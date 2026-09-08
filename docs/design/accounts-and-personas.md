@@ -92,7 +92,7 @@ them pick a persona before "check our mentions" would tax every ordinary turn. A
 and the mistake it can make (a public post from the wrong account) cannot be taken back. So the default flips
 from *everything* to *nothing* exactly where the supervision stops.
 
-Two details that matter:
+Four details that matter:
 
 - The narrowing happens **before** the browsers are built. An account this turn may not use is absent from the
   `browser` server's per-turn manifest, so no Chromium is launched and no profile is opened for it, and a call
@@ -101,6 +101,17 @@ Two details that matter:
 - Naming a card that does not exist denies everything. Falling back to "all accounts" would turn a typo into
   precisely the accident the layer exists to prevent: and a missing card is ordinary (a workspace cloned
   before its personas were committed).
+- **The turn is told, in words, which accounts it lost** (`unattendedAccountsNote`). Absence teaches nothing
+  here, because the account's skill file is written once per workspace and stays on disk naming it, `Skill(<id>)`
+  refuses with the SDK's generic permission sentence, and `secrets gates` — the one diagnostic this sandbox
+  points at a withheld credential — speaks only for approver gates and answers that nothing needs approval. A
+  CI-fix turn read those three silences as a broken connection and spent an hour on a manual login for an
+  account that was connected the whole time. The fence was right; being quiet about it was not.
+- **A steering message is supervision.** `unattended` says how a turn *started*; a person typing into it says
+  who is there now, and the second outranks the first for anything that would otherwise refuse rather than ask
+  (the command gate, the permission gate, and what the judge is told). The accounts themselves do not arrive
+  mid-turn — the browsers are built once, before the first token — so the note above says that too: a turn a
+  person starts gets them.
 
 ## Who names one
 

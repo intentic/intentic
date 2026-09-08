@@ -4,6 +4,7 @@ import {
     type PersonaPowers,
     type PersonaWorkspace,
     type SystemPromptMode,
+    type TurnNote,
     FRONT_DESK_PERSONA,
     PersonaPowersSchema,
 } from "@intentic/sandbox-contract";
@@ -113,6 +114,40 @@ export const turnPersona = ({ personas, actsAs, unattended }: TurnPersonaInput):
 // launches, rather than present-and-discouraged. The credential-free `browser` shelf isn't a capability here.
 export const personaCapabilities = (capabilities: readonly Capability[], persona: TurnPersona): Capability[] =>
     capabilities.filter((capability) => persona.allows(capability));
+
+// The signed-in accounts this turn lost, read from the other side of the same predicate — what the note below has to
+// name. Accounts only: a filtered connector or device teaches by the absence of a tool it never had, while an account's
+// skill file stays on disk naming it (deniedSkills says why), which is what makes THIS absence read as a broken login.
+export const personaWithheldAccounts = (capabilities: readonly Capability[], persona: TurnPersona): Capability[] =>
+    capabilities.filter((capability) => (capability.kind === "browser" || capability.kind === "identity") && !persona.allows(capability));
+
+export const UNATTENDED_ACCOUNTS_TITLE = "This turn reaches no signed-in account";
+
+// What an unattended wake owes itself when the rule above takes its accounts away.
+//
+// Absence teaches nothing here, and three silences compound: the skill files stay on disk still advertising the
+// account, `Skill(<id>)` refuses with the SDK's generic permission sentence, and `secrets gates` — the one diagnostic
+// this sandbox points at withheld credentials — knows only the owner-approval path and answers that nothing needs
+// approval. A CI-fix turn read that as a broken connection and spent an hour on a manual login for an account that was
+// connected the whole time. The fence is right; being silent about it is not.
+//
+// Only for the unpinned case: a turn wearing a card is told what it is wearing by personaNote, which is the same
+// sentence from the other end.
+export const unattendedAccountsNote = (persona: TurnPersona, withheld: readonly Capability[]): TurnNote | undefined => {
+    if (persona.reason !== "unattended-unpinned" || withheld.length === 0) {
+        return undefined;
+    }
+    return {
+        title: UNATTENDED_ACCOUNTS_TITLE,
+        text:
+            `Nobody started this turn — a schedule, an automation or a pipeline did — so it acts as no one, and the sandbox's ` +
+            `signed-in accounts are not loaded into it: ${withheld.map((capability) => `\`${capability.id}\``).join(", ")}.\n\n` +
+            `They are connected and working. Their tools are absent and their skills refuse, and that is THIS RULE, not a broken ` +
+            `login: do not reconnect them, do not sign in by hand, and do not reach for a token to work around them. A turn a ` +
+            `person starts gets them, so if the work needs one, do everything else first and say plainly in your summary which ` +
+            `account it was waiting on.`,
+    };
+};
 
 // Removes every env var suffixed with an ungranted connector's id, not merely discouraging its use. Driven by the
 // denied list, since the environment carries more than connector credentials (PATH, extension settings).

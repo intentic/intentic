@@ -35,6 +35,10 @@ export interface CommandGateOptions {
     readonly judging: CommandJudgeMode;
     // Nobody at a composer (automation, loop, chore); an ask refuses instead of parking, and the judge is told.
     readonly unattended: boolean;
+    // Whether a person has since steered this turn, read per command rather than snapshotted like the two above: an
+    // unattended turn somebody is visibly typing into can be asked after all, and refusing them refuses the person who
+    // just typed. Absent reads as nobody, so a caller that doesn't know keeps the old answer.
+    readonly steered?: (() => boolean) | undefined;
     // Whether this transport can pause for an answer; false if the runtime's own watchdog aborts a paused turn.
     readonly canPark?: boolean;
     // The turn's own signal, so a parked card settles when the turn is stopped instead of holding it open.
@@ -162,10 +166,14 @@ const hardRuled = (matches: readonly CommandMatch[]): CommandClass | undefined =
     matches.find((match) => guard(commandRun, { commandClass: match.commandClass, locus: SANDBOX, live: match.live }).effect !== "allow")
         ?.commandClass;
 
+// Whether an ask can reach anybody. `unattended` says how the turn STARTED; a steer says who is here now, and the
+// second outranks the first — a card raised at somebody who is mid-conversation with this turn gets answered.
+const nobodyToAsk = (options: CommandGateOptions): boolean => options.unattended && options.steered?.() !== true;
+
 // Why a command can't be asked about (or undefined if a card can be raised): both branches are properties of the turn,
 // not the policy. Each refusal tells the model not to retry.
 const cannotAsk = (reason: string, options: CommandGateOptions): GateOutcome | undefined => {
-    if (options.unattended) {
+    if (nobodyToAsk(options)) {
         return {
             allow: false,
             reason:
@@ -240,7 +248,9 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
             const hard = hardRuled(matches);
             const facts: JudgeFacts = {
                 consequences: classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]),
-                unattended: options.unattended,
+                // The same reading `cannotAsk` uses, so the judge is never told nobody can answer while a card would
+                // in fact reach the person steering this turn.
+                unattended: nobodyToAsk(options),
                 language: subject.language,
                 ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
                 ...(outsideSource === undefined ? {} : { outsideSource }),
@@ -250,12 +260,10 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
             const verdict: SafetyVerdict =
                 options.judging === "off"
                     ? { decision: "allow", sentence: JUDGE_OFF }
-                    : await askJudge(program, facts).catch(
-                          (error: unknown): SafetyVerdict => ({
-                              decision: "allow",
-                              sentence: error instanceof RoleModelUnsetError ? JUDGE_UNSET : JUDGE_UNAVAILABLE,
-                          }),
-                      );
+                    : await askJudge(program, facts).catch((error: unknown): SafetyVerdict => ({
+                          decision: "allow",
+                          sentence: error instanceof RoleModelUnsetError ? JUDGE_UNSET : JUDGE_UNAVAILABLE,
+                      }));
             // What's enforced, not what was said: only `on` obeys the verdict; `off` and `watch` never do.
             const enforced = options.judging === "on" ? verdict.decision : "allow";
             // The hard rule can only make a verdict stricter, never looser: allow becomes ask, refuse stays refuse.
@@ -303,9 +311,7 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
                 ...(hard === undefined ? {} : { explain: verdict.sentence }),
                 // Label is the exact line to add, so nobody accepts a rule unread; shown only when there is one to
                 // remember.
-                ...(verdict.policyLine !== undefined && options.remember !== undefined
-                    ? { alwaysLabel: `Always: ${verdict.policyLine}` }
-                    : {}),
+                ...(verdict.policyLine !== undefined && options.remember !== undefined ? { alwaysLabel: `Always: ${verdict.policyLine}` } : {}),
             };
             const { reply, resolved } = await wait(options.signal);
             // Every parked card owes the stream its resolution frame, for a replayed transcript and an honest wait

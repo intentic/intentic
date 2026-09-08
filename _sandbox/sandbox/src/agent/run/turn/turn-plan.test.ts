@@ -5,6 +5,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { testConfig } from "../../../testing.js";
+import { UNATTENDED_ACCOUNTS_TITLE } from "../../../personas/personas.js";
 import { TURN_ENDING_NOTE_HEADER } from "../../../rules/turn-ending-note.js";
 import type { AgentRequest } from "../agent.js";
 import { conversationExperimentArm, planTurn, ruleCommandIn, type TurnContext } from "./turn-plan.js";
@@ -149,6 +150,47 @@ test("Codex resolves the catalog default when the turn pins no model", async () 
     expect((plan as { request: AgentRequest }).request.model).toBe("gpt-5.6-codex");
 });
 
+// A turn nobody started acts as no one, so it reaches none of the sandbox's signed-in accounts. Denying the skills is
+// half the answer: the skill files stay on disk still naming the account, and the one diagnostic the sandbox points at
+// a withheld credential speaks only for approver gates, so an unexplained denial reads as a broken login and sends the
+// turn looking for a way around it.
+test("an unattended turn is told which signed-in accounts it cannot reach", async () => {
+    const npmjs = { id: "npmjs", kind: "browser" as const, config: { platform: "npmjs" } };
+    const services = harnessServices({
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [npmjs] }),
+        personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+    });
+
+    const plan = await planTurn(services, turn({ unattended: true, conversationId: "ci-fix-intentic-1" }), context);
+
+    const request = (plan as { request: AgentRequest }).request;
+    expect(request.disallowedTools).toContain("Skill(npmjs)");
+    // Asserted through the wire prompt, since a note the composer drops is a note the model never reads. The title
+    // rides the chat row rather than the prompt, so the text is what has to carry the account's name.
+    expect(request.notes?.map((note: { title: string }) => note.title)).toContain(UNATTENDED_ACCOUNTS_TITLE);
+    expect(wire(plan)).toContain("signed-in accounts are not loaded into it: `npmjs`");
+    expect(wire(plan)).toContain("not a broken login");
+});
+
+test("a turn somebody started keeps the account, and is told nothing about a fence it is not behind", async () => {
+    const npmjs = { id: "npmjs", kind: "browser" as const, config: { platform: "npmjs" } };
+    const services = harnessServices({
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [npmjs] }),
+        personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+    });
+
+    const plan = await planTurn(services, turn({ conversationId: "chat-1" }), context);
+
+    const request = (plan as { request: AgentRequest }).request;
+    expect(request.disallowedTools ?? []).not.toContain("Skill(npmjs)");
+    // The text, not the title: titles ride the chat row and never reach the wire, so asserting one absent would pass
+    // whether the note was there or not.
+    expect(request.notes?.map((note: { title: string }) => note.title) ?? []).not.toContain(UNATTENDED_ACCOUNTS_TITLE);
+    expect(wire(plan)).not.toContain("signed-in accounts are not loaded into it");
+});
+
 test("Codex receives the connected browser granted to its persona, and no other account", async () => {
     const writer: Persona = {
         id: "reddit-writer",
@@ -243,7 +285,9 @@ test("iq search teaching reaches native Codex and OpenCode as the shipped nudge,
 const CHECKED_SETTINGS = unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
     get: async () =>
         SandboxSettingsSchema.parse({
-            rules: [{ id: "pre-land", label: "Verify before you finish", moment: "turn.ending", action: { kind: "command", command: "pnpm verify" } }],
+            rules: [
+                { id: "pre-land", label: "Verify before you finish", moment: "turn.ending", action: { kind: "command", command: "pnpm verify" } },
+            ],
         }),
 });
 // A conversation as the registry has it: turns run, and the turn a compaction happened under (compactedTurn).

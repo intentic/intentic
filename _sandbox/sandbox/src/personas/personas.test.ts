@@ -1,6 +1,16 @@
 import { type Capability, type Persona, type PersonaPowers, FRONT_DESK_PERSONA, PersonaPowersSchema } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { personaCapabilities, personaCliEnv, personaDisallowedTools, personaNote, personaPrompt, turnPersona } from "./personas.js";
+import {
+    personaCapabilities,
+    personaCliEnv,
+    personaDisallowedTools,
+    personaNote,
+    personaPrompt,
+    personaWithheldAccounts,
+    turnPersona,
+    UNATTENDED_ACCOUNTS_TITLE,
+    unattendedAccountsNote,
+} from "./personas.js";
 
 const card = (id: string, capabilities: readonly string[], extra: Partial<Persona> = {}): Persona => ({
     id,
@@ -293,7 +303,13 @@ test("custom with nothing written yet falls back to the sandbox", () => {
 // A card's effects are a pure function of the card alone: two turns wearing the same card must produce the identical
 // note, tool set and prompt placement, so a provider's prompt cache can serve one from the other.
 test("two turns wearing one card get identical persona-derived context, and a different card gets a different one", () => {
-    const backend: Persona = { id: "backend", label: "Backend", capabilities: ["github-work"], powers: powers({ shell: false }), workspace: { folders: ["api"] } };
+    const backend: Persona = {
+        id: "backend",
+        label: "Backend",
+        capabilities: ["github-work"],
+        powers: powers({ shell: false }),
+        workspace: { folders: ["api"] },
+    };
     const cast = [...CAST, backend];
     const installed = [browser("reddit-work"), connector("github-work"), connector("stripe")];
     const wear = (unattended: boolean) => turnPersona({ personas: cast, actsAs: "backend", unattended });
@@ -308,4 +324,32 @@ test("two turns wearing one card get identical persona-derived context, and a di
     const other = turnPersona({ personas: cast, actsAs: "work", unattended: false });
     expect(personaNote(other)).not.toBe(personaNote(first));
     expect(personaDisallowedTools(other, installed)).not.toEqual(personaDisallowedTools(first, installed));
+});
+
+// The note the fence owes itself
+
+// The rule that takes the accounts away is right; being silent about it is what cost an hour. The turn has to be told,
+// because from inside it a withheld account and a broken one look identical.
+test("an unattended wake is told which accounts it lost, and that they are not broken", () => {
+    const persona = turnPersona({ personas: CAST, actsAs: undefined, unattended: true });
+    const installed = [browser("npmjs"), browser("reddit-work"), connector("github")];
+    const withheld = personaWithheldAccounts(installed, persona);
+    expect(withheld.map((capability) => capability.id)).toEqual(["npmjs", "reddit-work"]);
+    const note = unattendedAccountsNote(persona, withheld);
+    expect(note?.title).toBe(UNATTENDED_ACCOUNTS_TITLE);
+    expect(note?.text).toContain("`npmjs`");
+    expect(note?.text).toContain("`reddit-work`");
+    // The connector kept its tools, so naming it here would send the turn looking for a problem it doesn't have.
+    expect(note?.text).not.toContain("github");
+});
+
+test("no note when nothing was withheld, and none for a turn wearing a card", () => {
+    const attended = turnPersona({ personas: CAST, actsAs: undefined, unattended: false });
+    expect(unattendedAccountsNote(attended, personaWithheldAccounts([browser("npmjs")], attended))).toBeUndefined();
+    // A wake in a sandbox with no accounts connected has lost nothing, and a note about nothing is noise.
+    const bare = turnPersona({ personas: CAST, actsAs: undefined, unattended: true });
+    expect(unattendedAccountsNote(bare, personaWithheldAccounts([connector("github")], bare))).toBeUndefined();
+    // A card says the same thing from the other end (personaNote), so this one would be the second voice saying it.
+    const wearing = turnPersona({ personas: CAST, actsAs: "work", unattended: true });
+    expect(unattendedAccountsNote(wearing, personaWithheldAccounts([browser("npmjs")], wearing))).toBeUndefined();
 });

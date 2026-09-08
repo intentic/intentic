@@ -17,7 +17,8 @@ import { createTurnTaint, NO_TAINT } from "./turn-taint.js";
 const FORCE_PUSH = "git push --force origin main";
 
 // A judge that always answers the same way, so tests cover the gate's pipeline, not model accuracy.
-const always = (decision: SafetyVerdict["decision"], sentence = `It does the thing.`, policyLine?: string): CommandGateOptions["judge"] =>
+const always =
+    (decision: SafetyVerdict["decision"], sentence = `It does the thing.`, policyLine?: string): CommandGateOptions["judge"] =>
     async () => ({ decision, sentence, ...(policyLine === undefined ? {} : { policyLine }) });
 
 interface Harness {
@@ -261,6 +262,20 @@ describe("command gate: verdicts", () => {
         expect(gate.events).toEqual([]);
     });
 
+    // A steering message is somebody typing into this turn. The card goes to the same chat they typed in, so the
+    // refusal above would be refusing the one person who is demonstrably there.
+    test("an ask on an unattended turn a person has steered raises a card instead of refusing", async () => {
+        const gate = harness({ judge: always("ask"), unattended: true, steered: () => true });
+        const pending = gate.run(FORCE_PUSH);
+        await settled();
+        // cardOf throws when nothing was raised, so reaching here is the assertion that it asked rather than refused.
+        const card = cardOf(gate.events);
+        resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" });
+        await pending;
+        // The log is where "asked, and they said yes" is recorded; the unattended refusal above never reaches it.
+        expect(gate.logged).toMatchObject([{ outcome: "allowed", answer: "allowed" }]);
+    });
+
     // For runtimes that cannot pause for approval; distinct from unattended, since someone may be watching.
     test("a runtime that cannot park says so instead of claiming nobody is there", async () => {
         const gate = harness({ judge: always("ask"), canPark: false });
@@ -296,6 +311,14 @@ describe("command gate: the facts the judge is handed", () => {
         const gate = harness({ judge: always("allow"), unattended: true });
         await gate.run("rm -rf build");
         expect(gate.seen[0]?.facts.unattended).toBe(true);
+    });
+
+    // The judge reads the same fact the gate acts on: telling it nobody can answer while a card would in fact reach
+    // the person steering the turn is the one way these two can disagree.
+    test("a steered turn is declared to the judge as one somebody is watching", async () => {
+        const gate = harness({ judge: always("allow"), unattended: true, steered: () => true });
+        await gate.run("rm -rf build");
+        expect(gate.seen[0]?.facts.unattended).toBe(false);
     });
 
     test("the outside-content source is named, so a policy can key on what brought it in", async () => {
@@ -500,9 +523,7 @@ describe("command gate: the owner's switch", () => {
             const gate = harness({ judging: "watch", judge: always("ask", `Force-pushes to origin.`) });
             expect((await gate.run(FORCE_PUSH)).hookSpecificOutput).toBeUndefined();
             expect(gate.events).toEqual([]);
-            expect(rowsOf(gate.logged)).toEqual([
-                { ...FORCE_PUSH_ROW, sentence: `Force-pushes to origin.`, decision: "ask", outcome: "allowed" },
-            ]);
+            expect(rowsOf(gate.logged)).toEqual([{ ...FORCE_PUSH_ROW, sentence: `Force-pushes to origin.`, decision: "ask", outcome: "allowed" }]);
         });
 
         // Watch mode never enforces; a refusal is logged and stepped over exactly like an ask.
@@ -595,7 +616,13 @@ describe("command gate: the log", () => {
         const gate = harness({ judge: always("allow", `Deletes the build directory.`) });
         await gate.run("rm -rf build");
         expect(rowsOf(gate.logged)).toEqual([
-            { program: "rm -rf build", classes: ["files.destructive"], decision: "allow", outcome: "allowed", sentence: "Deletes the build directory." },
+            {
+                program: "rm -rf build",
+                classes: ["files.destructive"],
+                decision: "allow",
+                outcome: "allowed",
+                sentence: "Deletes the build directory.",
+            },
         ]);
         // The one field the row above drops, which is a clock reading and not a decision.
         expect(Number.isInteger(gate.logged[0]?.at)).toBe(true);

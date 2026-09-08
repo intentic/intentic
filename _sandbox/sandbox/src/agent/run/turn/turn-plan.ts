@@ -41,7 +41,9 @@ import {
     personaDisallowedTools,
     personaNote,
     personaPrompt,
+    personaWithheldAccounts,
     turnPersona,
+    unattendedAccountsNote,
 } from "../../../personas/personas.js";
 import { personaScopeOf } from "../../../personas/persona-scope.js";
 import { jsExecutionPlanOf } from "../../../execution/js-runtime.js";
@@ -225,9 +227,7 @@ const experimentStamps = (
     const chars = map.notes?.find((note) => note.title === WORKSPACE_MAP_NOTE_TITLE)?.text.length;
     return {
         ...(turnIndex !== undefined ? { turnIndex } : {}),
-        ...(search.arm !== undefined
-            ? { searchArm: search.arm, ...(search.cohort !== undefined ? { searchCohort: search.cohort } : {}) }
-            : {}),
+        ...(search.arm !== undefined ? { searchArm: search.arm, ...(search.cohort !== undefined ? { searchCohort: search.cohort } : {}) } : {}),
         ...(map.arm !== undefined ? { mapArm: map.arm } : {}),
         ...(chars !== undefined ? { mapChars: chars } : {}),
     };
@@ -504,6 +504,10 @@ const honoured = (
         // missing something, not once per conversation like the teaching notes above, since the condition changes the
         // moment someone clicks.
         ...[gatedCredentialsNote([...gating.withheld, ...(gatedEnv?.withheld ?? [])])].filter((note) => note !== undefined),
+        // The other reason an account can be missing, and the one nothing else says out loud: this turn started with
+        // nobody at the composer, so it acts as no one and reaches none of them. Same shape as the gate note above,
+        // because from inside the turn the two are indistinguishable until one of them explains itself.
+        ...[unattendedAccountsNote(persona, personaWithheldAccounts(installed, persona))].filter((note) => note !== undefined),
         // Every runtime gets the check now: the Claude Code loop runs the command rules at its Stop, the daemon runs them
         // for the rest once the frames end (agent.routes.ts daemonStopFindings), so the promise holds either way.
         ...(send.turnEnding ? [turnEndingNote(settings.rules)].filter((note) => note !== undefined) : []),
@@ -621,17 +625,7 @@ export const planHarnessTurn = async (
         ...peerToolsOf("host", granted, services.config.sandbox.port, services.hostBridgeToken, input.conversationId),
         ...peerToolsOf("webext", granted, services.config.sandbox.port, services.webextBridgeToken),
     ];
-    const {
-        hashlineEdits,
-        iqSearch,
-        outputCleaners,
-        outputHoldout,
-        rules,
-        subagentsAtOnce,
-        subagentsPerTurn,
-        subagentDepth,
-        actionRules,
-    } = settings;
+    const { hashlineEdits, iqSearch, outputCleaners, outputHoldout, rules, subagentsAtOnce, subagentsPerTurn, subagentDepth, actionRules } = settings;
     // Standing, not matching: conditions are read at Stop, once the turn has actually edited something to narrow on.
     const turnEndingRules = standing(rules, "turn.ending");
     // Rules armed on every file the turn writes, run beside the type check.
@@ -920,7 +914,8 @@ export const planHarnessTurn = async (
                 ? {
                       editReviewers: [
                           fileEditedReviewer(fileEditedRules, {
-                              run: (command, timeoutMs) => spawnEditCommand(context.localCwd)(ruleCommandIn(command, context.base.isolation?.anchor), timeoutMs),
+                              run: (command, timeoutMs) =>
+                                  spawnEditCommand(context.localCwd)(ruleCommandIn(command, context.base.isolation?.anchor), timeoutMs),
                               roots: [context.localCwd, context.base.isolation?.plan?.root, services.workspace.root].filter(
                                   (root): root is string => root !== undefined,
                               ),

@@ -60,7 +60,7 @@ import type { JsExecutionPlan } from "../../execution/js-runtime.js";
 import { JS_TOOL_ALIAS, JS_TOOL_NAME, jsExecutionServer } from "../../execution/js-tool.js";
 import { type AgentTool, mcpServersOf } from "../tools/agent-tools.js";
 import { createRequest } from "../tools/agent-requests.js";
-import type { SteeringQueue } from "../anchors/agent-steering.js";
+import { type SteeringQueue, turnSteered } from "../anchors/agent-steering.js";
 import { type FollowUpOutcome, type TurnRuleCommand, turnEndingHooks } from "../../rules/turn-ending.js";
 import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "../tools/agent-terminals.js";
 import type { HeavyCommands } from "../../platform/resources/heavy-commands.js";
@@ -441,6 +441,9 @@ const baseOptions = (
                 policy: request.safetyPolicy ?? DEFAULT_SAFETY_POLICY,
                 judging: request.judging ?? "on",
                 unattended: request.unattended === true,
+                // Read per command, not snapshotted beside it: attendance is the one fact about a turn that can arrive
+                // after it starts, and it arrives as a steering message.
+                steered: () => request.conversationId !== undefined && turnSteered(request.conversationId),
                 push,
                 signal: request.signal,
                 taint,
@@ -655,6 +658,12 @@ const relativePath = (absolute: string | undefined, cwd: string): string | undef
     return rel === "" || rel.startsWith("..") ? absolute : rel.split(sep).join("/");
 };
 
+// Whether a card raised now would reach nobody: how the turn STARTED, corrected by whether a person has since steered
+// it. An unattended turn somebody is typing into has an audience, and a card is pushed to that same chat, so refusing
+// it refuses the one person who is demonstrably there (agent-steering.ts).
+const nobodyToAsk = (request: AgentRequest): boolean =>
+    request.unattended === true && !(request.conversationId !== undefined && turnSteered(request.conversationId));
+
 // Every permission decision the turn needs from the user. The SDK only calls this when the active mode requires a
 // prompt, so there's no mode branching here.
 const permissionGate =
@@ -667,7 +676,7 @@ const permissionGate =
     ): CanUseTool =>
     async (toolName, input, options) => {
         // Refuses rather than parks: nobody can answer, and a hung card would read as the agent freezing.
-        if (request.unattended === true) {
+        if (nobodyToAsk(request)) {
             return { behavior: "deny", message: `${toolName} needs a person to answer, and this turn is running unattended. Proceed another way.` };
         }
         if (toolName === "ExitPlanMode") {

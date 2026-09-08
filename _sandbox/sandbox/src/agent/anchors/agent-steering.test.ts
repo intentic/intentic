@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
+import { registerTurn, SteeringQueue, steerTurn, stopTurn, turnSteered } from "./agent-steering.js";
 
 const drain = async (queue: SteeringQueue): Promise<string[]> => {
     const out: string[] = [];
@@ -64,4 +64,29 @@ test("a stale entry's unregister cannot clobber its successor's registration", (
     registerTurn("conv-x", { abort: () => {}, steering: successorQueue });
     first();
     expect(steerTurn("conv-x", "still here")).toBe(true);
+});
+
+// Attendance, which is the one fact about a turn that can arrive after it starts
+
+test("a delivered steer marks the turn as watched, and a new turn starts unwatched again", () => {
+    const queue = new SteeringQueue();
+    const unregister = registerTurn("c1", { abort: () => {}, steering: queue });
+    expect(turnSteered("c1")).toBe(false);
+    expect(steerTurn("c1", "actually, do it this way")).toBe(true);
+    expect(turnSteered("c1")).toBe(true);
+    // The next turn in the same conversation is its own turn: a wake hours later must not inherit an audience that
+    // typed once and left.
+    unregister();
+    registerTurn("c1", { abort: () => {}, steering: new SteeringQueue() });
+    expect(turnSteered("c1")).toBe(false);
+});
+
+test("a steer nobody could deliver leaves the turn unwatched", () => {
+    const queue = new SteeringQueue();
+    registerTurn("c2", { abort: () => {}, steering: queue });
+    queue.close();
+    expect(steerTurn("c2", "too late")).toBe(false);
+    expect(turnSteered("c2")).toBe(false);
+    // And a conversation with no turn at all was never watched.
+    expect(turnSteered("c3")).toBe(false);
 });

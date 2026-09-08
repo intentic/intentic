@@ -57,9 +57,22 @@ export interface ActiveTurn {
 
 const activeTurns = new Map<string, ActiveTurn>();
 
+// Conversations whose turn a person has steered since it started. A turn that began unattended (a schedule, a chore, a
+// CI failure) is one nobody could answer, so its asks refuse rather than park — but a steering message is proof that
+// somebody is at the composer RIGHT NOW, and refusing them is refusing the person who just typed. Read live by the
+// command gate and the permission gate, the way turn-taint is, since the fact arrives mid-turn or not at all.
+//
+// Per turn, not per conversation: cleared when the next turn registers, so a wake hours later is unattended again
+// rather than inheriting an attendance that has long since walked away.
+const steeredTurns = new Set<string>();
+
+// Whether a person has steered the turn running in this conversation.
+export const turnSteered = (conversationId: string): boolean => steeredTurns.has(conversationId);
+
 // Registers the conversation's in-flight turn; last-wins on a duplicate id (a stale entry, since the client serializes
 // turns). Returns an unregister bound to this entry, so a stale one can't clobber a successor's registration.
 export function registerTurn(conversationId: string, turn: ActiveTurn): () => void {
+    steeredTurns.delete(conversationId);
     activeTurns.set(conversationId, turn);
     return () => {
         if (activeTurns.get(conversationId) === turn) {
@@ -71,9 +84,14 @@ export function registerTurn(conversationId: string, turn: ActiveTurn): () => vo
 // Turns in flight right now; the idle-stop verdict reads it, since a machine mid-turn is never idle.
 export const activeTurnCount = (): number => activeTurns.size;
 
-// Deliver a steering message into the conversation's running turn; false when no steerable turn is live.
+// Deliver a steering message into the conversation's running turn; false when no steerable turn is live. Marked as
+// steered here rather than at the route, so a turn running on a runner is marked in the daemon its gates read from.
 export function steerTurn(conversationId: string, text: string): boolean {
-    return activeTurns.get(conversationId)?.steering?.push(text) ?? false;
+    const delivered = activeTurns.get(conversationId)?.steering?.push(text) ?? false;
+    if (delivered) {
+        steeredTurns.add(conversationId);
+    }
+    return delivered;
 }
 
 // Hard-cancel the conversation's running turn; false when nothing is running.
