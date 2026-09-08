@@ -25,6 +25,7 @@ import {
 import { errorMessage } from "@intentic/ui/async";
 import { basename } from "@intentic/ui/path";
 import { computed, ref } from "vue";
+import type { AgentStanding } from "../../agents/fleet/agentStatus";
 import { trackPerf } from "../../../app/perf";
 import { sandboxError, sandboxRequestVia } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
@@ -215,6 +216,12 @@ export class Conversation {
 
     // Blank fallback a panel shows with no tabs, or after closing its last; says nothing about what the chat is.
     readonly standIn = ref(false);
+
+    // The daemon's account of this agent when its card opened the chat (AgentStanding: status, attention, watches,
+    // spent-allowance state), carried so a window whose roster hasn't answered still places the card in the lane the
+    // board gives it. Superseded by the roster wherever one exists, and dropped the moment a turn runs here, which is
+    // fresher than anything the card said.
+    readonly standing = ref<AgentStanding | undefined>(undefined);
 
     // Worktree identity from the turn's `worktree` frame: agent/<id> branch and base sha; undefined until isolated.
     readonly worktree = ref<{ branch: string; base: string } | undefined>();
@@ -1010,6 +1017,8 @@ export class Conversation {
     private beginTurn(controller: AbortController, startedAt: number): void {
         this.inflight = controller;
         this.streaming.value = true;
+        // The card's account of this agent is now older than what this window can see for itself.
+        this.standing.value = undefined;
         // Nothing is delivered until the daemon says so; reattach() sets it true, adopting a run already accepted.
         this.turnAccepted = false;
         // Whatever interrupted the last turn is history, so this one's clean end may flush the queue.

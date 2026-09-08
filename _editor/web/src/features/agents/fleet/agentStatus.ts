@@ -229,6 +229,32 @@ const ENDING_REASONS: Partial<Record<AgentStatus | ClientAgentStatus, string>> =
 
 export type FleetLane = "attention" | "active" | "finished";
 
+// A card's standing on its own, carried where a whole card can't go (a chat tab, a summons to another window):
+// every field `laneOf` reads and nothing else, with absent ones left out rather than spelled as undefined, since
+// this is persisted and posted between windows.
+export const standingFrom = (agent: AgentStanding): AgentStanding => ({
+    status: agent.status,
+    // Copied, not referenced: this outlives the roster entry it was read from, in a tab and in storage.
+    attention: { ...agent.attention },
+    ...(agent.watches !== undefined ? { watches: agent.watches } : {}),
+    ...(agent.failureCode !== undefined ? { failureCode: agent.failureCode } : {}),
+    ...(agent.limitResetsAt !== undefined ? { limitResetsAt: agent.limitResetsAt } : {}),
+    ...(agent.limitHeld !== undefined ? { limitHeld: agent.limitHeld } : {}),
+    ...(agent.limitScheduled !== undefined ? { limitScheduled: agent.limitScheduled } : {}),
+    ...(agent.limitMoving !== undefined ? { limitMoving: agent.limitMoving } : {}),
+});
+
+// Nothing owed to the user. The one "no attention" block in the app: a client-only card has no daemon account of
+// what a turn asked, and two copies of this would let two surfaces place the same conversation differently.
+export const NO_ATTENTION: AgentAttention = {
+    plan: false,
+    question: false,
+    permission: false,
+    capability: false,
+    credential: false,
+    conflict: false,
+};
+
 // The lane projection every surface must agree with (see the header). Pure reading of the state machine:
 // "finished" needs no explicit timer since auto-land already flips a cleanly-completed turn to landed/idle within
 // ms, and any follow-up message moves the card back to active. Unread stays a badge, not a lane.

@@ -1,6 +1,6 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { computed, watch } from "vue";
-import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, turnInFlight, unregistered } from "./agentStatus";
+import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, NO_ATTENTION, turnInFlight, unregistered } from "./agentStatus";
 import { closedDrafts } from "../../chat/drafts/closedDrafts";
 import { draftPreview } from "../../chat/drafts/draftPreview";
 import { type TabFacts, unasked } from "../../chat/tabs/tabFacts";
@@ -48,9 +48,6 @@ export const windowFinished = <T>(
     }
     return { shown: [...shown, pinned], hidden: beyond.length - 1 };
 };
-
-// What a card that is not the daemon's says about itself: no attention, nothing owed.
-const NO_ATTENTION: FleetAgent["attention"] = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 
 // Built from the stored tab alone, since no daemon row or open tab exists for it; carries its origin sandbox so
 // actions address the right daemon. `updatedAt` is 0, since being set aside isn't activity.

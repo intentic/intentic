@@ -1,10 +1,11 @@
 import type { AgentOrigin } from "@intentic/sandbox-contract";
 import { useAgents } from "../../agents/fleet/useAgents";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
-import { type FleetLane, laneOf } from "../../agents/fleet/agentStatus";
+import { type FleetLane, laneOf, NO_ATTENTION } from "../../agents/fleet/agentStatus";
 import type { Conversation } from "../session/conversation";
 import { draftPreview } from "../drafts/draftPreview";
 import { useChat } from "../run/useChat";
+import { standingOf } from "./tabFacts";
 
 // Facts the open-chat list and header both need, kept as projections rather than component state, so the two
 // surfaces (and the close-set menus) read the same thing instead of duplicating it.
@@ -22,13 +23,23 @@ export const originOf = (conversation: Conversation): AgentOrigin | undefined =>
 // Distinguishes it from a live agent's chat.
 export const isArchived = (conversation: Conversation): boolean => useAgents().agentById(conversation.conversationId)?.archivedAt !== undefined;
 
-// Same lane as the board's card (laneOf), so a chat never disagrees with /agents. An uncarded conversation
-// (plain chat, roster down) reads streaming-or-empty as Active, else Finished.
+// Same lane as the board's card, from the same rule (laneOf), over the best card available here, in the order of
+// what each can know:
+// - the fleet's own entry, whenever this window's roster holds one
+// - what this window can see for itself: a turn running or refused right here outranks any older account
+// - the standing the card carried in when it opened the chat (Conversation.standing), for a roster that hasn't
+//   answered in this window — the one thing that keeps a popped-out chat from re-deciding the lane alone
+// - failing all three, the client standing the board's own draft card would carry (tabFacts.standingOf)
+// A second rule here is how one conversation sat in Attention on the board and Finished in the switcher.
 export const laneOfTab = (conversation: Conversation, agent: FleetAgent | undefined): FleetLane => {
     if (agent !== undefined) {
         return laneOf(agent);
     }
-    return conversation.streaming.value || conversation.messages.value.length === 0 ? `active` : `finished`;
+    const here = standingOf(conversation);
+    if (here === `starting` || here === `failed`) {
+        return laneOf({ status: here, attention: NO_ATTENTION });
+    }
+    return laneOf(conversation.standing.value ?? { status: here, attention: NO_ATTENTION });
 };
 
 // Close sets read the live conversation list at call time, not a snapshot, so a chat arriving while the menu

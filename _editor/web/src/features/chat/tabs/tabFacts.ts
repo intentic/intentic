@@ -60,7 +60,7 @@ export const EMPTY_STRIP: Strip = { active: undefined, panes: [], tabs: [] };
 // - an unfiled error: `failed`
 // - messages or a session already exist: `resumed`, not `draft`
 // Everything else is an empty `draft`.
-const standingOf = (conversation: Conversation): ClientAgentStatus => {
+export const standingOf = (conversation: Conversation): ClientAgentStatus => {
     if (conversation.streaming.value) {
         return `starting`;
     }

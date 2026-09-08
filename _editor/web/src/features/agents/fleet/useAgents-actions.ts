@@ -1,5 +1,5 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { unregistered } from "./agentStatus";
+import { standingFrom, unregistered } from "./agentStatus";
 import { useChat } from "../../chat/run/useChat";
 import { agentTabOf, type AgentTabSeed } from "../../chat/panel/useChat-reveal";
 import { summonChat } from "../../chat/run/summon";
@@ -181,11 +181,21 @@ export const agentSeed = (
         | "status"
         | "branch"
         | "sandboxId"
+        | "attention"
+        | "watches"
+        | "failureCode"
+        | "limitResetsAt"
+        | "limitHeld"
+        | "limitScheduled"
+        | "limitMoving"
     >,
 ): AgentTabSeed => ({
     id: agent.id,
     provider: agent.provider,
     harness: agent.harness,
+    // Where this card stands, carried so the chat lands in the same lane in a window whose roster hasn't answered
+    // for the agent yet.
+    standing: standingFrom(agent),
     // The box the card came from, so a tab for an agent in another sandbox is addressed there rather than asked of this
     // daemon.
     ...(agent.sandboxId !== undefined ? { sandboxId: agent.sandboxId } : {}),

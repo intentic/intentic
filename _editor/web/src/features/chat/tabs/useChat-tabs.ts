@@ -159,6 +159,8 @@ export const restoreTab = (tab: StoredTab): Conversation => {
     conversation.peek.value = tab.peek === true;
     // A stand-in blank restores as one too; unflagged, it would board a fresh, selected "New agent" card.
     conversation.standIn.value = tab.standIn === true;
+    // The card's account of the agent, so a restored tab lanes the way its board card does before the roster lands.
+    conversation.standing.value = tab.standing;
     restoreComposer(conversation, tab);
     conversation.title.value = tab.title ?? null;
     // Restore harness before model: native and claude-code model lists diverge for codex/grok.

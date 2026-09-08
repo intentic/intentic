@@ -1,4 +1,5 @@
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
+import type { AgentStanding } from "../../agents/fleet/agentStatus";
 import type { Conversation } from "../session/conversation";
 import type { TurnPick } from "../run/turnDefaults";
 import type { SessionRef } from "../run/turnRequest";
@@ -55,6 +56,9 @@ export interface StoredTab {
     readonly peek?: boolean;
     // The panel's fallback blank; losing it on handoff boards a fresh, selected "New agent" card.
     readonly standIn?: boolean;
+    // The daemon's account of the agent when its card opened this chat, so a window whose roster hasn't answered
+    // still lanes it the way the board does (Conversation.standing).
+    readonly standing?: AgentStanding;
     readonly title?: string;
     readonly draft: string;
     // When the draft first went unsent, so its age survives reload instead of resetting to "just now".
@@ -89,6 +93,7 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     forkOf: conversation.pendingForkOf.value,
     peek: conversation.peek.value,
     standIn: conversation.standIn.value,
+    standing: conversation.standing.value,
     title: conversation.title.value ?? undefined,
     draft: conversation.draft.value,
     draftAt: conversation.draftAt.value,
@@ -188,6 +193,20 @@ const readFork = (raw: unknown): { forkOf?: StoredTab["forkOf"] } => {
     return { forkOf: { conversationId, keep, files } };
 };
 
+// The card's account of the agent, read back only when it can still place a card: a status and the full
+// attention block, since `laneOf` reads every flag and a half-read block would answer "nothing owed" for a
+// question that is. The optional fields ride along as read, being plain scalars the lane only tests.
+const readStanding = (raw: unknown): { standing?: AgentStanding } => {
+    const standing = (typeof raw === `object` && raw !== null ? raw : {}) as Record<string, unknown>;
+    const attention = (typeof standing[`attention`] === `object` && standing[`attention`] !== null ? standing[`attention`] : undefined) as
+        | AgentStanding["attention"]
+        | undefined;
+    if (typeof standing[`status`] !== `string` || standing[`status`] === `` || attention === undefined) {
+        return {};
+    }
+    return { standing: { ...(standing as unknown as AgentStanding), status: standing[`status`] as AgentStanding["status"], attention } };
+};
+
 // Two small closed vocabularies, read back only as one of their own members; anything else (an older build, a
 // hand edit) falls to the restore's own default.
 const readTier = (raw: unknown): { tier?: "fast" | "standard" } => (raw === `fast` || raw === `standard` ? { tier: raw } : {});
@@ -224,6 +243,7 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         ...readFlag(`autoContinue`, raw[`autoContinue`]),
         ...readFlag(`peek`, raw[`peek`]),
         ...readFlag(`standIn`, raw[`standIn`]),
+        ...readStanding(raw[`standing`]),
         ...readFlag(`tierHold`, raw[`tierHold`]),
         ...readTier(raw[`tier`]),
         ...readHarness(raw[`harness`]),

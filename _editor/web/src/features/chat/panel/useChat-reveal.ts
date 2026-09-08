@@ -1,4 +1,5 @@
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
+import type { AgentStanding } from "../../agents/fleet/agentStatus";
 import { claimClosedDrafts } from "../drafts/closedDrafts";
 import { drawsChat } from "../run/chatEcho";
 import { Conversation } from "../session/conversation";
@@ -78,6 +79,26 @@ const restoreKept = (conversation: Conversation, kept: StoredTab | undefined): v
     }
 };
 
+// What a summons tells a chat this window already has open: the fleet's own answers about it, which the tab holds
+// only as long as nothing better arrives.
+const adoptTab = (existing: Conversation, entry: StoredTab): void => {
+    // Marks the agent as fleet-known so an opened card doesn't reappear on the board as a phantom draft.
+    if (entry.registered) {
+        existing.registered.value = true;
+        existing.isolated.value = entry.isolated;
+    }
+    // The card's account of where the agent stands; an entry without one (a history row, a restored tab) leaves
+    // whatever this chat already held rather than blanking it.
+    if (entry.standing !== undefined) {
+        existing.standing.value = entry.standing;
+    }
+    // Re-opening re-hydrates even an already-shown tab, since it may be a stub from a dead attach; skipped while
+    // streaming, since the tab IS the stream.
+    if (!existing.streaming.value) {
+        hydrateOnce(existing);
+    }
+};
+
 // Resolves one entry to the open Conversation it means in this window, matching by id or by shown session so a repeated
 // summons focuses the existing tab instead of minting a twin. New conversations go into `additions`.
 const resolveEntry = (entry: RevealEntry, additions: Conversation[], kept: ReadonlyMap<string, StoredTab>): Conversation => {
@@ -112,16 +133,7 @@ const resolveEntry = (entry: RevealEntry, additions: Conversation[], kept: Reado
     if (existing !== undefined) {
         // Words a close in another window set aside come back here, never over ones being typed now.
         restoreKept(existing, kept.get(entry.conversationId));
-        // Marks the agent as fleet-known so an opened card doesn't reappear on the board as a phantom draft.
-        if (entry.registered) {
-            existing.registered.value = true;
-            existing.isolated.value = entry.isolated;
-        }
-        // Re-opening re-hydrates even an already-shown tab, since it may be a stub from a dead attach; skipped while
-        // streaming, since the tab IS the stream.
-        if (!existing.streaming.value) {
-            hydrateOnce(existing);
-        }
+        adoptTab(existing, entry);
         return existing;
     }
     // Never open here: built fresh from the snapshot, exactly as a reload would. Hydrated outright rather than left to
@@ -210,12 +222,16 @@ export interface AgentTabSeed {
     tierHold?: boolean;
     // Whether the fleet actually knows this agent; false only for the board's client-only draft card.
     registered?: boolean;
+    // The card's own account of where this agent stands, so the chat lands in the same lane in a window whose
+    // roster hasn't answered for it (Conversation.standing).
+    standing?: AgentStanding;
 }
 
 export const agentTabOf = (agent: AgentTabSeed): StoredTab => {
     const registered = agent.registered ?? true;
     return {
         conversationId: agent.id,
+        standing: agent.standing,
         // A registered agent's isolation follows its branch; a draft keeps the fresh-conversation default of isolated.
         isolated: registered ? agent.branch !== undefined : true,
         registered,
