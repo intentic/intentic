@@ -34,6 +34,14 @@ const watch = (over: Partial<AgentWatch> = {}): AgentWatch => ({
 // The kanban lane projection, pure over status + attention: a cleanly-completed, auto-landed turn needs no explicit
 // action, since idle/landed already reads as finished.
 describe("laneOf", () => {
+    // Nothing runs, but the daemon holds the worktree exactly as a turn would: the card stays Active and every hands-off
+    // guard reads it as in flight, so nothing offers a press the daemon would refuse.
+    it("keeps a landing card in Active, in flight for every guard", () => {
+        expect(laneOf({ status: `landing`, attention: none })).toBe(`active`);
+        expect(turnInFlight({ status: `landing`, attention: none })).toBe(true);
+        expect(agentStatusMeta(`landing`).label).toBe(`Landing…`);
+    });
+
     it("routes pending plan/question/conflict and errors to attention", () => {
         expect(laneOf({ status: `running`, attention: { ...none, plan: true } })).toBe(`attention`);
         expect(laneOf({ status: `running`, attention: { ...none, question: true } })).toBe(`attention`);

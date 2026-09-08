@@ -28,6 +28,11 @@ const SLOW_MS: Readonly<Record<string, number>> = {
     "git.discover": 400,
     // One HTTP request end to end, as the browser experiences it.
     "http.request": 1_000,
+    // A conversation's rebase onto main; replaying a real branch costs seconds, so only a stall is worth a line.
+    "agent.sync": 2_000,
+    // One land end to end (rebase, preflight, patch); a monorepo's takes seconds. Past this, the classify step is where
+    // to look.
+    "agent.land": 5_000,
     // One WebSocket round trip to a device; floor is high because the honest cost is a network hop, not tolerance.
     "devices.pull": 4_000,
     // Pushing one frame to one connected browser's /events stream.

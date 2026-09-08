@@ -101,6 +101,34 @@ export const createAgentsRoutes = (services: Services) => {
         // Uncoded error is stopped work: nothing to repair, so `{ reason: "stopped" }` offers to just carry on.
         return summary.failureCode === undefined ? { reason: "stopped" } : undefined;
     };
+    // The composition a manual land applies: the same pre-land rebase as auto-land, with `base` moved onto what each
+    // repo now sits on. A git fault here lands on the old base instead of failing the land.
+    const syncedComposition = async (entry: IsolatedAgent): Promise<PersistedAgent["repos"]> => {
+        try {
+            return [...(await syncBeforeLand(services.agentWorktrees, entry, services.agents.recordWorktree))];
+        } catch (error) {
+            services.logger.warn({ err: error, id: entry.id }, "agents: pre-land sync failed, landing on the old base");
+            return [...entry.repos];
+        }
+    };
+    // What a land that reached the tree sets in motion: the commit-box chip's draft (not awaited), the user-write
+    // attribution (same convention as git.discard), and the workspace event.
+    const announceLanded = (entry: IsolatedAgent, span: readonly { repo: string; from: string; dir: string }[]): void => {
+        describeLandingInBackground(services, entry.id);
+        services.history.notifyUserWrite();
+        emitWorkspaceEvent(
+            services,
+            {
+                event: "agent.landed",
+                agentId: entry.id,
+                ...(entry.title !== undefined ? { title: entry.title } : {}),
+                branch: entry.branch,
+                outcome: "landed",
+                repos: [...span],
+            },
+            streamAgent,
+        );
+    };
     // `i.router()`, not a plain object: typechecked against agentsContract, so a dropped handler fails the build.
     return i.router({
         // Revision the roster was taken at, so the browser can tell this apart from a racing /events snapshot
@@ -336,8 +364,14 @@ export const createAgentsRoutes = (services: Services) => {
                     services.logger.warn({ err: error, repo: composed.repo, id: entry.id }, "agents diff: repo skipped");
                 }
             }
-            // Re-derived, not replayed: the stored refusal is from land time, rows may since be committed.
-            const conflicts = entry.conflicts === undefined ? [] : await outstandingConflicts(services.agentWorktrees, entry);
+            // Re-derived, not replayed: the stored refusal is from land time, rows may since be committed. Served as stored
+            // while a land holds one of its repos, since re-deriving would queue this read behind that land.
+            const conflicts =
+                entry.conflicts === undefined
+                    ? []
+                    : entry.repos.some(({ repo }) => services.agentWorktrees.repoBusy(repo))
+                      ? entry.conflicts
+                      : await outstandingConflicts(services.agentWorktrees, entry);
             // Tells apart an agent that wrote nothing from one whose every file is committed (AgentChangesSchema).
             return { repos, absorbed, ...(conflicts.length > 0 ? { conflicts } : {}) };
         }),
@@ -440,52 +474,41 @@ export const createAgentsRoutes = (services: Services) => {
         land: i.land.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);
             landable(input.id, input.force === true);
-            // Span is snapshotted before the land advances `landedTip`, matching what auto-land captures.
-            // Same pre-land rebase as auto-land; a git fault here lands on the old base instead of failing the land.
-            let composition = entry.repos;
-            try {
-                composition = [...(await syncBeforeLand(services.agentWorktrees, entry, services.agents.recordWorktree))];
-            } catch (error) {
-                services.logger.warn({ err: error, id: entry.id }, "agents: pre-land sync failed, landing on the old base");
+            // A second press while one is in flight would rebase the worktree the first is reading; the card already
+            // reads `landing`, so a refusal is all it needs.
+            if (services.agents.landing(input.id)) {
+                throw new ORPCError("CONFLICT", { message: "this agent is already landing, wait for it to finish" });
             }
-            // Snapshotted after the sync: a rebase orphans the sha a stale span would name.
-            const span = composition.map(({ repo, base, landedTip }) => ({
-                repo,
-                from: input.span === "cumulative" ? base : (landedTip ?? base),
-                dir: services.agentWorktrees.worktreeDir(entry.id, repo),
-            }));
-            const result = await landAgent(services.agentWorktrees, { ...entry, repos: composition }, input.mode, input.span);
-            // Stores the tips and conflict report, re-derives standing, and clears the prior ending without a turn.
-            await services.agents.recordLanded(input.id, result);
-            // Only on a resting agent: a running turn would have its mutex freed and its ending overwritten.
-            if (!services.agents.running(input.id)) {
-                await services.agents.finish(input.id, Date.now());
-            }
-            if (result.landed && result.changed) {
-                // Drafted from the diff now sitting in the tree, for the Changes panel's commit-box chip; not awaited.
-                describeLandingInBackground(services, entry.id);
-                // Main tree changed under the user, same attribution convention as git.discard.
-                services.history.notifyUserWrite();
-                emitWorkspaceEvent(
-                    services,
-                    {
-                        event: "agent.landed",
-                        agentId: entry.id,
-                        ...(entry.title !== undefined ? { title: entry.title } : {}),
-                        branch: entry.branch,
-                        outcome: "landed",
-                        repos: span,
-                    },
-                    streamAgent,
+            const mode = input.mode ?? "check";
+            const rung = input.span ?? "outstanding";
+            return services.agents.withLandLease(input.id, async () => {
+                const composition = await syncedComposition(entry);
+                // Snapshotted after the sync: a rebase orphans the sha a stale span would name.
+                const span = composition.map(({ repo, base, landedTip }) => ({
+                    repo,
+                    from: rung === "cumulative" ? base : (landedTip ?? base),
+                    dir: services.agentWorktrees.worktreeDir(entry.id, repo),
+                }));
+                const result = await services.perf.track("agent.land", { id: entry.id, mode, span: rung }, () =>
+                    landAgent(services.agentWorktrees, { ...entry, repos: composition }, mode, rung),
                 );
-            }
-            return {
-                landed: result.landed,
-                ...(result.conflicts !== undefined ? { conflicts: result.conflicts } : {}),
-                // A `merge` land's leftover-conflict paths; omitting it blanked the panel's finish-N-files strip.
-                ...(result.resolving !== undefined ? { resolving: result.resolving } : {}),
-                ...(result.held === true ? { held: true } : {}),
-            };
+                // Stores the tips and conflict report, re-derives standing, and clears the prior ending without a turn.
+                await services.agents.recordLanded(input.id, result);
+                // Only on a resting agent: a running turn would have its mutex freed and its ending overwritten.
+                if (!services.agents.running(input.id)) {
+                    await services.agents.finish(input.id, Date.now());
+                }
+                if (result.landed && result.changed) {
+                    announceLanded(entry, span);
+                }
+                return {
+                    landed: result.landed,
+                    ...(result.conflicts !== undefined ? { conflicts: result.conflicts } : {}),
+                    // A `merge` land's leftover-conflict paths; omitting it blanked the panel's finish-N-files strip.
+                    ...(result.resolving !== undefined ? { resolving: result.resolving } : {}),
+                    ...(result.held === true ? { held: true } : {}),
+                };
+            });
         }),
         discard: i.discard.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);

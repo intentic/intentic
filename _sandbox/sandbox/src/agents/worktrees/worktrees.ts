@@ -69,6 +69,8 @@ export interface AgentWorktrees {
     readonly prune: (knownIds: () => readonly string[], archivedIds: () => readonly string[]) => Promise<void>;
     // Serialize git ops that touch a repo's shared worktree admin area / main index (create/remove/land).
     readonly withRepoLock: <T>(repo: string, task: () => Promise<T>) => Promise<T>;
+    // Whether that chain is held or queued on right now; a read that would otherwise wait behind a land asks this.
+    readonly repoBusy: (repo: string) => boolean;
 }
 
 // Root first or root last, then everything else concurrently: root's checkout creates the dir nested worktrees mount
@@ -504,5 +506,6 @@ export const createAgentWorktrees = (
             }
         },
         withRepoLock,
+        repoBusy: (repo) => (queued.get(repo) ?? 0) > 0,
     };
 };

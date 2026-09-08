@@ -84,6 +84,9 @@ const STATUS_META = {
     // The turn stopped without ending (something underneath broke) and the daemon is already restarting it; running
     // spinner and blue since nothing failed and work is still in progress.
     resuming: { icon: `spinner`, spin: true, label: `Resuming…`, class: `text-link` },
+    // The daemon is rebasing the branch and carrying its work into the workspace; nothing has finished yet, nothing has
+    // failed, and nothing may act on the branch until it settles, so the running spinner and blue.
+    landing: { icon: `spinner`, spin: true, label: `Landing…`, class: `text-link` },
     awaiting: { icon: `exclamation-circle`, label: `Needs you`, class: `text-primary-500` },
     landed: { icon: `check-circle`, label: `Landed`, class: `text-success` },
     // Finished with auto-land off: work is safe on the branch, waiting for a deliberate Land. Link-blue, not an
@@ -109,14 +112,16 @@ export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon
 // A turn is in flight: running, unwinding after a Stop, or repairing itself after its daemon died. Every hands-off
 // guard (its worktree is a live turn's working state) and the live readouts (elapsed, activity line) key off this.
 // `starting` counts even though nothing is registered yet, elapsed should tick from the send. `dismissing` counts
-// for the guards only; its lane is decided separately (see laneOf) since it settles into Finished. `awaiting` is
-// deliberately excluded: it's live but parked, handled by `awaitingUser` instead.
+// for the guards only; its lane is decided separately (see laneOf) since it settles into Finished. `landing` counts
+// too: no turn runs, but the daemon holds the worktree exactly as a turn would, and every guard wants the same answer.
+// `awaiting` is deliberately excluded: it's live but parked, handled by `awaitingUser` instead.
 export const turnInFlight = (agent: AgentStanding): boolean =>
     agent.status === `running` ||
     agent.status === `starting` ||
     agent.status === `stopping` ||
     agent.status === `dismissing` ||
-    agent.status === `resuming`;
+    agent.status === `resuming` ||
+    agent.status === `landing`;
 
 // A person already ended this turn and it's unwinding, whether by Stop or by waving away the question it was
 // parked on; both differ only in the lane they settle in (see laneOf). Narrower than `turnInFlight`, which also

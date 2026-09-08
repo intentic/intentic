@@ -102,6 +102,10 @@ export const dropRejection = (agent: FleetAgent, target: DropTarget): string | u
     if (agent.status === `resuming`) {
         return `This turn is picking itself back up`;
     }
+    // Nothing to stop, and the land it would ask for is the one already under way.
+    if (agent.status === `landing`) {
+        return `Its work is landing right now`;
+    }
     return rejectionForTarget(agent, target);
 };
 

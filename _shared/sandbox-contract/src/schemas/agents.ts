@@ -26,6 +26,7 @@ export const AgentStatusSchema = z.enum([
     "dismissing",
     "stopped",
     "resuming",
+    "landing",
     "ready",
     "landed",
     "conflict",
@@ -142,7 +143,7 @@ export const AgentSummarySchema = z.object({
     sessionId: z.string().optional().describe("The provider session behind the last turn. It is retired whenever the model or account changes."),
     title: z.string().optional().describe("What to call it: the first prompt cut to one line, unless somebody renamed it."),
     status: AgentStatusSchema.describe(
-        "What it is doing. Stopping and stopped are the two halves of somebody pressing stop, because a cancel is not instant; dismissing is the same window for a question waved away, which ends the turn too but owes the user nothing; resuming means the sandbox is already putting right whatever killed the turn.",
+        "What it is doing. Stopping and stopped are the two halves of somebody pressing stop, because a cancel is not instant; dismissing is the same window for a question waved away, which ends the turn too but owes the user nothing; resuming means the sandbox is already putting right whatever killed the turn; landing means its work is being carried into the workspace right now, and nothing may act on its branch until that settles.",
     ),
     // Sentence the last turn died on; carried since `error` status alone isn't an answer, especially for an unwatched
     // run.

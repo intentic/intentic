@@ -58,6 +58,7 @@ const realCheckout = async (id: string): Promise<{ work: string; worktree: strin
             reapRepoCheckout: async () => {},
             prune: async () => {},
             withRepoLock: (_repo, task) => task(),
+            repoBusy: () => false,
         },
     };
 };

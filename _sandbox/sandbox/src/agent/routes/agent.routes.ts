@@ -194,7 +194,11 @@ const settleLandBooks = async (services: Services, conversationId: string): Prom
         return;
     }
     try {
-        const measured = await landAgent(services.agentWorktrees, entry, "measure");
+        const measured = await services.agents.withLandLease(conversationId, () =>
+            services.perf.track("agent.land", { id: conversationId, mode: "measure", span: "outstanding" }, () =>
+                landAgent(services.agentWorktrees, entry, "measure"),
+            ),
+        );
         if (measured.changed) {
             await services.agents.recordLanded(conversationId, measured);
         }
@@ -483,16 +487,22 @@ async function* runConversationTurn(
                 { repos: span.map(({ repo }) => repo), paths, outcome: landingOutcome(check) },
                 input.autoLand ?? finished.autoLand,
             );
-            // One more rebase before landing, since the top-of-turn sync is stale by now; best-effort.
-            try {
-                await syncOnto();
-            } catch (error) {
-                services.logger.warn({ err: error, id: conversationId }, "agents: pre-land sync failed, landing on the old base");
-            }
-            // Re-read after the sync: the frozen composition would hand anchorOf an orphaned base.
-            const resynced = services.agents.entry(conversationId);
-            const landing = resynced !== undefined && isIsolated(resynced) ? resynced : finished;
-            const landed = await landAgent(services.agentWorktrees, landing, decided.land ? "check" : "measure");
+            // Under the land lease, so a manual land pressed meanwhile queues rather than rebasing under this one.
+            const landed = await services.agents.withLandLease(conversationId, async () => {
+                // One more rebase before landing, since the top-of-turn sync is stale by now; best-effort.
+                try {
+                    await syncOnto();
+                } catch (error) {
+                    services.logger.warn({ err: error, id: conversationId }, "agents: pre-land sync failed, landing on the old base");
+                }
+                // Re-read after the sync: the frozen composition would hand anchorOf an orphaned base.
+                const resynced = services.agents.entry(conversationId);
+                const landing = resynced !== undefined && isIsolated(resynced) ? resynced : finished;
+                const mode = decided.land ? "check" : "measure";
+                return services.perf.track("agent.land", { id: conversationId, mode, span: "outstanding" }, () =>
+                    landAgent(services.agentWorktrees, landing, mode),
+                );
+            });
             reconciled = true;
             // A rule that held work reaches the settings feed; landing is self-evident, so only a hold is.
             // The one hold no rule decided: the work is finished but its own check failed.

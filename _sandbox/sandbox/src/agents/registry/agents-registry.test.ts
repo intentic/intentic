@@ -902,6 +902,75 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.status).toBe("error");
     });
 
+    // The lease is what keeps a second press from rebasing the worktree the first land is reading; the status is what
+    // the card wears meanwhile, above the ending the last turn wrote, below a live turn.
+    it("a land lease reads as `landing` from the claim to the last release, and queues a second land behind the first", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "error", message: "boom" });
+        await registry.finish("c1", 2_000);
+        expect(registry.get("c1")?.status).toBe("error");
+
+        let release: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const first = registry.withLandLease("c1", async () => {
+            await gate;
+            return "first";
+        });
+        // Claimed synchronously: a request asking right after the claim already sees it.
+        expect(registry.landing("c1")).toBe(true);
+        expect(registry.get("c1")?.status).toBe("landing");
+
+        let secondRan = false;
+        const second = registry.withLandLease("c1", async () => {
+            secondRan = true;
+            return "second";
+        });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(secondRan).toBe(false);
+
+        release();
+        expect(await first).toBe("first");
+        expect(await second).toBe("second");
+        expect(registry.landing("c1")).toBe(false);
+        expect(registry.get("c1")?.status).toBe("error");
+    });
+
+    it("a land lease is released when its work throws, and a running turn keeps its own status over it", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.finish("c1", 2_000);
+        await expect(
+            registry.withLandLease("c1", async () => {
+                throw new Error("git refused");
+            }),
+        ).rejects.toThrow("git refused");
+        expect(registry.landing("c1")).toBe(false);
+        expect(registry.get("c1")?.status).toBe("idle");
+
+        // A running turn's own end-of-turn land is still that turn running, not a card that stopped to land.
+        await registry.begin(turn(), 3_000);
+        let release: () => void = () => undefined;
+        const lease = registry.withLandLease(
+            "c1",
+            () =>
+                new Promise<void>((resolve) => {
+                    release = resolve;
+                }),
+        );
+        expect(registry.landing("c1")).toBe(true);
+        expect(registry.get("c1")?.status).toBe("running");
+        // The lease's work starts on the next tick; `release` is bound only once it has.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        release();
+        await lease;
+        await registry.finish("c1", 4_000);
+    });
+
     it("recordLanded persists advanced landedTips and the cumulative diffstat", async () => {
         const store = memoryStore();
         const registry = createAgentsRegistry(store, standings(), presences());

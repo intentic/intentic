@@ -11,28 +11,41 @@ import { currentSandboxTarget, type SandboxTarget, targetFor } from "./sandboxTa
 
 const { getSessionToken, rejectSessionToken } = useSandboxSession();
 
+// Beside the RequestInit: `deadline: false` lifts the headers deadline for a call whose answer takes as long as the
+// work it asks for (a land); every other call keeps the bound.
+export interface RequestOptions {
+    readonly deadline?: boolean;
+}
+
 // Includes any session renewal in its timing, so browser and daemon timings can be compared to locate slowness.
 // `path` drops its query so per-file reads aggregate into one row.
-const requestTo = async (target: SandboxTarget | undefined, path: string, init?: RequestInit, background = false): Promise<Response> =>
+const requestTo = async (
+    target: SandboxTarget | undefined,
+    path: string,
+    init?: RequestInit,
+    background = false,
+    options?: RequestOptions,
+): Promise<Response> =>
     trackPerf(`rpc.request`, { path: path.split(`?`)[0] ?? path, method: init?.method ?? `GET` }, async () => {
         if (target === undefined) {
             throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
         }
-        // Exempt from the headers deadline when the body streams up; its headers arrive only once the upload finishes.
+        // Exempt from the headers deadline when the body streams up (its headers arrive only once the upload finishes),
+        // or when the caller said the answer takes as long as the work.
         return sandboxAuthenticatedFetch(new Request(`${target.base}${path}`, init), target, {
-            deadline: !uploadsBody(init?.body),
+            deadline: options?.deadline !== false && !uploadsBody(init?.body),
             background,
         });
     });
 
-export async function sandboxRequest(path: string, init?: RequestInit): Promise<Response> {
-    return requestTo(currentSandboxTarget(), path, init);
+export async function sandboxRequest(path: string, init?: RequestInit, options?: RequestOptions): Promise<Response> {
+    return requestTo(currentSandboxTarget(), path, init, false, options);
 }
 
 // The same call aimed at a named sandbox instead of the active one; same auth, same bearer store, same perf row.
 // Its own entry point, not an optional argument, so crossing sandboxes stays a visible, greppable decision.
-export async function sandboxRequestAt(sandboxId: string, path: string, init?: RequestInit): Promise<Response> {
-    return requestTo(targetFor(sandboxId), path, init);
+export async function sandboxRequestAt(sandboxId: string, path: string, init?: RequestInit, options?: RequestOptions): Promise<Response> {
+    return requestTo(targetFor(sandboxId), path, init, false, options);
 }
 
 // Aims the same call by a reach value (a sandbox id, or undefined for the active box), for callers holding the
@@ -70,8 +83,8 @@ export async function sandboxError(response: Response, request?: { method: strin
 }
 
 // A GET/POST to the daemon that parses the JSON body and throws the daemon's message on any non-2xx status.
-export async function sandboxJson<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await sandboxRequest(path, init);
+export async function sandboxJson<T>(path: string, init?: RequestInit, options?: RequestOptions): Promise<T> {
+    const response = await sandboxRequest(path, init, options);
     if (!response.ok) {
         throw await sandboxError(response, { method: init?.method ?? `GET`, path });
     }
@@ -79,8 +92,14 @@ export async function sandboxJson<T>(path: string, init?: RequestInit): Promise<
 }
 
 // What sandboxJsonAt and sandboxJsonQuietly share; only whether anyone is waiting on the answer differs.
-const jsonAt = async <T,>(sandboxId: string, path: string, init: RequestInit | undefined, background: boolean): Promise<T> => {
-    const response = await requestTo(targetFor(sandboxId), path, init, background);
+const jsonAt = async <T>(
+    sandboxId: string,
+    path: string,
+    init: RequestInit | undefined,
+    background: boolean,
+    options?: RequestOptions,
+): Promise<T> => {
+    const response = await requestTo(targetFor(sandboxId), path, init, background, options);
     if (!response.ok) {
         throw await sandboxError(response);
     }
@@ -89,8 +108,8 @@ const jsonAt = async <T,>(sandboxId: string, path: string, init: RequestInit | u
 
 // The same read aimed at a named sandbox. Route-drift checks are skipped: this browser's own daemon fingerprint
 // says nothing about another box's build.
-export async function sandboxJsonAt<T>(sandboxId: string, path: string, init?: RequestInit): Promise<T> {
-    return jsonAt<T>(sandboxId, path, init, false);
+export async function sandboxJsonAt<T>(sandboxId: string, path: string, init?: RequestInit, options?: RequestOptions): Promise<T> {
+    return jsonAt<T>(sandboxId, path, init, false, options);
 }
 
 // For polls where nobody is waiting (fleet-wide stores), so no sign-in prompt is ever triggered. Uses whatever
@@ -101,8 +120,8 @@ export async function sandboxJsonQuietly<T>(sandboxId: string, path: string, ini
 
 // The reach-aimed read; undefined means the active box. For callers holding a reach as a value instead of
 // writing the ternary.
-export async function sandboxJsonVia<T>(at: string | undefined, path: string, init?: RequestInit): Promise<T> {
-    return at === undefined ? sandboxJson<T>(path, init) : sandboxJsonAt<T>(at, path, init);
+export async function sandboxJsonVia<T>(at: string | undefined, path: string, init?: RequestInit, options?: RequestOptions): Promise<T> {
+    return at === undefined ? sandboxJson<T>(path, init, options) : sandboxJsonAt<T>(at, path, init, options);
 }
 
 // Raw bytes for binary preview (images/PDF), where a utf8 decode would corrupt the file. `at` names the sandbox

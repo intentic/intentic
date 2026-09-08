@@ -88,6 +88,9 @@ interface RuntimeState {
     // A turn the daemon is already recovering (a remint, an outage wait) and will re-run on its own; the one flag that
     // survives `finish`. Cleared by the resumed turn's own `begin`, or by `abandonResume` if the recovery fails.
     resuming: boolean;
+    // A land lease is held (withLandLease): the worktree is being rebased and carried into the tree. Outlives `finish`
+    // too, since a manual land finishes the card while still holding it.
+    landing: boolean;
     activity: { tool?: string; target?: string; todo?: string } | undefined;
     contextTokens: number | undefined;
     contextWindow: number | undefined;
@@ -123,6 +126,7 @@ const freshRuntime = (): RuntimeState => ({
     limitMoving: undefined,
     stopping: undefined,
     resuming: false,
+    landing: false,
     activity: undefined,
     contextTokens: undefined,
     contextWindow: undefined,
@@ -238,8 +242,17 @@ const endedFailure = (
               ...(state.limitMoving !== undefined ? { limitMoving: state.limitMoving } : {}),
           };
 
-// Status precedence: the live turn (a chosen ending outranks a park), then an armed resume, then how the last turn
-// ended, then the land standing; only `idle` yields to the standing. Pure, so the rule is testable without a registry.
+// The live turn's word: a chosen ending outranks a park.
+const liveStatus = (state: RuntimeState, parked: readonly string[]): AgentStatus => {
+    if (state.stopping !== undefined) {
+        return state.stopping === "dismissed" ? "dismissing" : "stopping";
+    }
+    return parked.length > 0 ? "awaiting" : "running";
+};
+
+// Status precedence: the live turn, then an armed resume, then a held land lease, then how the last turn ended, then
+// the land standing; only `idle` yields to the standing. A running turn's own end-of-turn land stays `running`: the
+// lease reads as `landing` only between turns. Pure, so the rule is testable without a registry.
 const statusOf = (
     state: RuntimeState | undefined,
     parked: readonly string[],
@@ -247,13 +260,13 @@ const statusOf = (
     landing: LandStanding,
 ): AgentStatus => {
     if (state?.running === true) {
-        if (state.stopping !== undefined) {
-            return state.stopping === "dismissed" ? "dismissing" : "stopping";
-        }
-        return parked.length > 0 ? "awaiting" : "running";
+        return liveStatus(state, parked);
     }
     if (state?.resuming === true) {
         return "resuming";
+    }
+    if (state?.landing === true) {
+        return "landing";
     }
     return entryStatus === "idle" ? landing : entryStatus;
 };
@@ -319,6 +332,12 @@ export interface AgentsRegistry {
     // Holds the conversation against its own turns while a rewind restores files under a running turn. Shares one mutex
     // with `begin`, claimed synchronously; always released, even if `fn` throws.
     readonly withRewindLease: <T>(conversationId: string, fn: () => Promise<T>) => Promise<T | undefined>;
+    // One land at a time per conversation, later ones queued in arrival order; held through the pre-land sync as well
+    // as the land, since the sync rebases the very worktree the land reads. Claimed synchronously, so a request that
+    // asks `landing` right after sees it; released once the last queued one settles, whether or not it threw.
+    readonly withLandLease: <T>(id: string, fn: () => Promise<T>) => Promise<T>;
+    // Whether a land lease is held or queued on right now; what a second press is refused against.
+    readonly landing: (id: string) => boolean;
     // Writes what the checkout is (its repos, each with the main-line base) and, only when given, what it should carry
     // (`composition`); callers that merely rewrite repos keep the opening turn's decision.
     readonly recordWorktree: (id: string, repos: readonly PersistedAgent["repos"][number][], composition?: Composition) => Promise<void>;
@@ -405,6 +424,9 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
     // The other half of the turn mutex: conversations a rewind is restoring. Kept outside `RuntimeState`, which is
     // rebuilt on every `begin`, so nothing here could accidentally clear the lease.
     const rewinding = new Set<string>();
+    // Each conversation's land chain (the last queued land) and how many are held or queued on it.
+    const landChains = new Map<string, Promise<unknown>>();
+    const landQueued = new Map<string, number>();
     // Live account of each agent's commit message being drafted, kept outside `RuntimeState` since drafting starts
     // after the landing turn has already ended. A finished report stays until the next land replaces it.
     const messageDrafts = new Map<string, LandedMessageDraft>();
@@ -641,6 +663,38 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                     const sessionId = state.pendingSessionId ?? entryOf(id)?.sessionId;
                     return sessionId === undefined ? [] : [sessionId];
                 }),
+        landing: (id) => runtime.get(id)?.landing === true,
+        withLandLease: async (id, fn) => {
+            const state = runtimeOf(id);
+            const ahead = landChains.get(id) ?? Promise.resolve();
+            landQueued.set(id, (landQueued.get(id) ?? 0) + 1);
+            if (!state.landing) {
+                state.landing = true;
+                broadcast();
+            }
+            // Queued behind whatever is ahead, whichever way that ended; `fn` takes no argument, so the settled value is
+            // dropped.
+            const turn = ahead.then(
+                () => fn(),
+                () => fn(),
+            );
+            landChains.set(
+                id,
+                turn.catch(() => undefined),
+            );
+            try {
+                return await turn;
+            } finally {
+                const left = (landQueued.get(id) ?? 1) - 1;
+                landQueued.set(id, left);
+                if (left === 0) {
+                    landQueued.delete(id);
+                    landChains.delete(id);
+                    state.landing = false;
+                    broadcast();
+                }
+            }
+        },
         withRewindLease: async (conversationId, fn) => {
             // The claim: `running` is read and `rewinding` is written with no `await` between them, one atomic step.
             // Adding an await here, however harmless it looks, reopens the race this function exists to close.

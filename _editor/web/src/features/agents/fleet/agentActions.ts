@@ -9,7 +9,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
 import { refreshAcross } from "../../sandbox/live/fleetAcross";
 import { refreshChangesAcross } from "../../workspace/changes/changesAcross";
-import { sandboxJson, sandboxJsonAt } from "../../sandbox/client/sandboxClient";
+import { type RequestOptions, sandboxJson, sandboxJsonAt } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "../review/conflictResolution";
 import { useAgents } from "./useAgents";
@@ -24,8 +24,8 @@ import { AGENT_DIFF, GIT_CHANGES, HISTORY_SNAPSHOTS } from "../../../lib/queryKe
 // message through the chat singleton and so never will.
 export type AgentReach = string | undefined;
 
-const agentJson = <T>(at: AgentReach, path: string, init?: RequestInit): Promise<T> =>
-    at === undefined ? sandboxJson<T>(path, init) : sandboxJsonAt<T>(at, path, init);
+const agentJson = <T>(at: AgentReach, path: string, init?: RequestInit, options?: RequestOptions): Promise<T> =>
+    at === undefined ? sandboxJson<T>(path, init, options) : sandboxJsonAt<T>(at, path, init, options);
 
 // Routes to the active sandbox, or to a named one, matching `at`.
 export const startAgent = (prompt?: string, actsAs?: string): string => {
@@ -68,13 +68,17 @@ export const openConversation = (id: string): Conversation | undefined =>
 // Land: carries the agent's worktree branches into main; a conflict refuses every write. `span: cumulative` re-reads
 // from the branch's base for work already landed then discarded; `force` overrides the turn guard and must come only
 // from a press that showed the warning first.
+// No headers deadline: the answer comes once the work is in the tree, and a large delta takes longer than the bound;
+// the card's `landing` status carries the wait, so a request given up on would only re-enable a press the daemon
+// refuses.
 export const landAgent = (
     id: string,
     mode: LandMode = `check`,
     span: AgentSpan = `outstanding`,
     force = false,
     at: AgentReach = undefined,
-): Promise<LandResult> => agentJson<LandResult>(at, `/agents/${encodeURIComponent(id)}/land`, jsonBody(`POST`, { mode, span, force }));
+): Promise<LandResult> =>
+    agentJson<LandResult>(at, `/agents/${encodeURIComponent(id)}/land`, jsonBody(`POST`, { mode, span, force }), { deadline: false });
 
 // A collaborator's stand-in for a land they can't perform (the daemon floors `land` at maintainer): stamps the ask so
 // every maintainer's board wears it.

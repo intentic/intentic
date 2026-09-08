@@ -28,6 +28,15 @@ describe("dropActionFor", () => {
         expect(dropActionFor(agent({ status: `running` }), `finished`)).toBe(`stop`);
     });
 
+    // The land it would ask for is the one already under way; the daemon refuses a second, and discarding would delete
+    // the worktree being read.
+    it("offers nothing for a card whose work is landing, and says why", () => {
+        expect(dropActionFor(agent({ status: `landing` }), `finished`)).toBeUndefined();
+        expect(dropActionFor(agent({ status: `landing` }), `discard`)).toBeUndefined();
+        expect(dropRejection(agent({ status: `landing` }), `finished`)).toBe(`Its work is landing right now`);
+        expect(dropRejection(agent({ status: `landing` }), `discard`)).toBe(`Its work is landing right now`);
+    });
+
     // An errored turn never reached its auto-land, so the drop is a first attempt; a conflicted one already had its
     // land refused, and check mode is atomic so retrying is a guaranteed no-op.
     it("lands work whose turn errored out before it could land", () => {

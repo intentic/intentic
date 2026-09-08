@@ -406,6 +406,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             reapRepoCheckout: async () => {},
             prune: async () => {},
             withRepoLock: (_repo, task) => task(),
+            repoBusy: () => false,
         },
         // Composed from the same two lookups the daemon uses, so an unscoped read is the shared tree just as in
         // production. Read through `merged`, not the locals, so redirecting `workspace` moves the file routes with it.

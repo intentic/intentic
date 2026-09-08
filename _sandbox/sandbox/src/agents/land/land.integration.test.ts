@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -823,4 +823,60 @@ test("pruneEmptiedDirs stops at the first level that still holds anything, and a
     expect(existsSync(join(base, "a/b"))).toBe(false);
     expect(existsSync(join(base, "a/keep.txt"))).toBe(true);
     expect(existsSync(base)).toBe(true);
+});
+
+// The blocked set is read off one whole-patch refusal, not probed per file, so a delta of any size classifies in a
+// handful of git runs. Sixty files, refused and clean by turns, cost the per-file road three runs each.
+test("a delta with many refusing paths classifies in fewer git runs than it has files", async () => {
+    const { work, worktrees } = await setup();
+    const count = 60;
+    for (let index = 0; index < count; index += 1) {
+        await writeFile(join(work, `f${index}.ts`), "line one\nline two\nline three\n");
+    }
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "many files");
+    const conversation = await worktrees.ensure("c2", []);
+    for (let index = 0; index < count; index += 1) {
+        await writeFile(join(conversation.cwd, `f${index}.ts`), `line one AGENT ${index}\nline two\nline three\n`);
+        if (index % 2 === 0) {
+            await writeFile(join(work, `f${index}.ts`), `line one USER ${index}\nline two\nline three\n`);
+        }
+    }
+    let runs = 0;
+    const counting: typeof defaultGit = (dir, args, env) => {
+        runs += 1;
+        return defaultGit(dir, args, env);
+    };
+
+    const result = await landAgent(worktrees, isolatedAgent(conversation.repos, { id: "c2" }), "check", "outstanding", counting);
+
+    expect(result.landed).toBe(false);
+    expect(result.conflicts?.[0]?.paths).toHaveLength(count / 2);
+    expect(result.conflicts?.[0]?.paths.every((conflict) => conflict.reason === "workspace")).toBe(true);
+    expect(result.conflicts?.[0]?.clean).toBe(count / 2);
+    expect(runs).toBeLessThan(count);
+});
+
+// `git apply --check` passes a symlink over a directory (a directory may stand where a file will go) and the write then
+// refuses: reported as this repo's conflict at the path, rather than thrown as an error naming nothing.
+test("a write the tree refuses after a clean preflight reports the path as a conflict instead of throwing", async () => {
+    const { work, worktrees } = await setup();
+    await mkdir(join(work, "pkg"), { recursive: true });
+    await writeFile(join(work, "pkg", "index.ts"), "export {};\n");
+    await sh(work, "add", "-A");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "pkg");
+    // Main holds a real, populated directory where the branch puts a symlink; untracked, so no diff sees it.
+    await mkdir(join(work, "pkg", "node_modules", "dep"), { recursive: true });
+    await writeFile(join(work, "pkg", "node_modules", "dep", "index.js"), "module.exports = {};\n");
+    const conversation = await worktrees.ensure("c2", []);
+    await symlink("../shared", join(conversation.cwd, "pkg", "node_modules"));
+    await writeFile(join(conversation.cwd, "pkg", "index.ts"), "export const x = 1;\n");
+
+    const result = await landAgent(worktrees, isolatedAgent(conversation.repos, { id: "c2" }));
+
+    expect(result.landed).toBe(false);
+    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "pkg/node_modules", reason: "workspace" }], clean: 1, mainBranch: "main" }]);
+    expect(existsSync(join(work, "pkg", "node_modules", "dep", "index.js"))).toBe(true);
+    // Refused before any tip moved: the next land carries the same delta.
+    expect(result.repos.find((repo) => repo.repo === "root")?.landedTip).toBeUndefined();
 });
