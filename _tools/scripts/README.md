@@ -24,6 +24,7 @@ which jobs a push starts — and it asserts each one exists rather than silently
 |---|---|
 | [repo-root.sh](lib/repo-root.sh) | the monorepo root, **found** rather than counted (`repo_root`) |
 | [packages.sh](lib/packages.sh) | `PUB` / `VERSIONED`: the first-party release set, in topological order |
+| [packages.mjs](lib/packages.mjs) | the same list, read out of that file for the readers written in JavaScript (`publishSet`, `manifestOf`) |
 | [github.sh](lib/github.sh) | the GitHub REST calls a release makes: releases, assets, `make_latest`, the `stable` tag |
 | [registry-retry.sh](lib/registry-retry.sh) | which failed **image push** is worth a second attempt, and which must fail at once |
 | [npm-publish-retry.sh](lib/npm-publish-retry.sh) | the same judgment for an **npm publish** the transparency log dropped |
@@ -97,6 +98,7 @@ Ordered the way a release runs them:
 | | |
 |---|---|
 | [release-plan.mjs](release/release-plan.mjs) | the version, computed before anything is built |
+| [check-publishable.mjs](release/check-publishable.mjs) | npm has heard of every name in the publish set — asked before a version is cut, since a new one (a rename, usually) cannot be published by a trusted publisher at all |
 | [set-versions.sh](release/set-versions.sh) | stamp it onto every first-party package (transient, CI-only) |
 | [release-prepare.sh](release/release-prepare.sh) | semantic-release `prepareCmd`: assert every artifact exists and is the one that was verified |
 | [publish-github.sh](release/publish-github.sh) | the GitHub Release, its notes, and every installer attached to it |

@@ -129,44 +129,21 @@ for i in "${!names[@]}"; do
     ( t="$(pub_time "${names[$i]}")"; [ -n "$t" ] && printf '%s' "$t" > "$work/on-npm-$i" ) &
   else
     ( npm view "${names[$i]}@$VERSION" version >/dev/null 2>&1 && touch "$work/on-npm-$i" ) &
-    # Does the package exist AT ALL — see the bootstrap check below.
-    ( npm view "${names[$i]}" name >/dev/null 2>&1 && touch "$work/exists-$i" ) &
   fi
 done
 wait
 
 if [ "$INTERACTIVE" = 0 ]; then
-  # A PACKAGE THAT HAS NEVER BEEN PUBLISHED CANNOT BE PUBLISHED BY THIS WORKFLOW, and it fails in a way worth
-  # spending ten lines to prevent.
+  # A PACKAGE THAT HAS NEVER BEEN PUBLISHED CANNOT BE PUBLISHED BY THIS WORKFLOW: no settings page, so no
+  # trusted publisher, so nothing for the OIDC exchange to exchange for — and npm reports that as an auth
+  # failure on the `npm publish` line, indistinguishable at a glance from a misconfigured publisher on a
+  # package that does exist. Left to run it fails ONE PACKAGE AT A TIME, in the middle of a serial loop that
+  # has already published the ones before it, so the release ends half-landed.
   #
-  # Trusted publishing is registered per package, on that package's own settings page on npmjs.com. A name
-  # nobody has ever published has no such page, so no trusted publisher can be registered against it, so the
-  # OIDC exchange has nothing to exchange for. npm reports that as an auth failure on the `npm publish` line —
-  # indistinguishable, at a glance, from a misconfigured publisher on a package that does exist.
-  #
-  # Left to run, it fails ONE PACKAGE AT A TIME, in the middle of a serial loop that has already published the
-  # ones before it. The release ends half-landed, and the next person reads an auth error rather than the fact
-  # that the name is simply new. So: say it once, up front, naming all of them, before anything ships.
-  #
-  # The remedy is this same script under --interactive from an authenticated maintainer machine: it bootstraps
-  # the first version under a real login, after which each package has a settings page and its trusted
-  # publisher can be registered (Settings -> Trusted publisher -> GitHub Actions, workflow `npm-publish.yml`).
-  # From the release after that, the release lane owns them.
-  missing=()
-  for i in "${!names[@]}"; do
-    [ -e "$work/exists-$i" ] || missing+=("${names[$i]}")
-  done
-  if [ "${#missing[@]}" -gt 0 ]; then
-    {
-      echo "these packages have never been published, so no trusted publisher can exist for them yet:"
-      printf '  %s\n' "${missing[@]}"
-      echo
-      echo "bootstrap them once from an authenticated maintainer machine:"
-      echo "  bash _tools/scripts/release/publish-npm.sh $VERSION --interactive"
-      echo "then register each one's trusted publisher on npmjs.com (workflow: npm-publish.yml) and re-run the tag."
-    } >&2
-    exit 1
-  fi
+  # Read once, up front, naming all of them, before anything packs. check-publishable.mjs asks the registry and
+  # prints the remedy; the release plan runs the same guard before a version is ever cut, so reaching it HERE
+  # means a name went new between the plan and the tag — or that this workflow was dispatched by hand.
+  node "$DIR/check-publishable.mjs"
 else
   echo "== Audit: which of the ${#PUB[@]} packages already have $VERSION on npm =="
   todo=0

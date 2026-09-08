@@ -78,6 +78,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node _tools/scripts/release/release-plan.mjs >> "$GITHUB_OUTPUT"
 
+      # THE RELEASE THAT CANNOT PUBLISH IS THE ONE THAT MUST NOT BE CUT. npm refuses a name it has never seen
+      # from a trusted publisher (check-publishable.mjs says why), and publish-npm.sh reads that at publish
+      # time — which is after semantic-release has tagged, released and announced. v1.249.0 renamed a published
+      # package as collateral of a directory move and ended exactly there: a green release with nothing on npm.
+      # Asked here instead, while the release is still a plan and a failure costs only this job. Only when a
+      # release is actually planned: a no-release push owes the registry no question.
+      - name: The publish set is publishable
+        if: ${{ steps.release.outputs.version != '' }}
+        run: node _tools/scripts/release/check-publishable.mjs
+
   # The versioned candidate. This is the only build of the Windows installer in the release lifecycle; the
   # publish job downloads and stages it instead of asking cargo-xwin for a similar second file.
   windows-build:
