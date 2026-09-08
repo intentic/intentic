@@ -24,7 +24,7 @@
             "notes": "npm @cursor/sdk. Never baked into a published image: its licence grants no redistribution."
         },
         "opencode": {
-            "blessed": "1.18.18",
+            "blessed": "1.18.29",
             "notes": "npm opencode-ai, the runtime behind Grok turns."
         },
         "translator": {
