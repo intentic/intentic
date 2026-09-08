@@ -185,12 +185,6 @@ export function useHostRunning(slug: () => string | undefined): ComputedRef<stri
     });
 }
 
-// Past this, a device is treated as gone quiet rather than merely between reports.
-const REPORT_STALE_MS = 60_000;
-
-export const reportStale = (device: Device, now: number): boolean =>
-    device.report !== undefined && now - device.report.capturedAt > REPORT_STALE_MS;
-
 // Reads /system/sync, not /system/devices, to avoid polling every laptop just to draw a badge.
 const HEALTH_POLL_MS = 60_000;
 

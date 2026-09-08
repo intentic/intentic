@@ -1,16 +1,15 @@
 <script setup lang="ts">
 import type { Device } from "@intentic/sandbox-contract";
-import { Button, ui, Code, RowGroup, RowNote } from "@intentic/ui";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { Button, ui, Code } from "@intentic/ui";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useDevices } from "./useDevices";
 import { useDesktopSync } from "./useDesktopSync";
 import { desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
 import ScriptSourceSwitch from "../../capabilities/connect/ScriptSourceSwitch.vue";
 
 // Mints a device pairing: pick a folder, click Enable, run the one-liner on the target machine. Two modes:
-// full sync (file sync + ports, single holder, owner-only) and mirror (ports only, any device).
-
-const { highlight = false } = defineProps<{ highlight?: boolean }>();
+// full sync (file sync + ports, single holder, owner-only) and mirror (ports only, any device). Body only:
+// <AddDeviceDialog> frames it, so this draws no heading of its own.
 
 const {
     canOperate,
@@ -49,37 +48,18 @@ const startMirror = (): void => {
 // "What stays on your device" disclosure: collapsed by default.
 const showFootprint = ref(false);
 
-// Brief ring when arriving via the Workspace "Open in local editor" shortcut.
-const ringing = ref(false);
-watch(
-    () => highlight,
-    (on) => {
-        if (!on) {
-            return;
-        }
-        ringing.value = true;
-        setTimeout(() => (ringing.value = false), 2500);
-    },
-    { immediate: true },
-);
-
 onMounted(start);
 onUnmounted(stop);
 </script>
 
 <template>
-    <RowGroup
-        id="desktop-sync"
-        label="Add a device"
-        class="@container transition-shadow"
-        :class="ringing ? '-m-1 rounded-xl p-1 ring-2 ring-info' : ''"
-    >
-        <RowNote variant="block" class="flex flex-col gap-4">
+    <div class="@container">
+        <div class="flex flex-col gap-4">
             <template v-if="available">
                 <!-- States where status went, since this card no longer reports anything itself. -->
                 <p class="text-2xs text-subtle">
-                    Pair another device with this sandbox. Anything already paired is a row in
-                    <b>Devices</b> above, with its folder, its ports and its switches.
+                    Pair another device with this sandbox. Anything already paired is a card on the
+                    <b>Devices</b> board, with its folder, its ports and its switches.
                 </p>
                 <!-- Names the device being taken over, since taking over ends its sync. -->
                 <p v-if="takeover" class="text-2xs text-warning">
@@ -201,7 +181,7 @@ onUnmounted(stop);
                         </li>
                         <li>
                             <span class="font-mono text-content">intentic-machine sync uninstall</span> removes all of it; that device's
-                            <b>Unpair</b> button above asks it to do exactly that.
+                            <b>Unpair</b> button asks it to do exactly that.
                         </li>
                     </ul>
                 </template>
@@ -214,6 +194,6 @@ onUnmounted(stop);
             <div v-else :class="ui.emptyState()">
                 Desktop sync needs an SSH way into this sandbox. Sandboxes we connect for you don't have one yet, but one behind your own domain does.
             </div>
-        </RowNote>
-    </RowGroup>
+        </div>
+    </div>
 </template>

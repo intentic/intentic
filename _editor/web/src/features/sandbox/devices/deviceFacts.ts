@@ -1,5 +1,4 @@
 import { agentBuildSkew, agentStalled, type Device, type DeviceAgent, isBehind } from "@intentic/sandbox-contract";
-import { groupNeedsAttention, type DeviceSandboxGroup } from "@intentic/ui/device";
 import { timeAgo } from "@intentic/ui/format";
 
 // What a Devices row says about the machine itself, as distinct from what it's doing for this sandbox
@@ -110,56 +109,30 @@ export const syncNote = (device: Device, now: number): string | undefined => {
 // agentBuildSkew's restart instead.
 export const agentBehind = (device: Device, latest?: string): boolean => isBehind(device.report?.agent.installed, latest);
 
-// A folded device's line: facts are counted and never coloured; warnings keep their ink and are the reason to
-// open the row.
-export interface DeviceSummary {
-    readonly facts: readonly string[];
-    readonly warnings: readonly string[];
-}
+// Past this, a device is treated as gone quiet rather than merely between reports.
+const REPORT_STALE_MS = 60_000;
+
+export const reportStale = (device: Device, now: number): boolean =>
+    device.report !== undefined && now - device.report.capturedAt > REPORT_STALE_MS;
 
 // Same rule the terminal uses (agentStalled), so a row and `intentic-machine status` cannot disagree.
-const agentHalted = (device: Device, now: number): boolean => device.report !== undefined && agentStalled(device.report.agent, now);
+export const agentHalted = (device: Device, now: number): boolean => device.report !== undefined && agentStalled(device.report.agent, now);
 
-// Split from warnings the same way groupSummary splits its own: counted vs coloured.
-const summaryFacts = (device: Device, groups: readonly DeviceSandboxGroup[], now: number): string[] => {
-    const facts: string[] = [];
-    const running = groups.filter((group) => group.sandbox?.running === true).length;
-    if (groups.length > 0) {
-        facts.push(groups.length === 1 ? `1 sandbox` : `${groups.length} sandboxes`);
-    }
-    if (running > 0) {
-        facts.push(`${running} running`);
-    }
-    // Only while actually syncing; a quiet enrollment is a warning below, not a fact here.
-    const note = syncNote(device, now);
-    if (note !== undefined && !syncStopped(device, now)) {
-        facts.push(note);
-    }
-    return facts;
-};
-
-const summaryWarnings = (device: Device, groups: readonly DeviceSandboxGroup[], now: number): string[] => {
+// What is wrong with the machine itself, as distinct from what is wrong with one of its sandboxes: a board
+// card states these under the sandbox lines, which carry their own.
+export const machineWarnings = (device: Device, now: number): readonly string[] => {
     const warnings: string[] = [];
-    const attention = groups.filter(groupNeedsAttention).length;
-    if (attention > 0) {
-        warnings.push(attention === 1 ? `1 needs attention` : `${attention} need attention`);
-    }
     // An unused enrollment reads as healthy everywhere else, so it has to warn here.
     const note = syncNote(device, now);
     if (note !== undefined && syncStopped(device, now)) {
         warnings.push(note);
     }
-    // A dead loop leaves every row beneath it reading as it did the moment before; said once, here.
+    // A dead loop leaves every fact beneath it reading as it did the moment before; said once, here.
     if (device.report !== undefined && (!device.report.agent.running || agentHalted(device, now))) {
         warnings.push(`agent stopped`);
     }
     return warnings;
 };
-
-export const deviceSummary = (device: Device, groups: readonly DeviceSandboxGroup[], now: number): DeviceSummary => ({
-    facts: summaryFacts(device, groups, now),
-    warnings: summaryWarnings(device, groups, now),
-});
 
 // Only shown when offline: noise on a live row, the most useful fact on one that isn't.
 export const lastSeenNote = (device: Device): string | undefined =>

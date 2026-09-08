@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { Device } from "@intentic/sandbox-contract";
-import { Button, ConfirmDialog, DeviceRunLog, Notice, type NoticeModel, StatusBadge, ui } from "@intentic/ui";
+import { Button, ConfirmDialog, DeviceRunLog, Notice, type NoticeModel, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "./useRunners";
 
@@ -122,9 +122,12 @@ const add = async (): Promise<void> => {
 </script>
 
 <template>
-    <div v-if="device.hostId !== undefined" class="border-t border-line-subtle pt-3">
-        <div class="flex items-center justify-between gap-2">
-            <span class="text-2xs font-semibold uppercase tracking-wide text-subtle">Runners for this sandbox</span>
+    <!--
+        "on this device", not "for this sandbox": this list sits under the machine's own sandbox list, and two
+        adjacent headings whose "this" means different things is how the old page read.
+    -->
+    <RowGroup v-if="device.hostId !== undefined" label="Runners on this device" :count="mine.length === 0 ? undefined : mine.length">
+        <template #actions>
             <Button
                 v-if="!adding"
                 size="small"
@@ -136,10 +139,10 @@ const add = async (): Promise<void> => {
             >
                 <template #icon><Icon name="plus" /></template>
             </Button>
-        </div>
+        </template>
 
         <!-- Asked for, not generated: it's what you pick from in the composer every day. -->
-        <div v-if="adding" class="mt-2 flex flex-wrap items-center gap-2">
+        <RowNote v-if="adding" variant="block" class="flex flex-wrap items-center gap-2">
             <input
                 v-model="asked"
                 type="text"
@@ -151,10 +154,10 @@ const add = async (): Promise<void> => {
             <Button size="small" label="Create" :disabled="asked === `` || nameError !== undefined" @click="add()" />
             <Button size="small" severity="secondary" :text="true" label="Cancel" @click="adding = false" />
             <span v-if="nameError" class="text-2xs text-danger">{{ nameError }}</span>
-        </div>
+        </RowNote>
 
-        <ul v-if="mine.length > 0" class="mt-2 flex flex-col gap-1">
-            <li v-for="runner in mine" :key="runner.id" class="flex items-center gap-2 rounded-lg px-2 py-1.5">
+        <ul v-if="mine.length > 0" class="flex flex-col">
+            <li v-for="runner in mine" :key="runner.id" class="flex items-center gap-2 px-4 py-2.5">
                 <Icon name="desktop" class="text-xs" :class="runner.online ? 'text-primary-500' : 'text-subtle'" />
                 <span class="flex min-w-0 flex-col">
                     <span class="truncate text-xs text-content">{{ runner.id }}</span>
@@ -204,16 +207,23 @@ const add = async (): Promise<void> => {
             </li>
         </ul>
 
+        <!-- Said where the list would be, since an empty surface with a heading reads as a failure to load. -->
+        <RowNote v-if="mine.length === 0 && !adding" variant="empty">
+            This sandbox keeps no runner on {{ device.label }}. Add one to hand it conversations to run there.
+        </RowNote>
+
         <!-- The machine's own output while `ic` works, and whatever it said at the end. -->
-        <DeviceRunLog
-            v-if="busy !== undefined"
-            :lines="lines"
-            :running="true"
-            empty="Starting on that device…"
-            note="Running on that device. It keeps going even if you leave this page."
-        />
-        <Notice v-if="failure" :of="failure" />
-        <p v-else-if="done" class="mt-1 text-xs text-muted">{{ done }}</p>
+        <RowNote v-if="busy !== undefined || failure || done" variant="block" class="flex flex-col gap-1">
+            <DeviceRunLog
+                v-if="busy !== undefined"
+                :lines="lines"
+                :running="true"
+                empty="Starting on that device…"
+                note="Running on that device. It keeps going even if you leave this page."
+            />
+            <Notice v-if="failure" :of="failure" />
+            <p v-else-if="done" class="text-xs text-muted">{{ done }}</p>
+        </RowNote>
 
         <ConfirmDialog
             :open="confirmingRemove !== undefined"
@@ -228,5 +238,5 @@ const add = async (): Promise<void> => {
                 one here any time.
             </p>
         </ConfirmDialog>
-    </div>
+    </RowGroup>
 </template>

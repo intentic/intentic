@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 // jsdom because the subject is what a row puts on screen, not the derivation behind it (see deviceFacts.test.ts).
 import type { Device } from "@intentic/sandbox-contract";
+import type { RouteLocationRaw } from "vue-router";
 import PrimeVue from "primevue/config";
 import { groupNeedsAttention, groupSummary, menuVerbs, primaryVerb, sandboxGroups } from "@intentic/ui";
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, defineComponent, h, nextTick, reactive, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Import chain touches the app's environment and a media query at module eval; jsdom covers both (see
@@ -71,11 +72,18 @@ vi.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: 
 vi.mock(`./ContainerHealthCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./DesktopSyncCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`../access/ControlTokensSection.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-// A blocked machine's "open its permissions" is now a link, so the mock stubs one.
+// Which machine is on screen lives in the URL, so the harness carries a real (reactive) one: the tab reads
+// `?device=`, and its own auto-select writes it back through `replace`.
+const route = reactive<{ query: Record<string, string> }>({ query: {} });
+const navigate = (to: RouteLocationRaw): void => {
+    const asked = typeof to === `string` ? undefined : to.query;
+    // `?device=` is the only param the tab reads, and it is always a string.
+    route.query = Object.fromEntries(Object.entries(asked ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === `string`));
+};
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
-    useRoute: () => ({ query: {} }) as never,
-    useRouter: () => ({ push: () => {} }) as never,
+    useRoute: () => route as never,
+    useRouter: () => ({ push: navigate, replace: navigate }) as never,
     RouterLink: (await import(`../../../testing/routerLinkStub`)).RouterLinkStub as never,
 }));
 
@@ -105,14 +113,17 @@ vi.mock(`./useRunners`, () => ({
     forgetRunner: () => Promise.resolve(),
 }));
 
+const { boardRoute, deviceRoute } = await import("./deviceLinks");
 const { default: SandboxDevices } = await import("./SandboxDevices.vue");
 
 let app: App | undefined;
 // A second mount retires the first: a leaked app stays subscribed to `devices` and re-renders against DOM
 // afterEach already emptied.
-const mount = (rows: Device[]): HTMLElement => {
+const mount = (rows: Device[], at: Record<string, string> = {}): HTMLElement => {
     app?.unmount();
     document.body.innerHTML = ``;
+    // A mount is an arrival at the tab; `at` is the deep link it arrived on.
+    route.query = { ...at };
     devices.value = rows;
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -125,7 +136,7 @@ const mount = (rows: Device[]): HTMLElement => {
     return el;
 };
 
-// A device and a sandbox both disclose by pressing the line that names them.
+// A sandbox row is the one thing left that discloses; a machine is selected, not expanded.
 const disclosures = (el: HTMLElement): HTMLButtonElement[] => [...el.querySelectorAll<HTMLButtonElement>(`button[aria-expanded]`)];
 const openRow = async (el: HTMLElement, name: string): Promise<void> => {
     disclosures(el)
@@ -134,7 +145,21 @@ const openRow = async (el: HTMLElement, name: string): Promise<void> => {
     await nextTick();
 };
 
+// Opens a machine the way its board card does. A single-device fleet is already selected on arrival, so this
+// is only needed where the board had something to choose between.
+const select = async (key: string): Promise<void> => {
+    navigate(deviceRoute(key));
+    await nextTick();
+};
+
+// Back to the board, the way the device page's own link does.
+const showBoard = async (): Promise<void> => {
+    navigate(boardRoute());
+    await nextTick();
+};
+
 afterEach(() => {
+    route.query = {};
     latest.value = `1.183.0`;
     runnersList.value = [];
     devicesLoading.value = false;
@@ -549,28 +574,68 @@ it(`keeps the explanation and drops the button when the machine is not reachable
     expect(labels(text)).not.toContain(`Fix with agent`);
 });
 
-it(`folds a device to a line that counts what is under it`, async () => {
-    const el = mount([busyMachine()]);
-    await openRow(el, `radarsu-rog`);
-    const text = el.textContent ?? ``;
-    expect(text).toContain(`3 sandboxes`);
-    expect(text).toContain(`2 running`);
-    expect(text).toContain(`1 needs attention`);
+// A card is read, never expanded: everything a reader used to unfold a machine for is on its face.
+it(`names every sandbox a machine holds, and what each one came to, without being opened`, () => {
+    const text = mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]).textContent ?? ``;
+    expect(text).toContain(`radarsu-web-platform-bce57bb9fe3b`);
+    expect(text).toContain(`radarsu-local-0738cd6b5027`);
+    expect(text).toContain(`2 ports`);
+    // The third is stopped on purpose, which is a state rather than an errand.
+    expect(text).toContain(`stopped`);
+    expect(text).toContain(`1 port not on localhost`);
+    // No chevron on a machine: a card is one link, so nothing on the board discloses.
+    expect(disclosures(mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]))).toEqual([]);
 });
 
-// The hand-rolled rows had none of <DisclosureRow>'s wash or its `aria-controls`; they're that component now.
-it(`lights an open device the way the rest of the hub does, and names the block it opened`, async () => {
+// The board is an index of links, so a machine is deep-linkable, ⌘-clickable and survives a reload.
+it(`gives every machine its own address, and shows only the one the URL names`, async () => {
+    const el = mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]);
+    expect(el.querySelectorAll(`a`)).toHaveLength(2);
+
+    await select(`rog`);
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`radarsu-rog`);
+    expect(text).not.toContain(`other-pc`);
+    // And the way back out is on the page, not in the browser's history alone.
+    expect(text).toContain(`All devices`);
+
+    await showBoard();
+    expect(el.textContent ?? ``).toContain(`other-pc`);
+});
+
+// Nothing to choose between is not a choice: a one-machine fleet opens on that machine.
+it(`opens straight onto the only machine there is, and still lets the board be reached`, async () => {
     const el = mount([busyMachine()]);
-    const washed = (): Element[] => [...el.querySelectorAll(`[class*="bg-content/6"]`)];
-    expect(washed()).toHaveLength(1);
-    expect(washed()[0]?.textContent ?? ``).toContain(`radarsu-rog`);
+    await nextTick();
+    expect(el.textContent ?? ``).toContain(`All devices`);
 
-    const toggle = disclosures(el).find((button) => (button.textContent ?? ``).includes(`radarsu-rog`));
-    expect(toggle?.getAttribute(`aria-expanded`)).toBe(`true`);
-    expect(el.querySelector(`#${toggle?.getAttribute(`aria-controls`) ?? `none`}`)).not.toBeNull();
+    await showBoard();
+    const board = el.textContent ?? ``;
+    expect(board).toContain(`Add a device`);
+    expect(board).not.toContain(`All devices`);
+});
 
-    await openRow(el, `radarsu-rog`);
-    expect(washed()).toHaveLength(0);
+// A machine that has been revoked, renamed or unpaired since the link was copied.
+it(`falls back to the board when the URL names a machine this sandbox doesn't hold`, async () => {
+    const el = mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }], { device: `ghost` });
+    await nextTick();
+    expect(route.query).toEqual({});
+    expect(el.textContent ?? ``).toContain(`other-pc`);
+});
+
+// The Workspace's "Open in local editor" shortcut lands here asking for the pairing form. A single-machine
+// fleet is auto-selected, so the board's own "Add a device" button is not on screen to be mistaken for it.
+it(`opens the pairing form on arrival from the local-editor shortcut`, async () => {
+    const el = mount([busyMachine()], { enable: `desktop-sync` });
+    await nextTick();
+    expect(labels(el)).not.toContain(`Add a device`);
+    expect(document.body.textContent ?? ``).toContain(`Add a device`);
+});
+
+it(`keeps the pairing form shut on an ordinary arrival`, async () => {
+    mount([busyMachine()]);
+    await nextTick();
+    expect(document.body.textContent ?? ``).not.toContain(`Add a device`);
 });
 
 it(`finds a machine by a port number and opens what matched`, async () => {
@@ -583,7 +648,12 @@ it(`finds a machine by a port number and opens what matched`, async () => {
     const text = el.textContent ?? ``;
     expect(text).toContain(`radarsu-rog`);
     expect(text).not.toContain(`other-pc`);
-    expect(text).toContain(`localhost:8788`);
+    // The matching sandbox is named on the card, so the answer is on the board rather than a click away.
+    expect(text).toContain(`radarsu-web-platform-bce57bb9fe3b`);
+    // The port's own address belongs to the machine's page, where its mirroring switch is.
+    await select(`rog`);
+    await openRow(el, `radarsu-web-platform-bce57bb9fe3b`);
+    expect(el.textContent ?? ``).toContain(`localhost:8788`);
 });
 
 it(`says when a filter matched nothing`, async () => {
@@ -620,7 +690,7 @@ it(`says when a device's agent is behind, and offers the update as a button`, ()
     expect(text).toContain(`desktop sync`);
     expect(text).toContain(`agent`);
     expect(text).toContain(`0.1.0`);
-    expect(text).toContain(`1.183.0 available`);
+    expect(text).toContain(`Agent 1.183.0 has been published; this device has 0.1.0.`);
     // No button on a sync-only row: an update runs over the device connection, which this device has never had.
     expect(labels(el)).not.toContain(`Update agent`);
 });
@@ -638,7 +708,7 @@ it(`says nothing about updating a device that is already current`, () => {
     const text = el.textContent ?? ``;
     expect(text).toContain(`desktop sync`);
     expect(text).toContain(`1.183.0`);
-    expect(text).not.toContain(`available`);
+    expect(text).not.toContain(`has been published`);
     expect(labels(el)).not.toContain(`Update agent`);
 });
 
@@ -681,7 +751,7 @@ it(`makes no claim when this sandbox doesn't know the latest release`, () => {
     const text = el.textContent ?? ``;
     expect(text).toContain(`desktop sync`);
     expect(text).toContain(`0.1.0`);
-    expect(text).not.toContain(`available`);
+    expect(text).not.toContain(`has been published`);
     expect(labels(el)).not.toContain(`Update agent`);
 });
 
@@ -724,7 +794,7 @@ it(`lists this sandbox's runners under the device holding them, with what that m
     const el = mount([managed(true)]);
     await nextTick();
     const text = el.textContent ?? ``;
-    expect(text).toContain(`Runners for this sandbox`);
+    expect(text).toContain(`Runners on this device`);
     expect(text).toContain(`rig`);
     expect(text).toContain(`16 cores`);
     expect(text).not.toContain(`elsewhere`);
@@ -741,7 +811,7 @@ it(`shows the runners section and add control on a machine that has none`, async
     const el = mount([managed(true)]);
     await nextTick();
     const text = el.textContent ?? ``;
-    expect(text).toContain(`Runners for this sandbox`);
+    expect(text).toContain(`Runners on this device`);
     expect(text).toContain(`Add runner`);
 });
 
@@ -878,11 +948,18 @@ const mirrorOnly = (): Device => ({
     },
 });
 
-it(`says which half of desktop sync each device holds`, () => {
-    const text = mount([mirrored(`on`), mirrorOnly()]).textContent ?? ``;
-    expect(text).toContain(`syncing files and ports`);
-    expect(text).toContain(`mirroring ports`);
-    expect(text).toContain(`ports only`);
+it(`says which half of desktop sync each device holds`, async () => {
+    const el = mount([mirrored(`on`), mirrorOnly()]);
+    // On the board it is the door each machine is reached through, beside its name.
+    const board = el.textContent ?? ``;
+    expect(board).toContain(`desktop sync`);
+    expect(board).toContain(`ports only`);
+
+    // On a machine's own page it is the sentence, since that is what anyone opened the machine to read.
+    await select(`laptop`);
+    expect(el.textContent ?? ``).toContain(`syncing files and ports`);
+    await select(`colleague`);
+    expect(el.textContent ?? ``).toContain(`mirroring ports`);
 });
 
 // An unused enrollment used to read as healthy everywhere: the record exists, so every surface called it fine.

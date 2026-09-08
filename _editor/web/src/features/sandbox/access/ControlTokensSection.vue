@@ -3,30 +3,19 @@ import { CONTROL_SCOPE_REACH, type ControlScope } from "@intentic/sandbox-contra
 import { Button, Code, CopyButton, Notice, Picker, type PickerOption, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { formatDate, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
-import { RouterLink } from "vue-router";
 import { type ControlToken, useControlTokens } from "./useControlTokens";
 import { useSandbox } from "../client/useSandbox";
 
-// Program credential minted here by the owner, one component with two mounts: Access shows every scope, roster and
-// snippet; Devices shows only the editor slice, since pairing is about the machine, not tokens broadly. Shown once —
-// the daemon keeps only the hash — with paste-ready snippets for a shell, CI, and an editor.
-
-const {
-    scopes = [`read`, `drive`, `land`, `editor`],
-    snippets = [`curl`, `github`, `acp`],
-    roster = true,
-    defaultExpiry = `90`,
-} = defineProps<{
-    // Which rungs this mount offers. The Devices card offers the editor slice alone.
-    scopes?: readonly ControlScope[];
-    // Which paste-ready forms to show under a freshly minted token.
-    snippets?: readonly (`curl` | `github` | `acp`)[];
-    // Whether to list every token against this sandbox here (the Access tab) or point at the tab that does.
-    roster?: boolean;
-    defaultExpiry?: Expiry;
-}>();
+// Program credential minted here by the owner: every scope, every token against this sandbox, and the
+// paste-ready snippets for a shell, CI and an editor. Shown once — the daemon keeps only the hash.
 
 type Expiry = `30` | `90` | `365` | `never`;
+
+// Which rungs a token can hold, and which paste-ready forms exist for them; the ACP editor slice is one
+// `editor`-scoped token, minted here like any other rather than on a screen of its own.
+const SCOPES: readonly ControlScope[] = [`read`, `drive`, `land`, `editor`];
+const SNIPPETS: readonly (`curl` | `github` | `acp`)[] = [`curl`, `github`, `acp`];
+const DEFAULT_EXPIRY: Expiry = `90`;
 
 const { daemonUrl, active } = useSandbox();
 const { tokens, minted, minting, notice, mint, revoke } = useControlTokens();
@@ -45,7 +34,7 @@ const SCOPE_HINTS: Record<ControlScope, string> = {
 
 // Picker rows are the model: label is the lowercase scope (capitalized via CSS), hint is the teaching sentence.
 const scopeOptions = computed<readonly PickerOption<ControlScope>[]>(() =>
-    CONTROL_SCOPE_REACH.filter((entry) => scopes.includes(entry.scope)).map((entry) => ({
+    CONTROL_SCOPE_REACH.filter((entry) => SCOPES.includes(entry.scope)).map((entry) => ({
         value: entry.scope,
         label: entry.scope,
         icon: SCOPE_ICONS[entry.scope],
@@ -65,8 +54,8 @@ const EXPIRY_OPTIONS: readonly PickerOption<Expiry>[] = [
 ];
 
 const label = ref(``);
-const scope = ref<ControlScope | undefined>(scopes[0]);
-const expiry = ref<Expiry | undefined>(defaultExpiry);
+const scope = ref<ControlScope | undefined>(SCOPES[0]);
+const expiry = ref<Expiry | undefined>(DEFAULT_EXPIRY);
 
 const expiresAtOf = (choice: Expiry | undefined): number | undefined =>
     choice === undefined || choice === `never` ? undefined : Date.now() + Number(choice) * 24 * 60 * 60 * 1000;
@@ -129,7 +118,7 @@ const acpSnippet = computed(() =>
 // Which forms fit the rung just minted: an editor token has one home; a driving token is what CI holds.
 const shownSnippets = computed(() => {
     const rung = minted.value?.scope;
-    return snippets.filter((kind) => (kind === `acp` ? rung === `editor` : kind === `github` ? rung === `drive` || rung === `land` : true));
+    return SNIPPETS.filter((kind) => (kind === `acp` ? rung === `editor` : kind === `github` ? rung === `drive` || rung === `land` : true));
 });
 
 // The roster
@@ -159,23 +148,17 @@ const describe = (token: ControlToken): string =>
 </script>
 
 <template>
-    <RowGroup v-if="isOwner" label="API tokens" :count="roster && tokens.length > 0 ? tokens.length : undefined">
-        <template v-if="roster">
-            <Row v-for="token in tokens" :key="token.id" icon="key" :title="token.label" :description="describe(token)">
-                <!-- Same pill the member roster uses for the same word, so "expired" doesn't get two spellings. -->
-                <template v-if="expired(token)" #meta>
-                    <StatusBadge variant="danger" label="expired" size="xs" />
-                </template>
-                <template #control>
-                    <Button label="Revoke" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
-                </template>
-            </Row>
-            <RowNote v-if="tokens.length === 0">No program holds a token to this sandbox yet.</RowNote>
-        </template>
-        <RowNote v-else>
-            Every token against this sandbox is listed, and revoked, on
-            <RouterLink to="/sandbox/access" class="text-link">Access</RouterLink>.
-        </RowNote>
+    <RowGroup v-if="isOwner" label="API tokens" :count="tokens.length === 0 ? undefined : tokens.length">
+        <Row v-for="token in tokens" :key="token.id" icon="key" :title="token.label" :description="describe(token)">
+            <!-- Same pill the member roster uses for the same word, so "expired" doesn't get two spellings. -->
+            <template v-if="expired(token)" #meta>
+                <StatusBadge variant="danger" label="expired" size="xs" />
+            </template>
+            <template #control>
+                <Button label="Revoke" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
+            </template>
+        </Row>
+        <RowNote v-if="tokens.length === 0">No program holds a token to this sandbox yet.</RowNote>
 
         <RowNote variant="block">
             <div class="flex flex-col gap-3">

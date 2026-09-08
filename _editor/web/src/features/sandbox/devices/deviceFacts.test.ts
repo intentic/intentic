@@ -1,17 +1,17 @@
 import type { Device } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { sandboxGroups } from "@intentic/ui/device";
 import {
     agentBehind,
     agentChip,
     deviceDoors,
-    deviceSummary,
     hostCard,
     lastSeenNote,
     deviceHardware,
+    machineWarnings,
     manageBlock,
     osLabel,
     osTitle,
+    reportStale,
     syncNote,
     syncStopped,
 } from "./deviceFacts";
@@ -239,7 +239,8 @@ test(`ages an enrollment by its own heartbeat`, () => {
     expect(syncNote(quiet, NOW)).toBe(`syncing files and ports: stopped`);
 });
 
-// Facts are counted and never coloured; warnings keep their ink and decide whether to open the row.
+// What is wrong with the machine ITSELF: a board card states these under its sandbox lines, which carry
+// their own.
 const watching = (overrides: Partial<NonNullable<Device[`report`]>> = {}): NonNullable<Device[`report`]> => ({
     hostname: `my-pc`,
     os: `linux`,
@@ -251,26 +252,25 @@ const watching = (overrides: Partial<NonNullable<Device[`report`]>> = {}): NonNu
     ...overrides,
 });
 
-test(`counts what is under a folded device, and colours only what wants something`, () => {
-    const groups = sandboxGroups(
-        [{ sandboxId: `work`, mode: `sync`, localDir: `/home/ada/work`, mutagenStatus: `watching` }],
-        [],
-        [{ slug: `work`, running: true, image: `img` }],
-    );
-    expect(deviceSummary(device({ sync: enrolled(`sync`, NOW), report: watching() }), groups, NOW)).toEqual({
-        facts: [`1 sandbox`, `1 running`, `syncing files and ports`],
-        warnings: [],
-    });
+test(`says nothing about a machine that is syncing and answering`, () => {
+    expect(machineWarnings(device({ sync: enrolled(`sync`, NOW), report: watching() }), NOW)).toEqual([]);
 });
 
-test(`warns on the device's line when its agent has stopped`, () => {
-    const summary = deviceSummary(device({ sync: enrolled(`sync`, NOW), report: watching({ agent: { running: false } }) }), [], NOW);
-    expect(summary.warnings).toEqual([`agent stopped`]);
-    expect(summary.facts).toEqual([`syncing files and ports`]);
+test(`warns about a machine whose agent has stopped`, () => {
+    expect(machineWarnings(device({ sync: enrolled(`sync`, NOW), report: watching({ agent: { running: false } }) }), NOW)).toEqual([
+        `agent stopped`,
+    ]);
 });
 
-test(`moves a quiet enrollment from the facts to the warnings`, () => {
-    const summary = deviceSummary(device({ sync: enrolled(`sync`, NOW - 3 * 60 * 60_000), report: watching() }), [], NOW);
-    expect(summary.facts).toEqual([]);
-    expect(summary.warnings).toEqual([`syncing files and ports: stopped`]);
+test(`warns about an enrollment that has gone quiet, in the same words it reads when live`, () => {
+    expect(machineWarnings(device({ sync: enrolled(`sync`, NOW - 3 * 60 * 60_000), report: watching() }), NOW)).toEqual([
+        `syncing files and ports: stopped`,
+    ]);
+});
+
+test(`counts a reading older than a minute as stale, and a fresh one as current`, () => {
+    expect(reportStale(device({ report: watching() }), NOW)).toBe(false);
+    expect(reportStale(device({ report: watching({ capturedAt: NOW - 61_000 }) }), NOW)).toBe(true);
+    // No report is not a stale one: the row already says the machine has never described itself.
+    expect(reportStale(device(), NOW)).toBe(false);
 });
