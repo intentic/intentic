@@ -22,10 +22,8 @@
   window.env = {
     ...defaultEnv,
     api: { url: "https://localhost:6480" },
-    // Public web client id (@intentic/constants). Authorize the dev origin, https://localhost:47145, as a JS
-    // origin on this client, and reach the SPA at exactly that host: https://127.0.0.1:47145 is a different
-    // origin to both Google and the API's CORS check, and the API answers its preflight 204 with no
-    // allow-origin header (sign-in then fails).
+    // Must reach the SPA at exactly https://localhost:47145 (authorized as this client's JS origin); 127.0.0.1:47145 is
+    // a different origin to both Google and the API's CORS check, and sign-in fails silently there.
     auth: { googleClientId: GOOGLE_CLIENT_ID }
   };
 })();

@@ -17,9 +17,14 @@
  * the two things a drifted container cannot be trusted to have are a working tunnel and a recent image.
  *
  * So a requirement is a conditional: GIVEN this evidence, these keys must be present. A release that adds one
- * adds a row here, and every container predating it starts naming its own gap the next time it boots — in the
- * boot report, in `ic sandbox doctor`, and on the sandbox's own Devices view. That is the whole point of the
- * table: the NEXT migration of this kind announces itself instead of waiting to be noticed.
+ * adds a row here, and every container predating it starts naming its own gap the next time it boots — on its
+ * boot report, and from there on the sandbox's own Devices view. That is the whole point of the table: the NEXT
+ * migration of this kind announces itself instead of waiting to be noticed.
+ *
+ * `ic sandbox doctor` asks the same question from OUTSIDE the container and is deliberately not a reader of this
+ * (it is Rust, and reaching a TS table from there would cost more than the duplication saves). Its
+ * `classify_public` hard-codes the reachability pair today, so a row added here has to be added there too until
+ * one of the two grows a way to read the other. Named rather than left to be discovered.
  *
  * Deliberately small. A row belongs here only when all three are true, and inventing rows that fail the last one
  * is how a diagnostic becomes noise nobody reads:
@@ -109,8 +114,7 @@ export interface ContainerGap {
  * now needs, and only a setup run can hand it over. */
 export const containerDrift = (env: ContainerEnv): readonly ContainerGap[] =>
     CONTAINER_REQUIREMENTS.filter(
-        (requirement) =>
-            requirement.given.every((name) => present(env, name)) && !(requirement.unless ?? []).some((name) => present(env, name)),
+        (requirement) => requirement.given.every((name) => present(env, name)) && !(requirement.unless ?? []).some((name) => present(env, name)),
     )
         .map((requirement) => ({
             key: requirement.key,

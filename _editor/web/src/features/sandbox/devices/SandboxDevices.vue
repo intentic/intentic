@@ -60,6 +60,7 @@ import {
     syncNote,
     syncStopped,
 } from "./deviceFacts";
+import ContainerHealthCard from "./ContainerHealthCard.vue";
 import DesktopSyncCard from "./DesktopSyncCard.vue";
 import { type ConflictAsk, conflictAsk } from "./conflictAsk";
 import { startAgent } from "../../agents/fleet/agentActions";
@@ -787,6 +788,13 @@ const runRevoke = async (): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-4">
+        <!--
+            ABOVE THE DEVICE LIST, AND ABOVE THE FILTER, because it is the one thing here that is not a state to
+            read but a fault to act on: this sandbox was set up before something it now needs, and no verb in the
+            list below can give it back (each recreates the container out of what that container already carries).
+            Draws nothing at all on a healthy sandbox, which is nearly all of them.
+        -->
+        <ContainerHealthCard />
         <RowGroup label="Devices" :count="sorted.length === 0 ? undefined : sorted.length">
             <!--
                 The other half of the Ports tab's cross-link: both are about "ports" in opposite directions (out to the

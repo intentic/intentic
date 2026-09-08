@@ -89,7 +89,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 
 // One `NAME=value` out of a container's env list, or undefined when it carries none by that name.
 const envOf = (env: unknown, name: string): string | undefined =>
-    Array.isArray(env) ? env.find((entry): entry is string => typeof entry === "string" && entry.startsWith(`${name}=`))?.slice(name.length + 1) : undefined;
+    Array.isArray(env)
+        ? env.find((entry): entry is string => typeof entry === "string" && entry.startsWith(`${name}=`))?.slice(name.length + 1)
+        : undefined;
 
 const tokensOf = (value: string | undefined): string[] => (value ?? "").split(/\s+/).filter((token) => token !== "");
 
@@ -299,17 +301,27 @@ export interface RunnerShapeFiles {
 // The argv for the two runner ops (a sandbox-image container that belongs to a parent sandbox rather than a
 // person). The pairing is single-use and short-lived; an argv that dropped it produces a container that boots,
 // dials, is refused, and looks like a network problem.
-export const icRunnerArgs = (op: "runner-up" | "runner-remove", name: string, parentUrl: string | undefined, pair: string | undefined, shape: RunnerShapeFiles = {}): string[] => {
+export const icRunnerArgs = (
+    op: "runner-up" | "runner-remove",
+    name: string,
+    parentUrl: string | undefined,
+    pair: string | undefined,
+    shape: RunnerShapeFiles = {},
+): string[] => {
     if (op === "runner-remove") {
         return ["runner", "remove", name, "-y"];
     }
     if (parentUrl === undefined || parentUrl === "" || pair === undefined || pair === "") {
-        throw new Error(`starting a runner needs the parent sandbox's address and a pairing, and this request carried ${parentUrl ? "no pairing" : "neither"}.`);
+        throw new Error(
+            `starting a runner needs the parent sandbox's address and a pairing, and this request carried ${parentUrl ? "no pairing" : "neither"}.`,
+        );
     }
     // Both or neither, `ic`'s own rule restated where the argv is built: the hash is the trust anchor for the
     // overlay bytes.
     if ((shape.overlayFile === undefined) !== (shape.environmentHash === undefined)) {
-        throw new Error(`an overlay travels with the hash that pins it, and this request carried ${shape.overlayFile === undefined ? "only the hash" : "only the overlay"}.`);
+        throw new Error(
+            `an overlay travels with the hash that pins it, and this request carried ${shape.overlayFile === undefined ? "only the hash" : "only the overlay"}.`,
+        );
     }
     return [
         "runner",
@@ -320,7 +332,9 @@ export const icRunnerArgs = (op: "runner-up" | "runner-remove", name: string, pa
         "--name",
         name,
         ...(shape.definitionFile === undefined ? [] : ["--definition-file", shape.definitionFile]),
-        ...(shape.overlayFile === undefined || shape.environmentHash === undefined ? [] : ["--overlay-file", shape.overlayFile, "--environment-hash", shape.environmentHash]),
+        ...(shape.overlayFile === undefined || shape.environmentHash === undefined
+            ? []
+            : ["--overlay-file", shape.overlayFile, "--environment-hash", shape.environmentHash]),
     ];
 };
 
@@ -340,7 +354,10 @@ export const runnerFlow = async (
     // The definition and overlay arrive as text on the flow and reach `ic` as files: a Dockerfile on a command line
     // is unreadable in every log that quotes it, and the hash check `ic` runs wants bytes on disk anyway. A private
     // temp dir per flow, removed when the run ends either way.
-    const dir = op === "runner-up" && (shape.definition !== undefined || shape.overlay !== undefined) ? await mkdtemp(join(tmpdir(), "intentic-runner-")) : undefined;
+    const dir =
+        op === "runner-up" && (shape.definition !== undefined || shape.overlay !== undefined)
+            ? await mkdtemp(join(tmpdir(), "intentic-runner-"))
+            : undefined;
     try {
         const withDefinition = dir !== undefined && shape.definition !== undefined;
         const withOverlay = dir !== undefined && shape.overlay !== undefined;
@@ -473,6 +490,39 @@ export const reshapeSandbox = async (
         throw new Error(`That reshape failed on this device.\n\n${run.output}`);
     }
     return `Reshaped sandbox "${slug}". Its files and its history were kept, and the new share survives every later update.`;
+};
+
+/* REDEEM A FRESH CLAIM ONTO AN EXISTING SANDBOX, the repair for a container that was set up before something it
+ * now needs (@intentic/sandbox-contract's container-requirements.ts, which is what decides a sandbox needs this).
+ *
+ * Rides the `sandboxes` scope, not `sandboxRemove`, and the distinction is the honest one: this replaces the
+ * container exactly as an update does and keeps /work, /history and the Docker engine volume. Nothing a reshape
+ * or an update does not already do to the same box.
+ *
+ * `find(slug)` first, for the reason the swaps do it: reconnecting a slug this machine does not run would
+ * otherwise redeem the code — burning it — and only then discover there was nothing here to repair. */
+export const reconnectSandbox = async (
+    slug: string,
+    setupCode: string | undefined,
+    scopes: HostScopes,
+    onLine: (line: string) => void,
+): Promise<string> => {
+    assertScope(scopes, "sandboxes");
+    // Built before anything else, so a reconnect with no claim is refused instantly instead of after a docker
+    // round trip — and, more to the point, before `ic` is spawned with an argv that cannot work.
+    const args = icReconnectArgs(setupCode);
+    await find(slug);
+    icInFlight.add(slug);
+    let run: { code: number; output: string };
+    try {
+        run = await runIc(args, onLine);
+    } finally {
+        icInFlight.delete(slug);
+    }
+    if (run.code !== 0) {
+        throw new Error(`That reconnect failed on this device.\n\n${run.output}`);
+    }
+    return `Reconnected sandbox "${slug}". Its files and its history were kept, and it now has what it was missing.`;
 };
 
 export const removeSandbox = async (slug: string, scopes: HostScopes, onLine: (line: string) => void): Promise<string> => {

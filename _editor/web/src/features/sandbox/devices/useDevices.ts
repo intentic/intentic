@@ -51,17 +51,26 @@ const frameText = (line: Record<string, unknown>, key: string): string | undefin
 export interface DeviceSandboxPayload {
     hash?: string | undefined;
     resources?: SandboxResourcesAsk | undefined;
+    // `reconnect`'s claim: the short-lived setup code minted for this sandbox, which the machine redeems for the
+    // values a drifted container cannot be given by being recreated out of itself.
+    setupCode?: string | undefined;
     onLine?: ((line: string) => void) | undefined;
 }
 
-// Builds the daemon's flow input; includes hash/resources only when present, since the schema rejects an
-// explicit undefined.
-const flowInput = (hostId: string, slug: string, op: DeviceSandboxOp, { hash, resources }: DeviceSandboxPayload): DeviceSandboxFlowInput => ({
+// Builds the daemon's flow input; includes hash/resources/setupCode only when present, since the schema rejects
+// an explicit undefined.
+const flowInput = (
+    hostId: string,
+    slug: string,
+    op: DeviceSandboxOp,
+    { hash, resources, setupCode }: DeviceSandboxPayload,
+): DeviceSandboxFlowInput => ({
     id: hostId,
     slug,
     op,
     ...(hash === undefined ? {} : { hash }),
     ...(resources === undefined ? {} : { resources }),
+    ...(setupCode === undefined ? {} : { setupCode }),
 });
 
 // A stream ending without a terminal frame means the connection dropped, not that the operation stopped;

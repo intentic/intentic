@@ -4,7 +4,7 @@ import { implement } from "@orpc/server";
 import { handleMcpMessage } from "./mcp.js";
 import { hostFacts } from "./tools/describe.js";
 import { runAgentOp } from "./tools/agent.js";
-import { manageSandbox, removeSandbox, reshapeSandbox, runnerFlow, swapSandbox, tailSandboxLogs } from "./tools/sandboxes.js";
+import { manageSandbox, reconnectSandbox, removeSandbox, reshapeSandbox, runnerFlow, swapSandbox, tailSandboxLogs } from "./tools/sandboxes.js";
 
 // What this device answers, as the oRPC server on the socket it dialled out; the peer that dials and the peer
 // that serves are independent, oRPC's websocket adapter attaches to any socket-like object. `scopes` is a live
@@ -23,7 +23,7 @@ const streamFlow = (run: (onLine: (line: string) => void) => Promise<string>): A
 // Which function each op is. Start/stop/restart are a docker call, `logs` is a read, the rest run `ic` and
 // narrate themselves for minutes.
 const flowFor = (
-    { op, slug, hash, resources, parentUrl, pair, definition, overlay, overlayHash }: DeviceSandboxFlow,
+    { op, slug, hash, resources, setupCode, parentUrl, pair, definition, overlay, overlayHash }: DeviceSandboxFlow,
     scopes: HostScopes,
 ): ((onLine: (line: string) => void) => Promise<string>) => {
     switch (op) {
@@ -32,6 +32,10 @@ const flowFor = (
         // The same image with a different share of this machine: the one op with a payload of its own.
         case "reshape":
             return (onLine) => reshapeSandbox(slug, resources, scopes, onLine);
+        // The one op whose payload comes from the PLATFORM rather than from this machine or the container: a
+        // fresh claim, carrying the values a drifted sandbox cannot get by being recreated out of itself.
+        case "reconnect":
+            return (onLine) => reconnectSandbox(slug, setupCode, scopes, onLine);
         // A container that belongs to the asking sandbox rather than to a person; `slug` is the runner's name. The
         // parent's shape rides to `ic` as files, so the runner starts as its twin instead of a bare base image.
         case "runner-up":
