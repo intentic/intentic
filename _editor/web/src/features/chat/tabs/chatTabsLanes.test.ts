@@ -55,8 +55,7 @@ const settle = async (): Promise<void> => {
     await nextTick();
 };
 
-// Two agents, one per lane not already shown (Attention, Finished). Seeded at a high revision so the roster
-// read isn't mistaken for one from a live daemon.
+// One agent per lane. Seeded at a high revision so the roster read isn't mistaken for one from a live daemon.
 const seed = (): void =>
     setAgents(
         [
@@ -68,6 +67,15 @@ const seed = (): void =>
                 harness: `native`,
                 updatedAt: 2_000,
                 attention: { plan: false, question: true, permission: false, capability: false, credential: false, conflict: false },
+            },
+            {
+                id: `busy`,
+                title: `writing the patch`,
+                status: `running`,
+                provider: `claude`,
+                harness: `native`,
+                updatedAt: 1_500,
+                attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
             },
             {
                 id: `done`,
@@ -166,8 +174,12 @@ const openFinished = (count: number): void => {
 
 const tailRow = (el: HTMLElement): HTMLButtonElement | undefined =>
     [...el.querySelectorAll(`button`)].find((button) => /earlier|Show fewer/.test(button.textContent ?? ``));
-const clearButton = (el: HTMLElement): HTMLButtonElement | undefined =>
-    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Clear`);
+// Clear inside one named lane: every lane carries one, so matching on the word alone would hit whichever lane
+// happened to draw first rather than the one under test.
+const clearButton = (el: HTMLElement, lane: string): HTMLButtonElement | undefined => {
+    const section = [...el.querySelectorAll(`section`)].find((held) => held.querySelectorAll(`header span`)[1]?.textContent?.trim() === lane);
+    return [...(section?.querySelectorAll(`button`) ?? [])].find((button) => button.textContent?.trim() === `Clear`);
+};
 
 it(`caps the Finished lane and says how many it is holding back`, async () => {
     seedFinished(10);
@@ -217,12 +229,50 @@ it(`clears the whole lane from its header, whatever the window is showing`, asyn
     const el = await mountList();
     openFinished(10);
     await settle();
-    expect(clearButton(el)).toEqual(expect.any(Object));
+    expect(clearButton(el, `Finished`)?.getAttribute(`aria-label`)).toBe(`Close all 10 finished chats`);
 
-    clearButton(el)?.click();
+    clearButton(el, `Finished`)?.click();
 
     await settle();
     // Closes every finished chat, not just the six on screen; closeTabs leaves one fresh chat behind.
     expect(lanesOnScreen(el)).toEqual([`Active`]);
     expect(cardsOnScreen(el).filter((id) => id.startsWith(`done`))).toEqual([]);
+});
+
+// Clear is on every lane, not just Finished: Active and Attention fill up over a long session too, and a
+// close is the same lossless act in all three (the turn detaches, the chat stays on the board).
+const openEveryLane = async (el: HTMLElement): Promise<void> => {
+    // The blank a window opens on is swept the moment focus leaves it, so Active has nothing to clear yet.
+    expect(clearButton(el, `Active`)).toBeUndefined();
+    openFromBoard(`waiting`);
+    openFromBoard(`busy`);
+    openFromBoard(`done`);
+    await settle();
+    expect(lanesOnScreen(el)).toEqual([`Attention`, `Active`, `Finished`]);
+};
+
+it(`clears the Attention lane from its header, leaving the other lanes standing`, async () => {
+    seed();
+    const el = await mountList();
+    await openEveryLane(el);
+    expect(clearButton(el, `Attention`)?.getAttribute(`aria-label`)).toBe(`Close all 1 waiting chat`);
+
+    clearButton(el, `Attention`)?.click();
+
+    await settle();
+    expect(lanesOnScreen(el)).toEqual([`Active`, `Finished`]);
+    expect(cardsOnScreen(el)).toEqual([`busy`, `done`]);
+});
+
+it(`clears the Active lane from its header, leaving the other lanes standing`, async () => {
+    seed();
+    const el = await mountList();
+    await openEveryLane(el);
+    expect(clearButton(el, `Active`)?.getAttribute(`aria-label`)).toBe(`Close all 1 working chat`);
+
+    clearButton(el, `Active`)?.click();
+
+    await settle();
+    expect(lanesOnScreen(el)).toEqual([`Attention`, `Finished`]);
+    expect(cardsOnScreen(el)).toEqual([`waiting`, `done`]);
 });

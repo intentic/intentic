@@ -31,7 +31,7 @@ import { relativeTime, statusIcon, statusLabel } from "../models/catalog";
 import type { Conversation } from "../session/conversation";
 import { draftPreview } from "../drafts/draftPreview";
 import { modelLabelFor } from "../accounts/providerCatalog";
-import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "./tabs";
+import { allTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, tabsInLane, toRightOf } from "./tabs";
 import ChatShareDialog from "../panel/ChatShareDialog.vue";
 import { relaySummons } from "../run/summon";
 import { useChat } from "../run/useChat";
@@ -170,11 +170,25 @@ const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
     grouped.finished.sort((a, b) => Number(b.conversation.unsent.value) - Number(a.conversation.unsent.value) || lastActive(b) - lastActive(a));
     return grouped;
 });
-const LANES: readonly { key: FleetLane; label: string; dot: string }[] = [
-    { key: `attention`, label: `Attention`, dot: `bg-warning` },
-    { key: `active`, label: `Active`, dot: `bg-success` },
-    { key: `finished`, label: `Finished`, dot: `bg-line-strong` },
+// Clear's own words for the lane: the adjective its label counts ("3 working chats"), and what becomes of
+// those chats once they leave this window.
+const LANES: readonly { key: FleetLane; label: string; dot: string; clears: string; keeps: string }[] = [
+    { key: `attention`, label: `Attention`, dot: `bg-warning`, clears: `waiting`, keeps: `they keep waiting on the board` },
+    { key: `active`, label: `Active`, dot: `bg-success`, clears: `working`, keeps: `their turns keep running` },
+    { key: `finished`, label: `Finished`, dot: `bg-line-strong`, clears: `finished`, keeps: `they stay in Past chats` },
 ];
+// What Clear closes per lane, counted off the very set the press sends, so the button can't name a number it
+// doesn't close. Includes the chats a run's row folds away: they lane here too, and the lane is the target.
+const clearing = computed<Record<FleetLane, ReadonlySet<string>>>(() => ({
+    attention: tabsInLane(`attention`),
+    active: tabsInLane(`active`),
+    finished: tabsInLane(`finished`),
+}));
+// "1 working chat", never "1 working chats": a lane holding one is the common case here.
+const clearLabel = (lane: (typeof LANES)[number]): string => {
+    const count = clearing.value[lane.key].size;
+    return `Close all ${count} ${lane.clears} ${count === 1 ? `chat` : `chats`}`;
+};
 
 // Lane visibility is filtered in JS, not `v-show`: `LANES` is compile-time so `v-for` yields a stable fragment,
 // and `v-show` (set only on mount) would freeze stale in a long-lived floating window.
@@ -458,7 +472,7 @@ const tabMenuItems = computed<MenuItem[]>(() => {
     }
     const others = othersOf(id);
     const toRight = toRightOf(id);
-    const finished = finishedTabs();
+    const finished = tabsInLane(`finished`);
     const peeked = conversations.value.find((conversation) => conversation.conversationId === id)?.peek.value === true;
     return [
         // Keep Open leads the menu, shown only on a preview tab: same convention and wording as WorkspaceDesktop.
@@ -575,19 +589,21 @@ const keepTab = (event: Event, id: string): void => {
             -->
             <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :dot="lane.dot" :count="countIn(lane.key)">
                 <!--
-                    Same act and wording as the board's Finished lane (there it archives, here it closes the chats); both are
-                    lossless and need no confirmation. Hidden while filtering, since it would close more than the query matched.
+                    Same act and wording as the board's Finished lane (there it archives, here it closes the chats); on every
+                    lane, since a close is lossless whatever the lane — the turn detaches and keeps running, unsent words are
+                    set aside, and the chat is still on the board. Shown only where it would close something, and hidden while
+                    filtering, since it would close more than the query matched.
                 -->
                 <template #actions>
                     <Button
-                        v-if="lane.key === 'finished' && !filtering"
+                        v-if="clearing[lane.key].size > 0 && !filtering"
                         size="small"
                         severity="secondary"
                         :text="true"
                         class="shrink-0"
-                        :aria-label="`Close all ${lanes.finished.length} finished chats`"
-                        v-tooltip.bottom="`Close all ${lanes.finished.length}: they stay in Past chats`"
-                        @click="emit('close', finishedTabs())"
+                        :aria-label="clearLabel(lane)"
+                        v-tooltip.bottom="`Close all ${clearing[lane.key].size}: ${lane.keeps}`"
+                        @click="emit('close', clearing[lane.key])"
                     >
                         Clear
                     </Button>

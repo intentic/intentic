@@ -25,16 +25,16 @@ defineProps<{
              component rather than as the same one at another width.
              The header is opaque and ends exactly where the first card begins, so it paints over whatever that
              card draws at its top edge while the lane scrolls under it.
-             THE HEIGHT IS FIXED for the board's reason (AgentsView says it at length): `#actions` is one lane's
-             — "Clear" on Finished — and a cap that grew around a 26px button gave that lane a taller cap than
-             the lanes above and below it, which down a rail reads as three headers that disagree. -->
+             THE HEIGHT IS FIXED for the board's reason (AgentsView says it at length): `#actions` comes and goes
+             per lane, and a cap that grew around a 26px button gave the lanes carrying one a taller cap than the
+             lanes above and below them, which down a rail reads as three headers that disagree. -->
         <header class="lane-header sticky top-0 z-10 flex h-8 shrink-0 items-center gap-2 rounded-t-xl px-3">
             <span v-if="dot !== undefined" class="h-2 w-2 shrink-0 rounded-full" :class="dot"></span>
             <Icon v-else-if="icon !== undefined" :name="icon" class="shrink-0 text-2xs text-subtle" />
             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ label }}</span>
             <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ count }}</span>
             <span class="flex-1"></span>
-            <!-- The lane's own bulk act, where the lane is the target: "Clear" on Finished. -->
+            <!-- The lane's own bulk act, where the lane is the target: "Clear". -->
             <slot name="actions" />
         </header>
         <!-- The lane's contents, inset and spaced by the LANE rather than by each caller: three lists picking

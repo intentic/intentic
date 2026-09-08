@@ -5,7 +5,7 @@ import { type FleetLane, laneOf, NO_ATTENTION } from "../../agents/fleet/agentSt
 import type { Conversation } from "../session/conversation";
 import { draftPreview } from "../drafts/draftPreview";
 import { useChat } from "../run/useChat";
-import { standingOf } from "./tabFacts";
+import { standingOf, tabFacts, untouched } from "./tabFacts";
 
 // Facts the open-chat list and header both need, kept as projections rather than component state, so the two
 // surfaces (and the close-set menus) read the same thing instead of duplicating it.
@@ -60,13 +60,16 @@ export const toRightOf = (id: string): ReadonlySet<string> => {
 
 export const allTabs = (): ReadonlySet<string> => new Set(useChat().conversations.value.map((conversation) => conversation.conversationId));
 
-// Every chat in the Finished lane, for either surface: the sweep Close Others/Close to the Right can't
-// express. The active chat is not spared; closing it selects the last survivor like any other close.
-export const finishedTabs = (): ReadonlySet<string> => {
+// Every chat in one lane, for either surface: the sweep Close Others/Close to the Right can't express. An
+// untouched draft is left out (it goes on its own the moment focus leaves); the active chat is not spared.
+export const tabsInLane = (lane: FleetLane): ReadonlySet<string> => {
     const { agentById } = useAgents();
     return new Set(
         useChat()
-            .conversations.value.filter((conversation) => laneOfTab(conversation, agentById(conversation.conversationId)) === `finished`)
+            .conversations.value.filter(
+                (conversation) =>
+                    !untouched(tabFacts(conversation)) && laneOfTab(conversation, agentById(conversation.conversationId)) === lane,
+            )
             .map((conversation) => conversation.conversationId),
     );
 };

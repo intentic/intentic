@@ -12,7 +12,7 @@ import OriginMark from "../../../components/OriginMark.vue";
 import RailColumn from "../../../components/RailColumn.vue";
 import { statusIcon, statusLabel, statusTabClass } from "../models/catalog";
 import { chatOnRail, chatWide, toggleChatFloating, toggleChatHome } from "../panel/chatPanelLayout";
-import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "./tabs";
+import { allTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, tabsInLane, toRightOf } from "./tabs";
 import { useChat } from "../run/useChat";
 import { useChatFloating } from "../panel/chatFloating";
 import { commandShortcut, type CommandRegistration, registerCommand, withShortcut } from "../../../shell/commands/useCommands";
@@ -165,9 +165,9 @@ const barMenu = ref<{ show: (event: Event) => void } | undefined>();
 const barMenuItems = computed<MenuItem[]>(() => [
     {
         label: `Close Finished`,
-        disabled: finishedTabs().size === 0,
+        disabled: tabsInLane(`finished`).size === 0,
         shortcut: commandShortcut(`chat.closeFinishedTabs`),
-        command: () => emit(`close`, finishedTabs()),
+        command: () => emit(`close`, tabsInLane(`finished`)),
     },
     { label: `Close All`, shortcut: commandShortcut(`chat.closeAllTabs`), command: () => emit(`close`, allTabs()) },
     { separator: true },
@@ -281,7 +281,7 @@ onMounted(() => {
             icon: `times`,
             when: `tabSurface == 'chat'`,
             handler: (): void => {
-                const finished = finishedTabs();
+                const finished = tabsInLane(`finished`);
                 if (finished.size > 0) {
                     emit(`close`, finished);
                 }
