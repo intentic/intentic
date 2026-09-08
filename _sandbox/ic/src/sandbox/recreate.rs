@@ -83,6 +83,26 @@ const PRIVILEGED_TOKEN: &str = "--privileged";
 const GPUS_TOKEN: &str = "--gpus=all";
 const HOST_RUNTIME_ENV: &str = "SANDBOX_RUNTIME";
 
+/* How long the cutover will wait for dockerd to hand back the loopback port the container it just stopped was
+ * publishing (see the launch in `recreate`). Sized to the teardown, not to a timeout: the proxy for a stopped
+ * container goes in well under a second, so three tries two seconds apart is already generous, and every one
+ * of those seconds is only ever spent on a swap that would otherwise silently lose its shortcut. A port still
+ * held after this belongs to something else, which is what the publish-less retry is for. */
+const PORT_RELEASE_TRIES: u32 = 3;
+const PORT_RELEASE_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/* Did a launch fail because its published port is still taken? Classified from the log's tail rather than from
+ * `run_argv`, which reports only whether docker agreed — every other caller wants that yes/no, and this is the
+ * one place that needs the reason, so the reason is read where it is needed instead of widening the signature.
+ *
+ * Matched on the stable half of dockerd's refusal ("port is already allocated"), never on the address: the port
+ * is the contract's to choose (@intentic/sandbox-run's localDaemonPort, reaching this file only inside an opaque
+ * argv), and re-deriving it to match on would put a second copy of that arithmetic in the one file with no
+ * business knowing it. */
+fn port_still_held(log_tail: &str) -> bool {
+    log_tail.contains("port is already allocated")
+}
+
 impl Mode {
     fn name(&self) -> &'static str {
         match self {
@@ -644,13 +664,43 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     docker::quiet(&["rename", &container, &parked]);
     log.section("run command");
 
+    /* THE PORT THIS CUTOVER JUST FREED IS NOT FREE YET, and that is a race rather than a refusal.
+     *
+     * The stop above is what releases the loopback binding, and dockerd tears the proxy down ASYNCHRONOUSLY:
+     * `stop` returns when the container is stopped, not when the socket it published is back. Launch into that
+     * window and docker refuses the whole run for a port that is in the act of becoming free.
+     *
+     * That is NOT the case the publish-less retry below exists for. That one is a port something ELSE holds —
+     * a second sandbox, an unrelated dev server — which no amount of waiting frees, so dropping the shortcut is
+     * the right answer and the sandbox comes up on its tunnel. Here the holder is the container being replaced,
+     * and the two are worth telling apart because the fallback is PERMANENT: a container's port bindings are
+     * fixed for its life, so a swap that loses this race leaves the browser on the tunnel until someone
+     * recreates again. Nothing notices — the daemon is healthy, the workspace merely gets slower, and the one
+     * line saying so scrolls past in a rebuild that prints hundreds.
+     *
+     * So a refusal naming the port buys a few seconds and the same argv again, and only a port still held after
+     * that is treated as someone else's. */
+    let mut launched = docker::run_argv(&argv, &log);
+    for _ in 0..PORT_RELEASE_TRIES {
+        // The window is the last attempt's output alone — its command line, the created container's id, and
+        // docker's refusal — so a conflict on an earlier attempt cannot keep this true once a later one has
+        // failed for some other reason.
+        if launched || !port_still_held(&log.tail(6)) {
+            break;
+        }
+        // The refused attempt leaves a created-but-stopped container holding the name, exactly as below.
+        docker::quiet(&["rm", "-f", &container]);
+        std::thread::sleep(PORT_RELEASE_WAIT);
+        launched = docker::run_argv(&argv, &log);
+    }
+
     // Two attempts: everything the run can lose WITHOUT the sandbox being broken comes off together on the
     // retry — the loopback shortcut (docker refuses the whole launch when its port is already held) and
     // EVERY optional directive, even ones whose probe passed: a probe answers a question docker answers
     // again at run time, and it can answer differently (an nvidia runtime registered against a mismatched
     // driver satisfies `docker info` and then fails the container). A sandbox that comes back saying it has
     // no GPU beats no sandbox. The failed attempt leaves a created-but-stopped container holding the name.
-    if !docker::run_argv(&argv, &log) {
+    if !launched {
         docker::quiet(&["rm", "-f", &container]);
         let all_optional: Vec<String> = probes.iter().map(|probe| probe.token.clone()).collect();
         let retry_argv =
@@ -1148,6 +1198,30 @@ mod tests {
             apply_switches("  --privileged   --privileged ", None, None),
             "--privileged"
         );
+    }
+
+    /* WHICH LAUNCH FAILURES ARE WORTH WAITING OUT. Only the port conflict is: everything else the cutover can
+     * be refused for is answered by dropping the shortcut and the optional directives, and re-running the same
+     * argv into the same refusal three times would just make a broken swap slower to report. */
+    #[test]
+    fn only_a_held_port_is_worth_waiting_out_and_the_address_is_never_matched_on() {
+        // Verbatim dockerd, the refusal this whole retry exists for.
+        assert!(port_still_held(
+            "docker: Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint intentic-sandbox-sandbox-0738cd6b5027 (c3808c38): Bind for 127.0.0.1:29293 failed: port is already allocated"
+        ));
+        // The same refusal for a different sandbox's port: matched on the message, so no port arithmetic here
+        // has to agree with the contract's.
+        assert!(port_still_held(
+            "Bind for 127.0.0.1:28937 failed: port is already allocated"
+        ));
+        // The failures the publish-less retry is for — waiting changes none of them.
+        assert!(!port_still_held(
+            "docker: Error response from daemon: could not select device driver \"\" with capabilities: [[gpu]]"
+        ));
+        assert!(!port_still_held(
+            "docker: Error response from daemon: privileged mode is incompatible with this host"
+        ));
+        assert!(!port_still_held(""));
     }
 
     #[test]
