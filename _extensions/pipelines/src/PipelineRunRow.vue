@@ -99,10 +99,9 @@ const fixModel = useAgentRunPick(() => host().models, `pipeline-fix`);
 
 const api = host();
 const agentLink = (id: string): { href: string; onClick: (event: MouseEvent) => void } =>
-    // `/agents/<id>` is the one destination every state wants: it focuses the conversation in the docked chat
-    // AND carries the review of what the agent wrote, so a question and a finished diff are both one press
-    // away. A real anchor, so ⌘-click opens a tab like every other row on this board.
-    appLink(api.href(`/agents/${id}`), () => api.navigate(`/agents/${id}`));
+    // `/agents/<id>` as the href, so ⌘-click opens a full tab like every other row on this board.
+    // The plain click opens the conversation in the docked chat panel rather than navigating away.
+    appLink(api.href(`/agents/${id}`), () => api.chat.openAgent(id));
 
 /* WHAT BECAME OF THIS ROW'S OWN AGENT, read once and used twice: the chip that replaces the button, and the
  * button's label when there is nothing left to report. */

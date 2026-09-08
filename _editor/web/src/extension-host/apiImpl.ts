@@ -449,6 +449,21 @@ export const createExtensionApi = (
                         });
                     }
                 })(),
+            // Open (or focus) the docked chat for a fleet agent by its id, the same thing a card press on
+            // the agents board does. The agent's conversation appears in the chat panel rather than
+            // navigating away from the current view. Loads the archive if the agent is not in the live
+            // roster yet (between a start and the first roster frame, or already archived).
+            openAgent: (agentId) =>
+                void (async () => {
+                    const agents = useAgents();
+                    if (agents.agentById(agentId) === undefined) {
+                        await agents.loadArchived();
+                    }
+                    const agent = agents.agentById(agentId);
+                    if (agent !== undefined) {
+                        agents.open(agent);
+                    }
+                })(),
             /* A new chat with the workflow badge already set, `startAgent` is the same call "New agent" makes,
              * so the user lands in the one session-starting surface this product has, with the composer's
              * caret in it and the design named beside the effort control. Nothing is spent until they send. */

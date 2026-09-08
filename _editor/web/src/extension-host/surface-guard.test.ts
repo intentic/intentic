@@ -42,6 +42,10 @@ interface RecordedSurface {
      * whose entry is indistinguishable from the one before it is the untrue number this file exists to prevent.
      * Optional because earlier entries predate it. */
     readonly workspaceApi?: readonly string[];
+    /* api.chat's own members, recorded from 2.11.0 on: `openAgent` was added there, and without a sub-surface
+     * record the entry would be indistinguishable from its predecessor's. Optional because earlier entries
+     * predate it. */
+    readonly chatApi?: readonly string[];
     /* What the PACKAGE exports, recorded from 2.6.0 on: the third grain, and the last one that was still
      * unrecorded.
      *
@@ -103,6 +107,7 @@ const liveSurface = (): RecordedSurface => ({
     listener: Object.keys(ListenerContributionSchema.shape).toSorted(),
     sandboxApi: nestedMembers(`sandbox`),
     workspaceApi: nestedMembers(`workspace`),
+    chatApi: nestedMembers(`chat`),
     // The runtime exports only. Types are the api object's business (recorded above) and a package that
     // re-exports thirty interfaces would drown the one line that says a new FUNCTION arrived.
     moduleExports: Object.keys(sdkModule)

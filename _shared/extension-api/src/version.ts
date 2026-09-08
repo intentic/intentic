@@ -67,4 +67,9 @@
 // the slowest tile sat ten minutes behind the file it described. Additive, and the recorded surface grew a
 // `workspaceApi` member list with this release, the same grain `sandboxApi` got at 2.3.0 and for the same
 // reason: this is where the addition happened, and nothing could see it.
-export const extensionApiVersion = "2.10.0";
+// 2.11.0 adds `api.chat.openAgent`: open (or focus) the docked chat for a fleet agent by its id, the same
+// thing a card press on the agents board does. The agent's conversation appears in the chat panel rather
+// than navigating away from the current view. Two extensions were navigating to `/agents/<id>` on a plain
+// click, which left the view they were on; this is the call they should have had. The `chatApi` sub-surface
+// is recorded from this release on, for the same reason `workspaceApi` was recorded from 2.10.0.
+export const extensionApiVersion = "2.11.0";

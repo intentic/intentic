@@ -447,6 +447,11 @@ export interface IntenticApi {
         // Open (or focus) the tab for a stored runtime session id, the same path the History menu and the fleet
         // board take. A session the daemon no longer holds opens an empty tab rather than failing.
         openSession(sessionId: string): void;
+        /* Open (or focus) the docked chat for a fleet agent by its id: the same thing a card press on the
+         * agents board does. The agent's conversation appears in the chat panel beside the current view
+         * rather than navigating away from it. An agent the roster does not hold yet (archived, or between
+         * a start and the first roster frame) is looked up before opening. */
+        openAgent(agentId: string): void;
         /* AIM A NEW CHAT AT A WORKFLOW: the host opens a session exactly as "New agent" does, with the
          * composer's workflow badge set to this design, so the next message the user types becomes that run's
          * request instead of a turn on the chat.

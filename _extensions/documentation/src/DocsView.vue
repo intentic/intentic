@@ -189,8 +189,8 @@ const onStart = (dirs: readonly string[], pick: AgentRunChoice | undefined): voi
     });
 };
 
-// Each running writer is an ordinary agent with a page of its own, so its chip is a link to it.
-const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.navigate(`/agents/${id}`));
+// Each running writer is an ordinary agent: its chip opens the conversation in the docked chat.
+const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.chat.openAgent(id));
 </script>
 
 <template>

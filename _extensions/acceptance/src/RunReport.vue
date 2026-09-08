@@ -113,7 +113,8 @@ const verdictBadge = (slug: string): { readonly label: string; readonly variant:
 const sessionLink = (slug: string) => {
     const id = conversationOf(slug);
     const path = id === undefined ? `/agents` : `/agents/${encodeURIComponent(id)}`;
-    return appLink(api.href(path), () => api.navigate(path));
+    // A plain click opens the agent's conversation in the docked chat rather than navigating away.
+    return appLink(api.href(path), () => (id === undefined ? api.navigate(path) : api.chat.openAgent(id)));
 };
 const browserLink = (slug: string) => {
     const path = `/browsers/${browserOf(slug)?.session ?? ``}`;
