@@ -50,14 +50,14 @@ export const personasContract = {
         .input(PersonaIdParamSchema)
         .output(OkSchema),
 
-    // Costs a model call, hence POST though a read; the composer applies or shows the answer per setting.
+    // Costs a model call, hence POST though a read; the chat that asked applies the answer, this only reports it.
     route: oc
         .route({
             method: "POST",
             path: "/personas/route",
             summary: "Which persona a new chat belongs to",
             description:
-                "Reads the message a chat is about to open with, and one line per persona, and names the card it belongs to, or none. Costs one small model call on the persona-routing list. Nothing is applied: the composer shows or applies the answer according to the persona routing setting.",
+                "Reads the message a chat has just been sent, and one line per persona, and names the card it belongs to, or none, along with the model that answered. Costs one small model call on the persona-routing list, and says so. Nothing is applied here: the chat that asked puts the card on, and only when the persona routing setting is on.",
         })
         .input(PersonaRouteAskSchema)
         .output(PersonaRouteSchema),

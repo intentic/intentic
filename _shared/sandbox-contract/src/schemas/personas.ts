@@ -106,7 +106,7 @@ export type Persona = z.infer<typeof PersonaSchema>;
 // Ladder filtered to connected providers, deduplicated. Empty (absent, or every provider disconnected) means the card
 // has no opinion — the caller decides, not "run nothing".
 export const personaModels = (card: Pick<Persona, "models">, sources: readonly ModelSource[]): readonly ModelPin[] => readyChain(sources, card.models ?? []);
-// Asked once per settled draft on a fresh, unpinned chat; answers with the one card the message belongs to, or none.
+// Asked once per chat, on the message it was sent with; answers with the one card the message belongs to, or none.
 // `folder`/`paths` are the facts a card's `context`/`startIn` can be matched against that words alone can't supply.
 export const PersonaRouteAskSchema = z.object({
     prompt: z.string().min(1).max(20000).describe("The message a new chat is about to open with."),
@@ -116,7 +116,14 @@ export const PersonaRouteAskSchema = z.object({
 export type PersonaRouteAsk = z.infer<typeof PersonaRouteAskSchema>;
 export const PersonaRouteSchema = z.object({
     persona: entryId.optional().describe("The card this message belongs to, or absent when none does and the chat should stay open to everything."),
-    reason: z.string().describe("Why, in the one line a chip can show. Present whether or not a card was named."),
+    reason: z.string().describe("Why, in the one line a chat can show. Present whether or not a card was named."),
+    // Absent means nothing was spent: matched on the folder, or answered before any model was reached.
+    model: z
+        .string()
+        .optional()
+        .describe(
+            "Which model answered, as `provider:model`, so the chat can name what the reading cost. Absent when no model was asked at all, which a folder match and an empty persona list both are.",
+        ),
 });
 export type PersonaRoute = z.infer<typeof PersonaRouteSchema>;
 // The one stock persona id; lives here because the daemon and the automations form are separate packages that must

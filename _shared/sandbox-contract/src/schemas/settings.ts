@@ -184,17 +184,14 @@ export const SandboxSettingsSchema = z.object({
             "Keep the instructions identical between turns so the provider can cache them, moving anything that varies into the message instead. Cheaper, at the cost of some flexibility.",
         ),
     skills: z.array(z.string()).default(["lsp", "fileq"]).describe("Which skills are switched on."),
-    // Router reads the first message and one line per card, once per chat, before the first turn (persona-router.ts /
-    // model-roles.ts).
-    // off: never asked.
-    // suggest (default): a composer chip the user presses to apply.
-    // auto: applied on send, unless the chip was dismissed first.
+    // Router reads the sent message and one line per card, once per chat, between send and the first turn
+    // (persona-router.ts / model-roles.ts). Never asked of a draft: only a sent message is a finished one.
     // Attended chats only: routing onto a card would grant an unwatched wake accounts nobody named for it.
     personaRouting: z
-        .enum(["off", "suggest", "auto"])
-        .default("suggest")
+        .boolean()
+        .default(true)
         .describe(
-            "Whether a new chat is matched to one of your personas from its first message. Suggest shows the match on the composer for you to press; auto applies it when you send unless you dismiss it first. Never applies to unwatched runs, which name their persona themselves.",
+            "Whether a new chat is matched to one of your personas from its first message. The message is read once it is sent, by the model on the persona-routing list, and the chat says in its own transcript what was asked and which persona it landed on. Never applies to unwatched runs, which name their persona themselves.",
         ),
     hashlineEdits: z
         .boolean()

@@ -1,4 +1,4 @@
-import type { Persona } from "@intentic/sandbox-contract";
+import { modelPinKey, type Persona } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../../composition.js";
@@ -10,11 +10,14 @@ import type { Services } from "../../composition.js";
 const ask = vi.fn<(prompt: string) => Promise<string>>();
 // Which role each ask named, so a test can pin that the router spends the persona-routing list and no other.
 const roles: string[] = [];
+// The rung the mocked walk lands on, and the key the answer reports it back as.
+const RUNG = { provider: "claude", model: "haiku" };
+const RUNG_KEY = modelPinKey(RUNG);
 vi.mock("../models/role-model.js", () => ({
     askRoleModel: async (_services: unknown, role: string, request: { prompt: string; answer: { read: (reply: string) => unknown; unusable: (value: never) => string | undefined } }) => {
         roles.push(role);
         const { readRoleAnswer } = await import("../models/role-answer.js");
-        return { value: readRoleAnswer(request.answer as never, await ask(request.prompt)), choice: { provider: "claude", model: "haiku" }, skipped: [] };
+        return { value: readRoleAnswer(request.answer as never, await ask(request.prompt)), choice: RUNG, skipped: [] };
     },
 }));
 
@@ -72,7 +75,7 @@ test("the reply is an id from the list, case-insensitively and unwrapped, or non
 test("the rung is shown every card, the chat's facts, and the message; its id comes back with a reason", async () => {
     ask.mockResolvedValue("backend");
     const route = await routePersona(services(), { prompt: "the invoice totals are off in billing", folder: undefined, paths: ["billing/src/totals.ts"] });
-    expect(route).toEqual({ persona: "backend", reason: "The message reads like Backend's work." });
+    expect(route).toEqual({ persona: "backend", reason: "The message reads like Backend's work.", model: RUNG_KEY });
     expect(roles).toEqual(["persona-router"]);
     const prompt = ask.mock.calls[0]?.[0] ?? "";
     expect(prompt).toContain("- backend (Backend): Backend work on the api and billing services. Carries: api, billing. Speaks through: github.");
@@ -83,7 +86,8 @@ test("the rung is shown every card, the chat's facts, and the message; its id co
 
 test("none is a real answer, and so is a chain that could not answer at all", async () => {
     ask.mockResolvedValue("none");
-    expect(await routePersona(services(), { prompt: "what is a closure?", paths: [] })).toEqual({ reason: "No persona fits this message." });
+    // `none` still names the rung: the reading was paid for, and the chat that asked says so.
+    expect(await routePersona(services(), { prompt: "what is a closure?", paths: [] })).toEqual({ reason: "No persona fits this message.", model: RUNG_KEY });
     ask.mockRejectedValue(new Error("No AI account is connected to this sandbox"));
     expect(await routePersona(services(), { prompt: "fix the login flow", paths: [] })).toEqual({ reason: "Could not route: No AI account is connected to this sandbox" });
     expect(warn).toHaveBeenCalledTimes(1);
@@ -95,7 +99,11 @@ test("a chat opened in a folder exactly one card works in is that card's, and no
     expect(ask).not.toHaveBeenCalled();
     // A folder nobody works in falls through to the words.
     ask.mockResolvedValue("social");
-    expect(await routePersona(services(), { prompt: "reply to the thread", folder: "marketing", paths: [] })).toEqual({ persona: "social", reason: "The message reads like Social's work." });
+    expect(await routePersona(services(), { prompt: "reply to the thread", folder: "marketing", paths: [] })).toEqual({
+        persona: "social",
+        reason: "The message reads like Social's work.",
+        model: RUNG_KEY,
+    });
     expect(ask.mock.calls[0]?.[0]).toContain("- Opened in the folder `marketing`.");
 });
 

@@ -195,7 +195,10 @@ export const TranscriptRowSchema = z.object({
         .optional()
         .describe("A one-press follow-up this notice offers, by name. The chat decides what it does and whether it still applies."),
     // An unfinished wait this notice describes, by name; whether it's still running is live state, not stored here.
-    noticeWait: z.enum(["credentialRenewal"]).optional().describe("The wait this notice describes, by name, so a reader can say whether it is still on."),
+    noticeWait: z
+        .enum(["credentialRenewal", "personaRoute"])
+        .optional()
+        .describe("The wait this notice describes, by name, so a reader can say whether it is still on."),
     // At most one card per row; a card closes its bubble. One field per kind, so a reader reaches it by name.
     plan: TranscriptPlanSchema.optional().describe("The plan this row asked approval for, and the answer."),
     question: TranscriptQuestionSchema.optional().describe("The questions this row asked, and the picks that answered them."),

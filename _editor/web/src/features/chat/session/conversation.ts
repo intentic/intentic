@@ -519,6 +519,20 @@ export class Conversation {
         this.refreshSwitchNotice();
     }
 
+    // A muted line of this window's own, for work the chat did that no turn shows: what was asked of a helper model,
+    // and what it answered. `noticeWait` names a wait the row spins on until the caller rewords it.
+    notice(text: string, extra?: Pick<ChatMessage, "noticeWait">): number {
+        return this.transcript.notice(text, extra);
+    }
+
+    // Replaces one notice's words in place, so a wait and its outcome are one row rather than two.
+    reword(noticeId: number, text: string, extra?: Pick<ChatMessage, "noticeWait">): void {
+        this.transcript.write((state) => ({
+            ...state,
+            messages: state.messages.map((message) => (message.id === noticeId ? { ...message, text, ...extra } : message)),
+        }));
+    }
+
     // Retract the pending "switched" divider: the change it announced is no longer what the next send does.
     private dropSwitchNotice(): void {
         const noticeId = this.pendingSwitchNoticeId;
@@ -585,10 +599,7 @@ export class Conversation {
         }
         const noticeId = this.pendingSwitchNoticeId;
         if (noticeId !== undefined) {
-            this.transcript.write((state) => ({
-                ...state,
-                messages: state.messages.map((message) => (message.id === noticeId ? { ...message, text } : message)),
-            }));
+            this.reword(noticeId, text);
             return;
         }
         this.pendingSwitchNoticeId = this.transcript.notice(text);

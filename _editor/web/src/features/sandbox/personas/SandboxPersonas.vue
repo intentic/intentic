@@ -233,12 +233,11 @@ const beginRename = (persona: Persona): void => {
 const { settings, patch } = useSandboxSettings();
 const ROUTING = [
     { label: `Off`, value: `off` },
-    { label: `Suggest`, value: `suggest` },
-    { label: `Auto`, value: `auto` },
+    { label: `On`, value: `on` },
 ] as const;
-const routing = computed(() => settings.value?.personaRouting ?? `suggest`);
+const routing = computed(() => (settings.value?.personaRouting ?? true ? `on` : `off`));
 const setRouting = (value: string): void => {
-    patch({ personaRouting: value as (typeof ROUTING)[number][`value`] });
+    patch({ personaRouting: value === `on` });
 };
 
 // Removal.
@@ -261,8 +260,8 @@ const confirmRemove = async (): Promise<void> => {
         </p>
 
         <!--
-            The one setting on this page, above the list: three words, not a switch, since the honest default already takes accounts and repos away
-            from a chat only when someone chooses to.
+            The one setting on this page, above the list: two words, and no switch, since every switch on this page is a permission row inside a
+            card's form and this one governs the page.
         -->
         <div v-if="settings !== undefined && personas.length > 0" class="mb-5 flex flex-wrap items-center justify-between gap-3">
             <span class="flex min-w-0 flex-col">
@@ -271,9 +270,8 @@ const confirmRemove = async (): Promise<void> => {
                     Match new chats to a persona
                 </span>
                 <span class="text-xs text-subtle">
-                    <template v-if="routing === `off`">A chat acts as the persona you pick, or as everyone.</template>
-                    <template v-else-if="routing === `suggest`">The first message is read, and the matching persona is offered on the composer for you to press.</template>
-                    <template v-else>The first message is read, and the matching persona is applied when you send, unless you dismiss it.</template>
+                    <template v-if="routing === `on`">The first message is read when you send it, and the chat says which persona it landed on.</template>
+                    <template v-else>Nothing is read: a chat acts as the persona you pick, or as everyone.</template>
                 </span>
             </span>
             <SegmentedControl :model-value="routing" :options="ROUTING" aria-label="Match new chats to a persona" @update:model-value="setRouting" />

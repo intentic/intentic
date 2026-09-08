@@ -14,6 +14,7 @@ import { clearQuestionDraft, OTHER_LABEL, readQuestionDraft, writeQuestionDraft 
 import { effectiveAutoLand, effectiveOutageResume, formatElapsed } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { errandOf } from "../run/errands";
+import { personaRouteWait } from "../personas/personaRoute";
 import { type ChatMessage, foldsIntoTurn } from "./transcript";
 import { navigateInApp } from "../../../shell/window/mainWindow";
 import { useMarkdown } from "../../../lib/markdown/useMarkdown";
@@ -189,10 +190,18 @@ const commandOpen = ref(false);
 // mid-tool-call. Reads the conversation's streaming flag, not this message's.
 const showTyping = computed(() => props.streaming && !awaitingDecision.value);
 
-// Wait shown by this notice while running (ChatMessage.noticeWait); undefined once it ends.
-const pendingWait = computed(() =>
-    props.message.noticeWait === `credentialRenewal` ? conversation.value.failures.credentialRenewal.value : undefined,
-);
+// Wait shown by this notice while running (ChatMessage.noticeWait); undefined once it ends. Each kind is asked of
+// whoever owns that wait, since none of them is a field on the row.
+const pendingWait = computed(() => {
+    switch (props.message.noticeWait) {
+        case `credentialRenewal`:
+            return conversation.value.failures.credentialRenewal.value;
+        case `personaRoute`:
+            return personaRouteWait(conversation.value);
+        default:
+            return undefined;
+    }
+});
 
 // Clock for a pending notice wait only; stops once the wait ends.
 const now = useNow(() => pendingWait.value !== undefined);
@@ -628,11 +637,19 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             v-else-if="message.role === 'notice' && message.text !== ''"
             class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs text-subtle"
         >
-            <!-- Spins and shows elapsed time while the notice's wait runs, then settles to a plain line (ChatMessage.noticeWait). -->
-            <Icon v-if="pendingWait" name="spinner" spin class="text-2xs text-info" />
-            <Icon v-else name="info-circle" class="text-2xs" />
-            <span>{{ message.text }}</span>
-            <span v-if="pendingWait" class="shrink-0 tabular-nums">{{ formatElapsed(pendingWait.since, now) }}</span>
+            <!--
+                Mark, sentence and clock are one non-wrapping group inside the wrapping row: a sentence wider than the
+                pane must wrap inside its own span, and as three siblings of a `flex-wrap` row it would instead take a
+                line of its own and strand the mark above it and the clock below. The offers below stay siblings, since
+                wrapping is exactly what they want.
+            -->
+            <span class="flex min-w-0 items-baseline gap-x-2">
+                <!-- Spins and shows elapsed time while the notice's wait runs, then settles to a plain line (ChatMessage.noticeWait). -->
+                <Icon v-if="pendingWait" name="spinner" spin class="shrink-0 text-2xs text-info" />
+                <Icon v-else name="info-circle" class="shrink-0 text-2xs" />
+                <span class="min-w-0">{{ message.text }}</span>
+                <span v-if="pendingWait" class="shrink-0 tabular-nums">{{ formatElapsed(pendingWait.since, now) }}</span>
+            </span>
             <!-- Optional follow-up offer on a notice (see holdOffer): a link, not a button, stated as a trailing clause. -->
             <template v-if="holdOffer">
                 <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="holdFutureLands">

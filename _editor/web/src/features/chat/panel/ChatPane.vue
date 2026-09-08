@@ -67,7 +67,6 @@ import ChatTurnStatus from "../transcript/ChatTurnStatus.vue";
 import ComposerEffort from "../composer/ComposerEffort.vue";
 import ComposerModelPill from "../composer/ComposerModelPill.vue";
 import ComposerMoreMenu from "../composer/ComposerMoreMenu.vue";
-import ComposerPersonaChip from "../composer/ComposerPersonaChip.vue";
 import ComposerTierChip from "../composer/ComposerTierChip.vue";
 import { type ComposerControl, overflowRows, ridesRow } from "../composer/composerMore";
 import { startingMode } from "../run/turnDefaults";
@@ -617,13 +616,10 @@ const pickPersona = (id: string | undefined): void => {
     }
 };
 
-// Which persona the daemon reads this draft as belonging to, asked once per settled draft on a turnless,
-// personaless chat (personaRoute.ts). `beforeSend` is what an `auto` chat briefly waits for, so the card is on for
-// the turn that decides the conversation's tree.
-const personaRoute = usePersonaRoute(
-    () => props.conversation,
-    () => draft.value,
-);
+// Which persona the daemon reads the sent message as belonging to, asked once on a turnless, personaless chat
+// (personaRoute.ts). `beforeSend` is the wait the send holds for, so the card is on for the turn that decides the
+// conversation's tree; the chat says in its own transcript that the reading is happening.
+const personaRoute = usePersonaRoute(() => props.conversation);
 
 // Snaps the box back to one line and refocuses the cursor — what every path that spends the draft ends with.
 const settleComposer = (): void => {
@@ -677,9 +673,8 @@ const sendDraft = (): void => {
     } else {
         const snapshot = staging.snapshot();
         const editorContext = editorContextForSend();
-        // An `auto` chat's opening message briefly waits for the router's reading, so the card is on before the turn
-        // that
-        // decides the tree; every other send goes now.
+        // A routed chat's opening message waits for the reading, so the card is on before the turn that decides the
+        // tree; every other send goes now.
         const routing = personaRoute.beforeSend(text);
         if (routing === undefined) {
             void send(text, snapshot, editorContext);
@@ -1437,12 +1432,6 @@ watch(
                                             exactly that pill, keeping its glyph at every width and dropping only its words.
                                         -->
                                         <ComposerTierChip :conversation="conversation" />
-                                        <!--
-                                            Who the daemon reads this draft as belonging to, and the press that takes or declines it
-                                            (ComposerPersonaChip);
-                                            beside the tier chip for the same reason — a sentence about what the next send runs as.
-                                        -->
-                                        <ComposerPersonaChip :preview="personaRoute.preview.value" @press="personaRoute.press()" />
                                     </div>
 
                                     <!--

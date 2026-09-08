@@ -162,19 +162,25 @@ has the whole argument).
 
 **How a new chat finds its card.** The one per-chat decision is *which* card, and it is a classification: the
 `persona-router` helper role reads the first message and one line per card and names one card or `none`,
-once, before the first turn. The composer asks it once per settled draft on a chat with no turns and no
-persona pinned, and what it does with the answer is the **Match new chats to a persona** setting on the
-Personas page:
+once. It is a switch, **Match new chats to a persona** on the Personas page, and on by default.
 
-| Setting | What happens |
-| --- | --- |
-| Off | Never asked. |
-| Suggest (default) | A chip on the composer offers the card ("Act as Backend?"); pressing it puts the card on. Nothing happens at send. |
-| Auto | The card goes on when the message is sent, unless the chip was pressed first, which declines it for that chat. A send that beats the reading waits for it, briefly. |
+The reading happens *at send*, never while the draft is being typed. A draft says nothing about whether the
+person is finished with it, so reading one either spends a model call on half a sentence or spends several on
+the same message as it grows. Sending is the only moment the message is known to be whole. The send is held
+for the answer — up to seven seconds, against the daemon's own five — because the card decides the tree, the
+accounts and the model of the very turn being sent.
 
-Putting the card on means its model too, whichever door it came through. A pick made by hand at the persona
-pill, "Anyone" included, overrules routing for that chat. Unattended wakes are never routed: a wake names its
-persona on its own form, and routing one onto a card would grant it accounts the owner never named for it.
+Because the send waits on a model nobody asked for by hand, the chat says so in its own transcript: a muted
+row that spins while the reading runs, rewritten in place when it lands with the card it chose, why, and which
+model was paid for it ("Acting as Backend. The message reads like Backend's work. Read by Claude Haiku 4.5.").
+`none` gets the same row, since the call cost the same. A background model call the owner cannot see is a bill
+they cannot question, and that is the whole reason the row exists.
+
+Nothing is asked at all when the switch is off, when the sandbox has no persona cards, when the chat already
+has turns or a card, or when the message is under twelve characters. Putting the card on means its model too,
+whichever door it came through. A pick made by hand at the persona pill, "Anyone" included, overrules routing
+for that chat. Unattended wakes are never routed: a wake names its persona on its own form, and routing one
+onto a card would grant it accounts the owner never named for it.
 
 ## Two very different things both called "account"
 
@@ -250,7 +256,7 @@ accounts spelled out.
 | The agent signing itself in | [accounts-tools.ts](../../_sandbox/sandbox/src/browser/tools/accounts-tools.ts) |
 | Where the rule is applied to a turn | [turn-plan.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-plan.ts) |
 | What a session's tree holds | [conversation-context.ts](../../_sandbox/sandbox/src/agent/context/conversation-context.ts) (the card's `context` becomes the conversation's composition, once) · [worktrees.ts](../../_sandbox/sandbox/src/agents/worktrees/worktrees.ts) (`selection`: the checkout brought to it) · [context-note.ts](../../_sandbox/sandbox/src/agent/context/context-note.ts) (what the session is told) |
-| Which persona a new chat belongs to | [persona-router.ts](../../_sandbox/sandbox/src/agent/prompt/persona-router.ts) (the reading, on the `persona-router` role) · [personaRoute.ts](../../_editor/web/src/features/chat/personas/personaRoute.ts) (when the composer asks, and the three modes) · [ComposerPersonaChip.vue](../../_editor/web/src/features/chat/composer/ComposerPersonaChip.vue) (the chip) |
+| Which persona a new chat belongs to | [persona-router.ts](../../_sandbox/sandbox/src/agent/prompt/persona-router.ts) (the reading, on the `persona-router` role) · [personaRoute.ts](../../_editor/web/src/features/chat/personas/personaRoute.ts) (the send that waits for it, and the row that says so) |
 | The card's model ladder | [personas.ts (contract)](../../_shared/sandbox-contract/src/schemas/personas.ts) (`personaModels`) · [run-role-model.ts](../../_sandbox/sandbox/src/agent/models/run-role-model.ts) (`personaRunModel`, an unattended turn's fill) · [conversation.ts](../../_editor/web/src/features/chat/session/conversation.ts) (`wearModel`, the composer's pill following the card) |
 | The screens | [SandboxPersonas.vue](../../_editor/web/src/features/sandbox/personas/SandboxPersonas.vue) (who this box is, the whole card) · [DirectoryPersonas.vue](../../_editor/web/src/features/workspace/directory-ui/DirectoryPersonas.vue) (the Workspace tree's per-folder panel: a name, and permissions under Advanced) · [Capabilities.vue](../../_editor/web/src/features/capabilities/Capabilities.vue) (what it is signed into) |
 | The card's own fields | [PersonaForm.vue](../../_editor/web/src/features/sandbox/personas/PersonaForm.vue) (the editor) · [PersonaPowersFields.vue](../../_editor/web/src/features/sandbox/personas/PersonaPowersFields.vue) (what it may do, grouped by blast radius: shared with the tree's quick panel) · [FolderPicker.vue](../../_editor/web/src/features/sandbox/devices/FolderPicker.vue) (both location answers, picked from the workspace tree) |

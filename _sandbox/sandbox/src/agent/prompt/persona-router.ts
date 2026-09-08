@@ -3,7 +3,7 @@ import type { Persona, PersonaRoute, PersonaRouteAsk } from "@intentic/sandbox-c
 import type { RoleAnswer } from "../models/role-answer.js";
 import { askRoleModel } from "../models/role-model.js";
 import type { Services } from "../../composition.js";
-import { BULLET, FENCE } from "@intentic/sandbox-contract";
+import { BULLET, FENCE, modelPinKey } from "@intentic/sandbox-contract";
 
 // Routes a new chat to one persona card by classification (pick one of N), not composition; `none` is a real, safe
 // default, never a failure. Attended chats only — an unattended wake must not gain a persona's accounts from a model's
@@ -11,8 +11,9 @@ import { BULLET, FENCE } from "@intentic/sandbox-contract";
 
 // Opening message front-loads the ask; a long message's tail only dilutes the question it opens with.
 const MESSAGE_MAX_CHARS = 600;
-// Composer's chip waits on this; past it, the chat opens unrouted as if nothing had been asked.
-const ROUTE_DEADLINE_MS = 6_000;
+// A sent message is held back for this long at most; the caller's own wait is longer, so this deadline, not the wire,
+// is what ends a slow reading.
+const ROUTE_DEADLINE_MS = 5_000;
 const NONE = "none";
 
 const excerpt = (text: string): string => {
@@ -137,10 +138,12 @@ export const routePersona = async (services: Services, ask: PersonaRouteAsk, sig
             { prompt: routerPrompt(ask, lines), answer: routeAnswer(new Set(cards.map((card) => card.id))) },
             deadline,
         );
+        // Named whether or not a card was: the reading was paid for either way, and the chat says so.
+        const model = modelPinKey(answer.choice);
         const card = cards.find((entry) => entry.id === answer.value.persona);
         return card === undefined
-            ? { reason: `No persona fits this message.` }
-            : { persona: card.id, reason: `The message reads like ${nameOf(card)}'s work.` };
+            ? { reason: `No persona fits this message.`, model }
+            : { persona: card.id, reason: `The message reads like ${nameOf(card)}'s work.`, model };
     } catch (error: unknown) {
         // A spent chain, no account, or the deadline: the chat opens unrouted, with a reason the chip can show.
         services.logger.warn({ err: error }, "persona router: no answer, the chat stays open");
