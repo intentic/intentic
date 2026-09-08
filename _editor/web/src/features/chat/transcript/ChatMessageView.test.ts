@@ -16,6 +16,10 @@ const markdown = vi.hoisted(() => ({
     parts: [] as { readonly kind: string; readonly html?: string; readonly figure?: { readonly kind: string } }[],
 }));
 
+// Every ResizeObserver a mounted row builds, with the boxes it watches. jsdom has no layout to fire one, so the pinned
+// band's suite fires the row's own by hand; the others are left alone and never fire, as before.
+const resizers = vi.hoisted(() => [] as { readonly targets: Element[]; readonly fire: () => void }[]);
+
 vi.hoisted(() => {
     // Resize/IntersectionObserver stubs since jsdom lacks both; never firing leaves clamp/pin at their default state.
     const idle = class {
@@ -24,6 +28,18 @@ vi.hoisted(() => {
         disconnect(): void {}
     };
     globalThis.IntersectionObserver ??= idle as unknown as typeof globalThis.IntersectionObserver;
+    // Assigned, not `??=`: this replaces the setup file's no-op ResizeObserver with one the suite can fire.
+    globalThis.ResizeObserver = class {
+        private readonly targets: Element[] = [];
+        constructor(callback: ResizeObserverCallback) {
+            resizers.push({ targets: this.targets, fire: () => callback([], this as unknown as ResizeObserver) });
+        }
+        observe(target: Element): void {
+            this.targets.push(target);
+        }
+        unobserve(): void {}
+        disconnect(): void {}
+    } as unknown as typeof globalThis.ResizeObserver;
 });
 
 // Imported as a namespace since this file already binds `h`/`defineComponent`, which a destructured factory would
@@ -181,6 +197,7 @@ beforeEach(() => {
     pane.streaming = true;
     pane.editing = undefined;
     beginEdit.mockClear();
+    resizers.length = 0;
 });
 
 afterEach(() => {
@@ -585,5 +602,93 @@ describe(`ChatMessageView edit control`, () => {
         expect(mount(prompt, { doomed: true }).querySelector(`.chat-doomed`)).not.toBeNull();
         app?.unmount();
         expect(mount(prompt).querySelector(`.chat-doomed`)).toBeNull();
+    });
+});
+
+// THE PINNED BAND (.chat-prompt-pinned in chat.css), which is the only thing painting the opaque background a stuck
+// prompt needs. CSS cannot ask whether a sticky row is stuck, so the class is measured in JS — and a row is stuck by
+// layout alone as readily as by scrolling: content above it loses height, or the box around it resizes. Measured off
+// scroll events only, the row lifts with no event behind it and the turn scrolls through a transparent prompt.
+describe(`ChatMessageView pinned band`, () => {
+    const prompt: ChatMessage = { id: 12, role: `user`, text: `fix the bug` };
+    // jsdom lays nothing out, so both boxes answer from here; a test moves the row across the scroller's own edge.
+    // The row's flow position starts below it (8px down the scroller), which is a prompt that has not pinned yet.
+    const box = { rowTop: 8, scrollerTop: 0 };
+
+    const rectAt = (top: number): DOMRect =>
+        ({ top, bottom: top, left: 0, right: 0, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+
+    // The transcript as ChatPane builds it: the scroller the prompt pins against, and the wrapper inside it that
+    // grows with the turn.
+    // Async because the row's own measurement is a post-flush watcher: it runs, and builds its observers, on the
+    // tick after the mount.
+    const mountInTranscript = async (): Promise<{ row: HTMLElement; scroller: HTMLElement; content: HTMLElement }> => {
+        box.rowTop = 8;
+        const scroller = document.createElement(`div`);
+        scroller.className = `chat-scroller`;
+        const content = document.createElement(`div`);
+        scroller.append(content);
+        document.body.append(scroller);
+        app = createApp({ render: () => h(ChatMessageView, { message: prompt, streaming: false }) });
+        app.use(VueQueryPlugin, { queryClient: new QueryClient() });
+        app.component(`Icon`, IconStub);
+        app.directive(`tooltip`, {});
+        app.mount(content);
+        await nextTick();
+        const row = scroller.querySelector<HTMLElement>(`.chat-prompt`)!;
+        scroller.getBoundingClientRect = (): DOMRect => rectAt(box.scrollerTop);
+        row.getBoundingClientRect = (): DOMRect => rectAt(box.rowTop);
+        return { row, scroller, content };
+    };
+
+    // Reports the observation as the browser would, and answers how many observers were watching that box at all —
+    // zero means nothing is measuring it, which is the state this suite exists to catch.
+    const resize = (target: Element): number => {
+        const watching = resizers.filter((resizer) => resizer.targets.includes(target));
+        for (const resizer of watching) {
+            resizer.fire();
+        }
+        return watching.length;
+    };
+
+    it(`paints the band when the turn above the prompt changes height, with nothing scrolled`, async () => {
+        const { row, content } = await mountInTranscript();
+        expect(row.className).not.toContain(`chat-prompt-pinned`);
+
+        // A card above folds: the row lifts past the scroller's edge while scrollTop never moves, so no scroll
+        // event follows the change.
+        box.rowTop = -1;
+        expect(resize(content)).toBeGreaterThan(0);
+        await nextTick();
+
+        expect(row.className).toContain(`chat-prompt-pinned`);
+    });
+
+    it(`paints the band when the pane itself resizes under a stuck prompt`, async () => {
+        const { row, scroller } = await mountInTranscript();
+        expect(row.className).not.toContain(`chat-prompt-pinned`);
+
+        // The floating window fitting itself around a second pane: the box moves, the scroll position does not.
+        box.rowTop = -1;
+        expect(resize(scroller)).toBeGreaterThan(0);
+        await nextTick();
+
+        expect(row.className).toContain(`chat-prompt-pinned`);
+    });
+
+    it(`takes the band off again the moment the row is back in flow`, async () => {
+        const { row, content } = await mountInTranscript();
+        box.rowTop = -1;
+        resize(content);
+        await nextTick();
+        expect(row.className).toContain(`chat-prompt-pinned`);
+
+        // In flow the band must not paint: it would lie over the half-rem a run bar's count mark is pulled into
+        // the row's padding, and shave the mark's ring off (see .chat-prompt in chat.css).
+        box.rowTop = 8;
+        resize(content);
+        await nextTick();
+
+        expect(row.className).not.toContain(`chat-prompt-pinned`);
     });
 });

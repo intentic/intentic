@@ -414,8 +414,8 @@ const trailer = computed(() => {
 const { showToolCalls } = useToolCalls();
 
 // Pinned state (.chat-prompt-pinned).
-// Whether the prompt is actually stuck (CSS can't ask): compares the row's top to the scroller's edge on scroll; the
-// IntersectionObserver only toggles that listener.
+// Whether the prompt is actually stuck (CSS can't ask): compares the row's top to the scroller's edge on scroll and on
+// either box resizing; the IntersectionObserver only toggles that listener.
 const row = ref<HTMLElement>();
 const pinned = ref(false);
 
@@ -458,11 +458,32 @@ watch(
             { root: scroller },
         );
         observer.observe(element);
+        // A row crosses the threshold with nothing scrolled, too: content above it changes height (a card folding,
+        // the warm-up pass giving skipped rows their real heights) or the box around it resizes (the floating
+        // window fitting itself around a second pane). Scroll anchoring hides most of that — it moves scrollTop to
+        // hold the reader's place, and Chromium does fire a scroll event when it does — but it is suppressed on any
+        // frame that changes a computed style on the anchor's ancestors, which is what folding a row IS. The row
+        // then lifts with no scroll event behind it, and the prompt keeps a transparent band while the turn scrolls
+        // through it, until the reader happens to scroll: the report this measurement was added for.
+        // Two boxes, for the reason useStickToBottom watches two: the scroller's own box changes when the pane or
+        // window resizes it, the wrapper inside it (ChatPane's `content`, which the transcript's insets live on)
+        // changes when the turn grows, and neither implies the other.
+        const resizer = new ResizeObserver(() => {
+            if (listening) {
+                sync();
+            }
+        });
+        resizer.observe(scroller);
+        // Guarded, not asserted: a scroller with nothing in it yet is a transcript with no row to pin either.
+        if (scroller.firstElementChild !== null) {
+            resizer.observe(scroller.firstElementChild);
+        }
         // Syncs and listens immediately, so an already-stuck row (transcript restored at the bottom) starts out pinned.
         sync();
         listen(true);
         onCleanup(() => {
             observer.disconnect();
+            resizer.disconnect();
             listen(false);
         });
     },
