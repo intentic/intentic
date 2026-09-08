@@ -207,7 +207,9 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             mirror: get("mirror").is_some(),
         })),
         "sync" => None,
-        "recreate" => {
+        // App-window only, like `sync`: this link runs its script the moment it lands, with nothing left to
+        // confirm, and the only page that emits one is the SPA's own Update/Environment card.
+        "recreate" if source == Source::App => {
             let rollback = get("rollback").is_some();
             Some(Link::Recreate(RecreateArgs {
                 slug: get("slug")?,
@@ -217,6 +219,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
                 rollback,
             }))
         }
+        "recreate" => None,
         "auth" => Some(Link::Auth(AuthArgs {
             handoff: get("handoff")?,
             state: get("state")?,
@@ -303,6 +306,20 @@ mod tests {
                 rollback: true
             }))
         );
+    }
+
+    /// A recreate acts on the container the moment it lands — no requirements pass, no card, nothing to
+    /// answer — so an external one would let any page a reader visits restart their sandbox onto a rollback
+    /// image or a digest the sender chose. The whole link is refused, as `sync` is.
+    #[test]
+    fn a_recreate_link_from_outside_the_app_is_refused_entirely() {
+        for link in [
+            "intentic://recreate?slug=sandbox-abc",
+            "intentic://recreate?slug=sandbox-abc&hash=deadbeef",
+            "intentic://recreate?slug=sandbox-abc&rollback=1",
+        ] {
+            assert_eq!(parse_link(link, Source::External), None, "{link}");
+        }
     }
 
     /// Two destinations in one link is a caller's bug; the rollback wins and the digest is dropped, rather than

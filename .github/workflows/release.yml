@@ -305,7 +305,7 @@ jobs:
       # The ic host-side CLI ships for every platform a connect/recreate one-liner can land on: the .sh shims
       # cover Linux + macOS, the .ps1 shims Windows. All five come off the zig/xwin toolchains baked into this
       # image, with no Apple SDK anywhere in it (build-ic.sh header).
-      - run: bash _tools/scripts/build/build-ic.sh linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
+      - run: bash _tools/scripts/build/build-ic.sh --version "$RELEASE_VERSION" linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
       # The Windows launcher stub, which is what the machine agent above actually registers at logon: without it
       # in the release, `computer.ps1`/`sync.ps1` cannot install it and every Windows machine goes back to a
       # console window on the desktop at every boot. Same xwin toolchain as the ic build above; ~200 KB.

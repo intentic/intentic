@@ -4,7 +4,10 @@
 # single-runner pattern as build-agent-binaries.sh / build-desktop.sh, same explicit-target rule: shipping a
 # binary for a platform no card can hand a command for implies support that does not exist.
 #
-#   bash _tools/scripts/build/build-ic.sh linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
+#   bash _tools/scripts/build/build-ic.sh [--version <v>] linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
+#
+# --version is what the binary reports (`ic --version`, and the banner's stamp). Omit it and the build carries
+# the repo's 0.0.0 sentinel, which every reader of a version already treats as "built from source".
 #
 # Toolchains, per target family (in CI these are baked into the job image, like build-desktop.sh's; the
 # fallback installs below are for developer machines and are idempotent):
@@ -23,7 +26,18 @@ set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
 cd "$(repo_root)"
 
-[ $# -ge 1 ] || { echo "usage: build-ic.sh <target>... (linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64)" >&2; exit 2; }
+# THE VERSION THE BINARY WILL REPORT. Compiled in through IC_VERSION (main.rs reads it with `option_env!`),
+# because the artifact is one static binary with no package.json or Cargo.toml beside it, and because
+# set-versions.sh stamps npm packages only — a Cargo.toml this script rewrote would be a second place to bump.
+# Absent leaves the crate's 0.0.0 sentinel, which is what a working-tree build should say it is.
+VERSION="0.0.0"
+if [ "${1:-}" = "--version" ]; then
+  VERSION="${2:?usage: build-ic.sh [--version <v>] <target>...}"
+  shift 2
+fi
+export IC_VERSION="$VERSION"
+
+[ $# -ge 1 ] || { echo "usage: build-ic.sh [--version <v>] <target>... (linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64)" >&2; exit 2; }
 
 MANIFEST="_sandbox/ic/Cargo.toml"
 OUT="_sandbox/ic/dist-bin"
@@ -107,6 +121,27 @@ for target in "$@"; do
     windows-*) bash "$(dirname "$0")/sign-windows.sh" "$OUT/$name" ;;
   esac
 done
+
+# …and prove the stamp landed, by ASKING one of the binaries just built. An env var that silently stops
+# reaching rustc — a flag renamed, an `option_env!` renamed on one side only — produces a binary that builds,
+# ships, is downloaded by every connect one-liner and reports 0.0.0 forever, which is invisible everywhere
+# except a user being asked which build they have. Only the runner's own os/arch can be executed here, which
+# is enough: every target comes off the same source through the same variable.
+native_os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+native_arch="$(uname -m)"
+case "$native_arch" in
+  x86_64 | amd64) native_arch=amd64 ;;
+  arm64 | aarch64) native_arch=arm64 ;;
+esac
+native="$OUT/ic-${native_os}-${native_arch}"
+if [ ! -x "$native" ]; then
+  echo "note: no ic-${native_os}-${native_arch} in this build — version stamp not verified on this runner." >&2
+elif [ "$("$native" --version)" != "ic $VERSION" ]; then
+  echo "error: ic was stamped $VERSION but reports '$("$native" --version)' — IC_VERSION did not reach the binary." >&2
+  exit 1
+else
+  echo "ic: version stamp verified ($VERSION)"
+fi
 
 echo "==> ic binaries in $OUT:"
 ls -l "$OUT"

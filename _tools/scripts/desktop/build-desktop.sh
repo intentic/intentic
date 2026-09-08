@@ -300,8 +300,11 @@ else
     echo "==> TAURI_SIGNING_PRIVATE_KEY not set — skipping signatures + latest.json (no auto-update for this release)"
 fi
 
+# A dotfile first, because `./*` does not match one: a redirection straight into SHA256SUMS creates the file
+# before the glob expands, so sha256sum hashes the list it is still writing and records a value no
+# `sha256sum -c` can ever match.
 rm -f "$OUT/SHA256SUMS"
-(cd "$OUT" && sha256sum ./*) >"$OUT/SHA256SUMS"
+(cd "$OUT" && sha256sum ./* >.SHA256SUMS && mv .SHA256SUMS SHA256SUMS)
 echo "==> desktop artifacts:"
 ls -lh "$OUT"
 

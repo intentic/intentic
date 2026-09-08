@@ -497,15 +497,18 @@ The whole channel between the SPA and the app
 | `intentic://launcher` | the setup page's *Show the setup* | raise the app's own card again, holding the same run |
 | `intentic://window?do=…` | the title bar the SPA draws | minimise, maximise, close, drag, or announce that bar |
 
-The first four work from an external browser too, where the OS routes them to the installed app: with the one
-difference the next section is about. **The last three are refused from anywhere but this app's own window.**
-What `update` does is end the process and run an installer, which is a fine thing for a
+`setup`, `signin` and `auth` work from an external browser too, where the OS routes them to the installed app:
+with the one difference the next section is about. **The other four are refused from anywhere but this app's
+own window.** What `update` does is end the process and run an installer, which is a fine thing for a
 button this app drew to ask for and not something a page in a browser should be able to do to somebody who
 answered *"Open Intentic?"*. There is nothing to confirm afterwards that would make it a fair question: the
 answer is that your app closes now. Out of a window, the tray row is the way to reach it — on the machine,
-rather than on the web. `launcher` and `window` are refused for a duller reason: nothing they do is dangerous,
-but both are about a window of this app, and a link from the OS handler is not something this app's own window
-asked for.
+rather than on the web. `recreate` is refused for the same reason one step down: it spawns `recreate.sh`
+against a named container the moment it lands, so an external copy is a stranger restarting somebody's sandbox
+onto a rollback image, or onto a digest the sender chose, from a page they happened to open. The card that
+sends it is drawn *inside* this app (`desktopVersion()` gates it), so nothing legitimate arrives from outside.
+`launcher` and `window` are refused for a duller reason: nothing they do is dangerous, but both are about a
+window of this app, and a link from the OS handler is not something this app's own window asked for.
 
 ### A link from outside is not a link from us
 
@@ -527,8 +530,12 @@ less:
 
 **How a link gets in** depends on whether the app is already running, and the two paths share nothing but the
 url. If it is, the OS starts a second copy and `tauri-plugin-single-instance` forwards that copy's argv to the
-first over DBus. If it is not, the OS starts the app *with* the link in argv: which is the path a first-time
-user takes (install the app, sign in, and let its setup page hand this computer the code; nothing running yet)
+first over DBus, where `tauri-plugin-deep-link` reads the url out of it and emits `on_open_url`. That plugin is
+the **only** thing that turns argv into a link: the single-instance callback in `lib.rs` reads argv to notice
+that a second launch was a bare one (somebody reopening the app) and does nothing else with it, because a
+callback that also dispatched the link ran every external link twice — two *"Set up a sandbox on this
+device?"* dialogs for one press, and two setups off one code if both were answered. If the app is not running,
+the OS starts it *with* the link in argv: which is the path a first-time user takes (install the app, sign in, and let its setup page hand this computer the code; nothing running yet)
 and it needs two things the warm path does not:
 
 - **`%u` on the installed entry's `Exec`.** A handler without a field code is launched with no arguments at all

@@ -54,7 +54,9 @@ const contentClass = computed(() =>
     [
         chrome ? `` : `!p-0 !overflow-hidden !rounded-lg`,
         size === `full` ? `!flex min-h-0 !flex-1 !flex-col` : ``,
-        scroll ? `max-h-panel-lg overflow-y-auto` : ``,
+        // 72dvh AND what the viewport has left after this box's own header, footer and padding (10rem): the
+        // percentage alone exceeds the viewport under ~570px, where the surplus is clipped, not scrolled.
+        scroll ? `max-h-[min(var(--height-panel-lg),calc(100dvh_-_10rem))] overflow-y-auto` : ``,
     ]
         .filter(Boolean)
         .join(` `),

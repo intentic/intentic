@@ -116,7 +116,14 @@ const info = ref<DesktopInfo | undefined>(undefined);
 /* The box the window is fitted to: whichever face is up, measured (fitWindow.ts). One ref for both faces
  * because the root around them is one element, and the window follows whatever it holds. */
 const content = ref<HTMLElement | undefined>(undefined);
-useFitToContent(content);
+// Resources form parked on its row until Apply or Cancel answers it. Declared with the fit rather than beside
+// its handlers, because the window's height depends on whether it is open.
+const reshaping = ref<DeviceSandboxGroup | undefined>(undefined);
+/* A DIALOG NEEDS A WINDOW TO BE A DIALOG IN: an overlay is `position: fixed`, so a card-tall window clips it
+ * to its first row. The floor is the SCREEN's height and never the window's, which would feed the next
+ * resize; Rust clamps it to the work area (windows.rs `fit_to_content`). */
+const dialogFloor = computed(() => (reshaping.value === undefined ? 0 : globalThis.screen.availHeight));
+useFitToContent(content, dialogFloor);
 /* WHETHER DOCKER ANSWERS, AND `undefined` UNTIL IT HAS BEEN ASKED — a third state this screen genuinely has
  * and used to pretend it did not.
  *
@@ -654,9 +661,6 @@ const reshape = async (slug: string, ask: ResourcesAsk): Promise<void> => {
     rowFailure.value = failure === undefined ? undefined : { slug, message: failure };
     busy.value = undefined;
 };
-
-// Resources form parked on its row until Apply or Cancel answers it.
-const reshaping = ref<DeviceSandboxGroup | undefined>(undefined);
 
 /* ESCAPE IS THE ×: this window has no title bar to find one on, and a card that can be dismissed by a key is
  * a card that reads as a card. Not while a dialog of this screen's own is open, whose Escape is its own. */

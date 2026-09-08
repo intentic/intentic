@@ -352,6 +352,19 @@ fi
 xdg-open "$LINK" >/tmp/xdg-open.log 2>&1 || true
 
 if until_true 45 "the setup link reached the running app, which asked before running it" window_titled "$CONFIRM_TITLE"; then
+    # ONE LINK, ONE QUESTION — the row this tier did not have, and the reason a duplicate shipped. A running
+    # app is reached by a second copy whose argv the single-instance plugin forwards, and tauri-plugin-deep-link
+    # turns that same argv into `on_open_url`: a lib.rs that also dispatched argv itself asked twice, and a
+    # user who answered both prompts redeemed one setup code twice. Every other verb hides that behind a
+    # take-once park, so this dialog is the only place it is visible at all. The settle is not optional: the
+    # duplicate lands a moment after the one the search above stopped at, so counting immediately finds one.
+    sleep 3
+    asked=$(window_titled "$CONFIRM_TITLE" | grep -c .)
+    if [ "$asked" -eq 1 ]; then
+        pass "the link was asked about exactly once"
+    else
+        fail "one setup link raised $asked confirmations — external links are being handled more than once"
+    fi
     answer_confirm
     until_true 30 "the setup link opened the setup screen" window_titled "$SETUP_TITLE" || {
         echo "--- app output ---" >&2

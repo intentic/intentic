@@ -266,7 +266,7 @@ pub fn begin(title: &str, plan: Vec<PlanStep>) {
     let count = state.plan.len();
     let seconds: u32 = state.plan.iter().map(|step| step.weight).sum();
     let heading = state.paint(title, BOLD);
-    let version = env!("CARGO_PKG_VERSION");
+    let version = crate::VERSION;
     let stamp = if version == "0.0.0" {
         String::new()
     } else {

@@ -27,10 +27,18 @@ use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
  * Configuration doubles as flags AND the env vars the shims forward — every name the shell flows honored
  * keeps working (SETUP_CODE, CF_TOKEN, SANDBOX_IMAGE, INTENTIC_SET_ENV, …). */
 
+/// What this binary reports it is. `IC_VERSION` is set by build-ic.sh at release; without it the crate's own
+/// `0.0.0` sentinel stands, which is what an unreleased build should say — `Cargo.toml` is never bumped, so a
+/// release that stops passing it says 0.0.0 forever rather than a wrong number.
+pub const VERSION: &str = match option_env!("IC_VERSION") {
+    Some(stamped) => stamped,
+    None => env!("CARGO_PKG_VERSION"),
+};
+
 #[derive(Parser)]
 #[command(
     name = "ic",
-    version,
+    version = VERSION,
     about = "intentic on this machine — sandboxes and deploy targets",
     disable_help_subcommand = true
 )]

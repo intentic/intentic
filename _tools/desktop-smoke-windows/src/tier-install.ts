@@ -9,6 +9,7 @@
 import type { WindowInfo } from "@intentic/desktop-automation";
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { appExecutable, appRunning, installSilently, launchApp, quitApp, uninstallSilently } from "./app.js";
 import { APP_IDENTIFIER, CONFIRM_TITLE, PRODUCT_NAME, SCHEME, SETUP_LINK, SETUP_TITLE, WORKSPACE_TITLE } from "./constants.js";
 import type { Harness } from "./harness.js";
@@ -49,6 +50,26 @@ const answer = (harness: Harness, refusal: string | undefined): void => {
     if (refusal !== undefined) {
         harness.fail(`the confirmation could not be answered`, refusal);
     }
+};
+
+// A duplicate lands a moment after the one a title search stops at, so the count is taken after a settle rather than on
+// the first sighting.
+const DUPLICATE_SETTLE_MS = 3_000;
+
+/* ONE LINK, ONE QUESTION — the row neither smoke tier had, and the reason a duplicate shipped on Linux.
+ *
+ * A running app is reached by a second copy whose argv the single-instance plugin forwards, and
+ * tauri-plugin-deep-link turns that same argv into `on_open_url`: a lib.rs that also dispatched argv itself asked
+ * twice, and a user who answered both prompts redeemed one setup code twice. Every other verb hides that behind a
+ * take-once park, so this dialog is the only place it is visible at all. */
+const assertAskedOnce = async (harness: Harness, app: string): Promise<void> => {
+    await delay(DUPLICATE_SETTLE_MS);
+    const asked = (await appWindows(app)).filter((window) => window.title.includes(CONFIRM_TITLE)).length;
+    if (asked === 1) {
+        harness.pass(`the link was asked about exactly once`);
+        return;
+    }
+    harness.fail(`one setup link raised ${asked} confirmations`, `External links are being handled more than once.`);
 };
 
 export const runInstallTier = async (harness: Harness, options: InstallTierOptions): Promise<void> => {
@@ -186,6 +207,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
                 appWindowTitled(app, CONFIRM_TITLE),
             )
         ) {
+            await assertAskedOnce(harness, app);
             answer(harness, await answerConfirm(app, CONFIRM_TITLE));
             if (!(await harness.untilTrue(SCREEN_SECONDS, `answering it opened the setup screen`, () => appWindowTitled(app, SETUP_TITLE)))) {
                 harness.detail(await describeWindows());

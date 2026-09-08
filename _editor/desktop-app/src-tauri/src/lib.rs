@@ -34,12 +34,12 @@ pub fn run() {
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     {
         builder = builder
+            // A second launch carrying a link IS the OS delivering that link, and the deep-link plugin below
+            // forwards the same argv to `on_open_url` — so handling it here as well runs every external link
+            // twice. This decides one thing: whether the second launch was a bare one.
             .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-                for arg in &argv {
-                    if arg.starts_with("intentic://") {
-                        handle_intentic_link(app, arg, setup_link::Source::External);
-                        return;
-                    }
+                if argv.iter().any(|arg| arg.starts_with("intentic://")) {
+                    return;
                 }
                 windows::show_workspace(app);
             }))
