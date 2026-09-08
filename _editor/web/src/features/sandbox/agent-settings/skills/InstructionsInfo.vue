@@ -18,7 +18,7 @@ const PROMPT_LOST = [
 
 const PROMPT_KEPT = [
     [`Every tool`, `Nothing is removed, only what the model has been TOLD changes`],
-    [`CLAUDE.md and your skills`, `Still loaded from the workspace exactly as before`],
+    [`Memory and your skills`, `Your standing instructions ride your own prompt; skills load from the workspace as before`],
     [`The in-turn notices`, `Hooks are a separate layer: the search, dependency and diagnostics steers still fire`],
     [`Cross-provider delegation`, `Moves into the first message instead of the prompt`],
 ];
@@ -82,8 +82,8 @@ const REACH_ROWS = [
         <InfoTable class="mt-2" :headers="[`Model`, `What happens`]" :rows="REACH_ROWS" />
         <p class="mt-1.5 text-2xs text-subtle">
             An agent you install yourself brings its own prompt and offers no way to set one, so it keeps it, and the model picker says so on the chat it
-            would affect. Ordinary preferences ("answer in Polish") do not need this: put them in CLAUDE.md, which is read alongside whichever prompt
-            is in force. A single persona can run on a prompt of its own: see Personas.
+            would affect. Ordinary preferences ("answer in Polish") do not need this: put them in Memory, which every model is told whatever prompt is
+            in force. A single persona can run on a prompt of its own: see Personas.
         </p>
         <p class="mt-1.5 text-2xs text-subtle">
             Editing it costs one turn's worth of the reuse that keeps long conversations cheap, then settles back. Write it and leave it. It isn't a

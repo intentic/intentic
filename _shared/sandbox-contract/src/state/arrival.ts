@@ -30,7 +30,7 @@ export const ArrivalGroupSchema = z.enum([
     "capability",
     // The agent settings that differ from their defaults.
     "settings",
-    // A merge into CLAUDE.md / AGENTS.md.
+    // A merge into the workspace's memory file.
     "memory",
     "skill",
     "automation",

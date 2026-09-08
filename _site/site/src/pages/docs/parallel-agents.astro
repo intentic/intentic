@@ -64,7 +64,7 @@ const lanes = [
 
     <h3>The agent sees its worktree as /work</h3>
     <p>
-        Every absolute path an agent inherits: from a memory, a <code>CLAUDE.md</code>, a message you wrote quoting a file, its own earlier
+        Every absolute path an agent inherits: from a memory, an <code>AGENTS.md</code>, a message you wrote quoting a file, its own earlier
         turn: says <code>/work</code>. So the turn runs in its own mount namespace where its worktree <em>is</em> the workspace root:
     </p>
     <DocsCodeBlock code={mount} lang="bash" title="Inside an isolated turn" />

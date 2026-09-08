@@ -16,6 +16,11 @@ export const HISTORY_ROOT = "/history";
 // Daemon's own state folder; join through the state table's typed helpers instead, not by hand.
 export const STATE_DIR = ".intentic";
 
+// The owner's standing instructions, one filename for every runtime: the daemon reads it and composes it into each
+// turn's instructions itself, so no loop's own discovery decides which rules a turn ran under. One per folder, read
+// from the workspace root down to where the turn starts.
+export const MEMORY_FILE = "AGENTS.md";
+
 // Per-service state root on a provisioned host reached over ssh, as opposed to inside a sandbox container.
 export const HOST_STATE_ROOT = "/opt/intentic";
 

@@ -25,7 +25,7 @@ import { useWorkspaceTree } from "./useWorkspaceTree";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 import { useNotifications } from "../../../shell/notifications/notifications";
-import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
+import { specialChip } from "./specialPaths";
 import { dragOffer } from "./transfer/dragSource";
 import { filesToEntries } from "./transfer/dropEntries";
 import { explorerShows } from "./explorerFilter";
@@ -1146,17 +1146,13 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             :class="deadLink(row.entry) ? 'text-warning' : 'text-subtle'"
                             v-tooltip.right="linkTooltip(row.entry.link)"
                         />
-                        <!-- Dimmed like any out-of-focus dir but badged by name so it doesn't read as junk; details live in the workspace README. -->
+                        <!-- What the sandbox does with this entry, which its name doesn't say (specialPaths.ts); hover gives the rule. -->
                         <span
-                            v-if="row.entry.path === REFERENCE_DIR"
-                            class="shrink-0 rounded-full bg-subtle/10 px-1.5 text-2xs font-medium text-subtle"
-                            >reference</span
-                        >
-                        <!-- The one badge here that's a warning, not a label: everything under this directory is on the open internet. -->
-                        <span
-                            v-if="row.entry.path === PUBLIC_DIR"
-                            class="shrink-0 rounded-full bg-warning/10 px-1.5 text-2xs font-medium text-warning"
-                            >public</span
+                            v-if="specialChip(row.entry.path)"
+                            class="shrink-0 rounded-full px-1.5 text-2xs font-medium"
+                            :class="specialChip(row.entry.path)?.tone === `warning` ? `bg-warning/10 text-warning` : `bg-subtle/10 text-subtle`"
+                            v-tooltip.right="specialChip(row.entry.path)?.tooltip"
+                            >{{ specialChip(row.entry.path)?.label }}</span
                         >
                         <!-- A dir fetching its children lazily on expand (ignored, or below the walk's budget). -->
                         <Icon

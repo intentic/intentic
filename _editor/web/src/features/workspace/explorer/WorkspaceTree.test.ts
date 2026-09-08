@@ -628,3 +628,34 @@ describe(`where a drop on a row lands`, () => {
         expect(daemon.calls).toEqual([]);
     });
 });
+
+// A role the sandbox enforces and the row's name doesn't state: the chip is the only place the tree says so, and it
+// has to be ON the row, not merely in a table somewhere.
+describe(`rows with a special role`, () => {
+    const SPECIAL_TREE: WorkspaceTreeEntry[] = [
+        { name: `refs`, path: `refs`, type: `dir`, ignored: true },
+        dir(`public`, [file(`public/report.html`)]),
+        file(`AGENTS.md`),
+        file(`README.md`),
+    ];
+
+    it(`chips the memory file, the outbox and the reference shelf, and nothing else`, async () => {
+        layout.toggleShowIgnored();
+
+        const el = await mount({ tree: SPECIAL_TREE });
+
+        const chipped = [...el.querySelectorAll(`[role="treeitem"]`)]
+            .filter((row) => row.querySelector(`span.rounded-full`) !== null)
+            .map((row) => row.textContent?.trim() ?? ``);
+        expect(chipped).toEqual([`refsreference`, `publicpublic`, `AGENTS.mdmemory`]);
+    });
+
+    it(`says what the role is on hover, so the chip is a rule rather than a label`, async () => {
+        const el = await mount({ tree: SPECIAL_TREE });
+
+        const memory = [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === `AGENTS.mdmemory`);
+        expect(memory?.querySelector(`span.rounded-full`)?.getAttribute(`data-tooltip`)).toContain(
+            `every turn that starts in this folder or deeper`,
+        );
+    });
+});

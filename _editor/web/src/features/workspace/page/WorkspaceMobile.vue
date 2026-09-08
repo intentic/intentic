@@ -34,7 +34,7 @@ import DiffSkeleton from "../viewers/DiffSkeleton.vue";
 import FileDiffPane from "../viewers/FileDiffPane.vue";
 import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "../tabs/workspaceTabs";
-import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
+import { specialChip } from "../explorer/specialPaths";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
 import { explorerShows } from "../explorer/explorerFilter";
@@ -512,15 +512,12 @@ const onPick = (event: Event): void => {
                                 class="shrink-0 text-xs"
                                 :class="node.link.state === undefined ? 'text-subtle' : 'text-warning'"
                             />
-                            <!-- The reference shelf must not read as junk: no hover on touch, so the badge alone names it. -->
+                            <!-- What the sandbox does with this entry (specialPaths.ts). No hover on touch, so the chip alone names it. -->
                             <span
-                                v-if="node.path === REFERENCE_DIR"
-                                class="shrink-0 rounded-full bg-subtle/10 px-1.5 text-2xs font-medium text-subtle"
-                                >reference</span
-                            >
-                            <!-- The outbox: a warning, not a label, since everything under it is on the internet. -->
-                            <span v-if="node.path === PUBLIC_DIR" class="shrink-0 rounded-full bg-warning/10 px-1.5 text-2xs font-medium text-warning"
-                                >public</span
+                                v-if="specialChip(node.path)"
+                                class="shrink-0 rounded-full px-1.5 text-2xs font-medium"
+                                :class="specialChip(node.path)?.tone === 'warning' ? 'bg-warning/10 text-warning' : 'bg-subtle/10 text-subtle'"
+                                >{{ specialChip(node.path)?.label }}</span
                             >
                             <Icon
                                 v-if="node.type === 'dir' && !isLockedWorkspacePath(node.path) && !deadLink(node)"

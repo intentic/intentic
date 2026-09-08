@@ -113,16 +113,17 @@ test("apply lands the ticked items through the deps and reports the rest honestl
         "secret:OPENAI_API_KEY",
         "skill:weather",
     ]);
-    // Memory lands in BOTH agents' files, fenced.
-    expect(recorded.files.get("CLAUDE.md")).toContain("intentic:imported-hermes:soul");
+    // Memory lands in the one memory file, fenced; the daemon composes it into every runtime from there.
+    expect(recorded.files.get("AGENTS.md")).toContain("intentic:imported-hermes:soul");
     expect(recorded.files.get("AGENTS.md")).toContain("Be warm.");
+    expect(recorded.files.get("CLAUDE.md")).toBeUndefined();
     expect(recorded.skills[0]?.name).toBe("weather");
     expect(recorded.secrets.get("OPENAI_API_KEY")).toBe("sk-test");
     expect(recorded.capabilities[0]?.id).toBe("linear");
 
     // Re-applying is safe: the fences replace rather than stack.
     await applyMigration(recorded.deps, plan, { items: ["memory:soul"], includeSecrets: true });
-    expect(recorded.files.get("CLAUDE.md")?.split("intentic:imported-hermes:soul:start").length).toBe(2);
+    expect(recorded.files.get("AGENTS.md")?.split("intentic:imported-hermes:soul:start").length).toBe(2);
 });
 
 test("withholding secrets skips secret items and lands capabilities keyless, saying so", async () => {
@@ -168,7 +169,7 @@ test("an openclaw home crosses the same pipeline: pairing state never held, the 
         includeSecrets: false,
     });
     expect(report.failed).toEqual([]);
-    expect(recorded.files.get("CLAUDE.md")).toContain("intentic:imported-openclaw:soul");
+    expect(recorded.files.get("AGENTS.md")).toContain("intentic:imported-openclaw:soul");
     expect(recorded.files.get("imports/openclaw/memory/2026-08-01.md")).toBe("Day one.");
     expect(recorded.files.get("imports/openclaw/memory/2026-08-02.md")).toBe("Day two.");
     expect(recorded.automations[0]?.trigger).toEqual({ kind: "schedule", cron: "*/30 * * * *" });

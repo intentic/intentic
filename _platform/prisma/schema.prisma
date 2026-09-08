@@ -115,7 +115,7 @@ model Verification {
 }
 
 // ---------------------------------------------------------------------------
-// Platform domain. The strict, sandbox-centric model (CLAUDE.md): the ONLY
+// Platform domain. The strict, sandbox-centric model (AGENTS.md): the ONLY
 // operational state the platform owns is the user's connection to the sandbox
 // they work from. Everything else — Claude/git credentials, the three repos
 // (intent/desired-state/app), inventory, and the provisioned infra — lives in

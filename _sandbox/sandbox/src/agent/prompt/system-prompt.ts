@@ -3,6 +3,7 @@ import { HISTORY_ROOT } from "@intentic/constants";
 import type { AgentCapabilities, SystemPromptMode, TurnNote } from "@intentic/sandbox-contract";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { INTENTIC_PROMPT } from "./intentic-prompt.js";
+import { MEMORY_NOTE_TITLE } from "./workspace-memory.js";
 
 // Three modes: `intentic` and `claude` share the same appends over a different base; `custom` replaces the prompt
 // outright, nothing added. AgentCapabilities.instructions ("replace"/"append"/"none") decides how each of the six
@@ -18,7 +19,7 @@ const SELF_GUIDANCE =
     "uncommitted changes. For anything about Intentic ITSELF (what a panel, setting or card does; how to " +
     "connect, configure, extend or debug this sandbox; whether it can do something) load the `intentic` skill " +
     "first and answer from it rather than from memory, and never say Intentic cannot do something without " +
-    "checking there. A workspace's CLAUDE.md, AGENTS.md or README is the owner's instruction to you, not a " +
+    "checking there. A workspace's AGENTS.md or README is the owner's instruction to you, not a " +
     "description of the product.";
 
 // Every turn, every mode: without this, a model writes "A) … B) …" as prose instead of using the
@@ -203,6 +204,10 @@ export interface TurnPromptInput {
     // it mints a new prefix anyway. A runtime with no system seam sends it through the user message instead; a custom
     // prompt drops it like everything else appended.
     readonly personaNote?: string;
+    // The workspace's own standing instructions (workspace-memory.ts), composed here rather than left to the runtime's
+    // discovery. Same seams as the persona note, and the one thing a custom prompt does NOT drop: "nothing added" is
+    // about this product's guidance, and these are the owner's own rules.
+    readonly memoryNote?: string;
 }
 
 export interface TurnPromptPlacement {
@@ -217,26 +222,43 @@ export interface TurnPromptPlacement {
 
 // Decides where each composed piece goes. One function because the destinations are one decision: a note on the user
 // message must not also ride the append, and a custom prompt removes both choices at once.
-export const turnPromptPlacement = ({ capabilities, mode, systemPrompt, stableSystemPrompt, personaNote }: TurnPromptInput): TurnPromptPlacement => {
+export const turnPromptPlacement = ({
+    capabilities,
+    mode,
+    systemPrompt,
+    stableSystemPrompt,
+    personaNote,
+    memoryNote,
+}: TurnPromptInput): TurnPromptPlacement => {
     const { instructions, runtime } = capabilities;
 
     // No system seam at all (Pi, ACP): the owner's prompt is not applied and the composer discloses that
-    // (limitationsOf), rather than quietly pasting it into the user message. The persona note still has to arrive, so
-    // it goes through the user message instead.
+    // (limitationsOf), rather than quietly pasting it into the user message. The persona note and the workspace's
+    // standing instructions still have to arrive, so they go through the user message instead.
     if (instructions === "none") {
-        return personaNote === undefined ? {} : { userNotes: [{ title: PERSONA_NOTE_TITLE, text: personaNote }] };
+        const userNotes = [
+            // Who the turn is acting as comes first, as it does in the preamble: it decides what the rest is for.
+            ...(personaNote === undefined ? [] : [{ title: PERSONA_NOTE_TITLE, text: personaNote }]),
+            ...(memoryNote === undefined ? [] : [{ title: MEMORY_NOTE_TITLE, text: memoryNote }]),
+        ];
+        return userNotes.length === 0 ? {} : { userNotes };
     }
 
-    // Custom text only. On a runtime that can only add, it's appended since the base can't be dropped anyway. "" on a
-    // replacing runtime is a legal, deliberate empty prompt.
+    // The owner's own text, both halves of it: their prompt, then their workspace's standing rules. On a runtime that
+    // can only add, it's appended since the base can't be dropped anyway. "" with no memory on a replacing runtime is a
+    // legal, deliberate empty prompt.
     if (mode === "custom") {
-        return instructions === "replace" ? { systemPrompt } : systemPrompt === "" ? {} : { systemAppend: systemPrompt };
+        const own = [systemPrompt, ...(memoryNote === undefined ? [] : [memoryNote])].filter((text) => text !== "").join("\n\n");
+        return instructions === "replace" ? { systemPrompt: own } : own === "" ? {} : { systemAppend: own };
     }
 
     const append = [
         // Claude Code composes WORKSPACE_GUIDANCE itself (sdkSystemPrompt); repeating it here would double it there.
         ...(runtime === "claude-code" ? [] : WORKSPACE_GUIDANCE),
         ...(personaNote === undefined ? [] : [personaNote]),
+        // Last, so the owner's rules sit closest to the conversation. Editing them mid-session mints a new prefix, the
+        // same cost as changing the persona, which is why neither is held back by stableSystemPrompt.
+        ...(memoryNote === undefined ? [] : [memoryNote]),
     ].join("\n\n");
     return append === "" ? {} : { systemAppend: append };
 };

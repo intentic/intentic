@@ -79,6 +79,7 @@ import { resolveHarnessCredentials } from "../../providers/harness-credentials.j
 import { turnPromptPlacement } from "../../prompt/system-prompt.js";
 import { composeWirePrompt, LITERAL_SLASH_NOTE, worktreeNote, worktreeReminder } from "../../prompt/turn-preamble.js";
 import { WORKSPACE_MAP_NOTE_TITLE, workspaceMapNote } from "../../prompt/workspace-map.js";
+import { workspaceMemoryNote } from "../../prompt/workspace-memory.js";
 import { createDepsServer } from "../../../workspace/deps/deps-tools.js";
 import { dependencyDirForCommand } from "../../tools/agent-deps.js";
 import { setupNoticeFor, setupNoticeTitle } from "../../../workspace/layout/workspace-setup.js";
@@ -441,28 +442,34 @@ const honoured = (
     // (system-prompt.ts owns both halves as one decision). Undefined settings means a focused caller with no route (the
     // bench); it gets the schema defaults.
     const settings = context.settings ?? SETTINGS_DEFAULTS;
+    // Where the card says to start, resolved through the workspace escape guard; a path that fails it is dropped rather
+    // than refused, so a typo'd folder opens at the workspace root instead of failing the session outright. Resolved
+    // ahead of the instructions, which read the start folder to know whose standing rules apply.
+    const startIn = persona.workspace?.startIn;
+    const startPath = startIn === undefined || startIn === "" ? undefined : resolveWithin(context.effectiveCwd, startIn);
+    // The same starting position as the daemon reaches it: `startPath` is a namespace address the daemon isn't inside,
+    // so anything read off disk goes through `localCwd` instead. The root moves with an isolated turn, since its world
+    // is its own worktree.
+    const localRoot = isolated ? context.localCwd : services.workspace.root;
+    const localStart = startIn === undefined || startIn === "" ? localRoot : resolveWithin(localRoot, startIn);
     // Which persona the turn wears, said once; undefined when there's nothing to say (an ordinary attended turn naming
     // no persona).
     const actingNote = personaNote(persona);
+    // The owner's standing instructions, every turn and every runtime, from the root down to the start folder; composed
+    // here because no two runtimes discover them the same way, and one of them (`instructions: "none"`) discovers
+    // nothing at all.
+    const memoryNote = workspaceMemoryNote({ root: localRoot, cwd: localStart ?? localRoot });
     const placement = turnPromptPlacement({
         capabilities,
         ...prompt,
         stableSystemPrompt: settings.stableSystemPrompt,
         ...(actingNote === undefined ? {} : { personaNote: actingNote }),
+        ...(memoryNote === undefined ? {} : { memoryNote }),
     });
-    // Where the card says to start, resolved through the workspace escape guard; a path that fails it is dropped rather
-    // than refused, so a typo'd folder opens at the workspace root instead of failing the session outright.
-    const startIn = persona.workspace?.startIn;
-    const startPath = startIn === undefined || startIn === "" ? undefined : resolveWithin(context.effectiveCwd, startIn);
-    // The same starting position as the daemon reaches it: `startPath` is a namespace address the daemon isn't inside,
-    // so anything read off disk goes through `localCwd` instead. The map root moves with an isolated turn, since its
-    // world is its own worktree.
-    const mapRoot = isolated ? context.localCwd : services.workspace.root;
-    const mapCwd = startIn === undefined || startIn === "" ? mapRoot : resolveWithin(mapRoot, startIn);
     // The project map, sent only on a conversation's opening message, here rather than in the harness arm since it's a
-    // filesystem fact true of every runtime. `mapCwd` outside the root is dropped by the escape guard, mapping the root
-    // as the session actually opens there.
-    const mapNote = send.map && mapCwd !== undefined ? workspaceMapNote({ root: mapRoot, cwd: mapCwd }) : undefined;
+    // filesystem fact true of every runtime. A start folder outside the root is dropped by the escape guard, mapping the
+    // root as the session actually opens there.
+    const mapNote = send.map && localStart !== undefined ? workspaceMapNote({ root: localRoot, cwd: localStart }) : undefined;
     // The environment through two filters: the persona's (what this turn may reach) and the gate's (what a person has
     // released). A connector caught by either loses every env var carrying its suffix outright, rather than being
     // merely discouraged.

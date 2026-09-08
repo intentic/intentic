@@ -180,7 +180,7 @@ of "Unlock every premium extension"; the wake's refusal for spent hours is a gat
 ## 7. What changes in the source
 
 Sized so the owner can choose how much to do in one go. Everything is a clean removal, no compatibility layer,
-per the workspace's CLAUDE.md; the Stripe subscription that used to mean "member" now means "Hosted" and
+per the workspace's AGENTS.md; the Stripe subscription that used to mean "member" now means "Hosted" and
 nothing about it moves.
 
 **Content and naming (one session).** `pricing.ts`, `pool.ts` → `hosted.ts`, `where-it-runs.astro`,

@@ -410,9 +410,16 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   skill). It also says what the agent is INSIDE OF: the base prompt names the product in four words and the
   Claude preset never does, and an agent that knows only that answers questions about the product from its
   training, so one unconditional block gives the identity, points at the skill, and states the precedence rule
-  that a workspace's CLAUDE.md is the owner's instruction rather than a description of the product.
+  that a workspace's AGENTS.md is the owner's instruction rather than a description of the product.
   [src/runtimes/codex/codex-instructions.ts](../src/runtimes/codex/codex-instructions.ts) is the Codex half: two
   undocumented config keys, verified by reading what reached the wire.
+- [src/agent/prompt/workspace-memory.ts](../src/agent/prompt/workspace-memory.ts): the owner's own standing rules,
+  the workspace's `AGENTS.md` files from the root down to the folder the turn starts in. Composed here rather than
+  left to the runtime, because the loops disagree about both the filename and the ceiling — Claude Code walks cwd up
+  to `/` reading CLAUDE.md, Codex reads AGENTS.md and stops at the enclosing `.git` (so a persona starting in a
+  nested repo lost the workspace's rules), and Pi and ACP read no such file at all. It rides the same seams as the
+  persona note, and is the one thing a custom system prompt does NOT drop: "nothing added" is about this product's
+  guidance, and these are the owner's own words.
 - [src/agent/prompt/workspace-map.ts](../src/agent/prompt/workspace-map.ts): the AREAS of the project a run starts in, read off
   the filesystem when a conversation opens and prepended to its first message (opt-in: `workspaceMap`). Rooted at
   where the run actually begins (a persona's start folder, an isolated worktree) rather than at `/work`, and

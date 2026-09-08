@@ -7,6 +7,7 @@ import { TURN_ENDING_NOTE_HEADER, TURN_ENDING_NOTE_TITLE } from "../../rules/tur
 import { IQ_SEARCH_INSTRUCTION_HEADER } from "./iq-search-instruction.js";
 import { TURN_CONTEXT_NOTE_HEADER } from "../run/turn/turn-context.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
+import { MEMORY_NOTE_HEADER, MEMORY_NOTE_TITLE } from "./workspace-memory.js";
 import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../settings/loaded-skills.js";
 import { CONTEXT_NOTE_HEADER, CONTEXT_NOTE_TITLE } from "../context/context-note.js";
 
@@ -61,6 +62,8 @@ const INJECTED: readonly { readonly header: string; readonly title: string }[] =
     // Reaches the user message only on a runtime with no system prompt (Pi, ACP); the one note whose absence would hide
     // WHY a turn refused to touch something.
     { header: PERSONA_NOTE_HEADER, title: "Who this turn is acting as" },
+    // The same two runtimes: the owner's standing instructions have no system seam to ride there.
+    { header: MEMORY_NOTE_HEADER, title: MEMORY_NOTE_TITLE },
     { header: SETUP_NOTICE_HEADER, title: "Dependencies aren't installed yet" },
     // Separate opening: a stale-only notice can appear alone, without SETUP_NOTICE_HEADER ahead of it.
     { header: STALE_NOTICE_HEADER, title: "Dependencies are behind" },

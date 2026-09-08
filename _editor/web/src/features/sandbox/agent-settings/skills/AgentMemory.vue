@@ -1,20 +1,17 @@
 <script setup lang="ts">
-import { Button, Card, CopyButton, MarkdownDocument, Notice, type NoticeModel, Row, SegmentedControl, ui } from "@intentic/ui";
+import { MEMORY_FILE } from "@intentic/constants";
+import { Button, Card, CopyButton, MarkdownDocument, Notice, type NoticeModel, Row, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { onMounted, ref, watch } from "vue";
-import { IMPORT_PROMPT, MEMORY_FILES, mergeMemory } from "../../../extensions/memoryImport";
+import { onMounted, ref } from "vue";
+import { IMPORT_PROMPT, mergeMemory } from "../../../extensions/memoryImport";
 import { useSandbox } from "../../client/useSandbox";
 import { useWorkspaceTree } from "../../../workspace/explorer/useWorkspaceTree";
 
-// CLAUDE.md and AGENTS.md are read at the top of every turn; this card can read, edit and delete them, not just
-// append via import. Shows one file at a time, picked by name; save is explicit since a half-typed sentence going
-// live would be read on the next turn.
+// One file, read at the top of every turn on every runtime; this card can read, edit and delete it, not just append
+// via import. Save is explicit since a half-typed sentence going live would be read on the next turn.
 
 const sandbox = useSandbox();
 const { readFile, saveText } = useWorkspaceTree();
-
-const FILES = MEMORY_FILES.map((name) => ({ label: name, value: name }));
-const picked = ref<string>(MEMORY_FILES[0]);
 
 const draft = ref(``);
 // The file's last-read/written content; draft is compared against it for unsaved state.
@@ -22,16 +19,16 @@ const onDisk = ref<string | undefined>(undefined);
 const saving = ref(false);
 const error = ref<NoticeModel | undefined>(undefined);
 
-// A missing file reads as empty, not a failure; both files are created on first save.
-const load = async (name: string): Promise<void> => {
+// A missing file reads as empty, not a failure; it is created on first save.
+const load = async (): Promise<void> => {
     error.value = undefined;
     onDisk.value = undefined;
     try {
-        const text = (await readFile(name)) ?? ``;
+        const text = (await readFile(MEMORY_FILE)) ?? ``;
         onDisk.value = text;
         draft.value = text;
     } catch (caught) {
-        error.value = noticeFrom(caught, `Couldn't read ${name}.`);
+        error.value = noticeFrom(caught, `Couldn't read ${MEMORY_FILE}.`);
     }
 };
 
@@ -39,19 +36,18 @@ const commit = async (text: string): Promise<void> => {
     saving.value = true;
     error.value = undefined;
     try {
-        await saveText(picked.value, text);
+        await saveText(MEMORY_FILE, text);
         onDisk.value = text;
     } catch (caught) {
-        error.value = noticeFrom(caught, `Couldn't save ${picked.value}.`);
+        error.value = noticeFrom(caught, `Couldn't save ${MEMORY_FILE}.`);
     } finally {
         saving.value = false;
     }
 };
 
-onMounted(() => void load(picked.value));
-watch(picked, (name) => void load(name));
+onMounted(() => void load());
 
-// Writes both files and merges rather than overwrites; memoryImport.ts holds the fence markers.
+// Merges rather than overwrites; memoryImport.ts holds the fence markers.
 const importText = ref(``);
 const importing = ref(false);
 
@@ -63,14 +59,12 @@ const importMemory = async (): Promise<void> => {
     importing.value = true;
     error.value = undefined;
     try {
-        for (const file of MEMORY_FILES) {
-            // Missing file starts as empty rather than failing (first import).
-            const current = (await readFile(file)) ?? ``;
-            await saveText(file, mergeMemory(current, text));
-        }
+        // Missing file starts as empty rather than failing (first import).
+        const current = (await readFile(MEMORY_FILE)) ?? ``;
+        await saveText(MEMORY_FILE, mergeMemory(current, text));
         importText.value = ``;
-        // Reloads since the visible document may be one of the files just written.
-        await load(picked.value);
+        // Reloads: the visible document is the file just written.
+        await load();
     } catch (caught) {
         error.value = noticeFrom(caught, `Couldn't save memory.`);
     } finally {
@@ -84,11 +78,9 @@ const importMemory = async (): Promise<void> => {
         <Row flush :heading="2" icon="sparkles" title="Memory">
             <template #description>
                 The standing instructions
-                <span class="font-medium text-content">{{ sandbox.active.value?.name ?? `your sandbox` }}</span> carries into every turn.
-                <code>CLAUDE.md</code> is what Claude reads and <code>AGENTS.md</code> is what Codex and ChatGPT read; both sit at the workspace root.
-            </template>
-            <template #control>
-                <SegmentedControl v-model="picked" :options="FILES" aria-label="Which memory file" />
+                <span class="font-medium text-content">{{ sandbox.active.value?.name ?? `your sandbox` }}</span> carries into every turn, on whichever
+                model runs it. <code>{{ MEMORY_FILE }}</code> at the workspace root; a folder deeper in can carry its own, read on top of this one by a
+                conversation that starts there.
             </template>
         </Row>
 
@@ -101,12 +93,12 @@ const importMemory = async (): Promise<void> => {
                 :stored="onDisk"
                 :saving="saving"
                 save="explicit"
-                :label="picked"
-                :placeholder="onDisk === undefined ? `Reading ${picked}…` : `Nothing here yet. What every turn in this workspace should know.`"
+                :label="MEMORY_FILE"
+                :placeholder="onDisk === undefined ? `Reading ${MEMORY_FILE}…` : `Nothing here yet. What every turn in this workspace should know.`"
                 class="min-h-48"
                 @save="commit"
             >
-                <template #note><code>{{ picked }}</code>, at the workspace root.</template>
+                <template #note><code>{{ MEMORY_FILE }}</code>, at the workspace root.</template>
             </MarkdownDocument>
         </div>
 

@@ -8,7 +8,7 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { Logger } from "pino";
 import { promisify } from "node:util";
 
-// An isolated turn's own view of /work: without this, an absolute path (a memory, CLAUDE.md, a message) named the
+// An isolated turn's own view of /work: without this, an absolute path (a memory, an AGENTS.md, a message) named the
 // shared tree directly, bypassing `land` and losing attribution. A mount namespace makes the worktree BE /work; shared
 // state and dependency mirrors are bound back in, everything else is private and dies with the turn.
 

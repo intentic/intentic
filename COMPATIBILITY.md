@@ -53,5 +53,5 @@ give them a `Release-Note:` when a user would notice.
 
 ## The moment of flip
 
-Until real users exist, breaking freely is policy (see CLAUDE.md): but *declared* breaking, so the habit,
+Until real users exist, breaking freely is policy (see AGENTS.md): but *declared* breaking, so the habit,
 the tooling, and the user-facing warning path all exist on day one of the first real user.

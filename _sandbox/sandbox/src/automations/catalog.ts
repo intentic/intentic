@@ -145,7 +145,7 @@ const DREAMING_PROMPT =
     `answer: it does not survive, which is exactly why this is one of the four.\n` +
     `- A MISTAKE THAT KEEPS HAPPENING. Where the record shows the same correction being typed again, the fix is a ` +
     `mechanism rather than a resolution: a hook under .intentic/config/hooks, a skill, or a line in the workspace's own ` +
-    `AGENTS.md / CLAUDE.md that would have prevented it.\n\n` +
+    `AGENTS.md that would have prevented it.\n\n` +
     `The sessions woke you; they did not decide anything. A count is not a pattern, and one bad afternoon is not a ` +
     `standing problem: quote what you actually read. If they genuinely show nothing worth changing, say so in one line ` +
     `and stop, inventing an improvement to look useful costs more than the turn that found nothing.\n\n` +

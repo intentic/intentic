@@ -133,6 +133,30 @@ test("a persona with no file reads does not get the diagnostic tools", async () 
     expect((plan as { request: AgentRequest }).request.sdkServers?.["diagnostics"]).toBeUndefined();
 });
 
+// The whole reason memory is composed here: a card that starts a conversation inside one folder used to be at the mercy
+// of the runtime's own discovery, which stops at a nested repo on some loops and does not exist at all on others.
+test("a persona starting in a nested folder is told the workspace's rules and that folder's", async () => {
+    const root = await mkdtemp(join(tmpdir(), "turn-plan-"));
+    await mkdir(join(root, "shop"), { recursive: true });
+    await writeFile(join(root, "AGENTS.md"), "No legacy support.");
+    await writeFile(join(root, "shop/AGENTS.md"), "Prices are integers, in cents.");
+    const services = servicesIn(root, {
+        openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
+        async *agent() {},
+        personas: unstubbed<Services["personas"]>("personas", {
+            list: async () => [{ id: "shopkeeper", label: "Shopkeeper", capabilities: [], workspace: { startIn: "shop" } }] as never,
+        }),
+    });
+
+    const plan = await planTurn(services, { prompt: "do the thing", actsAs: "shopkeeper" } as AgentTurn, contextIn(root));
+    expect(plan).toMatchObject({ ok: true });
+    const request = (plan as { request: AgentRequest }).request;
+
+    expect(request.cwd).toBe(join(root, "shop"));
+    expect(request.systemAppend).toContain("No legacy support.");
+    expect(request.systemAppend).toContain("Prices are integers, in cents.");
+});
+
 test("a native Codex turn is told the tree's dependencies are missing, exactly as a Claude turn no longer is", async () => {
     const root = await workspaceWithMissingDeps();
     const services = servicesIn(root, {

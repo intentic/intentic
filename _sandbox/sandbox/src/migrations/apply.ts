@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import { MEMORY_FILE } from "@intentic/constants";
 import { type ArrivalReport, type Capability, type SkillDraft, CapabilitySchema } from "@intentic/sandbox-contract";
 import type { MigratedAutomation, PlannedItem, SourcePlan } from "./adapter-shared.js";
 import { mergeFenced } from "./merge.js";
@@ -28,8 +29,6 @@ export interface MigrationDeps {
     readonly setSecret: (key: string, value: string) => Promise<void>;
 }
 
-// The same two files the web's paste importer writes. Claude reads one, everything AGENTS-shaped the other.
-export const MEMORY_FILES = ["CLAUDE.md", "AGENTS.md"] as const;
 
 // Re-parses a capability with credential fields withheld; the schema is what confirms the keyless remainder is still
 // valid.
@@ -54,10 +53,9 @@ export const applyMigration = async (
         const step = planned.apply;
         switch (step.target) {
             case "memory": {
-                for (const file of MEMORY_FILES) {
-                    const existing = (await deps.readWorkspaceFile(file)) ?? "";
-                    await deps.writeWorkspaceFile(file, mergeFenced(existing, step.fence, step.body));
-                }
+                // One file, the same one the web's paste importer writes and the daemon composes into every turn.
+                const existing = (await deps.readWorkspaceFile(MEMORY_FILE)) ?? "";
+                await deps.writeWorkspaceFile(MEMORY_FILE, mergeFenced(existing, step.fence, step.body));
                 return;
             }
             case "skill": {

@@ -1,9 +1,6 @@
-// Merges memory exported from another AI assistant into the workspace's per-agent memory files: Claude reads CLAUDE.md
-// (project memory), Codex/GPT reads AGENTS.md, both at the workspace root. Pure module so mergeMemory is unit-tested
-// directly; the dialog handles daemon I/O via useWorkspaceTree.
-
-// Native project-memory files for each agent, at the workspace root; written verbatim.
-export const MEMORY_FILES = [`CLAUDE.md`, `AGENTS.md`] as const;
+// Merges memory exported from another AI assistant into the workspace's memory file (MEMORY_FILE at the workspace
+// root), which the daemon composes into every turn's instructions whatever runtime serves it. Pure module so
+// mergeMemory is unit-tested directly; the card handles daemon I/O via useWorkspaceTree.
 
 // Pasted into the user's other AI assistant; fixed headings keep the merged block's shape provider-agnostic.
 export const IMPORT_PROMPT = `Export everything you know about me from our past conversations so I can bring it to another AI assistant.

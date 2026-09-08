@@ -9,6 +9,7 @@ import { sdkSystemPrompt, turnPromptPlacement } from "./system-prompt.js";
 
 const CUSTOM = "You are a release-notes writer. Never edit code.";
 const PERSONA = "## Who this turn is acting as\n\nYou are acting as Studio.";
+const MEMORY = "## Standing instructions for this workspace\n\n### AGENTS.md\n\nNo legacy support.";
 const BASE = { append: undefined, unattended: false, browserOutputDir: undefined } as const;
 
 // One runtime per placement the axis distinguishes, plus a second "replace" runtime that must not behave identically
@@ -88,6 +89,42 @@ test("a runtime with no system prompt still hears which persona it is wearing", 
     expect(placement.userNotes).toEqual([{ title: "Who this turn is acting as", text: PERSONA }]);
     // Nothing to say is nothing sent: an empty list would put a bare separator in front of the user's own words.
     expect(turnPromptPlacement({ capabilities: ACP, mode: "intentic", systemPrompt: "", stableSystemPrompt: false })).toEqual({});
+});
+
+// The whole point of composing memory here: no runtime's own discovery decides whether the owner's rules arrive, so
+// every placement the axis has must carry them.
+test("the workspace's standing rules reach every runtime, whatever seam it has", () => {
+    for (const capabilities of [CLAUDE, CODEX, GROK]) {
+        const placement = turnPromptPlacement({ capabilities, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, memoryNote: MEMORY });
+        expect(placement.systemAppend).toContain(MEMORY);
+    }
+    // No system seam at all: the rules ride the user message, as the persona note does.
+    const acp = turnPromptPlacement({ capabilities: ACP, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, memoryNote: MEMORY });
+    expect(acp.userNotes).toEqual([{ title: "Standing instructions for this workspace", text: MEMORY }]);
+});
+
+// "Custom means nothing added" is about this product's guidance. The workspace's rules are the owner's own text, and an
+// owner writing their own prompt has not thereby withdrawn them.
+test("a custom prompt drops the harness's guidance and keeps the owner's own rules", () => {
+    const claude = turnPromptPlacement({
+        capabilities: CLAUDE,
+        mode: "custom",
+        systemPrompt: CUSTOM,
+        stableSystemPrompt: false,
+        personaNote: PERSONA,
+        memoryNote: MEMORY,
+    });
+    expect(claude.systemPrompt).toBe(`${CUSTOM}\n\n${MEMORY}`);
+    expect(claude.systemAppend).toBeUndefined();
+    // Still suppressed: the persona note is this harness talking, not the owner.
+    expect(claude.systemPrompt).not.toContain(PERSONA);
+
+    const grok = turnPromptPlacement({ capabilities: GROK, mode: "custom", systemPrompt: CUSTOM, stableSystemPrompt: false, memoryNote: MEMORY });
+    expect(grok.systemAppend).toBe(`${CUSTOM}\n\n${MEMORY}`);
+
+    // An emptied custom prompt is still an empty prompt; the rules are all that is left, with no separator in front.
+    const emptied = turnPromptPlacement({ capabilities: CLAUDE, mode: "custom", systemPrompt: "", stableSystemPrompt: false, memoryNote: MEMORY });
+    expect(emptied.systemPrompt).toBe(MEMORY);
 });
 
 test("intentic ships its own prompt as the base, with the harness guidance after it", () => {
@@ -236,9 +273,9 @@ test("both built-in bases say what the agent runs inside and where the product's
         const text = typeof composed === "string" ? composed : (composed as { append: string }).append;
         expect(text).toContain("You run inside Intentic");
         expect(text).toContain("`intentic` skill");
-        // The one fact the model cannot infer on its own: this workspace's own CLAUDE.md is read as the owner's
+        // The one fact the model cannot infer on its own: this workspace's own AGENTS.md is read as the owner's
         // instruction.
-        expect(text).toMatch(/CLAUDE\.md.*owner's instruction/);
+        expect(text).toMatch(/AGENTS\.md.*owner's instruction/);
         expect(text).toMatch(/never say Intentic cannot/i);
     }
 });

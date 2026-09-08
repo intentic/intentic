@@ -22,7 +22,7 @@ Three surfaces already do import-shaped work, and none of them closes this:
 | Surface | What it does | Why it doesn't cover this |
 | --- | --- | --- |
 | `_sandbox/sandbox/src/portability/` (bundle restore, then at `POST /bundles/restore`) | Full sandbox export/import | Intentic→Intentic only; the tar layout and manifest are our own |
-| `_editor/web/src/composables/extensions/memoryImport.ts` | "Run this prompt in your old assistant, paste the answer" → fenced merge into `CLAUDE.md`/`AGENTS.md` | Memory only; loses skills, crons, channels, models, secrets |
+| `_editor/web/src/composables/extensions/memoryImport.ts` | "Run this prompt in your old assistant, paste the answer" → fenced merge into `AGENTS.md` | Memory only; loses skills, crons, channels, models, secrets |
 | `_editor/web/src/components/ForticlientImport.vue` | Parse one foreign config file to prefill one capability card | The right *gesture* at 1/40th the scope |
 
 Two problems, and they compound. **The knowledge is scattered across formats**: an OpenClaw setup is
@@ -47,7 +47,7 @@ Worth restating before proposing anything, because together they kill most of th
 >: `_sandbox/sandbox/src/browser/accounts-tools.ts`
 
 > No migration logic – assume fresh state.
->: `/work/CLAUDE.md`
+>: `/work/AGENTS.md`
 
 Four consequences:
 
@@ -111,7 +111,7 @@ and cron-plus-channels. That convergence is why two adapters can share one plan 
 ~/.hermes  ──┘   (tar)   (pure)    (previewed,    │  ├─ secret vault         (opt-in)
                                     itemized,     │  ├─ POST /skills
                                     owner-edited) │  ├─ POST /automations
-                                                  │  ├─ mergeMemory fences   (CLAUDE.md / AGENTS.md)
+                                                  │  ├─ mergeMemory fences   (AGENTS.md)
                                                   │  ├─ settings.json        (via SandboxSettingsSchema)
                                                   │  └─ imports/<source>/    (the unmapped remainder)
                                                   └─ MigrationReport { applied, refused, needsAction }
@@ -157,7 +157,7 @@ emulates the foreign runtime.
 | Theirs | Becomes | Mechanism |
 | --- | --- | --- |
 | `SOUL.md` + `IDENTITY.md` | The sandbox's voice: `settings.systemPromptMode: "custom"` + `systemPrompt` when it reads as operating doctrine; a **persona** (`PROMPT.md` kit) when it reads as a character the agent acts as | Settings write / persona create. The adapter proposes, the owner picks, this is the one mapping with taste in it, flagged in the preview |
-| `USER.md`, `MEMORY.md`, `memory/*.md` | Fenced block in `CLAUDE.md`/`AGENTS.md` via `mergeMemory`, under a per-source fence id (`intentic:imported-openclaw`) so reruns and the generic memory importer never fight | Idempotent merge |
+| `USER.md`, `MEMORY.md`, `memory/*.md` | Fenced block in `AGENTS.md` via `mergeMemory`, under a per-source fence id (`intentic:imported-openclaw`) so reruns and the generic memory importer never fight | Idempotent merge |
 | Long-lived facts about people/projects inside memory | `knowledge/` notes, then `kb check` | Deferred to the agent (§7): entity extraction is judgment, not translation |
 | `AGENTS.md` | Same fenced merge into ours; it remains entirely user-owned | Idempotent merge |
 | `HEARTBEAT.md` | One `schedule` automation whose prompt is the file, `chore: true`, default cadence from their heartbeat config | `POST /automations` |

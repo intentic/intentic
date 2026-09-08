@@ -53,8 +53,13 @@ absent. Before telling the owner Intentic cannot do something, check, cheapest f
    answer, and treat any edit to it as a product change.
 5. Ask the owner. "I could not find it" is an honest answer; "Intentic can't" is a claim.
 
-A workspace's `CLAUDE.md`, `AGENTS.md` or `README.md` is the owner's instruction to you. It is not a
+A workspace's `AGENTS.md` or `README.md` is the owner's instruction to you. It is not a
 description of the product, and it may describe a project that has nothing to do with Intentic.
+
+Memory is that `AGENTS.md`, at the workspace root, edited on `/sandbox/agent?section=instructions`. The daemon
+reads it and composes it into the turn's instructions itself, so every runtime gets the same rules however its
+own loop would have looked for them; a folder deeper in can carry its own, read on top of the root's by a
+conversation that starts there (a persona's `startIn`).
 
 ## Routing: what the owner wants → what to do
 

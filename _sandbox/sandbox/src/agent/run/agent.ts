@@ -402,7 +402,9 @@ const baseOptions = (
             diagnostics: request.diagnostics === true,
             terminal: terminalMounted(request, tmuxEnabled),
         }),
-        // Loads the workspace's .claude/ config: CLAUDE.md, skills, subagents, settings, hooks, .mcp.json; else none.
+        // Loads the workspace's .claude/ config: skills, subagents, settings, hooks, .mcp.json; else none. Not the
+        // owner's standing rules — those are composed for every runtime alike (workspace-memory.ts), so a CLAUDE.md
+        // this still picks up is a repo's own file, not this product's memory.
         settingSources: ["user", "project"],
         // Fast-mode opt-in, per-session so the choice doesn't persist sandbox-wide; omitted (not false) so it never
         // overrides the owner's settings.json.
