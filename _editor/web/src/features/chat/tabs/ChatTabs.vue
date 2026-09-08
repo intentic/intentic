@@ -136,6 +136,13 @@ watch(
         }
     },
 );
+// The field names the chat it opened on: another window's summons switches chats without blurring it, and the
+// commit would then land on whichever chat is active by then.
+watch(activeId, () => {
+    if (edit.editing) {
+        edit.cancel();
+    }
+});
 
 // Anchored to whichever button opened it (docked header glyph or rail's "Past chats"); the anchor also picks
 // the window it opens in, since AnchoredOverlay derives document and viewport from it.

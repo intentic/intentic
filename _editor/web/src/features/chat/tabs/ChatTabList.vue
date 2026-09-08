@@ -333,6 +333,21 @@ const beginRename = (id: string): void => {
     renamingId.value = id;
     edit.begin();
 };
+// Whether the lanes still draw the row being renamed: a chat that was closed, filtered out, capped behind the
+// Finished fold or swallowed by a run is gone from the list, whatever the edit still holds.
+const renamingDrawn = computed(
+    () =>
+        renamingId.value !== undefined &&
+        LANES.some((lane) => cardsIn(lane.key).some((entry) => entry.conversation.conversationId === renamingId.value)),
+);
+// A rename cannot outlive the row it sits on: with no drawn row there is no input left to blur it shut, and
+// the edit would redraw that row as an empty field in place of its card the next time the chat appeared.
+watch([() => edit.editing, renamingDrawn], ([editing, drawn]) => {
+    if (editing && !drawn) {
+        edit.cancel();
+        renamingId.value = undefined;
+    }
+});
 // F2 in a floating window has no header, so the host forwards it here; docked, the header renames itself.
 defineExpose({ beginRename });
 
