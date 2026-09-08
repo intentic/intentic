@@ -119,6 +119,19 @@ RUN mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh \
 # default, so `zle_highlight=(paste:none)` alone would also drop the region/isearch highlighting people rely on.
 # Bracketed paste itself stays on: a pasted newline still waits for Enter instead of running.
 #
+# DISABLE_AUTO_TITLE is not cosmetic here, it is the difference between a clean line and visible garbage. TERM
+# inside a pane is tmux-256color (default-terminal below), so oh-my-zsh's `title` takes its screen branch and
+# emits the hardstatus sequence ESC k <title> ESC \ twice per command: preexec sends the command's name, precmd
+# the cwd. A normal tmux client never sees either — tmux consumes them to name its window — but the browser is a
+# CONTROL-MODE client that gets every pane's bytes RAW, and xterm.js has no ESC k handler: it drops the escape
+# and PRINTS the payload as screen text. `git push origin main` therefore drew a stray `git` welded to the front
+# of the command's first line of output; the precmd copy escaped notice only because the prompt redraw's CR + ED
+# erased it. Nothing reads a terminal title in this stack anyway — the web UI draws the tab bar — so the honest
+# fix is to stop sending one, which also costs nothing per prompt. Stripping the sequence out of the live stream
+# instead would mean decoding and rewriting every chunk on the terminal's hot path; the pane LOGS do pay that
+# (the TitleStripper in logs/pane-log-clean.ts) because they must survive whatever any program emits, not just
+# our own shell. OSC 7, the cwd report, is a separate hook and stays: xterm swallows an unknown OSC silently.
+#
 # THE TWO HOOKS AT THE END ARE WHAT MAKES THE PANEL'S BUSY DOT LIVE. tmux tells nobody when a command starts or
 # stops inside a live pane — `pane_current_command` just reads differently the next time somebody asks — so the
 # daemon could only ever sample it, and the dot outlived the command by up to a poll. The shell knows the exact
@@ -142,6 +155,7 @@ RUN mkdir -p /root/.oh-my-zsh /root/.oh-my-zsh/custom/plugins/zsh-autosuggestion
         "ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=245'" \
         "PROMPT_EOL_MARK=''" \
         'zle_highlight=(region:standout special:standout suffix:bold isearch:underline paste:none)' \
+        'DISABLE_AUTO_TITLE=true' \
         ': ${HISTFILE:=${HISTORY_ROOT:-/history}/shell/zsh_history}' \
         'HISTSIZE=100000' \
         'SAVEHIST=100000' \
