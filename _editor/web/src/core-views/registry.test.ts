@@ -1,11 +1,12 @@
-import type { CapabilityFacts, Disposable, IntenticApi, ViewRegistration } from "@intentic/extension-api";
+import type { CapabilityFacts, Disposable, IntenticApi, ViewBadge, ViewRegistration } from "@intentic/extension-api";
 import * as acceptance from "@intentic/ext-acceptance";
 import * as documentation from "@intentic/ext-documentation";
 import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
 import type { PanelSummary } from "@intentic/api-contract";
 import { describe, expect, it } from "vitest";
-import { RAIL_GROUPS, detectActivations, railRank, railSeated, registerView, seatPolicy, seatedOnlyByVisit } from "./registry";
+import { activationBadge, RAIL_GROUPS, detectActivations, railRank, railSeated, registerView, seatPolicy, seatedOnlyByVisit } from "./registry";
+import { badgeChip } from "./viewBadge";
 
 // Registers packaged extensions' detects against the same registry the shell composes, so cross-extension
 // rules (claiming, fallback) are exercised for real. `commands`/`viewers` stubs just keep activate() from throwing.
@@ -358,11 +359,54 @@ describe(`rail seats`, () => {
         expect(railSeated({ id: `some-third-party-view`, badge: { mark: `arrow-up` } }, resting)).toBe(true);
     });
 
+    it(`seats a tile whose only news is that something is running there`, () => {
+        // The rail has always seated live work — an open browser, a subagent, a workflow run — so a pipeline in
+        // flight earns the same seat. Waiting for it to FAIL before showing a tile hides the half hour when
+        // watching it is the point.
+        expect(railSeated({ id: `pipelines`, badge: { running: `1 running` } }, resting)).toBe(true);
+        // And it is a seat of its own, so it outlives the visit exactly like a count does.
+        expect(seatedOnlyByVisit({ id: `pipelines`, badge: { running: `1 running` } }, { pinned: false, active: true })).toBe(false);
+    });
+
     it(`spends permanent seats on the work loop and nowhere else`, () => {
         // The count is the point: four fits above the fold, room for what lights up. A fifth means editing this.
         const permanent = RAIL_GROUPS.flatMap((group) => group.items)
             .filter((item) => item.seat === `always`)
             .map((item) => item.id);
         expect(permanent).toEqual([`chat`, `agents`, `workspace`, `preview`]);
+    });
+});
+
+// Two claims a tile can make, and the rule that keeps them apart: what is OWED wears the chip, what is HAPPENING wears
+// the turning mark. Both are the same badge, so a view says both at once instead of one evicting the other.
+describe(`what a badge says`, () => {
+    const badgeOf = (badge: ViewBadge | undefined): ViewBadge | undefined =>
+        activationBadge({
+            extension: { id: `probe`, label: `Probe`, surface: `rail`, detect: () => [], view: async () => ({}), badge: () => badge },
+            activation: { key: `probe`, title: `Probe` },
+        });
+
+    it(`drops one with nothing to say, so every surface can go on testing presence alone`, () => {
+        expect(badgeOf(undefined)).toBeUndefined();
+        expect(badgeOf({ count: 0 })).toBeUndefined();
+        expect(badgeOf({ tooltip: `a sentence about nothing` })).toBeUndefined();
+    });
+
+    it(`keeps one whose only news is a run in flight`, () => {
+        expect(badgeOf({ running: `2 running` })?.running).toBe(`2 running`);
+    });
+
+    it(`carries the count and the run together, since a red branch is usually red WHILE its fix runs`, () => {
+        expect(badgeOf({ count: 2, tone: `danger`, tooltip: `main is broken`, running: `1 running` })).toMatchObject({
+            count: 2,
+            running: `1 running`,
+        });
+    });
+
+    it(`gives the running mark no chip to draw: a plate is what an errand wears`, () => {
+        expect(badgeChip({ running: `2 running` })).toBe(false);
+        expect(badgeChip({ count: 2 })).toBe(true);
+        expect(badgeChip({ mark: `arrow-up` })).toBe(true);
+        expect(badgeChip({ count: 0, running: `2 running` })).toBe(false);
     });
 });

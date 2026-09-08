@@ -138,6 +138,16 @@ one trailing pass, so serialization does not trade load for a missed update.
 What the tile SAYS stays yours: `badge()` is the judgement each surface exists to make, and no two of them
 agree about tone or wording.
 
+It says it on two channels, and which one you reach for is the only rule the host enforces. `count`/`mark`
+is what the reader is OWED, and it wears the chip: a number, a tone, something to go and do. `running` is
+what is HAPPENING, a sentence like `2 running`, and it draws as a turning mark in the tile's own corner with
+no plate and no tone. Fill both when both are true — a red branch with its fix already re-running is the
+ordinary case, not the exotic one — and the tile says so without either claim evicting the other. Either
+channel seats the tile: the rail has always shown live work, and a run in flight that had to fail before
+earning a tile would be invisible for exactly as long as watching it was worth anything. A running mark needs
+no read marker and no ledger, which is the other half of why it is a separate channel: it goes out by itself
+when the work ends.
+
 `sandboxLedger(host, path)` is the other half: the JSON file recording what the owner has already seen, as
 `key → mark`, where the mark is what makes an entry stale. Compare marks (a chore's evidence digest, a story's
 verdict) and the same key with new evidence is news again; ignore them and it is a plain presence ledger. It

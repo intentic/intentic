@@ -73,7 +73,9 @@ describe(`the Workflows tile`, () => {
 
         const registered = views[0];
         expect(registered?.id).toBe(`workflows`);
-        await vi.waitFor(() => expect(registered?.badge?.(tile)).toMatchObject({ count: 1, tone: `neutral`, tooltip: `1 running` }));
+        // The running channel, not a count chip: a fan-out in flight is not an errand, and it still seats the tile.
+        // Nothing else may be set, or the rail would draw a plate for it beside the mark.
+        await vi.waitFor(() => expect(registered?.badge?.(tile)).toEqual({ running: `1 running` }));
         expect(fetched[0]).toMatchObject({ queryKey: [`sandbox`, `box`, `workflow-runs`] });
         expect(registered?.warm?.()[0]).toMatchObject({ queryKey: [`sandbox`, `box`, `workflow-runs`] });
     });

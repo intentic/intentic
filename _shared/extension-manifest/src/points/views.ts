@@ -15,12 +15,13 @@ export const ViewContributionSchema = z.object({
         ),
     // Whether this view may badge its tile (ViewRegistration.badge). Declared here, like a command's
     // keybinding, because it is consequential: a badge interrupts the user from every other screen in the app.
+    // Covers everything the badge can say, its running mark included: one permission for "may speak on its tile".
     // Absent ⇒ the host drops any badge the extension registers.
     badge: z
         .boolean()
         .optional()
         .describe(
-            "Allow this view to put a count on its tile. Declared because a badge interrupts from every other screen in the app; leave it out and any badge the extension registers is dropped.",
+            "Allow this view to say something on its tile: a count, a glyph, or that work is running there. Declared because a badge interrupts from every other screen in the app; leave it out and any badge the extension registers is dropped.",
         ),
 });
 export type ViewContribution = z.infer<typeof ViewContributionSchema>;

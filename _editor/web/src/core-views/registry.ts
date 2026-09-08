@@ -1,6 +1,7 @@
 import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewBadge, ViewRegistration } from "@intentic/extension-api";
 import { shallowRef } from "vue";
 import { coreViews } from "./coreViews";
+import { badgeSpeaks } from "./viewBadge";
 
 // Runtime extension registry: core views seed it at load, third-party bundles join via api.views.register.
 // Module-level singleton ref, so every host (rail, mobile menu, ExtensionHost, DirectoryOperator) recomputes
@@ -67,7 +68,8 @@ const signal = (id: string): RailItem => ({ id, seat: `signal` });
 export const RAIL_GROUPS: readonly RailGroup[] = [
     // Preview is `always` for being visited constantly, not for its badge, which counts an inventory, not a claim.
     { id: `work`, label: `Work`, items: [always(`chat`), always(`agents`), always(`workspace`), always(`preview`)] },
-    // Every tile here badges when it needs the owner; being seated by lighting up costs them nothing.
+    // Every tile here badges when it needs the owner, and lights while a run of its own is in flight; being
+    // seated by lighting up costs them nothing.
     {
         id: `judge`,
         label: `Judge`,
@@ -90,6 +92,9 @@ export const seatPolicy = (id: string): SeatPolicy => SEAT_POLICY.get(id) ?? `si
 
 // Whether a tile is on the rail now, in one predicate: the rail and the More menu ask its positive and
 // negative of the same list. `pinned` overrules the table; `active` keeps the current area seated while you're in it.
+// A badge seats a tile whatever it says, an errand or only that something is running there. The rail has always
+// seated live work (an open browser, a subagent, a workflow run), so a running pipeline earning no seat would be
+// arbitrary — and a tile that stays away until the run fails hides the half hour when watching it is the point.
 export const railSeated = (
     tile: { readonly id: string; readonly badge?: ViewBadge | undefined },
     context: { readonly pinned: boolean; readonly active: boolean },
@@ -150,14 +155,16 @@ export const detectActivations = (repos: readonly RepoFacts[], capabilities: rea
 };
 
 // An element's badge, contained like detect(): a throwing badge costs its own tile, not the whole rail.
-// Normalizes to undefined when there's nothing to draw, so callers only test for presence.
+// Normalizes to undefined when there's nothing to draw, so callers only test for presence. `badgeSpeaks`
+// counts a running mark as something to draw: a view whose only news is "this is happening now" keeps its
+// badge, and with it its seat.
 export const activationBadge = ({ extension, activation }: ActiveExtension): ViewBadge | undefined => {
     if (extension.badge === undefined) {
         return undefined;
     }
     try {
         const badge = extension.badge(activation);
-        return badge === undefined || ((badge.count ?? 0) <= 0 && badge.mark === undefined) ? undefined : badge;
+        return badge === undefined || !badgeSpeaks(badge) ? undefined : badge;
     } catch (error) {
         console.error(`extension view ${extension.id}: badge() failed`, error);
         return undefined;

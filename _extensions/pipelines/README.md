@@ -62,6 +62,12 @@ inside the view rather than gating the tile.
   clears when a later commit passes. It used to clear when you opened the board, which meant the one surface
   that could say "main is still broken" went dark after a glance. What keeps the number from becoming noise is
   its shape, one per broken branch however many runs or commits deep the breakage is, not a read marker.
+- THE TILE ALSO SAYS WHEN CI IS MOVING (`inFlightNote`), on the badge's separate `running` channel: a turning
+  mark in the tile's corner, and the tile is seated by that alone while nothing is broken. It is not folded
+  into the count, because the count is what somebody has to fix and a run in progress is the opposite — the
+  most common reading of this tile is a red branch WITH a re-run already going, and a chip can hold only one
+  of those. It counts the way the board's own tally counts, `queued` kept out of `running`: nothing has picked
+  a queued run up, and "1 running" over a job waiting on an offline runner sends you to watch the wrong thing.
 - Which repository the board shows is a picker in the TOP BAR, the same control Documentation picks its
   repository with, and "All repositories" is where it opens: the first question a CI board answers is "is
   anything red anywhere". It was a 16rem rail of counts down the left, and the reason it is not any more is what

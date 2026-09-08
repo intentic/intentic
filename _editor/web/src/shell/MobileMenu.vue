@@ -6,7 +6,7 @@ import { RouterLink } from "vue-router";
 import { useAuth } from "../features/auth/useAuth";
 import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
 import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, TAB_BAR_IDS } from "../core-views/registry";
-import { badgeClass, badgeToneClass } from "../core-views/viewBadge";
+import { badgeChip, badgeClass, badgeToneClass, RUNNING_MARK_CLASS } from "../core-views/viewBadge";
 import { usePanels } from "../features/extensions/usePanels";
 import { useRole } from "../features/sandbox/secrets/useRole";
 import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttention";
@@ -19,6 +19,7 @@ import { useSandboxAvailability } from "../features/sandbox/overview/useSandboxA
 import { useWorkspaceTree } from "../features/workspace/explorer/useWorkspaceTree";
 import { environment } from "../app/environments/environment";
 import RailIcon from "./rail/RailIcon.vue";
+import RunningMark from "./rail/RunningMark.vue";
 
 // The mobile Menu tab: everything the desktop rail and its popovers hold, as one page — sandbox
 // switching, the presence roster, the area list, account actions. Same state singletons, different
@@ -224,7 +225,7 @@ const logout = async (): Promise<void> => {
                         <span class="min-w-0 truncate">{{ area.label }}</span>
                         <!-- The count only, when there's no tooltip; min-w-0 shrinks a long number instead of pushing the name off. -->
                         <span
-                            v-if="area.badge && area.badge.tooltip === undefined"
+                            v-if="area.badge && badgeChip(area.badge) && area.badge.tooltip === undefined"
                             class="min-w-0 shrink rounded-full px-1.5 py-px text-2xs font-semibold"
                             :class="badgeClass(area.badge)"
                             >{{ area.badge.count }}</span
@@ -233,6 +234,14 @@ const logout = async (): Promise<void> => {
                     <span v-if="area.badge?.tooltip !== undefined" class="mt-0.5 block text-xs" :class="badgeToneClass(area.badge)">{{
                         area.badge.tooltip
                     }}</span>
+                    <!--
+                        Running gets a line of its own rather than the rail's corner mark: a row this wide can afford the
+                        sentence, and it sits UNDER what is owed rather than replacing it, since a red branch and a run
+                        already going are two things the reader needs at once.
+                    -->
+                    <span v-if="area.badge?.running !== undefined" class="mt-0.5 flex items-center gap-1 text-xs" :class="RUNNING_MARK_CLASS">
+                        <RunningMark />{{ area.badge.running }}
+                    </span>
                 </span>
                 <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
             </RouterLink>

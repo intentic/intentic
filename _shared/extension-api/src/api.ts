@@ -39,6 +39,15 @@ export interface ViewBadge {
     readonly tone?: "neutral" | "info" | "warning" | "danger" | undefined;
     // What happened and how much; rendered after the view's name, so phrase it as a continuation, not a sentence.
     readonly tooltip?: string | undefined;
+    /* WORK IN FLIGHT BEHIND THIS TILE RIGHT NOW ("2 running"), phrased as a continuation like `tooltip`.
+     * A SECOND CHANNEL, not a second badge: the host draws it as a turning mark in the tile's own corner,
+     * never inside the chip. Running and broken are different claims that are true at the same time more
+     * often than not — a red branch with its fix already re-running is the ordinary case — and a chip can
+     * only hold one of them, so putting progress in there would cost the count of what is actually owed.
+     * No tone: running is never an errand, so it stays the one uncoloured thing a tile can say.
+     * Seats a tile like any other badge. The rail has always shown live work (an open browser, a subagent,
+     * a workflow run); a rule that seated those and not a running pipeline would be arbitrary. */
+    readonly running?: string | undefined;
 }
 
 // One cached read, shared by `ViewRegistration.warm` and `api.sandbox.fetch`. `staleTime`/`gcTime` are

@@ -47,6 +47,15 @@ export const watchConnections = (capabilities: readonly string[]): void => {
     }
 };
 
+// A deploy actually in progress, which is `deploying` alone: Komodo's `running` is a container that is UP, the resting
+// state of a healthy board, and a mark lit by that would never go out. Not seen-gated like the incident count below —
+// there is nothing to acknowledge, it clears itself when the deploy lands — and never suppressed by an incident, since
+// "the fix is already going out" is exactly what the reader wants to know while looking at a red board.
+const deployingNote = (board: DeployOverviewResponse): string | undefined => {
+    const deploying = board.resources.filter((resource) => resource.state === `deploying`).length;
+    return deploying === 0 ? undefined : `${deploying} deploying`;
+};
+
 // Unreachable gets a `warning` mark, never `danger`: a network blip reading as "production is down" would burn the
 // rail's one truly urgent colour. Seen-gated like everything else, so it stops once the view has been opened.
 export const deployBadge = (capability: string): ViewBadge | undefined => {
@@ -55,13 +64,20 @@ export const deployBadge = (capability: string): ViewBadge | undefined => {
         return undefined;
     }
     if (!board.reachable) {
+        // No running mark on this path: the last known board is a memory, and a deploy it remembers may well be over.
         return board.seenAt === undefined ? { mark: `exclamation-circle`, tone: `warning`, tooltip: `can't reach Komodo` } : undefined;
     }
+    const running = deployingNote(board);
     const unseen = topTier(unseenIncidents(incidents(board.alerts), board.seenAt));
     if (unseen.length === 0) {
-        return undefined;
+        return running === undefined ? undefined : { running };
     }
-    return { count: unseen.length, tone: unseen[0]?.tone ?? `info`, tooltip: incidentTooltip(unseen) };
+    return {
+        count: unseen.length,
+        tone: unseen[0]?.tone ?? `info`,
+        tooltip: incidentTooltip(unseen),
+        ...(running === undefined ? {} : { running }),
+    };
 };
 
 // Stamps read state daemon-side and folds the answer into the local board, so the badge clears immediately instead of

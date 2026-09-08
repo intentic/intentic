@@ -109,7 +109,7 @@
                                 "description": "Where it appears. `rail` is a tile in the global left rail; `directory` is a panel opened from a repo in the Workspace tree; `sandbox` is a tab on the Sandbox hub, for a view whose subject is the box rather than the work."
                             },
                             "badge": {
-                                "description": "Allow this view to put a count on its tile. Declared because a badge interrupts from every other screen in the app; leave it out and any badge the extension registers is dropped.",
+                                "description": "Allow this view to say something on its tile: a count, a glyph, or that work is running there. Declared because a badge interrupts from every other screen in the app; leave it out and any badge the extension registers is dropped.",
                                 "type": "boolean"
                             }
                         },

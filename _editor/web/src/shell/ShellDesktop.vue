@@ -25,7 +25,7 @@ import {
     seatPolicy,
     seatedOnlyByVisit,
 } from "../core-views/registry";
-import { badgeClass, badgeText } from "../core-views/viewBadge";
+import { badgeChip, badgeClass, badgeText } from "../core-views/viewBadge";
 import { chatOnRail, lastAreaPath, toggleChatFloating, toggleChatHome } from "../features/chat/panel/chatPanelLayout";
 import { useChatFloating } from "../features/chat/panel/chatFloating";
 import { useShellCommands } from "./commands/useShellCommands";
@@ -51,6 +51,7 @@ import { chatDock, terminalDock } from "./window/dockSlots";
 import { type RailSeat, useRailMemory } from "./rail/railMemory";
 import { useRailPins } from "./rail/railPins";
 import RailIcon from "./rail/RailIcon.vue";
+import RunningMark from "./rail/RunningMark.vue";
 import PresenceAvatars from "./presence/PresenceAvatars.vue";
 import QuickOpen from "./commands/QuickOpen.vue";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
@@ -68,9 +69,11 @@ interface AreaTile extends RailSeat {
     readonly ghost?: boolean;
 }
 
-// One label per tile — name, badge tooltip, then note (news before standing facts). A badge has no
-// tooltip of its own: nesting one inside the tile's would open two overlapping boxes on hover.
-const tileLabel = (tile: AreaTile): string => [tile.label, tile.badge?.tooltip, tile.note?.text].filter((part) => part !== undefined).join(` · `);
+// One label per tile — name, badge tooltip, what's running, then note (what is owed, then what is moving,
+// then standing facts). A badge has no tooltip of its own: nesting one inside the tile's would open two
+// overlapping boxes on hover, and the turning mark can't carry one either, being 10px of glyph.
+const tileLabel = (tile: AreaTile): string =>
+    [tile.label, tile.badge?.tooltip, tile.badge?.running, tile.note?.text].filter((part) => part !== undefined).join(` · `);
 
 // Desktop chrome of the post-login shell: a square-tile rail, the shared chat panel, and a workspace
 // outlet, laid out as a three-column grid (chat width via the --chat-width var, set by its drag handle).
@@ -516,13 +519,19 @@ useKeybindings();
                                  read. No tooltip of its own either: it would nest inside the tile's and open a
                                  second box on top of it: its sentence rides the tile instead (see tileLabel). -->
                             <span
-                                v-if="tile.badge"
+                                v-if="tile.badge && badgeChip(tile.badge)"
                                 class="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
                                 :class="badgeClass(tile.badge)"
                             >
                                 <Icon v-if="tile.badge.mark !== undefined" :name="tile.badge.mark as IconName" />
                                 <template v-else>{{ badgeText(tile.badge) }}</template>
                             </span>
+                            <!--
+                                Work in flight behind this tile (ViewBadge.running): its own corner, never the chip, so a
+                                branch that is red AND re-running says both at once instead of one evicting the other.
+                                Bottom right, the corner the chip and the note both leave free (see RunningMark).
+                            -->
+                            <RunningMark v-if="tile.badge?.running !== undefined" class="absolute bottom-0.5 right-0.5" />
                             <!--
                                 Opposite corner from the badge so the two never overlap; muted ink, no plate — it isn't an errand.
                                 Hidden from assistive tech: its text is already in the tile's aria-label (see railTileLabel).
@@ -639,13 +648,15 @@ useKeybindings();
                 <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-[1.375rem]" />
                 <!-- No tooltip on the badge, for the same reason as the navigation tiles above. -->
                 <span
-                    v-if="tile.badge"
+                    v-if="tile.badge && badgeChip(tile.badge)"
                     class="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
                     :class="badgeClass(tile.badge)"
                 >
                     <Icon v-if="tile.badge.mark !== undefined" :name="tile.badge.mark as IconName" />
                     <template v-else>{{ badgeText(tile.badge) }}</template>
                 </span>
+                <!-- Same running mark as a navigation tile, so live work reads identically in both clusters. -->
+                <RunningMark v-if="tile.badge?.running !== undefined" class="absolute bottom-0.5 right-0.5" />
             </RouterLink>
 
             <!--

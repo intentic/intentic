@@ -23,3 +23,17 @@ export const badgeToneClass = (badge: ViewBadge): string => BADGE_INK[badge.tone
 
 // Shared "99+" cap, used by rail/mobile/hub alike: a product decision, not each surface's own rounding.
 export const badgeText = ({ count = 0 }: ViewBadge): string => (count > 99 ? `99+` : String(count));
+
+// Whether there is a chip to draw at all. A badge carrying only `running` has no number and no glyph for
+// one — its mark is drawn beside the tile instead — and without this every surface would paint an empty
+// plate, or a "0", over a tile whose only news is that something is moving.
+export const badgeChip = (badge: ViewBadge): boolean => (badge.count ?? 0) > 0 || badge.mark !== undefined;
+
+// Whether the badge says anything at all, chip or running mark. The registry normalizes on this, so a
+// badge that fails it never reaches a surface and every caller can go on testing presence alone.
+export const badgeSpeaks = (badge: ViewBadge): boolean => badgeChip(badge) || badge.running !== undefined;
+
+// The turning mark's own ink: the app's one "in flight" colour, the same link blue a running agent's
+// spinner wears (agentStatus.ts), so activity reads the same wherever it is drawn. Deliberately not a
+// BADGE_TONE: a plate would make progress look like an errand, which is the whole thing it isn't.
+export const RUNNING_MARK_CLASS = `text-link`;
