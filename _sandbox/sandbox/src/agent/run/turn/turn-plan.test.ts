@@ -464,7 +464,7 @@ test("a main-tree turn has no worktree to name, so it says nothing", async () =>
     expect(wire(plan)).toBe("do the thing");
 });
 
-test("a Claude Code turn is told which automatic check runs at Stop", async () => {
+test("every runtime is told which automatic check runs when its turn ends", async () => {
     const gated = SandboxSettingsSchema.parse({
         rules: [
             {
@@ -477,15 +477,19 @@ test("a Claude Code turn is told which automatic check runs at Stop", async () =
         ],
     });
 
-    const claude = await planTurn(withSettings(harnessServices(), gated), turn(), context);
-    expect(wire(claude)).toContain("**Verify before you finish:** `cd intentic && pnpm lint && pnpm verify`");
-    expect(wire(claude)).toContain("Do not run or announce them yourself");
+    // Claude Code runs the command rules at its Stop; a native runtime gets the same rules from the daemon once its
+    // frames end (agent.routes.ts daemonStopFindings), so neither is promised a check nothing runs.
+    for (const plan of [
+        await planTurn(withSettings(harnessServices(), gated), turn(), context),
+        await planTurn(withSettings(codexServices(), gated), turn({ agent: "codex" }), context),
+    ]) {
+        expect(wire(plan)).toContain("**Verify before you finish:** `cd intentic && pnpm lint && pnpm verify`");
+        expect(wire(plan)).toContain("Do not run or announce them yourself");
+    }
 
-    // Native Codex has no Stop-command runner, so it must not be promised one.
-    const codex = await planTurn(withSettings(codexServices(), gated), turn({ agent: "codex" }), context);
-    expect(wire(codex)).toBe("do the thing");
-
+    // No command rule stands, so nothing is promised.
     expect(wire(await planTurn(harnessServices(), turn(), context))).toBe("do the thing");
+    expect(wire(await planTurn(codexServices(), turn({ agent: "codex" }), context))).toBe("do the thing");
 });
 
 // The pre-turn rebase says nothing to the model: telling it only bought a verification sweep reported green. The human
