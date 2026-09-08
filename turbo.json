@@ -89,8 +89,9 @@
         // the root `typecheck` and `test` scripts both run FIRST (_tools/scripts/build/emit-declarations.mjs). It is `tsgo -b` rather than a
         // `^build` dependency because `build` goes through pnpm, and pnpm's `syncInjectedDepsAfterScripts`
         // hardlinks into `node_modules` after it: a different filesystem in an agent worktree, so a `^build`
-        // dependency died EXDEV (exit 238) for every agent in the fleet, leaving the check that catches a fake
-        // drifting out of shape with its seam runnable only in CI, on main, after the merge.
+        // dependency died EXDEV for every agent in the fleet (ERR_PNPM_INJECTED_DEPS_SYNC_LINK, exit 1), leaving
+        // the check that catches a fake drifting out of shape with its seam runnable only in CI, on main, after
+        // the merge.
         //
         // The prepass is a plain step in that script rather than a `//#` root task in this graph, and that
         // distinction is worth real minutes: a ROOT task's hash covers every file in the repository, so any

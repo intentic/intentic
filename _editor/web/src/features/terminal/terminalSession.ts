@@ -202,7 +202,6 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
     });
 };
 
-// The private cell-metrics the fit needs, READ-ONLY, the same access @xterm/addon-fit makes (its own TODO
 // Private cell metrics the fit reads, since xterm exposes no public API for them; read-only, never used to mutate the
 // renderer.
 type XtermCore = { _renderService: { dimensions: { css: { cell: { width: number; height: number } } } } };

@@ -54,6 +54,9 @@ const fakeServices = (
     const record = fileTranscriptRecord(join(root, "transcripts"));
     return unstubbed<Services>("services", {
         sandboxSettings: fileSandboxSettingsStore(join(root, "settings.json")),
+        // Read as data by run-role health, so it has to be a real seam: the helpers below spread this object, and a
+        // spread keeps only own keys, dropping unstubbed's throwing proxy. Empty ledger: no rung has a failing streak.
+        usage: unstubbed<Services["usage"]>("usage", { turns: async () => [] }),
         agents: unstubbed<Services["agents"]>("agents", {
             abandonResume: async (id: string) => {
                 abandoned.push(id);
