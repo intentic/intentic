@@ -16,11 +16,20 @@ export interface HookSpec {
     readonly secret: string;
 }
 
+export interface FailedStep {
+    readonly job: string;
+    // Absent where the forge has no steps (GitLab), which reads as the code's own failure.
+    readonly step?: string;
+}
+
 export interface CiClient {
     // Newest-first normalized runs; failedJobs is not filled here, list calls are the hot path.
     readonly listRuns: (project: CiProject, limit: number) => Promise<PipelineRun[]>;
     // Names of the run's failed jobs, the one-extra-call enrichment for failed runs.
     readonly failedJobs: (project: CiProject, runId: number) => Promise<string[]>;
+    // Each failed job with the step that failed it, where the forge names steps; a runner-owned step (Set up job) says
+    // the fleet died, not the code.
+    readonly failedSteps: (project: CiProject, runId: number) => Promise<FailedStep[]>;
     // All jobs in a run with their individual statuses, the expanded-row enrichment for the view.
     readonly allJobs: (project: CiProject, runId: number) => Promise<PipelineJob[]>;
     // Failed jobs' log tails, concatenated and capped; each is reduced to plain text (plain-text.ts) first.
@@ -175,8 +184,11 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
             what,
         );
     };
-    const jobsOf = async (project: CiProject, runId: number): Promise<{ id: number; name: string; conclusion: string | null }[]> => {
-        const listed = await json<{ jobs: { id: number; name: string; conclusion: string | null }[] }>(
+    const jobsOf = async (
+        project: CiProject,
+        runId: number,
+    ): Promise<{ id: number; name: string; conclusion: string | null; steps?: { name: string; conclusion: string | null }[] }[]> => {
+        const listed = await json<{ jobs: { id: number; name: string; conclusion: string | null; steps?: { name: string; conclusion: string | null }[] }[] }>(
             await fetchFn(githubApi(project, `/actions/runs/${runId}/jobs?per_page=100`), { headers: githubHeaders(project.account.token) }),
             "github jobs list",
         );
@@ -191,6 +203,11 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
             return listed.workflow_runs.map((run) => githubRun(project, run));
         },
         failedJobs: async (project, runId) => (await jobsOf(project, runId)).map((job) => job.name),
+        failedSteps: async (project, runId) =>
+            (await jobsOf(project, runId)).map((job) => {
+                const step = job.steps?.find((candidate) => candidate.conclusion === "failure")?.name;
+                return step === undefined ? { job: job.name } : { job: job.name, step };
+            }),
         // No `stage`: Actions has no such concept. `needs` is filled only when the run's workflow file can be read,
         // fetched alongside the job list, not after; unreadable, jobs go out as before.
         allJobs: async (project, runId) => {
@@ -506,6 +523,7 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
             });
         },
         failedJobs: async (project, runId) => (await failedJobsOf(project, runId)).map((job) => job.name),
+        failedSteps: async (project, runId) => (await failedJobsOf(project, runId)).map((job) => ({ job: job.name })),
         // `stage` is native here; the view groups by it directly, timestamps only order stages by actual start.
         allJobs: async (project, runId) => {
             const listed = await json<

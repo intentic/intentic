@@ -3,6 +3,8 @@
 // runner-only steps (`Set up job`, etc.) as infra; `--logs` adds each failed job's first error line. Reads the GitHub
 // API with `GITHUB_TOKEN`/`GH_TOKEN` if set, else anonymously; prints markdown, or JSON with `--json`.
 
+import { INFRA_STEP } from "../../constants/src/ci-infra-steps.mjs";
+
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
     const at = args.indexOf(name);
@@ -15,7 +17,6 @@ const logs = args.includes("--logs");
 const asJson = args.includes("--json");
 const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
 
-const INFRA_STEP = /^(Set up job|Set up runner|Initialize containers|Stop containers|Complete job|Post .*)$/;
 
 // Reach says whether a local gate could ever catch a failure: `local` if `verify-push.mjs` runs that job, `partial` if
 // only part of it (rustfmt, not clippy), else `ci-only`. Grouped by job: steps are the commands the push gate shells

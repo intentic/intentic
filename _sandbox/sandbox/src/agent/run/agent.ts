@@ -61,7 +61,7 @@ import { JS_TOOL_ALIAS, JS_TOOL_NAME, jsExecutionServer } from "../../execution/
 import { type AgentTool, mcpServersOf } from "../tools/agent-tools.js";
 import { createRequest } from "../tools/agent-requests.js";
 import type { SteeringQueue } from "../anchors/agent-steering.js";
-import { type TurnRuleCommand, turnEndingHooks } from "../../rules/turn-ending.js";
+import { type FollowUpOutcome, type TurnRuleCommand, turnEndingHooks } from "../../rules/turn-ending.js";
 import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "../tools/agent-terminals.js";
 import type { HeavyCommands } from "../../platform/resources/heavy-commands.js";
 import { terminalHelpServer } from "../../terminal/terminal-help.js";
@@ -154,8 +154,12 @@ export interface AgentRequest {
     readonly onRuleFired?: (rule: Rule) => void;
     // Told what every command rule's run said, so end-of-turn landing can hold work whose check went red.
     readonly onCheckRun?: (rule: Rule, run: RuleCommandRun) => void;
+    // What the model did after a turn.ending follow-up, at the Stop that followed it.
+    readonly onFollowUpOutcome?: (rule: Rule, outcome: FollowUpOutcome) => void;
     // The verify-tests built-in's answer for this tree, bound while planning; absent means it says nothing.
     readonly verifyTests?: () => Promise<string | undefined>;
+    // What the tree says the turn changed, for the Stop's conditions: a shell edit is invisible to the edit ledger.
+    readonly changedPaths?: () => Promise<readonly string[]>;
     // Absolute plugin checkout dirs; the SDK's loader parses their skills/agents/hooks/commands/.mcp.json.
     readonly plugins?: readonly string[];
     // In-process SDK MCP servers whose handlers run in the daemon itself, merged into mcpServers alongside `tools`.
@@ -473,7 +477,9 @@ const baseOptions = (
                 cwd: request.cwd,
                 onFired: request.onRuleFired,
                 onCheckRun: request.onCheckRun,
+                onFollowUpOutcome: request.onFollowUpOutcome,
                 tests: request.verifyTests,
+                changedPaths: request.changedPaths,
             }),
             // Only when isolated and unanchored; an anchor already resolves paths to the worktree, so rewriting doubles
             // it.

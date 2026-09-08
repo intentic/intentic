@@ -463,6 +463,20 @@ run:
 stat -c '%d %n' /ci-cache /srv/actions/work-1
 ```
 
+### The turbo remote cache, for readers outside the bind mount
+
+The six runner processes share `/ci-cache/turbo` through the mount above, so among themselves every task is
+already a replay. What is not shared is the same work done in a sandbox: `pnpm verify` after a land compiles and
+tests the tree the verify groups compile and test again minutes later, on inputs turbo hashes identically.
+[`_tools/turbo-cache`](../../_tools/turbo-cache/README.md) is a turbo remote cache server for the runner host,
+and `turbo.json` has `remoteCache.enabled` on. It stays inert until the repository names the server: the
+variables `TURBO_API` and `TURBO_TEAM`, the secret `TURBO_TOKEN`, all three handed to every job by `ci.yml`,
+`verify.yml` and `release.yml`. Empty, turbo 2.10.8 reads them as unset and reports `remote: false`.
+
+The trust direction is the one the fork boundary above already draws: CI writes, a sandbox reads
+(`TURBO_REMOTE_CACHE_READ_ONLY=1`). An artifact written by an agent's turn and replayed by the release job
+would be the poisoned cache entry the boundary exists to keep out.
+
 ### Jobs run in a container, and need two mounts
 
 Every job runs in the prebaked `ci-base` image. That is `jobs.<id>.container`, and two mounts have to be

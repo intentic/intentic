@@ -67,6 +67,8 @@ export const RuleConditionSchema = z.object({
     paths: z.array(z.string().min(1)).max(20).optional(),
     // How the turn ended. Absent/empty ⇒ any, except that `checks-failed` never lands by omission.
     outcome: z.array(RuleOutcomeSchema).optional(),
+    // The fraction of occasions a rule fires on, at moments that draw one (turn.ending); absent ⇒ every occasion.
+    sample: z.number().gt(0).lt(1).optional(),
 });
 export type RuleCondition = z.infer<typeof RuleConditionSchema>;
 // `id` is stable and owner-visible, so a rename doesn't orphan the firing history. Which actions fit which moment is

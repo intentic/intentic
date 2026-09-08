@@ -130,6 +130,12 @@ export const CiFixParamSchema = CiRunParamSchema.extend({
     pick: AgentRunPickSchema.describe(
         "Which model to open the conversation on, when somebody chose one. Leave it out for the sandbox's own choice, which is the ordinary path.",
     ),
+    force: z
+        .boolean()
+        .optional()
+        .describe(
+            "Open the conversation even when every failed job died in its runner's own setup, which is the fleet's fault and nothing an agent on the code can repair. Left out, such a run is refused with that sentence.",
+        ),
 });
 export type CiFixParam = z.infer<typeof CiFixParamSchema>;
 // The fix route opens an isolated conversation (fleet card + chat tab) seeded with the failure context.

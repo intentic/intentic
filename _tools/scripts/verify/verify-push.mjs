@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Push gate: runs the same three steps verify.yml runs (checks, typecheck, build, test) before a push leaves, from both
-// `pnpm verify:push` and the pre-push hook. Two cheap tiers collect every finding first; the full suite runs only if
-// both pass and no cached verdict already covers this tree. Measures the working tree, not always what CI's checkout
-// builds.
+// Push gate, from both `pnpm verify:push` and the pre-push hook. Two cheap tiers collect every finding first (the checks,
+// the assertion ratchet, the manifest/lockfile lockstep, the linter, rustfmt). The suite CI's verify groups run
+// (typecheck, build, test) is then REPLAYED from a verdict the land's `pnpm verify` or an earlier push check recorded
+// for this tree, and otherwise left to CI: a tree nobody measured is not measured here on the pusher's clock unless
+// `--suite` asks for it. Measures the working tree and every pushed commit's own tree.
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -10,10 +11,12 @@ import { repoRoot } from "../../constants/src/node.mjs";
 import { isLinkedWorktree } from "../../checks/lib/repo.mjs";
 import { changedPaths as treeChangedPaths, git as gitIn } from "../lib/git.mjs";
 import { createSteps } from "../lib/steps.mjs";
-import { ago, freshFor, readVerdict, treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
+import { ago, commitTree, freshVerdicts, treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
 
 const root = repoRoot(import.meta.url);
 const hook = process.argv.includes("--hook");
+// Runs typecheck, build and test here when no verdict covers the tree; without it that is CI's to measure.
+const suiteForced = process.argv.includes("--suite");
 
 // Clears inherited GIT_* vars (e.g. GIT_DIR in a worktree), overriding `cwd: root` toward the wrong repo.
 for (const variable of ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_PREFIX", "GIT_GRAFT_FILE", "GIT_CEILING_DIRECTORIES", "GIT_INDEX_VERSION"]) {
@@ -277,28 +280,37 @@ const suite = (buildOnly) => {
 };
 
 const tree = treeHash(root);
-const verdict = readVerdict(root);
-const fresh = freshFor(verdict, tree);
-if (fresh && verdict.status === "passed" && verdict.suite === "push") {
-    say(`this exact tree passed the push check ${ago(verdict.at)}; not measuring it twice`);
+// The trees a verdict may be about: the working tree (what `pnpm verify` measured after a land) and each pushed
+// commit's own (what CI checks out); a clean tree makes them one.
+const candidates = [tree, ...pushes.map(({ local }) => commitTree(root, local))];
+const fresh = freshVerdicts(root, candidates);
+const passed = fresh.find((verdict) => verdict.status === "passed");
+if (passed !== undefined && passed.suite === "push") {
+    say(`this tree passed the push check ${ago(passed.at)}; not measuring it twice`);
     noteUncommitted();
     process.exit(0);
 }
 // A `verify` verdict covers typecheck and tests; the build is the one step it could not run.
-const replay = fresh && verdict.status === "passed" && verdict.suite === "verify";
+const replay = passed !== undefined && passed.suite === "verify";
 if (replay) {
-    say(`this exact tree passed \`pnpm verify\` ${ago(verdict.at)}; running only the build it could not`);
+    say(`this tree passed \`pnpm verify\` ${ago(passed.at)}; running only the build it could not`);
 }
-if (hook && fresh && verdict.status === "failed") {
+const failedPush = fresh.find((verdict) => verdict.status === "failed" && verdict.suite === "push");
+if (hook && !replay && failedPush !== undefined) {
     if (STRICT) {
-        refuse(`this exact tree FAILED the push check ${ago(verdict.at)}; fix it, or \`git push --no-verify\` if you must`);
+        refuse(`this tree FAILED the push check ${ago(failedPush.at)}; fix it, or \`git push --no-verify\` if you must`);
     }
-    say(`this exact tree FAILED the push check ${ago(verdict.at)} and the push was asked for anyway; CI will say the same`);
+    say(`this tree FAILED the push check ${ago(failedPush.at)} and the push was asked for anyway; CI will say the same`);
     noteUncommitted();
     process.exit(0);
 }
-if (hook && !replay) {
-    say("no passing verdict for this tree; running the suite here (the app's push check would show it in a terminal)");
+if (!replay && !suiteForced) {
+    say(
+        "no verdict covers this tree: the land's `pnpm verify` has not measured it and no push check has. CI's verify groups measure the " +
+            "commit (typecheck, build, test) in minutes; to measure it here first, `pnpm verify:push --suite` or `pnpm verify`",
+    );
+    noteUncommitted();
+    process.exit(0);
 }
 const result = suite(replay);
 writeVerdict(root, tree, result.ok ? "passed" : "failed", "push");

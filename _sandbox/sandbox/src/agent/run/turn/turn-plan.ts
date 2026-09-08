@@ -59,6 +59,7 @@ import { verifyTestsMessage } from "../../verification/agent-tests.js";
 import { passesAgainstHead } from "../../verification/agent-test-strength.js";
 import { recordCheckVerdict } from "../../verification/turn-checks.js";
 import { standing } from "../../../rules/rules.js";
+import type { FollowUpOutcome } from "../../../rules/turn-ending.js";
 import { turnEndingNote } from "../../../rules/turn-ending-note.js";
 import { CHECKS_SESSION } from "../../../terminal/terminal-session.js";
 import { queueRunEnabled } from "../../../terminal/terminal-run.js";
@@ -496,9 +497,9 @@ const honoured = (
         // missing something, not once per conversation like the teaching notes above, since the condition changes the
         // moment someone clicks.
         ...[gatedCredentialsNote([...gating.withheld, ...(gatedEnv?.withheld ?? [])])].filter((note) => note !== undefined),
-        // Only the Claude Code loop runs command rules at Stop; native runtimes must not be promised a check their
-        // fallback path doesn't run.
-        ...(capabilities.runtime === "claude-code" && send.turnEnding ? [turnEndingNote(settings.rules)].filter((note) => note !== undefined) : []),
+        // Every runtime gets the check now: the Claude Code loop runs the command rules at its Stop, the daemon runs them
+        // for the rest once the frames end (agent.routes.ts daemonStopFindings), so the promise holds either way.
+        ...(send.turnEnding ? [turnEndingNote(settings.rules)].filter((note) => note !== undefined) : []),
     ];
     // Ungranted connectors are removed from the shell environment outright, not merely left with an instruction to
     // ignore them.
@@ -956,6 +957,23 @@ export const planHarnessTurn = async (
                                   ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
                               })
                               .catch((error: unknown) => services.logger.warn({ err: error, rule: rule.id }, "rule activity append failed"));
+                      },
+                      // What the follow-up bought, in counts, so the rule's cost can be weighed against what it changed.
+                      onFollowUpOutcome: (rule: Rule, outcome: FollowUpOutcome) => {
+                          const did = [
+                              outcome.edits > 0 ? `${outcome.edits} edit${outcome.edits === 1 ? "" : "s"}` : undefined,
+                              outcome.looks > 0 ? `${outcome.looks} look${outcome.looks === 1 ? "" : "s"} at the page` : undefined,
+                              outcome.commands > 0 ? `${outcome.commands} command${outcome.commands === 1 ? "" : "s"}` : undefined,
+                          ].filter((part) => part !== undefined);
+                          void services.activity
+                              .append({
+                                  direction: "system",
+                                  type: "rule.followup_outcome",
+                                  content: `"${rule.label}" was answered with ${did.length === 0 ? "no edit, no look and no command" : did.join(", ")}.`,
+                                  extra: { rule: rule.id, ...outcome },
+                                  ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
+                              })
+                              .catch((error: unknown) => services.logger.warn({ err: error, rule: rule.id }, "rule outcome append failed"));
                       },
                       // Logged like the pre-push check, since a red `turn.ending` command has two very different causes
                       // (broken work, or a check that never saw the workspace's dependencies) told apart only by

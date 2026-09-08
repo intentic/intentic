@@ -11,8 +11,8 @@ import { type ViewLedger, verifyUiEditsMessage } from "./agent-viewing.js";
 import { startConversationTurn } from "../run/turn/turn-resume.js";
 import { seedFields } from "../run/turn/turn-seed.js";
 
-// Delivers the `verify-edits` follow-up on the five runtimes with no Stop hook: what was missing was a ledger, not the
-// follow-up itself. Sends a fresh daemon-started turn rather than a steer, since a steer queue can vanish mid-unwind;
+// Delivers the turn.ending follow-up on the runtimes with no Stop hook: the built-ins read off the frame ledgers, and
+// what the daemon's own run of the command rules found. Sends a fresh daemon-started turn rather than a steer, since a steer queue can vanish mid-unwind;
 // Claude keeps its cheaper in-turn hook. Spends a turn on the user's behalf, so it is gated: the rule must stand, its
 // conditions must hold, the work unproven, and a nudge never answers a nudge.
 
@@ -34,10 +34,13 @@ const pending = new Set<string>();
 // The rule the owner stood here, if any, re-checked against `moment` even though the planner filtered it, the same belt
 // the hook path keeps. Only builtins that read a record or the tree; instruct/command rules are the hook path's to
 // deliver.
-const builtinRule = (rules: readonly Rule[], name: RuleBuiltin, paths: readonly string[]): Rule | undefined =>
+const builtinRule = (rules: readonly Rule[], name: RuleBuiltin, paths: readonly string[], draw: number): Rule | undefined =>
     rules.find(
         (rule) =>
-            rule.moment === "turn.ending" && rule.action.kind === "builtin" && rule.action.name === name && conditionHolds(rule.when, { paths }),
+            rule.moment === "turn.ending" &&
+            rule.action.kind === "builtin" &&
+            rule.action.name === name &&
+            conditionHolds(rule.when, { paths, draw }),
     );
 
 export interface VerifyNudge {
@@ -61,7 +64,41 @@ export interface VerifyNudge {
     readonly onFired?: ((rule: Rule) => void) | undefined;
     // The verify-tests built-in's answer, bound to the turn's tree; optional for the same reason `view` is.
     readonly tests?: (() => Promise<string | undefined>) | undefined;
+    // What the turn.ending command rules found when the daemon ran them after the turn (rules/turn-ending.ts
+    // commandRuleFindings), each already worded for the model; absent or empty when they passed or did not run.
+    readonly findings?: readonly string[] | undefined;
 }
+
+// One follow-up carries every standing ask: two rules is two things to say, not two turns to spend. Every path the turn
+// edited, prose included, is one `facts` set per builtin, so a glob can't mean two things; one draw per turn is
+// shared by every sampled rule standing here, as the hook path draws once per turn.
+const asksOf = async (nudge: VerifyNudge): Promise<{ readonly rule: Rule; readonly message: string }[]> => {
+    const paths = nudge.ledger.edited().map((path) => workspaceRelative(path, nudge.cwd));
+    const draw = Math.random();
+    const asks: { readonly rule: Rule; readonly message: string }[] = [];
+    const verify = builtinRule(nudge.rules, "verify-edits", paths, draw);
+    if (verify !== undefined) {
+        const message = await verifyEditsMessage(nudge.ledger, nudge.isolation);
+        if (message !== undefined) {
+            asks.push({ rule: verify, message });
+        }
+    }
+    const viewing = nudge.view === undefined ? undefined : builtinRule(nudge.rules, "verify-ui-edits", paths, draw);
+    if (viewing !== undefined && nudge.view !== undefined) {
+        const message = verifyUiEditsMessage(nudge.view);
+        if (message !== undefined) {
+            asks.push({ rule: viewing, message });
+        }
+    }
+    const tests = nudge.tests === undefined ? undefined : builtinRule(nudge.rules, "verify-tests", paths, draw);
+    if (tests !== undefined && nudge.tests !== undefined) {
+        const message = await nudge.tests();
+        if (message !== undefined) {
+            asks.push({ rule: tests, message });
+        }
+    }
+    return asks;
+};
 
 // Decides, then delivers; returns the message sent, for the tests. Called from streamAgent's `finally` and never
 // awaited there, so the turn settles regardless of this bookkeeping.
@@ -74,35 +111,13 @@ export const nudgeUnverifiedWork = async (nudge: VerifyNudge): Promise<string | 
     if (pending.delete(nudge.conversationId)) {
         return undefined;
     }
-    // Every path the turn edited, prose included: one `facts` set per builtin, so a glob can't mean two things.
-    const paths = nudge.ledger.edited().map((path) => workspaceRelative(path, nudge.cwd));
-    // One follow-up carries every standing ask: two rules is two things to say, not two turns to spend.
-    const asks: { readonly rule: Rule; readonly message: string }[] = [];
-    const verify = builtinRule(nudge.rules, "verify-edits", paths);
-    if (verify !== undefined) {
-        const message = await verifyEditsMessage(nudge.ledger, nudge.isolation);
-        if (message !== undefined) {
-            asks.push({ rule: verify, message });
-        }
-    }
-    const viewing = nudge.view === undefined ? undefined : builtinRule(nudge.rules, "verify-ui-edits", paths);
-    if (viewing !== undefined && nudge.view !== undefined) {
-        const message = verifyUiEditsMessage(nudge.view);
-        if (message !== undefined) {
-            asks.push({ rule: viewing, message });
-        }
-    }
-    const tests = nudge.tests === undefined ? undefined : builtinRule(nudge.rules, "verify-tests", paths);
-    if (tests !== undefined && nudge.tests !== undefined) {
-        const message = await nudge.tests();
-        if (message !== undefined) {
-            asks.push({ rule: tests, message });
-        }
-    }
-    if (asks.length === 0) {
+    const asks = await asksOf(nudge);
+    const findings = nudge.findings ?? [];
+    if (asks.length === 0 && findings.length === 0) {
         return undefined;
     }
-    const message = asks.map((ask) => ask.message).join("\n\n");
+    // A failed check first: it is the thing the follow-up must repair, the asks are what it must then show.
+    const message = [...findings, ...asks.map((ask) => ask.message)].join("\n\n");
     pending.add(nudge.conversationId);
     for (const ask of asks) {
         nudge.onFired?.(ask.rule);

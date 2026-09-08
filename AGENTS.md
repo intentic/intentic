@@ -70,7 +70,10 @@ did (`_tools/scripts/lib/steps.mjs`), so one report is the whole list rather tha
 get two follow-ups, and a gate that named one problem per run could not spend them. Do not
 run or announce that gate yourself; failures return to the turn, and the check's last run decides whether
 the work lands: a red first run with a green second is a turn that passed, a turn still red when it ends is
-held on its branch as "Ready to land".
+held on its branch as "Ready to land". On a runtime with no Stop hook (Cursor, Gemini, Codex, Kimi) the daemon
+runs the same command rules itself once the turn's frames end, records their verdict for the land decision, and
+sends what they found back as one follow-up turn on the same model and session (`verify-nudge.ts`); a turn whose
+follow-up is still red is held the same way.
 
 Neither this nor the land check goes through `pnpm build`, which dies EXDEV under worktree isolation: the
 emit (`_tools/scripts/build/emit-declarations.mjs`, `tsgo -b`) writes every package's dist, and the tests run with
@@ -78,11 +81,13 @@ emit (`_tools/scripts/build/emit-declarations.mjs`, `tsgo -b`) writes every pack
 at, seconds ago.
 
 **After the land, on the main tree, off your clock:** the whole repository (`pnpm verify`, one prepass, one
-typecheck, one test run), serialized through the heavy-command pool, for every landed repo and every runtime.
+typecheck, one test run), serialized through the heavy-command pool, for every landed repo and every runtime,
+whether the land was the turn's own or the Land button's (`agents/land/verify-landed.ts`).
 This is the one moment that legitimately needs the whole suite against a tree nobody else is moving: it
 answers for another package's fixture, for main having moved under you, and for a runtime with no Stop hook.
 A red verdict wakes the fix chore with your land as the named cause; a green one is recorded against the
-tree so the push gate replays it.
+tree so the push gate replays it (`_tools/scripts/lib/tree-verdict.mjs`, the newest twenty trees, so a land
+between the verify and the push does not erase it).
 
 The test files a turn touched get one more reader at the Stop, the `verify-tests` rule: each is compared with
 the same file at HEAD for assertions that got weaker, and a new test is re-run against the pre-turn source for
@@ -98,14 +103,17 @@ commits a branch push already measured (the release tag, `stable`), so it stands
 (`_tools/checks/run.mjs`, under two seconds, needing nothing installed), the assertion ratchet over the
 range's test files (`_tools/scripts/verify/assertion-ratchet.mjs`: a test file may get stronger by itself and weaker
 only with a `test!:` subject or a `Test-Note:` trailer saying why), the manifest/lockfile lockstep, the
-linter; then `cargo fmt --check` on any Rust crate the push touches; then the three steps CI's verify groups
-run. Only the checks whose `gate` is `code` can refuse any of that: a `tidy` failure (`_tools/checks/manifest.mjs`
+linter; then `cargo fmt --check` on any Rust crate the push touches. Only the checks whose `gate` is `code` can refuse any of that: a `tidy` failure (`_tools/checks/manifest.mjs`
 says which is which — layout, doc links, path literals, the UI tiers) prints as a warning here and is refused
 by `nightly.yml`'s `tidy` job instead, because a directory another conversation made one file too full is
-nobody's push to stop and no commit in that push can fix it. The two cheap tiers collect — a push wrong in four readable ways is told about four — and the boundary
-before the suite still stops, because a tree already refused by a reader that costs a second should not spend
-ten minutes being refused again. A tree that `pnpm verify` already measured, which after a land is the ordinary case, replays that verdict
-and runs only the build it could not (`_tools/scripts/lib/tree-verdict.mjs`).
+nobody's push to stop and no commit in that push can fix it. The two cheap tiers collect — a push wrong in four readable ways is told about four — and they stop the run:
+a tree already refused by a reader that costs a second is not measured further.
+
+The three steps CI's verify groups run (typecheck, build, test) are not run at the push. A verdict the land's
+`pnpm verify` or an earlier push check recorded for the working tree or for any pushed commit's own tree is
+replayed (a `verify` verdict leaves only the build to run); a tree no verdict covers is left to CI, which measures
+the commit in minutes, and the push says so. `pnpm verify:push --suite` runs the three steps here anyway, and
+`pnpm verify` measures the whole tree and records the verdict.
 
 It measures the working tree; CI measures the commit. The land now regenerates `pnpm-lock.yaml` in the
 worktree whenever the delta changed a manifest without it (`agents/lockfile-reconcile.ts`), so the pair

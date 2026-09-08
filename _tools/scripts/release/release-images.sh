@@ -24,11 +24,14 @@ cd "$(repo_root)"
 # The halves are pinned to the VERSION-arch tags explicitly: the per-arch jobs push only those — so an aborted
 # release orphans at most version-tagged halves, and no stable-* tag ever exists half-moved — which means
 # `stable`'s merge must not go looking for a `stable-amd64` nothing ever pushes.
-AMD64_REF="$VERSION-amd64" ARM64_REF="$VERSION-arm64" bash "$DIR/../image/merge-image-manifests.sh" sandbox "$VERSION" stable
+# `latest` moves here too: a releasing push is the newest main, and ci.yml's per-push `images` job stands down on one
+# rather than build the same tree a second time (its header says so), so the moving tags it would have written are
+# written from the release's own halves instead.
+AMD64_REF="$VERSION-amd64" ARM64_REF="$VERSION-arm64" bash "$DIR/../image/merge-image-manifests.sh" sandbox "$VERSION" stable latest
 # The core profile's halves, published by the same jobs under core- prefixed tags (publish-images.sh TAG_PREFIX).
-AMD64_REF="core-$VERSION-amd64" ARM64_REF="core-$VERSION-arm64" bash "$DIR/../image/merge-image-manifests.sh" sandbox "core-$VERSION" core-stable
+AMD64_REF="core-$VERSION-amd64" ARM64_REF="core-$VERSION-arm64" bash "$DIR/../image/merge-image-manifests.sh" sandbox "core-$VERSION" core-stable core-latest
 
 # dind-host stays a single amd64 image (publish-images.sh says why) — no halves to merge, so stable is a
 # registry-side copy of the version tag the images-amd64 job pushed. That is exactly promote-image-tag.sh's
 # job, registry fan-out and retry included, rather than a fourth place that spells `imagetools create`.
-bash "$DIR/../image/promote-image-tag.sh" dind-host "$VERSION" stable
+bash "$DIR/../image/promote-image-tag.sh" dind-host "$VERSION" stable latest

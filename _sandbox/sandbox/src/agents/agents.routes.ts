@@ -26,6 +26,7 @@ import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/
 import { archivable, archiveAgents, purgeArchived } from "./registry/archive.js";
 import { landAgent, outstandingConflicts } from "./land/land.js";
 import { syncBeforeLand } from "./land/sync.js";
+import { verifyLandedTree } from "./land/verify-landed.js";
 import { describeLandingInBackground } from "./land/landed-subject.js";
 
 // Fleet routes: list/get the registry, review a worktree's delta against its recorded bases, land it, archive it, or
@@ -500,6 +501,15 @@ export const createAgentsRoutes = (services: Services) => {
                 }
                 if (result.landed && result.changed) {
                     announceLanded(entry, span);
+                    // The whole repository's check, the same one an auto-land queues; the Land button used to skip it, which
+                    // is how a week of lands produced a dozen verdicts.
+                    void verifyLandedTree(services, (event) => emitWorkspaceEvent(services, event, streamAgent), {
+                        kind: "land",
+                        agentId: entry.id,
+                        ...(entry.title !== undefined ? { title: entry.title } : {}),
+                        branch: entry.branch,
+                        repos: [...span],
+                    }).catch((error: unknown) => services.logger.warn({ err: error, id: entry.id }, "agents: land verify could not be queued"));
                 }
                 return {
                     landed: result.landed,

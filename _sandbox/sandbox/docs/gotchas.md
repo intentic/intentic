@@ -106,6 +106,13 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   version of the same silence is fixed where it starts ([src/runtimes/grok/grok-agent.ts](../src/runtimes/grok/grok-agent.ts)): an
   OpenCode event stream that ENDS without `session.idle` or `session.error` is the shared `opencode serve`
   going away mid-turn, and it now throws rather than returning as though the turn had finished.
+- **The command rules at `turn.ending` run on every runtime too** (`agent.routes.ts` `daemonStopFindings`,
+  `rules/turn-ending.ts` `commandRuleFindings`). "Verify before you finish" was a Claude Stop hook and nothing else:
+  46% of the turns that edited code in the week of 2026-09-01 ended `unproven`, most of them Cursor, Gemini, Codex
+  and Kimi turns whose first reader was the push. The daemon now runs those rules itself once such a turn's frames
+  end, awaited, so their verdict reaches the land decision the way a hook's does, and hands what they found to the
+  follow-up below as its first paragraph. One follow-up, not two: the nudge's own guard already stops a follow-up
+  from answering a follow-up, and a turn still red after it is held on its branch like a Claude turn is.
 - **And the follow-up that asks for proof now fires on every runtime** (`src/agent/verification/verify-nudge.ts`). The
   owner's `verify-edits` rule — a turn that changed code and ran no check after its last edit gets one bounded
   follow-up naming the checks this workspace actually has — reached the model through the Claude Agent SDK's

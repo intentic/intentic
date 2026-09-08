@@ -21,23 +21,20 @@ export interface RuleFacts {
     readonly repos?: readonly string[] | undefined;
     readonly paths?: readonly string[] | undefined;
     readonly outcome?: RuleOutcome | undefined;
+    // One uniform draw in [0, 1) per occasion, for a rule that fires on a sample; a moment that draws none never samples.
+    readonly draw?: number | undefined;
 }
 
-export const conditionHolds = (when: RuleCondition | undefined, facts: RuleFacts): boolean => {
-    if (when === undefined) {
-        return true;
-    }
-    if (when.repo !== undefined && !(facts.repos ?? []).includes(when.repo)) {
-        return false;
-    }
-    if (when.paths !== undefined && when.paths.length > 0 && !touches(facts.paths ?? [], when.paths)) {
-        return false;
-    }
-    if (when.outcome !== undefined && when.outcome.length > 0 && (facts.outcome === undefined || !when.outcome.includes(facts.outcome))) {
-        return false;
-    }
-    return true;
-};
+const repoHolds = (when: RuleCondition, facts: RuleFacts): boolean => when.repo === undefined || (facts.repos ?? []).includes(when.repo);
+const pathsHold = (when: RuleCondition, facts: RuleFacts): boolean =>
+    when.paths === undefined || when.paths.length === 0 || touches(facts.paths ?? [], when.paths);
+const outcomeHolds = (when: RuleCondition, facts: RuleFacts): boolean =>
+    when.outcome === undefined || when.outcome.length === 0 || (facts.outcome !== undefined && when.outcome.includes(facts.outcome));
+// A moment that draws nothing never samples: a sampled rule at the push or the landing decision fires every time.
+const sampleHolds = (when: RuleCondition, facts: RuleFacts): boolean => when.sample === undefined || facts.draw === undefined || facts.draw < when.sample;
+
+export const conditionHolds = (when: RuleCondition | undefined, facts: RuleFacts): boolean =>
+    when === undefined || (repoHolds(when, facts) && pathsHold(when, facts) && outcomeHolds(when, facts) && sampleHolds(when, facts));
 
 // Enabled rules at a moment, before conditions are checked; turn.ending carries these in since path facts aren't known
 // until the Stop. An empty `command` rule is dropped here, not a no-op: empty has always meant off.

@@ -13,6 +13,7 @@
         "verify:turn": "node _tools/scripts/verify/verify-turn.mjs",
         "verify:push": "node _tools/scripts/verify/verify-push.mjs",
         "ci:audit": "node _tools/scripts/ci/ci-audit.mjs",
+        "sdlc:scoreboard": "node _tools/scripts/ci/sdlc-scoreboard.mjs",
         "test": "pnpm prepass && VITEST_MAX_WORKERS=${VITEST_MAX_WORKERS:-4} turbo run test --only",
         "typecheck": "pnpm prepass && turbo run typecheck --continue=dependencies-successful",
         "prepass": "node _tools/checks/run.mjs --tidy=warn && node _tools/scripts/build/emit-declarations.mjs",

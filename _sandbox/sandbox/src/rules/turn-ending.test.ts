@@ -7,7 +7,7 @@ import type { ChecksProbe } from "../agent/verification/agent-verification.js";
 import { syncHookOutput } from "../testing.js";
 import type { RuleCommandRun } from "./rule-command.js";
 import { TEST_WRITING_NOTE } from "../agent/verification/agent-tests.js";
-import { type TurnEndingDeps, turnEndingHooks } from "./turn-ending.js";
+import { commandRuleFindings, type TurnEndingDeps, turnEndingHooks } from "./turn-ending.js";
 
 // Which commands a project offers is the probe's business; covered by agent-verification.integration.test.ts.
 const CHECKS: ChecksProbe = async () => ["pnpm test", "pnpm lint"];
@@ -539,5 +539,75 @@ describe("reporting", () => {
         // No edits: verify-edits has nothing to ask for, and the sql rule's condition cannot hold.
         await stop(hooks);
         expect(fired).toEqual(["loud"]);
+    });
+});
+
+describe("the daemon's own run of the command rules", () => {
+    const CHECK = rule({ id: "check", label: "Verify before you finish", action: { kind: "command", command: "pnpm verify:turn", timeoutMs: 900_000 } });
+
+    test("a failing command is one finding worded for the model, told to onCheckRun and onFired", async () => {
+        const runs: string[] = [];
+        const checked: string[] = [];
+        const fired: string[] = [];
+        const findings = await commandRuleFindings([CHECK], { paths: ["src/a.ts"] }, {
+            runCommand: async (command) => {
+                runs.push(command);
+                return { status: "failed", exitCode: 1, output: FAILED };
+            },
+            onCheckRun: (checkRule, run) => checked.push(`${checkRule.id}:${run.status}`),
+            onFired: (checkRule) => fired.push(checkRule.id),
+        });
+        expect(runs).toEqual(["pnpm verify:turn"]);
+        expect(findings).toHaveLength(1);
+        expect(findings[0]).toContain('"Verify before you finish" ran this and it exited 1');
+        expect(checked).toEqual(["check:failed"]);
+        expect(fired).toEqual(["check"]);
+    });
+
+    test("a passing command is no finding, and a rule whose condition the paths miss is not run", async () => {
+        const runs: string[] = [];
+        const runCommand = async (command: string) => {
+            runs.push(command);
+            return { status: "passed" as const, exitCode: 0, output: PASSED };
+        };
+        expect(await commandRuleFindings([CHECK], { paths: ["src/a.ts"] }, { runCommand })).toEqual([]);
+        const narrowed = { ...CHECK, when: { paths: ["intentic/**"] } };
+        expect(await commandRuleFindings([narrowed], { paths: ["docs/a.md"] }, { runCommand })).toEqual([]);
+        expect(runs).toEqual(["pnpm verify:turn"]);
+    });
+
+    test("with nowhere to run a command, nothing is invented", async () => {
+        expect(await commandRuleFindings([CHECK], { paths: ["src/a.ts"] }, {})).toEqual([]);
+    });
+});
+
+describe("what a follow-up bought", () => {
+    const CHECK = rule({ id: "check", label: "Verify before you finish", action: { kind: "command", command: "pnpm verify:turn", timeoutMs: 900_000 } });
+
+    test("the Stop after a follow-up reports the edits and commands since, per rule that spoke", async () => {
+        const outcomes: { id: string; edits: number; looks: number; commands: number }[] = [];
+        const hooks = armed([CHECK], {
+            runCommand: async () => ({ status: "failed", exitCode: 1, output: FAILED }),
+            onFollowUpOutcome: (spoke, outcome) => outcomes.push({ id: spoke.id, ...outcome }),
+        });
+        expect(await stop(hooks)).toContain("Verify before you finish");
+        expect(outcomes).toEqual([]);
+        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
+        await edit(hooks, `${WORKSPACE_ROOT}/src/b.ts`);
+        await bash(hooks, "pnpm test", PASSED);
+        await stop(hooks);
+        expect(outcomes).toEqual([{ id: "check", edits: 2, looks: 0, commands: 1 }]);
+    });
+
+    test("a Stop that asked nothing settles nothing", async () => {
+        const outcomes: unknown[] = [];
+        const hooks = armed([CHECK], {
+            runCommand: async () => ({ status: "passed", exitCode: 0, output: PASSED }),
+            onFollowUpOutcome: (spoke, outcome) => outcomes.push([spoke.id, outcome]),
+        });
+        expect(await stop(hooks)).toBeUndefined();
+        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
+        expect(await stop(hooks)).toBeUndefined();
+        expect(outcomes).toEqual([]);
     });
 });

@@ -247,8 +247,12 @@
             ]
         }
     },
+    /* On, but inert until TURBO_API, TURBO_TEAM and TURBO_TOKEN are all set (turbo 2.10.8 reads an empty one as
+     * unset and reports `remote: false`, measured with --dry=json). CI sets them from repository variables and a
+     * secret when the fleet host runs _tools/turbo-cache; nothing here reaches Vercel, since TURBO_API names the
+     * server. Never `signature`: that would need the key in every sandbox shell that runs a task. */
     "remoteCache": {
-        "enabled": false
+        "enabled": true
     },
     /* AN ABSOLUTE TASK COUNT, never a percentage: turbo resolves a percentage against the HOST's logical
      * processor count, and a container bounds memory, not cpus. Inside the sandbox "200%" therefore read as 32

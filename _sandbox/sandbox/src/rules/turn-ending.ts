@@ -68,6 +68,15 @@ export interface TurnEndingDeps {
     readonly onCheckRun?: ((rule: Rule, run: RuleCommandRun) => void) | undefined;
     // The verify-tests built-in's whole answer, bound by the planner; absent means it has nothing to say.
     readonly tests?: (() => Promise<string | undefined>) | undefined;
+    // Told, at the Stop after a follow-up, what the model did with it; absent records nothing.
+    readonly onFollowUpOutcome?: ((rule: Rule, outcome: FollowUpOutcome) => void) | undefined;
+}
+
+// What happened between a rule's follow-up and the next Stop: the counts that say whether it was acted on.
+export interface FollowUpOutcome {
+    readonly edits: number;
+    readonly looks: number;
+    readonly commands: number;
 }
 
 // `removal` exists only when a rule standing here reads it: snapshotting file contents before every edit is the one
@@ -178,6 +187,26 @@ const commandContribution = async (
         .join("\n");
 };
 
+// The command rules standing at turn.ending whose condition holds, run in the owner's order, each failure as the
+// sentence the model is sent; for the runtimes with no Stop hook, where the daemon runs them after the turn instead.
+export const commandRuleFindings = async (rules: readonly Rule[], facts: RuleFacts, deps: TurnEndingDeps): Promise<string[]> => {
+    const findings: string[] = [];
+    if (deps.runCommand === undefined) {
+        return findings;
+    }
+    for (const rule of rules) {
+        if (!rule.enabled || rule.moment !== "turn.ending" || rule.action.kind !== "command" || !conditionHolds(rule.when, facts)) {
+            continue;
+        }
+        const finding = await commandContribution(rule, rule.action, deps.runCommand, deps);
+        if (finding !== undefined && finding !== "") {
+            findings.push(finding);
+            deps.onFired?.(rule);
+        }
+    }
+    return findings;
+};
+
 // What one rule contributes to the follow-up, or nothing.
 const contributionOf = async (rule: Rule, deps: TurnEndingDeps, ledgers: Ledgers): Promise<string | undefined> => {
     if (rule.action.kind === "builtin") {
@@ -216,10 +245,19 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
     const read = deps.read ?? readWorkspaceFile;
     let followUps = 0;
     let testNoted = false;
+    // One draw for the whole turn, so a rule sampled out at the first Stop stays out at the second.
+    const draw = Math.random();
+    // Running counts of what the model did, read at each Stop to say what the last follow-up bought.
+    let edits = 0;
+    let looks = 0;
+    let commands = 0;
+    // The rules that spoke at the previous Stop, with the counts as they stood then.
+    let asked: { readonly rule: Rule; readonly edits: number; readonly looks: number; readonly commands: number }[] = [];
     // What every rule standing here has to say about this occasion, in the owner's order, telling `onFired`
     // for each that spoke.
-    const contributionsAt = async (facts: RuleFacts): Promise<string[]> => {
+    const contributionsAt = async (facts: RuleFacts): Promise<{ parts: string[]; spoke: Rule[] }> => {
         const parts: string[] = [];
+        const spoke: Rule[] = [];
         for (const rule of rules) {
             // Redundant with `standing` at its call site, kept since a wrong-moment rule firing would be silent and
             // wrong.
@@ -229,10 +267,18 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
             const contribution = await contributionOf(rule, deps, ledgers);
             if (contribution !== undefined && contribution !== "") {
                 parts.push(contribution);
+                spoke.push(rule);
                 deps.onFired?.(rule);
             }
         }
-        return parts;
+        return { parts, spoke };
+    };
+    // Settles the previous Stop's asks against what happened since; the counts are deltas, so two asks read alike.
+    const settleAsks = (): void => {
+        for (const ask of asked) {
+            deps.onFollowUpOutcome?.(ask.rule, { edits: edits - ask.edits, looks: looks - ask.looks, commands: commands - ask.commands });
+        }
+        asked = [];
     };
     return {
         ...(removal === undefined
@@ -265,6 +311,7 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                         if (input.hook_event_name === "PostToolUse") {
                             const path = editedPath(input.tool_input);
                             if (path !== undefined) {
+                                edits += 1;
                                 ledgers.verification.noteEdit(path);
                                 // The view ledger filters at its own door: one edit feeds two records, each with its
                                 // own idea of what matters.
@@ -288,6 +335,7 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                 hooks: [
                     async (input) => {
                         if (input.hook_event_name === "PostToolUse" && isObservingCall(input.tool_name)) {
+                            looks += 1;
                             ledgers.view.noteLook(input.tool_name);
                         }
                         return {};
@@ -303,6 +351,7 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                         }
                         const command = bashCommand(input.tool_input);
                         if (command !== undefined) {
+                            commands += 1;
                             const exit = commandExitCode(input.tool_response);
                             const text = typeof input.tool_response === "string" ? input.tool_response : "";
                             ledgers.verification.noteCommand(command, exit === undefined || exit === 0, text);
@@ -333,18 +382,23 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
             {
                 hooks: [
                     async (input) => {
-                        if (input.hook_event_name !== "Stop" || followUps >= MAX_FOLLOW_UPS) {
+                        if (input.hook_event_name !== "Stop") {
+                            return {};
+                        }
+                        settleAsks();
+                        if (followUps >= MAX_FOLLOW_UPS) {
                             return {};
                         }
                         // Edited paths plus what the tree shows changed; a turn with nothing edited still fires
                         // unconditioned rules.
                         const edited = ledgers.verification.edited().map((path) => workspaceRelative(path, deps.cwd));
                         const changed = deps.changedPaths === undefined ? [] : await deps.changedPaths().catch(() => []);
-                        const facts = { paths: [...new Set([...edited, ...changed])] };
-                        const parts = await contributionsAt(facts);
+                        const facts = { paths: [...new Set([...edited, ...changed])], draw };
+                        const { parts, spoke } = await contributionsAt(facts);
                         if (parts.length === 0) {
                             return {};
                         }
+                        asked = spoke.map((rule) => ({ rule, edits, looks, commands }));
                         followUps += 1;
                         return {
                             hookSpecificOutput: { hookEventName: "Stop", additionalContext: parts.join("\n\n") },

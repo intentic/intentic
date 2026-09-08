@@ -14,8 +14,9 @@ The ports, paths and image references the daemon, the CLIs and the desktop app a
 - [src/node.mjs](src/node.mjs): `repoRoot()` and `packageRoot()`, behind the `@intentic/constants/node`
   subpath. Node-only, and hand-written JavaScript rather than compiled TypeScript.
 - [src/assertion-measure.mjs](src/assertion-measure.mjs), [src/contract-shrink.mjs](src/contract-shrink.mjs),
-  [src/control-bytes.mjs](src/control-bytes.mjs) and [src/mirror-roots.mjs](src/mirror-roots.mjs): the four
-  judgments the repository's checkout gates (`_tools/checks/`) and the daemon both make, kept as one copy each.
+  [src/control-bytes.mjs](src/control-bytes.mjs), [src/mirror-roots.mjs](src/mirror-roots.mjs) and
+  [src/ci-infra-steps.mjs](src/ci-infra-steps.mjs): the five judgments the repository's scripts and checks
+  (`_tools/checks/`, `_tools/scripts/ci/ci-audit.mjs`) and the daemon both make, kept as one copy each.
   Hand-written JavaScript for the same reason `node.mjs` is: a gate that runs before `pnpm install` imports them
   by relative path, and the daemon imports them as subpaths of this package. `assertion-measure.mjs` carries
   three of them, not one: which files are test files (`TEST_FILE`), how strong a TypeScript file's assertions

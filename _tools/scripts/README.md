@@ -31,7 +31,7 @@ which jobs a push starts — and it asserts each one exists rather than silently
 | [dind-host.sh](lib/dind-host.sh) | a clean Docker-in-Docker host to run a user's setup on (`start_dind_host`, `in_host`) |
 | [git.mjs](lib/git.mjs) | `git`, `changedPaths` — one spawn wrapper with the buffer a release range needs (`isLinkedWorktree` lives beside the checks that ratchet, in [repo.mjs](../checks/lib/repo.mjs)) |
 | [steps.mjs](lib/steps.mjs) | the step runner the three verify tiers share: every reader speaks, then one digest |
-| [tree-verdict.mjs](lib/tree-verdict.mjs) | one measurement per tree, keyed by content, shared across checkouts |
+| [tree-verdict.mjs](lib/tree-verdict.mjs) | the newest twenty measurements, keyed by tree content (the working tree or a commit's), shared across checkouts |
 
 ### [verify/](verify) — the gates
 
@@ -39,7 +39,7 @@ which jobs a push starts — and it asserts each one exists rather than silently
 |---|---|
 | [verify.mjs](verify/verify.mjs) | `pnpm verify`: the whole repository, after every land, off every model's clock |
 | [verify-turn.mjs](verify/verify-turn.mjs) | `pnpm verify:turn`: the affected closure, when a turn tries to end |
-| [verify-push.mjs](verify/verify-push.mjs) | `pnpm verify:push` and the pre-push hook: what CI would say, said before the push leaves |
+| [verify-push.mjs](verify/verify-push.mjs) | `pnpm verify:push` and the pre-push hook: the cheap readers, then a replay of the land's verdict; `--suite` runs CI's three steps here |
 | [affected.mjs](verify/affected.mjs) | which parts of the repo a push touched — CI's `changes` job, walked off the package graph |
 | [assertion-ratchet.mjs](verify/assertion-ratchet.mjs) | a test file may get stronger by itself and weaker only on purpose |
 | [check-migrations.sh](verify/check-migrations.sh) | applied migrations are immutable, new ones can run on a database that has rows |
@@ -118,6 +118,7 @@ Ordered the way a release runs them:
 |---|---|
 | [githooks.mjs](ci/githooks.mjs) | point git at `.githooks`, on every install, on every platform |
 | [ci-audit.mjs](ci/ci-audit.mjs) | which gate to build next: the failing steps of the last N runs, grouped and counted |
+| [sdlc-scoreboard.mjs](ci/sdlc-scoreboard.mjs) | `pnpm sdlc:scoreboard`: the whole chain per day, from the daemon's records, the git log and the CI API |
 | [install-provider-clis.sh](ci/install-provider-clis.sh) | the provider CLIs the conformance tier drives, at the versions the packs pin |
 | [mobile-android-sdk.sh](ci/mobile-android-sdk.sh) | hand Bubblewrap an Android SDK it will accept |
 | [setup-windows-runner.ps1](ci/setup-windows-runner.ps1) | provision the Windows runner — the one thing the pipeline cannot do for itself |

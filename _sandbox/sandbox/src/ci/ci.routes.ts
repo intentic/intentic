@@ -7,7 +7,8 @@ import type { WakeFn } from "../automations/scheduler.js";
 import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { ciClientFor, type FetchFn } from "./providers.js";
+import { isInfraStep } from "@intentic/constants/ci-infra-steps";
+import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
 
 // Backend for the Pipelines rail: reads serve the webhook-freshened cache, backfilled from the vendor's REST API when
@@ -26,6 +27,30 @@ const upstream = async <T>(action: Promise<T>): Promise<T> => {
     } catch (error) {
         throw new ORPCError("BAD_GATEWAY", { message: errorMessage(error) });
     }
+};
+
+// What the fix conversation is handed about a failed run. A run whose every failure is a runner-owned step never ran a
+// line of this repository: the fleet is down, and an agent opened on it would fix code that is fine, so that run is
+// refused with the reason unless the caller forced it.
+const failureEvidence = async (
+    client: ReturnType<typeof ciClientFor>,
+    project: CiProject,
+    runId: number,
+    force: boolean | undefined,
+): Promise<{ failedJobs: string[]; logs: string }> => {
+    const [failedJobs, failedSteps, logs] = await Promise.all([
+        client.failedJobs(project, runId).catch(() => []),
+        client.failedSteps(project, runId).catch((): FailedStep[] => []),
+        client.failedJobLogs(project, runId, FIX_LOG_BYTES).catch(() => ""),
+    ]);
+    const infraOnly = failedSteps.length > 0 && failedSteps.every(({ step }) => step !== undefined && isInfraStep(step));
+    if (infraOnly && force !== true) {
+        const where = [...new Set(failedSteps.map(({ step }) => step))].join(", ");
+        throw new ORPCError("PRECONDITION_FAILED", {
+            message: `Every failed job died in its runner's own setup (${where}), before any step of this repository ran: the fleet, not the code. Bring the runner back and re-run the pipeline; force the fix to put an agent on it anyway.`,
+        });
+    }
+    return { failedJobs, logs };
 };
 
 export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, fetchFn: FetchFn = fetch) => {
@@ -93,17 +118,14 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
             const run: PipelineRun | undefined =
                 (services.ciRuns.sweep() ?? []).find((candidate) => candidate.repo === input.repo && candidate.runId === input.runId) ??
                 (await client.listRuns(project, RUNS_PER_PROJECT).catch(() => [])).find((candidate) => candidate.runId === input.runId);
-            const [failedJobs, logs] = await Promise.all([
-                client.failedJobs(project, input.runId).catch(() => []),
-                client.failedJobLogs(project, input.runId, FIX_LOG_BYTES).catch(() => ""),
-            ]);
+            const { failedJobs, logs } = await failureEvidence(client, project, input.runId, input.force);
             const where = run !== undefined ? `on branch ${run.branch} (${run.url})` : `(run ${input.runId})`;
             // Names the environment boundary, not job names, so the prompt can't drift from .github/workflows/.
             const prompt = [
                 `The CI pipeline for the workspace repo "${input.repo}" failed ${where}. Investigate and fix it.`,
                 ...(failedJobs.length > 0 ? [`Failed jobs: ${failedJobs.join(", ")}.`] : []),
                 `The logs below are the evidence — read them first; they are usually enough to name the cause.`,
-                `REPRODUCE LOCALLY ONLY IF THIS SANDBOX CAN. \`pnpm verify:push\` runs the checkout gates, typecheck, build and tests, which is what the preflight and verify-* jobs run, so those reproduce here exactly. Jobs that need Docker, a fresh CI image, a desktop runner, a GPU, Windows or Xcode DO NOT: this sandbox has none of them, and an hour spent standing one up is an hour that ends in a guess anyway.`,
+                `REPRODUCE LOCALLY ONLY IF THIS SANDBOX CAN. \`pnpm verify:push --suite\` runs the checkout gates, typecheck, build and tests, which is what the preflight and verify-* jobs run, so those reproduce here exactly. Jobs that need Docker, a fresh CI image, a desktop runner, a GPU, Windows or Xcode DO NOT: this sandbox has none of them, and an hour spent standing one up is an hour that ends in a guess anyway.`,
                 `For a job you cannot run here: make the change from the logs, then verify it in the place the constraints exist by dispatching the workflow on your own branch (\`gh workflow run <workflow.yml> --ref <your branch>\`, then \`gh run watch\`). Say plainly in your summary if you could not verify it and what would.`,
                 `You are in an isolated worktree: commit your fix and it goes through review.`,
                 ...(logs !== "" ? [`--- failed job logs (tails) ---\n${logs}`] : []),

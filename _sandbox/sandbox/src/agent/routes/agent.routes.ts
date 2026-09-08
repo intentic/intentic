@@ -1,4 +1,3 @@
-import { queueWhole } from "../tools/agent-terminals.js";
 import { randomUUID } from "node:crypto";
 import {
     type ActivityEvent,
@@ -26,7 +25,6 @@ import { turnCliEnv } from "../../capabilities/turn-env.js";
 import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
-import { queueVerify, type VerifyDeps } from "../../workspace/deps/verify-deps.js";
 import { REPO_SYNC_NOTE_TITLE, syncAdvisory, syncWorkspaceRepos } from "../../workspace/layout/sync-repos.js";
 import { resolveWithin } from "../../workspace/files/workspace-files-paths.js";
 import { startAnchor, type TurnPlacement } from "../../agents/worktrees/isolation.js";
@@ -36,6 +34,7 @@ import { ensureComposedWorktree } from "../context/conversation-context.js";
 import { anchorWorktree, forkWorktreeBase } from "../anchors/anchor-worktree.js";
 import { anchorSteeredMessage } from "../anchors/steer-anchors.js";
 import { landAgent } from "../../agents/land/land.js";
+import { verifyLandedTree } from "../../agents/land/verify-landed.js";
 import { describeLandingInBackground } from "../../agents/land/landed-subject.js";
 import { landingPaths } from "../../agents/land/landing-paths.js";
 import { landingVerdict, standing } from "../../rules/rules.js";
@@ -53,6 +52,7 @@ import { limitReopensAt } from "../models/limit-reset.js";
 import { createFrameLedger } from "../verification/agent-verification.js";
 import { createViewFrameLedger } from "../verification/agent-viewing.js";
 import { nudgeUnverifiedWork } from "../verification/verify-nudge.js";
+import { commandRuleFindings, workspaceRelative } from "../../rules/turn-ending.js";
 import { mentionsSpentAllowance } from "../providers/failure-sentences.js";
 import { conversationOf } from "../tools/agent-requests.js";
 import { actorOf, type TurnInput } from "../run/turn/turn-actor.js";
@@ -550,24 +550,10 @@ async function* runConversationTurn(
                     branch,
                     repos: span,
                 };
-                const verifier: VerifyDeps = {
-                    workspace: services.workspace,
-                    processes: services.processes,
-                    logger: services.logger,
-                    verifyStore: services.verifyStore,
-                    activity: services.activity,
-                    emit: (event) => emitWorkspaceEvent(services, event, streamAgent),
-                    queue: queueWhole(services.heavyCommands.read),
-                };
-                const deps = landed.landed ? await services.dependencies.reconcileLand(verifyContext) : undefined;
-                // Runs every landed repo's full check once, off-turn, beyond the turn's own diff check.
-                if (landed.landed && deps?.deferred !== true) {
-                    queueVerify(
-                        verifier,
-                        verifyContext,
-                        span.map(({ repo }) => (repo === "root" ? "" : repo)),
-                    );
-                }
+                // The whole repository's check, off the turn's clock; the reconciler first when node_modules is behind.
+                const deps = landed.landed
+                    ? await verifyLandedTree(services, (event) => emitWorkspaceEvent(services, event, streamAgent), verifyContext)
+                    : undefined;
                 yield {
                     kind: "landed",
                     landed: landed.landed,
@@ -791,6 +777,54 @@ const recordSpentAllowance = (params: {
 
 // The session to resume, or none if the runtime no longer holds it, which opens a fresh session seeded from the record
 // instead. A store that can't be probed is trusted, not doubted.
+// The conversation whose Stop the daemon runs, or undefined: a runtime with no Stop hook, a turn that ended well (not
+// cancelled, not failed), and not a spawned child, whose parent's Stop answers for it.
+const daemonStopConversation = (input: TurnInput, provider: AgentProvider, outcome: "ok" | "error" | "cancelled"): string | undefined =>
+    outcome === "ok" &&
+    input.conversationId !== undefined &&
+    capabilitiesOf(provider, input.harness ?? "native").rulebook !== "hooks" &&
+    !isSpawnedChild(input.conversationId)
+        ? input.conversationId
+        : undefined;
+
+// What the turn.ending command rules found on a daemon-stopped isolated turn, worded for the model; empty when the
+// turn is not one, is unisolated (the main tree is everyone's), or the rules passed. Their verdict is recorded through
+// `onCheckRun` as it runs, which is what the land decision reads.
+const daemonStopFindings = async (
+    services: Services,
+    turn: {
+        readonly conversationId: string | undefined;
+        readonly worktree: unknown;
+        readonly request: AgentRequest;
+        readonly edited: readonly string[];
+        readonly cwd: string;
+        readonly isolation: TurnPlacement | undefined;
+    },
+): Promise<string[]> => {
+    if (turn.conversationId === undefined || turn.worktree === undefined) {
+        return [];
+    }
+    const { request } = turn;
+    try {
+        const changed = request.changedPaths === undefined ? [] : await request.changedPaths().catch((): readonly string[] => []);
+        return await commandRuleFindings(
+            request.turnEndingRules ?? [],
+            { paths: [...new Set([...turn.edited.map((path) => workspaceRelative(path, turn.cwd)), ...changed])], draw: Math.random() },
+            {
+                runCommand: request.runRuleCommand,
+                onCheckRun: request.onCheckRun,
+                onFired: request.onRuleFired,
+                installing: request.dependencyInstalling,
+                cwd: turn.cwd,
+                ...(turn.isolation !== undefined ? { isolation: turn.isolation.plan } : {}),
+            },
+        );
+    } catch (error) {
+        services.logger.warn({ err: error, conversationId: turn.conversationId }, "turn-ending checks: could not run after the turn");
+        return [];
+    }
+};
+
 const sessionToResume = async (services: Services, input: AgentTurn, effectiveCwd: string): Promise<string | undefined> => {
     const { sessionId } = input;
     if (sessionId === undefined) {
@@ -1382,15 +1416,14 @@ async function* runTurn(
                     : {}),
             })
             .catch((error: unknown) => services.logger.warn({ err: error }, "usage: ledger append failed"));
-        // The proof follow-up for runtimes with no Stop hook; gated on ending well, not cancelled.
-        if (
-            outcome === "ok" &&
-            input.conversationId !== undefined &&
-            capabilitiesOf(provider, input.harness ?? "native").rulebook !== "hooks" &&
-            !isSpawnedChild(input.conversationId)
-        ) {
+        // The runtimes with no Stop hook get their Stop from the daemon: the command rules Claude runs at its Stop run
+        // here once the frames end, awaited, since the land decision reads the verdict they record next; the follow-up
+        // carries what they found along with the built-ins' asks.
+        const daemonStopped = daemonStopConversation(input, provider, outcome);
+        const findings = await daemonStopFindings(services, { conversationId: daemonStopped, worktree, request, edited: verification.edited(), cwd: effectiveCwd, isolation });
+        if (daemonStopped !== undefined) {
             void nudgeUnverifiedWork({
-                conversationId: input.conversationId,
+                conversationId: daemonStopped,
                 seed: input,
                 rules: request.turnEndingRules ?? [],
                 ledger: verification,
@@ -1399,6 +1432,7 @@ async function* runTurn(
                 cwd: effectiveCwd,
                 ...(request.onRuleFired !== undefined ? { onFired: request.onRuleFired } : {}),
                 ...(request.verifyTests !== undefined ? { tests: request.verifyTests } : {}),
+                findings,
             }).catch((error: unknown) => services.logger.warn({ err: error }, "verify nudge: could not be decided"));
         }
         sniffer.flush();

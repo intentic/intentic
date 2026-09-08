@@ -55,6 +55,11 @@ env:
   # action; this variable is deliberately named so it cannot be mistaken for one pnpm reads on its own.
   PNPM_STORE: /ci-cache/pnpm-store
   TURBO_CACHE_DIR: /ci-cache/turbo
+  # The fleet's turbo remote cache (_tools/turbo-cache), when the repository names one: TURBO_API and TURBO_TEAM
+  # are variables, TURBO_TOKEN a secret. Empty, turbo reads them as unset and uses /ci-cache/turbo alone.
+  TURBO_API: ${{ vars.TURBO_API }}
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
   # CI builds the site but never deploys it, so IndexNow submission is pure waste here — it polls the LIVE site
   # for the key file (90s timeout) and then retries a 403 five times, ~2 min per build.
   INDEXNOW_ENABLED: "0"
@@ -888,12 +893,20 @@ jobs:
   # SLOWEST group and skip outright if any of them failed, so a site build or a desktop clippy warning would
   # stop the images and the platform deploy for a reason neither has anything to do with. Both happened
   # before the edges were narrowed.
+  #
+  # AND NOT WHEN THE RELEASE BUILDS THE SAME IMAGE. On a releasing push the release's `images-amd64` and
+  # `sandbox-arm64` build this same tree at the real version, and release-images.sh then moves `latest` onto
+  # that build; this job and its arm64 twin were a second 46-minute build of the same bytes at 0.0.0, started a
+  # minute apart on the same fleet, for a tag the release was about to move anyway. Same shape desktop-verify
+  # uses: wait for the release call, run only when it released nothing. On a non-releasing push that wait is
+  # the release's one-minute `plan`; a release that failed leaves `latest` to this job, as before.
   images:
-    needs: [changes, verify-core]
+    needs: [changes, verify-core, release]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.changes.outputs.images == 'true'
       && needs.verify-core.result == 'success'
+      && (needs.release.outputs.version == '' || needs.release.result != 'success')
     runs-on: [self-hosted, intentic]
     container:
       # ci-base (node + docker CLI), not a bare docker image: prepare-image-trees.sh compiles the payload
@@ -972,11 +985,13 @@ jobs:
   # registry's own arm64 tags. The release does NOT reuse these sha tags — its arm64 half is version-stamped
   # inside release.yml (sandbox-arm64 there) so a released manifest's halves never skew.
   images-arm64:
-    needs: [changes, verify-core]
+    needs: [changes, verify-core, release]
+    # Gated on the release the way `images` is: the release's sandbox-arm64 builds this half on a releasing push.
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.changes.outputs.images == 'true'
       && needs.verify-core.result == 'success'
+      && (needs.release.outputs.version == '' || needs.release.result != 'success')
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
     permissions:

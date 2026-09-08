@@ -28,6 +28,14 @@ describe(`conditions`, () => {
         expect(conditionHolds({ paths: [`docs/**`] }, {})).toBe(false);
     });
 
+    test(`a sampled rule fires when the occasion's draw falls under its fraction, and always where nothing is drawn`, () => {
+        expect(conditionHolds({ sample: 0.25 }, { draw: 0.1 })).toBe(true);
+        expect(conditionHolds({ sample: 0.25 }, { draw: 0.25 })).toBe(false);
+        expect(conditionHolds({ sample: 0.25 }, { draw: 0.9 })).toBe(false);
+        // A push or a landing decision draws nothing, so a sample there narrows nothing rather than silently switching the rule off.
+        expect(conditionHolds({ sample: 0.25 }, {})).toBe(true);
+    });
+
     test(`paths match on the search box's own glob dialect`, () => {
         expect(conditionHolds({ paths: [`docs/**`] }, { paths: [`docs/guide/intro.md`] })).toBe(true);
         expect(conditionHolds({ paths: [`docs/**`] }, { paths: [`src/docs.ts`] })).toBe(false);

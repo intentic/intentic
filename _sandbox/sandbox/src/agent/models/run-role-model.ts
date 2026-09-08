@@ -1,6 +1,7 @@
 import { endpointProvider, type ModelPin, type ModelRole, type ModelSource, NATIVE_PROVIDERS, readyChain } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { harnessReadyProviders } from "../providers/harness-credentials.js";
+import { failingStreak } from "./role-model-health.js";
 import { spentRung } from "./role-model-quota.js";
 
 // Resolves which of a `run` role's pinned models this sandbox can actually start; read once before the session starts,
@@ -43,13 +44,18 @@ export const personaRunModel = async (services: Services, actsAs: string | undef
     return pinnedRunModel(services, (await services.personas.get(actsAs))?.models ?? []);
 };
 
-// First rung the recorded quota does not call spent, or the head of the chain if every rung is: it runs anyway, since
-// the reading is a snapshot that may already be stale.
+// First rung neither the recorded quota calls spent nor the turn ledger shows dying in a row, or the head of the chain
+// if every rung is: it runs anyway, since both readings are snapshots that may already be stale.
 const headOf = async (services: Services, chain: readonly ModelPin[]): Promise<ModelPin | undefined> => {
     for (const choice of chain) {
-        if ((await spentRung(services, choice)) === undefined) {
+        if ((await spentRung(services, choice)) !== undefined) {
+            continue;
+        }
+        const streak = await failingStreak(services.usage, choice);
+        if (streak === undefined) {
             return choice;
         }
+        services.logger.info({ provider: choice.provider, model: choice.model, streak }, "run role: rung stepped over for a failing streak");
     }
     return chain[0];
 };

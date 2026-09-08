@@ -21,7 +21,9 @@
         "src/control-bytes.mjs",
         "src/control-bytes.d.mts",
         "src/mirror-roots.mjs",
-        "src/mirror-roots.d.mts"
+        "src/mirror-roots.d.mts",
+        "src/ci-infra-steps.mjs",
+        "src/ci-infra-steps.d.mts"
     ],
     "exports": {
         ".": {
@@ -50,6 +52,10 @@
         "./control-bytes": {
             "types": "./src/control-bytes.d.mts",
             "default": "./src/control-bytes.mjs"
+        },
+        "./ci-infra-steps": {
+            "types": "./src/ci-infra-steps.d.mts",
+            "default": "./src/ci-infra-steps.mjs"
         },
         "./mirror-roots": {
             "types": "./src/mirror-roots.d.mts",

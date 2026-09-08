@@ -1,0 +1,19 @@
+# The turbo remote cache on the fleet host: one container, local disk, one shared token. Every job on the six runner
+# processes already shares /ci-cache/turbo through a bind mount; this is what lets a machine OUTSIDE that mount (a
+# second runner host, a sandbox reading with TURBO_REMOTE_CACHE_READ_ONLY=1) replay the same artifacts. README.md
+# says how to point turbo at it.
+services:
+  turbo-cache:
+    image: ducktors/turborepo-remote-cache:2
+    restart: unless-stopped
+    environment:
+      # The one token every reader and writer presents; the same value goes into the repository secret TURBO_TOKEN.
+      TURBO_TOKEN: ${TURBO_TOKEN:?set TURBO_TOKEN to the shared token}
+      STORAGE_PROVIDER: local
+      STORAGE_PATH: /cache
+      PORT: "3000"
+    volumes:
+      # Beside the runners' own cache so both sit on the same disk; the server prunes nothing, `find -mtime` does.
+      - /ci-cache/turbo-remote:/cache
+    ports:
+      - "127.0.0.1:3000:3000"
