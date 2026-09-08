@@ -245,6 +245,25 @@ export const icSwapArgs = (swap: SandboxSwap, slug: string, hash: string | undef
 // Consent happened in the browser, on a card that named what is lost.
 export const icRemoveArgs = (slug: string): string[] => ["sandbox", "remove", slug, "-y"];
 
+/* THE RECONNECT ARGV, and it is `connect` rather than a recreate on purpose: the values this sandbox is missing
+ * cannot come off the container being replaced, only from a fresh claim, and redeeming a claim is what `connect`
+ * is. Same slug, so `ic` lands on the same container name and the same volumes — its own comments call a
+ * same-slug re-run a normal reset, and it removes the CONTAINER, never /work.
+ *
+ * The slug is not passed: `ic sandbox connect` derives it from the code's own claim, and handing it a second,
+ * independently-chosen spelling of the same thing is how a reconnect would quietly build a SECOND sandbox beside
+ * the one it was asked to repair. The caller still names a slug on the wire, because the daemon routes and logs
+ * the flow by it; it just never reaches the argv.
+ *
+ * `-y` for `icRemoveArgs`'s reason: there is no terminal here, so `ic`'s "you already have other sandboxes"
+ * prompt would hang forever. Consent happened in the browser, on the card that named what this does. */
+export const icReconnectArgs = (setupCode: string | undefined): string[] => {
+    if (setupCode === undefined || setupCode.trim() === "") {
+        throw new Error(`"setupCode" is required to reconnect: it is the claim carrying the values this sandbox is missing.`);
+    }
+    return ["sandbox", "connect", setupCode.trim(), "-y"];
+};
+
 // The reshape argv, spelled the way `ic sandbox reshape` takes it: a cap as `<n>g`/`<n>`, `null` as ic's
 // `default`, a switch as an explicit on/off. Nothing is interpreted here; a reshape with nothing to change is
 // refused before anything is spawned.

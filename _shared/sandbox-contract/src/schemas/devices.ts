@@ -64,6 +64,14 @@ export const DeviceSandboxOpSchema = z.enum([
     "reshape",
     "remove",
     "logs",
+    /* THE ONLY OP THAT BRINGS SOMETHING IN FROM OUTSIDE THE MACHINE, and the reason it had to exist.
+     *
+     * Every other verb here recreates a container out of what that container already carries — which is exactly
+     * what a sandbox missing env cannot be fixed by, because the replay can only carry the absence forward. A
+     * reconnect runs the machine's `ic sandbox connect <code>`, so the values arrive with a freshly signed
+     * claim instead of being copied off the box being replaced. It keeps /work, /history and the Docker engine
+     * volume: same slug, same volumes, a new container. */
+    "reconnect",
     "runner-up",
     "runner-remove",
 ]);
@@ -79,6 +87,14 @@ export const DeviceSandboxFlowSchema = z.object({
     // `runner-up` only, daemon-filled, never by the caller: the browser never holds the pairing credential.
     parentUrl: z.string().optional(),
     pair: z.string().optional().meta({ secret: true }),
+    /* `reconnect` only, and REQUIRED by it: the short-lived setup code the platform minted for this sandbox
+     * (sandbox.setupCode, which re-signs the grant on every mint). The machine redeems it and gets back the
+     * reachability values, the connect token and the owner — the same claim a person pasting the setup command
+     * would redeem, which is what makes this op the button form of that command rather than a second mechanism.
+     *
+     * Secret, and short-lived by construction: it expires on the platform's own clock and is single-sandbox, so
+     * the worst a leaked one buys is a recreate of a container its holder could already recreate. */
+    setupCode: z.string().optional().meta({ secret: true }),
     // `runner-up` only, daemon-filled: `definition` carries no capabilities or secrets; `overlay`/`overlayHash` are
     // re-verified by hash before build.
     definition: z.string().optional(),

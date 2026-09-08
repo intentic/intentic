@@ -1,4 +1,5 @@
 import type { Logger } from "pino";
+import { containerDrift } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Config } from "../../env.config.js";
 import type { BootTracker } from "../boot/boot.js";
@@ -99,17 +100,32 @@ export const createReachReporter = (config: Config, logger: Logger, bootOf: () =
 
     // Best-effort by construction: a platform that can't be reached is the announce's problem to report, not this one's
     // to duplicate.
-    const tell = async (reach: ReachState["state"], detail?: string): Promise<void> => {
+    /* `retrying` rides every post rather than only the unhappy one, and it is the caller's to state rather than
+     * this function's to infer from `status`: the converged re-post below deliberately re-sends an EARLIER
+     * verdict, and reading a field that has moved on since would relabel a settled fault as a live wait. */
+    const tell = async (reach: ReachState["state"], detail?: string, retrying?: boolean): Promise<void> => {
         if (reach === "off") {
             return;
         }
         const boot = bootSnapshot();
         const cpu = readCpuThrottle();
+        /* WHAT THIS CONTAINER WAS SET UP BEFORE, sent on every report rather than only on the unhappy one.
+         *
+         * It rides here because this is already the post that arrives when the tunnel is the broken thing — the
+         * whole reason this module posts over the outbound channel instead of through the sandbox's own address
+         * — and a container missing the env to dial an edge is exactly a container whose address answers
+         * nobody. A second route for it would be a second thing to be down at the moment it is needed.
+         *
+         * Computed per post, not once at construction: it is a pure read of `process.env` (containerDrift), so
+         * there is nothing to cache and nothing that can go stale between the probe and the verdict. */
+        const drift = containerDrift(process.env);
         const answer = await postToPlatform(config, "/sandbox/boot-report", {
             reach,
             ...(detail === undefined ? {} : { detail }),
+            ...(retrying === undefined ? {} : { retrying }),
             ...(boot === undefined ? {} : { boot }),
             ...(cpu === undefined ? {} : { cpu }),
+            ...(drift.length === 0 ? {} : { drift }),
         });
         if ("error" in answer) {
             logger.debug({ err: answer.error }, "reachability report could not be delivered");
@@ -129,7 +145,7 @@ export const createReachReporter = (config: Config, logger: Logger, bootOf: () =
             }
             unsubscribeBoot?.();
             unsubscribeBoot = undefined;
-            void tell(status.state, status.detail);
+            void tell(status.state, status.detail, status.retrying);
         });
     };
 
@@ -144,7 +160,9 @@ export const createReachReporter = (config: Config, logger: Logger, bootOf: () =
         const spent = Date.now() >= deadline;
         logger.warn({ publicUrl, detail: verdict.detail }, "sandbox is not reachable at its public address yet");
         status = { state: "unreachable", detail: verdict.detail, retrying: !spent, at: Date.now() };
-        await tell("unreachable", verdict.detail);
+        // The last post of a spent loop is the one that matters most: it is the only one that says the waiting
+        // is over, and it is what turns a quiet wizard into a standing card on every screen that reads it.
+        await tell("unreachable", verdict.detail, !spent);
         if (spent) {
             return;
         }
@@ -169,14 +187,16 @@ export const createReachReporter = (config: Config, logger: Logger, bootOf: () =
                     `Re-run its setup command from the setup screen, which carries the values it is missing; until then it answers on its own machine only.`;
                 logger.warn({ publicUrl, detail }, "sandbox has a public address it cannot serve");
                 status = { state: "unreachable", detail, retrying: false, at: Date.now() };
-                void tell("unreachable", detail);
+                // Settled the moment it is asked, so it is posted as settled: this is the one verdict that was
+                // always final and, until it could say so on the wire, always read as a wait.
+                void tell("unreachable", detail, false);
                 return;
             }
             deadline = Date.now() + REACH_GIVE_UP_MS;
             status = { state: "checking", at: Date.now() };
             reportWhenConverged();
             // Says "checking" before the first probe resolves, so the page knows a daemon exists and is testing itself.
-            void tell("checking").then(() => attempt());
+            void tell("checking", undefined, true).then(() => attempt());
         },
         stop: () => {
             clearTimeout(timer);

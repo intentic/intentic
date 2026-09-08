@@ -119,6 +119,7 @@ export * from "./protocol/webext-protocol.js";
 export * from "./protocol/webext-links.js";
 export * from "./protocol/runner-protocol.js";
 export * from "./protocol/listener-protocol.js";
+export * from "./protocol/container-requirements.js";
 export * from "./ids/hostnames.js";
 export * from "./policy/overlay-lint.js";
 export * from "./models/model-order.js";
