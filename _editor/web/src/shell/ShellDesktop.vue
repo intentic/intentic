@@ -725,7 +725,7 @@ useKeybindings();
                             class="icon-rail-tile flex items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40"
                             aria-hidden="true"
                         >
-                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-lg" />
+                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-[1.375rem]" />
                         </span>
                         <RouterLink
                             v-else
@@ -736,7 +736,7 @@ useKeybindings();
                             v-tooltip.right="railTileLabel(tile)"
                             @contextmenu="onTileContextMenu(tile, $event)"
                         >
-                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-lg" />
+                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-[1.375rem]" />
                             <!-- One badge for every tile, core or extension: see AreaTile.badge. A `mark` replaces
                                  the number outright rather than sitting beside it: the chip is four pixels of
                                  glance, and a glyph AND a digit in it would be two claims competing for the same
@@ -783,7 +783,7 @@ useKeybindings();
                 v-tooltip.right="moreOpen ? undefined : moreLabel"
                 @click="moreOpen = !moreOpen"
             >
-                <RailIcon area="more" class="text-lg" />
+                <RailIcon area="more" class="text-[1.375rem]" />
             </button>
 
             <!-- Same surface as the sandbox switcher and account avatar: AnchoredOverlay rows, not PrimeVue's
@@ -846,7 +846,7 @@ useKeybindings();
                 :aria-label="vpnLabel"
                 v-tooltip.right="vpnLabel"
             >
-                <RailIcon area="vpn" class="text-lg" />
+                <RailIcon area="vpn" class="text-[1.375rem]" />
             </RouterLink>
 
             <!-- The exposure indicator: present ONLY while a port is forwarded, because that is when something
@@ -859,7 +859,7 @@ useKeybindings();
                 :aria-label="forwardedLabel"
                 v-tooltip.right="forwardedLabel"
             >
-                <RailIcon area="ports" class="text-lg" />
+                <RailIcon area="ports" class="text-[1.375rem]" />
                 <span
                     v-if="forwardedPorts.length > 1"
                     class="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-warning/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-warning"
@@ -880,7 +880,7 @@ useKeybindings();
                 :aria-label="tileLabel(tile)"
                 v-tooltip.right="tileLabel(tile)"
             >
-                <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-lg" />
+                <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-[1.375rem]" />
                 <!-- No tooltip on the badge, for the same reason as the navigation tiles above. -->
                 <span
                     v-if="tile.badge"
@@ -908,7 +908,7 @@ useKeybindings();
                 v-tooltip.right="terminalLabel"
                 @click="terminal.toggle()"
             >
-                <RailIcon area="terminal" class="text-lg" />
+                <RailIcon area="terminal" class="text-[1.375rem]" />
                 <span
                     v-if="terminalActivity.count.value > 0"
                     class="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-primary-600/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-link"
@@ -931,7 +931,7 @@ useKeybindings();
                 aria-label="Add a capability"
                 v-tooltip.right="'Add a capability'"
             >
-                <RailIcon area="capabilities" class="text-lg" />
+                <RailIcon area="capabilities" class="text-[1.375rem]" />
             </RouterLink>
 
             <!-- The account control: avatar → a rich popover (central account, sandbox workspace, theme, actions). -->
