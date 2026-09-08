@@ -69,13 +69,15 @@ const TONE: Record<WorkflowRun["state"], string> = {
         <div class="flex items-center gap-2.5">
             <!--
                 Graph glyph where an agent card has its identity tile: one look says this row is a shape, not a
-                session. Two boxes, not one, so it lands on the agent tile's geometry exactly: a 20px disc centred in
-                the 28px slot the tile's context ring occupies (AgentCard). A run has no context of its own to ring,
-                but its title still has to start on the same axis as the titles under it, and its mark has to be the
-                same shape as theirs or the lane draws two vocabularies.
+                session. Two boxes, not one, so it lands on the agent tile's geometry exactly: a 22px disc centred in
+                the 28px slot the tile's context ring occupies (AgentCard, which argues the proportion). A run has no
+                context of its own to ring, but its title still has to start on the same axis as the titles under it,
+                and its mark has to be the same shape AND size as theirs, or the lane draws two vocabularies.
+                It wears the empty rim for that reason: without it a run's bare disc reads a size smaller than the
+                ringed cards beside it. The inset ring is ProgressRing's own track, restated (AgentCard argues it).
             -->
-            <span class="flex h-7 w-7 shrink-0 items-center justify-center">
-                <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
+            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-[1.5px] ring-inset ring-content/12">
+                <span class="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
                     <Icon name="sitemap" class="text-2xs text-link" />
                 </span>
             </span>

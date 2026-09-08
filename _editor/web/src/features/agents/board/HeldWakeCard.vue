@@ -45,12 +45,13 @@ const autoRunLabel = computed(() => {
         <div class="flex items-center gap-2.5">
             <!--
                 Pause glyph where an agent card has its identity tile: a held wake, not a session, nothing running
-                yet. Two boxes for the same reason the workflow run's mark has two — a 20px disc centred in the 28px
-                slot the agent tile's context ring occupies, so the titles in this lane start on one axis and every
-                mark in the lane is the same shape.
+                yet. Two boxes for the same reason the workflow run's mark has two — a 22px disc centred in the 28px
+                slot the agent tile's context ring occupies (AgentCard argues the proportion), so the titles in this
+                lane start on one axis and every mark in the lane is the same shape and size.
+                It wears the empty rim for that reason too: a bare disc beside a ringed card reads a size smaller.
             -->
-            <span class="flex h-7 w-7 shrink-0 items-center justify-center">
-                <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warning/15">
+            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-[1.5px] ring-inset ring-content/12">
+                <span class="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full bg-warning/15">
                     <Icon name="pause" class="text-2xs text-warning" />
                 </span>
             </span>

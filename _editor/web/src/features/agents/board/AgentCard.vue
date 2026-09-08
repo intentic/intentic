@@ -416,16 +416,37 @@ const grab = (event: PointerEvent): void => {
 
                 The box is a fixed 28px whether or not a ring is drawn in it, so a lane of cards keeps its titles on
                 one axis rather than shifting left on every card the daemon hasn't reported context for yet.
-                TWO CONCENTRIC CIRCLES, which is the whole reason IdentityTile is round: a 20px disc inside a 28px
-                ring (2px stroke, inner edge at 12) leaves an even 2px all the way round. The square this replaced
-                could not — its gap ran from 4px at the flats to under 1px at the corners, so the arc read as a
-                flourish beside the tile instead of its rim, and it had to shrink to 18px with an 11px glyph just to
-                keep its corners off the stroke. The disc gives the glyph its 12px back.
+                TWO CONCENTRIC CIRCLES, which is the whole reason IdentityTile is round: the square this replaced had
+                a gap running from 4px at the flats to under 1px at the corners, so the arc read as a flourish beside
+                the tile instead of its rim.
+
+                THE THREE NUMBERS ARE A PROPORTION, not three independent choices, and getting them wrong is what a
+                correct centre calculation cannot save you from — measured dead concentric, the first attempt still
+                looked wrong. A ring's own geometry: its outer edge is always at `size / 2` and its inner edge at
+                `size / 2 - stroke`. So 28/1.5 puts the inner edge at 12.5, and a 22px disc (radius 11) sits 1.5px
+                inside it.
+                It replaced 28/2 around a 20px disc, which measured perfectly and read as a heavy donut with a small
+                glyph adrift in it: the stroke was a tenth of the disc it circled, and the disc only 71% of the ring,
+                so the eye read the ring as the object and the icon as filler. At 79% with a hairline the disc is the
+                object and the ring is its rim, which is the thing being drawn.
+                `stroke` is passed here rather than changed in ProgressRing: five other surfaces (UsageRing,
+                ApplyProgress, ChatPaneStatus, the design kit) draw that component at its own weight and none of them
+                is circling an icon.
+
+                A CARD WITH NO CONTEXT WEARS THE EMPTY TRACK, and this is the other half of "the sizes look off": a
+                bare 22px disc beside a ringed 28px one reads as two sizes of mark in one lane, even though both
+                discs are identical. So the rim is always drawn and only the ARC is conditional. The inset ring
+                reproduces ProgressRing's own track exactly — same 1.5px band with its outer edge at 14 — which is
+                why the two can stand in for each other without a seam.
                 Same size in every lane: lane weight is carried by the padding and the title, which have room for it.
             -->
-            <span v-tooltip.top="tileHint" class="relative flex h-7 w-7 shrink-0 items-center justify-center">
-                <ProgressRing v-if="context !== undefined" :value="context" :size="28" class="absolute inset-0" :class="ringTone" />
-                <IdentityTile :title="agent.title" :provider="agent.provider" class="h-5 w-5 text-xs" />
+            <span
+                v-tooltip.top="tileHint"
+                class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                :class="context === undefined ? 'ring-[1.5px] ring-inset ring-content/12' : ''"
+            >
+                <ProgressRing v-if="context !== undefined" :value="context" :size="28" :stroke="1.5" class="absolute inset-0" :class="ringTone" />
+                <IdentityTile :title="agent.title" :provider="agent.provider" class="h-5.5 w-5.5 text-xs" />
             </span>
             <input
                 v-if="edit.editing"
