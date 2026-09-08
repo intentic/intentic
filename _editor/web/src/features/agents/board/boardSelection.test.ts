@@ -10,6 +10,7 @@ import { resetChat, useChat } from "../../chat/run/useChat";
 import { openAgentConversation } from "../../chat/panel/useChat-reveal";
 import { queryClient } from "../../../lib/queryPersistence";
 import { resetAgents } from "../fleet/useAgents";
+import { FINISHED_WINDOW } from "../fleet/useAgents-fleet";
 import { setAgents } from "../fleet/useAgents-registry";
 import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
@@ -65,8 +66,13 @@ afterEach(() => {
 
 // Ten finished agents, newest first, matching the board's own sort; built fresh per call since the store stamps entries
 // in place. Seeded at a high revision so the board's own no-op refresh() can't be mistaken for a newer roster.
+const ROSTER_SIZE = 10;
+// The titles a full Finished window shows, derived from the window itself: these were spelled out as a literal
+// seven-title array, so changing the window broke this file with a diff about `agent 6` rather than about pinning,
+// which is the only thing these two tests are actually asserting.
+const windowTitles = Array.from({ length: FINISHED_WINDOW }, (_unused, at) => `agent ${at}`);
 const roster = (): AgentSummary[] =>
-    Array.from({ length: 10 }, (_unused, at): AgentSummary => ({
+    Array.from({ length: ROSTER_SIZE }, (_unused, at): AgentSummary => ({
         id: `a${at}`,
         title: `agent ${at}`,
         status: `landed`,
@@ -94,16 +100,17 @@ const tailRow = (el: HTMLElement): string => el.querySelectorAll(`section`)[2]!.
 it(`keeps the card the docked chat is reading, however far down the lane it is`, async () => {
     seed();
     const board = await mountBoard();
-    // Without the pin, this is the whole failure: seven cards and no ring on any of them.
-    expect(finishedCards(board)).toEqual([`agent 0`, `agent 1`, `agent 2`, `agent 3`, `agent 4`, `agent 5`, `agent 6`]);
+    // Without the pin, this is the whole failure: a window's worth of cards and no ring on any of them.
+    expect(finishedCards(board)).toEqual(windowTitles);
 
     openFromOutside(`a8`);
     await settle();
 
     // Pinned at the tail, so the lane's own recency order is otherwise untouched.
-    expect(finishedCards(board)).toEqual([`agent 0`, `agent 1`, `agent 2`, `agent 3`, `agent 4`, `agent 5`, `agent 6`, `agent 8`]);
-    // Counted out of the row that collapses the rest: eight cards on screen out of ten leaves two behind.
-    expect(tailRow(board)).toBe(`2 earlier`);
+    expect(finishedCards(board)).toEqual([...windowTitles, `agent 8`]);
+    // Counted out of the row that collapses the rest: the window plus the pin are on screen, so the row may only
+    // claim what is left of the roster.
+    expect(tailRow(board)).toBe(`${ROSTER_SIZE - FINISHED_WINDOW - 1} earlier`);
 });
 
 it(`lets the card go again when the chat moves on`, async () => {
@@ -115,8 +122,8 @@ it(`lets the card go again when the chat moves on`, async () => {
     openFromOutside(`a0`);
     await settle();
 
-    expect(finishedCards(board)).toEqual([`agent 0`, `agent 1`, `agent 2`, `agent 3`, `agent 4`, `agent 5`, `agent 6`]);
-    expect(tailRow(board)).toBe(`3 earlier`);
+    expect(finishedCards(board)).toEqual(windowTitles);
+    expect(tailRow(board)).toBe(`${ROSTER_SIZE - FINISHED_WINDOW} earlier`);
 });
 
 it(`scrolls to a card selected off the board: a ring drawn outside the scrollport is a board ignoring the click`, async () => {

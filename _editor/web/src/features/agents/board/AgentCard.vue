@@ -151,6 +151,30 @@ const away = computed(() => (props.agent.archivedAt === undefined ? landedAway(p
 // button.
 // Excluded in the archive, like `resolvable`: restore first.
 const landable = computed(() => props.agent.archivedAt === undefined && props.agent.status === `ready` && away.value === undefined);
+// A RECEIPT: a finished card that asks nothing of anyone. It keeps every fact it had and spends none of the board's
+// colour on them — the success green, the diff's red/green, the context tint all flatten to the row's own ink.
+// Finished is the only lane that fills by itself, so on an ordinary board it is forty painted rows beside two lanes
+// holding three cards each, and the eye went to the ledger because the ledger was the only column with colour in it.
+// NOT every finished card qualifies, which is the whole point of asking rather than keying off the lane: `ready`
+// still offers Land now, and landed-then-discarded work still says so in warning ink. Those are presses, not
+// receipts, and a press that reads as quietly as a receipt is a press nobody makes.
+// In the ARCHIVE that exception lapses: every press is withheld there until the card is restored (see `landable`,
+// `away`, `resolvable`), so a `ready` card filed away has nothing to shout about and reads as the receipt it is.
+const receipt = computed(
+    () => lane.value === `finished` && (props.agent.archivedAt !== undefined || (props.agent.status !== `ready` && away.value === undefined)),
+);
+// Statuses whose ink is already quiet (`idle`, `resumed`, `stopped`) keep it: flattening those to `muted` would make
+// a receipt LOUDER than it is today, which is the opposite of the errand.
+const QUIET_INK: ReadonlySet<string> = new Set([`text-subtle`, `text-muted`]);
+const statusMeta = computed(() => (receipt.value && !QUIET_INK.has(meta.value.class) ? { ...meta.value, class: `text-muted` } : meta.value));
+// The two lanes about work in flight get the bigger card: a step up in title size and padding, so which lane a card
+// is in is legible from its weight and not only from which column it landed in.
+// Hierarchy through the CARD rather than through the column: widening Attention and Active instead would have bought
+// nothing on an ordinary board, where those two lanes are near-empty and the widened columns are mostly air, and it
+// would have taken the width out of the one lane whose rows are already tightest.
+// Never in `dense` (the stacked, narrow board): there the lanes are stacked, so their order already says which is
+// which, and the extra padding costs a card per screen where cards per screen is the scarce thing.
+const live = computed(() => props.dense !== true && lane.value !== `finished`);
 // True only while this card's own land is pending; `pending` names the action so archiving doesn't leave Land spinning
 // too.
 const landing = computed(() => props.pending === `land`);
@@ -186,13 +210,38 @@ const context = computed(() => contextPct(props.agent.contextTokens, props.agent
 // Gated on exactly what it renders, no more and no less: gating on a subset hides what should show (subagents
 // mid-turn), a superset opens an empty strip.
 // The diff clause matches the diff chip's own condition, not merely `diff exists`, since renames alone render nothing.
+// Context is deliberately absent: it moved to the identity tile's ring (see `tileHint`), so a card whose only stat was
+// its context now opens no summary row at all.
 const stats = computed(
     () =>
         props.agent.costUsd !== undefined ||
         (props.agent.diff !== undefined && (props.agent.diff.insertions > 0 || props.agent.diff.deletions > 0)) ||
-        props.agent.subagents !== undefined ||
-        context.value !== undefined,
+        props.agent.subagents !== undefined,
 );
+// THE IDENTITY TILE IS ALSO THE FUEL GAUGE. The kind-of-work glyph was doing one job, telling cards apart, and it
+// did it in the strongest position a card has — leading, where the eye lands first — while the one number that
+// predicts what a session is about to do sat as a 14px ring in the summary row, last, among four other stats.
+// So the ring moved around the tile: how much of the model's context window this session has spent. It is the stat
+// that changes what to do next (an agent at 90% is one turn from compacting and starting to forget, which is when
+// you split the work rather than send another message), and unlike cost it has a denominator, so it can be a ring at
+// all. Cost stays a number, because "$3.26 of what?" has no answer to draw an arc against.
+// Amber past 80%, the band where compaction is close; accent while the work is live; plain ink on a receipt, where
+// the number is history rather than a warning.
+const ringTone = computed(() => {
+    if (receipt.value) {
+        return `text-subtle`;
+    }
+    return (context.value ?? 0) >= 80 ? `text-warning` : `text-primary-500`;
+});
+// One hover for a tile that now carries two facts, since two nested tooltips would raise two boxes over the same
+// 28 pixels. Either half can be missing: a title the category reading declines still has a context ring, and a fresh
+// agent has a category and no context yet.
+const tileHint = computed(() => {
+    const parts = [category.value?.type, context.value === undefined ? undefined : `${context.value}% of context used`].filter(
+        (part): part is string => part !== undefined,
+    );
+    return parts.length === 0 ? undefined : parts.join(` · `);
+});
 // Only a card with a daemon registry entry may claim "Completed": client-only standings have no such account of a turn.
 // A history-reopened chat sits in this lane too but says nothing here, since its own chip already states what it is.
 const completed = computed(() => lane.value === `finished` && !unregistered(props.agent.status));
@@ -329,8 +378,13 @@ const grab = (event: PointerEvent): void => {
         role="button"
         tabindex="0"
         :aria-label="`Focus agent: ${displayTitle}`"
-        class="session-card group flex w-full select-none flex-col gap-2 rounded-xl border p-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
+        class="session-card group flex w-full select-none flex-col rounded-xl border text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
+            /* A LIVE CARD IS A BIGGER CARD (see `live`): the two lanes about work in flight get 16px of padding and
+               a 14px title, the ledger keeps 14 and 12. This is the hierarchy signal, in place of widening the two
+               live columns — the fact being told is that this one is happening, and a card is where that belongs.
+               No double quotes in here: the whole array is one double-quoted attribute, and one closes it. */
+            live ? 'gap-2.5 p-4' : 'gap-2 p-3.5',
             /* TWO STATES, TWO CHANNELS, AND NEITHER IS DRAWN HERE. `selected` (this card's chat is on screen)
                and the Attention lane are unrelated facts, told apart by WHERE they are drawn: selection is a
                ring around the whole card plus a lifted surface, attention is a bar down the left edge. Both,
@@ -356,17 +410,30 @@ const grab = (event: PointerEvent): void => {
         <div class="flex items-center gap-2.5">
             <!--
                 Kind-of-work glyph tinted by the title's category (sessionCategory: audit=blue magnifier,
-                redesign=purple arrows, new=green plus, fix=red wrench).
-                Tooltip is the legend; an unreadable title falls back to the provider mark on neutral chrome.
+                redesign=purple arrows, new=green plus, fix=red wrench), ringed by how much of the model's context
+                window this session has spent (see `ringTone`).
+                Tooltip is the legend for both; an unreadable title falls back to the provider mark on neutral chrome.
+
+                The box is a fixed 26px whether or not a ring is drawn in it, so a lane of cards keeps its titles on
+                one axis rather than shifting left on every card the daemon hasn't reported context for yet.
+                THE GEOMETRY IS TIGHT ON PURPOSE and the two numbers are a pair: an 18px rounded square reaches
+                10.2px from its centre at the corners, and a 26px ring with a 2px stroke has its inner edge at 11.
+                Drawn any looser (it started at a 28px ring round a 20px tile) the arc stops reading as this tile's
+                rim and starts reading as a stray flourish beside it. Same size in every lane: lane weight is carried
+                by the padding and the title, which have room to say it.
             -->
-            <IdentityTile v-tooltip.top="category?.type" :title="agent.title" :provider="agent.provider" class="h-5 w-5 text-xs" />
+            <span v-tooltip.top="tileHint" class="relative flex h-6.5 w-6.5 shrink-0 items-center justify-center">
+                <ProgressRing v-if="context !== undefined" :value="context" :size="26" class="absolute inset-0" :class="ringTone" />
+                <IdentityTile :title="agent.title" :provider="agent.provider" class="h-4.5 w-4.5 text-2xs" />
+            </span>
             <input
                 v-if="edit.editing"
                 v-model="edit.draft"
                 type="text"
                 maxlength="80"
                 aria-label="Agent title"
-                class="ui-field-box ui-field-inline min-w-0 flex-1 select-text px-1 text-xs font-semibold"
+                class="ui-field-box ui-field-inline min-w-0 flex-1 select-text px-1 font-semibold"
+                :class="live ? 'text-sm' : 'text-xs'"
                 @click.stop
                 @keydown.enter.stop.prevent="edit.commit()"
                 @keydown.esc.stop.prevent="edit.cancel()"
@@ -374,7 +441,24 @@ const grab = (event: PointerEvent): void => {
                 @vue:mounted="edit.focusInput"
             />
             <template v-else>
-                <span class="min-w-0 flex-1 truncate text-xs font-semibold text-content" :class="{ italic: peek }">
+                <!--
+                    A LIVE CARD'S TITLE WRAPS, a receipt's clips. The step up to 14px costs about four characters
+                    against the same column, and beside a wide standing chip (`Question for you`, `Land conflict`)
+                    that was the difference between reading the title and reading `Refactor the a…`. A live lane
+                    holds a handful of cards and can spend the second line; Finished holds six and cannot, so it
+                    keeps one clipped line, which is also what makes the two lanes scan differently at a glance.
+
+                    `break-words` IS WHAT MAKES THE CLAMP TERMINATE, and it is not decoration. A clamp only draws
+                    its ellipsis when the text overruns VERTICALLY; a title with one unbreakable run in it (a
+                    branch, a path, a URL, anything a rename can put here) overruns sideways instead, so the box
+                    cut it mid-glyph with no ellipsis and left the second line empty. `truncate` never had the
+                    problem because nowrap plus text-overflow answers it in one. Breaking the long word puts the
+                    overrun back on the axis the clamp reads.
+                -->
+                <span
+                    class="min-w-0 flex-1 font-semibold text-content"
+                    :class="[live ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs', peek ? 'italic' : '']"
+                >
                     <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
                         run.text
                     }}</span>
@@ -474,7 +558,7 @@ const grab = (event: PointerEvent): void => {
                 Deliberately not chip-styled like the exceptions above: a board of forty "Idle" pills would spend its
                 whole attention budget on nothing, and an "Unfinished" pill per stopped-short card was the same spend.
             -->
-            <StatusGlyph v-else :meta="meta" :unfinished="agent.unfinished" :now="now" class="text-xs" />
+            <StatusGlyph v-else :meta="statusMeta" :unfinished="agent.unfinished" :now="now" class="text-xs" />
         </div>
         <p v-if="edit.error !== undefined" class="text-2xs text-danger">{{ edit.error }}</p>
 
@@ -670,9 +754,14 @@ const grab = (event: PointerEvent): void => {
                     shortcut saves.
                 -->
                 <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
+                <!--
+                    Red and green only while the diff is a live signal. On a receipt the pair keeps its signs, its
+                    monospace and its numbers and drops to the row's own ink: a lane of them was two saturated
+                    numbers per row, repeated six times, saying nothing that the `+` and `−` don't already say.
+                -->
                 <span v-if="agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)" class="font-mono">
-                    <span class="text-success">+{{ agent.diff.insertions }}</span>
-                    <span class="text-danger"> −{{ agent.diff.deletions }}</span>
+                    <span :class="receipt ? '' : 'text-success'">+{{ agent.diff.insertions }}</span>
+                    <span :class="receipt ? '' : 'text-danger'"> −{{ agent.diff.deletions }}</span>
                 </span>
                 <!--
                     Counts this agent's own children, live-of-total while any are running and settling to the lifetime
@@ -698,10 +787,6 @@ const grab = (event: PointerEvent): void => {
                         agent.subagents.running > 0 ? `${agent.subagents.running} / ${agent.subagents.total}` : agent.subagents.total
                     }}
                 </RouterLink>
-                <span v-if="context !== undefined" class="inline-flex items-center gap-1">
-                    <ProgressRing :value="context" :class="context >= 80 ? 'text-warning' : 'text-primary-500'" />
-                    <span>{{ context }}%</span>
-                </span>
 
                 <!--
                     Standing and clock pinned right by margin, not a spacer, so wrapping doesn't strand them on an

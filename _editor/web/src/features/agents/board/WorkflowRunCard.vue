@@ -11,7 +11,9 @@ import { liveSessions } from "../../chat/run/chatRun";
 // Clicking opens its live sessions side by side, one pane per attempt; that's why it lives on this board and not only
 // the workflows page.
 
-const { run } = defineProps<{ run: WorkflowRun; selected?: boolean; needsYou?: boolean; stopping?: boolean }>();
+// `dense` is the stacked, narrow board, exactly as AgentCard means it: it does not change what this row says, only
+// that it is drawn at the ledger's weight, since a stacked board's lanes are told apart by their order.
+const { run, dense } = defineProps<{ run: WorkflowRun; dense?: boolean; selected?: boolean; needsYou?: boolean; stopping?: boolean }>();
 const emit = defineEmits<{ open: []; stop: []; graph: []; archive: []; restore: [] }>();
 
 const lane = computed(() => laneOfRun(run));
@@ -22,6 +24,13 @@ const done = computed(() => run.steps.filter((step) => step.state === `done`).le
 
 // State word in the board's own vocabulary.
 // Only `running` gets its own color here; the other "look at this" states already have the lane bar.
+// The board's lane weight, read the same way AgentCard reads it (`live` there): a run in Attention or Active is
+// drawn at the live size, one in Finished at the ledger's. Named for the lane rather than for liveness because
+// `live` is already this file's word for the run's running sessions.
+// It has to agree with the agent cards or a lane draws two card sizes in one column, which reads as a bug rather
+// than as a hierarchy.
+const bigLane = computed(() => dense !== true && lane.value !== `finished`);
+
 const TONE: Record<WorkflowRun["state"], string> = {
     running: `text-link`,
     done: `text-success`,
@@ -37,8 +46,10 @@ const TONE: Record<WorkflowRun["state"], string> = {
         role="button"
         tabindex="0"
         :aria-label="`Open the sessions of ${run.workflow.name}`"
-        class="session-card group flex w-full select-none flex-col gap-2 rounded-xl border border-dashed p-3.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
+        class="session-card group flex w-full select-none flex-col rounded-xl border border-dashed text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
+            // Same step the agent cards take (AgentCard's `live`), so a lane draws one card size.
+            bigLane ? 'gap-2.5 p-4' : 'gap-2 p-3.5',
             /* Dashed, and that is the whole visual claim: this is a container of the solid cards around it
                rather than one of them. Everything else — fill, border, hover, the selection ring and the
                attention bar — is the session card's shared surface (.session-card in styles.css), the same one
@@ -56,11 +67,23 @@ const TONE: Record<WorkflowRun["state"], string> = {
         @keydown.space.self.prevent="emit(`open`)"
     >
         <div class="flex items-center gap-2.5">
-            <!-- Graph glyph where an agent card has its identity tile: one look says this row is a shape, not a session. -->
-            <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-primary-600/15">
-                <Icon name="sitemap" class="text-2xs text-link" />
+            <!--
+                Graph glyph where an agent card has its identity tile: one look says this row is a shape, not a
+                session. Two boxes, not one, so it lands on the agent tile's geometry exactly: an 18px mark centred
+                in the 26px slot the tile's context ring occupies (AgentCard). A run has no context of its own to
+                ring, but its title still has to start on the same axis as the titles under it.
+            -->
+            <span class="flex h-6.5 w-6.5 shrink-0 items-center justify-center">
+                <span class="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-md bg-primary-600/15">
+                    <Icon name="sitemap" class="text-2xs text-link" />
+                </span>
             </span>
-            <span class="min-w-0 flex-1 truncate text-xs font-semibold text-content">{{ run.workflow.name }}</span>
+            <!-- `break-words` for the reason AgentCard's title states: a clamp only ellipsises a VERTICAL overrun. -->
+            <span
+                class="min-w-0 flex-1 font-semibold text-content"
+                :class="bigLane ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs'"
+                >{{ run.workflow.name }}</span
+            >
             <!-- Wears the agent card's own attention chip, since the waiting step has no card of its own to wear it: the run answers on its behalf. -->
             <span
                 v-if="needsYou"

@@ -6,6 +6,7 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import { resetAgents } from "../../agents/fleet/useAgents";
+import { FINISHED_WINDOW } from "../../agents/fleet/useAgents-fleet";
 import { setAgents } from "../../agents/fleet/useAgents-registry";
 import { resetChat, useChat } from "../run/useChat";
 import { openAgentConversation } from "../panel/useChat-reveal";
@@ -165,6 +166,10 @@ const seedFinished = (count: number): void =>
         100,
     );
 
+// The ids a full window holds, derived from the window rather than transcribed: spelled out as a literal seven, each
+// of these cases failed the day the board's window became six with a diff about `done6` rather than about the cap.
+const windowIds = Array.from({ length: FINISHED_WINDOW }, (_, at) => `done${at}`);
+
 // Opens oldest first, leaving the newest as the focused chat: these cases test the cap, not the pin.
 const openFinished = (count: number): void => {
     for (let at = count - 1; at >= 0; at--) {
@@ -188,9 +193,9 @@ it(`caps the Finished lane and says how many it is holding back`, async () => {
     openFinished(10);
 
     await settle();
-    expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`, `done6`]);
+    expect(cardsOnScreen(el)).toEqual(windowIds);
     expect(el.querySelector(`section header span:nth-of-type(3)`)?.textContent?.trim()).toBe(`10`);
-    expect(tailRow(el)?.textContent?.trim()).toBe(`3 earlier`);
+    expect(tailRow(el)?.textContent?.trim()).toBe(`${10 - FINISHED_WINDOW} earlier`);
 });
 
 it(`opens the rest in place, and folds them back`, async () => {
@@ -208,7 +213,7 @@ it(`opens the rest in place, and folds them back`, async () => {
     tailRow(el)?.click();
 
     await settle();
-    expect(cardsOnScreen(el)).toHaveLength(7);
+    expect(cardsOnScreen(el)).toHaveLength(FINISHED_WINDOW);
 });
 
 it(`pins the chat being read into the window, however far down the lane it is`, async () => {
@@ -217,11 +222,12 @@ it(`pins the chat being read into the window, however far down the lane it is`, 
     openFinished(10);
     await settle();
 
-    openFromBoard(`done9`); // done9 is the oldest finished chat, three rows behind the fold.
+    openFromBoard(`done9`); // done9 is the oldest finished chat, several rows behind the fold.
 
     await settle();
-    expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`, `done6`, `done9`]);
-    expect(tailRow(el)?.textContent?.trim()).toBe(`2 earlier`);
+    expect(cardsOnScreen(el)).toEqual([...windowIds, `done9`]);
+    // The pin is on screen, so the row may only claim the rest of what the window left behind.
+    expect(tailRow(el)?.textContent?.trim()).toBe(`${10 - FINISHED_WINDOW - 1} earlier`);
 });
 
 it(`clears the whole lane from its header, whatever the window is showing`, async () => {

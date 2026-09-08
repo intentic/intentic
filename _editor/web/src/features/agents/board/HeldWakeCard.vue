@@ -10,7 +10,9 @@ import OriginMark from "../../../components/OriginMark.vue";
 // Approve/Reject sit on the card, not behind hover, since releasing it is the whole point; the countdown names the
 // auto-run alternative so it doesn't look like the board acted on its own.
 
-const { entry } = defineProps<{ entry: AutomationApproval; busy?: boolean }>();
+// `dense` is the stacked, narrow board, as AgentCard means it: same facts, drawn at the ledger's weight, since a
+// stacked board's lanes are told apart by their order rather than by how heavy their cards are.
+const { entry, dense } = defineProps<{ entry: AutomationApproval; busy?: boolean; dense?: boolean }>();
 const emit = defineEmits<{ approve: []; reject: [] }>();
 
 // First line of what fired: distinguishes two holds of the same automation (which otherwise share no payload).
@@ -37,15 +39,28 @@ const autoRunLabel = computed(() => {
 
 <template>
     <div
-        class="group flex w-full select-none flex-col gap-2 rounded-xl border border-dashed border-line bg-card p-3.5 text-left"
-        :class="busy ? 'pointer-events-none opacity-60' : ''"
+        class="group flex w-full select-none flex-col rounded-xl border border-dashed border-line bg-card text-left"
+        :class="[dense ? 'gap-2 p-3.5' : 'gap-2.5 p-4', busy ? 'pointer-events-none opacity-60' : '']"
     >
         <div class="flex items-center gap-2.5">
-            <!-- Pause glyph where an agent card has its identity tile: a held wake, not a session, nothing running yet. -->
-            <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-warning/15">
-                <Icon name="pause" class="text-2xs text-warning" />
+            <!--
+                Pause glyph where an agent card has its identity tile: a held wake, not a session, nothing running
+                yet. Two boxes for the same reason the workflow run's mark has two — an 18px mark centred in the
+                26px slot the agent tile's context ring occupies, so the titles in this lane start on one axis.
+            -->
+            <span class="flex h-6.5 w-6.5 shrink-0 items-center justify-center">
+                <span class="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-md bg-warning/15">
+                    <Icon name="pause" class="text-2xs text-warning" />
+                </span>
             </span>
-            <span class="min-w-0 flex-1 truncate text-xs font-semibold text-content">{{ entry.title ?? entry.automationId }}</span>
+            <!-- A hold only ever sits in Attention, so off the stacked board it is always drawn at the live card's weight (AgentCard's `live`). -->
+            <!-- `break-words` for the reason AgentCard's title states: a clamp only ellipsises a VERTICAL overrun, and an
+                 automation id is exactly the unbreakable run that overruns sideways instead. -->
+            <span
+                class="min-w-0 flex-1 font-semibold text-content"
+                :class="dense ? 'truncate text-xs' : 'line-clamp-2 break-words text-sm leading-snug'"
+                >{{ entry.title ?? entry.automationId }}</span
+            >
             <span class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning">held</span>
         </div>
         <div v-if="snippet !== undefined" class="truncate text-2xs text-muted">{{ snippet }}</div>

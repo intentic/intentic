@@ -31,7 +31,9 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
 }
 
 // How many finished entries show before the rest collapse behind one row; older ones remain reachable.
-export const FINISHED_WINDOW = 7;
+// Six rather than seven: Finished is the only self-filling lane, so it decides how tall the board reads, and the
+// fold below it is one press away. The number is small on purpose — the lane is a ledger you skim, not the work.
+export const FINISHED_WINDOW = 6;
 
 // Caps browsing, not existence: the currently open card is never culled even past the window, pinned at the tail
 // and excluded from the hidden count. Shared by both Finished lanes (board and chat list) so they can't disagree.

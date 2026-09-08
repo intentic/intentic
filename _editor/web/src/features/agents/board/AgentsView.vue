@@ -1155,6 +1155,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             :key="entry.id"
                             :entry="entry"
                             :busy="busyHeld.has(entry.id)"
+                            :dense="narrow"
                             @approve="releaseWake(entry.id, `approve`)"
                             @reject="releaseWake(entry.id, `reject`)"
                         />
@@ -1170,6 +1171,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             v-for="run in runsFor(lane.key)"
                             :key="run.runId"
                             :run="run"
+                            :dense="narrow"
                             :selected="chatRun?.runId === run.runId"
                             :needs-you="needingYou.has(run.runId)"
                             :stopping="stoppingRuns.has(run.runId)"
