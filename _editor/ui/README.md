@@ -19,6 +19,16 @@ Shared **Vue UI primitives + theme** for the platform web app. A small, reusable
 - Own the one button that starts an agent for you: `AgentRunButton`, a split button whose primary half runs on the sandbox's standing model FOR THAT JOB (the caller names its role: a pipeline fix and a documentation sweep are the same button and not the same spend) and whose caret re-points that single run — the model, the tier it thinks at, whether it reasons first, which account pays and whether the work is bought at the faster rate — plus `useAgentRunPick`, the state behind it. Seven surfaces press it (both Fix buttons, Maintenance, Documentation, Acceptance, a deployment incident and a failed pre-push check), and before it existed each had reached a different answer about how you choose what a click spends. **Both halves emit the same `run`**: the panel the caret opens ends in a bar carrying this button's own label, so configuring a run and starting it are one press rather than a dismissal followed by a second click. It takes the picker WHOLE (`:picker="fixModel"`) rather than the four values derived from it, because a row that named one picker's model above another picker's caret looked entirely correct while lying about what a click would spend. The picker itself is NOT here: it is a live read of connected accounts and catalogs, so the caller passes it in as `ModelPicking` and the kit stays free of both the app's state and the extension API.
 - It is **presentational/shared only**: no app state or data fetching.
 
+The shared `Icon` uses Intentic's own Khmer-inspired pack: square line ends, cut corners, lotus points,
+and clear interiors at small sizes. [iconSets.ts](src/icons/iconSets.ts) owns the semantic names and the
+section-to-icon mapping. The source drawings are grouped by navigation, actions, objects and states in
+`src/icons/*Glyphs.ts`; [glyph.ts](src/icons/glyph.ts) applies one stroke weight and `currentColor` to all of them.
+Vendor marks retain their recognisable artwork. Every drawing is bundled offline for both the editor and
+shared views; run `pnpm --filter @intentic/ui generate:icons` after editing a drawing or the name table.
+The generator rejects missing, duplicated and unused drawings. New icons should express their purpose with
+a distinct silhouette, without adding decoration inside a small control. Row lead marks have a 16px floor
+and use the muted text colour, with the selected navigation mark taking the active accent.
+
 ## Key files / exports
 
 - [src/index.ts](src/index.ts), the public surface, and the kit's own map: nearly every export carries a note saying what it replaced and why it exists. Read this before adding a component; the thing you want is usually already here under a name you did not guess.

@@ -84,7 +84,9 @@ const triggerClass = computed(() =>
          * opacity, no placeholder rule, and a focus state identical to its own hover. It wears `ui-field-box`
          * now, so a picker sitting in a form row beside a text input is the same control by construction, down
          * to the inset focus ring and the 16px mobile floor. */
-        variant === `input` ? `ui-field-box` : `ui-off rounded-md px-1.5 py-0.5 text-xs font-medium text-content hover:bg-overlay focus:outline-none focus-visible:bg-overlay`,
+        variant === `input`
+            ? `ui-field-box`
+            : `ui-off rounded-md px-1.5 py-0.5 text-xs font-medium text-content hover:bg-overlay focus:outline-none focus-visible:bg-overlay`,
         typeof attrs[`class`] === `string` ? attrs[`class`] : ``,
     ),
 );
@@ -161,7 +163,7 @@ const applyPick = (option: PickerOption<T>): void => {
                      right way round: a list of people is where you recognise a face, and a closed field is where
                      you confirm one you have already chosen. -->
                 <PersonaFace v-if="selected.face !== undefined" :persona="selected.face" :size="variant === `ghost` ? 16 : 20" />
-                <Icon v-else-if="selected.icon !== undefined" :name="selected.icon" class="shrink-0 text-xs text-muted" aria-hidden="true" />
+                <Icon v-else-if="selected.icon !== undefined" :name="selected.icon" class="shrink-0 text-sm text-muted" aria-hidden="true" />
             </slot>
         </template>
         <!-- The label reveals itself only when this span actually clips it. A native `title` on the BUTTON said

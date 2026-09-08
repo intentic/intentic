@@ -8,9 +8,9 @@
 
      DRAWN IN THE APP'S OWN HAND, which is the whole of what the first attempt got wrong. That one was chunky:
      2.5px rounded strokes around shapes filled with a wash, which is a sticker-illustration language this
-     product does not speak anywhere else. Every icon in the app is Remix's LINE set (ui/src/icons): a 24 grid,
-     hollow shapes, a thin even band, sharp geometry, small solid details. So these are the same drawings, in
-     the same band, at five times the size: 2px on a 132×76 stage, hollow, with one solid accent apiece. The
+     product does not speak anywhere else. The app's custom icon pack (ui/src/icons) uses hollow shapes,
+     an even band, sharp geometry and small solid details. These scenes share that vocabulary at a larger
+     scale: 2px on a 132×76 stage, hollow, with one solid accent apiece. The
      bolt is literally `ri:flashlight-line`'s own silhouette; the cloud is the one shape drawn fresh, and the
      comment on it says why a scaled-up `ri:cloud-line` had to be given up.
 
@@ -55,7 +55,7 @@ const popClass = (): string => (selected ? `text-link` : `text-muted`);
  * its radius, which is how a hand-written cloud ends up with one bump fatter than its neighbours. */
 const CLOUD = `M36 66h56a14 14 0 0 0 4-27.5a22 22 0 0 0-40-12a15 15 0 0 0-22 11a15 15 0 0 0 2 28.5z`;
 // …and `ri:flashlight-line`'s bolt, solid rather than hollow: at this size the accent is a mark, not an object,
-// and Remix fills its own small details (the LEDs on `ri:server-line`) exactly this way.
+// as the shared icon pack fills its small accent details.
 const BOLT = `M13 9h8L11 24v-9H4l9-15z`;
 // The band, in stage units: 2px at the size this renders. Both scaled groups pre-divide by their own scale,
 // since a transform scales the stroke with everything else.

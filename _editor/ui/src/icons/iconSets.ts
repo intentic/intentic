@@ -1,318 +1,187 @@
-// The app's icon vocabulary and how each name resolves. Keys are the stable semantic names (the old PrimeIcons
-// suffixes, verbatim); values are Iconify ids from Remix.
-//
-// ONE SET, and the id column is the only place a glyph is chosen. There used to be five complete sets here,
-// Phosphor, Solar, Remix, HugeIcons and PrimeIcons, behind a Settings control that let them be compared live in
-// the running app. That control had done its job: Remix was picked, and what was left was 530 lines of mappings
-// nobody read and a bundled SVG payload five times the size of the icons the app can actually draw. Comparing a
-// candidate set again is a branch, not a shipped feature.
-//
-// Every id referenced here is bundled offline: scripts/generateIconData.ts trims the used icons out of the full
-// @iconify-json/ri set into src/icons/iconData.generated.ts, which installUi() registers via addCollection. So no
-// runtime Iconify API fetch. Regenerate (pnpm --filter @intentic/ui generate:icons) whenever these change.
-
-export type IconName =
-    | "align-left"
-    | "angle-right"
-    | "arrow-circle-up"
-    | "arrow-down-left"
-    | "arrow-left"
-    | "arrow-right"
-    | "arrow-up-right"
-    | "arrows-h"
-    | "backward"
-    | "bars"
-    | "bolt"
-    | "book"
-    | "box"
-    | "boxes"
-    | "camera"
-    | "check"
-    | "check-circle"
-    | "check-square"
-    | "chevron-down"
-    | "chevron-right"
-    | "chevron-up"
-    | "circle"
-    | "circle-fill"
-    | "clock"
-    | "clone"
-    | "cloud"
-    | "cloud-upload"
-    | "code"
-    | "cog"
-    | "collapse-all"
-    | "cpu"
-    | "comments"
-    | "compress"
-    | "copy"
-    | "credit-card"
-    | "database"
-    | "desktop"
-    | "download"
-    | "ellipsis"
-    | "envelope"
-    | "eraser"
-    | "exclamation-circle"
-    | "exclamation-triangle"
-    | "expand"
-    | "external-link"
-    | "eye"
-    | "eye-slash"
-    | "file"
-    | "file-edit"
-    | "file-pdf"
-    | "file-tree"
-    | "filter"
-    | "folder"
-    | "folder-open"
-    | "fork"
-    | "forward"
-    | "gift"
-    | "github"
-    | "gitlab"
-    | "globe"
-    | "google"
-    | "hammer"
-    | "history"
-    | "image"
-    | "info-circle"
-    | "key"
-    | "layout-left"
-    | "link"
-    | "link-broken"
-    | "list-check"
-    | "lock"
-    | "microphone"
-    | "moon"
-    | "palette"
-    | "paperclip"
-    | "pause"
-    | "pencil"
-    | "picture-in-picture"
-    | "pin"
-    | "play"
-    | "plus"
-    | "plus-circle"
-    | "question-circle"
-    | "refresh"
-    | "repeat"
-    | "robot"
-    | "save"
-    | "search"
-    | "send"
-    | "server"
-    | "shield"
-    | "sign-in"
-    | "sign-out"
-    | "sitemap"
-    | "slack"
-    | "sliders-h"
-    | "sort-desc"
-    | "sparkles"
-    | "split-columns"
-    | "spinner"
-    | "square"
-    | "star"
-    | "star-fill"
-    | "stop"
-    | "sun"
-    | "sync"
-    | "terminal"
-    | "th-large"
-    | "times"
-    | "trash"
-    | "undo"
-    | "unlock"
-    | "upload"
-    | "user"
-    | "users"
-    | "volume-off"
-    | "volume-up"
-    | "wave-pulse"
-    | "wifi"
-    | "window-maximize"
-    | "window-minimize"
-    | "wrench";
-
-export const ICONS: Record<IconName, string> = {
-    "align-left": "ri:align-left",
-    "angle-right": "ri:arrow-right-s-line",
-    "arrow-circle-up": "ri:arrow-up-circle-line",
-    "arrow-down-left": "ri:arrow-left-down-line",
-    "arrow-left": "ri:arrow-left-line",
-    "arrow-right": "ri:arrow-right-line",
-    "arrow-up-right": "ri:arrow-right-up-line",
-    "arrows-h": "ri:arrow-left-right-line",
-    bars: "ri:menu-line",
-    bolt: "ri:flashlight-line",
-    book: "ri:book-open-line",
-    box: "ri:box-3-line",
-    /* MORE THAN ONE SANDBOX, the plural of `box` above: the stacked sheets read as "several of the same thing"
-     * where `box`'s single crate reads as "the one you are in". Used where a surface is about the account's
-     * boxes rather than this one (the rail's Agents tile while the board reads across, the composer's
-     * placement rows), so the two glyphs answer "here" and "everywhere" as a pair. */
-    boxes: "ri:stack-line",
-    camera: "ri:camera-line",
-    check: "ri:check-line",
-    "check-circle": "ri:checkbox-circle-line",
-    "check-square": "ri:checkbox-line",
-    "chevron-down": "ri:arrow-down-s-line",
-    "chevron-right": "ri:arrow-right-s-line",
-    "chevron-up": "ri:arrow-up-s-line",
-    circle: "ri:circle-line",
-    "circle-fill": "ri:circle-fill",
-    clock: "ri:time-line",
-    clone: "ri:file-copy-line",
-    cloud: "ri:cloud-line",
-    "cloud-upload": "ri:upload-cloud-line",
-    code: "ri:code-line",
-    cog: "ri:settings-3-line",
-    // Was a Phosphor borrow (`ph:arrows-in-line-vertical`) while five sets shipped. Remix's own converging-
-    // arrows glyph is the same idea and keeps the whole table on one prefix.
-    "collapse-all": "ri:collapse-vertical-line",
-    comments: "ri:chat-2-line",
-    /* A model whose weights run on the user's own hardware, in this sandbox: the picker's rail and rows draw it
-     * where a hosted provider draws its brand mark. A chip is the one glyph that says "this computation happens
-     * here" without saying which vendor; `server` is the neighbouring idea and stays with a REMOTE endpoint the
-     * user pointed us at, so the two never share a silhouette in the same rail. */
-    cpu: "ri:cpu-line",
-    copy: "ri:file-copy-line",
-    "credit-card": "ri:bank-card-line",
-    database: "ri:database-2-line",
-    desktop: "ri:device-line",
-    download: "ri:download-line",
-    // The row-overflow glyph: the actions a row has that don't earn a button of their own.
-    ellipsis: "ri:more-fill",
-    envelope: "ri:mail-line",
-    eraser: "ri:eraser-line",
-    "exclamation-circle": "ri:error-warning-line",
-    "exclamation-triangle": "ri:alert-line",
-    "external-link": "ri:external-link-line",
-    eye: "ri:eye-line",
-    "eye-slash": "ri:eye-off-line",
-    file: "ri:file-line",
-    "file-edit": "ri:file-edit-line",
-    "file-pdf": "ri:file-pdf-line",
-    /* The Workspace area's glyph, and deliberately NOT `folder`, see `robot` below for the pair's whole story.
-     * A branching tree is also the truer picture of that view: it opens on a file tree, not on one directory. */
-    "file-tree": "ri:node-tree",
-    filter: "ri:filter-3-line",
-    folder: "ri:folder-line",
-    "folder-open": "ri:folder-open-line",
-    /* Forking a CONVERSATION, which is why it is the branch glyph and not `ri:git-fork-line`: git's fork icon
-     * means a copy of somebody else's repository, where this means one line of talk splitting into two, the
-     * picture the cut line in the transcript is already drawing. */
-    fork: "ri:git-branch-line",
-    forward: "ri:forward-end-line",
-    /* The free allowance the product hands a new sandbox: given, not bought and not owned. Chosen over `star`
-     * (which reads as a favourite, and is already spent on that) and over `sparkles`, whose meaning here is
-     * "an AI thing", i.e. every row in the picker. */
-    gift: "ri:gift-line",
+// One offline icon vocabulary for the editor, its extensions and shared views.
+// The custom drawings live in *Glyphs.ts; vendor marks retain their recognisable brand artwork.
+// Regenerate the bundled collections with `pnpm --filter @intentic/ui generate:icons` after a drawing changes.
+export const ICONS = {
+    "align-left": "intentic:align-left",
+    "angle-right": "intentic:chevron-right",
+    approvals: "intentic:approvals",
+    "arrow-circle-up": "intentic:arrow-circle-up",
+    "arrow-down-left": "intentic:arrow-down-left",
+    "arrow-left": "intentic:arrow-left",
+    "arrow-right": "intentic:arrow-right",
+    "arrow-up-right": "intentic:arrow-up-right",
+    "arrows-h": "intentic:arrows-h",
+    automations: "intentic:automations",
+    backward: "intentic:backward",
+    bars: "intentic:bars",
+    bolt: "intentic:bolt",
+    book: "intentic:book",
+    box: "intentic:box",
+    boxes: "intentic:boxes",
+    browsers: "intentic:browsers",
+    camera: "intentic:camera",
+    check: "intentic:check",
+    "check-circle": "intentic:check-circle",
+    "check-square": "intentic:check-square",
+    "chevron-down": "intentic:chevron-down",
+    "chevron-right": "intentic:chevron-right",
+    "chevron-up": "intentic:chevron-up",
+    circle: "intentic:circle",
+    "circle-fill": "intentic:circle-fill",
+    clock: "intentic:clock",
+    clone: "intentic:copy",
+    cloud: "intentic:cloud",
+    "cloud-upload": "intentic:cloud-upload",
+    code: "intentic:code",
+    cog: "intentic:cog",
+    "collapse-all": "intentic:collapse-all",
+    comments: "intentic:comments",
+    compress: "intentic:compress",
+    copy: "intentic:copy",
+    cpu: "intentic:cpu",
+    "credit-card": "intentic:credit-card",
+    database: "intentic:database",
+    deployments: "intentic:deployments",
+    desktop: "intentic:desktop",
+    download: "intentic:download",
+    ellipsis: "intentic:ellipsis",
+    envelope: "intentic:envelope",
+    eraser: "intentic:eraser",
+    "exclamation-circle": "intentic:exclamation-circle",
+    "exclamation-triangle": "intentic:exclamation-triangle",
+    expand: "intentic:expand",
+    extensions: "intentic:extensions",
+    "external-link": "intentic:external-link",
+    eye: "intentic:eye",
+    "eye-slash": "intentic:eye-slash",
+    file: "intentic:file",
+    "file-edit": "intentic:file-edit",
+    "file-pdf": "intentic:file-pdf",
+    "file-tree": "intentic:file-tree",
+    filter: "intentic:filter",
+    folder: "intentic:folder",
+    "folder-open": "intentic:folder-open",
+    fork: "intentic:fork",
+    forward: "intentic:forward",
+    gift: "intentic:gift",
     github: "ri:github-line",
     gitlab: "ri:gitlab-line",
-    globe: "ri:global-line",
+    globe: "intentic:globe",
     google: "ri:google-line",
-    /* What a run DID, as opposed to what it said: the tool calls under a message. A hammer is the plainest
-     * picture of work being done with something, and it stays legible at the size the composer strip draws it,
-     * `wrench` at that size is a thin diagonal smudge, and it is already spoken for by settings-ish surfaces. */
-    hammer: "ri:hammer-line",
-    history: "ri:history-line",
-    image: "ri:image-line",
-    "info-circle": "ri:information-line",
-    key: "ri:key-2-line",
-    // A panel docked at a frame's left edge, the chat's "dock to rail" verb (the rail is the app's left
-    // column). Not `expand`: that glyph promises fullscreen, and the action is a docking, not a maximise.
-    "layout-left": "ri:layout-left-line",
-    link: "ri:link",
-    // A symlink whose target isn't there (or isn't reachable), the chain, drawn snapped.
-    "link-broken": "ri:link-unlink",
-    "list-check": "ri:list-check",
-    lock: "ri:lock-2-line",
-    microphone: "ri:mic-line",
-    moon: "ri:moon-line",
-    palette: "ri:palette-line",
-    paperclip: "ri:attachment-line",
-    pencil: "ri:pencil-line",
-    // Keeping something that would otherwise go: the chat rail's and the board's "keep this open" press, on a
-    // tab the strip is holding only while you look at it (Conversation.peek).
-    pin: "ri:pushpin-2-line",
-    play: "ri:play-line",
-    backward: "ri:rewind-mini-line",
-    compress: "ri:fullscreen-exit-line",
-    expand: "ri:fullscreen-line",
-    pause: "ri:pause-line",
-    "picture-in-picture": "ri:picture-in-picture-line",
-    repeat: "ri:repeat-2-line",
-    "volume-off": "ri:volume-mute-line",
-    "volume-up": "ri:volume-up-line",
-    plus: "ri:add-line",
-    "plus-circle": "ri:add-circle-line",
-    "question-circle": "ri:question-line",
-    refresh: "ri:refresh-line",
-    /* The Agents area's glyph. AT RAIL SIZE AN ICON IS ITS SILHOUETTE: 18px of 1.5px stroke resolves the outer
-     * shape and roughly how full the middle is, and nothing finer. Agents wore `comments` and Workspace wore
-     * `folder`, which are the same silhouette: a thin outlined box filling the tile, told apart only by a bump
-     * two pixels wide (a bubble's tail, a folder's tab). They sit adjacent in the rail's Work band, so the two
-     * tiles the app is used from were the two nobody could tell apart. `desktop` (Browsers) is a third box.
-     *
-     * The fix is to leave the family rather than redraw the bump: a round-ish head with eyes reads as a face at
-     * any size, and Workspace's `file-tree` reads as branching. Not a people glyph (`users`/`team`). Subagents
-     * already wears `users`, and that only moves the collision down the rail. Not a filled variant of the same
-     * shape either: it separates them, but a solid tile in an all-outline set reads as "unread". */
-    robot: "ri:robot-2-line",
-    save: "ri:save-line",
-    search: "ri:search-line",
-    send: "ri:send-plane-line",
-    server: "ri:server-line",
-    shield: "ri:shield-check-line",
-    "sign-in": "ri:login-box-line",
-    "sign-out": "ri:logout-box-line",
-    sitemap: "ri:organization-chart",
-    // One of the few brands the icon CDN cannot serve at all, it holds no Slack mark, so the card that wants
-    // one has to find it here or fall to a generic speech bubble, which is what it did.
+    hammer: "intentic:hammer",
+    history: "intentic:history",
+    image: "intentic:image",
+    "info-circle": "intentic:info-circle",
+    infrastructure: "intentic:infrastructure",
+    key: "intentic:key",
+    knowledge: "intentic:knowledge",
+    "layout-left": "intentic:layout-left",
+    link: "intentic:link",
+    "link-broken": "intentic:link-broken",
+    "list-check": "intentic:list-check",
+    lock: "intentic:lock",
+    maintenance: "intentic:maintenance",
+    microphone: "intentic:microphone",
+    moon: "intentic:moon",
+    palette: "intentic:palette",
+    paperclip: "intentic:paperclip",
+    pause: "intentic:pause",
+    pencil: "intentic:pencil",
+    "picture-in-picture": "intentic:picture-in-picture",
+    pin: "intentic:pin",
+    pipelines: "intentic:pipelines",
+    play: "intentic:play",
+    plus: "intentic:plus",
+    "plus-circle": "intentic:plus-circle",
+    ports: "intentic:ports",
+    "question-circle": "intentic:question-circle",
+    refresh: "intentic:refresh",
+    repeat: "intentic:repeat",
+    robot: "intentic:robot",
+    save: "intentic:save",
+    search: "intentic:search",
+    send: "intentic:send",
+    server: "intentic:server",
+    shield: "intentic:shield",
+    "sign-in": "intentic:sign-in",
+    "sign-out": "intentic:sign-out",
+    sitemap: "intentic:sitemap",
     slack: "ri:slack-line",
-    "sliders-h": "ri:equalizer-line",
-    /* BIGGEST FIRST: the reading-order toggle on both review lists (composables/workspace/changeWeight.ts). Bars
-     * of decreasing length, which is the same encoding the rail beside each row uses, so the button and what it
-     * does to the list are drawn in one language. `sort-number-desc` is the neighbouring glyph and is not used:
-     * its 9→1 annotation is mush at the 12px these bars are drawn at. */
-    "sort-desc": "ri:sort-desc",
-    sparkles: "ri:sparkling-line",
-    /* The editor's second pane: two columns, which is the whole of what the verb does. Both directions wear it
-     * ("Open to the Side", and the button that folds the split back), because they are one toggle and a second
-     * glyph would ask the reader to learn which arrow means which. Not `window-maximize`, which promises
-     * fullscreen, and not `th-large`, which is a grid of four and belongs to boards. */
-    "split-columns": "ri:layout-column-line",
-    spinner: "ri:loader-4-line",
-    square: "ri:checkbox-blank-line",
-    star: "ri:star-line",
-    "star-fill": "ri:star-fill",
-    stop: "ri:stop-circle-line",
-    sun: "ri:sun-line",
-    sync: "ri:restart-line",
-    terminal: "ri:terminal-box-line",
-    "th-large": "ri:layout-grid-line",
-    times: "ri:close-line",
-    trash: "ri:delete-bin-line",
-    undo: "ri:arrow-go-back-line",
-    unlock: "ri:lock-unlock-line",
-    upload: "ri:upload-line",
-    user: "ri:user-line",
-    users: "ri:group-line",
-    "wave-pulse": "ri:pulse-line",
-    wifi: "ri:wifi-line",
-    "window-maximize": "ri:fullscreen-line",
-    "window-minimize": "ri:fullscreen-exit-line",
-    wrench: "ri:wrench-line",
+    "sliders-h": "intentic:sliders-h",
+    "sort-desc": "intentic:sort-desc",
+    sparkles: "intentic:sparkles",
+    spinner: "intentic:spinner",
+    "split-columns": "intentic:split-columns",
+    square: "intentic:square",
+    star: "intentic:star",
+    "star-fill": "intentic:star-fill",
+    stop: "intentic:stop",
+    subagents: "intentic:subagents",
+    sun: "intentic:sun",
+    sync: "intentic:refresh",
+    terminal: "intentic:terminal",
+    "th-large": "intentic:th-large",
+    times: "intentic:times",
+    trash: "intentic:trash",
+    undo: "intentic:undo",
+    unlock: "intentic:unlock",
+    upload: "intentic:upload",
+    usage: "intentic:usage",
+    user: "intentic:user",
+    users: "intentic:users",
+    "volume-off": "intentic:volume-off",
+    "volume-up": "intentic:volume-up",
+    vpn: "intentic:vpn",
+    "wave-pulse": "intentic:wave-pulse",
+    wifi: "intentic:wifi",
+    "window-maximize": "intentic:expand",
+    "window-minimize": "intentic:compress",
+    wrench: "intentic:wrench",
+} as const;
+
+export type IconName = keyof typeof ICONS;
+
+/** Extension APIs accept open strings. An unknown name must fall back instead of drawing a blank. */
+export const isIconName = (name: string): name is IconName => Object.hasOwn(ICONS, name);
+
+/** Views choose by subject, so their navigation mark is the same in the rail, menus and hub indexes. */
+const AREA_ICONS: Readonly<Record<string, IconName>> = {
+    chat: `comments`,
+    agents: `robot`,
+    workspace: `folder`,
+    preview: `eye`,
+    approvals: `approvals`,
+    acceptance: `list-check`,
+    pipelines: `pipelines`,
+    deployments: `deployments`,
+    maintenance: `maintenance`,
+    workflows: `sitemap`,
+    automations: `automations`,
+    documentation: `book`,
+    infrastructure: `infrastructure`,
+    "live-status": `wave-pulse`,
+    browsers: `browsers`,
+    subagents: `subagents`,
+    terminal: `terminal`,
+    vpn: `vpn`,
+    ports: `ports`,
+    capabilities: `plus`,
+    more: `ellipsis`,
+    menu: `bars`,
+    issues: `exclamation-triangle`,
+    activity: `wave-pulse`,
+    public: `cloud-upload`,
+    knowledge: `knowledge`,
+    overview: `th-large`,
+    usage: `usage`,
+    environment: `box`,
+    secrets: `key`,
+    agent: `robot`,
+    extensions: `extensions`,
+    access: `shield`,
+    personas: `user`,
+    devices: `desktop`,
 };
 
-/* Is this string a name the app can actually draw?
- *
- * Every icon name that arrives from OUTSIDE the app is an open string, `Activation.icon`, a manifest's `icon`,
- * a capability card's, a document offer's, because a third-party extension is written against a build that
- * has not shipped yet and must install anyway. <Icon> takes the closed `IconName`, so the cast has to be
- * checked somewhere, and an UNchecked one is not a loud failure: `ICONS[name]` is undefined, Iconify renders
- * nothing, and the tile comes up blank (which shipped once, as `book`). Asking here lets a renderer fall to its
- * next tier, a glyph, then initials, instead of to a hole. */
-export const isIconName = (name: string): name is IconName => name in ICONS;
+export const areaIcon = (area: string, fallback?: IconName): IconName | undefined =>
+    Object.hasOwn(AREA_ICONS, area) ? AREA_ICONS[area] : fallback !== undefined && isIconName(fallback) ? fallback : undefined;

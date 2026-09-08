@@ -96,8 +96,8 @@ const onRowClick = (event: MouseEvent, item: MenuItem): void => {
                 <span v-if="hasGutter" class="flex w-3.5 shrink-0 justify-center">
                     <!-- A checkable row draws its state even when false: the gutter holds the space either
                          way, so the label cannot shift as the toggle flips. -->
-                    <Icon v-if="`checked` in item" v-show="item['checked'] === true" name="check" class="text-2xs text-muted" />
-                    <Icon v-else-if="item.icon" :name="item.icon as IconName" class="text-2xs" />
+                    <Icon v-if="`checked` in item" v-show="item['checked'] === true" name="check" class="text-sm text-muted" />
+                    <Icon v-else-if="item.icon" :name="item.icon as IconName" class="text-sm" />
                 </span>
                 <!-- The label, and under it the row's own consequence when it has one to state. A `hint` is for
                      the menus whose rows are CHOICES rather than commands: "Fork" and "Fork chat only" differ

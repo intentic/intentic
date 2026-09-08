@@ -2,7 +2,7 @@
 import { afterEach, expect, it } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import Icon from "@intentic/ui/icon";
-import type { IconName } from "../../../ui/src/icons/iconSets.js";
+import { areaIcon, ICONS, isIconName, type IconName } from "../../../ui/src/icons/iconSets.js";
 import { installUi } from "../../../ui/src/plugin.js";
 
 let app: App | undefined;
@@ -81,4 +81,40 @@ it(`announces a glyph that was given a label`, async () => {
 // name rather than about which attribute carries it.
 it(`announces a glyph named by its title`, async () => {
     expect((await svgOf({ name: `clock`, title: `Waiting` })).getAttribute(`aria-hidden`)).toBeNull();
+});
+
+it(`renders the whole offline vocabulary, including the custom collection, with one geometry and stroke weight`, async () => {
+    const names = Object.keys(ICONS) as IconName[];
+    const host = document.createElement(`div`);
+    document.body.append(host);
+    app = createApp({
+        render: () =>
+            h(
+                `div`,
+                names.map((name) => h(Icon, { name, "data-icon-name": name })),
+            ),
+    });
+    installUi(app);
+    app.mount(host);
+    await nextTick();
+
+    const rendered = [...host.querySelectorAll(`svg`)];
+    expect(rendered.map((svg) => svg.getAttribute(`data-icon-name`))).toEqual(names);
+    for (const [at, svg] of rendered.entries()) {
+        expect(svg.getAttribute(`viewBox`)).toBe(`0 0 24 24`);
+        expect(svg.querySelectorAll(`path`).length).toBeGreaterThan(0);
+        if (ICONS[names[at]!].startsWith(`intentic:`)) {
+            expect(svg.querySelector(`g`)?.getAttribute(`stroke-width`)).toBe(`2`);
+        }
+    }
+});
+
+it(`keeps section meanings consistent while accepting valid extension fallbacks`, () => {
+    expect(areaIcon(`terminal`, `code`)).toBe(`terminal`);
+    expect(areaIcon(`workspace`, `file-tree`)).toBe(`folder`);
+    expect(areaIcon(`agent`, `sparkles`)).toBe(`robot`);
+    expect(areaIcon(`third-party-view`, `camera`)).toBe(`camera`);
+    expect(areaIcon(`third-party-view`)).toBeUndefined();
+    expect(isIconName(`constructor`)).toBe(false);
+    expect(isIconName(`toString`)).toBe(false);
 });

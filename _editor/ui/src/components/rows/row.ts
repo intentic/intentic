@@ -26,9 +26,8 @@ export type RowDensity = `comfortable` | `compact` | `dense`;
 export type RowTone = `default` | `danger` | `warning` | `success` | `info`;
 
 /* A tier is read in one place rather than reassembled from five ternaries down a template.
- * THE ICON SCALES WITH THE TIER. It used to be a flat `text-lg`, which is right for a settings row and a third
- * too big beside a rail row's `text-xs` title: the icon then reads as the row's subject and the name as its
- * annotation, which is backwards.
+ * THE ICON SCALES WITH THE TIER, with a 16px floor for the lead mark. A section's silhouette has to survive
+ * beside a small label; shrinking it to the label's 12px turned keys and faces into indistinct scratches.
  *
  * `mark` IS THE SAME ARGUMENT FOR THE OTHER LEAD, and it is a NUMBER because the components it feeds take
  * pixels. <BrandMark> and <Avatar> each say in writing why they refuse a scale, and they are right: they are
@@ -43,9 +42,9 @@ export type RowTone = `default` | `danger` | `warning` | `success` | `info`;
  * mark it is drawing — which is how 32 got there in the first place. <Row> hands this out as a `#lead` slot
  * prop, so no call site types it at all. */
 export const ROW_TIERS = {
-    comfortable: { pad: `px-4.5 py-3.5`, gap: `gap-3`, icon: `text-lg`, title: `font-semibold leading-tight`, description: `text-xs`, mark: 28 },
-    compact: { pad: `px-4 py-2.5`, gap: `gap-3`, icon: `text-sm`, title: `text-sm font-medium leading-tight`, description: `text-2xs`, mark: 22 },
-    dense: { pad: `px-2.5 py-2`, gap: `gap-2.5`, icon: `text-xs`, title: `text-xs font-medium leading-tight`, description: `text-2xs`, mark: 18 },
+    comfortable: { pad: `px-4.5 py-3.5`, gap: `gap-3`, icon: `text-xl`, title: `font-semibold leading-tight`, description: `text-xs`, mark: 28 },
+    compact: { pad: `px-4 py-2.5`, gap: `gap-3`, icon: `text-lg`, title: `text-sm font-medium leading-tight`, description: `text-2xs`, mark: 22 },
+    dense: { pad: `px-2.5 py-2`, gap: `gap-2.5`, icon: `text-base`, title: `text-xs font-medium leading-tight`, description: `text-2xs`, mark: 18 },
 } as const satisfies Record<RowDensity, Record<string, string | number>>;
 
 /* The lead icon's colour, as a tone rather than as a class the caller brings. The three semantic ones are not
@@ -54,7 +53,7 @@ export const ROW_TIERS = {
  * previously spelled at its own call site, which is why one of them was `text-base` while its neighbours were
  * `text-lg`. `info` is the link colour, kept off the name `link` because nothing here navigates. */
 export const ROW_TONES = {
-    default: `text-subtle`,
+    default: `text-muted`,
     danger: `text-danger`,
     warning: `text-warning`,
     success: `text-success`,

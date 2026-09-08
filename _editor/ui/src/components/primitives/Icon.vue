@@ -43,7 +43,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => motionQuery?.removeEventListener(`change`, readMotionPreference));
 
-/* Remix is the one icon set and every glyph occupies a 24×24 view box (icons/iconSets.ts). SMIL stays outside
+/* Every glyph occupies a 24×24 view box (icons/iconSets.ts). SMIL stays outside
  * the CSS Animations model that makes DevTools replace its Styles rows, while still leaving a running mark for
  * work in progress. Reduced motion keeps the established slower, rather than frozen, spinner. */
 const spinningBody = computed(
@@ -68,12 +68,5 @@ svg {
     display: inline-block;
     vertical-align: -0.125em;
     flex: none;
-}
-
-/* Remix draws inside a smaller optical box than the other sets do, so its glyphs read a touch small beside
-   text at the same font size. Unconditional now that Remix is the only set. */
-.ui-icon {
-    scale: 1.08;
-    transform-origin: center;
 }
 </style>

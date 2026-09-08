@@ -119,7 +119,7 @@ const nameOf = (option: { label: string; title?: string; markTitle?: string; mar
             ]"
             @click="model = option.value"
         >
-            <Icon v-if="option.icon !== undefined" :name="option.icon" class="mr-1.5 text-2xs" /><!--
+            <Icon v-if="option.icon !== undefined" :name="option.icon" class="mr-1.5 text-sm" /><!--
             -->{{ option.label
             }}<span v-if="option.mark !== undefined" class="ml-1 rounded-full bg-primary-600/15 px-1 text-2xs text-link"
                 ><Icon :name="option.mark" /></span

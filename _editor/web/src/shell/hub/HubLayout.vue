@@ -22,6 +22,7 @@
      failure, caused by a 56rem content cap that does not apply once the page is the whole screen. -->
 <script setup lang="ts">
 import { type IconName, type NavGroup, NavRail, Row, SegmentedControl, SplitView } from "@intentic/ui";
+import { areaIcon } from "@intentic/ui/icons";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { badgeClass, badgeText } from "../../core-views/viewBadge";
@@ -111,7 +112,14 @@ watch(
                     <!-- <Row> is presentational by design and owns no router, so an internal-nav row wraps it:
                          which is what buys back the href the strip never had. -->
                     <RouterLink :key="tab.slug" :to="linkTo(tab.slug)" class="block">
-                        <Row as="div" density="dense" :icon="tab.icon" :title="tab.label" :selected="tab.slug === activeSlug" class="rounded-lg">
+                        <Row
+                            as="div"
+                            density="dense"
+                            :icon="areaIcon(tab.slug, tab.icon)"
+                            :title="tab.label"
+                            :selected="tab.slug === activeSlug"
+                            class="rounded-lg"
+                        >
                             <!-- A fact about the section, so it rides the row's #meta cluster. Same chip the
                                  rail's tiles wear, same tone table: a count here and a count there are the
                                  same claim and should not be two shades apart. -->

@@ -274,7 +274,13 @@ const picked = as === `button`;
                      leaves the call site with nothing to get wrong — `<template #lead="{ mark }">` — and it
                      tracks the group's density for free, which a constant read at the call site would not. -->
                         <slot name="lead" :mark="TIERS[tier].mark" />
-                        <Icon v-if="icon !== undefined" :name="icon" :spin="spin" class="shrink-0" :class="[TIERS[tier].icon, TONES[tone]]" />
+                        <Icon
+                            v-if="icon !== undefined"
+                            :name="icon"
+                            :spin="spin"
+                            class="shrink-0"
+                            :class="[TIERS[tier].icon, selected && tone === `default` ? `text-link` : TONES[tone]]"
+                        />
                         <div class="min-w-0" @click="onHeadlineClick">
                             <component
                                 :is="heading === undefined ? `div` : `h${heading}`"
