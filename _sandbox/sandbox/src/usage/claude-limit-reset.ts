@@ -2,38 +2,23 @@ import type { LimitResetClaim, LimitResetStatus } from "@intentic/sandbox-contra
 import { asRecord, asString, resetFromIso } from "./payload.js";
 import { type ClaudeStore, ensureFreshToken } from "../runtimes/claude/claude-credentials.js";
 
-/* REOPENING A SPENT SESSION WINDOW WITHOUT WAITING FOR IT, which is the one thing a refused turn could never
- * be offered here, and the reason people were told to sit out a five-hour window with a weekly allowance three
- * quarters full.
+/* Anthropic's once-a-week session reset. It reopens the five-hour pool and leaves weekly usage unchanged.
+ * The endpoints and program name match Claude Code's /limit-reset implementation.
  *
- * Anthropic grants this once a week per account: the five-hour pool reopens immediately, the WEEKLY pool is
- * untouched and still binds. Upstream's CLI spells it `/limit-reset` and calls the programme `juniper_tide`,
- * which is the word both endpoints below answer under.
+ * Eligibility is not enrollment. On 2026-09-08 the affected account returned eligible=true, available=true,
+ * in_experiment=false and arm=null, then refused the claim with result=ineligible. Claude Code 2.1.263 gates
+ * its offer on arm="reset" as well as availability. Without that check we offered a reset the account could
+ * not claim. Control and unenrolled accounts must not see the offer, even when their general eligibility
+ * passes. The provider may change its rollout independently of these client checks; a refused claim still
+ * has to say what happened without guessing that the user's plan is wrong.
  *
- * WHY THIS WAS PREVIOUSLY BELIEVED IMPOSSIBLE, because the note that said so is still next door in the editor
- * (limitFallback.ts) and was wrong for a reason worth writing down. The eligibility block comes back on the
- * SAME usage endpoint this directory has read all along — and it comes back `null` unless the request says it
- * is Claude Code. Read it the way our own reader reads it and the provider answers `ineligible_reason:
- * "surface"` for every account on every plan, which is indistinguishable from "the feature is off for you".
- * One header apart, the same accounts answer `eligible: true, available: true`.
+ * The User-Agent identifies the Claude Code surface used by our Agent SDK turns. Without it the provider
+ * answers ineligible_reason="surface". Its version is pinned because the SDK package and bundled CLI use
+ * different versions; an unsupported version is reported as ineligible_reason="cli_version".
  *
- * WHICH IS WHY THE USER AGENT IS NOT DECORATION. It is the request's claim about which surface is asking, the
- * provider gates the grant on it, and the claim is TRUE: a native Claude turn in this sandbox runs on the
- * Agent SDK's bundled Claude Code, so the allowance being asked about is spent by that CLI. Pinned rather than
- * derived because the SDK ships the CLI as a platform-specific binary with its own version line (the npm
- * package's version is not the CLI's), and a User-Agent assembled from the wrong one would fail the same way
- * sending none does. translator-usage.ts pins Codex's and Antigravity's for the same reason.
- *
- * A PIN THAT GOES STALE FAILS LEGIBLY, which is why it is an acceptable pin. The provider grades the version
- * separately from the surface, `cli_version` is its own refusal beside `surface` in the reasons it answers
- * with, so a version it has stopped accepting comes back as that word, rides out on the status, and is what
- * somebody reads when the button stops appearing. Neither failure is silent and neither can claim a grant that
- * is not there.
- *
- * NOTHING HERE POLLS. `at_wall=1` tells the provider the account has just been refused, which is a claim, and
- * a sweep making it every few minutes for every connection would be making it falsely; the endpoint also rate
- * limits reads hard enough that a second poller would cost the meters their freshness. So the probe happens
- * once, when a turn has actually been refused and somebody is looking at the strip that says so. */
+ * Probe only when a refused turn is on screen: at_wall=1 asserts that fact, and the endpoint rate limits
+ * reads. A transient failure must remain unanswered so the next strip can retry, never cached as no grant.
+ */
 
 const USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage?at_wall=1&skip_spend=1";
 const PROFILE_ENDPOINT = "https://api.anthropic.com/api/oauth/profile";
@@ -54,16 +39,13 @@ const PROBE_TIMEOUT_MS = 8_000;
 // The claim is the press itself, so it is given room to land. Upstream waits 25s on the same call.
 const CLAIM_TIMEOUT_MS = 25_000;
 
-// Nothing to offer, said the same way for every reason there is nothing: no such account, a credential that
-// cannot be refreshed, a provider that answered with no block, a network that did not answer at all. The
-// button is drawn from `available` alone, so every one of these correctly draws nothing.
+// A known absence of a grant. A failed probe returns undefined instead: caching a 429 as this answer hid
+// an eligible account's reset for the rest of the page's life.
 const NOTHING: LimitResetStatus = { available: false };
 
-/* The provider's block, transcribed. `eligible` and `available` are separate facts upstream and both must hold:
- * eligibility is about the account (its plan, its age, its surface), availability about this week (whether the
- * grant is already spent). Either one false is a button that must not be drawn, and the reason says which. */
+/* The offer requires general eligibility, an unspent grant, and enrollment in the reset arm. */
 const statusFrom = (block: Record<string, unknown>): LimitResetStatus => {
-    const available = block[`eligible`] === true && block[`available`] === true;
+    const available = block[`eligible`] === true && block[`available`] === true && block[`arm`] === "reset";
     const reason = asString(block[`ineligible_reason`]);
     const nextAvailableAt = resetFromIso(block[`next_available_at`]);
     const weeklyResetsAt = resetFromIso(block[`weekly_resets_at`]);
@@ -75,7 +57,7 @@ const statusFrom = (block: Record<string, unknown>): LimitResetStatus => {
     };
 };
 
-export const readLimitReset = async (store: ClaudeStore, id: string, fetchFn: typeof fetch = fetch): Promise<LimitResetStatus> => {
+export const readLimitReset = async (store: ClaudeStore, id: string, fetchFn: typeof fetch = fetch): Promise<LimitResetStatus | undefined> => {
     const token = await ensureFreshToken(store, id).catch(() => undefined);
     if (token === undefined) {
         return NOTHING;
@@ -83,14 +65,18 @@ export const readLimitReset = async (store: ClaudeStore, id: string, fetchFn: ty
     try {
         const response = await fetchFn(USAGE_ENDPOINT, { headers: headers(token), signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
         if (!response.ok) {
-            return NOTHING;
+            return response.status === 401 || response.status === 403 ? NOTHING : undefined;
         }
-        const block = asRecord(asRecord(await response.json())?.[PROGRAM]);
+        const body = asRecord(await response.json());
+        if (body === undefined || !(PROGRAM in body)) {
+            return undefined;
+        }
+        const block = asRecord(body[PROGRAM]);
         // `null` is what an account outside the programme gets, and it is a real answer rather than a failure:
         // an organisation-managed plan is told nothing at all here, where a personal one is told why not.
-        return block === undefined ? NOTHING : statusFrom(block);
+        return body[PROGRAM] === null ? NOTHING : block === undefined || typeof block[`eligible`] !== "boolean" ? undefined : statusFrom(block);
     } catch {
-        return NOTHING;
+        return undefined;
     }
 };
 

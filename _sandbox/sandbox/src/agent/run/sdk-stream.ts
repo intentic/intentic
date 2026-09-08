@@ -340,6 +340,7 @@ class TurnFold {
     // The agent's working checklist, reassembled from the Task tool family. Their tool_use ids are remembered
     // so the result path suppresses their cards too, the list IS their render.
     private readonly checklist = new TaskChecklist();
+    private inheritedChecklist: TodoItem[] | undefined;
     private readonly checklistToolIds = new Set<string>();
     // Of those, the ones a SUBAGENT made (see onChecklistCall): their cards are suppressed like any other
     // checklist verb, and their results are kept away from this conversation's list.
@@ -386,7 +387,7 @@ class TurnFold {
         if (!this.sessionSent && typeof sessionId === "string" && sessionId !== "") {
             this.sessionSent = true;
             yield { kind: "session", sessionId };
-            yield* this.adoptChecklist(sessionId);
+            this.adoptChecklist(sessionId);
         }
         // The session a child's transcript is filed under, onto the handle the hooks close over, see SubagentTurn.
         const subagents = this.args.subagents;
@@ -452,8 +453,10 @@ class TurnFold {
             };
         };
         if (event.type === "content_block_delta" && event.delta?.type === "text_delta" && typeof event.delta.text === "string") {
+            yield* this.showInheritedChecklist();
             yield { kind: "delta", text: event.delta.text, ...opt("parentToolUseId", parent) };
         } else if (event.type === "content_block_delta" && event.delta?.type === "thinking_delta" && typeof event.delta.thinking === "string") {
+            yield* this.showInheritedChecklist();
             yield { kind: "thinking", text: event.delta.thinking, ...opt("parentToolUseId", parent) };
         } else if (event.type === "content_block_start" && event.content_block?.type === "text" && event.index !== undefined) {
             this.textBlocks.set(parent ?? "", event.index);
@@ -475,6 +478,7 @@ class TurnFold {
             yield await errorFrame(message, this.args.allowance, this.args.trial);
             return;
         }
+        yield* this.showInheritedChecklist();
         const content = message.message.content as ReadonlyArray<{ type: string; id?: string; name?: string; input?: unknown }>;
         for (const block of content) {
             const call = toolUseOf(block);
@@ -523,16 +527,20 @@ class TurnFold {
      * render last session's rows and let this session's first create overwrite one of them, so a seed for any
      * other session is dropped unread, and the fold stays as empty as a first turn's.
      *
-     * Emitted as a frame, not only folded into the reducer: the chat shows the list from the turn's first
-     * moment rather than from its first update, and the registry's copy of the same frame is what the finish
-     * measures (agents-registry's unfinishedOf), so a turn that never touches its list still ends on the list
-     * as it stands rather than on the count some earlier turn wrote down. */
-    private *adoptChecklist(sessionId: string): Generator<AgentEvent> {
+     * Seed the reducer immediately so updates can resolve old task ids, but publish only once the provider
+     * answers. An init followed by a usage refusal did no work: publishing here created another checklist
+     * bubble on every failed retry. The registry already carries unfinished work across refused turns. */
+    private adoptChecklist(sessionId: string): void {
         const seed = this.args.checklistSeed;
         if (seed === undefined || seed.sessionId !== sessionId) {
             return;
         }
-        const items = this.checklist.seed(seed.tasks);
+        this.inheritedChecklist = this.checklist.seed(seed.tasks);
+    }
+
+    private *showInheritedChecklist(): Generator<AgentEvent> {
+        const items = this.inheritedChecklist;
+        this.inheritedChecklist = undefined;
         if (items !== undefined) {
             yield { kind: "todos", items };
         }

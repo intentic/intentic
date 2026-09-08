@@ -106,4 +106,5 @@ it(`says which kind of nothing happened, and says nothing at all about a reset t
     // A transient failure carries the daemon's own sentence when it has one, and a retryable fallback when not.
     expect(limitResetNote({ result: `error`, detail: `The provider answered 503.` })).toBe(`The provider answered 503.`);
     expect(limitResetNote({ result: `unavailable` })).toMatch(/try again/i);
+    expect(limitResetNote({ result: `ineligible` })).toBe(`Anthropic didn't grant this account a reset. Its current limit still applies.`);
 });

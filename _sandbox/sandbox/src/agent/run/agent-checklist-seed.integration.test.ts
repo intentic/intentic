@@ -113,3 +113,34 @@ test("a seed for a session the CLI did not resume is dropped, and the fold start
     );
     expect(todos(events)).toEqual([]);
 });
+
+test("restoring a session that is immediately refused does not repeat its checklist", async () => {
+    const root = workspaceWith(SESSION, [{ id: "1", subject: "Build", status: "pending" }]);
+    const events = await collect(
+        root,
+        fakeQuery(
+            { type: "system", subtype: "init", session_id: SESSION },
+            { type: "assistant", session_id: SESSION, error: "rate_limit", message: { content: [] } },
+        ),
+    );
+
+    expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "rate_limit" }));
+    expect(todos(events)).toEqual([]);
+});
+
+test("a resumed turn inherits its checklist when prose starts even if it never updates a task", async () => {
+    const root = workspaceWith(SESSION, [{ id: "1", subject: "Build", status: "pending" }]);
+    const events = await collect(
+        root,
+        fakeQuery(
+            { type: "system", subtype: "init", session_id: SESSION },
+            { type: "stream_event", session_id: SESSION, event: { type: "content_block_delta", delta: { type: "text_delta", text: "Working" } } },
+            call("t1", "Read", { file_path: "README.md" }),
+            { type: "result", subtype: "success" },
+        ),
+    );
+
+    expect(todos(events)).toEqual([{ kind: "todos", items: [{ content: "Build", status: "pending" }] }]);
+    const index = events.findIndex((event) => event.kind === "todos");
+    expect(events[index + 1]).toMatchObject({ kind: "delta", text: "Working" });
+});

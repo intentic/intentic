@@ -14,8 +14,7 @@ const ACCOUNT: StoredAccount = { id: "a", connectedAt: 1, accessToken: "tok" };
 
 // Enough of the store for `ensureFreshToken`: a stored account whose token has no expiry is usable as it
 // stands, so nothing here ever reaches the refresh path (which is claude-credentials' own subject).
-const store = (account: StoredAccount | undefined = ACCOUNT): ClaudeStore =>
-    unstubbed<ClaudeStore>("claudeStore", { read: async () => account });
+const store = (account: StoredAccount | undefined = ACCOUNT): ClaudeStore => unstubbed<ClaudeStore>("claudeStore", { read: async () => account });
 
 interface Call {
     readonly url: string;
@@ -26,10 +25,7 @@ interface Call {
 
 // A fetch that answers each URL from a table and records what it was asked, so the User-Agent, which is the
 // one header the provider's answer actually turns on, is assertable.
-const provider = (
-    answers: Record<string, { status?: number; body?: unknown }>,
-    calls: Call[] = [],
-): { fetchFn: typeof fetch; calls: Call[] } => ({
+const provider = (answers: Record<string, { status?: number; body?: unknown }>, calls: Call[] = []): { fetchFn: typeof fetch; calls: Call[] } => ({
     calls,
     fetchFn: (async (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input);
@@ -40,7 +36,14 @@ const provider = (
     }) as unknown as typeof fetch,
 });
 
-const eligible = { eligible: true, available: true, ineligible_reason: null, weekly_resets_at: "2026-09-08T00:00:00Z" };
+const eligible = {
+    eligible: true,
+    available: true,
+    in_experiment: true,
+    arm: "reset",
+    ineligible_reason: null,
+    weekly_resets_at: "2026-09-08T00:00:00Z",
+};
 
 test("an eligible account is offered, and the probe identifies itself as the CLI the allowance is spent by", async () => {
     const { fetchFn, calls } = provider({ "/api/oauth/usage": { body: { juniper_tide: eligible } } });
@@ -54,6 +57,17 @@ test("an eligible account is offered, and the probe identifies itself as the CLI
     expect(calls[0]?.url).toContain("at_wall=1");
 });
 
+test("general eligibility does not offer a reset outside the provider's reset rollout", async () => {
+    // Live affected-account response: the usage endpoint offered general eligibility, but claiming answered
+    // ineligible. Claude Code itself requires the reset arm before showing this offer.
+    for (const enrollment of [{ in_experiment: false, arm: null }, { in_experiment: true, arm: "control" }, {}]) {
+        const { fetchFn } = provider({
+            "/api/oauth/usage": { body: { juniper_tide: { eligible: true, available: true, ...enrollment } } },
+        });
+        expect(await readLimitReset(store(), "a", fetchFn)).toEqual({ available: false });
+    }
+});
+
 test("every way of having nothing to offer answers the same way, so no button is ever drawn from a guess", async () => {
     // An organisation-managed plan is outside the programme entirely and is told so with a null block.
     const outside = provider({ "/api/oauth/usage": { body: { juniper_tide: null } } });
@@ -62,7 +76,11 @@ test("every way of having nothing to offer answers the same way, so no button is
     // Eligible but this week's grant is spent: the reason is carried through, since somebody asking why the
     // button is missing is owed the provider's own word for it.
     const spent = provider({
-        "/api/oauth/usage": { body: { juniper_tide: { eligible: true, available: false, ineligible_reason: "already_used", next_available_at: "2026-09-08T00:00:00Z" } } },
+        "/api/oauth/usage": {
+            body: {
+                juniper_tide: { eligible: true, available: false, ineligible_reason: "already_used", next_available_at: "2026-09-08T00:00:00Z" },
+            },
+        },
     });
     expect(await readLimitReset(store(), "a", spent.fetchFn)).toEqual({
         available: false,
@@ -70,11 +88,20 @@ test("every way of having nothing to offer answers the same way, so no button is
         nextAvailableAt: Date.parse("2026-09-08T00:00:00Z") / 1000,
     });
 
-    // A refused read, and a credential that cannot be renewed, are both "nothing to offer" rather than errors:
-    // this dresses a strip that is already describing a failure.
+    // A missing credential is a known absence. A refused probe is not an answer about eligibility.
     const refused = provider({ "/api/oauth/usage": { status: 500 } });
-    expect(await readLimitReset(store(), "a", refused.fetchFn)).toEqual({ available: false });
-    expect(await readLimitReset(store(undefined), "a", refused.fetchFn)).toEqual({ available: false });
+    expect(await readLimitReset(store(), "a", refused.fetchFn)).toBeUndefined();
+    expect(await readLimitReset(unstubbed<ClaudeStore>("missing account", { read: async () => undefined }), "a", refused.fetchFn)).toEqual({
+        available: false,
+    });
+});
+
+test("a busy or malformed status endpoint leaves eligibility unanswered and a later probe can recover", async () => {
+    for (const answer of [{ status: 429 }, { status: 503 }, { body: {} }, { body: null }, { body: { juniper_tide: {} } }]) {
+        expect(await readLimitReset(store(), "a", provider({ "/api/oauth/usage": answer }).fetchFn)).toBeUndefined();
+    }
+    const available = provider({ "/api/oauth/usage": { body: { juniper_tide: eligible } } });
+    expect(await readLimitReset(store(), "a", available.fetchFn)).toMatchObject({ available: true });
 });
 
 test("claiming addresses the account's organisation and hands back the provider's own word for what it did", async () => {

@@ -94,7 +94,7 @@ export const limitResetNote = (claim: LimitResetClaim): string => {
         case `not_limited`:
             return `The window had already reopened — just continue.`;
         case `ineligible`:
-            return `This account's plan doesn't include a reset.`;
+            return `Anthropic didn't grant this account a reset. Its current limit still applies.`;
         default:
             return claim.detail ?? `Couldn't reset it right now — try again in a moment.`;
     }

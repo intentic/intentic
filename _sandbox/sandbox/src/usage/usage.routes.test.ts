@@ -1,6 +1,6 @@
 import { usageContract } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import type { UsageRoutesDeps } from "./usage.routes.js";
 import { createUsageRoutes } from "./usage.routes.js";
 import { routesClient } from "../harness/route-client.testing.js";
@@ -77,4 +77,27 @@ test("usage.limitReset answers for an account the store has no credential for, r
     // nothing: there is no credential to post with.
     expect(await client.claimLimitReset({ account: "nobody" })).toMatchObject({ result: "error", detail: expect.stringContaining("Reconnect") });
     expect(asked).toEqual(["nobody", "nobody"]);
+});
+
+test("a rate-limited eligibility probe fails over the wire so the client can retry it", async () => {
+    const fetcher = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(new Response("{}", { status: 429 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ juniper_tide: { eligible: true, available: true, arm: "reset" } })));
+    try {
+        const client = routesClient(
+            usageContract,
+            createUsageRoutes(
+                unstubbed<UsageRoutesDeps>("usage deps", {
+                    claudeStore: unstubbed("claudeStore", {
+                        read: async () => ({ id: "a", accessToken: "test-token", connectedAt: 1 }),
+                    }),
+                }),
+            ),
+        );
+        await expect(client.limitReset({ account: "a" })).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+        expect(await client.limitReset({ account: "a" })).toEqual({ available: true });
+    } finally {
+        fetcher.mockRestore();
+    }
 });

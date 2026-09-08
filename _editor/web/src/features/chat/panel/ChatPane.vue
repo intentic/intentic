@@ -22,7 +22,7 @@ import {
 import type { Conversation } from "../session/conversation";
 import { modelLabelFor, providerDisplayLabel } from "../accounts/providerCatalog";
 import { pickUpReady } from "../run/pickUp";
-import { type ChatMessage, cutsAboveOf, dayMarksOf, forkCutsOf, liveBubbleOf, turnsOf } from "../transcript/transcript";
+import { type ChatMessage, cutsAboveOf, dayMarksOf, forkCutsOf, liveBubbleOf, repeatedChecklistIds, turnsOf } from "../transcript/transcript";
 import { withShortcut } from "../../../shell/commands/useCommands";
 import { navigateInApp } from "../../../shell/window/mainWindow";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
@@ -328,6 +328,7 @@ const showTurnStatus = computed(() => streaming.value && !awaitingDecision.value
 // the same top edge and pile up on the one before it. Recomputed per streamed frame like the list it replaces,
 // and just as shallow: one pass, no message read beyond its role.
 const turns = computed(() => turnsOf(messages.value));
+const repeatedChecklists = computed(() => repeatedChecklistIds(messages.value));
 
 /* THE TRANSCRIPT'S DATE: a day named above the first turn sent on it, and nowhere else (dayMarksOf).
  *
@@ -1467,7 +1468,14 @@ watch(
                                 <div
                                     v-for="message in turn.messages"
                                     :key="message.id"
-                                    v-memo="[message, isStreaming(message), turn.folded, doomed.has(message.id), cutsAbove.get(message.id)]"
+                                    v-memo="[
+                                        message,
+                                        isStreaming(message),
+                                        turn.folded,
+                                        doomed.has(message.id),
+                                        cutsAbove.get(message.id),
+                                        repeatedChecklists.has(message.id),
+                                    ]"
                                     class="contents"
                                 >
                                     <!-- THE WAY BACK TO JUST ABOVE THIS MESSAGE, for the boundaries one mark per
@@ -1481,6 +1489,7 @@ watch(
                                          every folded one, which is the worst of both. -->
                                     <ChatForkCut v-if="cutsAbove.get(message.id) !== undefined" :cut="cutsAbove.get(message.id)!" />
                                     <ChatMessageView
+                                        v-if="!repeatedChecklists.has(message.id) || isStreaming(message)"
                                         :message="message"
                                         :streaming="isStreaming(message)"
                                         :folded="message.id === turn.id ? turn.folded : undefined"

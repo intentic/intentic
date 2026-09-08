@@ -1,8 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { holdsCard } from "@intentic/sandbox-contract";
-import { type ChatMessage, liveBubbleOf, recordedRows } from "./transcript";
+import { type ChatMessage, liveBubbleOf, recordedRows, repeatedChecklistIds } from "./transcript";
 
 const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
+
+it(`keeps checklist changes and meaningful intervening messages while hiding only unchanged retry copies`, () => {
+    const todos = [{ content: `Build`, status: `pending` as const }];
+    const messages: ChatMessage[] = [
+        { id: 1, role: `assistant`, text: ``, todos },
+        { id: 2, role: `notice`, text: `Usage limit reached` },
+        { id: 3, role: `assistant`, text: ``, todos: [...todos] },
+        { id: 4, role: `assistant`, text: ``, todos: [{ content: `Build`, status: `completed` }] },
+        { id: 5, role: `user`, text: `Try again` },
+        { id: 6, role: `assistant`, text: ``, todos },
+        { id: 7, role: `assistant`, text: `Working`, todos },
+        { id: 8, role: `assistant`, text: ``, todos, question: { requestId: `q1`, questions, status: `pending` } },
+    ];
+    expect(repeatedChecklistIds(messages)).toEqual(new Set([3]));
+    expect(recordedRows(messages)).toBe(8);
+});
 
 describe(`recordedRows`, () => {
     /* The count a fork copies a prefix of, and it has to agree with the daemon's own fold to the row. A card

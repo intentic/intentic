@@ -551,6 +551,23 @@ it(`keeps the press's variants behind the caret rather than in the row`, async (
  * reaching the held turn, and what a claim that changed nothing says instead.
  */
 
+it(`shows one copy of a checklist restored by failed retries in an older transcript`, async () => {
+    const conversation = limitChat();
+    const todos = [{ content: `Build the picker`, status: `pending` as const }];
+    conversation.restoreMessages([
+        { role: `user`, text: `fix the picker` },
+        { role: `assistant`, text: ``, todos },
+        { role: `notice`, text: `Claude usage limit reached.` },
+        { role: `notice`, text: `Sent again after the allowance ran out.` },
+        { role: `assistant`, text: ``, todos },
+        { role: `notice`, text: `Claude usage limit reached.` },
+    ]);
+    await mountPanel();
+    expect(document.body.textContent?.match(/Build the picker/g)).toHaveLength(1);
+    expect(document.body.textContent?.match(/Claude usage limit reached\./g)).toHaveLength(2);
+    expect(conversation.messages.value).toHaveLength(6);
+});
+
 it(`offers the reset in the row when the provider is granting one, and re-runs the held turn on it`, async () => {
     resetOffer.value = { available: true };
     claimReset.mockResolvedValue({ result: `reset` });
@@ -636,7 +653,11 @@ it(`keeps the press when the claim never landed, since nothing was spent and not
 it(`offers the other account twice when the session is worth carrying, each with its price, and carries on request`, async () => {
     twoAccounts(99, 10);
     const conversation = limitChat();
-    conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000, held: { ran: true, contextTokens: 85_000, handoffTokens: 6_000 } };
+    conversation.pickUp.value = {
+        reason: `limit`,
+        readyAt: Date.now() + 3_600_000,
+        held: { ran: true, contextTokens: 85_000, handoffTokens: 6_000 },
+    };
     const resume = vi.spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
