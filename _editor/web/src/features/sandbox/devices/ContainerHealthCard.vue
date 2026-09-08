@@ -9,36 +9,16 @@ import { manageDeviceSandbox, useDevices } from "./useDevices";
 import { useSandbox } from "../client/useSandbox";
 import { useRole } from "../secrets/useRole";
 
-/* WHAT THIS SANDBOX CANNOT DO AND WILL NOT FIX BY ITSELF, on the one screen that can do something about it.
- *
- * The evidence is all pre-existing (containerHealth.ts reads it, and says why it was invisible until now). This
- * component is the OTHER half: a fault whose repair needs a computer belongs beside the computers, and this tab
- * is already where a sandbox is started, updated, rolled back and reshaped from.
- *
- * WHY THE REPAIR IS ONE CLICK AND NOT A DIALOG. Every other verb on this page replaces the container too, and
- * this one is the mildest of them: same slug, same volumes, a container swapped for one that has what it was
- * missing — `ic sandbox connect`'s own comments call a same-slug re-run a normal reset, and it removes the
- * container, never /work. A confirmation here would be asking somebody to approve something safer than the
- * Update button sitting a few rows below it, which teaches people to click through dialogs rather than read
- * them. What the card owes them instead is saying plainly, before the click, what survives it.
- *
- * WHEN THERE IS NO BUTTON. The repair runs on the machine that HOSTS the sandbox, through an agent that has to
- * be connected. Absent that, the card degrades to the same repair by hand — the setup screen, which mints the
- * same claim for somebody to paste — rather than hiding, because the diagnosis is worth reading either way. */
-
 const { active, daemonUrl } = useSandbox();
 const { isOwner } = useRole();
 const { devices } = useDevices({ poll: false });
 
 const notices = computed(() => (active.value === undefined ? [] : containerNotices(active.value)));
 
-// This sandbox's container slug, derived exactly as the page around it does (the daemon's own hostname).
+// The daemon hostname's first label is the sandbox slug.
 const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
 
-/* The connected machine that runs THIS sandbox, which is the only one a reconnect may be aimed at: the claim
- * names one sandbox, and redeeming it anywhere else would build a second container rather than repair this one.
- * Both sides must be known, for the reason `isSelf` states next door — two optionals comparing equal would let
- * an unknown-URL sandbox adopt the first machine in the list. */
+// Guards against ownSlug and a sandbox's slug both being undefined and comparing equal.
 const host = computed<Device | undefined>(() =>
     ownSlug.value === undefined
         ? undefined
@@ -52,8 +32,7 @@ const host = computed<Device | undefined>(() =>
           ),
 );
 
-// Minting a claim is the owner's act (the platform gates it there too); a member sees the diagnosis and the
-// sentence naming who can act, never a button that would 403 on them.
+// Owner-only: the platform rejects a non-owner's mint, so the button is hidden rather than left to fail.
 const canRepair = computed(() => isOwner.value && host.value !== undefined && ownSlug.value !== undefined);
 
 const busy = ref(false);
@@ -73,19 +52,14 @@ const repair = async (): Promise<void> => {
     done.value = undefined;
     lines.value = [];
     try {
-        /* Minted HERE rather than reused: every mint re-signs the grant, so the claim this sends is current by
-         * construction and there is no stale code to reason about. The browser holds it for the length of one
-         * call — the same code the setup screen would have shown somebody to paste. */
+        // Minted fresh per call so the code is always current; never cached or reused.
         const { code } = await apiClient.sandbox.setupCode({ sandboxId });
         done.value = await manageDeviceSandbox(device.hostId, slug, `reconnect`, {
             setupCode: code,
             onLine: (line) => (lines.value = [...lines.value, line]),
         });
     } catch (error) {
-        /* The sandbox this browser is talking to is the one being replaced, so the stream is EXPECTED to die
-         * mid-flight — the daemon carrying it goes down with the container. That is the successful shape, not a
-         * failure, and reporting it as one would send people to look for a problem that isn't there. The
-         * container comes back on its own; the page reconnects when it does. */
+        // The stream dying mid-flight is the success case: the daemon goes down with the container.
         failure.value = error instanceof Error ? error.message : String(error);
     } finally {
         busy.value = false;

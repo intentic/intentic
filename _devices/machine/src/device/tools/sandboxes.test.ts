@@ -89,19 +89,14 @@ test("each swap builds the argv ic actually takes", () => {
     expect(icSwapArgs("prepare", "work", "deadbeef")).toEqual(["sandbox", "prepare", "work"]);
 });
 
-/* THE ONE ARGV THAT NAMES NO SLUG, and the property worth pinning: `ic sandbox connect` derives which sandbox
- * this is from the code's own claim, so passing a slug alongside it would be a second, independently-chosen
- * answer to the same question — and the failure mode is not an error, it is a SECOND sandbox built beside the
- * one somebody asked to repair. */
+// ic sandbox connect derives the sandbox from the claim; a slug alongside it would pick a second one.
 test("a reconnect redeems the claim and lets ic derive the sandbox from it", () => {
     expect(icReconnectArgs("code-abc")).toEqual(["sandbox", "connect", "code-abc", "-y"]);
-    // Pasted codes arrive with whitespace around them more often than not.
     expect(icReconnectArgs("  code-abc  ")).toEqual(["sandbox", "connect", "code-abc", "-y"]);
 });
 
 test("a reconnect with no claim is refused rather than run as a bare connect", () => {
-    // Without the code, this argv is `ic sandbox connect -y`, which starts a WIZARD for a brand-new sandbox on
-    // a machine with no terminal to answer it. Refusing by name is the only safe reading of a missing claim.
+    // Without a code, ic sandbox connect -y opens an interactive wizard this machine has no terminal for.
     expect(() => icReconnectArgs(undefined)).toThrow(/setupCode.*required/i);
     expect(() => icReconnectArgs("")).toThrow(/required/i);
     expect(() => icReconnectArgs("   ")).toThrow(/required/i);

@@ -1382,8 +1382,7 @@ test("a result with a backgrounded child in flight holds the stream open for the
     ]);
 });
 
-// is_backgrounded never arrives as a task_updated patch and the task stream carries no model, so the Agent
-// call's own run_in_background and model fields must reach the frame that announces the child.
+// Neither is_backgrounded nor model rides a task_updated patch; both come off the Agent call's own input.
 test("the Agent call's run_in_background and model reach the frame that announces the child", async () => {
     resetSubagents();
     const events = await collect(

@@ -32,8 +32,7 @@ const flowFor = (
         // The same image with a different share of this machine: the one op with a payload of its own.
         case "reshape":
             return (onLine) => reshapeSandbox(slug, resources, scopes, onLine);
-        // The one op whose payload comes from the PLATFORM rather than from this machine or the container: a
-        // fresh claim, carrying the values a drifted sandbox cannot get by being recreated out of itself.
+        // setupCode carries the values a drifted sandbox is missing; nothing on this machine can supply them.
         case "reconnect":
             return (onLine) => reconnectSandbox(slug, setupCode, scopes, onLine);
         // A container that belongs to the asking sandbox rather than to a person; `slug` is the runner's name. The

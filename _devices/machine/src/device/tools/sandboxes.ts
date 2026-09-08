@@ -247,22 +247,12 @@ export const icSwapArgs = (swap: SandboxSwap, slug: string, hash: string | undef
 // Consent happened in the browser, on a card that named what is lost.
 export const icRemoveArgs = (slug: string): string[] => ["sandbox", "remove", slug, "-y"];
 
-/* THE RECONNECT ARGV, and it is `connect` rather than a recreate on purpose: the values this sandbox is missing
- * cannot come off the container being replaced, only from a fresh claim, and redeeming a claim is what `connect`
- * is. Same slug, so `ic` lands on the same container name and the same volumes — its own comments call a
- * same-slug re-run a normal reset, and it removes the CONTAINER, never /work.
- *
- * The slug is not passed: `ic sandbox connect` derives it from the code's own claim, and handing it a second,
- * independently-chosen spelling of the same thing is how a reconnect would quietly build a SECOND sandbox beside
- * the one it was asked to repair. The caller still names a slug on the wire, because the daemon routes and logs
- * the flow by it; it just never reaches the argv.
- *
- * `-y` for `icRemoveArgs`'s reason: there is no terminal here, so `ic`'s "you already have other sandboxes"
- * prompt would hang forever. Consent happened in the browser, on the card that named what this does. */
 export const icReconnectArgs = (setupCode: string | undefined): string[] => {
     if (setupCode === undefined || setupCode.trim() === "") {
         throw new Error(`"setupCode" is required to reconnect: it is the claim carrying the values this sandbox is missing.`);
     }
+    // No slug in argv: ic derives it from the claim, and a second spelling would build a second sandbox.
+    // -y: there is no terminal to answer ic's other-sandboxes prompt.
     return ["sandbox", "connect", setupCode.trim(), "-y"];
 };
 
@@ -492,15 +482,7 @@ export const reshapeSandbox = async (
     return `Reshaped sandbox "${slug}". Its files and its history were kept, and the new share survives every later update.`;
 };
 
-/* REDEEM A FRESH CLAIM ONTO AN EXISTING SANDBOX, the repair for a container that was set up before something it
- * now needs (@intentic/sandbox-contract's container-requirements.ts, which is what decides a sandbox needs this).
- *
- * Rides the `sandboxes` scope, not `sandboxRemove`, and the distinction is the honest one: this replaces the
- * container exactly as an update does and keeps /work, /history and the Docker engine volume. Nothing a reshape
- * or an update does not already do to the same box.
- *
- * `find(slug)` first, for the reason the swaps do it: reconnecting a slug this machine does not run would
- * otherwise redeem the code — burning it — and only then discover there was nothing here to repair. */
+// sandboxes scope, not sandboxRemove: /work and /history survive a reconnect.
 export const reconnectSandbox = async (
     slug: string,
     setupCode: string | undefined,
@@ -508,9 +490,8 @@ export const reconnectSandbox = async (
     onLine: (line: string) => void,
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
-    // Built before anything else, so a reconnect with no claim is refused instantly instead of after a docker
-    // round trip — and, more to the point, before `ic` is spawned with an argv that cannot work.
     const args = icReconnectArgs(setupCode);
+    // find(slug) first: redeeming the claim for a slug not on this machine would burn it for nothing.
     await find(slug);
     icInFlight.add(slug);
     let run: { code: number; output: string };

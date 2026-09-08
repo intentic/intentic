@@ -380,9 +380,8 @@ export const createSystemRoutes = (services: Services) => {
             await closeBrowserSession(input.name);
             return { ok: true };
         }),
-        // Subagents this sandbox started, and one's transcript; both records from the registry and the child's
-        // store. Paired against the SDK's meta files on the way out, since for a child the daemon did not watch
-        // being spawned that file is the only place its model is written.
+        // Subagents this sandbox started, and one's transcript; both records from the registry and the child's store.
+        // Paired against meta files first: the only model source for a child the daemon never watched spawn.
         subagents: i.subagents.handler(async () => {
             await pairLiveSubagents();
             return { sessions: listSubagentSessions() };

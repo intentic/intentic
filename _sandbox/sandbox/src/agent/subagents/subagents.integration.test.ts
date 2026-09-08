@@ -39,8 +39,7 @@ const started = (over: { [K in keyof SubagentTaskMessage]?: SubagentTaskMessage[
         ...over,
     }) as SubagentTaskMessage;
 
-// The SubagentStop hook as the SDK fires it: the child's transcript path, whose meta sibling the registry
-// actually reads, and the child's agent id.
+// agent_transcript_path names the .jsonl; the registry actually reads its .meta.json sibling.
 const stopped = async (dir: string, agentId: string, lastAssistantMessage?: string): Promise<void> => {
     await subagentHooks(turn()).SubagentStop?.[0]?.hooks[0]?.(
         {
@@ -79,16 +78,14 @@ describe("the SDK's own subagents", () => {
         ]);
     });
 
-    // Neither fact is on the task stream: `is_backgrounded` rides a task_updated patch that never comes, and no
-    // task message carries a model, so both come off the spawning call and both must reach the born frame.
+    // Neither field rides a task_updated patch; both must come off the spawning call instead.
     it("takes 'backgrounded' and the model from the spawning tool call, onto the frame that announces the child", () => {
         noteSubagentSpawn("call-1", { background: true, model: "sonnet" });
         expect(noteSubagentTask(turn(), started())).toMatchObject({ kind: "subagent", id: "call-1", background: true, model: "sonnet" });
         expect(listSubagentSessions()).toMatchObject([{ id: "call-1", background: true, model: "sonnet" }]);
     });
 
-    // A foreground child says nothing rather than `background: false`, and `inherit` is not a model: it asks for
-    // the parent's, which is the state the row's own fallback covers.
+    // `background: false` and `model: "inherit"` both leave the field unset, not false or "inherit".
     it("leaves an unmarked child without the flag, and a child that named no model without one", () => {
         noteSubagentSpawn("call-1", { background: false, model: "inherit" });
         expect(noteSubagentTask(turn(), started())).not.toHaveProperty("background");
@@ -96,8 +93,7 @@ describe("the SDK's own subagents", () => {
         expect(listSubagentSessions()[0]).not.toHaveProperty("model");
     });
 
-    // The meta file fills the model in for a child whose call named none, which is where an agent definition's
-    // own pin shows up.
+    // A meta file's model surfaces only when the spawning call named none.
     it("takes the model from the meta file for a child whose call named none", async () => {
         const dir = await mkdtemp(join(tmpdir(), "subagents-model-"));
         await writeFile(join(dir, "agent-xyz.meta.json"), JSON.stringify({ toolUseId: "call-1", model: "claude-haiku-4-5-20251001" }));
@@ -108,21 +104,17 @@ describe("the SDK's own subagents", () => {
         await stopped(dir, "abc");
         const byId = new Map(listSubagentSessions().map((session) => [session.id, session]));
         expect(byId.get("call-1")).toMatchObject({ model: "claude-haiku-4-5-20251001" });
-        // And the file says `inherit` for a definition that asks for its parent's model, which is not a model:
-        // filed as one, a card would print the directive where the model goes.
         expect(byId.get("call-2")).not.toHaveProperty("model");
     });
 
-    // A child still working is paired where the roster is served, which is the only source for one the daemon
-    // never saw spawned (a workflow's), and the stop hook is too late for a row read while it runs.
+    // pairLiveSubagents is the only source of a model for a child the daemon never saw spawned.
     it("pairs a child that is still working when the roster is read", async () => {
         const dir = await mkdtemp(join(tmpdir(), "subagents-live-"));
         noteSubagentTask({ conversationId: "conv-1", cwd: WORKSPACE_ROOT, sessionId: "sess-1", subagentsDir: dir }, started());
         await writeFile(join(dir, "agent-live.meta.json"), JSON.stringify({ toolUseId: "call-1", model: "sonnet", spawnDepth: 2 }));
         await pairLiveSubagents();
         expect(listSubagentSessions()[0]).toMatchObject({ id: "call-1", status: "running", model: "sonnet", spawnDepth: 2 });
-        // Read once and kept: the file is written when the child starts and never touched again, so a paired
-        // child asks nothing further of the disk however often the roster is served.
+        // Deleted to prove the model came from the earlier cached read, not a fresh one.
         await rm(join(dir, "agent-live.meta.json"));
         await pairLiveSubagents();
         expect(listSubagentSessions()[0]).toMatchObject({ model: "sonnet" });

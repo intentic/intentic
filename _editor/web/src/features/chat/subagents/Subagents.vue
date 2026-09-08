@@ -100,7 +100,7 @@ const providerOf = (session: SubagentSession): AgentProvider =>
     session.kind === `subagent` ? (agentById(session.conversationId)?.provider ?? `claude`) : (session.provider ?? `claude`);
 
 // Which model the card shows, in the chat rail's own label; never left blank.
-// 1. the child's own, filed by its spawning call or by its meta file (the only rung that names an override).
+// 1. the child's own model, filed by its spawning call or its meta file.
 // 2. the parent's model, inherited when nothing named one for the child (`inherited: true`).
 // 3. the provider's own name, when the identity tile shows a category glyph instead of it.
 const modelOf = (session: SubagentSession): { label: string; inherited: boolean } | undefined => {

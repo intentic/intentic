@@ -67,9 +67,7 @@ vi.mock(`../overview/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ la
 // real hook needs vue-query's injected client.
 const capabilities = ref<{ id: string; config: Record<string, string> }[]>([]);
 vi.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
-// The cards around the list have their own daemon calls; this mounts the list alone. The health card above it
-// reads the active sandbox's own boot report, which this file's `useSandbox` mock does not carry — and it has
-// its own tests (../overview/containerHealth.test.ts) for the decision it draws.
+// ContainerHealthCard needs the active sandbox's boot report, which this file's useSandbox stub omits.
 vi.mock(`./ContainerHealthCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./DesktopSyncCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`../access/ControlTokensSection.vue`, () => ({ default: defineComponent({ render: () => null }) }));

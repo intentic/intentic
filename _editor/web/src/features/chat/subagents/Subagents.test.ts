@@ -28,8 +28,6 @@ vi.mock("./subagentsQuery", async (importOriginal) => ({
     ...(await importOriginal<typeof import("./subagentsQuery")>()),
     useSubagentsQuery: () => ({ sessions: computed(() => sessions.value), running: computed(() => sessions.value), refetch: async () => undefined }),
 }));
-// Model stands in for what a child inherits when its spawning call named none; a child that named one wears
-// its own, which is the pair the two model cases below pin.
 vi.mock("../../agents/fleet/useAgents", () => ({
     useAgents: () => ({
         agentById: (id: string) => (id === `c1` ? { id, title: `analyse the gap`, model: `x-test-model` } : undefined),
@@ -117,8 +115,7 @@ it(`opens the parent conversation in the chat instead of leaving for its diff`, 
     expect(mounted?.currentRoute.value.name).toBe(`subagents`);
 });
 
-// The child's spawning call named no model, so the row shows the parent's, inherited: this pins the
-// inheritance as much as the label.
+// The spawning call named no model, so the row falls back to the parent's inherited model.
 it(`names the model on the card and drops the facts that crowded it out`, async () => {
     sessions.value = [child({ background: true, toolUses: 6, tokens: 19_000 })];
     const card = (await mount({})).querySelector(`.session-card`);
@@ -131,8 +128,7 @@ it(`names the model on the card and drops the facts that crowded it out`, async 
     expect(text).not.toContain(`19k`);
 });
 
-// A child that named its own model wears it, not the conversation's. `sonnet` is a tier, which belongs to no
-// catalog, so it renders as the capitalized word with no version invented for it.
+// `sonnet` is a tier with no catalog entry, so it renders as the capitalized word, not a version.
 it(`names the child's own model rather than the conversation's`, async () => {
     sessions.value = [child({ model: `sonnet` })];
     const text = (await mount({})).querySelector(`.session-card`)?.textContent ?? ``;

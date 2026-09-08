@@ -218,10 +218,8 @@ const toolUseOf = (block: { type: string; id?: string; name?: string; input?: un
         ? { id: block.id, name: block.name, input: block.input }
         : undefined;
 
-// What the call that starts another agent says about it; the tool input is the only place either fact appears.
-// `run_in_background` is the tool's own default, so an explicit `false` is the one shape that blocks the turn on
-// it. The model is the caller's override, filed as written: a tier alias resolves to a version in the harness,
-// not here.
+// An explicit `run_in_background: false` is the only shape that blocks the turn on the call.
+// A tier is never resolved to a version here; the harness decides which build it names.
 const spawnedAgent = (input: unknown): { readonly background: boolean; readonly model?: string } => {
     const spec = input as { run_in_background?: unknown; model?: unknown } | undefined;
     return {
@@ -392,8 +390,8 @@ class TurnFold {
                 yield changed;
             }
         }
-        // `Agent` is the Claude SDK's own tool name; a spawn is noted only when there is a registry to file it
-        // in. Every such call is noted, foreground included: it names a model even when it names no background.
+        // `Agent` is the SDK's own tool name; a spawn is noted only when there is a registry to file it in.
+        // Foreground calls are noted too, since a call can name a model without backgrounding.
         if (block.name === "Agent" && this.args.subagents !== undefined) {
             noteSubagentSpawn(block.id, spawnedAgent(block.input));
         }

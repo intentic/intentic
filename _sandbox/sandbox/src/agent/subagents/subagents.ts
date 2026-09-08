@@ -80,24 +80,20 @@ const notifyChanged = (): void => {
     }
 };
 
-// What only the spawning tool call knows: whether the parent walked away (the SDK's `is_backgrounded` patch
-// never arrives for one) and which model the child was asked for (no task message carries a model, and the meta
-// file is read too late for a row read while the child runs). Marked before the record exists; `open` consumes
-// the mark onto the born frame, the only frame carrying either.
+// is_backgrounded never arrives as a task_updated patch, so it is read off the spawning tool call instead.
+// No task message carries a model, so the spawning call is also the only pre-meta-file source for one.
 interface SubagentSpawn {
     readonly background?: true;
     readonly model?: string;
 }
 const spawns = new Map<string, SubagentSpawn>();
 
-// A model the child was actually asked for. `inherit` (an agent definition asking for its parent's model) and
-// `default` name none, and filed as models they would print as one.
+// `inherit` and `default` are directives, not models; filing them would print them as one.
 const NAMES_NO_MODEL: ReadonlySet<string> = new Set(["", "inherit", "default"]);
 const namedModel = (model: string | undefined): string | undefined =>
     model === undefined || NAMES_NO_MODEL.has(model.trim().toLowerCase()) ? undefined : model;
 
-/** Marks a spawning tool call id with what it said, ahead of the task_started that will read it. Nothing is
- *  marked for a call with no news, so the map holds only the calls worth consuming. */
+/** Marks a spawning call's background/model ahead of task_started; a call with neither stays unmarked. */
 export const noteSubagentSpawn = (id: string, spawn: { readonly background?: boolean; readonly model?: string } = {}): void => {
     const model = namedModel(spawn.model);
     if (spawn.background !== true && model === undefined) {
@@ -209,7 +205,7 @@ export interface SubagentTurn {
 const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partial<SubagentRecord>): SubagentRecord => {
     const now = Date.now();
     sweep(now);
-    // What the spawning call said about this child, consumed here: it is the only frame either fact can ride.
+    // model and background are set only here, at birth; nothing updates them on the record later.
     const spawn = spawns.get(id);
     spawns.delete(id);
     const record: SubagentRecord = {
@@ -429,9 +425,7 @@ const readMeta = async (metaPath: string): Promise<SubagentMeta | undefined> => 
 // A session's children live in `<session-dir-without-.jsonl>/subagents/`, beside its transcript.
 const subagentsDirOf = (sessionTranscriptPath: string): string => join(sessionTranscriptPath.replace(/\.jsonl$/u, ""), "subagents");
 
-// Copies the meta file's facts onto the record; all but agentId use `??=` since the task stream or the spawning
-// call usually got there first. The model is the file's own resolution, so a definition-pinned one lands here
-// for a child whose call named none.
+// `??=` throughout: an earlier spawn-call or task-stream value is never overwritten by the meta file.
 const fill = (record: SubagentRecord, meta: SubagentMeta, agentId: string): void => {
     record.agentId = agentId;
     record.agentType ??= meta.agentType;
@@ -450,21 +444,12 @@ const adopt = (turn: SubagentTurn, meta: SubagentMeta, agentId: string): void =>
     fill(records.get(id) ?? open(turn, id, "subagent", {}), meta, agentId);
 };
 
-/* One scanner for a session's meta files, serving both callers that need them: the transcript door, which wants
- * the SDK agent id of the child being opened, and the roster, which wants every live child's model (the only
- * source for a child the daemon did not watch being spawned). A backgrounded child often outlives SubagentStop,
- * so that hook cannot always do the pairing.
- *
- * A file is read once and kept under the tool call it names, so a file whose record is not open yet is neither
- * lost nor re-read. An unmatched file is cached rather than adopted: a meta file outlives the record it
- * describes (retention is five minutes, the file is the session's), so opening records off the disk would
- * resurrect children that have aged out of the roster. */
+// A backgrounded child often outlives SubagentStop, so that hook alone cannot pair every child.
 const metaFiles = new Map<string, Map<string, SubagentMeta>>();
 // One pass per directory at a time, so readers arriving together share the one read.
 const passes = new Map<string, Promise<void>>();
 
-// Every meta file in this directory, by the SDK agent id its name carries; read at most once each, since the
-// file is written when its child starts and never touched again.
+// A meta file is written once at child start and never touched again, so it is read at most once.
 const metaOf = async (dir: string): Promise<Map<string, SubagentMeta>> => {
     const seen = metaFiles.get(dir) ?? new Map<string, SubagentMeta>();
     metaFiles.set(dir, seen);
@@ -481,6 +466,7 @@ const metaOf = async (dir: string): Promise<Map<string, SubagentMeta>> => {
     return seen;
 };
 
+// Fills existing records only; opening one here could resurrect a child already aged out of the roster.
 const scan = async (dir: string): Promise<void> => {
     let changed = false;
     for (const [agentId, meta] of await metaOf(dir)) {
@@ -490,7 +476,7 @@ const scan = async (dir: string): Promise<void> => {
             changed = true;
         }
     }
-    // Publishes but emits no frame: the born frame carried these fields and no update frame has a slot for them.
+    // Publishes but emits no frame: no update frame has a slot for fields the born frame already carried.
     if (changed) {
         publishRuntimeChange("subagents");
         notifyChanged();
@@ -503,8 +489,7 @@ const pair = async (dir: string): Promise<void> => {
     await running;
 };
 
-// Which SDK agent a child is, half of what getSubagentMessages reads a transcript with. Asked at read time, so
-// the meta files are long written; cached on the record, since the answer cannot change.
+// Cached on the record once resolved: the SDK agent id a child was assigned never changes.
 export const subagentAgentId = async (id: string): Promise<string | undefined> => {
     const record = records.get(id);
     if (record === undefined || record.agentId !== undefined) {
@@ -517,11 +502,8 @@ export const subagentAgentId = async (id: string): Promise<string | undefined> =
     return record.agentId;
 };
 
-/** Pairs the children still working, awaited where the roster is served so a live row can name its own model.
- *  Costs one directory read per session with an unpaired child, and nothing once they are all paired. */
+/** Pairs only children still running; costs one directory read per session with an unpaired child. */
 export const pairLiveSubagents = async (): Promise<void> => {
-    // Every directory the roster still points at, and the subset whose live children the files have not
-    // answered for yet.
     const known = new Set<string>();
     const unpaired = new Set<string>();
     for (const record of records.values()) {
@@ -533,8 +515,7 @@ export const pairLiveSubagents = async (): Promise<void> => {
             }
         }
     }
-    // What has been read is kept only as long as the children it describes are: a session whose whole fan-out
-    // has aged out of the roster is forgotten with it, rather than held for the life of the daemon.
+    // A directory's cache is dropped once no record in the roster points at it anymore.
     for (const dir of metaFiles.keys()) {
         if (!known.has(dir)) {
             metaFiles.delete(dir);

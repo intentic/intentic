@@ -166,14 +166,10 @@ describe("createReachReporter", () => {
         await vi.advanceTimersByTimeAsync(10 * 60_000);
         expect(posted).toHaveLength(1);
 
-        /* SETTLED, SAID ON THE WIRE. The daemon has always known this verdict was final; until it sent
-         * `retrying`, every screen outside the setup wizard had to assume the hopeful reading and stay quiet,
-         * which is how a sandbox stays visibly healthy while serving nobody. */
-        expect((posted[0]?.body as { retrying?: boolean }).retrying).toBe(false);
+        expect(posted.map((post) => (post.body as { retrying?: boolean }).retrying)).toEqual([false]);
     });
 
-    /* WHAT THE BOX WAS SET UP BEFORE, riding the report that survives its own tunnel being down — which is the
-     * only channel a container missing the means to dial an edge can be heard on at all. */
+    // Drift rides the same report that still gets through when the tunnel itself is down.
     it("names the env a drifted container is missing, on the same post as the verdict", async () => {
         vi.stubEnv("SANDBOX_PUBLIC_URL", PUBLIC_URL);
         vi.stubEnv("SANDBOX_GRANT", "");
@@ -183,15 +179,14 @@ describe("createReachReporter", () => {
         reporter.start({ by: "loopback", reason: "no INGRESS_URL, so there is no edge to dial" });
         await settle();
 
-        const drift = (posted[0]?.body as { drift?: { key: string; missing: string[]; repair: string }[] }).drift;
+        const [drift] = posted.map((post) => (post.body as { drift?: { key: string; missing: string[]; repair: string }[] }).drift);
         expect(drift?.map((gap) => gap.key)).toEqual(["reachability"]);
         expect(drift?.[0]?.missing).toEqual(["SANDBOX_GRANT", "INGRESS_URL"]);
         // Rendered verbatim wherever it lands, so the sentence has to name the move rather than the variable.
         expect(drift?.[0]?.repair).toContain("setup command");
     });
 
-    // The other half: a container a current release created reports the same verdict with nothing to explain,
-    // so the field is absent rather than an empty array nobody has to reason about.
+    // No drift: the field is absent, not an empty array, when nothing needs explaining.
     it("says nothing about drift when the container carries what it needs", async () => {
         vi.stubEnv("SANDBOX_PUBLIC_URL", PUBLIC_URL);
         vi.stubEnv("SANDBOX_GRANT", "ig1.payload.sig");
@@ -201,6 +196,6 @@ describe("createReachReporter", () => {
         reporter.start({ by: "loopback", reason: "this profile serves no front door for a tunnel to reach" });
         await settle();
 
-        expect((posted[0]?.body as { drift?: unknown }).drift).toBeUndefined();
+        expect(posted.map((post) => (post.body as { drift?: unknown }).drift)).toEqual([undefined]);
     });
 });

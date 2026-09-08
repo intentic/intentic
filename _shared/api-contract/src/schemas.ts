@@ -474,14 +474,7 @@ export const BootReportSchema = z.object({
     reach: z.enum(["checking", "reachable", "unreachable"]),
     // Why, for `unreachable`, already in the user's terms; rendered verbatim like a setup failure's problem.
     detail: z.string().max(2000).optional(),
-    /* WHETHER THE BOX IS STILL TRYING, which is the difference between a wait and a fault, and the only thing
-     * that lets a screen outside the setup wizard say anything at all.
-     *
-     * `unreachable` covers both a tunnel that is thirty seconds from coming up and one that is never coming up,
-     * and the daemon has always known which it was looking at (reach-report.ts's `retrying`) without ever
-     * putting it on the wire — so every reader had to assume the hopeful case and stay quiet. False means the
-     * verdict is FINAL: the probe loop has stopped, or was never started because the container's own env says
-     * it can dial nothing, and only a setup run changes that. A standing card gates on this. */
+    // False means the probe has stopped for good; absent means an older daemon never sent this field.
     retrying: z.boolean().optional(),
     // Boot-chain progress; `ready` is the readiness gate, `step` names what's running, absent on an older daemon.
     boot: z
@@ -494,18 +487,8 @@ export const BootReportSchema = z.object({
         .optional(),
     // How much of the machine's time the host reclaimed, to tell a slow boot from the host's own quota.
     cpu: z.object({ throttledMs: z.number().nonnegative(), throttledPeriods: z.number().int().nonnegative() }).optional(),
-    /* WHAT THIS CONTAINER WAS SET UP BEFORE — the box's own answer to "why can it not do that", from
-     * @intentic/sandbox-contract's containerDrift (container-requirements.ts, which carries the reasoning).
-     *
-     * A separate field from `reach` because it answers a different question, and the difference is the whole
-     * value: `reach` says the public address does not answer, which is also what a tunnel five seconds from
-     * coming up looks like, whereas a gap here is SETTLED — the container is missing env that only a setup run
-     * can hand it, so nothing it does on its own will ever close it. Every string is written for the person who
-     * has to act and is rendered verbatim, exactly like a setup failure's `problem`.
-     *
-     * Empty for every container a current release created, which is the answer nearly every sandbox gives.
-     * Absent (rather than empty) from a daemon older than this check — the reading screens treat the two the
-     * same, so an old image simply says nothing here instead of claiming to be healthy. */
+    // Settled, unlike `reach`: a gap here is missing env, and only a setup run closes it.
+    // Absent (older daemon) and empty (nothing missing) are read the same by clients.
     drift: z
         .array(
             z.object({

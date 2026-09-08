@@ -51,14 +51,12 @@ const frameText = (line: Record<string, unknown>, key: string): string | undefin
 export interface DeviceSandboxPayload {
     hash?: string | undefined;
     resources?: SandboxResourcesAsk | undefined;
-    // `reconnect`'s claim: the short-lived setup code minted for this sandbox, which the machine redeems for the
-    // values a drifted container cannot be given by being recreated out of itself.
+    // The short-lived setup code reconnect redeems on the host machine for a drifted container's missing values.
     setupCode?: string | undefined;
     onLine?: ((line: string) => void) | undefined;
 }
 
-// Builds the daemon's flow input; includes hash/resources/setupCode only when present, since the schema rejects
-// an explicit undefined.
+// hash/resources/setupCode are included only when present; the schema rejects an explicit undefined.
 const flowInput = (
     hostId: string,
     slug: string,
