@@ -15,8 +15,8 @@ import HostPickerBody from "./HostPickerBody.vue";
  * carries a footer now, and two copies of it are two places for the two surfaces to drift apart. */
 
 // One boolean over the request, so the overlay's own dismissal (pointerdown outside, Escape, the sheet's
-// backdrop) settles the promise rather than silently orphaning it — with whatever pins were set in the panel,
-// since closing it is how someone who only changed the effort says they are done (dismissModelPick).
+// backdrop) settles the promise rather than silently orphaning it. Every one of those gestures is a CANCEL, in
+// full: the panel ends in its own button now, so leaving it by any other route keeps nothing (hostModelPicker).
 const open = computed<boolean>({
     get: () => modelRequest.value !== undefined,
     set: (value) => {

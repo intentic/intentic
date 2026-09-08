@@ -5,17 +5,16 @@ import {
     type AgentProvider,
     type ModelPin,
     capabilitiesOf,
-    fastAllowed,
     harnessChoosable as contractHarnessChoosable,
     limitationsOf,
 } from "@intentic/sandbox-contract";
-import { InfoHint, SegmentedControl, ui } from "@intentic/ui";
-import EffortMeter from "../../../chat/composer/EffortMeter.vue";
+import { InfoHint } from "@intentic/ui";
 import ModelPicker from "../../../chat/models/ModelPicker.vue";
+import PickerRunSettings from "../../../chat/models/PickerRunSettings.vue";
 import ProviderLogo from "../../../chat/accounts/ProviderLogo.vue";
-import { clampEffort, effortsFor } from "../../../chat/models/effortScale";
 import type { PickerEntry } from "../../../chat/models/modelPickerState";
-import { providerDisplayLabel, providerModels } from "../../../chat/accounts/providerCatalog";
+import { providerDisplayLabel } from "../../../chat/accounts/providerCatalog";
+import { usePickerRunSettings } from "../../../chat/models/pickerRunSettings";
 import { useChat } from "../../../chat/run/useChat";
 
 /* THE SETTINGS PAGE'S BINDING OF THE APP'S MODEL PICKER: the same panel the composer opens (ModelPicker, with
@@ -77,29 +76,16 @@ const harness = computed<AgentHarness>(() => pin?.harness ?? `native`);
 
 const capabilities = computed(() => capabilitiesOf(provider.value, harness.value));
 
-/* THINKING HAS THREE STATES HERE and the scale is read against all three, not two. Claude's API refuses 'max'
- * with thinking DISABLED, so an entry whose thinking chip says Off loses the rung; an entry that pinned nothing
- * keeps it, because the turn then goes out with no thinking field and the daemon names the reasoning that tier
- * needs on the way (sendableThinking). Collapsing absent onto off, which this used to do, hid the top tier
- * behind a chip nobody had touched. */
-const thinkingPin = computed(() => pin?.thinking);
-const efforts = computed(() => (capabilities.value.effort ? effortsFor(provider.value, model.value, thinkingPin.value) : []));
-
-/* CLAMPED FOR DISPLAY, never written back, the composer's own rule (effortScale.ts). Switching thinking off, or
- * re-pointing the entry at a model with a shorter scale, would otherwise leave a stored 'max' lighting no rung
- * at all and reading as an unset control. The user's own pick stays stored for the day the longer scale is back. */
-const effort = computed(() =>
-    pin?.effort === undefined || pin.effort === `` ? `` : clampEffort(pin.effort, provider.value, model.value, thinkingPin.value),
-);
-
-// Fast speed exists only where the runtime, the route AND the model's own catalog row allow it, so the control
-// appears and disappears with the model instead of sitting greyed under an explanation nobody reads.
-const fastOffered = computed(() =>
-    fastAllowed(
-        capabilities.value,
-        provider.value,
-        (providerModels.value[provider.value] ?? []).find((option) => option.value === model.value)?.badges,
-    ),
+/* THE THREE ROWS FOR HOW THIS ENTRY IS RUN — effort, extended thinking, speed — are the shell picker's own
+ * (pickerRunSettings.ts), because they are the same rows asking the same questions about the same selection.
+ * They were written out twice, here and in HostPickerBody, down to the clamp rule and the × beside the meter.
+ * `hasContent` is what the footer below needs before it draws a border. */
+const { hasContent: runSettingsShown } = usePickerRunSettings(
+    provider,
+    model,
+    harness,
+    computed(() => pin?.thinking),
+    computed(() => pin?.effort),
 );
 
 // The harness axis, for the providers that have one: the same subscription model ids run under the provider's
@@ -112,20 +98,6 @@ const harnessOptions = computed(() => [
     { label: `Claude Code`, value: `claude-code` },
 ]);
 
-// Three stops rather than a toggle, because absent is not the same as off: a pin that says nothing about
-// thinking sends nothing, and the harness's own default (Claude reasons) answers. A two-state chip would draw
-// that as "off" and be wrong about what the run does.
-const THINKING_OPTIONS = [
-    { label: `Default`, value: `` },
-    { label: `On`, value: `on` },
-    { label: `Off`, value: `off` },
-];
-// Speed IS binary: an absent `fast` means standard speed, which is what the turn schema says it means.
-const SPEED_OPTIONS = [
-    { label: `Standard`, value: `standard` },
-    { label: `Fast`, value: `fast` },
-];
-
 // What this provider/harness pair cannot do, straight off its declared record: the honest half of a choice made
 // for runs nobody is watching. Empty (the Claude Code loop, the ceiling) draws nothing.
 const limitations = computed(() => limitationsOf(capabilities.value));
@@ -133,10 +105,7 @@ const limitations = computed(() => limitationsOf(capabilities.value));
 // Whether the footer earns the border and padding it draws: a rule over nothing is the one defect a footer like
 // this has to make impossible.
 const footerVisible = computed(
-    () =>
-        knobs &&
-        pin !== undefined &&
-        (efforts.value.length > 0 || provider.value === `claude` || harnessChoosable.value || limitations.value.length > 0),
+    () => knobs && pin !== undefined && (runSettingsShown.value || harnessChoosable.value || limitations.value.length > 0),
 );
 
 // A pin with the fields nobody set left OFF it rather than present-and-undefined: the daemon reads an absent
@@ -188,54 +157,18 @@ const unpickable = (entry: PickerEntry): boolean =>
                     </span>
                 </div>
 
-                <!-- REASONING EFFORT: the app's own meter (EffortMeter), the control the composer draws beside
-                     its model pill. "Default" is a real state and not decoration: an unpinned effort means the
-                     turn goes out without one and the model's own answers, so that word sits where the level
-                     would be until a rung is chosen.
-                     THE WAY BACK IS AN ×, NOT THE WORD AGAIN. It read "Max Default" side by side on screen —
-                     two words in the same size where one is the state and the other is a control, which is one
-                     phrase to anybody scanning the row. The × is the same gesture the list rows use to take an
-                     entry out, one level down: this takes the tier out and leaves the model. -->
-                <div v-if="efforts.length > 0" class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">Reasoning effort</span>
-                    <span class="flex shrink-0 items-center gap-1.5">
-                        <EffortMeter :efforts="efforts" :effort="effort" empty-label="Default" @pick="configure({ effort: $event })" />
-                        <!-- It keeps its slot at "Default" rather than unmounting, so picking a rung never
-                             re-lays-out the row and slides the ladder out from under the cursor. -->
-                        <button
-                            type="button"
-                            :aria-hidden="effort === `` ? `true` : undefined"
-                            :tabindex="effort === `` ? -1 : undefined"
-                            :class="[ui.iconButton(`h-auto w-auto shrink-0 rounded p-1 text-subtle`), effort === `` ? `pointer-events-none invisible` : ``]"
-                            v-tooltip.top="`Take this model's own default effort`"
-                            aria-label="Take this model's own default effort"
-                            @click="configure({ effort: undefined })"
-                        >
-                            <Icon name="times" class="text-2xs" />
-                        </button>
-                    </span>
-                </div>
-
-                <!-- CLAUDE'S TWO KNOBS. Thinking is three-stop for the reason THINKING_OPTIONS gives; speed is
-                     binary, and offered only where the runtime, the route and the model all allow it. -->
-                <div v-if="provider === `claude`" class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">Extended thinking</span>
-                    <SegmentedControl
-                        :model-value="pin?.thinking === undefined ? `` : pin.thinking ? `on` : `off`"
-                        :options="THINKING_OPTIONS"
-                        wrap
-                        @update:model-value="(value: string) => configure({ thinking: value === `` ? undefined : value === `on` })"
-                    />
-                </div>
-                <div v-if="fastOffered" class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">Speed</span>
-                    <SegmentedControl
-                        :model-value="pin?.fast === true ? `fast` : `standard`"
-                        :options="SPEED_OPTIONS"
-                        wrap
-                        @update:model-value="(value: string) => configure({ fast: value === `fast` ? true : undefined })"
-                    />
-                </div>
+                <!-- Reasoning effort, extended thinking and speed: the shell picker's own rows, shared verbatim
+                     (PickerRunSettings), because a reader configuring a pinned entry here and a run over there
+                     is answering the same three questions about the same kind of selection. -->
+                <PickerRunSettings
+                    :provider="provider"
+                    :model="model"
+                    :harness="harness"
+                    :effort="pin?.effort"
+                    :thinking="pin?.thinking"
+                    :fast="pin?.fast"
+                    @update="configure($event)"
+                />
 
                 <!-- Harness axis (codex/grok): the provider's own runtime, or its model through the Claude Code
                      harness. Separate from the model, since the same subscription ids run under either. -->

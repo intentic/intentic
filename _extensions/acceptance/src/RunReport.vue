@@ -260,7 +260,7 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                 </div>
             </div>
             <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-                <span>{{ run.manifest.provider }}{{ run.manifest.model ? ` · ${run.manifest.model}` : `` }}</span>
+                <span>{{ run.manifest.pick.agent }} · {{ run.manifest.pick.model }}</span>
                 <span>{{ timeAgo(run.manifest.createdAt) }}</span>
                 <span v-if="defects.length > 0" class="text-danger">{{ defects.length }} {{ defects.length === 1 ? `defect` : `defects` }}</span>
             </div>

@@ -1,28 +1,35 @@
 <script setup lang="ts">
-import { capabilitiesOf, sendableEffort } from "@intentic/sandbox-contract";
-import { ui } from "@intentic/ui";
+import { Button } from "@intentic/ui";
 import { computed } from "vue";
-import { clampEffort, effortsFor } from "./effortScale";
-import { dismissModelPick, modelRequest, settleModelPick, stageModelPick } from "./hostModelPicker";
+import { commitModelPick, dismissModelPick, modelRequest, stageModelPick } from "./hostModelPicker";
+import { effortLabelOf } from "./effortScale";
+import { modelLabelFor } from "../accounts/providerCatalog";
 import type { PickerEntry } from "./modelPickerState";
 import { usePickerAccounts } from "../accounts/pickerAccounts";
-import EffortMeter from "../composer/EffortMeter.vue";
+import { usePickerRunSettings } from "./pickerRunSettings";
 import ModelPicker from "./ModelPicker.vue";
 import PickerAccounts from "../accounts/PickerAccounts.vue";
+import PickerRunSettings from "./PickerRunSettings.vue";
 
-/* THE SHELL PICKER'S BODY: the list, and under it the same who-serves-the-turn block the composer shows. One
- * component because there are two hosts for it (a sheet on mobile, a popover on desktop) and only the frame
- * differs; the panel they frame is the same panel, and it stopped being a single tag the moment it grew a footer.
+/* THE SHELL PICKER'S BODY: the list, the who-serves-the-turn block the composer shows, the model's own run
+ * settings, and the button that ends the whole thing. One component because there are two hosts for it (a sheet
+ * on mobile, a popover on desktop) and only the frame differs.
  *
- * Like the composer, only a MODEL row answers and closes. Account, harness and effort rows configure that answer
- * in place: the open request holds those staged pins until the panel is left. Leaving it by clicking away is not
- * a discard — a dismissal after a pin was touched answers with the model the panel opened on plus the pins
- * (dismissModelPick), because most re-points are of the tier alone and the model is already the right one.
+ * A MODEL ROW SELECTS HERE; THE BAR AT THE BOTTOM COMMITS. That is the one real difference from the composer's
+ * binding of this same list, and hostModelPicker.ts has the argument for it in full: every caller of this panel
+ * is AWAITING an answer, and several of them spend money on it, so an answer has to be a press on something that
+ * names what will happen rather than a click on a row in a list you were reading.
  *
- * THE EFFORT ROW IS HERE FOR THE SAME REASON THE SETTINGS PAGE HAS ONE (ModelPinPickerBody), and it is the same
- * control: this panel is what every "Fix with agent" caret opens, and a run started from a red pipeline has no
- * composer beside it to set a tier in. Without it the caret could move the run to a frontier model and not to
- * the tier that model was pinned at, which is half of what the standing setting says and the cheaper half. */
+ * It also makes the panel cancellable. When a row settled it, the only way to leave after touching the effort
+ * meter was to click away — which the old version had to treat as an answer to keep the meter from looking
+ * broken, so backing out of a change ARMED it. Now every row writes through freely, because Escape undoes all of
+ * it at once.
+ *
+ * THE RUN SETTINGS ARE HERE FOR THE SAME REASON THE SETTINGS PAGE HAS THEM (ModelPinPickerBody), and they are
+ * the same three rows, from the same composable: this panel is what every "Fix with agent" caret opens, and a
+ * run started from a red pipeline has no composer beside it to set a tier in. Without them the caret could move
+ * the run to a frontier model and not to the tier that model was pinned at, which is half of what the standing
+ * setting says and the cheaper half. */
 
 const request = computed(() => modelRequest.value);
 
@@ -34,62 +41,67 @@ const { hasContent } = usePickerAccounts(
     computed(() => request.value?.model),
 );
 
-/* WHICH RUNGS THIS SELECTION OFFERS, and whether it is asked at all: `chooseEffort` is the caller saying it
- * carries a tier (every run button does; the chat, the automations form and a workflow step do not).
- *
- * THINKING IS NOT PART OF A RUN PICK, and the scale is read with it UNSET rather than off, which is the same
- * reading the daemon will make of a turn that says nothing about thinking. Passing `false` here is what used to
- * take Claude's top rung off this panel: `max` is refused only alongside thinking that was explicitly turned
- * OFF, and a run started from a red pipeline turns nothing off — it pins a model and a tier, and the daemon
- * names the reasoning that tier needs on the way out (sendableThinking). A runtime that owns its own reasoning
- * settings (ACP, OpenCode) publishes no scale and draws no row either. */
-const efforts = computed(() => {
+// And the same question for the run settings, whose rows are drawn only for a caller that CARRIES them
+// (`chooseRun`): a control whose answer is dropped on the floor is worse than no control.
+const { hasContent: runSettingsShown } = usePickerRunSettings(
+    computed(() => request.value?.provider ?? `claude`),
+    computed(() => request.value?.model),
+    computed(() => request.value?.harness ?? `native`),
+    computed(() => request.value?.thinking),
+    computed(() => request.value?.effort),
+);
+const runSettings = computed(() => request.value?.chooseRun === true && runSettingsShown.value);
+
+const footerVisible = computed(() => hasContent.value || runSettings.value);
+
+/* NOTHING IS CHOSEN YET is a real state this panel opens in: an automation rung added past the end of its
+ * ladder arrives with a blank pair, and there is no such thing as half an entry. The bar refuses the press
+ * until the list has been answered, which is the one thing the list is unambiguously for. */
+const chosen = computed(() => {
     const held = request.value;
-    if (held?.chooseEffort !== true || !capabilitiesOf(held.provider, held.harness ?? `native`).effort) {
-        return [];
+    return held !== undefined && held.provider !== `` && held.model !== ``;
+});
+
+/* WHAT THE PRESS COSTS, in the one line above it: the model, and the tier it will think at where one is pinned.
+ * The list is scrollable and usually scrolled, so the checkmark answering "which model" is routinely off screen
+ * by the time somebody reaches the bottom of the panel — this is the only place the selection is named in words
+ * at the moment it is spent. The tier is read the way the daemon will read it (against this selection's own
+ * thinking), so the line cannot promise a rung the run will not use. */
+const spend = computed<string>(() => {
+    const held = request.value;
+    if (held === undefined || !chosen.value) {
+        return `Choose a model to continue`;
     }
-    return effortsFor(held.provider, held.model, undefined);
+    const tier = held.chooseRun === true ? effortLabelOf(held.effort, held.provider, held.model, held.thinking) : undefined;
+    return [modelLabelFor(held.provider, held.model), ...(tier === undefined ? [] : [tier])].join(` · `);
 });
 
-/* THE TIER THIS RUN IS ON, read the one way the daemon will read it (sendableEffort over the same unset
- * thinking): nothing is repaired for a pick that turned nothing off, so a run pinned at Max opens on Max.
- * Reading it here rather than only on the way out is what keeps the meter honest — a panel lighting a rung the
- * turn will not use is the failure this control exists to prevent. */
-const staged = computed(() => sendableEffort(request.value?.effort, undefined));
-
-/* CLAMPED FOR DISPLAY on top of that, never written back, the composer's own rule (effortScale.ts): a tier
- * carried over from a model with a longer scale would otherwise light no rung at all and read as an unset
- * control. What the run SENDS stays the repaired pick, for the day they re-point it at a longer scale again. */
-const effort = computed(() => {
-    const held = request.value;
-    return staged.value === undefined || staged.value === `` || held === undefined
-        ? ``
-        : clampEffort(staged.value, held.provider, held.model, undefined);
-});
-
-const footerVisible = computed(() => hasContent.value || efforts.value.length > 0);
-
-/* A model row. Account and harness ride along ONLY under the provider they were made under: an account id is one
- * provider's store key, and a harness is a choice that exists for codex/grok alone, so carrying either across a
- * provider switch would pin the run to a credential the new provider does not have. THE EFFORT TRAVELS, because
- * a tier is a question every native model answers, and the clamp above already says what a shorter scale will
- * run it at, the same split the settings page's picker makes. */
+/* A model row STAGES. Account and harness ride along ONLY under the provider they were made under: an account id
+ * is one provider's store key, and a harness is a choice that exists for codex/grok alone, so carrying either
+ * across a provider switch would pin the work to a credential the new provider does not have. THE RUN SETTINGS
+ * TRAVEL, because effort, thinking and speed are questions every native model answers for itself, and the
+ * meter's own clamp already says what a shorter scale will run a carried tier at — the same split the settings
+ * page's picker makes. */
 const choose = (entry: PickerEntry): void => {
     const held = request.value;
-    const kept = held !== undefined && entry.provider === held.provider ? held : undefined;
-    settleModelPick({
+    const switching = held !== undefined && entry.provider !== held.provider;
+    stageModelPick({
         provider: entry.provider,
         model: entry.value,
-        label: entry.label,
-        ...(kept?.account !== undefined ? { account: kept.account } : {}),
-        ...(kept?.harness !== undefined ? { harness: kept.harness } : {}),
-        ...(staged.value === undefined || staged.value === `` ? {} : { effort: staged.value }),
+        ...(switching ? { account: undefined, harness: undefined } : {}),
     });
 };
 </script>
 
 <template>
-    <ModelPicker v-if="request" :provider="request.provider" :model="request.model" @pick="choose" @close="dismissModelPick()">
+    <ModelPicker
+        v-if="request"
+        :provider="request.provider"
+        :model="request.model"
+        @pick="choose"
+        @submit="commitModelPick()"
+        @close="dismissModelPick()"
+    >
         <template #footer>
             <!-- The composer's footer metrics exactly (ModelPicker's own 12px rhythm, the row groups bleeding
                  back out with `-mx-3`): the two panels are the same panel, and a reader who opens this one from
@@ -109,30 +121,37 @@ const choose = (entry: PickerEntry): void => {
                     @navigate="dismissModelPick()"
                 />
 
-                <!-- REASONING EFFORT, the app's own meter, drawn exactly as Sandbox ▸ Agent ▸ Models draws it for
-                     a pinned entry: "Default" is a real state rather than decoration (the run goes out without an
-                     effort and the model's own answers), and the way back to it is the × rather than the word
-                     again, which read as one phrase beside the level it was meant to undo. -->
-                <div v-if="efforts.length > 0" class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">Reasoning effort</span>
-                    <span class="flex shrink-0 items-center gap-1.5">
-                        <EffortMeter :efforts="efforts" :effort="effort" empty-label="Default" @pick="stageModelPick({ effort: $event })" />
-                        <!-- The × KEEPS ITS SLOT at "Default" instead of unmounting: it is the last thing on a
-                             right-aligned row, so appearing on the first pick used to shove the ladder sideways
-                             out from under the cursor that had just clicked it. Hidden, it is inert and unseen. -->
-                        <button
-                            type="button"
-                            :aria-hidden="effort === `` ? `true` : undefined"
-                            :tabindex="effort === `` ? -1 : undefined"
-                            :class="[ui.iconButton(`h-auto w-auto shrink-0 rounded p-1 text-subtle`), effort === `` ? `pointer-events-none invisible` : ``]"
-                            v-tooltip.top="`Take this model's own default effort`"
-                            aria-label="Take this model's own default effort"
-                            @click="stageModelPick({ effort: undefined })"
-                        >
-                            <Icon name="times" class="text-2xs" />
-                        </button>
-                    </span>
-                </div>
+                <PickerRunSettings
+                    v-if="runSettings"
+                    :provider="request.provider"
+                    :model="request.model"
+                    :harness="request.harness ?? `native`"
+                    :effort="request.effort"
+                    :thinking="request.thinking"
+                    :fast="request.fast"
+                    @update="stageModelPick($event)"
+                />
+            </div>
+        </template>
+
+        <!-- THE END OF THE PANEL, and the whole reason it now has one. It is `shrink-0` because it is the row
+             that may never be squeezed out by a tall footer on a short window, and `sticky bottom-0` because the
+             mobile sheet scrolls as one piece: unstuck, the press this panel exists for would sit below the fold
+             on exactly the device where the accounts list is longest.
+             THE VERB IS THE CALLER'S ("Fix with agent", "Run chore", "Use this model"), because only the caller
+             knows what the press does, and the line above it is what that press will spend. -->
+        <template #commit>
+            <div class="sticky bottom-0 z-10 flex shrink-0 flex-col gap-1.5 border-t border-line bg-canvas px-3 py-2">
+                <span class="truncate text-2xs" :class="chosen ? `text-subtle` : `text-muted`">{{ spend }}</span>
+                <Button
+                    :label="request.action"
+                    class="w-full"
+                    :disabled="!chosen"
+                    v-tooltip.top="`${request.action} — ⌘/Ctrl + Enter`"
+                    @click="commitModelPick()"
+                >
+                    <template #icon><Icon name="play" /></template>
+                </Button>
             </div>
         </template>
     </ModelPicker>

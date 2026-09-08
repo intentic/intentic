@@ -64,15 +64,7 @@ const startFix = (): void => {
             <!-- Hand the failure to an agent. Absent for a check that could not run and for one the user stopped:
                  nothing was learned about the code either way, so an agent sent after it would be hunting a bug
                  that isn't there. -->
-            <AgentRunButton
-                v-if="pushFlow.proposedFix.value"
-                label="Fix with agent"
-                :model-label="fixModel.model.value.label"
-                :effort-label="fixModel.model.value.effortLabel"
-                :overridden="fixModel.overridden.value"
-                @run="startFix"
-                @pick="fixModel.choose"
-            />
+            <AgentRunButton v-if="pushFlow.proposedFix.value" label="Fix with agent" :picker="fixModel" @run="startFix" />
 
             <!-- Push anyway, and it never asks twice. The user knows things the check does not: that this IS the
                  fix for the failure, that the suite is flaky, that they want it on a branch to look at in CI.

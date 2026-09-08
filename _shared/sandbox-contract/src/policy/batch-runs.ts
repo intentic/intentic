@@ -129,11 +129,7 @@ export const parseBatchFile = <T>(text: string, shape: (value: Record<string, un
  *
  * The closing line is not decoration. A turn that concludes there was nothing to do and writes no file is
  * indistinguishable from a turn that died, and the surface has to show the second as an unknown. */
-export const batchReportingClause = (params: {
-    readonly path: string;
-    readonly fields: string;
-    readonly outcomes?: string | undefined;
-}): string =>
+export const batchReportingClause = (params: { readonly path: string; readonly fields: string; readonly outcomes?: string | undefined }): string =>
     [
         `When you are finished, write your conclusion to ${params.path} as JSON:`,
         params.fields,
@@ -153,11 +149,32 @@ export const batchReportingClause = (params: {
  * never finishes, so that surface trades the prompt away; a maintenance chore is different in kind — nobody is
  * waiting on it, it may take until tomorrow, and a sweep that can answer its own permission prompts is exactly
  * the thing an owner would want to have been asked about. A default here would decide that for both. */
+/* WHAT THE CARET ON THE RUN BUTTON CHOSE, in the shell's own vocabulary (`provider`; the turn calls it `agent`).
+ * Every field but the provider is optional and absent means absent: the turn goes out without it and the model's
+ * own default answers. All of them travel, because all of them are things the picker can now set and each is a
+ * different price — a run re-pointed at a frontier model but not at the tier, the loop or the account it was
+ * pinned under is not the run the reader configured. */
 export interface BatchTurnPick {
     readonly provider: string;
     readonly model?: string | undefined;
+    readonly account?: string | undefined;
+    readonly harness?: string | undefined;
     readonly effort?: string | undefined;
+    readonly thinking?: boolean | undefined;
+    readonly fast?: boolean | undefined;
 }
+
+// The same fields under the names a turn uses. Its own function so the body builder below stays one readable
+// object literal rather than seven nested conditionals.
+const runPickFields = (pick: BatchTurnPick): Record<string, unknown> => ({
+    agent: pick.provider,
+    ...(pick.model === undefined ? {} : { model: pick.model }),
+    ...(pick.account === undefined ? {} : { account: pick.account }),
+    ...(pick.harness === undefined ? {} : { harness: pick.harness }),
+    ...(pick.effort === undefined ? {} : { effort: pick.effort }),
+    ...(pick.thinking === undefined ? {} : { thinking: pick.thinking }),
+    ...(pick.fast === undefined ? {} : { fast: pick.fast }),
+});
 
 export const batchTurnBody = (params: {
     readonly prompt: string;
@@ -177,12 +194,6 @@ export const batchTurnBody = (params: {
     isolated: true,
     unattended: true,
     runRole: params.role,
-    ...(params.pick === undefined
-        ? {}
-        : {
-              agent: params.pick.provider,
-              ...(params.pick.model === undefined ? {} : { model: params.pick.model }),
-              ...(params.pick.effort === undefined ? {} : { effort: params.pick.effort }),
-          }),
+    ...(params.pick === undefined ? {} : runPickFields(params.pick)),
     ...params.extra,
 });

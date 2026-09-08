@@ -51,11 +51,8 @@ const startFix = (): void => {
                 class="-my-1 shrink-0"
                 severity="secondary"
                 text
-                :model-label="fixModel.model.value.label"
-                :effort-label="fixModel.model.value.effortLabel"
-                :overridden="fixModel.overridden.value"
+                :picker="fixModel"
                 @run="startFix"
-                @pick="fixModel.choose"
             />
         </div>
         <Notice v-if="failure" :of="noticeOf(failure)" />

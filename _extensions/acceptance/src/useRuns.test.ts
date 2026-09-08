@@ -104,8 +104,7 @@ const input = (stories: readonly Story[]) => ({
     stories,
     targets: { app: `http://localhost:5173` },
     notes: { app: `Use the demo account` },
-    provider: `claude`,
-    model: `claude-sonnet-4-5`,
+    pick: { agent: `claude`, model: `claude-sonnet-4-5` },
 });
 
 describe(`useRuns`, () => {

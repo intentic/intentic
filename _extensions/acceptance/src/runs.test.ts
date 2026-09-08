@@ -66,8 +66,7 @@ describe(`runManifestOf`, () => {
         createdAt: 1_800_000_000_000,
         targets: { "app/site": `http://localhost:4321`, api: `http://localhost:3000` },
         notes: { app: `Use the demo account` },
-        provider: `claude`,
-        model: `claude-sonnet-4-5`,
+        pick: { agent: `claude`, model: `claude-sonnet-4-5` },
         stories: [story(`login`, `app`, `site`), story(`checkout`, `api`)],
     });
 
@@ -104,19 +103,13 @@ describe(`runManifestOf`, () => {
         expect(manifest.targets).toEqual({ "app/site": `http://localhost:4321`, api: `http://localhost:3000` });
     });
 
-    it(`omits an unset model instead of writing an empty string`, () => {
-        const withoutModel = runManifestOf({ ...manifest, model: ``, stories: [story(`login`)] });
-        expect(`model` in withoutModel).toBe(false);
-    });
-
-    /* THE TIER IS RECORDED WITH THE MODEL, and it has to be: the fan-out is one session per story and Retry
-     * starts more of them off this file minutes later, so a tier the reader chose and the manifest dropped would
-     * run the first story at that level and every later one at the model's own default. Unset stays unset, the
-     * same way the model does, since an empty string is a tier no provider offers. */
-    it(`records the tier the reader chose beside the model, and omits an unset one`, () => {
-        const chosen = runManifestOf({ ...manifest, effort: `xhigh`, stories: [story(`login`)] });
-        const unset = runManifestOf({ ...manifest, effort: ``, stories: [story(`login`)] });
-        expect([chosen.effort, `effort` in unset]).toEqual([`xhigh`, false]);
+    /* THE WHOLE PICK IS RECORDED, and it has to be: the fan-out is one session per story and Retry starts more
+     * of them off this file minutes later, so a knob the reader chose and the manifest dropped would run the
+     * first story the way they asked and every later one on the sandbox's defaults. Whatever was not chosen is
+     * simply absent, which is how every reader of a pick spells "the model's own default". */
+    it(`records the whole pick the reader configured`, () => {
+        const pick = { agent: `claude`, model: `claude-sonnet-4-5`, account: `acc-1`, effort: `xhigh`, thinking: false, fast: true } as const;
+        expect(runManifestOf({ ...manifest, pick, stories: [story(`login`)] }).pick).toEqual(pick);
     });
 });
 
@@ -127,7 +120,7 @@ describe(`reposOf`, () => {
             createdAt: 0,
             targets: {},
             notes: {},
-            provider: `claude`,
+            pick: { agent: `claude`, model: `claude-sonnet-4-5` },
             stories: [story(`login`, `api`), story(`checkout`, `app`), story(`profile`, `api`)],
         });
         expect(reposOf(manifest)).toEqual([`api`, `app`]);
@@ -167,8 +160,7 @@ describe(`parseManifest`, () => {
             createdAt: 7,
             targets: { app: `http://x` },
             notes: {},
-            provider: `codex`,
-            effort: `high`,
+            pick: { agent: `codex`, model: `gpt-5.6`, effort: `high` },
             stories: [story(`login`)],
         });
         expect(parseManifest(JSON.stringify(source))).toEqual(source);
@@ -177,7 +169,7 @@ describe(`parseManifest`, () => {
     it(`rejects a manifest that cannot identify the exact story revision it tested`, () => {
         expect(
             parseManifest(
-                `{"runId":"rabc","createdAt":7,"targets":{},"notes":{},"provider":"codex","launchFailures":{},"stories":[{"slug":"login"}]}`,
+                `{"runId":"rabc","createdAt":7,"targets":{},"notes":{},"pick":{"agent":"codex","model":"gpt-5.6"},"launchFailures":{},"stories":[{"slug":"login"}]}`,
             ),
         ).toBeUndefined();
     });
@@ -188,7 +180,7 @@ describe(`parseManifest`, () => {
             createdAt: 7,
             targets: {},
             notes: {},
-            provider: `codex`,
+            pick: { agent: `codex`, model: `gpt-5.6` },
             stories: [story(`login`)],
         });
         expect(parseManifest(JSON.stringify({ ...manifest, runId: `../outside` }))).toBeUndefined();

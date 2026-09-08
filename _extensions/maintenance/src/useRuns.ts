@@ -1,5 +1,5 @@
 import type { ChoreVerdict } from "@intentic/sandbox-contract/chores";
-import { type AgentSummary, AgentsListSchema, StartedTurnSchema } from "@intentic/sandbox-contract";
+import { type AgentSummary, AgentsListSchema, runPickOf, StartedTurnSchema } from "@intentic/sandbox-contract";
 import type { AgentRunChoice } from "@intentic/extension-ui";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
@@ -156,9 +156,7 @@ export function useRuns() {
                     unattended: true,
                     // Which of the owner's model lists pays for it (Sandbox ▸ Agent ▸ Models).
                     runRole: `maintenance-chore`,
-                    ...(pick !== undefined
-                        ? { agent: pick.provider, model: pick.model, ...(pick.effort === undefined ? {} : { effort: pick.effort }) }
-                        : {}),
+                    ...(pick === undefined ? {} : runPickOf(pick)),
                 }),
             }),
         );

@@ -1,7 +1,7 @@
 import { computed, type ComputedRef, ref } from "vue";
 
 /* THE MODEL A SURFACE-STARTED RUN WILL OPEN ON, AND THE OVERRIDE FOR IT, the state behind every
- * <AgentRunButton> in the app, written once so the six surfaces that start an agent for you cannot each invent
+ * <AgentRunButton> in the app, written once so the seven surfaces that start an agent for you cannot each invent
  * their own idea of what the caret means.
  *
  * WHY IT IS PARAMETERISED rather than reaching for the setting itself: this kit is loaded from two worlds. The
@@ -36,7 +36,29 @@ export interface AgentRunChoice {
     // What the app calls that tier ("X-High"), for the button, since only the host holds the scale. Absent
     // whenever `effort` is.
     readonly effortLabel?: string | undefined;
+    /* THE OTHER TWO KNOBS THE PICKER NOW OFFERS A RUN, and they ride for exactly the reason the tier does. A
+     * `max` pick beside thinking left unset is a different turn from one beside thinking OFF (the daemon reads
+     * the pair together: sendableEffort/sendableThinking), and `fast` is bought at a higher rate — so a caret
+     * that could set them and a turn that dropped them would be charging the user for a choice it discarded.
+     * Absent ⇒ nothing chosen, and the model's own default answers, which is not the same as `false`. */
+    readonly thinking?: boolean | undefined;
+    readonly fast?: boolean | undefined;
 }
+
+/* WHETHER TWO SELECTIONS WOULD START THE SAME RUN, which is the only question `overridden` is really asking.
+ * Someone who opens the caret, reads the panel and presses its button without changing anything has CHOSEN,
+ * and the button must not then announce a deviation: the inline "✨ Opus 4.6 · High" label exists to make an
+ * invisible re-point visible, and worn by a run that matches the sandbox's standing order it is noise on every
+ * row of a list. Compared field by field rather than by identity, because the pick arrives as a fresh object
+ * every time. */
+const sameChoice = (left: AgentRunChoice, right: AgentRunChoice): boolean =>
+    left.provider === right.provider &&
+    left.model === right.model &&
+    left.account === right.account &&
+    left.harness === right.harness &&
+    left.effort === right.effort &&
+    left.thinking === right.thinking &&
+    left.fast === right.fast;
 
 /* The two questions this asks of whichever world it is running in: what would run if nobody chose, and let them
  * choose.
@@ -60,26 +82,41 @@ export interface ModelPicking {
         readonly model: string;
         readonly account?: string | undefined;
         readonly harness?: string | undefined;
-        // The tier the picker opens on, so it starts where the run currently stands rather than at "Default".
+        // What the run currently stands at, so the panel opens where the run is rather than at "Default".
         readonly effort?: string | undefined;
-        /* ASK FOR THE TIER TOO. The host's picker is one panel over several questions, and only some of its
-         * callers can honour an answer about reasoning effort: a run button does (the tier rides onto the turn
-         * it starts), while the chat sets its own effort in the composer and the automations/workflow forms
-         * store a model without one. A control whose answer is dropped is worse than no control, so the row is
-         * drawn only for a caller that says it carries the field. This composable always does. */
-        readonly chooseEffort?: boolean;
+        readonly thinking?: boolean | undefined;
+        readonly fast?: boolean | undefined;
+        /* THE VERB ON THE PANEL'S OWN BUTTON, which is what makes the picker end in a press instead of in a
+         * click on a list row. The caller supplies it because only the caller knows what the press does; this
+         * one passes the button's own label, so the panel a "Fix with agent" caret opens is closed by a bar
+         * that says "Fix with agent" — the same words, the same act, one click from wherever in the panel the
+         * user finished configuring. */
+        readonly action?: string | undefined;
+        /* ASK FOR THE MODEL'S OWN RUN SETTINGS TOO — effort, extended thinking, speed. The host's picker is one
+         * panel over several questions, and only some of its callers can honour an answer about how hard a
+         * model thinks: a run button does (all three ride onto the turn it starts), while the chat sets its own
+         * in the composer and a workflow step stores a pair and an account and nothing else. A control whose
+         * answer is dropped is worse than no control, so the rows are drawn only for a caller that says it
+         * carries the fields. This composable always does. */
+        readonly chooseRun?: boolean;
     }): Promise<AgentRunChoice | undefined>;
 }
 
 export interface AgentRunPicker {
     // What the next run opens on, the user's pick if they made one, else the sandbox's standing list.
     readonly model: ComputedRef<AgentRunChoice>;
-    // Whether that is a deviation. The button shows the model only when it is: a control that names the
-    // standing setting on every row of a list is noise, and one that stays silent about a deviation is a trap.
+    // Whether that would start a DIFFERENT run from the sandbox's standing order. The button shows the model
+    // only when it is: a control that names the standing setting on every row of a list is noise, and one that
+    // stays silent about a deviation is a trap.
     readonly overridden: ComputedRef<boolean>;
-    // Open the picker over the caret. Anchored to the element the caller hands back, because in a popped-out
-    // panel the overlay has to measure and dismiss against THAT window rather than the opener's.
-    readonly choose: (anchor: HTMLElement) => Promise<void>;
+    /* Open the picker over the caret and answer whether the user pressed its button. Anchored to the element the
+     * caller hands back, because in a popped-out panel the overlay has to measure and dismiss against THAT
+     * window rather than the opener's; `action` is the verb that button carries.
+     *
+     * TRUE MEANS START THE RUN, and that is the whole point of the return value: configuring the run and
+     * starting it are one act, so the press that ends the panel is the press that spends the money. False is a
+     * dismissal — Escape, a click outside, the sheet's backdrop — and changes nothing at all. */
+    readonly choose: (anchor: HTMLElement, action: string) => Promise<boolean>;
     // Back to the standing setting, called once a run has been started with the pick, so the next one on the
     // same row does not silently inherit a choice made for a different failure.
     readonly clear: () => void;
@@ -91,25 +128,31 @@ export interface AgentRunPicker {
  * composer's own model — the same floor an unpinned one gets — rather than by a crash in somebody's panel. */
 export function useAgentRunPick(models: () => ModelPicking, role: string): AgentRunPicker {
     const picked = ref<AgentRunChoice | undefined>(undefined);
-    const model = computed<AgentRunChoice>(() => picked.value ?? models().agentRun(role));
+    const standing = computed<AgentRunChoice>(() => models().agentRun(role));
+    const model = computed<AgentRunChoice>(() => picked.value ?? standing.value);
     return {
         model,
-        overridden: computed(() => picked.value !== undefined),
-        choose: async (anchor: HTMLElement): Promise<void> => {
+        overridden: computed(() => picked.value !== undefined && !sameChoice(picked.value, standing.value)),
+        choose: async (anchor: HTMLElement, action: string): Promise<boolean> => {
             const next = await models().pick({
                 anchor,
-                // Every surface that presses this button sends the tier on with the model (the daemon fills a
-                // pinned entry's own in only for a run that named neither), so the row is always offered here.
-                chooseEffort: true,
+                action,
+                // Every surface that presses this button sends the knobs on with the model (the daemon fills a
+                // pinned entry's own in only for a run that named neither), so the rows are always offered here.
+                chooseRun: true,
                 provider: model.value.provider,
                 model: model.value.model,
                 ...(model.value.account !== undefined ? { account: model.value.account } : {}),
                 ...(model.value.harness !== undefined ? { harness: model.value.harness } : {}),
                 ...(model.value.effort !== undefined ? { effort: model.value.effort } : {}),
+                ...(model.value.thinking !== undefined ? { thinking: model.value.thinking } : {}),
+                ...(model.value.fast !== undefined ? { fast: model.value.fast } : {}),
             });
-            if (next !== undefined) {
-                picked.value = next;
+            if (next === undefined) {
+                return false;
             }
+            picked.value = next;
+            return true;
         },
         clear: (): void => {
             picked.value = undefined;

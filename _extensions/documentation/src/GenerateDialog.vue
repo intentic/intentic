@@ -92,15 +92,7 @@ const start = (): void => {
 
             <div class="flex justify-end gap-2">
                 <Button size="small" severity="secondary" text label="Cancel" @click="open = false" />
-                <AgentRunButton
-                    label="Generate"
-                    :model-label="runModel.model.value.label"
-                    :effort-label="runModel.model.value.effortLabel"
-                    :overridden="runModel.overridden.value"
-                    :disabled="chosen.length === 0"
-                    @run="start"
-                    @pick="runModel.choose"
-                />
+                <AgentRunButton label="Generate" :picker="runModel" :disabled="chosen.length === 0" @run="start" />
             </div>
         </div>
     </Modal>

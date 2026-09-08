@@ -245,6 +245,14 @@ export interface PickedModel {
     // What the shell calls that tier ("X-High"), for a view that shows the choice. Absent whenever `effort` is,
     // and for a runtime that owns its own reasoning settings and publishes no scale.
     readonly effortLabel?: string | undefined;
+    /* WHETHER THE MODEL REASONS BEFORE IT ANSWERS, where that is a choice it offers. Three states and not two:
+     * absent means nobody said, and the turn goes out with no thinking field so the model's own default decides,
+     * which is NOT the same as `false`. The distinction is load-bearing — Claude refuses its top effort tier
+     * beside thinking explicitly disabled — so pass it on the turn exactly as it arrives. */
+    readonly thinking?: boolean | undefined;
+    /* WHETHER THE WORK IS BOUGHT AT THE FASTER RATE, for a higher price. A request rather than a promise: the
+     * harness answers, and may decline (the plan, the account's own settings, the model). Absent ⇒ standard. */
+    readonly fast?: boolean | undefined;
 }
 
 export type SettingValue = string | number | boolean;
@@ -517,17 +525,28 @@ export interface IntenticApi {
             readonly account?: string | undefined;
             readonly harness?: string | undefined;
             readonly effort?: string | undefined;
+            readonly thinking?: boolean | undefined;
+            readonly fast?: boolean | undefined;
         }): PickedModel;
         /* Open the picker over `anchor`, a popover on desktop, a sheet on mobile, starting on the selection the
          * caller is holding. Resolves with the pick, or undefined if it was dismissed. A second call supersedes
          * the first, resolving it as a dismissal.
          *
-         * A MODEL ROW settles it. Account, harness and reasoning-effort rows behave as they do in the composer:
-         * they update the open selection without closing, and the eventual model pick carries those pins.
-         * Dismissing after only staging a pin still resolves undefined. Picking a model under a DIFFERENT provider
-         * clears the account and harness with it, an account id is one provider's store key, so carrying it across
-         * would pin the run to an account that provider does not have; the EFFORT survives, because a tier is a
-         * question every model answers for itself. */
+         * IT IS A FORM AND IT ENDS IN A PRESS. Every row in the panel — the model list included — updates the
+         * open selection and leaves the panel open; the bar at the bottom, carrying your `action` as its label,
+         * is what resolves this promise. Nothing else does: Escape, a click outside and the sheet's backdrop are
+         * all a plain cancel, resolving undefined and keeping nothing, so a caller never has to guess whether a
+         * dismissal meant "as you were" or "yes, but from over there".
+         *
+         * The panel used to settle on the model row instead, which cost the callers that spend money a second
+         * click (leave the panel, then press the thing that starts the run) and made backing out of an effort
+         * change impossible. If your surface merely stores the answer, name your verb accordingly ("Use this
+         * model" is the default) and the press reads as the save it is.
+         *
+         * Picking a model under a DIFFERENT provider clears the account and harness with it: an account id is one
+         * provider's store key, so carrying it across would pin the work to an account that provider does not
+         * have. The RUN SETTINGS survive, because effort, thinking and speed are questions every model answers
+         * for itself. */
         pick(options: {
             readonly anchor: HTMLElement;
             readonly provider: string;
@@ -535,11 +554,19 @@ export interface IntenticApi {
             readonly account?: string | undefined;
             readonly harness?: string | undefined;
             readonly effort?: string | undefined;
-            /* OFFER THE REASONING-EFFORT ROW, for a caller that will carry `effort` onto the turn it starts. Off
-             * by default, and deliberately: a form that stores a model and no tier (an automation, a workflow
-             * step) would be showing a control whose answer it drops, which is worse than showing none. Every
-             * <AgentRunButton> asks for it through `useAgentRunPick`, so a surface using that gets it already. */
-            readonly chooseEffort?: boolean;
+            readonly thinking?: boolean | undefined;
+            readonly fast?: boolean | undefined;
+            /* THE VERB ON THE PANEL'S OWN BUTTON — "Fix with agent", "Run all 21 stories", "Save this step".
+             * Yours, because only you know what the press does, and it is what lets configuring a run and
+             * starting it be one act instead of two. Defaults to "Use this model", which is honest for a form
+             * that is only storing the answer. */
+            readonly action?: string | undefined;
+            /* OFFER THE MODEL'S OWN RUN SETTINGS — reasoning effort, extended thinking, speed — for a caller
+             * that will carry them onto the turn it starts or the pin it stores. Off by default, and
+             * deliberately: a form that keeps a model and none of these (a workflow step) would be showing
+             * controls whose answers it drops, which is worse than showing none. Every <AgentRunButton> asks for
+             * them through `useAgentRunPick`, so a surface using that gets them already. */
+            readonly chooseRun?: boolean;
         }): Promise<PickedModel | undefined>;
     };
     // Navigate the shell to an app path (e.g. "/capabilities", "/ext/<view>/<key>").

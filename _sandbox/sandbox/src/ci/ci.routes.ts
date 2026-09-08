@@ -144,9 +144,9 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                  * either way: it is what the turn IS, not a statement about whether a model was named. */
                 unattended: true,
                 runRole: `pipeline-fix`,
-                ...(input.pick !== undefined
-                    ? { agent: input.pick.agent, model: input.pick.model, ...(input.pick.effort === undefined ? {} : { effort: input.pick.effort }) }
-                    : {}),
+                // Spread verbatim: AgentRunPick's fields ARE the turn's (agent, model, account, harness, effort,
+                // thinking, fast), so there is nothing to translate and nothing that can be forgotten here.
+                ...input.pick,
                 title: `Fix CI: ${run?.title ?? input.repo}`.slice(0, TITLE_MAX),
             };
             /* Use the SAME detached-run boundary as POST /agent. The old fire-and-forget generator bypassed the

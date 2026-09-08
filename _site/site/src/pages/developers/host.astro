@@ -252,21 +252,22 @@ const packages = [
         <tbody>
             <tr><td><code>agentRun()</code></td><td>What a run opens on when nobody has chosen: the sandbox's Agent-runs model, falling back to the owner's own chat setting. Reactive.</td></tr>
             <tr><td><code>describe(selection)</code></td><td>Name a selection you already hold: a pin read back from disk arrives as bare ids and has to be rendered before anyone opens the picker. Reactive, so a disconnected account changes what a stored pin says about itself.</td></tr>
-            <tr><td><code>pick(&#123; anchor, ... &#125;)</code></td><td>Open the picker over an element: a popover on desktop, a sheet on mobile. Resolves with the pick, or <code>undefined</code> if dismissed.</td></tr>
+            <tr><td><code>pick(&#123; anchor, action, ... &#125;)</code></td><td>Open the picker over an element: a popover on desktop, a sheet on mobile. Every row inside it updates the open selection; the bar at the bottom, wearing your <code>action</code> as its label, is what resolves the promise. Escape, a click outside and the sheet's backdrop are a plain cancel: <code>undefined</code>, nothing kept.</td></tr>
         </tbody>
     </table>
     <p>
         A <code>PickedModel</code> covers the whole choice: <code>provider</code>, <code>model</code>, a display <code>label</code>, and
-        optionally which connected <code>account</code>, which <code>harness</code>, and the reasoning <code>effort</code> that model
-        thinks at (with <code>effortLabel</code>, the shell's own word for it). Those are pins. Leaving them absent lets the
-        daemon choose, which keeps a saved choice working after an account is disconnected.
+        optionally which connected <code>account</code>, which <code>harness</code>, the reasoning <code>effort</code> that model
+        thinks at (with <code>effortLabel</code>, the shell's own word for it), whether it reasons first
+        (<code>thinking</code>) and whether the work is bought at the faster rate (<code>fast</code>). Those are pins. Leaving them
+        absent lets the daemon choose, which keeps a saved choice working after an account is disconnected.
         Pin the account when the surface starts <em>unattended</em> runs: nobody is watching at 6am, and a first account that has run out of
         headroom is a run that errors every time until someone reads the row.
-        Pass <code>effort</code> on the turn you start, beside <code>model</code>: the sandbox fills a pinned entry's tier in only for a run
-        that named no model at all, so a run your caret re-pointed and that dropped the tier falls back to the provider's default.
-        The picker offers the tier only when you ask for it, <code>pick(&#123; …, chooseEffort: true &#125;)</code>: a form that stores a model
-        and no tier would be showing a control whose answer it throws away. <code>useAgentRunPick</code> asks for you, so a surface built on
-        <code>AgentRunButton</code> has it already.
+        Pass all of them on the turn you start, beside <code>model</code>: the sandbox fills a pinned entry's knobs in only for a run
+        that named no model at all, so a run your caret re-pointed and that dropped them falls back to the provider's defaults.
+        The picker offers them only when you ask, <code>pick(&#123; …, chooseRun: true &#125;)</code>: a form that stores a model
+        and none of them would be showing controls whose answers it throws away. <code>useAgentRunPick</code> asks for you, so a surface built on
+        <code>AgentRunButton</code> has them already.
     </p>
 
     <h2>api.navigate, api.route and api.theme</h2>

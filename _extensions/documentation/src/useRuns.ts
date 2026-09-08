@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { type AgentSummary, AgentsListSchema, WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
+import { type AgentRunPick, AgentRunPickSchema, type AgentSummary, AgentsListSchema, WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, type Ref } from "vue";
 import { mapBrief, packageBrief } from "./brief.js";
 import { componentOfPackage, parseRepoDoc, type RepoDoc } from "./docModel.js";
@@ -68,9 +68,11 @@ export interface RunManifest {
      * possibly in a browser that has been reloaded since. A pick kept in memory would document the first
      * package on the model the user chose and the other forty on the standing one.
      *
-     * The TIER is part of that choice and is recorded with it, for the same reason: a fan-out where the first
-     * session thinks at Max and the rest at the model's default is not the run the reader asked for. */
-    readonly pick?: { readonly agent: string; readonly model: string; readonly effort?: string };
+     * THE WHOLE PICK is recorded, not merely the pair, for the same reason: a fan-out where the first session
+     * thinks at Max on the account the reader chose and the rest at the model's default on whichever account
+     * came first is not the run they asked for. The contract's own shape (AgentRunPickSchema), so this manifest
+     * cannot fall behind what the picker can set. */
+    readonly pick?: NonNullable<AgentRunPick>;
 }
 
 const parseManifest = (text: string): RunManifest | undefined => {
@@ -79,7 +81,10 @@ const parseManifest = (text: string): RunManifest | undefined => {
         const runId = body[`runId`];
         const repo = body[`repo`];
         const packages = body[`packages`];
-        const pick = body[`pick`] as { agent?: unknown; model?: unknown; effort?: unknown } | undefined;
+        // Read back through the contract's own schema: both halves of the pair or neither (a model id means
+        // nothing without the provider that vends it, so half a pick off disk is worse than none), and every
+        // knob it carries comes with it, without this reader having to be told each time one is added.
+        const pick = AgentRunPickSchema.safeParse(body[`pick`]);
         if (typeof runId !== `string` || typeof repo !== `string`) {
             return undefined;
         }
@@ -88,12 +93,7 @@ const parseManifest = (text: string): RunManifest | undefined => {
             repo,
             createdAt: typeof body[`createdAt`] === `number` ? (body[`createdAt`] as number) : 0,
             packages: Array.isArray(packages) ? packages.filter((dir): dir is string => typeof dir === `string`) : undefined,
-            // Both halves or neither: a model id means nothing without the provider that vends it, so half a
-            // pick read back off disk is worse than none. The tier is its own question and rides along when the
-            // file has one, a manifest written before the reader chose a tier simply has none.
-            ...(typeof pick?.agent === `string` && typeof pick.model === `string`
-                ? { pick: { agent: pick.agent, model: pick.model, ...(typeof pick.effort === `string` ? { effort: pick.effort } : {}) } }
-                : {}),
+            ...(pick.success && pick.data !== undefined ? { pick: pick.data } : {}),
         };
     } catch {
         return undefined;
@@ -117,7 +117,7 @@ export interface StartRunInput {
     // Absent ⇒ document every package the map finds. See RunManifest.packages.
     readonly packages?: readonly string[] | undefined;
     // The caret's choice, when the reader made one. Recorded on the manifest so the whole fan-out inherits it.
-    readonly pick?: { readonly agent: string; readonly model: string; readonly effort?: string } | undefined;
+    readonly pick?: NonNullable<AgentRunPick> | undefined;
 }
 
 export function useRuns(repo: Ref<string>) {
@@ -227,9 +227,8 @@ export function useRuns(repo: Ref<string>) {
                 unattended: true,
                 // Which of the owner's model lists pays for it (Sandbox ▸ Agent ▸ Models).
                 runRole: `documentation-run`,
-                ...(pick !== undefined
-                    ? { agent: pick.agent, model: pick.model, ...(pick.effort === undefined ? {} : { effort: pick.effort }) }
-                    : {}),
+                // Spread verbatim: the pick's fields ARE the turn's (contract AgentRunPickSchema).
+                ...pick,
             }),
         });
     };

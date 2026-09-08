@@ -1,5 +1,12 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type AgentSummary, AgentsListSchema, StartedTurnSchema, BrowsersListSchema, WorkspaceChildrenSchema } from "@intentic/sandbox-contract";
+import {
+    type AgentRunPick,
+    type AgentSummary,
+    AgentsListSchema,
+    StartedTurnSchema,
+    BrowsersListSchema,
+    WorkspaceChildrenSchema,
+} from "@intentic/sandbox-contract";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
@@ -82,13 +89,9 @@ export interface StartRunInput {
     readonly targets: Readonly<Record<string, string>>;
     // Each repo's docs/user-stories/.acceptance.md, keyed by repo name.
     readonly notes: Readonly<Record<string, string>>;
-    // The pair the header's chip resolved, the host names both, because a model id is only meaningful under the
-    // provider that vends it. An empty model is a real answer (an ACP agent owns its own): the daemon then falls
-    // to the provider's catalog default, exactly as an unpinned composer turn does.
-    readonly provider: string;
-    readonly model: string;
-    // And the tier that model thinks at, where the reader chose one. Absent ⇒ the model's own default.
-    readonly effort?: string | undefined;
+    // What every session opens on, as the run button resolved it: the pair, and the account, harness, tier,
+    // thinking and speed configured with it. Recorded on the manifest, so Retry launches the same run.
+    readonly pick: NonNullable<AgentRunPick>;
 }
 
 export function useRuns() {
@@ -271,9 +274,8 @@ export function useRuns() {
             unattended: true,
             // Which of the owner's model lists pays for it (Sandbox ▸ Agent ▸ Models).
             runRole: `acceptance-run`,
-            agent: manifest.provider,
-            ...(manifest.model === undefined ? {} : { model: manifest.model }),
-            ...(manifest.effort === undefined ? {} : { effort: manifest.effort }),
+            // Spread verbatim: the pick's fields ARE the turn's (contract AgentRunPickSchema).
+            ...manifest.pick,
         };
         StartedTurnSchema.parse(
             await api.sandbox.json(`/agent`, { method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(body) }),
@@ -299,9 +301,7 @@ export function useRuns() {
             createdAt,
             targets: input.targets,
             notes: input.notes,
-            provider: input.provider,
-            model: input.model,
-            effort: input.effort,
+            pick: input.pick,
             stories: snapshots,
         });
         await api.workspace.write(runManifestPath(runId), JSON.stringify(manifest, null, 2));

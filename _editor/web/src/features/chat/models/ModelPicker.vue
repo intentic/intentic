@@ -31,6 +31,17 @@ import ProviderLogo from "../accounts/ProviderLogo.vue";
  * that configures a SESSION rather than choosing a model goes in the `footer` slot: accounts, the harness axis,
  * extended thinking, because none of that means anything to a caller who has no session.
  *
+ * AND A `commit` SLOT UNDER THAT, for the one kind of caller whose answer SPENDS MONEY. Everywhere else a model
+ * row is the answer and answering closes the panel: the composer writes it to the conversation, the settings row
+ * writes it to a pin, and both keep editing after it. A run button cannot work that way — the panel it opens is
+ * configuring a run that has not started, so an answer would have to START it, and the panel would be a control
+ * where clicking a list row bills you. Those callers leave `pick` staging the selection instead and put their own
+ * verb in this slot, which is the whole reason the panel now ends in a press rather than in a dismissal.
+ *
+ * The slot is drawn by the CALLER, exactly as `footer` is: this panel owns the column, not the chrome inside it.
+ * A caller that fills it must be `shrink-0` (it is the one row that may never be squeezed out by a tall footer)
+ * and `sticky bottom-0` so it stays in thumb reach in the mobile sheet, which scrolls as one piece.
+ *
  * ACCESS IS THE FIRST THING A ROW STATES. Every provider's catalog is non-empty whether or not its credential is
  * connected (the daemon serves a seed floor so a turn always resolves a model), so the list used to offer models
  * that could not run, indistinguishable from ones that could. Connected providers now lead, the rest follow
@@ -42,7 +53,12 @@ import ProviderLogo from "../accounts/ProviderLogo.vue";
  * The rail is a FILTER, never a switcher. Hosts remount the body per open, so the query/rail reset and the
  * catalogs refresh on every open. */
 
-const emit = defineEmits<{ pick: [PickerEntry]; close: [] }>();
+/* `submit` is the keyboard's way to the `commit` slot, and it is deliberately NOT plain Enter. Enter picks the
+ * highlighted row, everywhere, in every binding of this panel — that is the one keystroke a search-and-choose
+ * list may not redefine per caller, and for the callers that commit it is how the list's value gets set at all.
+ * ⌘/Ctrl-Enter is this app's send (the composer's own), and it is the right shape for the other half: a
+ * deliberate two-finger gesture for the press that starts something. A caller with no commit bar ignores it. */
+const emit = defineEmits<{ pick: [PickerEntry]; submit: []; close: [] }>();
 const { provider, model, unpickable } = defineProps<{
     // The pair the list checkmarks. Both, because a model id is only meaningful under the provider that vends it.
     provider: AgentProvider;
@@ -324,7 +340,9 @@ onMounted(() => {
             :aria-activedescendant="flat.length > 0 ? `model-picker-opt-${activeIndex}` : undefined"
             @keydown.down.prevent="move(1)"
             @keydown.up.prevent="move(-1)"
-            @keydown.enter.prevent="pickActive"
+            @keydown.enter.exact.prevent="pickActive"
+            @keydown.enter.meta.prevent="emit(`submit`)"
+            @keydown.enter.ctrl.prevent="emit(`submit`)"
             @keydown.esc="onEsc"
         />
 
@@ -561,5 +579,7 @@ onMounted(() => {
 
         <!-- Whatever the caller configures BESIDE the model. Empty for a caller that only chooses one. -->
         <slot name="footer" />
+        <!-- And the press that spends it, for a caller whose answer starts something. See the header. -->
+        <slot name="commit" />
     </div>
 </template>

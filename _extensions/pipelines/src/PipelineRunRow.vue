@@ -361,8 +361,15 @@ const startFix = (): void => {
                             <Icon :name="fixState.icon" :spin="fixState.spin" class="text-2xs" />
                             {{ fixState.label }}
                             <span v-if="showFixChipMeta && fixAge" class="text-2xs font-normal tabular-nums text-subtle">{{ fixAge }}</span>
-                            <span v-if="showFixChipMeta && spend" class="hidden text-2xs font-normal tabular-nums text-subtle @3xl:inline">{{ spend }}</span>
-                            <DiffStat v-if="showFixChipMeta && fixDiff" class="hidden @3xl:inline" :additions="fixDiff.insertions" :deletions="fixDiff.deletions" />
+                            <span v-if="showFixChipMeta && spend" class="hidden text-2xs font-normal tabular-nums text-subtle @3xl:inline">{{
+                                spend
+                            }}</span>
+                            <DiffStat
+                                v-if="showFixChipMeta && fixDiff"
+                                class="hidden @3xl:inline"
+                                :additions="fixDiff.insertions"
+                                :deletions="fixDiff.deletions"
+                            />
                         </a>
                         <!-- Primary only on the branch's open failure, and only while no agent is already on that
                              branch. Every other red row keeps the same action at Re-run's weight: a log entry, not
@@ -376,16 +383,13 @@ const startFix = (): void => {
                         <AgentRunButton
                             v-else-if="run.status === `failed`"
                             :label="fixState?.retry === true ? `Try again` : `Fix with agent`"
-                            :model-label="fixModel.model.value.label"
-                            :effort-label="fixModel.model.value.effortLabel"
-                            :overridden="fixModel.overridden.value"
+                            :picker="fixModel"
                             :severity="loud ? undefined : `secondary`"
                             :text="!loud"
                             :loading="busy === actionKey"
                             :disabled="busy !== undefined"
                             :hint="startHint"
                             @run="startFix"
-                            @pick="fixModel.choose"
                         />
                         <!-- Cancel is offered for a QUEUED run as well as a going one: a pipeline waiting on a
                              runner that is not coming is the case where the button is most wanted, and both

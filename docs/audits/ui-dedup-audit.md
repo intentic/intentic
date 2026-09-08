@@ -189,7 +189,10 @@ but no general one. Left alone: the three round differently on purpose and no tw
 - **DAG graphs.** `PipelineGraph` (a mini status strip) and `PipelineDagGraph` (the full graph) look like a
   duplicate pair but are not; both derive shape from one `pipelineDag.ts`, and the full one uses the kit's
   `DagGraph`. Vue Flow appears only inside the kit.
-- **Model pickers.** `ModelPicker` is the one list; `ChatModelPicker`, `HostPickerBody` and `HostModelPicker`
-  are thin bindings of it.
+- **Model pickers.** `ModelPicker` is the one list; `ChatModelPicker`, `HostPickerBody` and `ModelPinPickerBody`
+  are thin bindings of it, and `HostModelPicker` is the shell's mount for the second. The footers underneath it
+  are shared too: `PickerAccounts` (who serves the turn) and `PickerRunSettings` (effort, extended thinking,
+  speed) — the latter because the shell picker and the settings page had drawn all three rows by hand, in
+  duplicate, down to the clamp rule and the `×` beside the meter.
 - **Desktop app.** Uses the kit throughout; no parallel component set.
 - **Spinners, badges, avatars, icons.** Single shared implementations.

@@ -441,12 +441,18 @@ export type AgentTurn = z.infer<typeof AgentTurnSchema>;
  * would send a Codex model id to Claude. Routes that accept this pass it through verbatim; a model this build
  * has never heard of is a supported pick, since the picker offers a custom-id escape hatch.
  *
- * AND THE TIER IT RUNS AT, because naming a model is only half of what the standing setting says. A pinned
- * entry carries its own effort (ModelPinSchema), and the daemon applies the pin's knobs ONLY to a turn that
- * named no model (turn-resume.ts): so a caret that could re-point the model but not the tier moved every
- * override onto the provider's own default effort, and the one moment somebody reaches for the caret is the
- * failure that just beat the standing order. Optional, and absent means absent, the turn goes out without an
- * effort and the model's own answers. */
+ * AND EVERYTHING ELSE THE PANEL CAN SET, which is the half this schema used to drop on the floor. A pinned entry
+ * carries its own account, harness, effort, thinking and speed (ModelPinSchema), the daemon applies a pin's
+ * knobs ONLY to a turn that named no model (turn-resume.ts), and the picker the caret opens offers every one of
+ * them — so a pick that carried the pair alone moved each override onto the provider's own defaults for the
+ * rest. That is worst exactly where the caret gets reached for: the one moment somebody opens it is the failure
+ * that just beat the standing order, and a run re-pointed at a frontier model but not at the tier, the loop or
+ * the account that model was pinned under is not the run they configured.
+ *
+ * The fields are AgentTurn's own (it carries all five already), so a route that accepts this spreads it onto
+ * the turn verbatim. Every one is optional and absent means absent: the turn goes out without the field and the
+ * model's own default answers. `thinking: false` is therefore a different statement from no thinking at all,
+ * which is the distinction Claude's own refusal of `max` beside disabled thinking turns on. */
 export const AgentRunPickSchema = z
     .object({
         agent: z.string().min(1).describe("Which provider."),
@@ -454,13 +460,44 @@ export const AgentRunPickSchema = z
             .string()
             .min(1)
             .describe("Which of its models. Both or neither, because a model name only means anything to the provider that serves it."),
+        account: z
+            .string()
+            .optional()
+            .describe("Which connected account of that provider pays, by its daemon-minted id. Leave it out for whichever has headroom."),
+        harness: AgentHarnessSchema.optional().describe("Which agentic loop runs it. Leave it out to use the provider's own."),
         effort: z
             .string()
             .optional()
             .describe("How hard that model should think, where it offers a choice. Leave it out to take the model's own default."),
+        thinking: z.boolean().optional().describe("Whether this model reasons before it answers, where that is a choice it offers."),
+        fast: z.boolean().optional().describe("Ask for this model's work at a higher rate for a higher price. A request rather than a promise."),
     })
     .optional();
 export type AgentRunPick = z.infer<typeof AgentRunPickSchema>;
+/* THE PICK A RUN BUTTON HOLDS, AS THE WIRE SPELLS IT. The picker answers in the shell's own vocabulary
+ * (`provider`, the kit's AgentRunChoice) and a turn calls the same field `agent`, so every surface that starts
+ * an agent had this translation written out by hand — seven of them, each re-deciding which fields to carry,
+ * which is exactly how the tier came to travel from four of them and the account from none.
+ *
+ * ABSENT STAYS ABSENT, field by field: `undefined` means the turn goes out without it and the model's own
+ * default answers, which is not the same as any value this could invent. */
+export const runPickOf = (choice: {
+    readonly provider: string;
+    readonly model: string;
+    readonly account?: string | undefined;
+    readonly harness?: string | undefined;
+    readonly effort?: string | undefined;
+    readonly thinking?: boolean | undefined;
+    readonly fast?: boolean | undefined;
+}): NonNullable<AgentRunPick> => ({
+    agent: choice.provider,
+    model: choice.model,
+    ...(choice.account === undefined ? {} : { account: choice.account }),
+    ...(choice.harness === undefined ? {} : { harness: choice.harness as AgentHarness }),
+    ...(choice.effort === undefined ? {} : { effort: choice.effort }),
+    ...(choice.thinking === undefined ? {} : { thinking: choice.thinking }),
+    ...(choice.fast === undefined ? {} : { fast: choice.fast }),
+});
 /* ONE ENTRY OF ONE ROLE'S MODEL LIST (settings.modelRoles): the standing version of the pick above, and not
  * merely which model but HOW it is to be run.
  *

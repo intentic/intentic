@@ -204,17 +204,7 @@ const logText = computed(() => {
                      with the repo that holds the bug already open. It is the only primary button on the row,
                      and it IS Pipelines' "Fix with agent": the same component, because it is the same act:
                      one click on the standing model, a caret for the container that wants a bigger one. -->
-                <AgentRunButton
-                    label="Ask the agent to fix"
-                    icon="sparkles"
-                    :model-label="fixModel.model.value.label"
-                    :effort-label="fixModel.model.value.effortLabel"
-                    :overridden="fixModel.overridden.value"
-                    :loading="busy"
-                    :disabled="busy"
-                    @run="startFix"
-                    @pick="fixModel.choose"
-                />
+                <AgentRunButton label="Ask the agent to fix" icon="sparkles" :picker="fixModel" :loading="busy" :disabled="busy" @run="startFix" />
                 <Button
                     v-if="resource.state !== `stopped`"
                     label="Stop"

@@ -53,19 +53,30 @@ export interface HostBindings {
  * has been disconnected is exactly what a caller needs to be able to notice.
  *
  * The TIER is named the same way and for the same reason (effortLabelOf): clamped to what this model actually
- * offers, read with thinking UNSET because a run pick carries no thinking setting (which is not the same as one
- * that turned it off, and reading it as off would rename a Max run "X-High"), and left unnamed where the runtime
- * publishes no scale at all. */
+ * offers, read against the selection's OWN thinking (absent keeps Max on the scale, because the turn then goes
+ * out with no thinking field; explicitly off takes it away, because Claude refuses that pair), and left unnamed
+ * where the runtime publishes no scale at all. */
+// The account half of that, lifted out so the builder below stays one flat literal: which id was pinned, and
+// what the owner would recognise it as.
+const namedAccount = (provider: AgentProvider, account: string | undefined): Pick<PickedModel, "account" | "accountLabel"> => {
+    const connected = account === undefined ? undefined : accountsOf(provider).find((entry) => entry.id === account);
+    return {
+        ...(account !== undefined ? { account } : {}),
+        ...(connected !== undefined ? { accountLabel: connected.email ?? connected.label } : {}),
+    };
+};
+
 const named = (selection: {
     readonly provider: AgentProvider;
     readonly model: string;
     readonly account?: string | undefined;
     readonly harness?: AgentHarness | undefined;
     readonly effort?: string | undefined;
+    readonly thinking?: boolean | undefined;
+    readonly fast?: boolean | undefined;
 }): PickedModel => {
-    const { provider, model, account, harness, effort } = selection;
-    const connected = account === undefined ? undefined : accountsOf(provider).find((entry) => entry.id === account);
-    const effortLabel = effortLabelOf(effort, provider, model, undefined);
+    const { provider, model, account, harness, effort, thinking, fast } = selection;
+    const effortLabel = effortLabelOf(effort, provider, model, thinking);
     return {
         provider,
         model,
@@ -73,11 +84,12 @@ const named = (selection: {
         // own run buttons: an UNPINNED model has no catalog row to name it, and the rule's last rung is the
         // provider's display name, which is right because the provider is what resolves a model at run time.
         label: modelLabelFor(provider, model),
-        ...(account !== undefined ? { account } : {}),
-        ...(connected !== undefined ? { accountLabel: connected.email ?? connected.label } : {}),
+        ...namedAccount(provider, account),
         ...(harness !== undefined ? { harness } : {}),
         ...(effort === undefined || effort === `` ? {} : { effort }),
         ...(effortLabel === undefined ? {} : { effortLabel }),
+        ...(thinking !== undefined ? { thinking } : {}),
+        ...(fast !== undefined ? { fast } : {}),
     };
 };
 
@@ -491,7 +503,14 @@ export const createExtensionApi = (
              * structural AgentRunChoice does not, accountLabel, which only this side can look up. */
             agentRun: (role) => {
                 const choice = agentRunChoice(role);
-                return named({ provider: choice.provider as AgentProvider, model: choice.model, effort: choice.effort });
+                return named({
+                    provider: choice.provider as AgentProvider,
+                    model: choice.model,
+                    harness: choice.harness as AgentHarness | undefined,
+                    effort: choice.effort,
+                    thinking: choice.thinking,
+                    fast: choice.fast,
+                });
             },
             describe: (selection) =>
                 named({
@@ -500,6 +519,8 @@ export const createExtensionApi = (
                     account: selection.account,
                     harness: selection.harness as AgentHarness | undefined,
                     effort: selection.effort,
+                    thinking: selection.thinking,
+                    fast: selection.fast,
                 }),
             pick: async (options) => {
                 const choice = await shellModelPicking().pick(options);
@@ -511,6 +532,8 @@ export const createExtensionApi = (
                           account: choice.account,
                           harness: choice.harness as AgentHarness | undefined,
                           effort: choice.effort,
+                          thinking: choice.thinking,
+                          fast: choice.fast,
                       });
             },
         },

@@ -10,10 +10,12 @@
 **/out-tsc
 **/tmp
 pnpm-lock.yaml
-# Byte-canonical output of _sandbox/sandbox-contract/scripts/write-lock.mjs — one line per exported schema, and
+# Byte-canonical output of _shared/sandbox-contract/scripts/write-lock.mjs — one line per exported schema, and
 # the ONLY reason the wire contract is a thing git can diff. Formatting rewrites every one of those lines, which
 # fails contract-lock.test.ts and buries the handful of changed schemas a shrink declaration exists to show.
-_sandbox/sandbox-contract/contract.lock.json
+# The path is `_shared/`: this entry pointed at the package's old home and had quietly stopped matching, so
+# `pnpm format` reflowed the lock and broke that test until it was regenerated.
+_shared/sandbox-contract/contract.lock.json
 **/assets/js/env.js
 _sandbox/sandbox/operator-templates
 # Derived files whose generator owns their shape — `**/generated` matches directories, and neither of these

@@ -1,4 +1,12 @@
-import { type AgentHarness, type AgentProvider, type CommandRun, commandRunOutcome, type PushRun, modelPinKey, pushFixConversationId } from "@intentic/sandbox-contract";
+import {
+    type AgentHarness,
+    type AgentProvider,
+    type CommandRun,
+    commandRunOutcome,
+    type PushRun,
+    modelPinKey,
+    pushFixConversationId,
+} from "@intentic/sandbox-contract";
 import type { AgentRunChoice } from "@intentic/ui";
 import { computed, ref, shallowRef, watch } from "vue";
 import { composeSession, startSession } from "../../agents/fleet/sessionSuggestion";
@@ -399,6 +407,33 @@ export function usePushFlow() {
         prepush.forget();
     };
 
+    /* WHAT THE CARET CHOSE, ONTO THE DRAFT. Each field is applied only when the pick NAMED it: the draft was
+     * already composed on the pinned entry (`fixWith`), so an untouched knob leaves that standing rather than
+     * resetting a proposal the reader can still see. `setEffort` writes the PICK, which the draft then clamps to
+     * whatever the model just chosen actually offers.
+     *
+     * All five travel, because all five are things the picker sets and each is a different run: a fix re-pointed
+     * at a frontier model but not at the tier, the loop, the account or the speed it was configured under is not
+     * the fix the reader pressed for. */
+    const applyPick = (fix: Conversation, pick: AgentRunChoice): void => {
+        fix.selectModel({ provider: pick.provider as AgentProvider, value: pick.model });
+        if (pick.account !== undefined) {
+            fix.account.value = pick.account;
+        }
+        if (pick.harness !== undefined) {
+            fix.harness.value = pick.harness as AgentHarness;
+        }
+        if (pick.effort !== undefined) {
+            fix.setEffort(pick.effort);
+        }
+        if (pick.thinking !== undefined) {
+            fix.setThinking(pick.thinking);
+        }
+        if (pick.fast !== undefined) {
+            fix.setFast(pick.fast);
+        }
+    };
+
     // Hand the failure to an agent. The push does NOT go: the point of accepting the fix is that this tree is
     // not the one to push, and the agent's diff comes back for review like any other.
     const startFix = (pick?: AgentRunChoice): void => {
@@ -406,20 +441,7 @@ export function usePushFlow() {
         dismiss();
         if (fix !== undefined) {
             if (pick !== undefined && `selectModel` in fix) {
-                fix.selectModel({ provider: pick.provider as AgentProvider, value: pick.model });
-                if (pick.account !== undefined) {
-                    fix.account.value = pick.account;
-                }
-                if (pick.harness !== undefined) {
-                    fix.harness.value = pick.harness as AgentHarness;
-                }
-                /* THE TIER THE CARET NAMED, applied last and only when it named one: the draft was already
-                 * composed on the pinned entry's effort (`fixWith`), so an untouched picker leaves that standing
-                 * rather than resetting a proposal the reader can still see. `setEffort` writes the PICK, which
-                 * the draft clamps to whatever the model just chosen actually offers. */
-                if (pick.effort !== undefined) {
-                    fix.setEffort(pick.effort);
-                }
+                applyPick(fix, pick);
             }
             startSession(fix);
         }

@@ -1,4 +1,4 @@
-import { type CiFixResponse, CiFixResponseSchema, type PipelineRun } from "@intentic/sandbox-contract";
+import { type CiFixResponse, CiFixResponseSchema, type PipelineRun, runPickOf } from "@intentic/sandbox-contract";
 import type { AgentRunChoice } from "@intentic/extension-ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
@@ -60,9 +60,7 @@ export function usePipelines() {
                     body: JSON.stringify({
                         repo: run.repo,
                         runId: run.runId,
-                        ...(pick !== undefined
-                            ? { pick: { agent: pick.provider, model: pick.model, ...(pick.effort === undefined ? {} : { effort: pick.effort }) } }
-                            : {}),
+                        ...(pick === undefined ? {} : { pick: runPickOf(pick) }),
                     }),
                 }),
             ),

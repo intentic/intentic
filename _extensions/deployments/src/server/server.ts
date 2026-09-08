@@ -220,13 +220,9 @@ export const activateServer = (api: ExtensionServerApi, _context: ExtensionServe
                         unattended: true,
                         // Which of the owner's model lists pays for it (Sandbox ▸ Agent ▸ Models).
                         runRole: `deployment-fix`,
-                        ...(input.pick !== undefined
-                            ? {
-                                  agent: input.pick.agent,
-                                  model: input.pick.model,
-                                  ...(input.pick.effort === undefined ? {} : { effort: input.pick.effort }),
-                              }
-                            : {}),
+                        // Spread verbatim: AgentRunPick's fields ARE the turn's, so nothing is translated here
+                        // and nothing can be left behind (contract AgentRunPickSchema).
+                        ...input.pick,
                         title: `Fix deployment: ${resource.name}`.slice(0, TITLE_MAX),
                     }),
                 })

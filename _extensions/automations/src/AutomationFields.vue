@@ -295,12 +295,13 @@ const bindRung = (index: number, el: unknown): void => {
 };
 
 /* WHERE THE PICKER OPENS FROM: the rung being edited, or an empty selection for the slot past the end.
- * `chooseEffort` is on because a rung STORES the tier now (ModelPin carries it) — the flag exists to stop a form
- * showing a control whose answer it would drop, and this form no longer drops it. */
+ * `chooseRun` is on because a rung STORES all three of them now (ModelPin carries effort, thinking and speed) —
+ * the flag exists to stop a form showing controls whose answers it would drop, and this form drops none.
+ * The verb is left to default ("Use this model"): a rung is stored, not spent, and the press is the save. */
 const pickerOptions = (anchor: HTMLElement, current: ModelPin | undefined) => {
     // Blank provider and model are what "nothing chosen yet" looks like to the picker, which is the state the
     // add button opens in; an existing rung opens on itself.
-    const { provider = ``, model = ``, harness, effort } = current ?? {};
+    const { provider = ``, model = ``, harness, effort, thinking, fast } = current ?? {};
     return {
         anchor,
         provider,
@@ -308,17 +309,28 @@ const pickerOptions = (anchor: HTMLElement, current: ModelPin | undefined) => {
         ...(accountPinnable.value && form.account !== `` ? { account: form.account } : {}),
         ...(harness !== undefined ? { harness } : {}),
         ...(effort !== undefined ? { effort } : {}),
-        chooseEffort: true,
+        ...(thinking !== undefined ? { thinking } : {}),
+        ...(fast !== undefined ? { fast } : {}),
+        chooseRun: true,
     };
 };
 
-// A pick as a stored rung. Absent stays absent, never an invented default: a tier the owner did not choose is
-// one the model answers for itself, which is the contract every other reader of a pin keeps.
-const pinOf = (picked: { provider: string; model: string; effort?: string | undefined; harness?: string | undefined }): ModelPin => ({
+// A pick as a stored rung. Absent stays absent, never an invented default: a knob the owner did not touch is one
+// the model answers for itself, which is the contract every other reader of a pin keeps.
+const pinOf = (picked: {
+    provider: string;
+    model: string;
+    effort?: string | undefined;
+    harness?: string | undefined;
+    thinking?: boolean | undefined;
+    fast?: boolean | undefined;
+}): ModelPin => ({
     provider: picked.provider,
     model: picked.model,
     ...(picked.effort !== undefined && picked.effort !== `` ? { effort: picked.effort } : {}),
     ...(picked.harness !== undefined && picked.harness !== `` ? { harness: picked.harness as ModelPin["harness"] } : {}),
+    ...(picked.thinking !== undefined ? { thinking: picked.thinking } : {}),
+    ...(picked.fast !== undefined ? { fast: picked.fast } : {}),
 });
 
 // Open the picker over one rung and write back whatever it settles on.
@@ -611,12 +623,7 @@ const setProvider = (provider: string): void => {
                         </div>
                         <label class="ui-field">
                             <span class="ui-field-label">{{ listenerSource.channel.label }}</span>
-                            <input
-                                v-model="form.channelId"
-                                :placeholder="listenerSource.channel.placeholder"
-                                class="font-mono"
-                                :class="ui.input()"
-                            />
+                            <input v-model="form.channelId" :placeholder="listenerSource.channel.placeholder" class="font-mono" :class="ui.input()" />
                         </label>
                         <!-- The second narrowing axis, for the one source that has one: CI's branch. Without it,
                              "wake me when CI fails" means every agent's branch as well as the one that ships. -->
@@ -704,7 +711,9 @@ const setProvider = (provider: string): void => {
                         />
                         new sessions have run since it last woke
                     </label>
-                    <p class="text-2xs text-subtle">0 fires on every occurrence. Short of the bar, a due run is recorded as skipped and says how far off it is.</p>
+                    <p class="text-2xs text-subtle">
+                        0 fires on every occurrence. Short of the bar, a due run is recorded as skipped and says how far off it is.
+                    </p>
                 </template>
 
                 <!-- CI is the one source with no gateway holding a connection open: its events arrive by provider

@@ -32,13 +32,18 @@ authors is a marketplace-phase task.
 
 ## The one control worth calling out
 
-`AgentRunButton` and `useAgentRunPick` are re-exported because four extensions start an agent for the user:
-pipelines, deployments, maintenance, acceptance: and each had reached its own answer about how you choose what
-that costs. Press the primary half and the run opens on the sandbox's standing model for the job the caller named; use the caret
-and it opens on something else, for that run only. The choice covers the tier as well as the model
-(`AgentRunChoice.effort`), so pass it on the turn you start beside `model`: the sandbox fills a pinned entry's
-tier in only for a run that named no model, so dropping it runs the model you chose at the provider's default
-effort.
+`AgentRunButton` and `useAgentRunPick` are re-exported because five extensions start an agent for the user:
+pipelines, deployments, maintenance, documentation, acceptance: and each had reached its own answer about how
+you choose what that costs. Press the primary half and the run opens on the sandbox's standing model for the job
+the caller named; use the caret and a panel opens on that run, ending in a bar that carries the button's own
+label. Both halves emit the same `run`, because both are the same act: the press that finishes configuring the
+run is the press that starts it.
+
+The choice covers more than the model — the account, the harness, the tier, extended thinking and speed
+(`AgentRunChoice`) — and every one of them is a different price. Send them on the turn you start beside `model`:
+the sandbox fills a pinned entry's knobs in only for a run that named no model, so dropping them runs the model
+you chose on the provider's defaults for everything else. `runPickOf(choice)` (from `@intentic/sandbox-contract`)
+translates the whole thing into the turn's own field names in one call.
 
 `useAgentRunPick` takes `api.models` as an argument rather than importing it, which is what lets the control
 live in a kit that knows nothing about the extension API. Pass the extension's own host handle:

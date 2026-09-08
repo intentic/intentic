@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { errorMessage } from "@intentic/base/errors";
 import type { PickedModel } from "@intentic/extension-api";
+import { runPickOf } from "@intentic/sandbox-contract";
 import {
     Checkbox,
     ui,
@@ -369,9 +370,9 @@ const run = async (model: PickedModel): Promise<void> =>
         openRunId.value = await start({
             stories: chosen.value,
             targets: Object.fromEntries(groups.value.map((story) => [targetKeyOf(story), targets.addressOf(story.repo, story.group) ?? ``])),
-            provider: model.provider,
-            model: model.model,
-            effort: model.effort,
+            // The whole pick, in the wire's own vocabulary: every session in the fan-out opens on it, and Retry
+            // reads it back off the manifest months later.
+            pick: runPickOf(model),
             notes: notes.value,
         });
     });
@@ -534,8 +535,7 @@ const run = async (model: PickedModel): Promise<void> =>
                             {{ entry.row.manifest.stories.map((story) => story.title).join(` · `) }}
                         </span>
                         <span class="block truncate font-mono text-2xs text-subtle">
-                            {{ reposOf(entry.row.manifest).join(`, `) }} · {{ entry.row.manifest.provider
-                            }}{{ entry.row.manifest.model ? ` ${entry.row.manifest.model}` : `` }}
+                            {{ reposOf(entry.row.manifest).join(`, `) }} · {{ entry.row.manifest.pick.agent }} {{ entry.row.manifest.pick.model }}
                         </span>
                     </span>
                     <StatusBadge v-if="entry.status" :variant="entry.status.variant" :label="entry.status.label" size="xs" />

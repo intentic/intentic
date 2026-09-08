@@ -8,7 +8,7 @@ import {
     batchRunsDir,
 } from "@intentic/sandbox-contract/batch-runs";
 import type { Story } from "./stories";
-import { isConversationId } from "@intentic/sandbox-contract";
+import { type AgentRunPick, AgentRunPickSchema, isConversationId } from "@intentic/sandbox-contract";
 
 /* A RUN is the set of stories the user selected at one moment. The machinery under it — the directory layout,
  * the run id, the conversation id derived from it — is the core's batch-run substrate, shared with maintenance
@@ -92,13 +92,15 @@ export interface RunManifest {
     // Project-specific instructions that shaped the turns, by repo. Kept with the evidence so Retry runs the
     // same brief even when the repo's .acceptance.md changes later.
     readonly notes: Readonly<Record<string, string>>;
-    readonly provider: string;
-    readonly model?: string;
-    /* HOW HARD EACH SESSION THINKS, the caret's other half, recorded beside the model for the same reason it is:
-     * a run fans a session out per story and Retry launches more of them later, so a tier held only in the view
-     * would run the first story at the level the reader chose and every later one at the model's default.
-     * Absent ⇒ the model's own default, which is what an unpinned run has always used. */
-    readonly effort?: string;
+    /* WHAT EVERY SESSION IN THIS RUN OPENS ON, as the wire spells it (contract AgentRunPickSchema): the pair,
+     * and the account, harness, tier, thinking and speed the reader configured with it.
+     *
+     * RECORDED RATHER THAN HELD IN THE VIEW, because a run fans a session out PER STORY and Retry launches more
+     * of them later, quite possibly in a browser that has been reloaded since: a choice kept in memory would run
+     * the first story the way the reader asked and every later one on the sandbox's defaults. The whole pick and
+     * not merely the pair, for the same reason — a fan-out whose first session thinks at Max and whose rest take
+     * the model's default is not one run. */
+    readonly pick: NonNullable<AgentRunPick>;
     readonly stories: readonly RunStory[];
     // A POST that was refused before the fleet registered a session. Persisted because roster absence alone
     // cannot tell "not launched" from "finished and archived", and because these are the stories Retry can resume.
@@ -110,18 +112,14 @@ export const runManifestOf = (params: {
     readonly createdAt: number;
     readonly targets: Readonly<Record<string, string>>;
     readonly notes: Readonly<Record<string, string>>;
-    readonly provider: string;
-    readonly model?: string | undefined;
-    readonly effort?: string | undefined;
+    readonly pick: NonNullable<AgentRunPick>;
     readonly stories: readonly StorySnapshot[];
 }): RunManifest => ({
     runId: params.runId,
     createdAt: params.createdAt,
     targets: params.targets,
     notes: params.notes,
-    provider: params.provider,
-    ...(params.model === undefined || params.model === `` ? {} : { model: params.model }),
-    ...(params.effort === undefined || params.effort === `` ? {} : { effort: params.effort }),
+    pick: params.pick,
     stories: params.stories.map(({ slug, repo, group, path, title, content, criteria }) => ({
         slug,
         repo,
@@ -354,26 +352,19 @@ export const parseManifest = (text: string): RunManifest | undefined => {
         if (parsed === undefined) {
             return undefined;
         }
-        const {
-            runId,
-            createdAt,
-            provider,
-            model,
-            effort,
-            stories: rawStories,
-            targets: rawTargets,
-            notes: rawNotes,
-            launchFailures: rawLaunchFailures,
-        } = parsed;
+        const { runId, createdAt, stories: rawStories, targets: rawTargets, notes: rawNotes, launchFailures: rawLaunchFailures } = parsed;
+        // The pick answers for itself, through the schema every other surface sends it under: both halves of the
+        // pair or nothing, and each knob typed. One check here rather than a field per knob, so a manifest
+        // cannot fall behind what the picker can set.
+        const pick = AgentRunPickSchema.safeParse(parsed[`pick`]);
         if (
             !nonempty(runId) ||
             !RUN_ID.test(runId) ||
             typeof createdAt !== `number` ||
             !Number.isSafeInteger(createdAt) ||
             createdAt < 0 ||
-            !nonempty(provider) ||
-            (model !== undefined && !nonempty(model)) ||
-            (effort !== undefined && !nonempty(effort)) ||
+            !pick.success ||
+            pick.data === undefined ||
             !Array.isArray(rawStories) ||
             rawStories.length === 0
         ) {
@@ -400,9 +391,7 @@ export const parseManifest = (text: string): RunManifest | undefined => {
             createdAt,
             targets,
             notes,
-            provider,
-            ...(model === undefined ? {} : { model }),
-            ...(effort === undefined ? {} : { effort }),
+            pick: pick.data,
             stories: complete,
             launchFailures,
         };

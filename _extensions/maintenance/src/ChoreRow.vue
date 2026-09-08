@@ -494,12 +494,9 @@ watch(
                         v-if="verdict.prompt !== undefined && verdict.state !== `clear`"
                         :label="standing ? `Run it again` : verdict.chore.stance === `act` ? `Fix it` : `Look into it`"
                         icon="play"
-                        :model-label="runModel.model.value.label"
-                        :effort-label="runModel.model.value.effortLabel"
-                        :overridden="runModel.overridden.value"
+                        :picker="runModel"
                         :disabled="busy || busyHere || liveAgent !== undefined"
                         @run="startRun"
-                        @pick="runModel.choose"
                     />
                     <!-- The only way this page asks for a measurement, and the one move a stale row has: nobody
                      can decide whether there is work here until something has looked at the tree since the last
