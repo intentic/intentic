@@ -2,12 +2,12 @@ import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { statePath } from "../workspace/layout/state-paths.js";
 import type { Services } from "../composition.js";
-import { removeLoadedSkill, writeLoadedSkill } from "./loaded-skills.js";
+import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "./loaded-skills.js";
 import { parseSkillFile, skillDocument } from "./skill-file.js";
 
 // Baked-tool skills gate a tool already on PATH; writing its SKILL.md surfaces it, so adding one is a registry entry
-// here plus its name in the settings `skills` array. Own skills are the same mechanism over owner-typed text, stored
-// durably so switching one off never deletes it; both share that one array as their enabled set.
+// here plus its name in the settings `skills` array. That array names baked tools only: an own skill is the owner's
+// file, on exactly while its loaded copy exists, and only the owner's own save, switch or delete moves that copy.
 
 export const LSP_SKILL = `---
 name: lsp
@@ -142,23 +142,29 @@ export const writeOwnSkill = async (services: Services, skill: OwnSkill): Promis
     await services.files.write(ownSkillFile(services.workspace.root, skill.name), skillDocument(skill.name, skill.description, skill.body));
 };
 
-// Deletes the durable copy and the loaded one; leaving the loaded copy behind would keep a deleted skill in the agent's
-// context until the next reconcile.
+// Deletes the durable copy and the loaded one together; a loaded copy left behind would stay in the agent's context.
 export const removeOwnSkill = async (services: Services, name: string): Promise<void> => {
     await rm(ownSkillDir(services.workspace.root, name), { recursive: true, force: true });
     await removeLoadedSkill(services.files, services.workspace.root, name);
 };
 
-// Writes every skill named in `enabled`, removes the rest; an enabled name matching neither a baked tool nor a stored
-// one is ignored (it may belong to an extension). Own skills are re-read from disk each pass, so an out-of-band edit
-// reaches the next turn.
-export const reconcileSkills = async (services: Services, enabled: readonly string[]): Promise<void> => {
-    const own = await listOwnSkills(services);
-    const sources: readonly (readonly [string, string])[] = [
-        ...Object.entries(SKILLS),
-        ...own.map((skill) => [skill.name, skillDocument(skill.name, skill.description, skill.body)] as const),
-    ];
-    for (const [name, body] of sources) {
+// Whether the agent can reach an own skill: its loaded copy is the only account of that, never the settings list.
+export const ownSkillOn = async (services: Services, name: string): Promise<boolean> =>
+    (await services.files.read(loadedSkillFile(services.workspace.root, name))) !== undefined;
+
+// Writes or removes the loaded copy of a stored skill; the stored copy is never touched, so off keeps the text.
+export const switchOwnSkill = async (services: Services, skill: OwnSkill, on: boolean): Promise<void> => {
+    if (on) {
+        await writeLoadedSkill(services.files, services.workspace.root, skill.name, skillDocument(skill.name, skill.description, skill.body));
+        return;
+    }
+    await removeLoadedSkill(services.files, services.workspace.root, skill.name);
+};
+
+// Writes every baked tool named in `enabled` and removes the rest; a name that is no baked tool is ignored (it may
+// belong to an extension). Never reaches an own skill: a reconcile cannot create or delete the owner's files.
+export const reconcileBakedSkills = async (services: Services, enabled: readonly string[]): Promise<void> => {
+    for (const [name, body] of Object.entries(SKILLS)) {
         if (enabled.includes(name)) {
             await writeLoadedSkill(services.files, services.workspace.root, name, body);
             continue;

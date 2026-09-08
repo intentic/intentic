@@ -7,6 +7,8 @@ import { objectParse } from "../store/unknown-keys.js";
 
 export interface SandboxSettingsStore {
     readonly get: () => Promise<SandboxSettings>;
+    // `get` plus whether the value stands in for a file this build could not read; boot acts on nothing it did not read.
+    readonly load: () => Promise<{ readonly settings: SandboxSettings; readonly unreadable: boolean }>;
     readonly set: (settings: SandboxSettings) => Promise<void>;
 }
 
@@ -20,9 +22,15 @@ export const fileSandboxSettingsStore = (path: string): SandboxSettingsStore => 
         // yet" rather than a second copy of the shape that could drift from it. A manifest that predates a flag
         // keeps every pick it DOES carry, the missing key reads as that flag's default.
         fallback: () => SandboxSettingsSchema.parse({}),
+        // The one manifest the owner edits by hand: a version this build cannot parse is theirs to fix, never replaced.
+        onUnreadable: "refuse",
     });
     return {
         get: file.read,
+        load: async () => {
+            const { value, unreadable } = await file.state();
+            return { settings: value, unreadable };
+        },
         set: async (settings) => {
             await file.update(() => settings);
         },

@@ -81,7 +81,7 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
         path: stateRelPath(".intentic/config/autostart.json"),
         note: "Which apps the daemon starts at boot, by repo and app folder; an entry whose folder the target lacks is one skipped log line per boot, nothing more.",
     },
-    { path: ".intentic/config/skills/", note: "Locally-authored skills. Which skills are ON is a setting; the files are these." },
+    { path: ".intentic/config/skills/", note: "Locally-authored skills; each is on while its copy under .agents/skills/ exists. Which baked tools are ON is a setting; the files are these." },
     {
         path: ".intentic/config/capability-dismissals.json",
         note: "Suggestions this workspace turned down. Carried as-is; the target can undismiss any of them.",

@@ -99,7 +99,7 @@ export const RuleFiringsSchema = z.record(z.string(), z.number());
 export type RuleFirings = z.infer<typeof RuleFiringsSchema>;
 // Where a skill came from, the fact that decides everything else about its row.
 // builtin: this image ships it.
-// own: the owner wrote it (.intentic/config/skills/); only these are editable here.
+// own: the owner wrote it (.intentic/config/skills/); on while its loaded copy exists; only these are editable here.
 // capability: something connected brought it (a CLI tool, a machine, a browser account, a VPN).
 // extension: an installed extension ships it inside its checkout.
 // plugin: a plugin capability cloned a repo that holds it.
@@ -128,7 +128,7 @@ export const SkillSummarySchema = z.object({
     // e.g. an extension's title, a plugin capability's id, a setting's name.
     owner: z.string().optional().describe("Who ships it, as the row would name them."),
     enabled: z.boolean().describe("Whether the agent can reach it."),
-    // True only for the skills the settings `skills` list itself governs (baked tools, the owner's own).
+    // True for a baked tool (switched through the settings `skills` list) and the owner's own (through `skills.switch`).
     switchable: z
         .boolean()
         .describe(
@@ -171,8 +171,13 @@ export const SkillDraftSchema = z.object({
 });
 export type SkillDraft = z.infer<typeof SkillDraftSchema>;
 export const SkillRemoveSchema = z.object({
-    name: SkillNameSchema.describe("Which skill to delete. The text and the enabled list are both updated, so nothing is left half done."),
+    name: SkillNameSchema.describe("Which skill to delete. The stored text and the agent's copy go together, so nothing is left half done."),
 });
+export const SkillSwitchSchema = z.object({
+    name: SkillNameSchema.describe("Which skill of your own to switch."),
+    on: z.boolean().describe("On writes the agent's copy from the stored text; off removes that copy and keeps the text."),
+});
+export type SkillSwitch = z.infer<typeof SkillSwitchSchema>;
 // Opt-in settings the /settings routes edit and streamAgent reads, defaulting off so each can be A/B tested (`skills`
 // defaults on for the baked tools worth having, since a skill file is the only thing that tells the agent a baked
 // binary exists). Every default lives in the schema, so an older settings file still parses and keeps the owner's other
@@ -185,7 +190,7 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Keep the instructions identical between turns so the provider can cache them, moving anything that varies into the message instead. Cheaper, at the cost of some flexibility.",
         ),
-    skills: z.array(z.string()).default(["lsp", "fileq"]).describe("Which skills are switched on."),
+    skills: z.array(z.string()).default(["lsp", "fileq"]).describe("Which built-in tools are switched on. A skill of your own is not listed here: it is on while the agent's copy of it exists."),
     // Router reads the sent message and one line per card, once per chat, between send and the first turn
     // (persona-router.ts / model-roles.ts). Never asked of a draft: only a sent message is a finished one.
     // Attended chats only: routing onto a card would grant an unwatched wake accounts nobody named for it.

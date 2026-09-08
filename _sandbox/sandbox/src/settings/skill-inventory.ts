@@ -8,12 +8,12 @@ import { pluginDir } from "../capabilities/plugin-dirs.js";
 import { listPersonaSkills, readPersonaSkill } from "../personas/persona-kit.js";
 import { loadedSkillsRoot } from "./loaded-skills.js";
 import { parseSkillFile, skillDocument } from "./skill-file.js";
-import { bakedSkillNames, bakedSkillText, listOwnSkills, ownSkillDir } from "./skills.js";
+import { bakedSkillNames, bakedSkillText, listOwnSkills, ownSkillDir, ownSkillOn } from "./skills.js";
 
 // Reads everything the agent knows from six sources (baked tools, the owner's store, connections, plugins, extensions,
 // personas) directly off disk, not a config projection; an unclaimed file lists as `dropped` rather than being skipped.
 // What a row may do follows strictly from its origin:
-// baked tools and the owner's own are switchable, from the settings list
+// baked tools are switchable from the settings list, the owner's own from their loaded copy
 // only the owner's own are editable
 // `own` and `dropped` are removable; anything else is removed by removing its owner
 
@@ -100,7 +100,8 @@ export const skillInventory = async (services: Services): Promise<SkillSummary[]
                 name: skill.name,
                 description: skill.description,
                 origin: "own",
-                enabled: enabled(skill.name),
+                // On exactly while its loaded copy exists; the settings list has no say over the owner's files.
+                enabled: await ownSkillOn(services, skill.name),
                 switchable: true,
                 editable: true,
                 removable: true,

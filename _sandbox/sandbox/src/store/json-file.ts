@@ -6,16 +6,30 @@ import { type ManifestEdit, registerManifestEditor } from "./manifest-repair.js"
 // One JSON file, read through a schema and written whole; every `*-store.ts` in the daemon sits on this.
 // - atomicity: writes go to a sibling temp file and rename over the target, so a reader never sees a half-written file
 // - lost updates: `update` serializes read-modify-write through a per-file queue
-// - downgrades: an update that would overwrite content this build could not read renames it aside first
-//   (`<name>.corrupt`)
+// - downgrades: an update over content this build could not read sets it aside first (`<name>.corrupt`), or refuses
+//   outright when the file is one the owner maintains (`onUnreadable`)
 // - silence: every read reports its outcome to the manifest-problems registry, so a clean read clears a prior complaint
 
 export interface JsonFile<T> {
     // Contents, or the fallback if unreadable; not queued, since a write is never observable half-done.
     readonly read: () => Promise<T>;
+    // The same read, plus whether the value stands in for content that exists but this build could not read.
+    readonly state: () => Promise<JsonFileState<T>>;
     // Read-change-write, serialized against every other update of this file, and returns what was written. Returning
     // `current` unchanged by reference skips the write, so read-or-init is free once already initialized.
     readonly update: (change: (current: T) => T) => Promise<T>;
+}
+
+export type JsonFileState<T> =
+    | { readonly value: T; readonly unreadable: false }
+    | { readonly value: T; readonly unreadable: true; readonly detail: string };
+
+// Thrown by `update` under `onUnreadable: "refuse"`; names the file and what was wrong with it, for the owner to fix.
+export class ManifestUnreadableError extends Error {
+    constructor(path: string, detail: string) {
+        super(`${basename(path)} could not be read by this build (${detail}); fix or remove the file before anything can be written to it`);
+        this.name = "ManifestUnreadableError";
+    }
 }
 
 export interface JsonFileOptions<T> {
@@ -25,6 +39,9 @@ export interface JsonFileOptions<T> {
     readonly fallback: () => T;
     // File mode for the write; omitted, it defaults to the process umask like every other manifest.
     readonly mode?: number;
+    // What `update` does over content this build could not read: set it aside as `<name>.corrupt` and write (state the
+    // daemon can regrow), or refuse (a manifest the owner maintains, which nothing may replace for them).
+    readonly onUnreadable?: "setAside" | "refuse";
 }
 
 // Writes one JSON file atomically (temp file, then rename); used by jsonFile and by stores that must own their own read
@@ -37,15 +54,19 @@ export const writeJsonFile = async (path: string, value: unknown, mode?: number)
     await rename(tempPath, path);
 };
 
-export const jsonFile = <T>(path: string, { parse, fallback, mode }: JsonFileOptions<T>): JsonFile<T> => {
-    // Value plus whether it stands in for content that exists but couldn't be read; only `update` acts on that
-    // distinction, a plain read answers the same either way.
-    const readState = async (): Promise<{ value: T; unreadable: boolean }> => {
+export const jsonFile = <T>(path: string, { parse, fallback, mode, onUnreadable = "setAside" }: JsonFileOptions<T>): JsonFile<T> => {
+    // Value plus whether it stands in for content that exists but couldn't be read; a plain read answers the same
+    // either way.
+    const readState = async (): Promise<JsonFileState<T>> => {
         // Recorded on every read, including clean ones, so the registry self-clears when a complaint no longer applies.
         const problems: ManifestProblem[] = [];
-        const done = <R extends { value: T; unreadable: boolean }>(state: R): R => {
+        const done = (state: JsonFileState<T>): JsonFileState<T> => {
             recordManifestProblems(path, problems);
             return state;
+        };
+        const unreadable = (detail: string): JsonFileState<T> => {
+            problems.push({ kind: "unreadable", detail });
+            return done({ value: fallback(), unreadable: true, detail });
         };
         let text: string;
         try {
@@ -57,14 +78,12 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode }: JsonFileOpt
         try {
             raw = JSON.parse(text);
         } catch {
-            problems.push({ kind: "unreadable", detail: "the file is not valid JSON" });
-            return done({ value: fallback(), unreadable: true });
+            return unreadable("the file is not valid JSON");
         }
         const parsed = parse(raw, (problem) => problems.push(problem));
         if (parsed === undefined) {
             // Schema-rejected: the file's content is ignored in favor of defaults, with no other way to notice.
-            problems.push({ kind: "unreadable", detail: "the file does not match what this build expects" });
-            return done({ value: fallback(), unreadable: true });
+            return unreadable("the file does not match what this build expects");
         }
         return done({ value: parsed, unreadable: false });
     };
@@ -104,14 +123,18 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode }: JsonFileOpt
 
     return {
         read: async () => (await readState()).value,
+        state: readState,
         update: (change) => {
             const next = queue.then(async () => {
-                const { value: current, unreadable } = await readState();
-                const updated = change(current);
-                if (updated !== current) {
-                    // Unreadable content moves aside instead of being overwritten, recoverable by hand or by a later
-                    // roll-forward.
-                    if (unreadable) {
+                const state = await readState();
+                const updated = change(state.value);
+                if (updated !== state.value) {
+                    // Content this build could not read is never overwritten: refused, or set aside where a later
+                    // roll-forward or a hand can recover it.
+                    if (state.unreadable) {
+                        if (onUnreadable === "refuse") {
+                            throw new ManifestUnreadableError(path, state.detail);
+                        }
                         await rename(path, `${path}.corrupt`).catch(() => undefined);
                     }
                     await writeJsonFile(path, updated, mode);

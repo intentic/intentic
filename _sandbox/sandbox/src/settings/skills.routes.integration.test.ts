@@ -12,7 +12,7 @@ import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
 
 // Drives the skills routes over the real HTTP surface, with real files and a real settings store, since the point is
-// that one save call leaves text, the enabled list, and the loaded folder in agreement.
+// that one save call leaves the text and the loaded folder in agreement, and the settings list to the baked tools.
 const withStore = (capabilities: Capability[] = []) => {
     const workspace = tempWorkspace([]);
     let stored: SandboxSettings = SandboxSettingsSchema.parse({});
@@ -51,33 +51,42 @@ const withStore = (capabilities: Capability[] = []) => {
     };
 };
 
-test("saving a skill writes it, switches it on, and loads it: all from one call", async () => {
+test("saving a skill writes it, loads it, and leaves the settings list alone: all from one call", async () => {
     const { client, enabled, loaded } = withStore();
     await client.skills.save({ name: "release-notes", description: "Use when drafting release notes.", body: "Run git log." });
 
-    expect(enabled()).toContain("release-notes");
     expect(loaded("release-notes")).toContain("description: Use when drafting release notes.");
     expect(loaded("release-notes")).toContain("Run git log.");
+    // The list names baked tools; an own skill's switch is its loaded copy.
+    expect(enabled()).not.toContain("release-notes");
 
     const row = (await client.skills.list()).find((skill) => skill.id === "release-notes");
     expect(row).toMatchObject({ origin: "own", enabled: true, editable: true, removable: true, switchable: true });
 });
 
 test("editing a switched-off skill keeps it off and still stores the new text", async () => {
-    const { client, enabled, loaded } = withStore();
+    const { client, loaded } = withStore();
     await client.skills.save({ name: "notes", description: "First.", body: "Body one." });
-    const settings = await client.settings.get();
-    await client.settings.set({ ...settings, skills: settings.skills.filter((name) => name !== "notes") });
+    await client.skills.switch({ name: "notes", on: false });
     expect(loaded("notes")).toBeUndefined();
+    expect((await client.skills.list()).find((skill) => skill.id === "notes")).toMatchObject({ enabled: false, switchable: true });
 
     await client.skills.save({ name: "notes", description: "Second.", body: "Body two." });
-    expect(enabled()).not.toContain("notes");
     expect(loaded("notes")).toBeUndefined();
 
-    // Turning it back on through the settings door must also pick up the stored edit.
-    const current = await client.settings.get();
-    await client.settings.set({ ...current, skills: [...current.skills, "notes"] });
+    // Switching it back on must also pick up the stored edit.
+    await client.skills.switch({ name: "notes", on: true });
     expect(loaded("notes")).toContain("Body two.");
+});
+
+// The settings list is the baked tools' door: a write through it, whatever it names, never reaches an own skill.
+test("a settings write never removes an own skill's loaded copy", async () => {
+    const { client, loaded } = withStore();
+    await client.skills.save({ name: "notes", description: "Use it.", body: "Body." });
+    const settings = await client.settings.get();
+    await client.settings.set({ ...settings, skills: [] });
+    expect(loaded("notes")).toContain("Body.");
+    expect(loaded("lsp")).toBeUndefined();
 });
 
 test("reading a skill returns its instructions without the declared block", async () => {
@@ -87,23 +96,25 @@ test("reading a skill returns its instructions without the declared block", asyn
     expect(await errorCode(client.skills.read({ id: "ghost" }))).toBe("NOT_FOUND");
 });
 
-test("removing a skill clears the text, the loaded copy and the enabled list together", async () => {
-    const { client, enabled, loaded } = withStore();
+test("removing a skill clears the text and the loaded copy together", async () => {
+    const { client, loaded } = withStore();
     await client.skills.save({ name: "notes", description: "Use it.", body: "Body." });
     await client.skills.remove({ name: "notes" });
 
-    expect(enabled()).not.toContain("notes");
     expect(loaded("notes")).toBeUndefined();
     expect((await client.skills.list()).some((skill) => skill.id === "notes")).toBe(false);
 });
 
-// Both refusals guard against a control that would appear to work: reusing a baked tool's name would silently claim its
-// switch, and deleting a skill something else provides would just come back on the next reconcile.
-test("a baked tool's name is refused, and a skill something else provides cannot be deleted", async () => {
+// Every refusal guards against a control that would appear to work: reusing a baked tool's name would silently claim
+// its switch, its switch here would shadow the settings list, and deleting a skill something else provides would just
+// come back on the next reconcile.
+test("a baked tool's name is refused, its switch is not here, and a skill something else provides cannot be deleted", async () => {
     // Without this capability in the store, the same file would be a loose, removable one; that's the distinction being
     // pinned down.
     const { client, root } = withStore([{ id: "github", kind: "cli", config: { provider: "github" } }]);
     expect(await errorCode(client.skills.save({ name: "lsp", description: "Mine now.", body: "Body." }))).toBe("CONFLICT");
+    expect(await errorCode(client.skills.switch({ name: "lsp", on: false }))).toBe("NOT_FOUND");
+    expect(await errorCode(client.skills.switch({ name: "ghost", on: true }))).toBe("NOT_FOUND");
     expect(await errorCode(client.skills.remove({ name: "lsp" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.skills.remove({ name: "ghost" }))).toBe("BAD_REQUEST");
 

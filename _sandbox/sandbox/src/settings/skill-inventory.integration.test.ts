@@ -9,7 +9,7 @@ import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
 import { readSkillText, skillInventory } from "./skill-inventory.js";
 import { writePersonaSkill } from "../personas/persona-kit.js";
-import { reconcileSkills, writeOwnSkill } from "./skills.js";
+import { reconcileBakedSkills, switchOwnSkill, writeOwnSkill } from "./skills.js";
 
 // A row's origin decides its switch, edit, and delete controls; getting it wrong is a functional bug, not cosmetic.
 // Tests build the four directory shapes the inventory reads: loaded folder, owner's store, plugin and extension
@@ -60,11 +60,15 @@ test("a baked tool lists whether or not it is switched on, and only ever offers 
     expect(rowFor(on, "lsp").enabled).toBe(true);
 });
 
-test("an own skill is the only origin that is editable, and reads its enabled state from the settings list", async () => {
+test("an own skill is the only origin that is editable, and reads its enabled state from its loaded copy", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     const services = stubServices(root, [], settingsWith(["release-notes"]));
-    await writeOwnSkill(services, { name: "release-notes", description: "Use when drafting release notes.", body: "Run git log." });
+    const skill = { name: "release-notes", description: "Use when drafting release notes.", body: "Run git log." };
+    await writeOwnSkill(services, skill);
+    // Named in the settings list yet off: that list has no say over an own skill.
+    expect(rowFor(await skillInventory(services), "release-notes").enabled).toBe(false);
 
+    await switchOwnSkill(services, skill, true);
     const rows = await skillInventory(services);
     expect(rowFor(rows, "release-notes")).toMatchObject({
         origin: "own",
@@ -184,8 +188,10 @@ test("the identities skill and a site group's skill attribute to the accounts be
 test("a skill already accounted for is not listed a second time from the loaded folder", async () => {
     const root = mkdtempSync(join(tmpdir(), "inventory-"));
     const services = stubServices(root, [], settingsWith(["lsp", "notes"]));
-    await writeOwnSkill(services, { name: "notes", description: "Use it.", body: "Body." });
-    await reconcileSkills(services, ["lsp", "notes"]);
+    const notes = { name: "notes", description: "Use it.", body: "Body." };
+    await writeOwnSkill(services, notes);
+    await reconcileBakedSkills(services, ["lsp"]);
+    await switchOwnSkill(services, notes, true);
 
     const rows = await skillInventory(services);
     expect(rows.filter((row) => row.name === "lsp")).toHaveLength(1);

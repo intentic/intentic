@@ -262,9 +262,11 @@ Every surface this one process owns, and the reason each one lives here rather t
   sitting in the loaded folder: and nothing joined them, so "what is my agent carrying" had no answer. The
   inventory reads all six off disk and reports where each came from, which is what decides whether a row may be
   switched, rewritten or deleted at all: a control the source would undo on the next reconcile is not offered.
-  The owner's own skills are stored APART from the folder the agents read (`.intentic/config/skills/`, reconciled into
-  `.agents/skills/` by src/settings/skills.ts) so that switching one off keeps what they wrote: in the loaded
-  folder, "off" and "deleted" would be the same operation. The loaded folder is the vendor-neutral one on
+  The owner's own skills are stored APART from the folder the agents read (`.intentic/config/skills/`) so that
+  switching one off keeps what they wrote: in the loaded folder, "off" and "deleted" would be the same operation.
+  An own skill is on exactly while its copy under `.agents/skills/` exists, and only the owner's own save, switch
+  or delete moves that copy (src/settings/skills.ts); the settings `skills` list names baked tools alone, so no
+  reconcile, boot or settings write can create or delete an owner's file. The loaded folder is the vendor-neutral one on
   purpose (src/settings/loaded-skills.ts): Codex reads `.agents/skills/` natively, Claude Code reads it through
   per-skill symlinks under `.claude/skills/`, and runtimes with no skill loader get the same name, description
   and file path as a disclosed note on the conversation's opening prompt. `AGENTS.md` remains entirely the

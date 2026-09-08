@@ -1,10 +1,11 @@
 import { mkdtempSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { SandboxSettingsSchema, type SandboxSettings } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
+import { ManifestUnreadableError } from "../store/json-file.js";
 import { fileSandboxSettingsStore } from "./settings-store.js";
 
 // A store over a fresh temp path (the .intentic dir doesn't exist yet: the store must create it on write).
@@ -40,6 +41,26 @@ test("a corrupt or schema-invalid manifest reads as the defaults rather than thr
     expect(await store.get()).toEqual(DEFAULTS);
     await writeFile(path, JSON.stringify({ iqSearch: "yes" }));
     expect(await store.get()).toEqual(DEFAULTS);
+});
+
+// The owner's hand-edited manifest: what this build can't parse is theirs to fix; replacing it would lose every pick.
+test("set refuses to write over a file this build could not read, and leaves the bytes alone", async () => {
+    const { store, path } = tempStore();
+    await mkdir(dirname(path), { recursive: true });
+    for (const bytes of ["{ not valid json", JSON.stringify({ iqSearch: "yes" })]) {
+        await writeFile(path, bytes);
+        await expect(store.set(DEFAULTS)).rejects.toBeInstanceOf(ManifestUnreadableError);
+        expect(await readFile(path, "utf8")).toBe(bytes);
+        expect(await readdir(dirname(path))).toEqual(["settings.json"]);
+    }
+});
+
+test("load says when the defaults stand in for a file this build could not read", async () => {
+    const { store, path } = tempStore();
+    expect(await store.load()).toEqual({ settings: DEFAULTS, unreadable: false });
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, JSON.stringify({ iqSearch: "yes" }));
+    expect(await store.load()).toEqual({ settings: DEFAULTS, unreadable: true });
 });
 
 // A manifest written before a flag existed is missing that key, which the schema fills with the flag's own

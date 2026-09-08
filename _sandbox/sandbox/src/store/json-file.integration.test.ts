@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { afterEach, expect, test } from "vitest";
 import { z } from "zod";
-import { jsonFile } from "./json-file.js";
+import { jsonFile, ManifestUnreadableError } from "./json-file.js";
 
 const dirs: string[] = [];
 const tempFile = async (name = "state.json"): Promise<string> => {
@@ -56,6 +56,29 @@ test("an update never overwrites content it could not read: the bytes move aside
     await writeFile(path, `[1, 2`);
     await file.update(() => [2]);
     expect(await readFile(`${path}.corrupt`, "utf8")).toBe(`[1, 2`);
+});
+
+test("state says whether the fallback stands in for content that could not be read", async () => {
+    const path = await tempFile();
+    const file = numbers(path);
+    expect(await file.state()).toEqual({ value: [], unreadable: false });
+    await file.update(() => [0]);
+    expect(await file.state()).toEqual({ value: [0], unreadable: false });
+    await writeFile(path, `{"not":"an array"}`);
+    expect(await file.state()).toEqual({ value: [], unreadable: true, detail: "the file does not match what this build expects" });
+});
+
+test("under onUnreadable refuse, an update over unreadable content throws and moves nothing", async () => {
+    const path = await tempFile();
+    const file = jsonFile<number[]>(path, { parse: (raw) => NumbersSchema.safeParse(raw).data, fallback: () => [], onUnreadable: "refuse" });
+    await file.update(() => [0]);
+    await writeFile(path, `[1, 2`);
+    await expect(file.update(() => [1])).rejects.toBeInstanceOf(ManifestUnreadableError);
+    expect(await readFile(path, "utf8")).toBe(`[1, 2`);
+    expect(await readdir(join(path, ".."))).toEqual([`state.json`]);
+    // The refusal settles the queue: once the content reads again, the next update runs.
+    await writeFile(path, `[3]`);
+    expect(await file.update((current) => [...current, 4])).toEqual([3, 4]);
 });
 
 test("an absent file has nothing to protect: a first write sets nothing aside", async () => {

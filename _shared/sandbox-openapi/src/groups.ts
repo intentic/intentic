@@ -177,7 +177,7 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         label: "Skills",
         summary: "The instruction packs an agent can be handed",
         description:
-            "What is available and whether each is on, the text of one, and writing or deleting one. The list joins four separate sources into a single answer.",
+            "What is available and whether each is on, the text of one, and writing, switching or deleting one of your own. The list joins every separate source into a single answer.",
     },
     {
         name: "extensions",

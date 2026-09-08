@@ -43,7 +43,7 @@ import { pinTmuxServer, reportTmuxServerNamespace } from "./terminal/tmux-server
 import { prepushCheck } from "./prepush/prepush.js";
 import { ensureRepoGitDirs } from "./git/remote/repo-git-dirs.js";
 import { commitRootBaseline, ensureLocalRootRepo, ensureRootRepo } from "./git/remote/root-repo.js";
-import { reconcileSkills } from "./settings/skills.js";
+import { reconcileBakedSkills } from "./settings/skills.js";
 import { composeEnvironment } from "./environment/environment.js";
 import { applyDefinitionItems } from "./portability/apply-definition.js";
 import { parseDefinitionToml } from "./portability/definition.js";
@@ -609,16 +609,25 @@ const main = async (): Promise<void> => {
     // phantom add.
     // - the approvals skill: how the agent writes posts/actions for approval
     // - the baked-tool skills named in settings
+    // The owner's own skills are not converged: boot never creates or deletes an owner's file.
     await boot.step("skills", async () => {
         // Gated like other config writes: an unowned folder gets no writes under .agents/skills.
         if (!role.roots || !traits.ownsWorkspaceConfig) {
             return;
         }
         await ensureApprovalsSkill(services).catch((error: unknown) => logger.warn({ err: error }, "approvals skill not converged"));
-        await services.sandboxSettings
-            .get()
-            .then((settings) => reconcileSkills(services, settings.skills))
-            .catch((error: unknown) => logger.warn({ err: error }, "skill reconcile failed"));
+        try {
+            const { settings, unreadable } = await services.sandboxSettings.load();
+            // Defaults standing in for a file this build could not read are nobody's choice; acting on them would switch
+            // tools the owner never touched.
+            if (unreadable) {
+                logger.warn("settings.json could not be read by this build, so the baked-tool skills stay as they are");
+                return;
+            }
+            await reconcileBakedSkills(services, settings.skills);
+        } catch (error) {
+            logger.warn({ err: error }, "skill reconcile failed");
+        }
     });
 
     // Commits "Initialize workspace" once on a fresh sandbox, after daemon-owned files exist, so Changes starts clean.

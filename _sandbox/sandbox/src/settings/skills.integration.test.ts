@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
-import { LSP_SKILL, listOwnSkills, ownSkillDir, readOwnSkill, reconcileSkills, removeOwnSkill, writeOwnSkill } from "./skills.js";
+import { LSP_SKILL, listOwnSkills, ownSkillDir, ownSkillOn, readOwnSkill, reconcileBakedSkills, removeOwnSkill, switchOwnSkill, writeOwnSkill } from "./skills.js";
 
 // Minimal services stub with real on-disk IO, so assertions match what the agent's loader would actually find.
 const stubServices = (root: string): Services =>
@@ -23,40 +23,44 @@ const stubServices = (root: string): Services =>
 
 const loadedPath = (root: string, name: string): string => join(root, ".agents", "skills", name, "SKILL.md");
 
-test("reconcile writes a skill when named and removes it when absent from the list", async () => {
+test("reconcile writes a baked tool when named and removes it when absent from the list", async () => {
     const root = mkdtempSync(join(tmpdir(), "skills-"));
     const services = stubServices(root);
     const skillPath = join(root, ".agents", "skills", "lsp", "SKILL.md");
 
-    await reconcileSkills(services, ["lsp"]);
+    await reconcileBakedSkills(services, ["lsp"]);
     expect(await readFile(skillPath, "utf8")).toBe(LSP_SKILL);
 
-    await reconcileSkills(services, []);
+    await reconcileBakedSkills(services, []);
     await expect(stat(skillPath)).rejects.toThrow();
 });
 
 test("reconcile with an empty list is a no-op when nothing was written", async () => {
     const root = mkdtempSync(join(tmpdir(), "skills-"));
-    await expect(reconcileSkills(stubServices(root), [])).resolves.toBeUndefined();
+    await expect(reconcileBakedSkills(stubServices(root), [])).resolves.toBeUndefined();
 });
 
 test("an unknown skill name is ignored (no registry entry, nothing written)", async () => {
     const root = mkdtempSync(join(tmpdir(), "skills-"));
     const services = stubServices(root);
-    await reconcileSkills(services, ["does-not-exist"]);
+    await reconcileBakedSkills(services, ["does-not-exist"]);
     await expect(stat(loadedPath(root, "does-not-exist"))).rejects.toThrow();
 });
 
-// Storing own skills separately from the loaded copy means switching one off deletes only the copy, never the source.
-test("an own skill is copied into the loaded folder when on, and only the copy goes when off", async () => {
+// The stored copy is the text, the loaded copy is the switch: off deletes only the copy, never the source.
+test("an own skill's loaded copy follows its switch, and only the copy goes when off", async () => {
     const root = mkdtempSync(join(tmpdir(), "skills-"));
     const services = stubServices(root);
-    await writeOwnSkill(services, { name: "release-notes", description: "Use when drafting release notes.", body: "Run git log." });
+    const skill = { name: "release-notes", description: "Use when drafting release notes.", body: "Run git log." };
+    await writeOwnSkill(services, skill);
+    expect(await ownSkillOn(services, "release-notes")).toBe(false);
 
-    await reconcileSkills(services, ["release-notes"]);
+    await switchOwnSkill(services, skill, true);
+    expect(await ownSkillOn(services, "release-notes")).toBe(true);
     expect(await readFile(loadedPath(root, "release-notes"), "utf8")).toContain("description: Use when drafting release notes.");
 
-    await reconcileSkills(services, []);
+    await switchOwnSkill(services, skill, false);
+    expect(await ownSkillOn(services, "release-notes")).toBe(false);
     await expect(stat(loadedPath(root, "release-notes"))).rejects.toThrow();
     expect(await readOwnSkill(services, "release-notes")).toEqual({
         name: "release-notes",
@@ -65,24 +69,29 @@ test("an own skill is copied into the loaded folder when on, and only the copy g
     });
 });
 
-// Reconcile re-reads own skills from disk every pass, so an out-of-band edit (the agent's own file tools) reaches the
-// next turn.
-test("reconcile picks up an out-of-band edit to a stored skill", async () => {
+// The settings list names baked tools only: whatever it says, a reconcile neither creates, deletes nor rewrites an
+// own skill. The loaded copy is the owner's file too, agent edits included.
+test("a reconcile of the baked tools never touches an own skill, on or off", async () => {
     const root = mkdtempSync(join(tmpdir(), "skills-"));
     const services = stubServices(root);
-    await writeOwnSkill(services, { name: "notes", description: "First.", body: "Body one." });
-    await reconcileSkills(services, ["notes"]);
+    const notes = { name: "notes", description: "Use it.", body: "Body." };
+    await writeOwnSkill(services, notes);
+    await switchOwnSkill(services, notes, true);
+    await writeOwnSkill(services, { name: "paused", description: "Later.", body: "Body." });
+    await writeFile(loadedPath(root, "notes"), "---\nname: notes\ndescription: Edited in place.\n---\n\nBody two.\n");
 
-    await writeFile(join(ownSkillDir(root, "notes"), "SKILL.md"), "---\nname: notes\ndescription: Second.\n---\n\nBody two.\n");
-    await reconcileSkills(services, ["notes"]);
+    await reconcileBakedSkills(services, []);
+    await reconcileBakedSkills(services, ["lsp", "notes", "paused"]);
     expect(await readFile(loadedPath(root, "notes"), "utf8")).toContain("Body two.");
+    await expect(stat(loadedPath(root, "paused"))).rejects.toThrow();
 });
 
 test("removing an own skill clears the stored copy and the loaded one together", async () => {
     const root = mkdtempSync(join(tmpdir(), "skills-"));
     const services = stubServices(root);
-    await writeOwnSkill(services, { name: "notes", description: "Use it.", body: "Body." });
-    await reconcileSkills(services, ["notes"]);
+    const notes = { name: "notes", description: "Use it.", body: "Body." };
+    await writeOwnSkill(services, notes);
+    await switchOwnSkill(services, notes, true);
 
     await removeOwnSkill(services, "notes");
     await expect(stat(loadedPath(root, "notes"))).rejects.toThrow();

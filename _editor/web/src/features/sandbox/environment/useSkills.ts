@@ -1,4 +1,4 @@
-import { type SkillBody, SkillBodySchema, type SkillDraft, type SkillSummary, SkillsListSchema } from "@intentic/api-contract";
+import { type SkillBody, SkillBodySchema, type SkillDraft, type SkillSummary, type SkillSwitch, SkillsListSchema } from "@intentic/api-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { jsonBody } from "../client/jsonBody";
@@ -7,9 +7,10 @@ import { SKILLS } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
 
-// What the agent knows: the list is a daemon read, since only the daemon sees all six sources a skill can arrive from.
-// Enabling one is a settings write instead, riding useSandboxSettings' optimistic write; only the list needs refetching
-// after, since enabled state comes from the daemon's own join.
+// What the agent knows: the list is a daemon read, since only the daemon sees all the sources a skill can arrive from.
+// Switching a baked tool is a settings write riding useSandboxSettings' optimistic write; switching one of the owner's
+// own is its own call, since the settings list has no say over the owner's files. Only the list needs refetching after
+// either, since enabled state comes from the daemon's own join.
 
 const QUERY_KEY = SKILLS.of();
 
@@ -36,16 +37,25 @@ export function useSkills() {
         onSuccess: invalidate,
     });
 
+    const switchOwn = useMutation({
+        mutationFn: (input: SkillSwitch) => sandboxJson(`/skills/switch`, jsonBody(`POST`, input)),
+        onSuccess: invalidate,
+    });
+
     const skills = computed<SkillSummary[]>(() => query.data.value ?? []);
 
-    // Edits the settings' skills array directly, not the rows on screen: rebuilding it from displayed rows would drop
-    // an enabled skill the daemon doesn't currently list as a row.
-    const setEnabled = (name: string, enabled: boolean): void => {
+    // Two doors, by origin. A baked tool edits the settings' skills array directly, not the rows on screen: rebuilding
+    // it from displayed rows would drop an enabled skill the daemon doesn't currently list as a row.
+    const setEnabled = (skill: SkillSummary, enabled: boolean): void => {
+        if (skill.origin === `own`) {
+            switchOwn.mutate({ name: skill.name, on: enabled });
+            return;
+        }
         const current = settings.value?.skills;
         if (current === undefined) {
             return;
         }
-        patch({ skills: enabled ? [...new Set([...current, name])] : current.filter((entry) => entry !== name) });
+        patch({ skills: enabled ? [...new Set([...current, skill.name])] : current.filter((entry) => entry !== skill.name) });
         void invalidate();
     };
 

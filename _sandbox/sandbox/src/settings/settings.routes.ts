@@ -1,13 +1,14 @@
 import { settingsContract } from "@intentic/sandbox-contract";
-import { implement } from "@orpc/server";
+import { implement, ORPCError } from "@orpc/server";
 import { INTENTIC_PROMPT } from "../agent/prompt/intentic-prompt.js";
 import { presetSystemPrompt } from "../agent/prompt/preset-prompt.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { readInputSavings } from "../logs/filter-stats.js";
+import { ManifestUnreadableError } from "../store/json-file.js";
 import { readTierReport } from "../usage/tier-report.js";
 import { readTurnExperiments } from "../usage/turn-experiments.js";
-import { reconcileSkills } from "./skills.js";
+import { reconcileBakedSkills } from "./skills.js";
 
 // `get` applies defaults when the manifest is absent, `set` overwrites it. `savings` reads whichever backend's ledger
 // is currently compressing: the setting picking the cleaner also picks the ledger read here.
@@ -16,9 +17,16 @@ export const createSettingsRoutes = (services: Services) => {
     return {
         get: i.get.handler(() => services.sandboxSettings.get()),
         set: i.set.handler(async ({ input }) => {
-            await services.sandboxSettings.set(input);
-            // Converges skills with the new list for the next turn; a failed write only warns, the save still succeeds.
-            await reconcileSkills(services, input.skills).catch((error: unknown) => services.logger.warn({ err: error }, "skill reconcile failed"));
+            await services.sandboxSettings.set(input).catch((error: unknown) => {
+                // The owner's file to fix, not a server fault: the message names it and what this build could not read.
+                if (error instanceof ManifestUnreadableError) {
+                    throw new ORPCError("CONFLICT", { message: error.message });
+                }
+                throw error;
+            });
+            // Converges the baked tools with the new list for the next turn; a failed write only warns, the save still
+            // succeeds.
+            await reconcileBakedSkills(services, input.skills).catch((error: unknown) => services.logger.warn({ err: error }, "skill reconcile failed"));
             return { ok: true } as const;
         }),
         savings: i.savings.handler(async ({ input }) => {

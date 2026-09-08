@@ -83,6 +83,7 @@ import type {
     SkillDraftSchema,
     SkillOriginSchema,
     SkillSummarySchema,
+    SkillSwitchSchema,
     SnapshotTriggerSchema,
     TemplatesListSchema,
     TemplateSummarySchema,
@@ -176,6 +177,7 @@ export {
     SkillOriginSchema,
     SkillsListSchema,
     SkillSummarySchema,
+    SkillSwitchSchema,
     TemplatesListSchema,
     TemplateSummarySchema,
     TerminalSessionSchema,
@@ -233,6 +235,7 @@ export type SkillOrigin = z.infer<typeof SkillOriginSchema>;
 export type SkillSummary = z.infer<typeof SkillSummarySchema>;
 export type SkillBody = z.infer<typeof SkillBodySchema>;
 export type SkillDraft = z.infer<typeof SkillDraftSchema>;
+export type SkillSwitch = z.infer<typeof SkillSwitchSchema>;
 export type RuleMoment = z.infer<typeof RuleMomentSchema>;
 export type RuleFirings = z.infer<typeof RuleFiringsSchema>;
 export type SafetyPolicy = z.infer<typeof SafetyPolicySchema>;

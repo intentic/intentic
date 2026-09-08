@@ -130,7 +130,7 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
             :sources="sources"
             :disabled="settings === undefined"
             @toggle="void toggle(skill)"
-            @enable="(value: boolean) => setEnabled(skill.name, value)"
+            @enable="(value: boolean) => setEnabled(skill, value)"
             @save="saveDraft"
             @remove="removeSkill(skill)"
         />
@@ -182,7 +182,7 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
                     :sources="sources"
                     :disabled="settings === undefined"
                     @toggle="void toggle(skill)"
-                    @enable="(value: boolean) => setEnabled(skill.name, value)"
+                    @enable="(value: boolean) => setEnabled(skill, value)"
                     @save="saveDraft"
                     @remove="removeSkill(skill)"
                 />

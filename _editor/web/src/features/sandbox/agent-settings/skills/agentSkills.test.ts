@@ -125,8 +125,8 @@ test(`the switch appears only on rows the daemon said are switchable, and writes
     expect(switches(host)).toHaveLength(2);
     switches(host)[0]?.click();
     await Promise.resolve();
-    // Keyed by name, not id: the enabled list is addressed by what the loader calls the skill.
-    expect(setEnabled).toHaveBeenCalledWith(`notes`, false);
+    // The row itself, not its name: which door the write takes depends on where the skill came from.
+    expect(setEnabled).toHaveBeenCalledWith(expect.objectContaining({ name: `notes`, origin: `own` }), false);
 });
 
 test(`a switched-off skill still gets a row, drained and switchable`, () => {

@@ -10,7 +10,7 @@ import type { Services } from "../composition.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { upsertEnv } from "../secrets/secrets.routes.js";
-import { reconcileSkills, writeOwnSkill } from "../settings/skills.js";
+import { switchOwnSkill, writeOwnSkill } from "../settings/skills.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import type { Files, SourcePlan } from "./adapter-shared.js";
 import { MigrationFormatError, readForeignArchive, rebaseArchive } from "./archive.js";
@@ -134,14 +134,11 @@ const migrationDeps = (services: Services): MigrationDeps => {
     return {
         readWorkspaceFile: (relPath) => services.files.read(workspacePath(relPath)),
         writeWorkspaceFile: (relPath, content) => services.files.write(workspacePath(relPath), content),
-        // Same trio the skills route performs (write, enable, reconcile), so a migrated skill is indistinguishable from
-        // one saved by hand. An existing own skill of the same name is overwritten, idempotent across a re-run.
+        // Same pair the skills route performs (store, then load), so a migrated skill is indistinguishable from one
+        // saved by hand. An existing own skill of the same name is overwritten, idempotent across a re-run.
         saveSkill: async (skill) => {
             await writeOwnSkill(services, skill);
-            const settings = await services.sandboxSettings.get();
-            const skills = settings.skills.includes(skill.name) ? settings.skills : [...settings.skills, skill.name];
-            await services.sandboxSettings.set({ ...settings, skills });
-            await reconcileSkills(services, skills);
+            await switchOwnSkill(services, skill, true);
         },
         upsertAutomation: async (automation) => services.automations.upsert({ ...automation, models: await migratedLadder(services) }),
         // Capability route's core sequence (handler apply, then the manifest entry) minus streaming frames; an existing
