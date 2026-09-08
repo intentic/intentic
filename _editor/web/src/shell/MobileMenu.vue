@@ -18,6 +18,7 @@ import { sandboxAvailabilityVisual } from "../features/sandbox/overview/availabi
 import { useSandboxAvailability } from "../features/sandbox/overview/useSandboxAvailability";
 import { useWorkspaceTree } from "../features/workspace/explorer/useWorkspaceTree";
 import { environment } from "../app/environments/environment";
+import RailIcon from "./rail/RailIcon.vue";
 
 /* The mobile Menu tab: everything the desktop rail and its popovers hold, as one thumb-friendly page:
  * sandbox switching, the live presence roster, the area list (rail tiles), and the account actions. State
@@ -251,8 +252,7 @@ const logout = async (): Promise<void> => {
                 class="flex min-h-12 items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-content transition-colors active:bg-overlay"
             >
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center">
-                    <Icon v-if="area.icon" :name="area.icon" class="text-base text-muted" />
-                    <span v-else class="text-xs font-semibold text-muted">{{ area.label.slice(0, 2).toUpperCase() }}</span>
+                    <RailIcon :area="area.id" :fallback="area.icon" :label="area.label" class="text-base text-muted" />
                 </span>
                 <span class="min-w-0 flex-1">
                     <span class="flex items-center gap-2">
@@ -283,7 +283,9 @@ const logout = async (): Promise<void> => {
                 :to="row.to"
                 class="flex h-12 items-center gap-3 rounded-lg px-2 text-sm text-content transition-colors active:bg-overlay"
             >
-                <span class="flex h-8 w-8 shrink-0 items-center justify-center"><Icon :name="row.icon!" class="text-base text-muted" /></span>
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center">
+                    <RailIcon :area="row.id" :fallback="row.icon" :label="row.label" class="text-base text-muted" />
+                </span>
                 <span class="min-w-0 flex-1 truncate">{{ row.label }}</span>
                 <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
             </RouterLink>

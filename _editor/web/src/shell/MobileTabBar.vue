@@ -6,6 +6,7 @@ import { RouterLink, useRoute } from "vue-router";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
 import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTile";
 import { useApprovalsTile } from "./mobileTabs";
+import RailIcon from "./rail/RailIcon.vue";
 import { outgoingMark, outgoingSummary } from "../features/workspace/push/outgoingWork";
 import { pushBadge } from "../features/workspace/push/pushBadge";
 import { useChanges } from "../features/workspace/changes/useChanges";
@@ -26,9 +27,9 @@ import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttenti
  * uncommitted work is shell business whatever the queue is. */
 
 interface Tab {
+    readonly id: string;
     readonly to: string;
     readonly label: string;
-    readonly icon: IconName;
     // What the tab says without being opened: the same shape the desktop rail badges with, so one renderer
     // serves all four instead of a hand-rolled span per tab.
     readonly badge?: ViewBadge;
@@ -80,26 +81,26 @@ const reviewBadge = computed<ViewBadge | undefined>(() => {
 
 const tabs = computed<readonly Tab[]>(() => [
     {
+        id: `agents`,
         to: `/agents`,
         label: `Agents`,
-        icon: `robot`,
         // The desktop rail's tile, on a phone: one derivation (agentsTile.ts) for both, so a count that follows
         // the board's scope cannot follow it in one shell and not the other.
         ...(agentsBadge.value === undefined ? {} : { badge: agentsBadge.value }),
         ...(agentsScopeNote.value === undefined ? {} : { note: { icon: `boxes` as IconName, text: agentsScopeNote.value } }),
     },
-    { to: `/workspace`, label: `Files`, icon: `file-tree`, panel: `files` },
+    { id: `workspace`, to: `/workspace`, label: `Files`, panel: `files` },
     {
         /* The queue when the pack is on; the workspace's OWN review: its Changes panel, when it is off.
          * `?panel=changes` rather than the bare path the Files tab already owns: two tabs at one address are
          * one tab's worth of navigation and two highlights (WorkspaceMobile reads the query). */
+        id: `approvals`,
         to: approvalsTile.value?.to ?? `/workspace?panel=changes`,
         label: `Review`,
-        icon: `send`,
         ...(reviewBadge.value === undefined ? {} : { badge: reviewBadge.value }),
         ...(approvalsTile.value === undefined ? { panel: `changes` as const } : {}),
     },
-    { to: `/menu`, label: `Menu`, icon: `bars`, ...(sandboxBadge.value === undefined ? {} : { badge: sandboxBadge.value }) },
+    { id: `menu`, to: `/menu`, label: `Menu`, ...(sandboxBadge.value === undefined ? {} : { badge: sandboxBadge.value }) },
 ]);
 
 // ONE label per tab, badge and note included: the rail's tileLabel rule, in the order it uses (news, then the
@@ -140,7 +141,7 @@ const isNavActive = (tab: Tab): boolean => {
             <!-- One badge for every tab: a `mark` replaces the number where the amount isn't what you act on.
                  aria-hidden: the link's own label above already says it in words. -->
             <span class="relative">
-                <Icon :name="tab.icon" class="text-xl" />
+                <RailIcon :area="tab.id" class="text-xl" />
                 <span
                     v-if="tab.badge"
                     class="absolute -right-2.5 -top-1 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"

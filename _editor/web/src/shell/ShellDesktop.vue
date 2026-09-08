@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import type { Disposable, ViewBadge } from "@intentic/extension-api";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
-// `initialsOf` is the rail tile's glyph for a repository (my-shop-api → MS), so repositories stay
-// distinguishable instead of all sharing one icon: the same monogram <Avatar> and <BrandMark> fall back to.
-import { AnchoredOverlay, browserOwnsClick, ui, ContextMenu, type IconName, initialsOf } from "@intentic/ui";
+import { AnchoredOverlay, browserOwnsClick, ui, ContextMenu, type IconName } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
@@ -52,6 +50,7 @@ import AccountPanel from "./AccountPanel.vue";
 import { chatDock, terminalDock } from "./window/dockSlots";
 import { type RailSeat, useRailMemory } from "./rail/railMemory";
 import { useRailPins } from "./rail/railPins";
+import RailIcon from "./rail/RailIcon.vue";
 import PresenceAvatars from "./presence/PresenceAvatars.vue";
 import QuickOpen from "./commands/QuickOpen.vue";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
@@ -198,8 +197,8 @@ const chatTileSeated = computed(() => chatOnRail.value && (!chatFloats.value || 
 /* Preview closes the Work band: start a turn (Chat), read what it did (Agents/Workspace), LOOK at the running
  * app. Evidence-driven like every extension tile: it appears once the workspace has anything a live iframe can
  * show (a runnable repo, a monorepo's apps, a forwarded port, a served public page) and is absent on a box with
- * none, where it could only open an empty state. An `eye` among the Work band's face/bubble/tree: what this
- * tile does is look. The badge counts what is actually ANSWERING right now: neutral, because "your app is up"
+ * none, where it could only open an empty state. The badge counts what is actually ANSWERING right now:
+ * neutral, because "your app is up"
  * is inventory, not a debt (viewBadge.ts).
  *
  * BOTH READINGS COME FROM THE PANEL'S OWN BUILDERS (previewModel.railTargets), never from a second opinion
@@ -269,9 +268,7 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
         id: `agents`,
         to: `/agents`,
         label: `Agents`,
-        // `robot`, not `comments`, the Work-band tiles have to differ in SILHOUETTE, not in detail: a face,
-        // a bubble (Chat above), a branching tree. The reasoning, and what it rules out, is on `robot` in the
-        // icon table.
+        // RailIcon draws by area identity; these generic names remain the fallback vocabulary.
         icon: `robot`,
         // Both readings come from agentsTile.ts, which is also what the phone's tab bar draws: the count follows
         // the board's scope, and the note says so when it is wide (with the boxes that didn't answer named).
@@ -283,7 +280,6 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
         id: `workspace`,
         to: `/workspace`,
         label: `Workspace`,
-        // The other half of that pair: a branching tree, which is what this view opens on anyway.
         icon: `file-tree`,
         ...(workspaceBadge.value === undefined ? {} : { badge: workspaceBadge.value }),
     },
@@ -294,8 +290,7 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
  * ports indicator and the terminal), not among the navigation tiles: a browser session is runtime state like a
  * tmux session, not an area like Agents or Workspace. The badge counts RUNNING browsers only: a finished one is
  * still readable in the view (its pages are the record of where the agent went) but it is not something
- * happening now, and a rail count that never drops to zero stops meaning anything. The icon is `desktop`, not
- * `globe`: the ports-exposure indicator it sits beside already claims the globe. */
+ * happening now, and a rail count that never drops to zero stops meaning anything. */
 const browserTile = computed<AreaTile | undefined>(() => {
     if (browsers.value.length === 0) {
         return undefined;
@@ -338,8 +333,7 @@ const subagentTile = computed<AreaTile | undefined>(() => {
 // The live-runtime cluster below the divider: the same AreaTile shape and the same markup as the navigation
 // tiles above, so a badge is rendered in ONE place in this file rather than once per hand-rolled RouterLink.
 const runtimeTiles = computed<readonly AreaTile[]>(() => [browserTile.value, subagentTile.value].filter((tile) => tile !== undefined));
-// Activation.icon is an open string in the public extension API; the rail trusts it names one of the app's
-// icons (an unknown name renders the icon set's fallback).
+// RailIcon selects bespoke glyphs by view id and validates extension fallbacks before drawing them.
 const extensionTile = (active: ActiveExtension): AreaTile => {
     const { extension, activation } = active;
     const badge = activationBadge(active);
@@ -389,9 +383,7 @@ const seatedTiles = computed<readonly AreaTile[]>(() =>
     tiles.value.filter((tile) => railSeated(tile, { pinned: pins.pinned.value.has(tile.to), active: isNavActive(tile.to) })),
 );
 const moreTiles = computed<readonly AreaTile[]>(() =>
-    tiles.value
-        .filter((tile) => !seatedTiles.value.includes(tile))
-        .toSorted((left, right) => left.label.localeCompare(right.label)),
+    tiles.value.filter((tile) => !seatedTiles.value.includes(tile)).toSorted((left, right) => left.label.localeCompare(right.label)),
 );
 
 /* THE NAVIGATION RUN'S LABEL: `tileLabel`, plus one clause on the tile that is only here for the visit.
@@ -733,8 +725,7 @@ useKeybindings();
                             class="icon-rail-tile flex items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40"
                             aria-hidden="true"
                         >
-                            <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initialsOf(tile.label) }}</span>
-                            <Icon v-else :name="tile.icon!" class="text-lg" />
+                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-lg" />
                         </span>
                         <RouterLink
                             v-else
@@ -745,8 +736,7 @@ useKeybindings();
                             v-tooltip.right="railTileLabel(tile)"
                             @contextmenu="onTileContextMenu(tile, $event)"
                         >
-                            <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initialsOf(tile.label) }}</span>
-                            <Icon v-else :name="tile.icon!" class="text-lg" />
+                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-lg" />
                             <!-- One badge for every tile, core or extension: see AreaTile.badge. A `mark` replaces
                                  the number outright rather than sitting beside it: the chip is four pixels of
                                  glance, and a glyph AND a digit in it would be two claims competing for the same
@@ -793,7 +783,7 @@ useKeybindings();
                 v-tooltip.right="moreOpen ? undefined : moreLabel"
                 @click="moreOpen = !moreOpen"
             >
-                <Icon name="ellipsis" class="text-lg" />
+                <RailIcon area="more" class="text-lg" />
             </button>
 
             <!-- Same surface as the sandbox switcher and account avatar: AnchoredOverlay rows, not PrimeVue's
@@ -811,8 +801,8 @@ useKeybindings();
                         class="group flex items-center rounded-md text-xs text-content transition-colors hover:bg-content/5"
                     >
                         <RouterLink :to="tile.to" class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left" @click="dismissMore">
-                            <span v-if="tile.icon !== undefined" class="flex h-5 w-5 shrink-0 items-center justify-center">
-                                <Icon :name="tile.icon" class="text-xs text-muted" />
+                            <span class="flex h-5 w-5 shrink-0 items-center justify-center">
+                                <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-base text-muted" />
                             </span>
                             <span class="min-w-0 flex-1 truncate">{{ tile.label }}</span>
                         </RouterLink>
@@ -856,7 +846,7 @@ useKeybindings();
                 :aria-label="vpnLabel"
                 v-tooltip.right="vpnLabel"
             >
-                <Icon name="shield" class="text-lg" />
+                <RailIcon area="vpn" class="text-lg" />
             </RouterLink>
 
             <!-- The exposure indicator: present ONLY while a port is forwarded, because that is when something
@@ -869,7 +859,7 @@ useKeybindings();
                 :aria-label="forwardedLabel"
                 v-tooltip.right="forwardedLabel"
             >
-                <Icon name="globe" class="text-lg" />
+                <RailIcon area="ports" class="text-lg" />
                 <span
                     v-if="forwardedPorts.length > 1"
                     class="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-warning/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-warning"
@@ -890,7 +880,7 @@ useKeybindings();
                 :aria-label="tileLabel(tile)"
                 v-tooltip.right="tileLabel(tile)"
             >
-                <Icon :name="tile.icon!" class="text-lg" />
+                <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-lg" />
                 <!-- No tooltip on the badge, for the same reason as the navigation tiles above. -->
                 <span
                     v-if="tile.badge"
@@ -918,7 +908,7 @@ useKeybindings();
                 v-tooltip.right="terminalLabel"
                 @click="terminal.toggle()"
             >
-                <Icon name="code" class="text-lg" />
+                <RailIcon area="terminal" class="text-lg" />
                 <span
                     v-if="terminalActivity.count.value > 0"
                     class="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-primary-600/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-link"
@@ -941,7 +931,7 @@ useKeybindings();
                 aria-label="Add a capability"
                 v-tooltip.right="'Add a capability'"
             >
-                <Icon name="plus" class="text-lg" />
+                <RailIcon area="capabilities" class="text-lg" />
             </RouterLink>
 
             <!-- The account control: avatar → a rich popover (central account, sandbox workspace, theme, actions). -->

@@ -78,6 +78,12 @@ scaffolds, profiles, …), and the environment-overlay rebuild flow: is document
 
 - **What analytics captures is a legal document's subject, so it changes with one** ([`composables/analytics.ts`](src/app/analytics.ts)). `main.ts` boots PostHog for the whole SPA: autocapture, SPA pageviews, session replay, and the milestone events call sites send through `track()`; a resolved session is `identify`'d with the account's id, email and name. The privacy policy and the sub-processor list are written FROM that file ([`_site/site-content/src/legal.ts`](../../_site/site-content/src/legal.ts)), so a change here that alters what leaves the browser is an edit to those documents and to `LEGAL_VERSION` in the same commit, not a follow-up. **Replay is deliberately unscoped for launch, and that is a temporary decision.** The only mask is `maskAllInputs`, which covers what a visitor types into a field and nothing else, so a recording reconstructs whatever the workspace had on screen: Monaco's rendered file contents, diffs, transcripts, file and branch names — and the `defaults: 2026-06-25` snapshot carries canvas capture parameters too, so a project with canvas recording on gets the terminal as frames. The bet is full-fidelity replay while the funnel is being learned, against a promise elsewhere on the site that code stays on your machine, and the policy is written to match the code rather than the other way round. Narrowing it later is configuration rather than a project: `session_recording.maskTextSelector: "*"` records the shape of every page and the text of none, and `posthog.stopSessionRecording()` on entering a sandbox workspace leaves the pre-workspace funnel at full fidelity.
 
+The navigation uses bespoke Khmer-inspired glyphs from [railGlyphs.ts](src/shell/rail/railGlyphs.ts):
+stepped outlines, lotus points and diamond cuts, drawn on a 24-unit grid for small sizes.
+[RailIcon.vue](src/shell/rail/RailIcon.vue) selects them by view identity for the desktop rail, More menu,
+and mobile navigation. New glyphs should have distinct silhouettes and open interiors; colour follows the
+existing theme and navigation state. Unrecognised views use their declared icon, then their label's initials.
+
 ## How to extend
 
 **Default: write an extension, not a shell edit.** A new user-facing feature (a sidebar panel, a file
