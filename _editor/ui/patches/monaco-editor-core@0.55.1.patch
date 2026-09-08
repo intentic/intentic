@@ -1,0 +1,95 @@
+diff --git a/esm/vs/base/browser/ui/codicons/codicon/codicon.css b/esm/vs/base/browser/ui/codicons/codicon/codicon.css
+--- a/esm/vs/base/browser/ui/codicons/codicon/codicon.css
++++ b/esm/vs/base/browser/ui/codicons/codicon/codicon.css
+@@ -3,14 +3,8 @@
+  *  Licensed under the MIT License. See License.txt in the project root for license information.
+  *--------------------------------------------------------------------------------------------*/
+ 
+-@font-face {
+-	font-family: "codicon";
+-	font-display: block;
+-	src: url(./codicon.ttf) format("truetype");
+-}
+-
+ .codicon[class*='codicon-'] {
+-	font: normal normal normal 16px/1 codicon;
++	font: normal normal normal 16px/1 sans-serif;
+ 	display: inline-block;
+ 	text-decoration: none;
+ 	text-rendering: auto;
+@@ -23,3 +17,13 @@
+ }
+ 
+ /* icon rules are dynamically created by the platform theme service (see iconsStyleSheet.ts) */
++
++/* Intentic supplies native SVG masks; the editor never loads an icon font. */
++.codicon[class*='codicon-']::before {
++	content: "";
++	display: inline-block;
++	width: 1em;
++	height: 1em;
++	background-color: currentColor;
++	mask: var(--intentic-editor-icon, var(--intentic-icon-code)) center / contain no-repeat;
++}
+diff --git a/esm/vs/editor/contrib/inlineProgress/browser/inlineProgressWidget.css b/esm/vs/editor/contrib/inlineProgress/browser/inlineProgressWidget.css
+--- a/esm/vs/editor/contrib/inlineProgress/browser/inlineProgressWidget.css
++++ b/esm/vs/editor/contrib/inlineProgress/browser/inlineProgressWidget.css
+@@ -25,6 +25,5 @@
+ }
+ 
+ .inline-progress-widget:hover .icon::before {
+-	content: var(--vscode-icon-x-content);
+-	font-family: var(--vscode-icon-x-font-family);
++	--intentic-editor-icon: var(--intentic-icon-close);
+ }
+diff --git a/esm/vs/platform/theme/browser/iconsStyleSheet.js b/esm/vs/platform/theme/browser/iconsStyleSheet.js
+--- a/esm/vs/platform/theme/browser/iconsStyleSheet.js
++++ b/esm/vs/platform/theme/browser/iconsStyleSheet.js
+@@ -19,39 +19,18 @@
+         dispose: () => disposable.dispose(),
+         onDidChange: onDidChangeEmmiter.event,
+         getCSS() {
+-            const productIconTheme = themeService ? themeService.getProductIconTheme() : new UnthemedProductIconTheme();
+-            const usedFontIds = {};
+             const rules = new css.Builder();
+-            const rootAttribs = new css.Builder();
+             for (const contribution of iconRegistry.getIcons()) {
+-                const definition = productIconTheme.getIcon(contribution);
+-                if (!definition) {
+-                    continue;
++                let base = contribution;
++                const seen = new Set();
++                while (ThemeIcon.isThemeIcon(base.defaults) && !seen.has(base.id)) {
++                    seen.add(base.id);
++                    const parent = iconRegistry.getIcon(base.defaults.id);
++                    if (!parent) break;
++                    base = parent;
+                 }
+-                const fontContribution = definition.font;
+-                const fontFamilyVar = css.inline `--vscode-icon-${css.className(contribution.id)}-font-family`;
+-                const contentVar = css.inline `--vscode-icon-${css.className(contribution.id)}-content`;
+-                if (fontContribution) {
+-                    usedFontIds[fontContribution.id] = fontContribution.definition;
+-                    rootAttribs.push(css.inline `${fontFamilyVar}: ${css.stringValue(fontContribution.id)};`, css.inline `${contentVar}: ${css.stringValue(definition.fontCharacter)};`);
+-                    rules.push(css.inline `.codicon-${css.className(contribution.id)}:before { content: ${css.stringValue(definition.fontCharacter)}; font-family: ${css.stringValue(fontContribution.id)}; }`);
+-                }
+-                else {
+-                    rootAttribs.push(css.inline `${contentVar}: ${css.stringValue(definition.fontCharacter)}; ${fontFamilyVar}: 'codicon';`);
+-                    rules.push(css.inline `.codicon-${css.className(contribution.id)}:before { content: ${css.stringValue(definition.fontCharacter)}; }`);
+-                }
++                rules.push(css.inline `.codicon-${css.className(contribution.id)}:before { --intentic-editor-icon: var(--intentic-icon-${css.className(base.id)}, var(--intentic-icon-code)); }`);
+             }
+-            for (const id in usedFontIds) {
+-                const definition = usedFontIds[id];
+-                const fontWeight = definition.weight ? css.inline `font-weight: ${css.identValue(definition.weight)};` : css.inline ``;
+-                const fontStyle = definition.style ? css.inline `font-style: ${css.identValue(definition.style)};` : css.inline ``;
+-                const src = new css.Builder();
+-                for (const l of definition.src) {
+-                    src.push(css.inline `${css.asCSSUrl(l.location)} format(${css.stringValue(l.format)})`);
+-                }
+-                rules.push(css.inline `@font-face { src: ${src.join(', ')}; font-family: ${css.stringValue(id)};${fontWeight}${fontStyle} font-display: block; }`);
+-            }
+-            rules.push(css.inline `:root { ${rootAttribs.join(' ')} }`);
+             return rules.join('\n');
+         }
+     };

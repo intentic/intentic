@@ -96,7 +96,7 @@ const onProseClick = (event: MouseEvent): void => {
         @remove="forget"
     >
         <template #lead>
-            <Icon name="file" class="shrink-0 text-xs text-subtle" />
+            <Icon name="file" class="shrink-0 text-base text-muted" />
         </template>
         <!-- The type badge only: it costs width off the note's name on this row, and tags already live on the meta line. -->
         <template #badges>

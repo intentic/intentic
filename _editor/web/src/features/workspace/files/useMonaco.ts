@@ -3,6 +3,7 @@ import { useTextSize } from "@intentic/ui/text-size";
 import type * as Monaco from "monaco-editor-core";
 import { watch } from "vue";
 import { toScreenPx } from "../../../shell/window/uiScale";
+import { EDITOR_ICON_CSS } from "./monacoIcons";
 
 // Single Monaco integration point for the code surface (CodeView + DiffView), lazy-loaded on first use so other
 // viewers skip it. Highlighting stays on Shiki, bridged into Monaco's tokenizer so code matches the <Code> HTML
@@ -65,6 +66,10 @@ const applyBridge = (monaco: typeof Monaco, core: NonNullable<ShikiCore>): void 
 
 const init = async (): Promise<typeof Monaco> => {
     const monaco = await import(`monaco-editor-core`);
+    const icons = document.createElement(`style`);
+    icons.dataset[`intenticEditorIcons`] = ``;
+    icons.textContent = EDITOR_ICON_CSS;
+    document.head.append(icons);
     const { default: EditorWorker } = await import(`./editorWorker?worker`);
     // Ships only the editor worker; no language workers. Own entry: monaco's module never calls start().
     self.MonacoEnvironment = { getWorker: () => new EditorWorker() };

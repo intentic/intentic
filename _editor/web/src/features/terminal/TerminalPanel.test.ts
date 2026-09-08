@@ -3,6 +3,7 @@
 // names it. The sweep shares this field; the pane is mocked, only the dialog is under test.
 import PrimeVue from "primevue/config";
 import Tooltip from "primevue/tooltip";
+import { IconStub } from "@intentic/ui/testing";
 import { afterEach, expect, test, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 
@@ -83,6 +84,7 @@ const openPanel = async (sessions: Listed[]) => {
             }),
     });
     app.use(PrimeVue);
+    app.component(`Icon`, IconStub);
     app.directive(`tooltip`, Tooltip);
     app.mount(host);
     mounted.push({ app, host });

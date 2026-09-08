@@ -1,4 +1,6 @@
 import { mermaidTheme } from "./mermaidTheme.js";
+import { ICONS } from "../../icons/iconSets.js";
+import { glyphBody } from "../../icons/glyph.js";
 
 // One shared mermaid module: config, measuring area, and diagram registry are singletons, but a page can hold several
 // diagrams. Owns the id counter (per-instance would collide across diagrams), keeps initialize+render atomic so a theme
@@ -31,6 +33,17 @@ const bounded = async (work: Promise<string>): Promise<string> => {
 export const renderMermaid = (code: string, scheme: "light" | "dark", font: string): Promise<string> => {
     const work = async (): Promise<string> => {
         const mermaid = (await import(`mermaid`)).default;
+        mermaid.registerIconPacks([
+            {
+                name: `intentic`,
+                icons: {
+                    prefix: `intentic`,
+                    width: 24,
+                    height: 24,
+                    icons: Object.fromEntries(Object.entries(ICONS).map(([name, glyph]) => [name, { body: glyphBody(glyph) }])),
+                },
+            },
+        ]);
         mermaid.initialize({ startOnLoad: false, securityLevel: `strict`, suppressErrorRendering: true, ...mermaidTheme(scheme, font) });
         const { svg } = await mermaid.render(`md-mermaid-${(ids += 1)}`, code);
         return svg;

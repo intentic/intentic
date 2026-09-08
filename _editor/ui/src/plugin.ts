@@ -1,4 +1,3 @@
-import { addCollection } from "@iconify/vue";
 import PrimeVue from "primevue/config";
 import ButtonStyle from "primevue/button/style";
 import CheckboxStyle from "primevue/checkbox/style";
@@ -9,7 +8,6 @@ import PopoverStyle from "primevue/popover/style";
 import ToggleSwitchStyle from "primevue/toggleswitch/style";
 import type { App } from "vue";
 import Icon from "./components/primitives/Icon.vue";
-import { BUNDLED_ICONS } from "./icons/iconData.generated.js";
 import { Theme } from "./styles/theme.js";
 import { vAction } from "./lib/pressAction.js";
 import { vLongpress } from "./lib/longPress.js";
@@ -26,7 +24,9 @@ interface PrimeComponentStyle {
     loadStyle: (options: { name: string }, style: string | undefined) => unknown;
 }
 const asComponentStyle = (style: unknown): PrimeComponentStyle => style as PrimeComponentStyle;
-const primeComponentStyles = [ButtonStyle, CheckboxStyle, ContextMenuStyle, DialogStyle, DrawerStyle, PopoverStyle, ToggleSwitchStyle].map(asComponentStyle);
+const primeComponentStyles = [ButtonStyle, CheckboxStyle, ContextMenuStyle, DialogStyle, DrawerStyle, PopoverStyle, ToggleSwitchStyle].map(
+    asComponentStyle,
+);
 
 // PrimeVue writes component theme CSS at runtime, not in the app stylesheet, so a component first reached via a
 // lazy route would append its `<style>` nodes late. Preload every PrimeVue import here at boot, alongside the
@@ -42,8 +42,6 @@ const preloadPrimeComponentStyles = (): void => {
 // Design system's single entry point: wires the PrimeVue preset, dark-mode selector, and `cssLayer` order
 // (`utilities` last, so Tailwind always beats PrimeVue). Call once from the app's main.ts.
 export function installUi(app: App): void {
-    // Register the bundled icon sets so every <Icon> resolves locally, no runtime Iconify API fetch.
-    BUNDLED_ICONS.forEach((collection) => addCollection(collection));
     app.use(PrimeVue, {
         ripple: true,
         theme: {

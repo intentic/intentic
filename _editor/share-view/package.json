@@ -23,7 +23,6 @@
         "test:watch": "vitest"
     },
     "devDependencies": {
-        "@iconify/vue": "catalog:",
         "@intentic/web": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",

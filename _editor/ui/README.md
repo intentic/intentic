@@ -22,12 +22,20 @@ Shared **Vue UI primitives + theme** for the platform web app. A small, reusable
 The shared `Icon` uses Intentic's own Khmer-inspired pack: square line ends, cut corners, lotus points,
 and clear interiors at small sizes. [iconSets.ts](src/icons/iconSets.ts) owns the semantic names and the
 section-to-icon mapping. The source drawings are grouped by navigation, actions, objects and states in
-`src/icons/*Glyphs.ts`; [glyph.ts](src/icons/glyph.ts) applies one stroke weight and `currentColor` to all of them.
-Vendor marks retain their recognisable artwork. Every drawing is bundled offline for both the editor and
-shared views; run `pnpm --filter @intentic/ui generate:icons` after editing a drawing or the name table.
-The generator rejects missing, duplicated and unused drawings. New icons should express their purpose with
+`src/icons/*Glyphs.ts`. The native [Icon](src/components/primitives/Icon.vue) binds their paths directly;
+there is no icon package, generated collection, registration step or icon API request. [glyph.ts](src/icons/glyph.ts)
+serializes the same drawings for Mermaid's `intentic:name` icons. Vendor marks retain their recognisable
+artwork, stored locally with their [license](src/icons/REMIX-LICENSE.txt). New icons should express their purpose with
 a distinct silhouette, without adding decoration inside a small control. Row lead marks have a 16px floor
-and use the muted text colour, with the selected navigation mark taking the active accent.
+and use the muted text colour, with the selected navigation mark taking the active accent. `Row` and
+`DisclosureRow` pass `iconClass` alongside `mark` to custom lead slots, so selection checkboxes and icons
+can share a column without the icons losing their tier's size.
+
+The [versioned dependency patches](patches/README.md) make PrimeVue's fallback controls use the globally
+registered native `Icon` and replace Mermaid's icon utilities with native SVG. The matching dependency
+overrides remove the unused icon packages from the lockfile. Keep these patches in step with library upgrades.
+Monaco's patched stylesheet also uses these drawings as SVG masks; editor symbols live beside the rest of
+the pack in `editorGlyphs.ts` and its bundled icon font is not loaded.
 
 ## Key files / exports
 

@@ -85,26 +85,32 @@ it(`draws a loading outline at the same tier as the rows that will replace it`, 
 // The mark's size is handed to the slot, so a call site has no number to type and no number to get wrong.
 it(`hands a row's #lead the tier's mark size`, async () => {
     const seen: number[] = [];
-    const record = ({ mark }: { mark: number }): unknown => {
+    const icons: string[] = [];
+    const record = ({ mark, iconClass }: { mark: number; iconClass: string }): unknown => {
         seen.push(mark);
+        icons.push(iconClass);
         return h(`span`, { class: `mark` }, `•`);
     };
     await mount(`compact`, () => h(Row, { title: `GITHUB_TOKEN` }, { lead: record }));
     await mount(`comfortable`, () => h(Row, { title: `Membership` }, { lead: record }));
     expect(seen).toEqual([ROW_TIERS.compact.mark, ROW_TIERS.comfortable.mark]);
+    expect(icons).toEqual([`text-lg`, `text-xl`]);
 });
 
 // <DisclosureRow> draws `#lead` twice, once visibly and once as the hidden mirror that offsets its opened block, so
 // both must get the same number.
 it(`hands the same mark size to a disclosure row's lead and to its hidden mirror`, async () => {
     const seen: number[] = [];
-    const record = ({ mark }: { mark: number }): unknown => {
+    const icons: string[] = [];
+    const record = ({ mark, iconClass }: { mark: number; iconClass: string }): unknown => {
         seen.push(mark);
+        icons.push(iconClass);
         return h(`span`, { class: `mark` }, `•`);
     };
     await mount(`compact`, () => h(DisclosureRow, { open: true, title: `intentic.discord` }, { lead: record, below: () => `evidence` }));
     expect(seen.length, `an open disclosure row draws its lead twice`).toBeGreaterThan(1);
     expect(new Set(seen)).toEqual(new Set([ROW_TIERS.compact.mark]));
+    expect(new Set(icons)).toEqual(new Set([`text-lg`]));
 });
 
 // The lines on a group's surface that are not rows. Before <RowNote> these were hand-written in several spellings,

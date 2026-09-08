@@ -129,26 +129,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <!-- `data-window-no-drag`: this strip is the one part of the title bar that is not draggable, because all
-         of it is buttons and the gap between them is a hair. The row keeps a gutter to its left for that.
-
-         THE MARKS ARE DRAWN HERE rather than taken from the icon set. That set is the app's shared vocabulary
-         for what a view MEANS; these three are the platform's own furniture, down to the offset squares that
-         say "restore", and they exist at 10px and at no other size. This is also the only window in the
-         product that has them: the app's launcher face is a card with a × of its own (desktop-app App.vue). -->
+    <!-- The buttons opt out of the title bar's drag gesture. -->
     <div v-if="frameless" class="window-controls" data-window-no-drag>
         <button type="button" class="window-control" aria-label="Minimise" @click="workDesktopWindow(`minimize`)">
-            <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" /></svg>
+            <Icon name="minus" class="text-sm" />
         </button>
         <button type="button" class="window-control" :aria-label="maximized ? `Restore` : `Maximise`" @click="workDesktopWindow(`maximize`)">
-            <svg v-if="maximized" viewBox="0 0 10 10" aria-hidden="true">
-                <path d="M2.5 2.5h7v7h-7z" />
-                <path d="M0.5 7.5v-7h7" />
-            </svg>
-            <svg v-else viewBox="0 0 10 10" aria-hidden="true"><path d="M0.5 0.5h9v9h-9z" /></svg>
+            <Icon :name="maximized ? `restore` : `square`" class="text-sm" />
         </button>
         <button type="button" class="window-control window-control-close" aria-label="Close" @click="workDesktopWindow(`close`)">
-            <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0.5 0.5l9 9M9.5 0.5l-9 9" /></svg>
+            <Icon name="times" class="text-sm" />
         </button>
     </div>
 </template>
@@ -185,14 +175,6 @@ onUnmounted(() => {
     transition:
         background-color 120ms ease,
         color 120ms ease;
-}
-
-.window-control svg {
-    width: 0.625rem;
-    height: 0.625rem;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1;
 }
 
 .window-control:hover {

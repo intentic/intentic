@@ -49,8 +49,8 @@ const facts = computed(() =>
         can't nest in a button). The whole row still opens on click; only the transcript link is excepted.
     -->
     <DisclosureRow v-model:open="open" density="compact" hit="pair">
-        <template #lead>
-            <Icon :name="KIND_ICONS[episode.kind]" class="text-xs" :class="open ? `` : KIND_TINTS[episode.kind]" />
+        <template #lead="{ iconClass }">
+            <Icon :name="KIND_ICONS[episode.kind]" :class="[iconClass, open ? `` : KIND_TINTS[episode.kind]]" />
         </template>
 
         <!--
@@ -111,7 +111,12 @@ const facts = computed(() =>
                     <span v-if="episode.sessionId">session {{ episode.sessionId }}</span>
                     <span>source {{ sourceLabel(episode.sourceKey) }}</span>
                 </div>
-                <button v-if="episode.sessionId" type="button" :class="ui.linkButton('gap-1 text-2xs')" @click="api.chat.openSession(episode.sessionId)">
+                <button
+                    v-if="episode.sessionId"
+                    type="button"
+                    :class="ui.linkButton('gap-1 text-2xs')"
+                    @click="api.chat.openSession(episode.sessionId)"
+                >
                     <Icon name="external-link" class="shrink-0" /> Open transcript
                 </button>
             </div>

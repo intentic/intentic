@@ -48,8 +48,8 @@ const details = computed<string[][]>(() => [
         <!-- The origin glyph and the port number ride INSIDE the toggle: the pair is the hit area, and a
              fixed-width number is a wide, easy target that costs the row nothing. It also sets where the
              evidence below starts, since <DisclosureRow> offsets that block by this cluster's own width. -->
-        <template #lead>
-            <Icon :name="ORIGIN_ICONS[entry.origin]" class="shrink-0 text-sm text-subtle" />
+        <template #lead="{ iconClass }">
+            <Icon :name="ORIGIN_ICONS[entry.origin]" class="shrink-0 text-muted" :class="iconClass" />
             <!-- The port number is what the reader came looking for, and a fixed width is what makes a column
                  of them scannable rather than ragged. The "forwarded" badge rides in #meta rather than here
                  for the same reason: a badge in the lead pushes that one row's name out of the column. -->

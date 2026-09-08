@@ -81,6 +81,7 @@ const onRowClick = (event: MouseEvent, item: MenuItem): void => {
                     <span class="truncate" :class="item['danger'] === true && `text-danger`">{{ item.label }}</span>
                     <span v-if="item['hint']" class="truncate text-2xs text-subtle">{{ item["hint"] }}</span>
                 </span>
+                <Icon v-if="item.items?.length" name="chevron-right" class="text-sm text-muted" />
                 <kbd
                     v-if="item['shortcut']"
                     class="shrink-0 rounded border border-line bg-overlay px-1 py-px font-mono text-3xs leading-none text-muted"

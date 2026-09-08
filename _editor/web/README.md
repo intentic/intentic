@@ -84,6 +84,10 @@ simple Khmer-inspired outlines on a 24-unit grid, with consistent strokes and op
 identities through the pack's `areaIcon`, so a section keeps its mark in the rail, menus and hub index.
 Unrecognised views use their declared icon, then their label's initials. The rail uses larger marks;
 section rows keep their own smaller, more legible icon tier and highlight the selected mark with its label.
+The pack renders native SVG throughout, including window controls and library-supplied checkmarks, loading
+indicators and dialog controls. Custom agent-setting row leads inherit the same icon tier through their slot.
+Monaco's editor controls, search toggles and completion symbols use the pack as SVG masks, replacing its
+bundled icon font. The shared initializer installs these before a code editor or diff view mounts.
 
 ## How to extend
 

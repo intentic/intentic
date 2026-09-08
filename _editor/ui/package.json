@@ -50,6 +50,10 @@
             "types": "./src/icons/iconSets.ts",
             "default": "./src/icons/iconSets.ts"
         },
+        "./glyph": {
+            "types": "./src/icons/glyph.ts",
+            "default": "./src/icons/glyph.ts"
+        },
         "./path": {
             "types": "./src/lib/path.ts",
             "default": "./src/lib/path.ts"
@@ -109,14 +113,12 @@
         }
     },
     "scripts": {
-        "generate:icons": "bun run scripts/generateIconData.ts",
         "typecheck": "vue-tsc --noEmit"
     },
     "dependencies": {
         "@dagrejs/dagre": "catalog:",
         "@dicebear/core": "catalog:",
         "@dicebear/styles": "catalog:",
-        "@iconify/vue": "catalog:",
         "@primeuix/themes": "catalog:",
         "@intentic/code-read": "workspace:*",
         "@shikijs/langs": "catalog:",
@@ -132,9 +134,6 @@
         "vue": "catalog:"
     },
     "devDependencies": {
-        "@iconify-json/ri": "catalog:",
-        "@iconify/types": "catalog:",
-        "@iconify/utils": "catalog:",
         "@intentic/constants": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "typescript": "catalog:",

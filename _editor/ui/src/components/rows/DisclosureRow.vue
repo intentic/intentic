@@ -119,10 +119,7 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
         <div :class="$slots[`before`] ? `flex w-full items-center` : `contents`">
             <div v-if="$slots[`before`]" class="flex shrink-0 items-center"><slot name="before" /></div>
             <Row
-                :class="[
-                    $slots[`before`] ? `min-w-0 flex-1` : ``,
-                    open && body === `drawer` ? `!pb-0` : ``,
-                ]"
+                :class="[$slots[`before`] ? `min-w-0 flex-1` : ``, open && body === `drawer` ? `!pb-0` : ``]"
                 :density="tier"
                 :tone="tone"
                 :icon="icon"
@@ -172,7 +169,7 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
                             The tier's mark size, forwarded so a disclosure row's lead is written exactly like a plain
                             row's.
                         -->
-                        <slot name="lead" :mark="mark" />
+                        <slot name="lead" :mark="mark" :icon-class="ROW_TIERS[tier].icon" />
                     </component>
                 </template>
 
@@ -195,7 +192,7 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
                         <span class="flex shrink-0 cursor-pointer items-center" aria-hidden="true">
                             <span class="invisible flex items-center" :class="toggleGap">
                                 <Icon v-if="!disabled" name="chevron-right" class="shrink-0" :class="chevronSize" />
-                                <slot name="lead" :mark="mark" />
+                                <slot name="lead" :mark="mark" :icon-class="ROW_TIERS[tier].icon" />
                             </span>
                         </span>
                         <!--

@@ -200,8 +200,8 @@ const startFix = (): void => {
     -->
     <!-- @container: the chip's content is measured against this row, not the window, which the chat panel can halve. -->
     <DisclosureRow class="@container border-l-4" :class="tone.rowBorder" hit="pair" body="drawer" wide-control v-model:open="expanded">
-        <template #lead>
-            <Icon :name="tone.icon" :spin="tone.spin" class="shrink-0 text-base" :class="tone.text" />
+        <template #lead="{ iconClass }">
+            <Icon :name="tone.icon" :spin="tone.spin" class="shrink-0" :class="[iconClass, tone.text]" />
             <Avatar :size="24" :name="run.authorName" :src="run.authorAvatarUrl" />
         </template>
 

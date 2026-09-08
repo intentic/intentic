@@ -42,6 +42,7 @@ export const sourceAliases = (): Record<string, string> => ({
     // of the barrel. The DAG layout is plain TypeScript with its own unit tests, which must not boot the component
     // graph to reach it.
     "@intentic/ui/icon": fromRoot("_editor/ui/src/components/primitives/Icon.vue"),
+    "@intentic/ui/glyph": fromRoot("_editor/ui/src/icons/glyph.ts"),
     // Icon is registered globally by installUi, so component tests need a stand-in for it; one shared fixture here
     // instead of one per suite.
     "@intentic/ui/testing": fromRoot("_editor/ui/src/testing.ts"),

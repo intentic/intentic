@@ -221,8 +221,8 @@ watch(
         :open="expanded"
         @update:open="emit(`toggle`)"
     >
-        <template #lead>
-            <Icon :name="verdict.chore.icon as IconName" class="shrink-0 text-subtle" />
+        <template #lead="{ iconClass }">
+            <Icon :name="verdict.chore.icon as IconName" class="shrink-0 text-muted" :class="iconClass" />
         </template>
 
         <!--

@@ -1,18 +1,26 @@
 <!--
-    The single icon primitive for the app: resolves a stable semantic `name` through the icon table (icons/iconSets.ts) via Iconify. Size/colour come
+    The single icon primitive for the app: draws the native SVG paths in icons/iconSets.ts. Size/colour come
     from Tailwind classes on the tag. `spin` animates via SVG's own element, not CSS, so DevTools' Styles panel doesn't rebuild every frame.
 -->
 <script setup lang="ts">
-import { Icon as IconifyIcon } from "@iconify/vue";
 import { computed, onBeforeUnmount, onMounted, ref, useAttrs } from "vue";
 import { ICONS, type IconName } from "../../icons/iconSets.js";
+import type { Glyph } from "../../icons/glyph.js";
 
 const { name, spin = false } = defineProps<{ name: IconName; spin?: boolean }>();
 
-// An `aria-label` or `title` clears Iconify's default `aria-hidden`, announcing the icon as a named
-// image; unlabelled icons (most, sitting beside text) stay hidden.
+// Attrs aren't reactive; read them during rendering so a changed accessible name is respected.
 const attrs = useAttrs();
-const named = computed(() => [`aria-label`, `ariaLabel`, `title`].some((key) => attrs[key] !== undefined && attrs[key] !== null));
+const label = (): string | undefined => {
+    for (const key of [`aria-label`, `ariaLabel`, `title`]) {
+        const value = attrs[key];
+        if (typeof value === `string` && value.length > 0) {
+            return value;
+        }
+    }
+    return undefined;
+};
+const drawing = computed<Glyph>(() => ICONS[name]);
 
 const reducedMotion = ref(false);
 let motionQuery: MediaQueryList | undefined;
@@ -28,20 +36,35 @@ onMounted(() => {
     motionQuery.addEventListener(`change`, readMotionPreference);
 });
 onBeforeUnmount(() => motionQuery?.removeEventListener(`change`, readMotionPreference));
-
-/* Every glyph occupies a 24×24 view box (icons/iconSets.ts). SMIL stays outside
- * the CSS Animations model that makes DevTools replace its Styles rows, while still leaving a running mark for
- * work in progress. Reduced motion keeps the established slower, rather than frozen, spinner. */
-const spinningBody = computed(
-    () =>
-        (body: string): string =>
-            `<g>${body}<animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="${reducedMotion.value ? 3 : 1}s" repeatCount="indefinite" /></g>`,
-);
 </script>
 
 <template>
-    <!-- `undefined`, not `true`, for the unnamed case: leaves Iconify's own default rather than restating it. -->
-    <IconifyIcon :icon="ICONS[name]" :customise="spin ? spinningBody : undefined" :aria-hidden="named ? false : undefined" class="ui-icon" />
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        width="1em"
+        height="1em"
+        role="img"
+        focusable="false"
+        :aria-hidden="label() !== undefined || attrs['aria-labelledby'] ? undefined : true"
+        :aria-label="label()"
+        class="ui-icon"
+    >
+        <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="2">
+            <path v-if="drawing.outline" :d="drawing.outline" />
+            <path v-if="drawing.solid" :d="drawing.solid" fill="currentColor" stroke="none" />
+            <!-- SMIL leaves DevTools' CSS animation model alone. Reduced motion keeps the slower spinner. -->
+            <animateTransform
+                v-if="spin"
+                attributeName="transform"
+                type="rotate"
+                from="0 12 12"
+                to="360 12 12"
+                :dur="reducedMotion ? `3s` : `1s`"
+                repeatCount="indefinite"
+            />
+        </g>
+    </svg>
 </template>
 
 <style scoped>

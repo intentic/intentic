@@ -171,18 +171,6 @@ catalogs:
     '@huggingface/transformers':
       specifier: 4.2.0
       version: 4.2.0
-    '@iconify-json/ri':
-      specifier: 1.2.10
-      version: 1.2.10
-    '@iconify/types':
-      specifier: 2.0.0
-      version: 2.0.0
-    '@iconify/utils':
-      specifier: 3.1.4
-      version: 3.1.4
-    '@iconify/vue':
-      specifier: 5.0.1
-      version: 5.0.1
     '@openai/codex-sdk':
       specifier: 0.147.0
       version: 0.147.0
@@ -551,6 +539,8 @@ catalogs:
       version: 2.9.0
 
 overrides:
+  primevue>@primevue/icons: '-'
+  mermaid>@iconify/utils: '-'
   zod: 4.5.4
   '@cursor/sdk>zod': 3.25.76
   '@posthog/core': 1.40.2
@@ -566,6 +556,11 @@ overrides:
   '@oxlint/plugins': 1.76.0
 
 pnpmfileChecksum: sha256-PpzRJUwQNhPhdukDf+vjTfLef6d4dIO8ZlQYv1vne7Q=
+
+patchedDependencies:
+  mermaid@11.16.1: dfb3ae2a4a7d51f8cc126f7bb73461ebe913e7bb99981adf2418bd33cf016106
+  monaco-editor-core@0.55.1: f43544ed76acfd0e96e3029a7cc969fbf8a832d4168f015cde90f0b150a93703
+  primevue@4.5.5: df5c12d98e45d34b51bc87bbe7cb90dc7f3960744e435acdba0ea9c474c89a68
 
 importers:
 
@@ -1099,7 +1094,7 @@ importers:
         version: 2.7.2
       primevue:
         specifier: 'catalog:'
-        version: 4.5.5(vue@3.5.40(typescript@5.9.3))
+        version: 4.5.5(patch_hash=df5c12d98e45d34b51bc87bbe7cb90dc7f3960744e435acdba0ea9c474c89a68)(vue@3.5.40(typescript@5.9.3))
       tslib:
         specifier: 'catalog:'
         version: 2.8.1
@@ -1149,9 +1144,6 @@ importers:
 
   _editor/share-view:
     devDependencies:
-      '@iconify/vue':
-        specifier: 'catalog:'
-        version: 5.0.1(vue@3.5.40(typescript@5.9.3))
       '@intentic/constants':
         specifier: workspace:*
         version: link:../../_tools/constants
@@ -1212,9 +1204,6 @@ importers:
       '@dicebear/styles':
         specifier: 'catalog:'
         version: 10.4.0
-      '@iconify/vue':
-        specifier: 'catalog:'
-        version: 5.0.1(vue@3.5.40(typescript@5.9.3))
       '@intentic/code-read':
         specifier: workspace:*
         version: link:../../_tools/code-read
@@ -1238,10 +1227,10 @@ importers:
         version: 18.0.7
       mermaid:
         specifier: 'catalog:'
-        version: 11.16.1
+        version: 11.16.1(patch_hash=dfb3ae2a4a7d51f8cc126f7bb73461ebe913e7bb99981adf2418bd33cf016106)
       primevue:
         specifier: 'catalog:'
-        version: 4.5.5(vue@3.5.40(typescript@5.9.3))
+        version: 4.5.5(patch_hash=df5c12d98e45d34b51bc87bbe7cb90dc7f3960744e435acdba0ea9c474c89a68)(vue@3.5.40(typescript@5.9.3))
       shiki:
         specifier: 'catalog:'
         version: 4.4.1
@@ -1255,15 +1244,6 @@ importers:
         specifier: 'catalog:'
         version: 3.5.40(typescript@5.9.3)
     devDependencies:
-      '@iconify-json/ri':
-        specifier: 'catalog:'
-        version: 1.2.10
-      '@iconify/types':
-        specifier: 'catalog:'
-        version: 2.0.0
-      '@iconify/utils':
-        specifier: 'catalog:'
-        version: 3.1.4
       '@intentic/constants':
         specifier: workspace:*
         version: link:../../_tools/constants
@@ -1407,13 +1387,13 @@ importers:
         version: 6.3.0
       monaco-editor-core:
         specifier: 'catalog:'
-        version: 0.55.1
+        version: 0.55.1(patch_hash=f43544ed76acfd0e96e3029a7cc969fbf8a832d4168f015cde90f0b150a93703)
       posthog-js:
         specifier: 'catalog:'
         version: 1.409.5
       primevue:
         specifier: 'catalog:'
-        version: 4.5.5(vue@3.5.40(typescript@5.9.3))
+        version: 4.5.5(patch_hash=df5c12d98e45d34b51bc87bbe7cb90dc7f3960744e435acdba0ea9c474c89a68)(vue@3.5.40(typescript@5.9.3))
       tslib:
         specifier: 'catalog:'
         version: 2.8.1
@@ -1442,6 +1422,9 @@ importers:
       '@xterm/headless':
         specifier: 'catalog:'
         version: 6.0.0
+      dompurify:
+        specifier: 'catalog:'
+        version: 3.4.13
       esbuild:
         specifier: 'catalog:'
         version: 0.28.1
@@ -1451,6 +1434,9 @@ importers:
       jsdom:
         specifier: 'catalog:'
         version: 29.1.1(@noble/hashes@2.4.0)
+      mermaid:
+        specifier: 'catalog:'
+        version: 11.16.1(patch_hash=dfb3ae2a4a7d51f8cc126f7bb73461ebe913e7bb99981adf2418bd33cf016106)
       tailwindcss:
         specifier: 'catalog:'
         version: 4.3.3
@@ -3289,7 +3275,7 @@ importers:
     dependencies:
       primevue:
         specifier: 'catalog:'
-        version: 4.5.5(vue@3.5.40(typescript@5.9.3))
+        version: 4.5.5(patch_hash=df5c12d98e45d34b51bc87bbe7cb90dc7f3960744e435acdba0ea9c474c89a68)(vue@3.5.40(typescript@5.9.3))
     devDependencies:
       '@intentic/tsconfig':
         specifier: workspace:*
@@ -3503,7 +3489,7 @@ importers:
         version: 1.48.2(vue@3.5.40(typescript@5.9.3))
       mermaid:
         specifier: 'catalog:'
-        version: 11.16.1
+        version: 11.16.1(patch_hash=dfb3ae2a4a7d51f8cc126f7bb73461ebe913e7bb99981adf2418bd33cf016106)
       shiki:
         specifier: 'catalog:'
         version: 4.4.1
@@ -3882,12 +3868,6 @@ packages:
   '@alloc/quick-lru@5.3.0':
     resolution: {integrity: sha512-U4+70Pc5ZS9osnCBCE5Jha/ciHM+Yp+CNMNC/7HvYbNRk1Ldd+f7qO65W5qfhu/TCv+/ozljlXXe9Nj8419DMA==}
     engines: {node: '>=10'}
-
-  '@antfu/install-pkg@1.1.0':
-    resolution: {integrity: sha512-MGQsmw10ZyI+EJo45CdSER4zEb+p31LpDAFp2Z3gkSd1yqVZGi0Ebx++YTEMonJy4oChEMLsxZ64j8FH6sSqtQ==}
-
-  '@antfu/install-pkg@2.0.1':
-    resolution: {integrity: sha512-iCKVQcIC0e3oDxEfs3SHQGW+ovhBMZmS1TE+bTk50rVyMCBmCfClv7Qi3HQKlumYwvjb/iIMeWCW2i67q6kFfQ==}
 
   '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.257':
     resolution: {integrity: sha512-ITjFPYB8riu9tbxbrWArokiZ/90w/NDrYbtEvyr3ScilVtu1iupkComxkhvbUxoyT4JRDpKsdw/ZOfwSl/pkpA==}
@@ -5265,23 +5245,6 @@ packages:
   '@huggingface/xetchunk-wasm@0.1.0':
     resolution: {integrity: sha512-wWpp2qwPgf9kv1KLJjcDUk/OrpDOsFoQ3Qpz0U5LGn20csoymBf8eneOv6wm/GzPBzlWac1OYiR0aa1vT6aM2Q==}
 
-  '@iconify-json/ri@1.2.10':
-    resolution: {integrity: sha512-WWMhoncVVM+Xmu9T5fgu2lhYRrKTEWhKk3Com0KiM111EeEsRLiASjpsFKnC/SrB6covhUp95r2mH8tGxhgd5Q==}
-
-  '@iconify/types@2.0.0':
-    resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
-
-  '@iconify/utils@3.1.4':
-    resolution: {integrity: sha512-b1S7B1k9ohZ+iNTi2ATxbRYG9fTrJmUT0rc46bvVnNxqNRGW7dyo/vRREwyniI5IRN2RSJHDcm+s3BjWrSAjHw==}
-
-  '@iconify/utils@3.1.5':
-    resolution: {integrity: sha512-nT+AWyh5caHY6xa0PdLXpUooIz6l7qsT+adqsCTYBfbdn5Q18VrWs2fvuTa7KEoJnPBfEPqWkmAIht0EHtCi2A==}
-
-  '@iconify/vue@5.0.1':
-    resolution: {integrity: sha512-aumwwooJlFJ5H5qYWB6ZTAyM0C8hpfcSVLB9/a3qnH1GGvIJ+FEbpEs4s/HfErYe/M5qZeLjwmESR5fFm3lXEw==}
-    peerDependencies:
-      vue: '>=3.0.0'
-
   '@img/colour@1.1.0':
     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
     engines: {node: '>=18'}
@@ -6628,10 +6591,6 @@ packages:
     engines: {node: '>=12.11.0'}
     peerDependencies:
       vue: ^3.5.0
-
-  '@primevue/icons@4.5.5':
-    resolution: {integrity: sha512-eteOhTdAOXEYE9qW1AOrBBgDxQ2szHJxSkEK1XVdV2TKxGM5FQf03Ovms0VDyZTc16XBIgvwYjXJQS0BPbhPaA==}
-    engines: {node: '>=12.11.0'}
 
   '@prisma/adapter-pg@7.9.1':
     resolution: {integrity: sha512-Ho2RK1KanQxLNSC0sR5bpiiVep10sWPLXCcxK+KXfI/Q69TMRbiafSvLPv3V9snimX72rMCqGlyJ4sBO4lKTAw==}
@@ -13141,16 +13100,6 @@ snapshots:
 
   '@alloc/quick-lru@5.3.0': {}
 
-  '@antfu/install-pkg@1.1.0':
-    dependencies:
-      package-manager-detector: 1.8.0
-      tinyexec: 1.3.1
-
-  '@antfu/install-pkg@2.0.1':
-    dependencies:
-      package-manager-detector: 1.8.0
-      tinyexec: 1.3.1
-
   '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.257':
     optional: true
 
@@ -14408,29 +14357,6 @@ snapshots:
       '@huggingface/blake3-jit': 0.0.2
       gearhash-jit: 1.0.2
 
-  '@iconify-json/ri@1.2.10':
-    dependencies:
-      '@iconify/types': 2.0.0
-
-  '@iconify/types@2.0.0': {}
-
-  '@iconify/utils@3.1.4':
-    dependencies:
-      '@antfu/install-pkg': 1.1.0
-      '@iconify/types': 2.0.0
-      import-meta-resolve: 4.2.0
-
-  '@iconify/utils@3.1.5':
-    dependencies:
-      '@antfu/install-pkg': 2.0.1
-      '@iconify/types': 2.0.0
-      import-meta-resolve: 4.2.0
-
-  '@iconify/vue@5.0.1(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@iconify/types': 2.0.0
-      vue: 3.5.40(typescript@5.9.3)
-
   '@img/colour@1.1.0': {}
 
   '@img/sharp-darwin-arm64@0.35.3':
@@ -14949,7 +14875,7 @@ snapshots:
 
   '@intentic/extension-ui@file:_shared/extension-ui(vue@3.5.40(typescript@5.9.3))':
     dependencies:
-      primevue: 4.5.5(vue@3.5.40(typescript@5.9.3))
+      primevue: 4.5.5(patch_hash=df5c12d98e45d34b51bc87bbe7cb90dc7f3960744e435acdba0ea9c474c89a68)(vue@3.5.40(typescript@5.9.3))
       vue: 3.5.40(typescript@5.9.3)
 
   '@intentic/graph@file:_deploy/graph':
@@ -14989,7 +14915,6 @@ snapshots:
       '@dagrejs/dagre': 3.0.0
       '@dicebear/core': 10.5.0
       '@dicebear/styles': 10.4.0
-      '@iconify/vue': 5.0.1(vue@3.5.40(typescript@5.9.3))
       '@intentic/code-read': file:_tools/code-read
       '@primeuix/themes': 2.0.3
       '@shikijs/langs': 4.4.1
@@ -14997,8 +14922,8 @@ snapshots:
       '@vue-flow/core': 1.48.2(vue@3.5.40(typescript@5.9.3))
       dompurify: 3.4.13
       marked: 18.0.7
-      mermaid: 11.16.1
-      primevue: 4.5.5(vue@3.5.40(typescript@5.9.3))
+      mermaid: 11.16.1(patch_hash=dfb3ae2a4a7d51f8cc126f7bb73461ebe913e7bb99981adf2418bd33cf016106)
+      primevue: 4.5.5(patch_hash=df5c12d98e45d34b51bc87bbe7cb90dc7f3960744e435acdba0ea9c474c89a68)(vue@3.5.40(typescript@5.9.3))
       shiki: 4.4.1
       tailwind-merge: 3.6.0
       tslib: 2.8.1
@@ -15051,9 +14976,9 @@ snapshots:
       '@xterm/xterm': 6.0.0
       better-auth: 1.6.25(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3))(mysql2@3.24.3(@types/node@24.13.2))(pg@8.22.0)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
       idb-keyval: 6.3.0
-      monaco-editor-core: 0.55.1
+      monaco-editor-core: 0.55.1(patch_hash=f43544ed76acfd0e96e3029a7cc969fbf8a832d4168f015cde90f0b150a93703)
       posthog-js: 1.409.5
-      primevue: 4.5.5(vue@3.5.40(typescript@5.9.3))
+      primevue: 4.5.5(patch_hash=df5c12d98e45d34b51bc87bbe7cb90dc7f3960744e435acdba0ea9c474c89a68)(vue@3.5.40(typescript@5.9.3))
       tslib: 2.8.1
       vue: 3.5.40(typescript@5.9.3)
       vue-router: 5.2.0(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(rolldown@1.2.7)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(vue@3.5.40(typescript@5.9.3))
@@ -15142,9 +15067,9 @@ snapshots:
       '@xterm/xterm': 6.0.0
       better-auth: 1.6.25(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3))(mysql2@3.24.3(@types/node@24.13.2))(pg@8.22.0)(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.2.18)(magicast@0.5.4)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
       idb-keyval: 6.3.0
-      monaco-editor-core: 0.55.1
+      monaco-editor-core: 0.55.1(patch_hash=f43544ed76acfd0e96e3029a7cc969fbf8a832d4168f015cde90f0b150a93703)
       posthog-js: 1.409.5
-      primevue: 4.5.5(vue@3.5.40(typescript@5.9.3))
+      primevue: 4.5.5(patch_hash=df5c12d98e45d34b51bc87bbe7cb90dc7f3960744e435acdba0ea9c474c89a68)(vue@3.5.40(typescript@5.9.3))
       tslib: 2.8.1
       vue: 3.5.40(typescript@5.9.3)
       vue-router: 5.2.0(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(rolldown@1.2.7)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(vue@3.5.40(typescript@5.9.3))
@@ -15233,9 +15158,9 @@ snapshots:
       '@xterm/xterm': 6.0.0
       better-auth: 1.6.25(@opentelemetry/api@1.9.1)(@prisma/client@7.9.1(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.2.18)(magicast@0.5.4)(typescript@5.9.3))(typescript@5.9.3))(prisma@7.9.1(@types/node@24.13.2)(@types/react@19.2.18)(magicast@0.5.4)(typescript@5.9.3))(vitest@4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))(vue@3.5.40(typescript@5.9.3))
       idb-keyval: 6.3.0
-      monaco-editor-core: 0.55.1
+      monaco-editor-core: 0.55.1(patch_hash=f43544ed76acfd0e96e3029a7cc969fbf8a832d4168f015cde90f0b150a93703)
       posthog-js: 1.409.5
-      primevue: 4.5.5(vue@3.5.40(typescript@5.9.3))
+      primevue: 4.5.5(patch_hash=df5c12d98e45d34b51bc87bbe7cb90dc7f3960744e435acdba0ea9c474c89a68)(vue@3.5.40(typescript@5.9.3))
       tslib: 2.8.1
       vue: 3.5.40(typescript@5.9.3)
       vue-router: 5.2.0(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(rolldown@1.2.7)(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(vue@3.5.40(typescript@5.9.3))
@@ -16111,13 +16036,6 @@ snapshots:
       '@primeuix/utils': 0.6.4
       vue: 3.5.40(typescript@5.9.3)
 
-  '@primevue/icons@4.5.5(vue@3.5.40(typescript@5.9.3))':
-    dependencies:
-      '@primeuix/utils': 0.6.4
-      '@primevue/core': 4.5.5(vue@3.5.40(typescript@5.9.3))
-    transitivePeerDependencies:
-      - vue
-
   '@prisma/adapter-pg@7.9.1':
     dependencies:
       '@prisma/driver-adapter-utils': 7.9.1
@@ -16615,13 +16533,13 @@ snapshots:
 
   '@slack/logger@5.0.0':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 26.4.1
 
   '@slack/socket-mode@3.0.0(undici@7.29.1)':
     dependencies:
       '@slack/logger': 5.0.0
       '@slack/web-api': 8.0.0
-      '@types/node': 24.13.2
+      '@types/node': 26.4.1
       eventemitter3: 5.0.4
       undici: 7.29.1
 
@@ -16631,7 +16549,7 @@ snapshots:
     dependencies:
       '@slack/logger': 5.0.0
       '@slack/types': 3.1.0
-      '@types/node': 24.13.2
+      '@types/node': 26.4.1
       '@types/retry': 0.12.0
       eventemitter3: 5.0.4
       p-queue: 6.6.2
@@ -17031,7 +16949,7 @@ snapshots:
 
   '@types/d3-interpolate@3.0.1':
     dependencies:
-      '@types/d3-color': 3.1.0
+      '@types/d3-color': 3.1.3
 
   '@types/d3-interpolate@3.0.4':
     dependencies:
@@ -17049,7 +16967,7 @@ snapshots:
 
   '@types/d3-scale@4.0.2':
     dependencies:
-      '@types/d3-time': 3.0.0
+      '@types/d3-time': 3.0.4
 
   '@types/d3-scale@4.0.9':
     dependencies:
@@ -17121,13 +17039,13 @@ snapshots:
 
   '@types/docker-modem@3.0.6':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 26.4.1
       '@types/ssh2': 1.15.5
 
   '@types/dockerode@4.0.1':
     dependencies:
       '@types/docker-modem': 3.0.6
-      '@types/node': 24.13.2
+      '@types/node': 26.4.1
       '@types/ssh2': 1.15.5
 
   '@types/estree-jsx@1.0.5':
@@ -17150,7 +17068,7 @@ snapshots:
 
   '@types/mailparser@3.4.6':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 26.4.1
       iconv-lite: 0.6.3
 
   '@types/mdast@4.0.4':
@@ -17195,15 +17113,15 @@ snapshots:
 
   '@types/sax@1.2.7':
     dependencies:
-      '@types/node': 24.13.3
+      '@types/node': 26.4.1
 
   '@types/ssh2-streams@0.1.13':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 26.4.1
 
   '@types/ssh2@0.5.52':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 26.4.1
       '@types/ssh2-streams': 0.1.13
 
   '@types/ssh2@1.15.5':
@@ -17212,7 +17130,7 @@ snapshots:
 
   '@types/tar-stream@3.1.4':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 26.4.1
 
   '@types/trusted-types@2.0.7':
     optional: true
@@ -17223,11 +17141,11 @@ snapshots:
 
   '@types/web-push@3.6.4':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 26.4.1
 
   '@types/ws@8.18.1':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 26.4.1
 
   '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260707.2':
     optional: true
@@ -20470,10 +20388,9 @@ snapshots:
 
   merge2@1.4.1: {}
 
-  mermaid@11.16.1:
+  mermaid@11.16.1(patch_hash=dfb3ae2a4a7d51f8cc126f7bb73461ebe913e7bb99981adf2418bd33cf016106):
     dependencies:
       '@braintree/sanitize-url': 7.1.2
-      '@iconify/utils': 3.1.5
       '@mermaid-js/parser': 1.2.1
       '@types/d3': 7.4.3
       '@upsetjs/venn.js': 2.0.0
@@ -20576,7 +20493,7 @@ snapshots:
       pkg-types: 1.3.1
       ufo: 1.6.4
 
-  monaco-editor-core@0.55.1:
+  monaco-editor-core@0.55.1(patch_hash=f43544ed76acfd0e96e3029a7cc969fbf8a832d4168f015cde90f0b150a93703):
     dependencies:
       dompurify: 3.4.13
       marked: 14.0.0
@@ -21229,13 +21146,12 @@ snapshots:
     dependencies:
       parse-ms: 4.0.0
 
-  primevue@4.5.5(vue@3.5.40(typescript@5.9.3)):
+  primevue@4.5.5(patch_hash=df5c12d98e45d34b51bc87bbe7cb90dc7f3960744e435acdba0ea9c474c89a68)(vue@3.5.40(typescript@5.9.3)):
     dependencies:
       '@primeuix/styled': 0.7.4
       '@primeuix/styles': 2.0.3
       '@primeuix/utils': 0.6.4
       '@primevue/core': 4.5.5(vue@3.5.40(typescript@5.9.3))
-      '@primevue/icons': 4.5.5(vue@3.5.40(typescript@5.9.3))
     transitivePeerDependencies:
       - vue
 
@@ -21299,7 +21215,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.2
-      '@types/node': 24.13.2
+      '@types/node': 26.4.1
       long: 5.3.2
 
   proxy-addr@2.0.7:

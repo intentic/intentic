@@ -193,12 +193,8 @@ const groupCount = computed(() => {
             </RowNote>
 
             <RowNote v-else-if="visibleEntries.length === 0" variant="empty">
-                <template v-if="query.trim() !== ''">
-                    No decisions match "{{ query.trim() }}".
-                </template>
-                <template v-else>
-                    No {{ outcomeFilter }} decisions recorded yet.
-                </template>
+                <template v-if="query.trim() !== ''"> No decisions match "{{ query.trim() }}". </template>
+                <template v-else> No {{ outcomeFilter }} decisions recorded yet. </template>
             </RowNote>
 
             <template v-else>
@@ -209,8 +205,8 @@ const groupCount = computed(() => {
                     body="rail"
                     @update:open="(val) => toggle(entryKey(entry), val)"
                 >
-                    <template #lead>
-                        <Icon :name="statusOf(entry).icon" class="text-xs" :class="statusOf(entry).iconTone" />
+                    <template #lead="{ iconClass }">
+                        <Icon :name="statusOf(entry).icon" :class="[iconClass, statusOf(entry).iconTone]" />
                     </template>
 
                     <template #title>
@@ -234,12 +230,7 @@ const groupCount = computed(() => {
                             <Icon name="desktop" class="text-3xs" />
                             {{ entry.machine }}
                         </span>
-                        <StatusBadge
-                            :variant="statusOf(entry).variant"
-                            :label="statusOf(entry).label"
-                            size="xs"
-                            :dot="statusOf(entry).dot"
-                        />
+                        <StatusBadge :variant="statusOf(entry).variant" :label="statusOf(entry).label" size="xs" :dot="statusOf(entry).dot" />
                         <span class="shrink-0 text-2xs text-subtle" :title="formatDateTime(entry.at)">
                             {{ timeAgo(entry.at) }}
                         </span>

@@ -71,9 +71,9 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
             Sized from the tier's own `mark`, not a literal number, so the lead column matches every row at every density; the tick centers on the
             glyph rather than sitting beside it.
         -->
-        <template #lead="{ mark }">
+        <template #lead="{ mark, iconClass }">
             <span class="relative flex shrink-0 items-center justify-center" :style="{ width: `${mark}px`, height: `${mark}px` }">
-                <Icon :name="glyph" aria-hidden="true" class="text-sm text-subtle transition-opacity" :class="glyphClass" />
+                <Icon :name="glyph" aria-hidden="true" class="text-muted transition-opacity" :class="[iconClass, glyphClass]" />
                 <Checkbox
                     v-if="selectable"
                     :model-value="selected"

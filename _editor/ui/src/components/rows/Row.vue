@@ -146,7 +146,7 @@ const picked = as === `button`;
                             The lead mark's size, handed to the slot so callers don't look up or restate the tier's
                             number.
                         -->
-                        <slot name="lead" :mark="TIERS[tier].mark" />
+                        <slot name="lead" :mark="TIERS[tier].mark" :icon-class="TIERS[tier].icon" />
                         <Icon
                             v-if="icon !== undefined"
                             :name="icon"
@@ -212,7 +212,7 @@ const picked = as === `button`;
                 <div v-if="spine" class="flex" :class="TIERS[tier].gap">
                     <div class="relative flex shrink-0 justify-center">
                         <span class="invisible flex items-center" :class="TIERS[tier].gap" inert aria-hidden="true">
-                            <slot name="lead" :mark="TIERS[tier].mark" />
+                            <slot name="lead" :mark="TIERS[tier].mark" :icon-class="TIERS[tier].icon" />
                             <Icon v-if="icon !== undefined" :name="icon" :class="TIERS[tier].icon" />
                         </span>
                         <span class="absolute inset-y-0 w-px bg-line-strong" aria-hidden="true" />

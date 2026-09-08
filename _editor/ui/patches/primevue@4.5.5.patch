@@ -1,0 +1,1884 @@
+diff --git a/accordion/Accordion.vue b/accordion/Accordion.vue
+index 5334453e8c553ebb50fd0d1cfeabc2da1159dafd..4ea164c27ad3fdc58acddb221ffed775ca3ca580 100644
+--- a/accordion/Accordion.vue
++++ b/accordion/Accordion.vue
+@@ -28,8 +28,8 @@
+ </template>
+ 
+ <script>
+-import ChevronRightIcon from '@primevue/icons/chevronright';
+-import ChevronUpIcon from '@primevue/icons/chevronup';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
++import { ChevronUpIcon } from '../intentic-icons.mjs';
+ import AccordionContent from 'primevue/accordioncontent';
+ import AccordionHeader from 'primevue/accordionheader';
+ import AccordionPanel from 'primevue/accordionpanel';
+diff --git a/accordion/index.mjs b/accordion/index.mjs
+index 69e72c1b6cc16db93bfe97fa7d7464eefe038e73..f27b0655111399a7601fb64bc610f59f9a43d1ec 100644
+--- a/accordion/index.mjs
++++ b/accordion/index.mjs
+@@ -1,5 +1,5 @@
+-import ChevronRightIcon from '@primevue/icons/chevronright';
+-import ChevronUpIcon from '@primevue/icons/chevronup';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
++import { ChevronUpIcon } from '../intentic-icons.mjs';
+ import AccordionContent from 'primevue/accordioncontent';
+ import AccordionHeader from 'primevue/accordionheader';
+ import AccordionPanel from 'primevue/accordionpanel';
+diff --git a/accordionheader/AccordionHeader.vue b/accordionheader/AccordionHeader.vue
+index 542bdba2622c5f54662cdd3fec075109db36048c..1cf9d98bb703ecd2ad45355cb277a27170f76815 100644
+--- a/accordionheader/AccordionHeader.vue
++++ b/accordionheader/AccordionHeader.vue
+@@ -24,8 +24,8 @@
+ <script>
+ import { cn } from '@primeuix/utils';
+ import { findSingle, focus, getAttribute } from '@primeuix/utils/dom';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronUpIcon from '@primevue/icons/chevronup';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronUpIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps } from 'vue';
+ import BaseAccordionHeader from './BaseAccordionHeader.vue';
+diff --git a/accordionheader/index.mjs b/accordionheader/index.mjs
+index 25ac34b8dbb4a4aa8e1ed1f415f15878882bb258..d2697b47d2c239bd5b37f7d59581d93cbe8952eb 100644
+--- a/accordionheader/index.mjs
++++ b/accordionheader/index.mjs
+@@ -1,7 +1,7 @@
+ import { cn } from '@primeuix/utils';
+ import { focus, getAttribute, findSingle } from '@primeuix/utils/dom';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronUpIcon from '@primevue/icons/chevronup';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronUpIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps, resolveDirective, withDirectives, openBlock, createBlock, resolveDynamicComponent, withCtx, renderSlot, normalizeClass } from 'vue';
+ import BaseComponent from '@primevue/core/basecomponent';
+diff --git a/autocomplete/AutoComplete.vue b/autocomplete/AutoComplete.vue
+index 8ca74d454db6c673a79459a6537429c5937a983b..670a92bf27e869406378dd9d6f36a0461d959224 100644
+--- a/autocomplete/AutoComplete.vue
++++ b/autocomplete/AutoComplete.vue
+@@ -213,9 +213,9 @@ import { absolutePosition, addStyle, findSingle, focus, getOuterWidth, isTouchDe
+ import { equals, findLastIndex, isEmpty, isNotEmpty, resolveFieldData } from '@primeuix/utils/object';
+ import { ZIndex } from '@primeuix/utils/zindex';
+ import { ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import SpinnerIcon from '@primevue/icons/spinner';
+-import TimesIcon from '@primevue/icons/times';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { SpinnerIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Chip from 'primevue/chip';
+ import InputText from 'primevue/inputtext';
+ import OverlayEventBus from 'primevue/overlayeventbus';
+diff --git a/autocomplete/index.mjs b/autocomplete/index.mjs
+index 982cbf69247b98da1ec8bf28286a981132da9378..ac5bb4a8211d85b5d8c04f09e869c3fb4a4b0e11 100644
+--- a/autocomplete/index.mjs
++++ b/autocomplete/index.mjs
+@@ -3,9 +3,9 @@ import { findSingle, focus, isTouchDevice, relativePosition, getOuterWidth, abso
+ import { isNotEmpty, findLastIndex, equals, isEmpty, resolveFieldData } from '@primeuix/utils/object';
+ import { ZIndex } from '@primeuix/utils/zindex';
+ import { ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import SpinnerIcon from '@primevue/icons/spinner';
+-import TimesIcon from '@primevue/icons/times';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { SpinnerIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Chip from 'primevue/chip';
+ import InputText from 'primevue/inputtext';
+ import OverlayEventBus from 'primevue/overlayeventbus';
+diff --git a/breadcrumb/Breadcrumb.vue b/breadcrumb/Breadcrumb.vue
+index c56286cfce11fa23b4cbc4a05f1f08228eca6c66..6c8655b23ea44c2b9d14756ad782454d5e0c0e31 100644
+--- a/breadcrumb/Breadcrumb.vue
++++ b/breadcrumb/Breadcrumb.vue
+@@ -15,7 +15,7 @@
+ </template>
+ 
+ <script>
+-import ChevronRightIcon from '@primevue/icons/chevronright';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
+ import BaseBreadcrumb from './BaseBreadcrumb.vue';
+ import BreadcrumbItem from './BreadcrumbItem.vue';
+ 
+diff --git a/breadcrumb/index.mjs b/breadcrumb/index.mjs
+index 3fd7940be1ac371595fbe725cc890f5f3adc6179..98ed59bf677705372d6d145c4a1f0da0146d115a 100644
+--- a/breadcrumb/index.mjs
++++ b/breadcrumb/index.mjs
+@@ -1,4 +1,4 @@
+-import ChevronRightIcon from '@primevue/icons/chevronright';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import BreadcrumbStyle from 'primevue/breadcrumb/style';
+ import { mergeProps, openBlock, createElementBlock, createBlock, resolveDynamicComponent, normalizeClass, createCommentVNode, toDisplayString, resolveComponent, createElementVNode, Fragment, renderList, renderSlot, createVNode } from 'vue';
+diff --git a/button/Button.vue b/button/Button.vue
+index fa3e57aff008cf7d72f33f0b7071740b1b64c025..728f266ee4d349354fbdf20aaf8663b33ce1462f 100644
+--- a/button/Button.vue
++++ b/button/Button.vue
+@@ -18,7 +18,7 @@
+ <script>
+ import { cn } from '@primeuix/utils';
+ import { isEmpty } from '@primeuix/utils/object';
+-import SpinnerIcon from '@primevue/icons/spinner';
++import { SpinnerIcon } from '../intentic-icons.mjs';
+ import Badge from 'primevue/badge';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps } from 'vue';
+diff --git a/button/index.mjs b/button/index.mjs
+index fe79ceb5668ff7ce75f15a3020133c2b61ded42a..36abe778a2aafbe830c850a461928d9a922fdca9 100644
+--- a/button/index.mjs
++++ b/button/index.mjs
+@@ -1,6 +1,6 @@
+ import { cn } from '@primeuix/utils';
+ import { isEmpty } from '@primeuix/utils/object';
+-import SpinnerIcon from '@primevue/icons/spinner';
++import { SpinnerIcon } from '../intentic-icons.mjs';
+ import Badge from 'primevue/badge';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps, resolveComponent, resolveDirective, withDirectives, openBlock, createBlock, resolveDynamicComponent, withCtx, renderSlot, createElementBlock, createCommentVNode, toDisplayString, normalizeClass } from 'vue';
+diff --git a/carousel/Carousel.vue b/carousel/Carousel.vue
+index 482579b685450a5dfad7ac36693fa0791cd3c87a..b0f6f5eaad4dd95d8078d3dba56716ace1dcbf3c 100644
+--- a/carousel/Carousel.vue
++++ b/carousel/Carousel.vue
+@@ -103,10 +103,10 @@
+ <script>
+ import { addClass, find, findSingle, getAttribute, removeClass, setAttribute } from '@primeuix/utils/dom';
+ import { localeComparator, sort } from '@primeuix/utils/object';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronLeftIcon from '@primevue/icons/chevronleft';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
+-import ChevronUpIcon from '@primevue/icons/chevronup';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronLeftIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
++import { ChevronUpIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import Ripple from 'primevue/ripple';
+ import BaseCarousel from './BaseCarousel.vue';
+diff --git a/carousel/index.mjs b/carousel/index.mjs
+index 12356ed48d63534cc92a655a6e4ec08aff17956b..de79c1cba6f228b7841c63db258212575dcb30fa 100644
+--- a/carousel/index.mjs
++++ b/carousel/index.mjs
+@@ -1,9 +1,9 @@
+ import { setAttribute, find, findSingle, getAttribute, addClass, removeClass } from '@primeuix/utils/dom';
+ import { localeComparator, sort } from '@primeuix/utils/object';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronLeftIcon from '@primevue/icons/chevronleft';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
+-import ChevronUpIcon from '@primevue/icons/chevronup';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronLeftIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
++import { ChevronUpIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import Ripple from 'primevue/ripple';
+ import BaseComponent from '@primevue/core/basecomponent';
+diff --git a/cascadeselect/CascadeSelect.vue b/cascadeselect/CascadeSelect.vue
+index dd9ab4fe2bd42a1d037f7d7d90bd3d54a47d1c9f..31eb05d501ec45f5934b3bbfac574d2bf473ede7 100644
+--- a/cascadeselect/CascadeSelect.vue
++++ b/cascadeselect/CascadeSelect.vue
+@@ -97,10 +97,10 @@ import { absolutePosition, addStyle, findSingle, focus, getOuterWidth, isTouchDe
+ import { equals, findLastIndex, isEmpty, isNotEmpty, isPrintableCharacter, isString, resolveFieldData } from '@primeuix/utils/object';
+ import { ZIndex } from '@primeuix/utils/zindex';
+ import { ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import AngleRightIcon from '@primevue/icons/angleright';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import SpinnerIcon from '@primevue/icons/spinner';
+-import TimesIcon from '@primevue/icons/times';
++import { AngleRightIcon } from '../intentic-icons.mjs';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { SpinnerIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import OverlayEventBus from 'primevue/overlayeventbus';
+ import Portal from 'primevue/portal';
+ import BaseCascadeSelect from './BaseCascadeSelect.vue';
+diff --git a/cascadeselect/CascadeSelectSub.vue b/cascadeselect/CascadeSelectSub.vue
+index 974fb19dc50627ee8456ddf851f12a4fe1ce56b4..6f902670034a927edbbb5b46bdc2dfa90c1c7cb9 100644
+--- a/cascadeselect/CascadeSelectSub.vue
++++ b/cascadeselect/CascadeSelectSub.vue
+@@ -66,7 +66,7 @@
+ <script>
+ import { equals, isNotEmpty, resolveFieldData } from '@primeuix/utils/object';
+ import BaseComponent from '@primevue/core/basecomponent';
+-import AngleRightIcon from '@primevue/icons/angleright';
++import { AngleRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ export default {
+     name: 'CascadeSelectSub',
+diff --git a/cascadeselect/index.mjs b/cascadeselect/index.mjs
+index ebea97f76d77001df5eb7c9d7d27bd5abdb9af8b..a92ec13db0fae56a922d39751e90149ca497702f 100644
+--- a/cascadeselect/index.mjs
++++ b/cascadeselect/index.mjs
+@@ -2,10 +2,10 @@ import { findSingle, isTouchDevice, relativePosition, getOuterWidth, absolutePos
+ import { equals, isNotEmpty, resolveFieldData, isEmpty, findLastIndex, isPrintableCharacter, isString } from '@primeuix/utils/object';
+ import { ZIndex } from '@primeuix/utils/zindex';
+ import { ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import AngleRightIcon from '@primevue/icons/angleright';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import SpinnerIcon from '@primevue/icons/spinner';
+-import TimesIcon from '@primevue/icons/times';
++import { AngleRightIcon } from '../intentic-icons.mjs';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { SpinnerIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import OverlayEventBus from 'primevue/overlayeventbus';
+ import Portal from 'primevue/portal';
+ import BaseInput from '@primevue/core/baseinput';
+diff --git a/checkbox/Checkbox.vue b/checkbox/Checkbox.vue
+index 0ff3146a89355b686abaefb1d9ef6ba471e61ef8..7d2f3cc68227b3559ca97936db7fd0ce8b7c925b 100644
+--- a/checkbox/Checkbox.vue
++++ b/checkbox/Checkbox.vue
+@@ -33,8 +33,8 @@
+ <script>
+ import { cn } from '@primeuix/utils';
+ import { contains, equals } from '@primeuix/utils/object';
+-import CheckIcon from '@primevue/icons/check';
+-import MinusIcon from '@primevue/icons/minus';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { MinusIcon } from '../intentic-icons.mjs';
+ import BaseCheckbox from './BaseCheckbox.vue';
+ 
+ export default {
+diff --git a/checkbox/index.mjs b/checkbox/index.mjs
+index 6a3f6a98575e026366f6be1e0780ac5b0d8f018f..58c9c561923b319c9bcf710cfb9bfd8f7e494c42 100644
+--- a/checkbox/index.mjs
++++ b/checkbox/index.mjs
+@@ -1,7 +1,7 @@
+ import { cn } from '@primeuix/utils';
+ import { contains, equals } from '@primeuix/utils/object';
+-import CheckIcon from '@primevue/icons/check';
+-import MinusIcon from '@primevue/icons/minus';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { MinusIcon } from '../intentic-icons.mjs';
+ import BaseInput from '@primevue/core/baseinput';
+ import CheckboxStyle from 'primevue/checkbox/style';
+ import { resolveComponent, openBlock, createElementBlock, mergeProps, createElementVNode, renderSlot, normalizeClass, createBlock, createCommentVNode } from 'vue';
+diff --git a/chip/Chip.vue b/chip/Chip.vue
+index 2042d6915dbf5c8fc60d4af8c608db27b7fe174e..ca8c1c3503a857b3453da808c061e921df0d1b57 100644
+--- a/chip/Chip.vue
++++ b/chip/Chip.vue
+@@ -14,7 +14,7 @@
+ 
+ <script>
+ import { cn } from '@primeuix/utils';
+-import TimesCircleIcon from '@primevue/icons/timescircle';
++import { TimesCircleIcon } from '../intentic-icons.mjs';
+ import BaseChip from './BaseChip.vue';
+ 
+ export default {
+diff --git a/chip/index.mjs b/chip/index.mjs
+index 9cf70395922185437569d8269467dedf2772d8a5..c0866ac1abd81d5d4014d48e7c608d7c795f63f5 100644
+--- a/chip/index.mjs
++++ b/chip/index.mjs
+@@ -1,5 +1,5 @@
+ import { cn } from '@primeuix/utils';
+-import TimesCircleIcon from '@primevue/icons/timescircle';
++import { TimesCircleIcon } from '../intentic-icons.mjs';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import ChipStyle from 'primevue/chip/style';
+ import { openBlock, createElementBlock, mergeProps, renderSlot, createBlock, resolveDynamicComponent, createCommentVNode, toDisplayString } from 'vue';
+diff --git a/contextmenu/ContextMenuSub.vue b/contextmenu/ContextMenuSub.vue
+index 91a8f1ca664fd01918803eaa73f11c967ec3eaa0..4c9bc4076e512b7586e57ac91b1c634fb2ce4d38 100644
+--- a/contextmenu/ContextMenuSub.vue
++++ b/contextmenu/ContextMenuSub.vue
+@@ -78,7 +78,7 @@
+ import { nestedPosition } from '@primeuix/utils/dom';
+ import { isNotEmpty, resolve } from '@primeuix/utils/object';
+ import BaseComponent from '@primevue/core/basecomponent';
+-import AngleRightIcon from '@primevue/icons/angleright';
++import { AngleRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps } from 'vue';
+ 
+diff --git a/contextmenu/index.mjs b/contextmenu/index.mjs
+index eaa0bb8a56bea92418fec88bc172b8e6502ca346..9b44b61bfa5eb8e2aaf060ddac2c44df20ea38cc 100644
+--- a/contextmenu/index.mjs
++++ b/contextmenu/index.mjs
+@@ -4,7 +4,7 @@ import { ZIndex } from '@primeuix/utils/zindex';
+ import Portal from 'primevue/portal';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import ContextMenuStyle from 'primevue/contextmenu/style';
+-import AngleRightIcon from '@primevue/icons/angleright';
++import { AngleRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps, resolveComponent, resolveDirective, openBlock, createBlock, Transition, withCtx, createElementBlock, Fragment, renderList, createElementVNode, withDirectives, resolveDynamicComponent, normalizeClass, createCommentVNode, toDisplayString, createVNode } from 'vue';
+ 
+diff --git a/datatable/BodyCell.vue b/datatable/BodyCell.vue
+index c1c80bcf276ff82332a4f39af82029fa2ab83ca1..288968af2b4f0bd16b66f7eaeb617ae39af2ae8f 100644
+--- a/datatable/BodyCell.vue
++++ b/datatable/BodyCell.vue
+@@ -137,12 +137,12 @@ import { getAttribute, getFirstFocusableElement, getNextElementSibling, getOuter
+ import { resolveFieldData } from '@primeuix/utils/object';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import { getVNodeProp } from '@primevue/core/utils';
+-import BarsIcon from '@primevue/icons/bars';
+-import CheckIcon from '@primevue/icons/check';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
+-import PencilIcon from '@primevue/icons/pencil';
+-import TimesIcon from '@primevue/icons/times';
++import { BarsIcon } from '../intentic-icons.mjs';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
++import { PencilIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import OverlayEventBus from 'primevue/overlayeventbus';
+ import Ripple from 'primevue/ripple';
+diff --git a/datatable/BodyRow.vue b/datatable/BodyRow.vue
+index 07502945e113646519e46490f8ca8582c094cd65..0bf9bfbede7a1b609f7bd3f0abef62fdcd9bef18 100644
+--- a/datatable/BodyRow.vue
++++ b/datatable/BodyRow.vue
+@@ -96,8 +96,8 @@
+ import { equals, isNotEmpty, resolveFieldData } from '@primeuix/utils/object';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import { getVNodeProp } from '@primevue/core/utils';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
+ import { mergeProps } from 'vue';
+ import BodyCell from './BodyCell.vue';
+ 
+diff --git a/datatable/ColumnFilter.vue b/datatable/ColumnFilter.vue
+index 6acc084fb32b36742b92f0354dc6b22ebbaf2d60..bdea5a5f37c958b49c0e962e2a8b55d72e28b4e8 100644
+--- a/datatable/ColumnFilter.vue
++++ b/datatable/ColumnFilter.vue
+@@ -158,11 +158,11 @@ import { ZIndex } from '@primeuix/utils/zindex';
+ import { FilterOperator } from '@primevue/core/api';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import { ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import FilterIcon from '@primevue/icons/filter';
+-import FilterFillIcon from '@primevue/icons/filterfill';
+-import FilterSlashIcon from '@primevue/icons/filterslash';
+-import PlusIcon from '@primevue/icons/plus';
+-import TrashIcon from '@primevue/icons/trash';
++import { FilterIcon } from '../intentic-icons.mjs';
++import { FilterFillIcon } from '../intentic-icons.mjs';
++import { FilterSlashIcon } from '../intentic-icons.mjs';
++import { PlusIcon } from '../intentic-icons.mjs';
++import { TrashIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import FocusTrap from 'primevue/focustrap';
+ import OverlayEventBus from 'primevue/overlayeventbus';
+diff --git a/datatable/DataTable.vue b/datatable/DataTable.vue
+index fee84ef25fe7527b03a5d4f5ae82c4561c8ff351..32b030e354aca3a23c7a19c2f57ad6c112d78038 100644
+--- a/datatable/DataTable.vue
++++ b/datatable/DataTable.vue
+@@ -347,9 +347,9 @@ import {
+ import { equals, findIndexInList, isEmpty, isNotEmpty, localeComparator, reorderArray, resolveFieldData, sort } from '@primeuix/utils/object';
+ import { FilterMatchMode, FilterOperator, FilterService } from '@primevue/core/api';
+ import { HelperSet, getVNodeProp } from '@primevue/core/utils';
+-import ArrowDownIcon from '@primevue/icons/arrowdown';
+-import ArrowUpIcon from '@primevue/icons/arrowup';
+-import SpinnerIcon from '@primevue/icons/spinner';
++import { ArrowDownIcon } from '../intentic-icons.mjs';
++import { ArrowUpIcon } from '../intentic-icons.mjs';
++import { SpinnerIcon } from '../intentic-icons.mjs';
+ import Paginator from 'primevue/paginator';
+ import VirtualScroller from 'primevue/virtualscroller';
+ import BaseDataTable from './BaseDataTable.vue';
+diff --git a/datatable/HeaderCell.vue b/datatable/HeaderCell.vue
+index 42a887ac7d137288a2255880118fdc608db87fa5..a76bcbb34aed9d19e1e6627a3388ac8abc835adb 100644
+--- a/datatable/HeaderCell.vue
++++ b/datatable/HeaderCell.vue
+@@ -87,9 +87,9 @@
+ import { getAttribute, getIndex, getNextElementSibling, getOuterWidth, getPreviousElementSibling } from '@primeuix/utils/dom';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import { getVNodeProp } from '@primevue/core/utils';
+-import SortAltIcon from '@primevue/icons/sortalt';
+-import SortAmountDownIcon from '@primevue/icons/sortamountdown';
+-import SortAmountUpAltIcon from '@primevue/icons/sortamountupalt';
++import { SortAltIcon } from '../intentic-icons.mjs';
++import { SortAmountDownIcon } from '../intentic-icons.mjs';
++import { SortAmountUpAltIcon } from '../intentic-icons.mjs';
+ import Badge from 'primevue/badge';
+ import { mergeProps } from 'vue';
+ import ColumnFilter from './ColumnFilter.vue';
+diff --git a/datatable/HeaderCheckbox.vue b/datatable/HeaderCheckbox.vue
+index 7a99c7914f3603422d78ecdc1941976c323ee0da..ea939e73f86eb1d7fe6153505a8471bff55a81c4 100644
+--- a/datatable/HeaderCheckbox.vue
++++ b/datatable/HeaderCheckbox.vue
+@@ -9,7 +9,7 @@
+ 
+ <script>
+ import BaseComponent from '@primevue/core/basecomponent';
+-import CheckIcon from '@primevue/icons/check';
++import { CheckIcon } from '../intentic-icons.mjs';
+ import Checkbox from 'primevue/checkbox';
+ import { mergeProps } from 'vue';
+ 
+diff --git a/datatable/RowCheckbox.vue b/datatable/RowCheckbox.vue
+index df4ccd1748c8faff811f6d823a5d2c2ecf4add27..2aad48198d0b051c174b249a25cb8858978160a0 100644
+--- a/datatable/RowCheckbox.vue
++++ b/datatable/RowCheckbox.vue
+@@ -9,7 +9,7 @@
+ 
+ <script>
+ import BaseComponent from '@primevue/core/basecomponent';
+-import CheckIcon from '@primevue/icons/check';
++import { CheckIcon } from '../intentic-icons.mjs';
+ import Checkbox from 'primevue/checkbox';
+ import { mergeProps } from 'vue';
+ 
+diff --git a/datatable/index.mjs b/datatable/index.mjs
+index d3f4a75239631e1b9a3f37637cdc2feb5ecc4235..abc215a572d71531c77a787caa700474b84953ed 100644
+--- a/datatable/index.mjs
++++ b/datatable/index.mjs
+@@ -3,37 +3,37 @@ import { getNextElementSibling, getOuterWidth, getPreviousElementSibling, getAtt
+ import { resolveFieldData, isNotEmpty, equals, isEmpty, reorderArray, findIndexInList, localeComparator, sort } from '@primeuix/utils/object';
+ import { FilterOperator, FilterMatchMode, FilterService } from '@primevue/core/api';
+ import { getVNodeProp, HelperSet, ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import ArrowDownIcon from '@primevue/icons/arrowdown';
+-import ArrowUpIcon from '@primevue/icons/arrowup';
+-import SpinnerIcon from '@primevue/icons/spinner';
++import { ArrowDownIcon } from '../intentic-icons.mjs';
++import { ArrowUpIcon } from '../intentic-icons.mjs';
++import { SpinnerIcon } from '../intentic-icons.mjs';
+ import Paginator from 'primevue/paginator';
+ import VirtualScroller from 'primevue/virtualscroller';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import DataTableStyle from 'primevue/datatable/style';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
+ import { mergeProps, resolveComponent, openBlock, createBlock, withCtx, resolveDynamicComponent, normalizeClass, createCommentVNode, resolveDirective, createElementBlock, Fragment, withDirectives, withModifiers, createTextVNode, toDisplayString, createElementVNode, renderList, createVNode, Transition, withKeys, normalizeProps, renderSlot, createSlots } from 'vue';
+-import BarsIcon from '@primevue/icons/bars';
+-import CheckIcon from '@primevue/icons/check';
+-import PencilIcon from '@primevue/icons/pencil';
+-import TimesIcon from '@primevue/icons/times';
++import { BarsIcon } from '../intentic-icons.mjs';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { PencilIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import OverlayEventBus from 'primevue/overlayeventbus';
+ import Ripple from 'primevue/ripple';
+ import Checkbox from 'primevue/checkbox';
+ import RadioButton from 'primevue/radiobutton';
+ import { ZIndex } from '@primeuix/utils/zindex';
+-import FilterIcon from '@primevue/icons/filter';
+-import FilterFillIcon from '@primevue/icons/filterfill';
+-import FilterSlashIcon from '@primevue/icons/filterslash';
+-import PlusIcon from '@primevue/icons/plus';
+-import TrashIcon from '@primevue/icons/trash';
++import { FilterIcon } from '../intentic-icons.mjs';
++import { FilterFillIcon } from '../intentic-icons.mjs';
++import { FilterSlashIcon } from '../intentic-icons.mjs';
++import { PlusIcon } from '../intentic-icons.mjs';
++import { TrashIcon } from '../intentic-icons.mjs';
+ import FocusTrap from 'primevue/focustrap';
+ import Portal from 'primevue/portal';
+ import Select from 'primevue/select';
+-import SortAltIcon from '@primevue/icons/sortalt';
+-import SortAmountDownIcon from '@primevue/icons/sortamountdown';
+-import SortAmountUpAltIcon from '@primevue/icons/sortamountupalt';
++import { SortAltIcon } from '../intentic-icons.mjs';
++import { SortAmountDownIcon } from '../intentic-icons.mjs';
++import { SortAmountUpAltIcon } from '../intentic-icons.mjs';
+ import Badge from 'primevue/badge';
+ 
+ var script$d = {
+diff --git a/datepicker/DatePicker.vue b/datepicker/DatePicker.vue
+index 65e3dd74879ee0f4e25e66c8cfddce2b1b3bb7b2..54e927463438b5b584fe4644ef6c1c91ea5d702e 100644
+--- a/datepicker/DatePicker.vue
++++ b/datepicker/DatePicker.vue
+@@ -571,12 +571,12 @@ import { absolutePosition, addStyle, find, findSingle, getAttribute, getFocusabl
+ import { isDate, isEmpty, isNotEmpty, localeComparator } from '@primeuix/utils/object';
+ import { ZIndex } from '@primeuix/utils/zindex';
+ import { ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import CalendarIcon from '@primevue/icons/calendar';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronLeftIcon from '@primevue/icons/chevronleft';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
+-import ChevronUpIcon from '@primevue/icons/chevronup';
+-import TimesIcon from '@primevue/icons/times';
++import { CalendarIcon } from '../intentic-icons.mjs';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronLeftIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
++import { ChevronUpIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import InputText from 'primevue/inputtext';
+ import OverlayEventBus from 'primevue/overlayeventbus';
+diff --git a/datepicker/index.mjs b/datepicker/index.mjs
+index 8e027029087d73b1ecf6b8c68b52dafebb20edcd..d1bde00456f56252743c11ac5696ce99aa0ed71e 100644
+--- a/datepicker/index.mjs
++++ b/datepicker/index.mjs
+@@ -3,12 +3,12 @@ import { setAttribute, getFocusableElements, find, findSingle, getIndex, getAttr
+ import { localeComparator, isEmpty, isDate, isNotEmpty } from '@primeuix/utils/object';
+ import { ZIndex } from '@primeuix/utils/zindex';
+ import { ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import CalendarIcon from '@primevue/icons/calendar';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronLeftIcon from '@primevue/icons/chevronleft';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
+-import ChevronUpIcon from '@primevue/icons/chevronup';
+-import TimesIcon from '@primevue/icons/times';
++import { CalendarIcon } from '../intentic-icons.mjs';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronLeftIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
++import { ChevronUpIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import InputText from 'primevue/inputtext';
+ import OverlayEventBus from 'primevue/overlayeventbus';
+diff --git a/dialog/Dialog.vue b/dialog/Dialog.vue
+index 3cdecd71d4d0f22c11e78bd137f5b9f683e3799c..c2c2e6a67f1e83cf7394ee5aa2f04f6cd338814a 100644
+--- a/dialog/Dialog.vue
++++ b/dialog/Dialog.vue
+@@ -67,9 +67,9 @@
+ import { cn } from '@primeuix/utils';
+ import { addClass, addStyle, focus, getOuterHeight, getOuterWidth, getViewport, setAttribute } from '@primeuix/utils/dom';
+ import { ZIndex } from '@primeuix/utils/zindex';
+-import TimesIcon from '@primevue/icons/times';
+-import WindowMaximizeIcon from '@primevue/icons/windowmaximize';
+-import WindowMinimizeIcon from '@primevue/icons/windowminimize';
++import { TimesIcon } from '../intentic-icons.mjs';
++import { WindowMaximizeIcon } from '../intentic-icons.mjs';
++import { WindowMinimizeIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import FocusTrap from 'primevue/focustrap';
+ import Portal from 'primevue/portal';
+diff --git a/dialog/index.mjs b/dialog/index.mjs
+index b5518cc133cb4b2e7e44915560768c97c67b4d0e..ba4ae04623c29c25e7ab4228f88fb002bf32dbab 100644
+--- a/dialog/index.mjs
++++ b/dialog/index.mjs
+@@ -1,9 +1,9 @@
+ import { cn } from '@primeuix/utils';
+ import { getOuterWidth, getOuterHeight, getViewport, addStyle, setAttribute, focus, addClass } from '@primeuix/utils/dom';
+ import { ZIndex } from '@primeuix/utils/zindex';
+-import TimesIcon from '@primevue/icons/times';
+-import WindowMaximizeIcon from '@primevue/icons/windowmaximize';
+-import WindowMinimizeIcon from '@primevue/icons/windowminimize';
++import { TimesIcon } from '../intentic-icons.mjs';
++import { WindowMaximizeIcon } from '../intentic-icons.mjs';
++import { WindowMinimizeIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import FocusTrap from 'primevue/focustrap';
+ import Portal from 'primevue/portal';
+diff --git a/drawer/Drawer.vue b/drawer/Drawer.vue
+index 27c99f6279e294306aa8b6d54e4cda58d997d2cb..d69ed39e737aa10704101861e386e88f315df8c9 100644
+--- a/drawer/Drawer.vue
++++ b/drawer/Drawer.vue
+@@ -38,7 +38,7 @@
+ import { cn } from '@primeuix/utils';
+ import { addClass, focus } from '@primeuix/utils/dom';
+ import { ZIndex } from '@primeuix/utils/zindex';
+-import TimesIcon from '@primevue/icons/times';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import FocusTrap from 'primevue/focustrap';
+ import Portal from 'primevue/portal';
+diff --git a/drawer/index.mjs b/drawer/index.mjs
+index 497ed19a8830a9fc21dac5f872b6961902ac7d60..0357cbb58c30bbacc0b5c117f8aebafc716fc7ef 100644
+--- a/drawer/index.mjs
++++ b/drawer/index.mjs
+@@ -1,7 +1,7 @@
+ import { cn } from '@primeuix/utils';
+ import { focus, addClass } from '@primeuix/utils/dom';
+ import { ZIndex } from '@primeuix/utils/zindex';
+-import TimesIcon from '@primevue/icons/times';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import FocusTrap from 'primevue/focustrap';
+ import Portal from 'primevue/portal';
+diff --git a/fieldset/Fieldset.vue b/fieldset/Fieldset.vue
+index 5ba17212fd1225cf74330b8603abf690a0484593..b0ebc224b84ff550bf287be46e447d2cd8ea29ee 100644
+--- a/fieldset/Fieldset.vue
++++ b/fieldset/Fieldset.vue
+@@ -38,8 +38,8 @@
+ 
+ <script>
+ import { cn } from '@primeuix/utils';
+-import MinusIcon from '@primevue/icons/minus';
+-import PlusIcon from '@primevue/icons/plus';
++import { MinusIcon } from '../intentic-icons.mjs';
++import { PlusIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import BaseFieldset from './BaseFieldset.vue';
+ 
+diff --git a/fieldset/index.mjs b/fieldset/index.mjs
+index 311f193fe9b36dae99bf5fee6b38ac34dbe4e1e7..554d71cef19a0a66f2ab595f7e96890a40a27c8e 100644
+--- a/fieldset/index.mjs
++++ b/fieldset/index.mjs
+@@ -1,6 +1,6 @@
+ import { cn } from '@primeuix/utils';
+-import MinusIcon from '@primevue/icons/minus';
+-import PlusIcon from '@primevue/icons/plus';
++import { MinusIcon } from '../intentic-icons.mjs';
++import { PlusIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import FieldsetStyle from 'primevue/fieldset/style';
+diff --git a/fileupload/FileContent.vue b/fileupload/FileContent.vue
+index 5a4fc403180913755d29f060769cd06e2857307d..c53d9066aa80547618ec5dda0eab6f5b54db4781 100644
+--- a/fileupload/FileContent.vue
++++ b/fileupload/FileContent.vue
+@@ -19,7 +19,7 @@
+ 
+ <script>
+ import BaseComponent from '@primevue/core/basecomponent';
+-import TimesIcon from '@primevue/icons/times';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Badge from 'primevue/badge';
+ import Button from 'primevue/button';
+ 
+diff --git a/fileupload/FileUpload.vue b/fileupload/FileUpload.vue
+index f6dc1676067752795f1cd4b62113a6f26f265efb..094434ca9965ea711e8b3c033e58dafc4f3d7b5f 100644
+--- a/fileupload/FileUpload.vue
++++ b/fileupload/FileUpload.vue
+@@ -88,9 +88,9 @@
+ 
+ <script>
+ import { addClass, removeClass } from '@primeuix/utils/dom';
+-import PlusIcon from '@primevue/icons/plus';
+-import TimesIcon from '@primevue/icons/times';
+-import UploadIcon from '@primevue/icons/upload';
++import { PlusIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
++import { UploadIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import Message from 'primevue/message';
+ import ProgressBar from 'primevue/progressbar';
+diff --git a/fileupload/index.mjs b/fileupload/index.mjs
+index f58d19c2dfe5ef759bbf72bdf4f27614b6ad061f..defbdc405819e355b39316ef666ad67ced3ccc75 100644
+--- a/fileupload/index.mjs
++++ b/fileupload/index.mjs
+@@ -1,7 +1,7 @@
+ import { removeClass, addClass } from '@primeuix/utils/dom';
+-import PlusIcon from '@primevue/icons/plus';
+-import TimesIcon from '@primevue/icons/times';
+-import UploadIcon from '@primevue/icons/upload';
++import { PlusIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
++import { UploadIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import Message from 'primevue/message';
+ import ProgressBar from 'primevue/progressbar';
+diff --git a/galleria/GalleriaContent.vue b/galleria/GalleriaContent.vue
+index e22f50e4e803425375c7ad5ef454a0b9418531dc..a1e046d4d4ab2402b64927f8485b3b4eaafb715b 100644
+--- a/galleria/GalleriaContent.vue
++++ b/galleria/GalleriaContent.vue
+@@ -61,7 +61,7 @@
+ 
+ <script>
+ import BaseComponent from '@primevue/core/basecomponent';
+-import TimesIcon from '@primevue/icons/times';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import GalleriaItem from './GalleriaItem.vue';
+ import GalleriaThumbnails from './GalleriaThumbnails.vue';
+diff --git a/galleria/GalleriaItem.vue b/galleria/GalleriaItem.vue
+index 2fd4b09a67ab737dda94292b038032dd6a69c73c..e29465a15d328d9c09141909cff7927e770b52c5 100644
+--- a/galleria/GalleriaItem.vue
++++ b/galleria/GalleriaItem.vue
+@@ -38,8 +38,8 @@
+ <script>
+ import { find, findSingle, getAttribute } from '@primeuix/utils/dom';
+ import BaseComponent from '@primevue/core/basecomponent';
+-import ChevronLeftIcon from '@primevue/icons/chevronleft';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
++import { ChevronLeftIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ 
+ export default {
+diff --git a/galleria/GalleriaThumbnails.vue b/galleria/GalleriaThumbnails.vue
+index 1cb9812ec1981ce4087dcfc42c202d01539c7890..eb7e5cfa6ce9e5b90a5ca0e3976146234e1669cf 100644
+--- a/galleria/GalleriaThumbnails.vue
++++ b/galleria/GalleriaThumbnails.vue
+@@ -74,10 +74,10 @@
+ import { addClass, find, findSingle, getAttribute, removeClass, setAttribute } from '@primeuix/utils/dom';
+ import { localeComparator, sort } from '@primeuix/utils/object';
+ import BaseComponent from '@primevue/core/basecomponent';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronLeftIcon from '@primevue/icons/chevronleft';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
+-import ChevronUpIcon from '@primevue/icons/chevronup';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronLeftIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
++import { ChevronUpIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ 
+ export default {
+diff --git a/galleria/index.mjs b/galleria/index.mjs
+index 339409154db65fbedb402fbfdbc760a31b83ba92..e741a8d8170f69ce32994fc9015b94ba409862a7 100644
+--- a/galleria/index.mjs
++++ b/galleria/index.mjs
+@@ -5,14 +5,14 @@ import Portal from 'primevue/portal';
+ import { unblockBodyScroll, blockBodyScroll } from 'primevue/utils';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import GalleriaStyle from 'primevue/galleria/style';
+-import TimesIcon from '@primevue/icons/times';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+-import ChevronLeftIcon from '@primevue/icons/chevronleft';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
++import { ChevronLeftIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
+ import { resolveDirective, openBlock, createElementBlock, mergeProps, createElementVNode, withDirectives, createBlock, resolveDynamicComponent, createCommentVNode, Fragment, renderList, resolveComponent, createVNode, withCtx, Transition } from 'vue';
+ import { localeComparator, sort } from '@primeuix/utils/object';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronUpIcon from '@primevue/icons/chevronup';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronUpIcon } from '../intentic-icons.mjs';
+ 
+ var script$4 = {
+   name: 'BaseGalleria',
+diff --git a/image/Image.vue b/image/Image.vue
+index 2015a99fd60df9f0ec499a403c3dd98c7658e58f..835870404e4c5c455757d22d327916ec2b24d1fe 100644
+--- a/image/Image.vue
++++ b/image/Image.vue
+@@ -62,12 +62,12 @@
+ <script>
+ import { addClass, focus, isAttributeEquals } from '@primeuix/utils/dom';
+ import { ZIndex } from '@primeuix/utils/zindex';
+-import EyeIcon from '@primevue/icons/eye';
+-import RefreshIcon from '@primevue/icons/refresh';
+-import SearchMinusIcon from '@primevue/icons/searchminus';
+-import SearchPlusIcon from '@primevue/icons/searchplus';
+-import TimesIcon from '@primevue/icons/times';
+-import UndoIcon from '@primevue/icons/undo';
++import { EyeIcon } from '../intentic-icons.mjs';
++import { RefreshIcon } from '../intentic-icons.mjs';
++import { SearchMinusIcon } from '../intentic-icons.mjs';
++import { SearchPlusIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
++import { UndoIcon } from '../intentic-icons.mjs';
+ import FocusTrap from 'primevue/focustrap';
+ import Portal from 'primevue/portal';
+ import { blockBodyScroll, unblockBodyScroll } from 'primevue/utils';
+diff --git a/image/index.mjs b/image/index.mjs
+index 520310609de831ab4a783c320ed98df048486e4f..b34974c4441dc66cacd5e65d20679c2bdd68856c 100644
+--- a/image/index.mjs
++++ b/image/index.mjs
+@@ -1,11 +1,11 @@
+ import { addClass, focus, isAttributeEquals } from '@primeuix/utils/dom';
+ import { ZIndex } from '@primeuix/utils/zindex';
+-import EyeIcon from '@primevue/icons/eye';
+-import RefreshIcon from '@primevue/icons/refresh';
+-import SearchMinusIcon from '@primevue/icons/searchminus';
+-import SearchPlusIcon from '@primevue/icons/searchplus';
+-import TimesIcon from '@primevue/icons/times';
+-import UndoIcon from '@primevue/icons/undo';
++import { EyeIcon } from '../intentic-icons.mjs';
++import { RefreshIcon } from '../intentic-icons.mjs';
++import { SearchMinusIcon } from '../intentic-icons.mjs';
++import { SearchPlusIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
++import { UndoIcon } from '../intentic-icons.mjs';
+ import FocusTrap from 'primevue/focustrap';
+ import Portal from 'primevue/portal';
+ import { unblockBodyScroll, blockBodyScroll } from 'primevue/utils';
+diff --git a/inlinemessage/InlineMessage.vue b/inlinemessage/InlineMessage.vue
+index 8dcb5449e4f2507af41eaccbff308a015488c451..4d9cd8a0f3c46fd7e8af2f0ecec3f618289f9b7b 100644
+--- a/inlinemessage/InlineMessage.vue
++++ b/inlinemessage/InlineMessage.vue
+@@ -10,10 +10,10 @@
+ </template>
+ 
+ <script>
+-import CheckIcon from '@primevue/icons/check';
+-import ExclamationTriangleIcon from '@primevue/icons/exclamationtriangle';
+-import InfoCircleIcon from '@primevue/icons/infocircle';
+-import TimesCircleIcon from '@primevue/icons/timescircle';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { ExclamationTriangleIcon } from '../intentic-icons.mjs';
++import { InfoCircleIcon } from '../intentic-icons.mjs';
++import { TimesCircleIcon } from '../intentic-icons.mjs';
+ import BaseInlineMessage from './BaseInlineMessage.vue';
+ 
+ export default {
+diff --git a/inlinemessage/index.mjs b/inlinemessage/index.mjs
+index 4394533cbe11c4e4d3842cc8148a726e37b64a0b..aed01f2f31bcdd3ff6bbc5eb82c0f252a2c55a33 100644
+--- a/inlinemessage/index.mjs
++++ b/inlinemessage/index.mjs
+@@ -1,7 +1,7 @@
+-import CheckIcon from '@primevue/icons/check';
+-import ExclamationTriangleIcon from '@primevue/icons/exclamationtriangle';
+-import InfoCircleIcon from '@primevue/icons/infocircle';
+-import TimesCircleIcon from '@primevue/icons/timescircle';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { ExclamationTriangleIcon } from '../intentic-icons.mjs';
++import { InfoCircleIcon } from '../intentic-icons.mjs';
++import { TimesCircleIcon } from '../intentic-icons.mjs';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import InlineMessageStyle from 'primevue/inlinemessage/style';
+ import { openBlock, createElementBlock, mergeProps, renderSlot, createBlock, resolveDynamicComponent, createCommentVNode } from 'vue';
+diff --git a/inputnumber/InputNumber.vue b/inputnumber/InputNumber.vue
+index 2f06e7c3f905b021ec575f513d37f89b09e76603..edc0c35cd263c1aac0c505583b83dce5111e2de8 100644
+--- a/inputnumber/InputNumber.vue
++++ b/inputnumber/InputNumber.vue
+@@ -93,9 +93,9 @@
+ import { cn } from '@primeuix/utils';
+ import { clearSelection, getSelection } from '@primeuix/utils/dom';
+ import { isEmpty, isNotEmpty } from '@primeuix/utils/object';
+-import AngleDownIcon from '@primevue/icons/angledown';
+-import AngleUpIcon from '@primevue/icons/angleup';
+-import TimesIcon from '@primevue/icons/times';
++import { AngleDownIcon } from '../intentic-icons.mjs';
++import { AngleUpIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import InputText from 'primevue/inputtext';
+ import BaseInputNumber from './BaseInputNumber.vue';
+ 
+diff --git a/inputnumber/index.mjs b/inputnumber/index.mjs
+index 9885ab787a625ab7f470beaff6cb81e7a11e1ce8..d153e402f6955099a02472fe564aca8e8a6b8039 100644
+--- a/inputnumber/index.mjs
++++ b/inputnumber/index.mjs
+@@ -1,9 +1,9 @@
+ import { cn } from '@primeuix/utils';
+ import { clearSelection, getSelection } from '@primeuix/utils/dom';
+ import { isEmpty, isNotEmpty } from '@primeuix/utils/object';
+-import AngleDownIcon from '@primevue/icons/angledown';
+-import AngleUpIcon from '@primevue/icons/angleup';
+-import TimesIcon from '@primevue/icons/times';
++import { AngleDownIcon } from '../intentic-icons.mjs';
++import { AngleUpIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import InputText from 'primevue/inputtext';
+ import BaseInput from '@primevue/core/baseinput';
+ import InputNumberStyle from 'primevue/inputnumber/style';
+diff --git aintentic-icons.mjs b/intentic-icons.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..25bc5657b7e5bacc81f18a4609d0b4bd41a3d942
+--- /dev/null
++++ b/intentic-icons.mjs
+@@ -0,0 +1,58 @@
++// PrimeVue's fallback icons use the same globally registered Icon as Intentic's own controls.
++import { h, resolveComponent } from 'vue';
++
++const icon = (name) => ({
++    inheritAttrs: false,
++    setup(_, { attrs }) {
++        const Icon = resolveComponent('Icon');
++        if (typeof Icon === 'string') throw new Error('Install Intentic UI before rendering PrimeVue controls');
++        return () => h(Icon, { ...attrs, name });
++    }
++});
++
++export const AngleDoubleDownIcon = icon('chevrons-down');
++export const AngleDoubleLeftIcon = icon('chevrons-left');
++export const AngleDoubleRightIcon = icon('chevrons-right');
++export const AngleDoubleUpIcon = icon('chevrons-up');
++export const AngleDownIcon = icon('chevron-down');
++export const AngleLeftIcon = icon('chevron-left');
++export const AngleRightIcon = icon('chevron-right');
++export const AngleUpIcon = icon('chevron-up');
++export const ArrowDownIcon = icon('arrow-down');
++export const ArrowUpIcon = icon('arrow-up');
++export const BanIcon = icon('ban');
++export const BarsIcon = icon('bars');
++export const CalendarIcon = icon('calendar');
++export const CheckIcon = icon('check');
++export const ChevronDownIcon = icon('chevron-down');
++export const ChevronLeftIcon = icon('chevron-left');
++export const ChevronRightIcon = icon('chevron-right');
++export const ChevronUpIcon = icon('chevron-up');
++export const ExclamationTriangleIcon = icon('exclamation-triangle');
++export const EyeIcon = icon('eye');
++export const EyeSlashIcon = icon('eye-slash');
++export const FilterFillIcon = icon('filter');
++export const FilterIcon = icon('filter');
++export const FilterSlashIcon = icon('filter-slash');
++export const InfoCircleIcon = icon('info-circle');
++export const MinusIcon = icon('minus');
++export const PencilIcon = icon('pencil');
++export const PlusIcon = icon('plus');
++export const RefreshIcon = icon('refresh');
++export const SearchIcon = icon('search');
++export const SearchMinusIcon = icon('search-minus');
++export const SearchPlusIcon = icon('search-plus');
++export const SortAltIcon = icon('sort');
++export const SortAmountDownIcon = icon('sort-desc');
++export const SortAmountUpAltIcon = icon('sort-asc');
++export const SpinnerIcon = icon('spinner');
++export const StarFillIcon = icon('star-fill');
++export const StarIcon = icon('star');
++export const TimesCircleIcon = icon('times-circle');
++export const TimesIcon = icon('times');
++export const TrashIcon = icon('trash');
++export const UndoIcon = icon('undo');
++export const UploadIcon = icon('upload');
++export const WindowMaximizeIcon = icon('expand');
++export const WindowMinimizeIcon = icon('compress');
++export const BlankIcon = () => h('span', { 'aria-hidden': true });
+diff --git a/listbox/Listbox.vue b/listbox/Listbox.vue
+index 48339515691db8021de0fa3e2797694f45782cbc..c147e0acc009f6b1e1dab613480505edfe5e0081 100644
+--- a/listbox/Listbox.vue
++++ b/listbox/Listbox.vue
+@@ -135,9 +135,9 @@ import { cn } from '@primeuix/utils';
+ import { findSingle, focus, getFirstFocusableElement, isElement } from '@primeuix/utils/dom';
+ import { equals, findLastIndex, isNotEmpty, isPrintableCharacter, resolveFieldData } from '@primeuix/utils/object';
+ import { FilterService } from '@primevue/core/api';
+-import BlankIcon from '@primevue/icons/blank';
+-import CheckIcon from '@primevue/icons/check';
+-import SearchIcon from '@primevue/icons/search';
++import { BlankIcon } from '../intentic-icons.mjs';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { SearchIcon } from '../intentic-icons.mjs';
+ import IconField from 'primevue/iconfield';
+ import InputIcon from 'primevue/inputicon';
+ import InputText from 'primevue/inputtext';
+diff --git a/listbox/index.mjs b/listbox/index.mjs
+index 0b16ac3790922b70e9a0162efb45371995cfe6bf..d4f62591b361463712dbefee20321c29571b0717 100644
+--- a/listbox/index.mjs
++++ b/listbox/index.mjs
+@@ -2,9 +2,9 @@ import { cn } from '@primeuix/utils';
+ import { findSingle, getFirstFocusableElement, focus, isElement } from '@primeuix/utils/dom';
+ import { isNotEmpty, equals, findLastIndex, isPrintableCharacter, resolveFieldData } from '@primeuix/utils/object';
+ import { FilterService } from '@primevue/core/api';
+-import BlankIcon from '@primevue/icons/blank';
+-import CheckIcon from '@primevue/icons/check';
+-import SearchIcon from '@primevue/icons/search';
++import { BlankIcon } from '../intentic-icons.mjs';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { SearchIcon } from '../intentic-icons.mjs';
+ import IconField from 'primevue/iconfield';
+ import InputIcon from 'primevue/inputicon';
+ import InputText from 'primevue/inputtext';
+diff --git a/megamenu/MegaMenu.vue b/megamenu/MegaMenu.vue
+index c2fdbe52cf7bf797701d1d57fc05d348a121a507..291be79d0c023172d7228241d4322e87a6d82bbb 100644
+--- a/megamenu/MegaMenu.vue
++++ b/megamenu/MegaMenu.vue
+@@ -62,7 +62,7 @@
+ import { findSingle, focus, isTouchDevice } from '@primeuix/utils/dom';
+ import { findLastIndex, isEmpty, isNotEmpty, isPrintableCharacter, resolve } from '@primeuix/utils/object';
+ import { ZIndex } from '@primeuix/utils/zindex';
+-import BarsIcon from '@primevue/icons/bars';
++import { BarsIcon } from '../intentic-icons.mjs';
+ import BaseMegaMenu from './BaseMegaMenu.vue';
+ import MegaMenuSub from './MegaMenuSub.vue';
+ 
+diff --git a/megamenu/MegaMenuSub.vue b/megamenu/MegaMenuSub.vue
+index 680c57cf1591fc8d0fa48c0a950ed36d1ce1966e..e4b6d7a74493b25e0bc33e43082c5685e0dae467 100644
+--- a/megamenu/MegaMenuSub.vue
++++ b/megamenu/MegaMenuSub.vue
+@@ -76,8 +76,8 @@
+ <script>
+ import { isNotEmpty, resolve } from '@primeuix/utils/object';
+ import BaseComponent from '@primevue/core/basecomponent';
+-import AngleDownIcon from '@primevue/icons/angledown';
+-import AngleRightIcon from '@primevue/icons/angleright';
++import { AngleDownIcon } from '../intentic-icons.mjs';
++import { AngleRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps } from 'vue';
+ 
+diff --git a/megamenu/index.mjs b/megamenu/index.mjs
+index 3c443be551c26dbb3dff5832c4a026217bc03560..e512f8dfc156693bd975d3fdb664a4d5a4febf5b 100644
+--- a/megamenu/index.mjs
++++ b/megamenu/index.mjs
+@@ -1,11 +1,11 @@
+ import { findSingle, isTouchDevice, focus } from '@primeuix/utils/dom';
+ import { isNotEmpty, resolve, findLastIndex, isEmpty, isPrintableCharacter } from '@primeuix/utils/object';
+ import { ZIndex } from '@primeuix/utils/zindex';
+-import BarsIcon from '@primevue/icons/bars';
++import { BarsIcon } from '../intentic-icons.mjs';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import MegaMenuStyle from 'primevue/megamenu/style';
+-import AngleDownIcon from '@primevue/icons/angledown';
+-import AngleRightIcon from '@primevue/icons/angleright';
++import { AngleDownIcon } from '../intentic-icons.mjs';
++import { AngleRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps, resolveComponent, resolveDirective, openBlock, createElementBlock, toDisplayString, createCommentVNode, Fragment, renderList, createElementVNode, withDirectives, createBlock, resolveDynamicComponent, normalizeClass, normalizeStyle, renderSlot, createVNode, normalizeProps, guardReactiveProps } from 'vue';
+ 
+diff --git a/menubar/Menubar.vue b/menubar/Menubar.vue
+index 449edd8367ccc6a2efbf5c3c70aaf547bbe45c76..6d75e06f24deb1e5dc9ea392d82ffa0068bd6f9f 100644
+--- a/menubar/Menubar.vue
++++ b/menubar/Menubar.vue
+@@ -60,7 +60,7 @@
+ import { findSingle, focus, isTouchDevice } from '@primeuix/utils/dom';
+ import { findLastIndex, isEmpty, isNotEmpty, isPrintableCharacter, resolve } from '@primeuix/utils/object';
+ import { ZIndex } from '@primeuix/utils/zindex';
+-import BarsIcon from '@primevue/icons/bars';
++import { BarsIcon } from '../intentic-icons.mjs';
+ import BaseMenubar from './BaseMenubar.vue';
+ import MenubarSub from './MenubarSub.vue';
+ 
+diff --git a/menubar/MenubarSub.vue b/menubar/MenubarSub.vue
+index cb05233971b571085f181495d502967b199cb771..00a13254f3422bd69a583171afe237c8cda06f2a 100644
+--- a/menubar/MenubarSub.vue
++++ b/menubar/MenubarSub.vue
+@@ -73,8 +73,8 @@
+ <script>
+ import { isNotEmpty, resolve } from '@primeuix/utils/object';
+ import BaseComponent from '@primevue/core/basecomponent';
+-import AngleDownIcon from '@primevue/icons/angledown';
+-import AngleRightIcon from '@primevue/icons/angleright';
++import { AngleDownIcon } from '../intentic-icons.mjs';
++import { AngleRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps } from 'vue';
+ 
+diff --git a/menubar/index.mjs b/menubar/index.mjs
+index e149b6dfef61028825e63aa628f0ec3d741edf21..290fb28bb89536749fd3c048db12725ba50dcd54 100644
+--- a/menubar/index.mjs
++++ b/menubar/index.mjs
+@@ -1,11 +1,11 @@
+ import { findSingle, isTouchDevice, focus } from '@primeuix/utils/dom';
+ import { isNotEmpty, resolve, findLastIndex, isEmpty, isPrintableCharacter } from '@primeuix/utils/object';
+ import { ZIndex } from '@primeuix/utils/zindex';
+-import BarsIcon from '@primevue/icons/bars';
++import { BarsIcon } from '../intentic-icons.mjs';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import MenubarStyle from 'primevue/menubar/style';
+-import AngleDownIcon from '@primevue/icons/angledown';
+-import AngleRightIcon from '@primevue/icons/angleright';
++import { AngleDownIcon } from '../intentic-icons.mjs';
++import { AngleRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps, resolveComponent, resolveDirective, openBlock, createElementBlock, Fragment, renderList, createElementVNode, withDirectives, createBlock, resolveDynamicComponent, normalizeClass, createCommentVNode, toDisplayString, normalizeStyle, renderSlot, createVNode, normalizeProps, guardReactiveProps } from 'vue';
+ 
+diff --git a/message/Message.vue b/message/Message.vue
+index b561bf40c0c03f575a1cfc99ac9e6bffbd758a6c..6b90f33ee6d277c2b966553c6082369d3cedea42 100644
+--- a/message/Message.vue
++++ b/message/Message.vue
+@@ -25,7 +25,7 @@
+ 
+ <script>
+ import { cn } from '@primeuix/utils';
+-import TimesIcon from '@primevue/icons/times';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import BaseMessage from './BaseMessage.vue';
+ 
+diff --git a/message/index.mjs b/message/index.mjs
+index f590932e87e90d5ca53ee9eec630f9162f6d3978..9d85af79aba68e6ae27b17ff38c05d52401c5f4c 100644
+--- a/message/index.mjs
++++ b/message/index.mjs
+@@ -1,5 +1,5 @@
+ import { cn } from '@primeuix/utils';
+-import TimesIcon from '@primevue/icons/times';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import MessageStyle from 'primevue/message/style';
+diff --git a/multiselect/MultiSelect.vue b/multiselect/MultiSelect.vue
+index c924d07ee19d95f770ea4549997a0e1e448fb644..cbadac641c1c0234d54a7b13a841f366b70d99e2 100644
+--- a/multiselect/MultiSelect.vue
++++ b/multiselect/MultiSelect.vue
+@@ -230,11 +230,11 @@ import { equals, findLastIndex, isEmpty, isNotEmpty, isPrintableCharacter, resol
+ import { ZIndex } from '@primeuix/utils/zindex';
+ import { FilterService } from '@primevue/core/api';
+ import { ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import CheckIcon from '@primevue/icons/check';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import SearchIcon from '@primevue/icons/search';
+-import SpinnerIcon from '@primevue/icons/spinner';
+-import TimesIcon from '@primevue/icons/times';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { SearchIcon } from '../intentic-icons.mjs';
++import { SpinnerIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Checkbox from 'primevue/checkbox';
+ import Chip from 'primevue/chip';
+ import IconField from 'primevue/iconfield';
+diff --git a/multiselect/index.mjs b/multiselect/index.mjs
+index 224a49e6a81ebb495648f5960f21c87e0e16ae82..7d86b8851f06fb7b997f3edcbbeec9d3858e73aa 100644
+--- a/multiselect/index.mjs
++++ b/multiselect/index.mjs
+@@ -4,11 +4,11 @@ import { isNotEmpty, isEmpty, findLastIndex, equals, isPrintableCharacter, resol
+ import { ZIndex } from '@primeuix/utils/zindex';
+ import { FilterService } from '@primevue/core/api';
+ import { ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import CheckIcon from '@primevue/icons/check';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import SearchIcon from '@primevue/icons/search';
+-import SpinnerIcon from '@primevue/icons/spinner';
+-import TimesIcon from '@primevue/icons/times';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { SearchIcon } from '../intentic-icons.mjs';
++import { SpinnerIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Checkbox from 'primevue/checkbox';
+ import Chip from 'primevue/chip';
+ import IconField from 'primevue/iconfield';
+diff --git a/orderlist/OrderList.vue b/orderlist/OrderList.vue
+index 0dcc6a86e84a415da7d1dd84b2cdb697f03694fa..3670021e5ecf4a8fb9a70fd91df1dfabf9c34102 100644
+--- a/orderlist/OrderList.vue
++++ b/orderlist/OrderList.vue
+@@ -69,10 +69,10 @@
+ <script>
+ import { find, findSingle, scrollInView, setAttribute } from '@primeuix/utils/dom';
+ import { findIndexInList, isNotEmpty } from '@primeuix/utils/object';
+-import AngleDoubleDownIcon from '@primevue/icons/angledoubledown';
+-import AngleDoubleUpIcon from '@primevue/icons/angledoubleup';
+-import AngleDownIcon from '@primevue/icons/angledown';
+-import AngleUpIcon from '@primevue/icons/angleup';
++import { AngleDoubleDownIcon } from '../intentic-icons.mjs';
++import { AngleDoubleUpIcon } from '../intentic-icons.mjs';
++import { AngleDownIcon } from '../intentic-icons.mjs';
++import { AngleUpIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import Listbox from 'primevue/listbox';
+ import Ripple from 'primevue/ripple';
+diff --git a/orderlist/index.mjs b/orderlist/index.mjs
+index 5f0c31f8ec1b7f3e155ec55b9a62cb044b33d116..b13b4eaf2bd1be43b9dc8124bda35ac900acf6b9 100644
+--- a/orderlist/index.mjs
++++ b/orderlist/index.mjs
+@@ -1,9 +1,9 @@
+ import { setAttribute, findSingle, find, scrollInView } from '@primeuix/utils/dom';
+ import { isNotEmpty, findIndexInList } from '@primeuix/utils/object';
+-import AngleDoubleDownIcon from '@primevue/icons/angledoubledown';
+-import AngleDoubleUpIcon from '@primevue/icons/angledoubleup';
+-import AngleDownIcon from '@primevue/icons/angledown';
+-import AngleUpIcon from '@primevue/icons/angleup';
++import { AngleDoubleDownIcon } from '../intentic-icons.mjs';
++import { AngleDoubleUpIcon } from '../intentic-icons.mjs';
++import { AngleDownIcon } from '../intentic-icons.mjs';
++import { AngleUpIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import Listbox from 'primevue/listbox';
+ import Ripple from 'primevue/ripple';
+diff --git a/organizationchart/OrganizationChartNode.vue b/organizationchart/OrganizationChartNode.vue
+index dd18558b85f41085ff53fe8aa6512bfa33fd1d9c..e1949eb546c370bb10f446e701baebffa7bc12b8 100644
+--- a/organizationchart/OrganizationChartNode.vue
++++ b/organizationchart/OrganizationChartNode.vue
+@@ -54,8 +54,8 @@
+ <script>
+ import { isAttributeEquals } from '@primeuix/utils/dom';
+ import BaseComponent from '@primevue/core/basecomponent';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronUpIcon from '@primevue/icons/chevronup';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronUpIcon } from '../intentic-icons.mjs';
+ 
+ export default {
+     name: 'OrganizationChartNode',
+diff --git a/organizationchart/index.mjs b/organizationchart/index.mjs
+index 4a44de56cb668b869bb59e874f92c82ca7e5ac89..1b341c30e4892f49f83ed641c649e79584609a3b 100644
+--- a/organizationchart/index.mjs
++++ b/organizationchart/index.mjs
+@@ -1,8 +1,8 @@
+ import BaseComponent from '@primevue/core/basecomponent';
+ import OrganizationChartStyle from 'primevue/organizationchart/style';
+ import { isAttributeEquals } from '@primeuix/utils/dom';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronUpIcon from '@primevue/icons/chevronup';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronUpIcon } from '../intentic-icons.mjs';
+ import { resolveComponent, openBlock, createElementBlock, mergeProps, createElementVNode, normalizeProps, guardReactiveProps, createBlock, resolveDynamicComponent, createCommentVNode, Fragment, renderList, createVNode } from 'vue';
+ 
+ var script$2 = {
+diff --git a/paginator/FirstPageLink.vue b/paginator/FirstPageLink.vue
+index ed4429e1beb6aeb0731500a30aa71e9345782a7f..5156959d01a34783ff44677cf0dd4d41edf4ec08 100644
+--- a/paginator/FirstPageLink.vue
++++ b/paginator/FirstPageLink.vue
+@@ -6,7 +6,7 @@
+ 
+ <script>
+ import BaseComponent from '@primevue/core/basecomponent';
+-import AngleDoubleLeftIcon from '@primevue/icons/angledoubleleft';
++import { AngleDoubleLeftIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ 
+ export default {
+diff --git a/paginator/LastPageLink.vue b/paginator/LastPageLink.vue
+index 55b045e10c189cb8c618d08b6dd3ca5cdb53d4a9..b71e09ba207ea1766ecb903fdd0a0e6dba2fefe5 100644
+--- a/paginator/LastPageLink.vue
++++ b/paginator/LastPageLink.vue
+@@ -6,7 +6,7 @@
+ 
+ <script>
+ import BaseComponent from '@primevue/core/basecomponent';
+-import AngleDoubleRightIcon from '@primevue/icons/angledoubleright';
++import { AngleDoubleRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ 
+ export default {
+diff --git a/paginator/NextPageLink.vue b/paginator/NextPageLink.vue
+index 2b12268aeb4a94600b0cfc4cbd0a5e7787fb559d..04c46e33096c6c5f7886964d60179acb2f96becc 100644
+--- a/paginator/NextPageLink.vue
++++ b/paginator/NextPageLink.vue
+@@ -6,7 +6,7 @@
+ 
+ <script>
+ import BaseComponent from '@primevue/core/basecomponent';
+-import AngleRightIcon from '@primevue/icons/angleright';
++import { AngleRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ 
+ export default {
+diff --git a/paginator/PrevPageLink.vue b/paginator/PrevPageLink.vue
+index b5e519df13f2bf52d73166e398e8210c9d493f02..66453ba4a339d625e739ab944ac59bbb752d3a96 100644
+--- a/paginator/PrevPageLink.vue
++++ b/paginator/PrevPageLink.vue
+@@ -6,7 +6,7 @@
+ 
+ <script>
+ import BaseComponent from '@primevue/core/basecomponent';
+-import AngleLeftIcon from '@primevue/icons/angleleft';
++import { AngleLeftIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ 
+ export default {
+diff --git a/paginator/index.mjs b/paginator/index.mjs
+index 2951a45ee3bbf13312c6e958472508ff3e6162e0..6f88f084f103b52da711eab64ace145624b9be39 100644
+--- a/paginator/index.mjs
++++ b/paginator/index.mjs
+@@ -2,13 +2,13 @@ import { setAttribute } from '@primeuix/utils/dom';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import PaginatorStyle from 'primevue/paginator/style';
+ import { openBlock, createElementBlock, mergeProps, toDisplayString, resolveDirective, withDirectives, createBlock, resolveDynamicComponent, resolveComponent, normalizeClass, createSlots, withCtx, Fragment, renderList, createTextVNode, normalizeProps, renderSlot, createCommentVNode, createElementVNode } from 'vue';
+-import AngleDoubleLeftIcon from '@primevue/icons/angledoubleleft';
++import { AngleDoubleLeftIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import Select from 'primevue/select';
+ import InputNumber from 'primevue/inputnumber';
+-import AngleDoubleRightIcon from '@primevue/icons/angledoubleright';
+-import AngleRightIcon from '@primevue/icons/angleright';
+-import AngleLeftIcon from '@primevue/icons/angleleft';
++import { AngleDoubleRightIcon } from '../intentic-icons.mjs';
++import { AngleRightIcon } from '../intentic-icons.mjs';
++import { AngleLeftIcon } from '../intentic-icons.mjs';
+ 
+ var script$a = {
+   name: 'BasePaginator',
+diff --git a/panel/Panel.vue b/panel/Panel.vue
+index 5b1a94b7d57ff8eb367957b40fdb4f4ead293f01..a0848d04930b4f5a0375c0e93ad5412c10cb75a8 100644
+--- a/panel/Panel.vue
++++ b/panel/Panel.vue
+@@ -36,8 +36,8 @@
+ 
+ <script>
+ import { cn } from '@primeuix/utils';
+-import MinusIcon from '@primevue/icons/minus';
+-import PlusIcon from '@primevue/icons/plus';
++import { MinusIcon } from '../intentic-icons.mjs';
++import { PlusIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import Ripple from 'primevue/ripple';
+ import BasePanel from './BasePanel.vue';
+diff --git a/panel/index.mjs b/panel/index.mjs
+index 8daac76d70fc2de7ef0bb5a9eb84823d560ee566..1f0ddf55e8154123616ccc9e9ad18968be7e6abf 100644
+--- a/panel/index.mjs
++++ b/panel/index.mjs
+@@ -1,6 +1,6 @@
+ import { cn } from '@primeuix/utils';
+-import MinusIcon from '@primevue/icons/minus';
+-import PlusIcon from '@primevue/icons/plus';
++import { MinusIcon } from '../intentic-icons.mjs';
++import { PlusIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import Ripple from 'primevue/ripple';
+ import BaseComponent from '@primevue/core/basecomponent';
+diff --git a/panelmenu/PanelMenu.vue b/panelmenu/PanelMenu.vue
+index 8471d38876393f2f670b4611f24107c31c777604..cabe980f1d33b80ee4330f25877cf131b7e189ab 100644
+--- a/panelmenu/PanelMenu.vue
++++ b/panelmenu/PanelMenu.vue
+@@ -57,8 +57,8 @@
+ <script>
+ import { findSingle, focus, getAttribute } from '@primeuix/utils/dom';
+ import { equals, isNotEmpty, resolve } from '@primeuix/utils/object';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
+ import { mergeProps } from 'vue';
+ import BasePanelMenu from './BasePanelMenu.vue';
+ import PanelMenuList from './PanelMenuList.vue';
+diff --git a/panelmenu/PanelMenuSub.vue b/panelmenu/PanelMenuSub.vue
+index a6614b1384b48af0f100c4826ea79ee9670052b5..e23565f8c4f4fb53edb22e1c00557ca380926d5b 100644
+--- a/panelmenu/PanelMenuSub.vue
++++ b/panelmenu/PanelMenuSub.vue
+@@ -76,8 +76,8 @@
+ <script>
+ import { isNotEmpty, resolve } from '@primeuix/utils/object';
+ import BaseComponent from '@primevue/core/basecomponent';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps } from 'vue';
+ 
+diff --git a/panelmenu/index.mjs b/panelmenu/index.mjs
+index 733dfe7b4c01cf5668a7182f4b6d93f49a4aff39..f58028e25c710cf4854de0d8cd09aa0cbb015fc7 100644
+--- a/panelmenu/index.mjs
++++ b/panelmenu/index.mjs
+@@ -1,7 +1,7 @@
+ import { findSingle, focus, getAttribute } from '@primeuix/utils/dom';
+ import { isNotEmpty, resolve, isEmpty, findLast, isPrintableCharacter, equals } from '@primeuix/utils/object';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
+ import { mergeProps, resolveComponent, resolveDirective, openBlock, createElementBlock, normalizeClass, Fragment, renderList, createElementVNode, withDirectives, createBlock, resolveDynamicComponent, createCommentVNode, toDisplayString, createVNode, Transition, withCtx, vShow, renderSlot } from 'vue';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import PanelMenuStyle from 'primevue/panelmenu/style';
+diff --git a/password/Password.vue b/password/Password.vue
+index 517cd43dcd0233b704acb978cb31f888b9fa8a1b..7c91010ecb91e44ce1fa68b8fd332b6f3aa4df2f 100644
+--- a/password/Password.vue
++++ b/password/Password.vue
+@@ -79,9 +79,9 @@ import { cn } from '@primeuix/utils';
+ import { absolutePosition, addStyle, getOuterWidth, isTouchDevice, relativePosition } from '@primeuix/utils/dom';
+ import { ZIndex } from '@primeuix/utils/zindex';
+ import { ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import EyeIcon from '@primevue/icons/eye';
+-import EyeSlashIcon from '@primevue/icons/eyeslash';
+-import TimesIcon from '@primevue/icons/times';
++import { EyeIcon } from '../intentic-icons.mjs';
++import { EyeSlashIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import InputText from 'primevue/inputtext';
+ import OverlayEventBus from 'primevue/overlayeventbus';
+ import Portal from 'primevue/portal';
+diff --git a/password/index.mjs b/password/index.mjs
+index ee723ae3cc63d107858de5fcc13b7850bcf5036c..6fe5356af5b7be131dec4c1578a511f153ffc61a 100644
+--- a/password/index.mjs
++++ b/password/index.mjs
+@@ -2,9 +2,9 @@ import { cn } from '@primeuix/utils';
+ import { isTouchDevice, relativePosition, getOuterWidth, absolutePosition, addStyle } from '@primeuix/utils/dom';
+ import { ZIndex } from '@primeuix/utils/zindex';
+ import { ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import EyeIcon from '@primevue/icons/eye';
+-import EyeSlashIcon from '@primevue/icons/eyeslash';
+-import TimesIcon from '@primevue/icons/times';
++import { EyeIcon } from '../intentic-icons.mjs';
++import { EyeSlashIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import InputText from 'primevue/inputtext';
+ import OverlayEventBus from 'primevue/overlayeventbus';
+ import Portal from 'primevue/portal';
+diff --git a/picklist/PickList.vue b/picklist/PickList.vue
+index 47d8829f2b9c1e298a6f274468f0327166757ddd..c32b2cf53cc959392d6816eefcbc6efe70e2e020 100644
+--- a/picklist/PickList.vue
++++ b/picklist/PickList.vue
+@@ -168,14 +168,14 @@
+ <script>
+ import { find, scrollInView, setAttribute } from '@primeuix/utils/dom';
+ import { findIndexInList, isEmpty } from '@primeuix/utils/object';
+-import AngleDoubleDownIcon from '@primevue/icons/angledoubledown';
+-import AngleDoubleLeftIcon from '@primevue/icons/angledoubleleft';
+-import AngleDoubleRightIcon from '@primevue/icons/angledoubleright';
+-import AngleDoubleUpIcon from '@primevue/icons/angledoubleup';
+-import AngleDownIcon from '@primevue/icons/angledown';
+-import AngleLeftIcon from '@primevue/icons/angleleft';
+-import AngleRightIcon from '@primevue/icons/angleright';
+-import AngleUpIcon from '@primevue/icons/angleup';
++import { AngleDoubleDownIcon } from '../intentic-icons.mjs';
++import { AngleDoubleLeftIcon } from '../intentic-icons.mjs';
++import { AngleDoubleRightIcon } from '../intentic-icons.mjs';
++import { AngleDoubleUpIcon } from '../intentic-icons.mjs';
++import { AngleDownIcon } from '../intentic-icons.mjs';
++import { AngleLeftIcon } from '../intentic-icons.mjs';
++import { AngleRightIcon } from '../intentic-icons.mjs';
++import { AngleUpIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import Listbox from 'primevue/listbox';
+ import Ripple from 'primevue/ripple';
+diff --git a/picklist/index.mjs b/picklist/index.mjs
+index 3645d675962668f145774eafa6eeda1e9b356e19..6d5654a62c354bacdd703db1e7963282c09fc303 100644
+--- a/picklist/index.mjs
++++ b/picklist/index.mjs
+@@ -1,13 +1,13 @@
+ import { setAttribute, find, scrollInView } from '@primeuix/utils/dom';
+ import { isEmpty, findIndexInList } from '@primeuix/utils/object';
+-import AngleDoubleDownIcon from '@primevue/icons/angledoubledown';
+-import AngleDoubleLeftIcon from '@primevue/icons/angledoubleleft';
+-import AngleDoubleRightIcon from '@primevue/icons/angledoubleright';
+-import AngleDoubleUpIcon from '@primevue/icons/angledoubleup';
+-import AngleDownIcon from '@primevue/icons/angledown';
+-import AngleLeftIcon from '@primevue/icons/angleleft';
+-import AngleRightIcon from '@primevue/icons/angleright';
+-import AngleUpIcon from '@primevue/icons/angleup';
++import { AngleDoubleDownIcon } from '../intentic-icons.mjs';
++import { AngleDoubleLeftIcon } from '../intentic-icons.mjs';
++import { AngleDoubleRightIcon } from '../intentic-icons.mjs';
++import { AngleDoubleUpIcon } from '../intentic-icons.mjs';
++import { AngleDownIcon } from '../intentic-icons.mjs';
++import { AngleLeftIcon } from '../intentic-icons.mjs';
++import { AngleRightIcon } from '../intentic-icons.mjs';
++import { AngleUpIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import Listbox from 'primevue/listbox';
+ import Ripple from 'primevue/ripple';
+diff --git a/rating/Rating.vue b/rating/Rating.vue
+index 72eabe9d967e069e63f8026daaeaf22221cc9be9..50aa8049c0ed80d7f061d5d80ae313e53f89e66d 100644
+--- a/rating/Rating.vue
++++ b/rating/Rating.vue
+@@ -31,9 +31,9 @@
+ <script>
+ import { cn } from '@primeuix/utils';
+ import { focus, getFirstFocusableElement } from '@primeuix/utils/dom';
+-import BanIcon from '@primevue/icons/ban';
+-import StarIcon from '@primevue/icons/star';
+-import StarFillIcon from '@primevue/icons/starfill';
++import { BanIcon } from '../intentic-icons.mjs';
++import { StarIcon } from '../intentic-icons.mjs';
++import { StarFillIcon } from '../intentic-icons.mjs';
+ import BaseRating from './BaseRating.vue';
+ 
+ export default {
+diff --git a/rating/index.mjs b/rating/index.mjs
+index d4a94300e73545ac6a1848dce9c7585b99625c8a..b336e35bbff24a3414a7a0f1b237f84bb3ecca2d 100644
+--- a/rating/index.mjs
++++ b/rating/index.mjs
+@@ -1,8 +1,8 @@
+ import { cn } from '@primeuix/utils';
+ import { getFirstFocusableElement, focus } from '@primeuix/utils/dom';
+-import BanIcon from '@primevue/icons/ban';
+-import StarIcon from '@primevue/icons/star';
+-import StarFillIcon from '@primevue/icons/starfill';
++import { BanIcon } from '../intentic-icons.mjs';
++import { StarIcon } from '../intentic-icons.mjs';
++import { StarFillIcon } from '../intentic-icons.mjs';
+ import BaseEditableHolder from '@primevue/core/baseeditableholder';
+ import RatingStyle from 'primevue/rating/style';
+ import { openBlock, createElementBlock, mergeProps, Fragment, renderList, createElementVNode, renderSlot, normalizeClass, createBlock, resolveDynamicComponent } from 'vue';
+diff --git a/scrolltop/ScrollTop.vue b/scrolltop/ScrollTop.vue
+index 6e20169a75242ddaa400e6b3e3ad0d8dbcf00a89..90d1f276fdfb27b46f940746b65c9815564ffa88 100644
+--- a/scrolltop/ScrollTop.vue
++++ b/scrolltop/ScrollTop.vue
+@@ -13,7 +13,7 @@
+ <script>
+ import { getWindowScrollTop } from '@primeuix/utils/dom';
+ import { ZIndex } from '@primeuix/utils/zindex';
+-import ChevronUpIcon from '@primevue/icons/chevronup';
++import { ChevronUpIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import BaseScrollTop from './BaseScrollTop.vue';
+ 
+diff --git a/scrolltop/index.mjs b/scrolltop/index.mjs
+index f4c9b6533cc00fcf9a693087c5a26f590cb038e6..66e81db4350f08cf586ceb299b6bcf827054e0a0 100644
+--- a/scrolltop/index.mjs
++++ b/scrolltop/index.mjs
+@@ -1,6 +1,6 @@
+ import { getWindowScrollTop } from '@primeuix/utils/dom';
+ import { ZIndex } from '@primeuix/utils/zindex';
+-import ChevronUpIcon from '@primevue/icons/chevronup';
++import { ChevronUpIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import ScrollTopStyle from 'primevue/scrolltop/style';
+diff --git a/select/Select.vue b/select/Select.vue
+index f233fc27df13e6c7f7ea750bd2c641e14fe7dd03..6e95e98cfedc722c755b689bd8cc5d536a1c022d 100644
+--- a/select/Select.vue
++++ b/select/Select.vue
+@@ -203,12 +203,12 @@ import { equals, findLastIndex, isNotEmpty, isPrintableCharacter, resolveFieldDa
+ import { ZIndex } from '@primeuix/utils/zindex';
+ import { FilterService } from '@primevue/core/api';
+ import { ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import BlankIcon from '@primevue/icons/blank';
+-import CheckIcon from '@primevue/icons/check';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import SearchIcon from '@primevue/icons/search';
+-import SpinnerIcon from '@primevue/icons/spinner';
+-import TimesIcon from '@primevue/icons/times';
++import { BlankIcon } from '../intentic-icons.mjs';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { SearchIcon } from '../intentic-icons.mjs';
++import { SpinnerIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import IconField from 'primevue/iconfield';
+ import InputIcon from 'primevue/inputicon';
+ import InputText from 'primevue/inputtext';
+diff --git a/select/index.mjs b/select/index.mjs
+index f6716a906a6916ce67665fd07fab646d711fea86..27cca79dce497682cc3e057340118b2f27f57933 100644
+--- a/select/index.mjs
++++ b/select/index.mjs
+@@ -4,12 +4,12 @@ import { isNotEmpty, findLastIndex, equals, isPrintableCharacter, resolveFieldDa
+ import { ZIndex } from '@primeuix/utils/zindex';
+ import { FilterService } from '@primevue/core/api';
+ import { ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import BlankIcon from '@primevue/icons/blank';
+-import CheckIcon from '@primevue/icons/check';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import SearchIcon from '@primevue/icons/search';
+-import SpinnerIcon from '@primevue/icons/spinner';
+-import TimesIcon from '@primevue/icons/times';
++import { BlankIcon } from '../intentic-icons.mjs';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { SearchIcon } from '../intentic-icons.mjs';
++import { SpinnerIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import IconField from 'primevue/iconfield';
+ import InputIcon from 'primevue/inputicon';
+ import InputText from 'primevue/inputtext';
+diff --git a/speeddial/SpeedDial.vue b/speeddial/SpeedDial.vue
+index b13f4be545db60c1d70cbe4a775499e7dc872b82..d358d844d8d98c4c20b00bb5304d1f482da23eb9 100644
+--- a/speeddial/SpeedDial.vue
++++ b/speeddial/SpeedDial.vue
+@@ -69,7 +69,7 @@
+ <script>
+ import { $dt } from '@primeuix/styled';
+ import { find, findSingle, focus } from '@primeuix/utils/dom';
+-import PlusIcon from '@primevue/icons/plus';
++import { PlusIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import Ripple from 'primevue/ripple';
+ import Tooltip from 'primevue/tooltip';
+diff --git a/speeddial/index.mjs b/speeddial/index.mjs
+index 39496fb40fde73a82b3c00758f4f0dabc32422f3..b7ef2e53aed60ee0919fbbb2f9a1ecaa66dc454a 100644
+--- a/speeddial/index.mjs
++++ b/speeddial/index.mjs
+@@ -1,6 +1,6 @@
+ import { $dt } from '@primeuix/styled';
+ import { find, findSingle, focus } from '@primeuix/utils/dom';
+-import PlusIcon from '@primevue/icons/plus';
++import { PlusIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import Ripple from 'primevue/ripple';
+ import Tooltip from 'primevue/tooltip';
+diff --git a/splitbutton/SplitButton.vue b/splitbutton/SplitButton.vue
+index bf5b0735ce901777bf282ef8653583a074bbe818..c0cf1e80dd6629356993caa3ffd4bb81cb54fc85 100644
+--- a/splitbutton/SplitButton.vue
++++ b/splitbutton/SplitButton.vue
+@@ -64,7 +64,7 @@
+ 
+ <script>
+ import { isEmpty } from '@primeuix/utils/object';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import TieredMenu from 'primevue/tieredmenu';
+ import BaseSplitButton from './BaseSplitButton.vue';
+diff --git a/splitbutton/index.mjs b/splitbutton/index.mjs
+index 003827340198a3a75391c9cba912f5343e50fb0c..05bd6c5f9092923704cf5e4dd1fb35c902d49440 100644
+--- a/splitbutton/index.mjs
++++ b/splitbutton/index.mjs
+@@ -1,5 +1,5 @@
+ import { isEmpty } from '@primeuix/utils/object';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
+ import Button from 'primevue/button';
+ import TieredMenu from 'primevue/tieredmenu';
+ import BaseComponent from '@primevue/core/basecomponent';
+diff --git a/tablist/TabList.vue b/tablist/TabList.vue
+index c52f11532dcdd5762c05d080cc6e559f68b84131..70430517497c56e1477b8ef1a7d2f40a82e6c873 100644
+--- a/tablist/TabList.vue
++++ b/tablist/TabList.vue
+@@ -40,8 +40,8 @@
+ <script>
+ import { cn } from '@primeuix/utils';
+ import { findSingle, getHeight, getOffset, getOuterHeight, getOuterWidth, getWidth, isRTL } from '@primeuix/utils/dom';
+-import ChevronLeftIcon from '@primevue/icons/chevronleft';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
++import { ChevronLeftIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import BaseTabList from './BaseTabList.vue';
+ 
+diff --git a/tablist/index.mjs b/tablist/index.mjs
+index e66b898a332e8bf9ce84406cacd82ec6912c1749..9d996c2c36e90cbf088a63108336e2cf08daaa45 100644
+--- a/tablist/index.mjs
++++ b/tablist/index.mjs
+@@ -1,7 +1,7 @@
+ import { cn } from '@primeuix/utils';
+ import { getWidth, getHeight, findSingle, getOuterHeight, getOffset, getOuterWidth, isRTL } from '@primeuix/utils/dom';
+-import ChevronLeftIcon from '@primevue/icons/chevronleft';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
++import { ChevronLeftIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import TabListStyle from 'primevue/tablist/style';
+diff --git a/tabview/TabView.vue b/tabview/TabView.vue
+index 14546ad8e43544f77f96a654a5e00a7bd504edaf..60e38b4b73f348f859de13d67fd5e946428c7538 100644
+--- a/tabview/TabView.vue
++++ b/tabview/TabView.vue
+@@ -92,8 +92,8 @@
+ 
+ <script>
+ import { findSingle, focus, getAttribute, getOffset, getWidth } from '@primeuix/utils/dom';
+-import ChevronLeftIcon from '@primevue/icons/chevronleft';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
++import { ChevronLeftIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps } from 'vue';
+ import BaseTabView from './BaseTabView.vue';
+diff --git a/tabview/index.mjs b/tabview/index.mjs
+index efc1ea86e46a7f72b3691b351f8c1206b7c77424..c70b90ee6eb3fd0aba795cf3c23d4c06d454b752 100644
+--- a/tabview/index.mjs
++++ b/tabview/index.mjs
+@@ -1,6 +1,6 @@
+ import { getWidth, getOffset, focus, getAttribute, findSingle } from '@primeuix/utils/dom';
+-import ChevronLeftIcon from '@primevue/icons/chevronleft';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
++import { ChevronLeftIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps, resolveDirective, openBlock, createElementBlock, createElementVNode, withDirectives, renderSlot, createBlock, resolveDynamicComponent, createCommentVNode, Fragment, renderList, toDisplayString, vShow } from 'vue';
+ import BaseComponent from '@primevue/core/basecomponent';
+diff --git a/tieredmenu/TieredMenuSub.vue b/tieredmenu/TieredMenuSub.vue
+index 9cd688a8e50ac8cfe76b3b4065b591a4a1fd95ad..443aaf0a6c38c6c226e78ae70b8ac8d8129562db 100644
+--- a/tieredmenu/TieredMenuSub.vue
++++ b/tieredmenu/TieredMenuSub.vue
+@@ -79,7 +79,7 @@
+ import { nestedPosition } from '@primeuix/utils/dom';
+ import { isNotEmpty, resolve } from '@primeuix/utils/object';
+ import BaseComponent from '@primevue/core/basecomponent';
+-import AngleRightIcon from '@primevue/icons/angleright';
++import { AngleRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps } from 'vue';
+ 
+diff --git a/tieredmenu/index.mjs b/tieredmenu/index.mjs
+index 22cc0e5b2cea323564d8eb9d9ded9d7c9f234062..95bae518a80c8cab7d6c7ea9d731646ce17f9c7d 100644
+--- a/tieredmenu/index.mjs
++++ b/tieredmenu/index.mjs
+@@ -6,7 +6,7 @@ import OverlayEventBus from 'primevue/overlayeventbus';
+ import Portal from 'primevue/portal';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import TieredMenuStyle from 'primevue/tieredmenu/style';
+-import AngleRightIcon from '@primevue/icons/angleright';
++import { AngleRightIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps, resolveComponent, resolveDirective, openBlock, createBlock, Transition, withCtx, createElementBlock, Fragment, renderList, createElementVNode, withDirectives, resolveDynamicComponent, normalizeClass, createCommentVNode, toDisplayString, createVNode, renderSlot } from 'vue';
+ 
+diff --git a/toast/ToastMessage.vue b/toast/ToastMessage.vue
+index aeee221ee714425dcb0c04f655ad1ce512f23219..02834cd83a2ede3bb169c0f19195595e91c7053f 100644
+--- a/toast/ToastMessage.vue
++++ b/toast/ToastMessage.vue
+@@ -22,11 +22,11 @@
+ <script>
+ import { cn } from '@primeuix/utils';
+ import BaseComponent from '@primevue/core/basecomponent';
+-import CheckIcon from '@primevue/icons/check';
+-import ExclamationTriangleIcon from '@primevue/icons/exclamationtriangle';
+-import InfoCircleIcon from '@primevue/icons/infocircle';
+-import TimesIcon from '@primevue/icons/times';
+-import TimesCircleIcon from '@primevue/icons/timescircle';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { ExclamationTriangleIcon } from '../intentic-icons.mjs';
++import { InfoCircleIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
++import { TimesCircleIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ 
+ export default {
+diff --git a/toast/index.mjs b/toast/index.mjs
+index 5f9d3bd49b4d937c9cf8c34e9fcb57fd38d9dcf9..bf71a62829d5ad9efb381b8db62ba0843251c2d1 100644
+--- a/toast/index.mjs
++++ b/toast/index.mjs
+@@ -6,11 +6,11 @@ import Portal from 'primevue/portal';
+ import ToastEventBus from 'primevue/toasteventbus';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import ToastStyle from 'primevue/toast/style';
+-import CheckIcon from '@primevue/icons/check';
+-import ExclamationTriangleIcon from '@primevue/icons/exclamationtriangle';
+-import InfoCircleIcon from '@primevue/icons/infocircle';
+-import TimesIcon from '@primevue/icons/times';
+-import TimesCircleIcon from '@primevue/icons/timescircle';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { ExclamationTriangleIcon } from '../intentic-icons.mjs';
++import { InfoCircleIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
++import { TimesCircleIcon } from '../intentic-icons.mjs';
+ import Ripple from 'primevue/ripple';
+ import { resolveDirective, openBlock, createElementBlock, mergeProps, createBlock, resolveDynamicComponent, Fragment, createElementVNode, toDisplayString, createCommentVNode, normalizeProps, withDirectives, resolveComponent, withCtx, createVNode, TransitionGroup, renderList } from 'vue';
+ 
+diff --git a/tree/Tree.vue b/tree/Tree.vue
+index 5bce7fc890fff234ed6dac3cb3cffe4c6a81fd7b..0d3335a06eff14017cddd2467a31cab48c44bab4 100644
+--- a/tree/Tree.vue
++++ b/tree/Tree.vue
+@@ -60,8 +60,8 @@
+ <script>
+ import { cn } from '@primeuix/utils';
+ import { isFunction, resolveFieldData } from '@primeuix/utils/object';
+-import SearchIcon from '@primevue/icons/search';
+-import SpinnerIcon from '@primevue/icons/spinner';
++import { SearchIcon } from '../intentic-icons.mjs';
++import { SpinnerIcon } from '../intentic-icons.mjs';
+ import IconField from 'primevue/iconfield';
+ import InputIcon from 'primevue/inputicon';
+ import InputText from 'primevue/inputtext';
+diff --git a/tree/TreeNode.vue b/tree/TreeNode.vue
+index b00fd538e873740a37772f7a71e2b7b210392dcf..9d76b721ae63adf9654bbb8fc270e59a7b33b9fe 100644
+--- a/tree/TreeNode.vue
++++ b/tree/TreeNode.vue
+@@ -102,11 +102,11 @@
+ <script>
+ import { find, findSingle, getAttribute, getOuterHeight, getOuterWidth } from '@primeuix/utils';
+ import BaseComponent from '@primevue/core/basecomponent';
+-import CheckIcon from '@primevue/icons/check';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
+-import MinusIcon from '@primevue/icons/minus';
+-import SpinnerIcon from '@primevue/icons/spinner';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
++import { MinusIcon } from '../intentic-icons.mjs';
++import { SpinnerIcon } from '../intentic-icons.mjs';
+ import Checkbox from 'primevue/checkbox';
+ import Ripple from 'primevue/ripple';
+ 
+diff --git a/tree/index.mjs b/tree/index.mjs
+index b9c2c8505645d3ed59951ce2cd6910cfb9440436..b3c3ee27ff2c423f9e82deed82f81864b36455ec 100644
+--- a/tree/index.mjs
++++ b/tree/index.mjs
+@@ -1,17 +1,17 @@
+ import { getAttribute, findSingle, find, getOuterWidth, getOuterHeight, cn } from '@primeuix/utils';
+ import { isFunction, resolveFieldData } from '@primeuix/utils/object';
+-import SearchIcon from '@primevue/icons/search';
+-import SpinnerIcon from '@primevue/icons/spinner';
++import { SearchIcon } from '../intentic-icons.mjs';
++import { SpinnerIcon } from '../intentic-icons.mjs';
+ import IconField from 'primevue/iconfield';
+ import InputIcon from 'primevue/inputicon';
+ import InputText from 'primevue/inputtext';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import TreeStyle from 'primevue/tree/style';
+ import { reactive, resolveComponent, resolveDirective, openBlock, createElementBlock, mergeProps, normalizeClass, createCommentVNode, createElementVNode, withDirectives, Fragment, createBlock, resolveDynamicComponent, withCtx, withModifiers, createTextVNode, toDisplayString, renderList, createVNode, Transition, renderSlot } from 'vue';
+-import CheckIcon from '@primevue/icons/check';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
+-import MinusIcon from '@primevue/icons/minus';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
++import { MinusIcon } from '../intentic-icons.mjs';
+ import Checkbox from 'primevue/checkbox';
+ import Ripple from 'primevue/ripple';
+ 
+diff --git a/treeselect/TreeSelect.vue b/treeselect/TreeSelect.vue
+index fb6857354357c6c86141a178be2fd00c660bfd1c..cb67ace166ec007c02ffb6e94ffcfd93d47adc55 100644
+--- a/treeselect/TreeSelect.vue
++++ b/treeselect/TreeSelect.vue
+@@ -135,8 +135,8 @@ import { absolutePosition, addStyle, find, findSingle, focus, getFirstFocusableE
+ import { isEmpty, isNotEmpty } from '@primeuix/utils/object';
+ import { ZIndex } from '@primeuix/utils/zindex';
+ import { ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import TimesIcon from '@primevue/icons/times';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Chip from 'primevue/chip';
+ import OverlayEventBus from 'primevue/overlayeventbus';
+ import Portal from 'primevue/portal';
+diff --git a/treeselect/index.mjs b/treeselect/index.mjs
+index 3d5b48265ac9b324fc76142c1870396314a59594..cb0ac8e51610d34e4d811c7608c003c0a32c4c0e 100644
+--- a/treeselect/index.mjs
++++ b/treeselect/index.mjs
+@@ -2,8 +2,8 @@ import { findSingle, isTouchDevice, relativePosition, getOuterWidth, absolutePos
+ import { isNotEmpty, isEmpty } from '@primeuix/utils/object';
+ import { ZIndex } from '@primeuix/utils/zindex';
+ import { ConnectedOverlayScrollHandler } from '@primevue/core/utils';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import TimesIcon from '@primevue/icons/times';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { TimesIcon } from '../intentic-icons.mjs';
+ import Chip from 'primevue/chip';
+ import OverlayEventBus from 'primevue/overlayeventbus';
+ import Portal from 'primevue/portal';
+diff --git a/treetable/BodyCell.vue b/treetable/BodyCell.vue
+index 5a7c8fd974713cde3a776ea0293a5c49662e0b41..e68a8fa119c2b3631060bb562f53d0936dcf2228 100644
+--- a/treetable/BodyCell.vue
++++ b/treetable/BodyCell.vue
+@@ -45,11 +45,11 @@ import { getNextElementSibling, getOuterWidth, getPreviousElementSibling } from
+ import { resolveFieldData } from '@primeuix/utils/object';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import { getVNodeProp } from '@primevue/core/utils';
+-import CheckIcon from '@primevue/icons/check';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
+-import MinusIcon from '@primevue/icons/minus';
+-import SpinnerIcon from '@primevue/icons/spinner';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
++import { MinusIcon } from '../intentic-icons.mjs';
++import { SpinnerIcon } from '../intentic-icons.mjs';
+ import Checkbox from 'primevue/checkbox';
+ import Ripple from 'primevue/ripple';
+ import { mergeProps } from 'vue';
+diff --git a/treetable/HeaderCell.vue b/treetable/HeaderCell.vue
+index 2f0f13771df156f4e6f5d0b1764b084e28ea8e75..361f1f399caf7ef609a962fbf8d81db7dc5dab06 100644
+--- a/treetable/HeaderCell.vue
++++ b/treetable/HeaderCell.vue
+@@ -29,9 +29,9 @@
+ import { getAttribute, getIndex, getNextElementSibling, getOuterWidth, getPreviousElementSibling } from '@primeuix/utils/dom';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import { getVNodeProp } from '@primevue/core/utils';
+-import SortAltIcon from '@primevue/icons/sortalt';
+-import SortAmountDownIcon from '@primevue/icons/sortamountdown';
+-import SortAmountUpAltIcon from '@primevue/icons/sortamountupalt';
++import { SortAltIcon } from '../intentic-icons.mjs';
++import { SortAmountDownIcon } from '../intentic-icons.mjs';
++import { SortAmountUpAltIcon } from '../intentic-icons.mjs';
+ import Badge from 'primevue/badge';
+ import { mergeProps } from 'vue';
+ 
+diff --git a/treetable/TreeTable.vue b/treetable/TreeTable.vue
+index 642009959a4c3eb7708e0fa15224908559a81bfd..26dac2003eaf82b32acc61c3f7b6c2c6aca8adc8 100644
+--- a/treetable/TreeTable.vue
++++ b/treetable/TreeTable.vue
+@@ -214,7 +214,7 @@ import { addStyle, clearSelection, find, getAttribute, getIndex, getOffset, getO
+ import { localeComparator, resolveFieldData, sort } from '@primeuix/utils/object';
+ import { FilterService } from '@primevue/core/api';
+ import { getVNodeProp, HelperSet } from '@primevue/core/utils';
+-import SpinnerIcon from '@primevue/icons/spinner';
++import { SpinnerIcon } from '../intentic-icons.mjs';
+ import Paginator from 'primevue/paginator';
+ import BaseTreeTable from './BaseTreeTable.vue';
+ import FooterCell from './FooterCell.vue';
+diff --git a/treetable/index.mjs b/treetable/index.mjs
+index 77545720ae0ba3c5c7df562b50e8686422c5eab6..a3637655ccf5d2e7242ac3a363aa9fbfc5146b16 100644
+--- a/treetable/index.mjs
++++ b/treetable/index.mjs
+@@ -3,19 +3,19 @@ import { getNextElementSibling, getOuterWidth, getPreviousElementSibling, getAtt
+ import { resolveFieldData, equals, localeComparator, sort } from '@primeuix/utils/object';
+ import { FilterService } from '@primevue/core/api';
+ import { getVNodeProp, HelperSet } from '@primevue/core/utils';
+-import SpinnerIcon from '@primevue/icons/spinner';
++import { SpinnerIcon } from '../intentic-icons.mjs';
+ import Paginator from 'primevue/paginator';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import TreeTableStyle from 'primevue/treetable/style';
+ import { mergeProps, openBlock, createElementBlock, createBlock, resolveDynamicComponent, createCommentVNode, toDisplayString, resolveComponent, createElementVNode, normalizeProps, resolveDirective, withDirectives, Fragment, normalizeClass, withCtx, createTextVNode, renderList, renderSlot, createVNode, Transition, createSlots } from 'vue';
+-import SortAltIcon from '@primevue/icons/sortalt';
+-import SortAmountDownIcon from '@primevue/icons/sortamountdown';
+-import SortAmountUpAltIcon from '@primevue/icons/sortamountupalt';
++import { SortAltIcon } from '../intentic-icons.mjs';
++import { SortAmountDownIcon } from '../intentic-icons.mjs';
++import { SortAmountUpAltIcon } from '../intentic-icons.mjs';
+ import Badge from 'primevue/badge';
+-import CheckIcon from '@primevue/icons/check';
+-import ChevronDownIcon from '@primevue/icons/chevrondown';
+-import ChevronRightIcon from '@primevue/icons/chevronright';
+-import MinusIcon from '@primevue/icons/minus';
++import { CheckIcon } from '../intentic-icons.mjs';
++import { ChevronDownIcon } from '../intentic-icons.mjs';
++import { ChevronRightIcon } from '../intentic-icons.mjs';
++import { MinusIcon } from '../intentic-icons.mjs';
+ import Checkbox from 'primevue/checkbox';
+ import Ripple from 'primevue/ripple';
+ 
+diff --git a/virtualscroller/VirtualScroller.vue b/virtualscroller/VirtualScroller.vue
+index d5b9dc27840979f1fe0cdb0ec173071fd14b0450..0b58f9325b09d9007c4af6ec9345c7487dfb579a 100644
+--- a/virtualscroller/VirtualScroller.vue
++++ b/virtualscroller/VirtualScroller.vue
+@@ -45,7 +45,7 @@
+ 
+ <script>
+ import { findSingle, getHeight, getWidth, isVisible } from '@primeuix/utils/dom';
+-import SpinnerIcon from '@primevue/icons/spinner';
++import { SpinnerIcon } from '../intentic-icons.mjs';
+ import BaseVirtualScroller from './BaseVirtualScroller.vue';
+ 
+ export default {
+diff --git a/virtualscroller/index.mjs b/virtualscroller/index.mjs
+index bb284a9ae21e33fead1668a6fd1a7cb15f47e9a5..bdddd61757fb322a3fc51039849c00b6582c5c48 100644
+--- a/virtualscroller/index.mjs
++++ b/virtualscroller/index.mjs
+@@ -1,5 +1,5 @@
+ import { findSingle, isVisible, getWidth, getHeight } from '@primeuix/utils/dom';
+-import SpinnerIcon from '@primevue/icons/spinner';
++import { SpinnerIcon } from '../intentic-icons.mjs';
+ import BaseComponent from '@primevue/core/basecomponent';
+ import VirtualScrollerStyle from 'primevue/virtualscroller/style';
+ import { resolveComponent, openBlock, createElementBlock, mergeProps, renderSlot, createElementVNode, Fragment, renderList, createCommentVNode, createVNode } from 'vue';

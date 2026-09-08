@@ -95,8 +95,7 @@ const liveRoles = (roles: readonly ModelRoleSpec[]): readonly ModelRoleSpec[] =>
 
 // Nothing is stored per block: its list is derived from jobs and fanned back out, so Advanced later shows exactly what
 // was written. Identity needs every field to match, not just the model, or a re-point could silently hit a lookalike.
-const pinIdentity = (pin: ModelPin): string =>
-    [modelPinKey(pin), pin.effort ?? ``, pin.thinking ?? ``, pin.fast ?? ``, pin.harness ?? ``].join(`|`);
+const pinIdentity = (pin: ModelPin): string => [modelPinKey(pin), pin.effort ?? ``, pin.thinking ?? ``, pin.fast ?? ``, pin.harness ?? ``].join(`|`);
 
 // Intersection, not union: a union would show a model on jobs that don't actually have it, the one lie a collapsed view
 // could tell.
@@ -451,9 +450,9 @@ const eagernessOptions = [
                     Uses `#lead` like the job rows, not the `icon` prop, so its mark matches their size instead of the smaller type-sized glyph that
                     would misalign the title column. No tick: not selectable.
                 -->
-                <template #lead="{ mark }">
+                <template #lead="{ mark, iconClass }">
                     <span class="flex shrink-0 items-center justify-center" :style="{ width: `${mark}px`, height: `${mark}px` }">
-                        <Icon name="credit-card" aria-hidden="true" class="text-sm text-subtle" />
+                        <Icon name="credit-card" aria-hidden="true" class="text-muted" :class="iconClass" />
                     </span>
                 </template>
                 <template #control>

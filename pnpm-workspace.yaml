@@ -40,6 +40,9 @@ verifyDepsBeforeRun: false
 nodeVersion: 24.20.0
 
 overrides:
+  # The versioned UI patches route control icons to Icon and render diagram SVGs natively.
+  "primevue>@primevue/icons": "-"
+  "mermaid>@iconify/utils": "-"
   zod: 4.5.4
   # THE ONE PACKAGE THE ZOD OVERRIDE ABOVE MUST NOT REACH. @cursor/sdk asks for `^3.25.0` and the blanket
   # override hands it 4.5.4 anyway, which is a MAJOR it was not written against, and the damage is silent
@@ -209,10 +212,6 @@ catalog:
   "@hono/otel": 1.1.2
   "@huggingface/hub": 2.14.4
   "@huggingface/transformers": 4.2.0
-  "@iconify-json/ri": 1.2.10
-  "@iconify/types": 2.0.0
-  "@iconify/utils": 3.1.4
-  "@iconify/vue": 5.0.1
   # The MCP server the platform speaks to Claude Code with (_platform/api/src/mcp). Its web-standard
   # streamable-HTTP transport takes a Request and answers a Response, which is exactly Hono's currency —
   # the api mounts it without an adapter.
@@ -386,3 +385,8 @@ catalog:
   ws: 8.21.1
   yaml: 2.9.0
   zod: 4.5.4
+
+patchedDependencies:
+  primevue@4.5.5: _editor/ui/patches/primevue@4.5.5.patch
+  mermaid@11.16.1: _editor/ui/patches/mermaid@11.16.1.patch
+  monaco-editor-core@0.55.1: _editor/ui/patches/monaco-editor-core@0.55.1.patch

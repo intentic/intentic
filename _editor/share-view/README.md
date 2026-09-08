@@ -9,6 +9,7 @@ from anywhere — there is nothing for a visitor to authenticate to, and nothing
 
 It shares the design system (`@intentic/ui`) and the transcript components with the editor, so a shared
 transcript reads the way it read in the app rather than being a second renderer that drifts.
+Its boot registers the native SVG `Icon` directly; icons need no library plugin, collection or network request.
 
 ## Key files
 

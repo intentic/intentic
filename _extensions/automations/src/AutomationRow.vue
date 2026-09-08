@@ -196,13 +196,13 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
          a fact hanging off its id. -->
     <DisclosureRow class="group/row @container" body="drawer" :open="expanded" @update:open="emit(`expand`)">
         <!-- The row's one mark: what wakes it, tinted by health. Sized from the group's own tier via the slot prop, not a number typed here. -->
-        <template #lead="{ mark }">
+        <template #lead="{ mark, iconClass }">
             <span
                 class="flex shrink-0 items-center justify-center rounded-md"
                 :class="TILE[health]"
                 :style="{ width: `${mark}px`, height: `${mark}px` }"
             >
-                <Icon :name="TRIGGER_ICON[trigger.kind]" class="text-xs" />
+                <Icon :name="TRIGGER_ICON[trigger.kind]" :class="iconClass" />
             </span>
         </template>
 

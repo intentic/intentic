@@ -66,9 +66,9 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
             Sized from the tier's own `mark`, not a literal number, so the text column doesn't shift between views. `boxes` is the plural glyph for a
             set of jobs.
         -->
-        <template #lead="{ mark }">
+        <template #lead="{ mark, iconClass }">
             <span class="flex shrink-0 items-center justify-center" :style="{ width: `${mark}px`, height: `${mark}px` }">
-                <Icon name="boxes" aria-hidden="true" class="text-sm text-subtle" />
+                <Icon name="boxes" aria-hidden="true" class="text-muted" :class="iconClass" />
             </span>
         </template>
 

@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, expect, it } from "vitest";
-import { type App, createApp, h, nextTick } from "vue";
+import { afterEach, expect, it, vi } from "vitest";
+import { type App, createApp, h, nextTick, ref } from "vue";
 import Icon from "@intentic/ui/icon";
 import { areaIcon, ICONS, isIconName, type IconName } from "../../../ui/src/icons/iconSets.js";
-import { installUi } from "../../../ui/src/plugin.js";
 
 let app: App | undefined;
 // Props are cast through `as never` since the accessibility tests below pass raw fallthrough attrs (`aria-label`,
@@ -13,7 +12,6 @@ const mount = async (props: { name: IconName; spin?: boolean } & Record<string, 
     const host = document.createElement(`div`);
     document.body.append(host);
     app = createApp({ render: () => h(Icon, props as never) });
-    installUi(app);
     app.mount(host);
     await nextTick();
     return host;
@@ -23,6 +21,7 @@ const spinner = async (spin: boolean): Promise<HTMLElement> => mount({ name: `sp
 afterEach(() => {
     app?.unmount();
     app = undefined;
+    vi.restoreAllMocks();
     document.body.innerHTML = ``;
 });
 
@@ -41,10 +40,19 @@ it(`leaves an ordinary icon still`, async () => {
     expect(host.querySelector(`animateTransform, animatetransform`)).toBeNull();
 });
 
-// The one accessibility rule: a named glyph is announced, an unnamed one stays hidden. Pinned since the failure
-// was silent: Iconify hides every svg by default and clears that only for an explicit `aria-hidden={false}`, not
-// for `aria-label` alone, so a labelled call site could still ship a hidden node. Asserts on the rendered
-// attributes, not the props, since the question is what the library does with what we hand it.
+it(`slows the spinner for reduced motion and removes its preference listener on unmount`, async () => {
+    const query = window.matchMedia(`(prefers-reduced-motion: reduce)`);
+    const remove = vi.spyOn(query, `removeEventListener`);
+    Object.defineProperty(query, `matches`, { value: true });
+    vi.spyOn(window, `matchMedia`).mockReturnValue(query);
+    const host = await spinner(true);
+    expect(host.querySelector(`animateTransform`)?.getAttribute(`dur`)).toBe(`3s`);
+    app!.unmount();
+    app = undefined;
+    expect(remove).toHaveBeenCalledWith(`change`, expect.any(Function));
+});
+
+// Assert the actual accessible SVG, including attribute changes after mount.
 
 const svgOf = async (props: { name: IconName } & Record<string, unknown>): Promise<SVGElement> => {
     const svg = (await mount(props)).querySelector(`svg`);
@@ -58,8 +66,6 @@ it(`keeps an unlabelled glyph out of the accessibility tree`, async () => {
     expect((await svgOf({ name: `check` })).getAttribute(`aria-hidden`)).toBe(`true`);
 });
 
-// A named glyph is read out: `role="img"` is Iconify's own and stays; what this asserts is that the hiding gets
-// lifted.
 it(`announces a glyph that was given a label`, async () => {
     const svg = await svgOf({ name: `exclamation-circle`, "aria-label": `Needs you` });
 
@@ -75,7 +81,7 @@ it(`announces a glyph named by its title`, async () => {
     expect((await svgOf({ name: `clock`, title: `Waiting` })).getAttribute(`aria-hidden`)).toBeNull();
 });
 
-it(`renders the whole offline vocabulary, including the custom collection, with one geometry and stroke weight`, async () => {
+it(`renders the whole vocabulary without a plugin, with one geometry and stroke weight`, async () => {
     const names = Object.keys(ICONS) as IconName[];
     const host = document.createElement(`div`);
     document.body.append(host);
@@ -86,19 +92,38 @@ it(`renders the whole offline vocabulary, including the custom collection, with 
                 names.map((name) => h(Icon, { name, "data-icon-name": name })),
             ),
     });
-    installUi(app);
     app.mount(host);
     await nextTick();
 
     const rendered = [...host.querySelectorAll(`svg`)];
     expect(rendered.map((svg) => svg.getAttribute(`data-icon-name`))).toEqual(names);
-    for (const [at, svg] of rendered.entries()) {
+    for (const svg of rendered) {
         expect(svg.getAttribute(`viewBox`)).toBe(`0 0 24 24`);
         expect(svg.querySelectorAll(`path`).length).toBeGreaterThan(0);
-        if (ICONS[names[at]!].startsWith(`intentic:`)) {
-            expect(svg.querySelector(`g`)?.getAttribute(`stroke-width`)).toBe(`2`);
-        }
+        expect(svg.querySelector(`g`)?.getAttribute(`stroke-width`)).toBe(`2`);
+        expect(svg.getAttribute(`width`)).toBe(`1em`);
+        expect(svg.getAttribute(`height`)).toBe(`1em`);
+        expect(svg.getAttribute(`focusable`)).toBe(`false`);
     }
+});
+
+it(`updates both its drawing and its accessible name after mount`, async () => {
+    const name = ref<IconName>(`check`);
+    const label = ref<string>();
+    const host = document.createElement(`div`);
+    app = createApp({ render: () => h(Icon, { name: name.value, "aria-label": label.value }) });
+    app.mount(host);
+    const svg = host.querySelector(`svg`)!;
+    expect(svg.getAttribute(`aria-hidden`)).toBe(`true`);
+    name.value = `times`;
+    label.value = `Failed`;
+    await nextTick();
+    expect(svg.querySelector(`path`)?.getAttribute(`d`)).toBe(ICONS.times.outline);
+    expect(svg.getAttribute(`aria-hidden`)).toBeNull();
+    expect(svg.getAttribute(`aria-label`)).toBe(`Failed`);
+    label.value = undefined;
+    await nextTick();
+    expect(svg.getAttribute(`aria-hidden`)).toBe(`true`);
 });
 
 it(`keeps section meanings consistent while accepting valid extension fallbacks`, () => {

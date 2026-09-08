@@ -11,6 +11,7 @@ import { createApp, h } from "vue";
 // mermaidTheme.ts.
 
 import { Markdown } from "@intentic/ui";
+import { ICONS } from "../../../ui/src/icons/iconSets.js";
 
 const identity = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
 Object.assign(SVGElement.prototype, {
@@ -62,6 +63,13 @@ describe(`<Markdown> with a mermaid fence`, () => {
         expect(runs).toHaveLength(2);
         expect(runs[0]?.textContent).toContain(`Before.`);
         expect(runs[1]?.textContent).toContain(`After.`);
+    });
+
+    it(`draws the app's native icon inside a Mermaid diagram`, async () => {
+        const host = render('```mermaid\nflowchart LR\n A@{ icon: "intentic:server", form: "square", label: "Compute" } --> B[Ready]\n```');
+        await settled(host, `.md-mermaid svg`);
+        expect([...host.querySelectorAll(`.md-mermaid path`)].map((path) => path.getAttribute(`d`))).toContain(ICONS.server.outline);
+        expect(host.querySelector(`.md-mermaid`)?.textContent).toContain(`Compute`);
     });
 
     it(`falls back to a code block holding the source when mermaid refuses the body`, async () => {

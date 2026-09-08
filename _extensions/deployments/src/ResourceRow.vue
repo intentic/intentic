@@ -88,8 +88,8 @@ const logText = computed(() => {
 <template>
     <!-- One toggle for the row; the drawer holds the resource's own report, not a fact hung off its name. -->
     <DisclosureRow class="border-l-4" :class="tone.rowBorder" density="comfortable" body="drawer" :open="expanded" @update:open="toggle">
-        <template #lead>
-            <Icon :name="tone.icon" :spin="tone.spin" class="shrink-0 text-base" :class="tone.text" />
+        <template #lead="{ iconClass }">
+            <Icon :name="tone.icon" :spin="tone.spin" class="shrink-0" :class="[iconClass, tone.text]" />
         </template>
 
         <template #title>

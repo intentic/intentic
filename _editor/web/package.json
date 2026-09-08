@@ -77,6 +77,8 @@
         "@vitejs/plugin-vue": "catalog:",
         "@xterm/headless": "catalog:",
         "esbuild": "catalog:",
+        "dompurify": "catalog:",
+        "mermaid": "catalog:",
         "fast-check": "catalog:",
         "jsdom": "catalog:",
         "tailwindcss": "catalog:",
