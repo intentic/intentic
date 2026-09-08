@@ -8,6 +8,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { HISTORY_ROOT } from "@intentic/constants";
 import { repoRoot } from "../../constants/src/node.mjs";
 
 const args = process.argv.slice(2);
@@ -16,7 +17,7 @@ const option = (name, fallback) => {
     return at === -1 ? fallback : args[at + 1];
 };
 const days = Number(option("--days", "7"));
-const history = option("--history", "/history");
+const history = option("--history", HISTORY_ROOT);
 const repo = option("--repo", "intentic/intentic");
 const github = !args.includes("--no-github");
 const asJson = args.includes("--json");

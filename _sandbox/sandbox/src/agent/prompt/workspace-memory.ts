@@ -30,7 +30,7 @@ const foldersFrom = (root: string, cwd: string): string[] => {
     }
     const folders = [root];
     for (const segment of rel.split(sep)) {
-        folders.push(join(folders[folders.length - 1] ?? root, segment));
+        folders.push(join(folders.at(-1) ?? root, segment));
     }
     return folders;
 };

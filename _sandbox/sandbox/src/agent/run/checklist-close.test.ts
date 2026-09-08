@@ -1,5 +1,6 @@
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { describe, expect, it } from "vitest";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { syncHookOutput } from "../../testing.js";
 import { checklistCloseHooks, checklistCloseNote } from "./checklist-close.js";
 import type { StoredTask } from "./task-store.js";
@@ -8,7 +9,7 @@ import { taskStoreDir } from "./task-store.js";
 // The one Stop-time ask about a checklist the turn is leaving open: said once, off the CLI's own store for the session
 // the Stop names, and only when something on it is not completed.
 
-const ROOT = "/work";
+const ROOT = WORKSPACE_ROOT;
 
 const stored = (...rows: [string, StoredTask["status"], string][]): StoredTask[] => rows.map(([id, status, subject]) => ({ id, status, subject }));
 
