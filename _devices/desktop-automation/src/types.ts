@@ -29,6 +29,25 @@ export interface WindowInfo {
     readonly focused: boolean;
 }
 
+// Whatever holds the keyboard right now, read from the OS rather than looked up in `windows()`: the foreground
+// can be held by a window no enumeration returns — a cloaked one, or the lock screen's — and a caller that
+// searches the window list for it is told "nothing holds the foreground" in exactly that case.
+export interface ForegroundWindow {
+    readonly id: string;
+    readonly title: string;
+    // The program as the OS names it. `LockApp` and `LogonUI` are the lock screen's own two.
+    readonly app: string;
+}
+
+export interface SessionState {
+    // Whether Windows is drawing its sign-in screen over this session, read off LogonUI — the program that
+    // draws it, and which runs for as long as it is up. While it is, the keyboard belongs to a desktop no
+    // ordinary process can reach: focus, chords and typed text all go nowhere, and none of them report it.
+    readonly locked: boolean;
+    // Undefined when nothing holds it, which is what a desktop with no window mapped answers.
+    readonly foreground: ForegroundWindow | undefined;
+}
+
 // One object rather than free functions, so a caller can hold a fake.
 export interface Desktop {
     // Cheap where the OS answers it directly; a screenshot's own dimensions where it will not (Wayland).

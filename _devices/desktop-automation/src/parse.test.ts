@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { looksLikeUrl, parseSwayTree, parseWindowsJson, parseWmctrl } from "./parse.js";
+import { focusRefusal, looksLikeUrl, parseSessionJson, parseSwayTree, parseWindowsJson, parseWmctrl } from "./parse.js";
 
 /* Reading a platform's window list. Every case here is one somebody has actually been bitten by — a title with
  * spaces truncated at the first one, a single window arriving as an object instead of an array, the same window
@@ -121,4 +121,53 @@ test("what counts as something to OPEN rather than a program to run", () => {
     expect(looksLikeUrl("mailto:someone@example.com")).toBe(true);
     expect(looksLikeUrl("code")).toBe(false);
     expect(looksLikeUrl("/usr/bin/firefox")).toBe(false);
+});
+
+/* Reading the session, which is the read `windows()` cannot make: on the machine this was written for, the
+ * Windows smoke tier's doctor printed "9 window(s) currently open, none holding the foreground" while the
+ * keyboard was held by the lock screen — a window EnumWindows does not return — and every focus after it was
+ * refused. Searching a window list for the foreground answers "nobody" in exactly the case that matters. */
+
+test("the foreground holder comes back even when it is the lock screen's own window", () => {
+    const state = parseSessionJson('{"locked":true,"id":"66048","title":"Windows Default Lock Screen","app":"LockApp"}');
+    expect(state?.locked).toBe(true);
+    expect(state?.foreground).toEqual({ id: "66048", title: "Windows Default Lock Screen", app: "LockApp" });
+});
+
+test("a zero handle is Windows saying nobody, not a window to go looking for", () => {
+    expect(parseSessionJson('{"locked":false,"id":"0","title":"","app":""}')).toEqual({ locked: false, foreground: undefined });
+});
+
+// The distinction the old doctor line could not draw: a machine nobody could read reported as an idle one.
+test("output that is not the shape asked for is undefined, not an unlocked desktop", () => {
+    expect(parseSessionJson("")).toBeUndefined();
+    expect(parseSessionJson("Get-Process : Access is denied.")).toBeUndefined();
+    expect(parseSessionJson('{"id":"12","title":"A","app":"a"}')).toBeUndefined();
+});
+
+test("a refusal on a locked session says that, rather than listing what it might have been", () => {
+    const said = focusRefusal("1900772", 3, { locked: true, foreground: { id: "66048", title: "", app: "LockApp" } });
+    expect(said).toContain("sign-in screen");
+    expect(said).toContain("sign in on that machine");
+    expect(said).not.toContain("full-screen app");
+});
+
+test("a refusal with the desktop unlocked names the window that kept the keyboard", () => {
+    const said = focusRefusal("4242", 3, { locked: false, foreground: { id: "99", title: "Save changes?", app: "notepad" } });
+    expect(said).toContain(`"Save changes?" [notepad]`);
+});
+
+test("an untitled holder is still named by its program", () => {
+    expect(focusRefusal("4242", 3, { locked: false, foreground: { id: "99", title: "", app: "ApplicationFrameHost" } })).toContain(
+        "an untitled window [ApplicationFrameHost]",
+    );
+});
+
+test("nothing in the foreground reads as a window that is gone, not as a machine that refused", () => {
+    expect(focusRefusal("4242", 3, { locked: false, foreground: undefined })).toContain("the window is gone");
+});
+
+// The only branch allowed to be vague, and it says so instead of dressing a failed read as a diagnosis.
+test("a session that could not be read admits it", () => {
+    expect(focusRefusal("4242", 3, undefined)).toContain("nothing here could read which window has it");
 });

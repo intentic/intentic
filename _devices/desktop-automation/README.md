@@ -66,6 +66,15 @@ app that activates itself a moment after being asked to, loses the first round a
 keyboard still went elsewhere it raises a `DesktopError` **naming the window that kept it**, rather than
 returning to a caller that is about to type into the wrong one.
 
+**A refused focus states its cause, and `windowsSession()` is where it comes from.** The foreground can be held
+by a window `windows()` does not return — a cloaked one, or the lock screen's, which has no row anywhere — so
+looking for the holder in the window list answers "nobody" in exactly the case that matters. That read is the
+OS's: `GetForegroundWindow` for the holder, and the presence of `LogonUI` for whether Windows is drawing its
+sign-in screen over the desktop at all, which is a state in which nothing can be focused and nothing typed
+lands. The message used to list every cause it might have been ("a UAC prompt, a full-screen app, or a locked
+session") on every refusal; it now says which one the machine reported, and only admits to guessing when the
+read itself failed. Windows-only, and named so: no compositor on Linux answers the second half.
+
 **Wayland enumeration mostly cannot happen**, and that is a design decision rather than a gap: a compositor does
 not let one client enumerate another's windows, the same protection that stops it synthesising input. The
 wlroots family (sway, Hyprland) answers `swaymsg -t get_tree` to anyone who can reach the socket, so those are
@@ -88,7 +97,7 @@ coupling this package exists to remove.
 
 - [src/index.ts](src/index.ts): the public surface.
 - [src/input-linux.ts](src/input-linux.ts) / [src/input-windows.ts](src/input-windows.ts): pointer, keys and text, per platform.
-- [src/apps-linux.ts](src/apps-linux.ts) / [src/apps-windows.ts](src/apps-windows.ts): windows, focus, launching and the clipboard, per platform.
+- [src/apps-linux.ts](src/apps-linux.ts) / [src/apps-windows.ts](src/apps-windows.ts): windows, focus, launching and the clipboard, per platform — and on Windows, whether the desktop can be driven at all.
 - [src/screen.ts](src/screen.ts): capturing the screen.
 - [src/keys.ts](src/keys.ts): chord and key-name parsing, shared by both platforms.
 - [src/run.ts](src/run.ts): how commands are invoked without a native module.

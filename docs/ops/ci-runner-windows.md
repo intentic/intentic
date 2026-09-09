@@ -123,16 +123,20 @@ storing a logon password in the registry in cleartext, which is a poor trade on 
 **`-KeepAwake`.** A sleeping runner is an offline runner, and from GitHub's side that is indistinguishable from a
 broken one — see the queueing above. This stops the machine sleeping or hibernating **on mains power only**; on
 battery it is somebody's laptop and should still be allowed to sleep. It is the only machine-wide setting this
-script will make, which is why it asks. The monitor is deliberately left alone: a blanked screen keeps every
-window mapped, so it costs the tiers nothing.
+script will make, which is why it asks.
 
 It also stops the session **locking**, which is the same class of problem wearing a much better disguise. A
 locked machine stays online and keeps taking jobs, and every assertion that only reads window titles keeps
 passing — but `LockApp` holds the foreground, so `focusWindow` can never hand the keyboard to the app under
 test and every keystroke the desktop smoke tier sends goes nowhere. The run then reports the product failing to
-answer its own dialog. The nightlies of 2026-09-05 and 2026-09-09 are both that, six failed assertions each.
-Three separate settings get there, so all three are turned off: the machine inactivity limit
-(`InactivityTimeoutSecs`), a secure screensaver, and require-a-password-on-wake (`CONSOLELOCK`).
+answer its own dialog: the nightlies of 2026-09-05 and 2026-09-09, and the release run between them, are all
+that, six failed assertions each. Four settings reach that state and all four are turned off: the machine
+inactivity limit (`InactivityTimeoutSecs`), a secure screensaver, require-a-password-on-wake (`CONSOLELOCK`),
+and the display timeout — this page used to say the monitor was deliberately left alone because "a blanked
+screen keeps every window mapped, so it costs the tiers nothing", which is true about the windows and wrong
+about the desktop. Two things outlive the script: an inactivity limit a managed box pushes back after it is
+cleared, and somebody locking the machine by hand. `doctor` names either one before a tier runs, rather than
+leaving the assertions to blame the app.
 
 A laptop is the machine this matters most on, and it is worth being blunt about it: a lid that closes is a
 Windows leg of the pipeline that stops, silently, until somebody opens it.
@@ -278,7 +282,8 @@ The Windows runner never builds product binaries. Linux jobs cross-build what ea
 | Windows jobs sit *in progress* for hours, nothing fails, no log | no machine is answering `windows-desktop`. The runner is not running, and a runner that is not running produces no error anywhere: check Settings > Actions > Runners for `offline`, then whether the box is asleep, signed out, or was only ever a console window somebody closed |
 | the runner was there yesterday and is gone today | it was started by hand, not by the logon task. `doctor` says so, in the log of the last run that passed. `-Repair` |
 | every window assertion times out | the runner is a service: session 0 has no desktop |
-| `Windows would not give window N the keyboard`, and `LockApp` is named as the window that kept it | the session is locked. The tiers read titles fine and answer nothing, so the failures blame the app for a keystroke it never received. Sign in on the box, then re-run `setup-windows-runner.ps1 -Repair -KeepAwake`, which turns the three lock settings off for good |
+| `Windows would not give window N the keyboard`, and `LockApp` is named as the window that kept it | the session is locked. The tiers read titles fine and answer nothing, so the failures blame the app for a keystroke it never received. Sign in on the box, then re-run `setup-windows-runner.ps1 -Repair -KeepAwake`, which turns the lock settings off for good |
+| `Windows is drawing its sign-in screen over this session`, or `the lock screen still holds the foreground` | the same machine state, named by `doctor` before a tier runs rather than after: it now refuses the desktop up front instead of letting the assertions blame the app. Same remedy. If it recurs on a managed box, the inactivity policy (`InactivityTimeoutSecs`) is being pushed back and has to be cleared where it is set |
 | `already installed` | something the reconcile teardown could not remove: a stuck uninstaller, or an install under a different account |
 | `the daemon runs windows containers, not linux` | Docker Desktop is in Windows-container mode: one tray-menu click |
 | the app starts, no window, WebView2 reported absent | the installer's runtime bootstrapper did not complete; usually no outbound network |

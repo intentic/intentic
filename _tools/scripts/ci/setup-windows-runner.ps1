@@ -341,8 +341,7 @@ if ($KeepAwake) {
     # A SLEEPING RUNNER IS AN OFFLINE RUNNER, and from GitHub's side that is indistinguishable from a broken
     # one: jobs naming `windows-desktop` queue against a label nothing is answering, with no error anywhere to
     # read. Mains power only — on battery this machine is somebody's laptop and should still be allowed to
-    # sleep. The monitor is left alone deliberately: a blanked screen keeps every window mapped, so it costs the
-    # tiers nothing, and turning it off is not this script's business.
+    # sleep.
     Step 'stopping this machine sleeping on mains power...'
     & powercfg /change standby-timeout-ac 0 | Out-Null
     & powercfg /change hibernate-timeout-ac 0 | Out-Null
@@ -351,12 +350,18 @@ if ($KeepAwake) {
     # jobs, every window stays mapped, and the desktop tiers keep passing the assertions that only read titles —
     # but LockApp holds the foreground, so `focusWindow` cannot hand the keyboard to anything and every keystroke
     # the smoke tier sends lands nowhere. The run then reports the app failing to answer its own dialog. That is
-    # the 2026-09-05 and 2026-09-09 nightlies: six failed assertions each, all of them the lock screen.
+    # the 2026-09-05 and 2026-09-09 nightlies and the release between them: six failed assertions each, all of
+    # them the lock screen. The smoke `doctor` refuses such a desktop up front now; this is the switch that stops
+    # the machine reaching it.
     #
-    # Three separate things lock a Windows session and each has its own switch. The inactivity policy is the one
-    # that bit here (a machine nobody touches for its timeout), but a secure screensaver and require-password-on-
-    # wake reach the same state by other roads, and a box that is only ever driven by CI wants none of them.
+    # Four separate things lock a Windows session and each has its own switch. The inactivity policy is the one
+    # that bit here (a machine nobody touches for its timeout); a secure screensaver and require-password-on-wake
+    # reach the same state by other roads; and the display timeout is what fires first on an idle box, which is
+    # why the monitor is no longer left alone — this block used to say "a blanked screen keeps every window
+    # mapped, so it costs the tiers nothing", which is true about the windows and wrong about the desktop. A box
+    # that is only ever driven by CI wants none of the four.
     Step 'stopping this machine locking its session...'
+    & powercfg /change monitor-timeout-ac 0 | Out-Null
     $systemPolicy = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
     New-Item -Path $systemPolicy -Force -ErrorAction SilentlyContinue | Out-Null
     # 0 is "never", not "immediately" — the documented disabled value for the machine inactivity limit.
@@ -364,10 +369,20 @@ if ($KeepAwake) {
     $desktop = 'HKCU:\Control Panel\Desktop'
     Set-ItemProperty -Path $desktop -Name ScreenSaveActive -Value '0'
     Set-ItemProperty -Path $desktop -Name ScreenSaverIsSecure -Value '0'
+    Set-ItemProperty -Path $desktop -Name ScreenSaveTimeOut -Value '0'
     # CONSOLELOCK: "require a password on wakeup". Set under the active scheme on mains only, to match the sleep
     # settings above; the scheme has to be re-activated for a changed index to take effect.
     & powercfg /setacvalueindex SCHEME_CURRENT SUB_NONE CONSOLELOCK 0 | Out-Null
     & powercfg /setactive SCHEME_CURRENT | Out-Null
+
+    # READ BACK THE ONE WRITE THAT CAN BE REFUSED. The inactivity limit lives under a policy key, so on a domain
+    # or Intune-managed box that write can fail outright — and this file's 'Continue' preference would carry the
+    # error past into a summary claiming a machine that will not lock. Reported rather than retried: a policy
+    # pushed from outside is not this script's to win, and the box keeps locking until it is cleared there.
+    $inactivity = (Get-ItemProperty $systemPolicy -Name InactivityTimeoutSecs -ErrorAction SilentlyContinue).InactivityTimeoutSecs
+    if ($inactivity -gt 0) {
+        Step "NOTE: the machine inactivity limit is still $inactivity seconds, so this box will keep locking itself out from under the desktop tiers. It is managed from outside this script - local security policy, or whatever manages this machine - and has to be cleared there."
+    }
 }
 
 # ── one listener, and it is the task's ───────────────────────────────────────────────────────────────────────
@@ -452,6 +467,6 @@ Step "ready: listener in session $($sessions -join ', '), as $Account, with no w
 Step "it is checked every $WatchdogMinutes minutes ($repetition, read back off the registered task) and restarted if it has stopped — nothing to keep open, nothing to babysit."
 Step "it starts again at every sign-in$(if ($AutoLogon) { ', and this machine signs in on its own' } else { " — after an unattended reboot it waits for one (-AutoLogon changes that, at the cost of a stored password)" })."
 if (-not $KeepAwake) {
-    Step 'this machine may still SLEEP, and a sleeping runner is an offline runner as far as GitHub is concerned (-KeepAwake changes that, at the cost of a machine-wide power policy).'
+    Step 'this machine may still SLEEP or LOCK itself: a sleeping runner is an offline runner as far as GitHub is concerned, and a locked one takes jobs and fails every desktop assertion in them (-KeepAwake changes both, at the cost of a machine-wide power policy).'
 }
 Step 'the tiers reconcile everything else about this machine themselves; nothing here needs doing again.'

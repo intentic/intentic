@@ -2,7 +2,7 @@
 // reusable by a tier expecting yes and one expecting no (the doctor's "already installed?" wants undefined).
 
 import { errorMessage } from "@intentic/base/errors";
-import { desktop, type WindowInfo } from "@intentic/desktop-automation";
+import { desktop, windowsSession, type SessionState, type WindowInfo } from "@intentic/desktop-automation";
 import {
     asList,
     containerNames,
@@ -222,6 +222,28 @@ export const answerConfirm = async (
         }
     }
     return refusal;
+};
+
+/**
+ * Who holds the keyboard, and whether Windows' sign-in screen is over this desktop. Throws when the machine
+ * cannot be read at all, which is a different answer from "nothing holds it" and must not collapse into it.
+ */
+export const sessionState = async (): Promise<SessionState> => await windowsSession();
+
+/*
+ * Ends the program that DRAWS the lock screen, which is not the same as unlocking one.
+ *
+ * A session Windows has secured stays secured: LockApp is restarted and draws the lock screen again, and the
+ * credentials are still the only way in — so this is safe to try whenever the lock screen has the foreground,
+ * and it is not a way past a locked machine. What it does clear is the state this runner wedged in: a lock
+ * screen still holding the keyboard over a desktop that is signed in, where the window is invisible, no
+ * enumeration returns it, and every `focusWindow` is refused for as long as it sits there.
+ */
+export const dismissLockScreen = async (): Promise<void> => {
+    await powershell(
+        `$ErrorActionPreference='SilentlyContinue'
+         Stop-Process -Name 'LockApp' -Force`,
+    );
 };
 
 /** Fire a link at the OS the way a browser does, `Start-Process`, resolved through the registered handler. */

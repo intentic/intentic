@@ -40,6 +40,13 @@ tier that installed nothing. None of those are product bugs and all of them look
 It reports, and does not fix. A doctor that installed Docker or uninstalled a leftover app would be making the
 machine pass rather than telling you what it is.
 
+**A desktop nobody can type into is refused here**, and that check is the one that used to be a note. The
+foreground holder was looked up in the window list, which is the one place the lock screen does not appear: the
+line read `9 window(s) currently open, none holding the foreground`, the machine was called ready, and the
+install tier then failed six assertions that all described a product which had stopped answering deep links.
+The holder now comes from the OS, a session showing the sign-in screen fails with the remedy attached, and a
+holder no enumeration returns is said to be one instead of counting as nobody.
+
 ### `install`: does it install, launch, and answer a link
 
 No Docker and no credentials. The installer may fetch WebView2 on a bare machine; after installation, the tier
@@ -183,6 +190,13 @@ misconfigured".
   assertion after it waits out its deadline and the log blames the setup screen for a keystroke that was never
   delivered — and without the name, the remedy is a guess about a machine nobody is sitting at. The doctor
   prints the same thing before the tiers start, so a desktop that was already wrong is visible up front.
+- **The lock screen is the one holder nothing can take the keyboard from**, and it does not appear in any
+  window list, so it arrived as "none holding the foreground" on a machine where every focus was refused. Two
+  runs of a release died that way, four minutes in, with six failures each that read as the app's. `teardown`
+  now ends `LockApp` when it has the foreground — which clears a lock screen left holding it over a desktop
+  that is signed in, and cannot unlock a session Windows has secured, since that one is simply drawn again —
+  and the doctor refuses whatever is left. The machine-side fix is `setup-windows-runner.ps1 -KeepAwake`, which
+  stops the display timeout locking the session in the first place.
 - **A failure never stops the run.** One tier reports every assertion it could make, because the second failure
   is usually what explains the first: "no window" plus "the process exited" is a crash, "no window" alone is a
   hang.

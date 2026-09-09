@@ -1,6 +1,6 @@
-import { parseWindowsJson } from "./parse.js";
+import { focusRefusal, parseSessionJson, parseWindowsJson } from "./parse.js";
 import { run } from "./run.js";
-import { DesktopError, type WindowInfo } from "./types.js";
+import { DesktopError, type SessionState, type WindowInfo } from "./types.js";
 
 // Windows window listing and focus, via PowerShell calls into user32.
 // EnumWindows is the source of truth, not Get-Process.MainWindowHandle: a process can own several visible windows.
@@ -87,7 +87,50 @@ $callback = [IntenticWin+EnumWindowsProc] {
 ConvertTo-Json -Compress -Depth 3 -InputObject $items;
 `;
 
+// The foreground holder, and whether the sign-in screen is over this desktop. Both come from the OS in one
+// call, because the window list cannot answer either: a cloaked window and the lock screen's own are absent
+// from `EnumWindows` and can still hold the keyboard, which reads as "nothing has the foreground".
+const SESSION = `
+$fg = [IntenticWin]::GetForegroundWindow();
+$id = '0'; $title = ''; $app = '';
+if ($fg -ne [IntPtr]::Zero) {
+  $id = [string]($fg.ToInt64());
+  $text = [System.Text.StringBuilder]::new([IntenticWin]::GetWindowTextLength($fg) + 1);
+  [void][IntenticWin]::GetWindowText($fg, $text, $text.Capacity);
+  $title = $text.ToString();
+  [uint32]$owner = 0;
+  [void][IntenticWin]::GetWindowThreadProcessId($fg, [ref]$owner);
+  $program = (Get-Process -Id $owner -ErrorAction SilentlyContinue).ProcessName;
+  if ($program) { $app = $program };
+}
+$mine = (Get-Process -Id $PID).SessionId;
+$locked = @(Get-Process -Name 'LogonUI' -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $mine }).Count -gt 0;
+ConvertTo-Json -Compress -InputObject ([pscustomobject]@{ locked = $locked; id = $id; title = $title; app = $app });
+`;
+
 const powershell = (script: string): Promise<string> => run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `${SHIM}${script}`]);
+
+/**
+ * Whether this desktop can be driven at all, and by whom it is currently held. Windows-only, and named so:
+ * nothing on Linux answers the second half without asking the compositor, and no caller should pretend it does.
+ *
+ * LogonUI rather than a window title, because the lock screen has no window this can see. `Get-Process` lists
+ * SYSTEM's processes for an ordinary user (it is names and ids that need no privilege, not `Path`), LogonUI.exe
+ * is what Windows runs to draw the sign-in screen, and it exits when somebody signs in — so its presence is the
+ * state itself, not a symptom of it.
+ *
+ * Matched against THIS process's session id, because `Get-Process` is machine-wide: with fast user switching a
+ * second account sitting at its own sign-in screen has a LogonUI of its own, and that says nothing about this
+ * desktop. The one that locks this session runs in it.
+ */
+export const windowsSession = async (): Promise<SessionState> => {
+    const answer = (await powershell(SESSION)).trim();
+    const state = parseSessionJson(answer);
+    if (state === undefined) {
+        throw new DesktopError(`Could not read which window holds this desktop's keyboard: ${answer === "" ? "PowerShell said nothing" : answer}`);
+    }
+    return state;
+};
 
 export const windowsApps = {
     windows: async (): Promise<WindowInfo[]> => parseWindowsJson((await powershell(LIST)).trim()),
@@ -128,26 +171,16 @@ export const windowsApps = {
              } finally {
                if ($armed) { [void][IntenticWin]::WriteSetting(${SPI_SET_FOREGROUND_LOCK_TIMEOUT}, 0, [IntPtr]::new([int64]$lock), ${SPIF_SENDCHANGE}) };
              }
-             $fg = [IntenticWin]::GetForegroundWindow();
-             $holder = 'nothing holds the foreground';
-             if ($fg -ne [IntPtr]::Zero) {
-               $held = [System.Text.StringBuilder]::new([IntenticWin]::GetWindowTextLength($fg) + 1);
-               [void][IntenticWin]::GetWindowText($fg, $held, $held.Capacity);
-               [uint32]$owner = 0;
-               [void][IntenticWin]::GetWindowThreadProcessId($fg, [ref]$owner);
-               $program = (Get-Process -Id $owner -ErrorAction SilentlyContinue).ProcessName;
-               $holder = $held.ToString() + ' [' + $program + ']';
-             }
-             if ($fg -eq $h) { Write-Output 'focused' } else { Write-Output ('holder=' + $holder) }`,
+             if ([IntenticWin]::GetForegroundWindow() -eq $h) { Write-Output 'focused' } else { Write-Output 'refused' }`,
         );
-        const answer = settled.trim();
-        if (answer !== `focused`) {
-            const holder = answer.startsWith(`holder=`) ? answer.slice(`holder=`.length) : `nothing this could read`;
-            throw new DesktopError(
-                `Windows would not give window ${id} the keyboard after ${FOCUS_ATTEMPTS} attempts: it is gone, or ${holder} would not let go ` +
-                    `(a UAC prompt, a full-screen app, or a locked session).`,
-            );
+        if (settled.trim() === `focused`) {
+            return;
         }
+        // Asked as a second call rather than inside the script above, so there is one place that answers "who has
+        // the keyboard, and is this desktop drivable at all" — and the refusal states what the machine said
+        // rather than listing what it might have been. Only the failure path pays for the extra call.
+        const state = await windowsSession().catch((): SessionState | undefined => undefined);
+        throw new DesktopError(focusRefusal(id, FOCUS_ATTEMPTS, state));
     },
 
     // Start-Process resolves an executable, document, or URL through the shell's own file associations.
