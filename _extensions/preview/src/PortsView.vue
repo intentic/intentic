@@ -78,7 +78,7 @@ const openTerminal = (session: string): void => host().terminal.open(session);
             </div>
 
             <div v-else-if="!isLoading && workspacePorts.length === 0" class="flex flex-col items-center gap-2 py-10 text-center">
-                <Icon name="desktop" class="text-2xl text-subtle" />
+                <Icon name="ports" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">Nothing of yours is listening yet.</p>
                 <p class="text-2xs text-subtle">Start a dev server in a terminal and it appears here.</p>
             </div>

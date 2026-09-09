@@ -12,14 +12,12 @@ import SharePreview from "./SharePreview.vue";
 const { entry, busy = false } = defineProps<{ entry: PortSummary; busy?: boolean }>();
 const emit = defineEmits<{ preview: []; stop: []; terminal: [session: string] }>();
 
-/* WHOSE IS IT, as a glyph: the fastest form of the answer, and the one that survives a reader skimming the
- * list instead of reading it. The vocabulary is the app's own: an agent is sparkles wherever it appears, a
- * terminal is a terminal. */
+// Origin marks must match the corresponding section's icon.
 const ORIGIN_ICONS = {
     terminal: `terminal`,
-    agent: `sparkles`,
+    agent: `robot`,
     panel: `play`,
-    extension: `wrench`,
+    extension: `extensions`,
     container: `box`,
     sandbox: `server`,
     unknown: `question-circle`,

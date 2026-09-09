@@ -77,9 +77,8 @@ export const NAVIGATION_GLYPHS = {
     vpn: {
         outline: `m12 3 8 3v7l-3 5-5 3-5-3-3-5V6Z M9 12V9a3 3 0 0 1 6 0v3 M8 12h8v5H8Z`,
     },
-    // A route through an open gateway: something in the sandbox is publicly reachable.
     ports: {
-        outline: `M3 21V7h3V4h9v3h3 M7 21V9h7v3 M11 16h11 M18 12l4 4-4 4`,
+        outline: `M5 3h14l2 2v12h-5v4H8v-4H3V5Z M8 7v3 M12 7v3 M16 7v3`,
     },
     // The familiar add action needs only a plus.
     plus: {
