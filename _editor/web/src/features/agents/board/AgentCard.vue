@@ -443,7 +443,7 @@ const grab = (event: PointerEvent): void => {
             <span
                 v-tooltip.top="tileHint"
                 class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
-                :class="context === undefined ? 'ring-[1.5px] ring-inset ring-content/12' : ''"
+                :class="context === undefined ? 'ring-(length:--ring-track) ring-inset ring-content/12' : ''"
             >
                 <ProgressRing v-if="context !== undefined" :value="context" :size="28" :stroke="1.5" class="absolute inset-0" :class="ringTone" />
                 <IdentityTile :title="agent.title" :provider="agent.provider" class="h-5.5 w-5.5 text-xs" />

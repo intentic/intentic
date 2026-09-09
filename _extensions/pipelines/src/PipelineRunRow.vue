@@ -371,7 +371,7 @@ const openStartOver = (): void => {
                         <a
                             v-if="fixState !== undefined && !fixState.retry"
                             v-bind="fixState.link"
-                            class="touch-target inline-flex shrink-0 items-center gap-1.5 rounded border px-2 py-1 text-xs font-medium"
+                            class="ui-chip shrink-0 rounded px-2 py-1 text-xs font-medium"
                             :class="[fixState.ink, fixState.chip]"
                             v-tooltip.top="fixDetail"
                             :aria-label="fixAria"

@@ -129,6 +129,16 @@
      * telling us. This way the number lives here, once, and the expansion stays Tailwind's problem. */
     --ring-hairline: 0.5px;
 
+    /* THE EMPTY TRACK. ProgressRing's own track weight, restated as a painted ring for the marks on the agent
+     * board that have no arc to draw — a card with no context, a held wake, a workflow run. The two have to be
+     * the same number or a ringed card and a bare one beside it read as two sizes of mark in one lane, which is
+     * the bug AgentCard's comment argues at length; keep this in step with ProgressRing's `stroke` prop where
+     * those call sites pass it (`:stroke="1.5"`).
+     *
+     * SPELLED AT THE CALL SITE AS `ring-(length:--ring-track)`, for the reason --ring-hairline gives above:
+     * Tailwind 4 has no `--ring-*` width namespace, so the token cannot become a `ring-track` utility. */
+    --ring-track: 1.5px;
+
     /* Radius scale. */
     /* Chart and table legend swatches — smaller than xs so a colour chip reads square without a full corner. */
     --radius-2xs: 0.125rem;

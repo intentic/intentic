@@ -139,9 +139,12 @@ const openStartOver = (): void => {
                  nothing was learned about the code either way, so an agent sent after it would be hunting a bug
                  that isn't there. -->
             <template v-if="pushFlow.proposedFix.value && attempt && look && inPlay">
+                <!-- The kit's chip, which is what this is: state, not rank (ui.ts's vocabulary). It owns the box, the
+                     thumb target, the focus ring and the disabled answer; the stance owns the ink and the rim, and
+                     those land in the utilities layer, above the recipe's, so they still win. -->
                 <button
                     type="button"
-                    class="touch-target inline-flex shrink-0 items-center gap-1.5 rounded border px-2 py-1 text-xs font-medium"
+                    class="ui-chip shrink-0 rounded px-2 py-1 text-xs font-medium"
                     :class="[look.ink, look.chip]"
                     v-tooltip.top="attempt.stance.hint"
                     :aria-label="`Fix agent: ${attempt.stance.label.toLowerCase()} — open the conversation`"

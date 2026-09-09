@@ -14,6 +14,7 @@ import { createApprovalsRoutes } from "./approvals/approvals.routes.js";
 import { createExtensionsRoutes } from "./extensions/extensions.routes.js";
 import { createEndpointsRoutes } from "./endpoints/endpoints.routes.js";
 import { createGitRoutes } from "./git/git.routes.js";
+import { createDeviceSystemRoutes } from "./hosts/devices.routes.js";
 import { createAccountsRoutes } from "./agent/routes/accounts.routes.js";
 import { createHistoryRoutes } from "./history/history.routes.js";
 import { createIntenticRoutes } from "./intentic/intentic.routes.js";
@@ -76,7 +77,9 @@ export const createRouter = (services: Services) => ({
     push: createPushRoutes(services),
     translator: createTranslatorRoutes(services),
     secrets: createSecretsRoutes(services),
-    system: createSystemRoutes(services),
+    // The device procedures live in hosts/devices.routes.ts, beside the devices they act on; merged here, above both,
+    // so neither subsystem has to import the other's values.
+    system: { ...createSystemRoutes(services), ...createDeviceSystemRoutes(services) },
     usage: createUsageRoutes(services),
     vpn: createVpnRoutes(services),
     exit: createExitRoutes(services),

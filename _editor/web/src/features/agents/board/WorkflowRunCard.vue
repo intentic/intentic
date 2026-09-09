@@ -76,7 +76,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 It wears the empty rim for that reason: without it a run's bare disc reads a size smaller than the
                 ringed cards beside it. The inset ring is ProgressRing's own track, restated (AgentCard argues it).
             -->
-            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-[1.5px] ring-inset ring-content/12">
+            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-(length:--ring-track) ring-inset ring-content/12">
                 <span class="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
                     <Icon name="sitemap" class="text-2xs text-link" />
                 </span>
