@@ -33,6 +33,23 @@ it(`animates a running icon inside the SVG without a CSS animation class`, async
     expect(host.querySelector(`.animate-spin`)).toBeNull();
 });
 
+// The spinner is drawn for motion, not for silhouette: a still ring behind the arc, so the shape the eye holds onto
+// rasterises once instead of being rebuilt from different sub-pixels on every frame. That only works while the track
+// stays OUT of the group the animation turns, which is what this pins.
+it(`turns the spinner's arc over a track that holds still`, async () => {
+    const host = await spinner(true);
+    const turning = host.querySelector(`animateTransform`)!.parentElement!;
+
+    expect(turning.querySelector(`path`)?.getAttribute(`d`)).toBe(ICONS.spinner.outline);
+    expect(turning.querySelector(`circle`)).toBeNull();
+    expect(host.querySelector(`svg > g > circle`)).not.toBeNull();
+    // Round ends and a stroke heavier than the pack's 2: at rail size a square-ended hairline is caps and grey.
+    expect({ cap: turning.getAttribute(`stroke-linecap`), width: turning.getAttribute(`stroke-width`) }).toEqual({
+        cap: `round`,
+        width: `2.5`,
+    });
+});
+
 it(`leaves an ordinary icon still`, async () => {
     const host = await spinner(false);
 

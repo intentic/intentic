@@ -49,7 +49,7 @@ it(`draws an indeterminate checkbox with the native minus`, async () => {
 it(`uses the native spinner for a library button's loading fallback`, async () => {
     const host = await mount(Button, { label: `Save`, loading: true });
     expectDrawing(host, `spinner`);
-    expect(host.querySelector(`animateTransform`)?.getAttribute(`dur`)).toBe(`1s`);
+    expect(host.querySelector(`animateTransform`)?.getAttribute(`dur`)).toBe(`1.1s`);
     expect(host.querySelector(`button`)?.disabled).toBe(true);
 });
 

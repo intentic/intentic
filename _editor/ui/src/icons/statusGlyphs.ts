@@ -14,7 +14,11 @@ export const STATUS_GLYPHS = {
     "plus-circle": { outline: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M12 7v10 M7 12h10` },
     square: { outline: `M3 3h18v18H3Z` },
     stop: { outline: ``, solid: `M5 4h14l1 1v14l-1 1H5l-1-1V5Z` },
-    spinner: { outline: `M12 3a9 9 0 1 1-9 9` },
+    // The one glyph that turns, so it is drawn for motion rather than for silhouette: a 140° arc on the same 20-unit
+    // outer circle as `circle`, ridden over a still track and thickened by Icon (see Icon.vue). A three-quarter
+    // hairline — what this was — is a shape whose every pixel is re-antialiased on every frame, which at 11px reads as
+    // a stutter rather than a turn.
+    spinner: { outline: `M12 3.25a8.75 8.75 0 0 1 5.624 15.453` },
     star: { outline: `m12 2 3 7 7 1-5 5 1 7-6-4-6 4 1-7-5-5 7-1Z` },
     "star-fill": { outline: ``, solid: `m12 2 3 7 7 1-5 5 1 7-6-4-6 4 1-7-5-5 7-1Z` },
     bolt: { outline: `M14 2 4 14h7l-1 8 10-12h-7Z` },

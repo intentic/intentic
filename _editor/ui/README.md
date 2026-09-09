@@ -26,7 +26,10 @@ section-to-icon mapping. The source drawings are grouped by navigation, actions,
 there is no icon package, generated collection, registration step or icon API request. [glyph.ts](src/icons/glyph.ts)
 serializes the same drawings for Mermaid's `intentic:name` icons. Vendor marks retain their recognisable
 artwork, stored locally with their [license](src/icons/REMIX-LICENSE.txt). New icons should express their purpose with
-a distinct silhouette, without adding decoration inside a small control. Row lead marks have a 16px floor
+a distinct silhouette, without adding decoration inside a small control. `spinner` is the pack's one exception, and it
+is a deliberate one: `Icon` draws it with round ends, a heavier stroke and a still track behind the turning arc,
+because it is the only glyph that MOVES, and a square-ended hairline that re-antialiases its whole shape on every
+frame reads as a stutter by the time it is the 12px mark on a rail tile. Row lead marks have a 16px floor
 and use the muted text colour, with the selected navigation mark taking the active accent. `Row` and
 `DisclosureRow` pass `iconClass` alongside `mark` to custom lead slots, so selection checkboxes and icons
 can share a column without the icons losing their tier's size.
