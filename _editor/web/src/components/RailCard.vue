@@ -4,11 +4,12 @@
     border, selection ring) is the shared `.session-card` class in styles.css.
 -->
 <script setup lang="ts">
-import type { AgentProvider, MatchSnippet } from "@intentic/sandbox-contract";
-import type { IconName } from "@intentic/ui";
+import type { AgentProvider, MatchSnippet, UnfinishedWork } from "@intentic/sandbox-contract";
+import { type IconName, ProgressRing } from "@intentic/ui";
 import { computed } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
 import { formatElapsed } from "../features/agents/fleet/agentStatus";
+import StatusGlyph from "../features/agents/fleet/StatusGlyph.vue";
 import { markSegments } from "../features/agents/review/markSegments";
 import IdentityTile from "../features/capabilities/connect/IdentityTile.vue";
 import MatchLine from "./MatchLine.vue";
@@ -23,6 +24,12 @@ const props = defineProps<{
     icon?: IconName;
     // Spread onto the Icon via v-bind; the host derives it once (agentStatusMeta) rather than field by field.
     status?: { name: IconName; spin?: boolean; class: string; "aria-label"?: string };
+    // Percent of the model's context window this session has spent, drawn as the identity mark's rim. Undefined
+    // for a row with nothing measured (and for every row that isn't a session), which wears the empty rim instead.
+    context?: number;
+    // What the last turn left open, as the daemon measured it. Present only for a card at rest; it puts the amber
+    // dot on the status glyph, the one thing a resting status cannot say about itself.
+    unfinished?: UnfinishedWork;
     live?: { icon: IconName; text: string; since?: number };
     now?: number;
     // When true, the live readout trails the facts line instead of taking its own row, for narrow rails.
@@ -44,6 +51,23 @@ const props = defineProps<{
 }>();
 
 const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, props.matchCase === true));
+// The rim's ink, on the board's rule (AgentCard.ringTone): amber past 80%, where a compaction is close and the
+// session is about to start forgetting; the accent below it. A `quiet` row is a destination rather than an open
+// session, so its rim states the number without arguing for it.
+const ringTone = computed(() => {
+    if (props.quiet === true) {
+        return `text-subtle`;
+    }
+    return (props.context ?? 0) >= 80 ? `text-warning` : `text-primary-500`;
+});
+// StatusGlyph's shape from this card's own: the two describe the same thing in different words (`name`/`icon`,
+// `aria-label`/`label`) because `status` is spread straight onto an Icon by every caller that has no unfinished
+// work to report. Adapted here rather than at each call site, so the callers keep one prop shape.
+const statusMeta = computed(() =>
+    props.status === undefined
+        ? undefined
+        : { icon: props.status.name, spin: props.status.spin, label: props.status[`aria-label`] ?? ``, class: props.status.class },
+);
 </script>
 
 <template>
@@ -62,12 +86,31 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
         <span class="flex min-w-0 flex-1 flex-col gap-1.5">
             <span class="flex w-full min-w-0 items-start gap-2">
                 <!--
-                    Sized to the title's first line, so a two-line title hangs off the tile rather than wrapping around
-                    it.
+                    THE MARK, on the board's construction at the rail's scale (AgentCard argues the proportion at
+                    length): a disc inside a rim, the rim carrying how much context the session has spent.
+                    24/1.5/18 here against the board's 28/1.5/22 — the ratio is what carries over, not the pixels. A
+                    rail row is denser than a board card by design and its tile has always run a size below, so
+                    matching the board's 28 would cost 10px of height on every row in a list read by the dozen.
+                    The rim is drawn WHETHER OR NOT there is context to draw: a bare disc beside a ringed one reads as
+                    two sizes of mark in one list even when the discs are identical, so only the ARC is conditional.
+                    CENTRED ON THE TITLE'S FIRST LINE, which is what `-mt-1` buys and why it is not a fudge: the row
+                    is `items-start`, so a 24px mark top-aligned against a 16px line hangs 4px low — measured, not
+                    guessed — and the eye checks a mark against the words beside it, not against the box. Pulling it
+                    up by half the difference lands its centre on the line's centre, and a title that wraps to two
+                    lines still hangs off it rather than wrapping around it. It eats 4px of the card's 12px top
+                    padding and nothing else.
                 -->
-                <IdentityTile v-if="provider !== undefined" :title="title" :provider="provider" class="-mt-px h-4.5 w-4.5 text-2xs" />
-                <span v-else-if="icon !== undefined" class="flex h-4 shrink-0 items-center">
-                    <Icon :name="icon" class="text-2xs" :class="quiet ? 'text-subtle' : 'text-link'" />
+                <span
+                    v-if="provider !== undefined || icon !== undefined"
+                    class="relative -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+                    :class="context === undefined ? 'ring-[1.5px] ring-inset ring-content/12' : ''"
+                >
+                    <ProgressRing v-if="context !== undefined" :value="context" :size="24" :stroke="1.5" class="absolute inset-0" :class="ringTone" />
+                    <IdentityTile v-if="provider !== undefined" :title="title" :provider="provider" class="h-4.5 w-4.5 text-2xs" />
+                    <!-- A row that is not a session (a workflow run, a search hit) wears its glyph on the same disc. -->
+                    <span v-else class="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
+                        <Icon :name="icon!" class="text-2xs" :class="quiet ? 'text-subtle' : 'text-link'" />
+                    </span>
                 </span>
                 <!-- Clamped to two lines; most titles fit whole at this width. -->
                 <span
@@ -84,7 +127,16 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
                     <span v-if="peek" class="sr-only">, temporary</span>
                 </span>
                 <slot name="trailing" />
-                <span v-if="status !== undefined" class="flex h-4 shrink-0 items-center"><Icon v-bind="status" /></span>
+                <!--
+                    StatusGlyph only when there is unfinished work to mark: it is the same glyph either way, but it
+                    carries the amber dot and the sentence explaining it, which is the one thing a resting status
+                    cannot say about itself. Every other row keeps the bare Icon it has always drawn — the glyph is
+                    identical, so no row changes appearance for gaining the capability.
+                -->
+                <span v-if="status !== undefined" class="flex h-4 shrink-0 items-center">
+                    <StatusGlyph v-if="unfinished !== undefined && statusMeta !== undefined" :meta="statusMeta" :unfinished="unfinished" :now="now" />
+                    <Icon v-else v-bind="status" />
+                </span>
             </span>
 
             <!-- Muted by default; these are reference numbers, not events, so colour here is reserved for what matters. -->

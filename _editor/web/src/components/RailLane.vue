@@ -19,7 +19,7 @@ defineProps<{
 <template>
     <section class="lane flex min-w-0 flex-col rounded-xl">
         <!-- THE BOARD'S OWN LANE MEASUREMENTS, to the pixel: header `h-8 px-3`, cards inset `px-2` from the
-             slab's edge with `gap-2` between them (the <section> in AgentsView). They were a few pixels tighter
+             slab's edge with `gap-2.5` between them (the <section> in AgentsView). They were a few pixels tighter
              here, and that is exactly the drift the two lists cannot afford: a rail row and a board card are one
              card in two frames, and a card sitting nearer its lane's edge in one of them reads as a different
              component rather than as the same one at another width.
@@ -32,14 +32,21 @@ defineProps<{
             <span v-if="dot !== undefined" class="h-2 w-2 shrink-0 rounded-full" :class="dot"></span>
             <Icon v-else-if="icon !== undefined" :name="icon" class="shrink-0 text-2xs text-subtle" />
             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ label }}</span>
-            <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ count }}</span>
+            <!-- THE NUMBER WITHOUT THE PILL. It stays because it is the only thing on screen that can say what is
+                 NOT on screen — the Finished lane windows itself, so "12" above six rows is the fact the rows
+                 cannot state, and under a filter it reads "3 of 12". The `bg-overlay` capsule around it was doing
+                 none of that work: three filled chips down a narrow rail read as controls rather than as counts,
+                 and they were the heaviest thing in a header whose own label is 11px muted uppercase. -->
+            <span data-lane-count class="text-2xs tabular-nums text-subtle">{{ count }}</span>
             <span class="flex-1"></span>
             <!-- The lane's own bulk act, where the lane is the target: "Clear". -->
             <slot name="actions" />
         </header>
         <!-- The lane's contents, inset and spaced by the LANE rather than by each caller: three lists picking
-             their own padding is how the rail and the board came apart in the first place. -->
-        <div class="flex min-w-0 flex-col gap-2 px-2 pb-2">
+             their own padding is how the rail and the board came apart in the first place.
+             `gap-2.5` is the board's actual figure, and this had drifted to `gap-2` while the comment above still
+             claimed they matched — which is the drift those comments exist to prevent, arriving as 2px. -->
+        <div class="flex min-w-0 flex-col gap-2.5 px-2 pb-2">
             <slot />
         </div>
     </section>

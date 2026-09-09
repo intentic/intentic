@@ -12,6 +12,7 @@ import {
     activityLine,
     agentStatusMeta,
     attentionReason,
+    contextPct,
     type FleetLane,
     turnInFlight,
     unreadBadge,
@@ -242,6 +243,12 @@ const statusOf = (entry: OpenChat): { name: IconName; spin?: boolean; class: str
     const icon = statusIcon(status);
     return { name: icon.name, spin: icon.spin, class: `text-xs ${icon.class}`, "aria-label": statusLabel(status) };
 };
+
+// How much of the model's context window this chat has spent, for the mark's rim. Only the fleet agent knows it:
+// a conversation this window holds but the roster has not filed has nothing measured, and its mark wears the empty
+// rim rather than a guess.
+const contextOf = (entry: OpenChat): number | undefined =>
+    entry.agent === undefined ? undefined : contextPct(entry.agent.contextTokens, entry.agent.contextWindow);
 
 // Prefers the fleet agent, falls back to the conversation: an unresolved agent (archived, unregistered) still
 // has a conversation with real facts. Omits spend, diff and turn count on purpose; those belong to the board.
@@ -582,7 +589,12 @@ const keepTab = (event: Event, id: string): void => {
             this file does, so the host focuses a chat the same way from either list.
         -->
         <ChatPersonaRail v-if="grouping === `persona`" @select="onPersonaSelect" />
-        <div v-else ref="scroller" class="scrollbar-thin flex min-h-0 flex-1 flex-col items-stretch gap-3 overflow-y-auto">
+        <!--
+            LANE BREAKS OUTRANK CARD BREAKS, and at 12px against 10px they barely did: the eye groups by proximity,
+            so two gaps that close together read as one flat list with headings dropped into it rather than as three
+            groups. 16px against 10px is the smallest ratio that separates them.
+        -->
+        <div v-else ref="scroller" class="scrollbar-thin flex min-h-0 flex-1 flex-col items-stretch gap-4 overflow-y-auto">
             <!--
                 An empty lane isn't drawn at all (see occupiedLanes); one emptied only by the filter keeps its header, so the
                 list doesn't reshuffle under the cursor mid-keystroke.
@@ -613,7 +625,7 @@ const keepTab = (event: Event, id: string): void => {
                     it the same way the board does (openRunInChat) — live sessions into the panes, or the diagram when nothing
                     is live.
                 -->
-                <div v-if="runsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-2">
+                <div v-if="runsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-2.5">
                     <RailCard
                         v-for="run in runsIn(lane.key)"
                         :key="run.runId"
@@ -636,7 +648,7 @@ const keepTab = (event: Event, id: string): void => {
                     </RailCard>
                 </div>
                 <p v-if="cardsIn(lane.key).length === 0 && runsIn(lane.key).length === 0" class="px-1 text-2xs text-subtle">No matches</p>
-                <div v-else-if="cardsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-2">
+                <div v-else-if="cardsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-2.5">
                     <template v-for="{ conversation: c, agent } in cardsIn(lane.key)" :key="c.conversationId">
                         <!--
                             Replaces the card rather than nesting a field in it (a button can't host a usable input). Enter/blur commit,
@@ -663,6 +675,8 @@ const keepTab = (event: Event, id: string): void => {
                             :match-case="matchCase"
                             :provider="agent?.provider ?? c.provider.value"
                             :status="statusOf({ conversation: c, agent })"
+                            :context="contextOf({ conversation: c, agent })"
+                            :unfinished="agent?.unfinished"
                             :live="liveOf({ conversation: c, agent })"
                             :now="now"
                             tight
@@ -786,7 +800,7 @@ const keepTab = (event: Event, id: string): void => {
                 conversation, same as History. Same card shape as the lanes above, just muted.
             -->
             <RailLane v-if="filtering && notOpenCount > 0" label="Not open" icon="search" :count="notOpenCount">
-                <div class="flex min-w-0 flex-col gap-2">
+                <div class="flex min-w-0 flex-col gap-2.5">
                     <!-- Same identity tile as the lanes above; the category tint still signals what kind of work this is. -->
                     <RailCard
                         v-for="agent in notOpen"

@@ -1076,7 +1076,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                 <Icon name="arrow-left" class="text-2xs" />
                             </button>
                             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">Archived</span>
-                            <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ laneCount("finished") }}</span>
+                            <span data-lane-count class="text-2xs tabular-nums text-subtle">{{ laneCount("finished") }}</span>
                             <Icon v-if="archiveLoading" name="spinner" spin class="text-2xs text-muted" />
                         </template>
                         <template v-else>
@@ -1085,8 +1085,17 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             <!--
                                 "3 of 12" while filtering: which lane a match sits in is half the answer, so lanes stay
                                 and report their own share on screen.
+                                THE NUMBER WITHOUT THE PILL, and RailLane says the same in the rail so the two frames
+                                keep one header: the count is load-bearing (a windowed Finished lane can hold forty
+                                behind six rows) but the `bg-overlay` capsule around it was reading as a control, and
+                                it was the heaviest mark in a header whose own label is 11px muted uppercase.
                             -->
-                            <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ laneCount(lane.key) }}</span>
+                            <!--
+                                `data-lane-count` is the count's own hook, so a test asks for the count rather than
+                                for whatever class it happens to wear: archivePaging.test.ts read `span.rounded-full`
+                                and started matching the lane's DOT the moment the pill came off.
+                            -->
+                            <span data-lane-count class="text-2xs tabular-nums text-subtle">{{ laneCount(lane.key) }}</span>
                         </template>
                         <span class="flex-1"></span>
                         <template v-if="lane.key === 'finished' && !archiveOpen">
@@ -1322,7 +1331,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     <div class="flex items-center gap-2 px-1">
                         <Icon name="box" class="shrink-0 text-2xs text-subtle" />
                         <span class="text-2xs font-semibold uppercase tracking-wide text-muted">In the archive</span>
-                        <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ archivedHits.length }}</span>
+                        <span class="text-2xs tabular-nums text-subtle">{{ archivedHits.length }}</span>
                     </div>
                     <!--
                         Real cards, not a stripped list: an archived agent keeps its branch, diff and transcript, so
@@ -1353,7 +1362,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     <div class="flex items-center gap-2 px-1">
                         <Icon name="history" class="shrink-0 text-2xs text-subtle" />
                         <span class="text-2xs font-semibold uppercase tracking-wide text-muted">In earlier chats</span>
-                        <span class="rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ sessionMatches.length }}</span>
+                        <span class="text-2xs tabular-nums text-subtle">{{ sessionMatches.length }}</span>
                     </div>
                     <!--
                         Conversations no agent entry owns; with no card to draw, they read as history rows and open as

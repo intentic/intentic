@@ -95,7 +95,10 @@ const archiveCards = (el: HTMLElement): string[] =>
     );
 // The lane's tail: a direct child of the section, unlike the header's own buttons. Absent once the whole pile is drawn.
 const tailRow = (el: HTMLElement): HTMLElement | null => el.querySelectorAll(`section`)[2]!.querySelector(`:scope > button`);
-const laneCount = (el: HTMLElement): string => el.querySelectorAll(`section`)[2]!.querySelector(`span.rounded-full`)!.textContent!.trim();
+// Asks for the count by its own hook rather than by what it is wearing: this read `span.rounded-full`, which was the
+// count's pill until the pill came off, and then silently matched the lane's 2px DOT instead — a passing selector
+// pointed at the wrong element, reporting `''` where a number belonged.
+const laneCount = (el: HTMLElement): string => el.querySelectorAll(`section`)[2]!.querySelector(`[data-lane-count]`)!.textContent!.trim();
 
 const openArchive = async (el: HTMLElement): Promise<void> => {
     el.querySelector<HTMLElement>(`[aria-label^="Open the archive"]`)!.click();
