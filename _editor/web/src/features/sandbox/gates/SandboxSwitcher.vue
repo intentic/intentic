@@ -9,6 +9,7 @@ import {
     commandLang,
     ConfirmDialog,
     type IconName,
+    Notice,
     OS_OPTIONS,
     SegmentedControl,
     useOsPreference,
@@ -26,6 +27,7 @@ import { connectedSandboxes, unfinishedSandboxes } from "../live/roster";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../client/useSandbox";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
+import { manageDeviceSandbox, useHostRunning } from "../devices/useDevices";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
 
 // Rail control to switch between the user's sandboxes or add another; selecting one re-points every sandbox-backed
@@ -171,17 +173,43 @@ const cleanupCommand = computed(() => {
     return cmdOs.value === `windows` ? psCommand(`cleanupPs1`, ``, `-Slug ${slug} -Yes`) : bashCommand(`cleanup`, ``, `${slug} -y`);
 });
 
+// The machine running this sandbox, when it is one of the owner's connected devices: then deleting the container
+// out there is a checkbox here, and the cleanup command above is only for a machine nothing can reach.
+const cleanupHost = useHostRunning(() => cleanupSlug.value);
+const alsoDeleteThere = ref(false);
+const deletingThere = ref(false);
+const thereFailed = ref<string | undefined>(undefined);
+
 const askRemove = (option: SandboxSummary): void => {
     open.value = false;
+    // Never carried over from the last dialog: this box destroys files, so it starts unticked every time.
+    alsoDeleteThere.value = false;
+    thereFailed.value = undefined;
     pending.value = option;
 };
 
 const confirmRemove = async (): Promise<void> => {
     const target = pending.value;
-    pending.value = undefined;
     if (target === undefined) {
         return;
     }
+    const slug = cleanupSlug.value;
+    const hostId = cleanupHost.value;
+    // The device first, and the dialog stays open while it runs: a failure out there leaves the account row in place
+    // to retry from, rather than dropping the only handle on a container nobody deleted.
+    if (alsoDeleteThere.value && hostId !== undefined && slug !== undefined) {
+        deletingThere.value = true;
+        thereFailed.value = undefined;
+        try {
+            await manageDeviceSandbox(hostId, slug, `remove`);
+        } catch (error) {
+            thereFailed.value = error instanceof Error ? error.message : String(error);
+            return;
+        } finally {
+            deletingThere.value = false;
+        }
+    }
+    pending.value = undefined;
     const removal = sandbox.remove(target.id);
     // remove() drops the row synchronously before its first await, so the empty check is valid here.
     if (sandbox.sandboxes.value.length === 0) {
@@ -385,6 +413,7 @@ const confirmRemove = async (): Promise<void> => {
         :header="pending?.role === 'owner' ? 'Remove from account?' : 'Leave sandbox?'"
         :confirm-label="pending?.role === 'owner' ? 'Remove' : 'Leave'"
         confirm-icon="trash"
+        :loading="deletingThere"
         @cancel="pending = undefined"
         @confirm="confirmRemove"
     >
@@ -399,9 +428,26 @@ const confirmRemove = async (): Promise<void> => {
         </p>
         <!-- The hosted lane is the only removal that destroys a machine; no cleanup command, since nothing else exists. -->
         <template v-if="pending?.role === 'owner' && pending.hosted === null && cleanupCommand !== undefined">
-            <p class="mt-3 text-sm text-muted">To also remove it from the machine hosting it: including its files, run there:</p>
-            <SegmentedControl class="mt-2" v-model="cmdOs" :options="OS_OPTIONS" />
-            <Code class="mt-1.5" :code="cleanupCommand" :lang="commandLang(cmdOs)" label="Cleanup command" :wrap="true" />
+            <!--
+                The machine is one of the owner's connected devices, so this is a tick box rather than a command: the
+                same removal the Devices tab's own button runs, on the machine that holds the container.
+            -->
+            <template v-if="cleanupHost !== undefined">
+                <label class="mt-3 flex items-start gap-2 text-sm text-muted">
+                    <!-- Same plain box the extension cards use; the kit has no checkbox component, on purpose. -->
+                    <input v-model="alsoDeleteThere" type="checkbox" :disabled="deletingThere" class="mt-0.5" />
+                    <span>
+                        Also delete it from <span class="font-medium text-content">{{ cleanupHost }}</span> — the container, its files and its
+                        history there are gone for good.
+                    </span>
+                </label>
+                <Notice v-if="thereFailed" tone="danger" class="mt-2 text-2xs">{{ thereFailed }}</Notice>
+            </template>
+            <template v-else>
+                <p class="mt-3 text-sm text-muted">To also remove it from the machine hosting it: including its files, run there:</p>
+                <SegmentedControl class="mt-2" v-model="cmdOs" :options="OS_OPTIONS" />
+                <Code class="mt-1.5" :code="cleanupCommand" :lang="commandLang(cmdOs)" label="Cleanup command" :wrap="true" />
+            </template>
         </template>
     </ConfirmDialog>
 </template>

@@ -985,6 +985,15 @@ pub async fn machine_report() -> CommandResult<Option<String>> {
         .map_err(|error| error.to_string())?
 }
 
+/// Restart this device's agent loop from the window, instead of naming the two commands for someone to type in a
+/// terminal on the computer this app is already running on.
+#[tauri::command]
+pub async fn machine_restart() -> CommandResult<String> {
+    tauri::async_runtime::spawn_blocking(scripts::agent_restart)
+        .await
+        .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub async fn sandbox_logs(slug: String, tail: u32) -> CommandResult<String> {
     tauri::async_runtime::spawn_blocking(move || {

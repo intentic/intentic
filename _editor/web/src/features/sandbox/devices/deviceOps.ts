@@ -1,4 +1,4 @@
-import type { DeviceAgentOp, DeviceCommand, DeviceSandboxOp } from "@intentic/sandbox-contract";
+import type { DeviceAgentOp, DeviceSandboxOp, DeviceSyncSwitch } from "@intentic/sandbox-contract";
 import type { DeviceSandboxGroup, NoticeModel, ResourcesAsk, SandboxVerb } from "@intentic/ui";
 import { sandboxVerbPrompt, VERB_LABEL } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
@@ -30,7 +30,7 @@ const SEVERING = new Set<DeviceSandboxOp>([`stop`, `restart`, `update`, `rebuild
 
 // Pause/resume and mirror on/off are one button wearing two labels; the label flips on the next report, not
 // the click, so a spinner must answer to either direction.
-const PAIRED_WITH: Partial<Record<DeviceCommand, DeviceCommand>> = {
+const PAIRED_WITH: Partial<Record<DeviceSyncSwitch, DeviceSyncSwitch>> = {
     "sync-pause": `sync-resume`,
     "sync-resume": `sync-pause`,
     "mirror-off": `mirror-on`,
@@ -39,7 +39,7 @@ const PAIRED_WITH: Partial<Record<DeviceCommand, DeviceCommand>> = {
 
 // Kept beside each other rather than inlined at each call site, so a verb and its failure sentence can't
 // drift apart.
-const COMMAND_REFUSAL: Record<DeviceCommand, string> = {
+const COMMAND_REFUSAL: Record<DeviceSyncSwitch, string> = {
     "mirror-off": `That device didn't change its port mirroring.`,
     "mirror-on": `That device didn't change its port mirroring.`,
     "sync-pause": `That device didn't pause its file syncing.`,
@@ -47,7 +47,7 @@ const COMMAND_REFUSAL: Record<DeviceCommand, string> = {
     "sync-unpair": `That device didn't unpair this sandbox.`,
 };
 
-const COMMAND_UNREACHED: Record<DeviceCommand, string> = {
+const COMMAND_UNREACHED: Record<DeviceSyncSwitch, string> = {
     "mirror-off": `Couldn't reach that device to change its port mirroring.`,
     "mirror-on": `Couldn't reach that device to change its port mirroring.`,
     "sync-pause": `Couldn't reach that device to pause its file syncing.`,
@@ -97,8 +97,8 @@ export interface DeviceOps {
     readonly selfGroup: (group: DeviceSandboxGroup) => boolean;
 
     // The two sync switches, per pairing and machine-wide.
-    readonly runSync: (key: string, sandboxId: string | undefined, command: DeviceCommand) => Promise<void>;
-    readonly syncRunning: (key: string, command: DeviceCommand) => boolean;
+    readonly runSync: (key: string, sandboxId: string | undefined, command: DeviceSyncSwitch) => Promise<void>;
+    readonly syncRunning: (key: string, command: DeviceSyncSwitch) => boolean;
     readonly confirmingUnpair: Ref<{ group: DeviceSandboxGroup } | undefined>;
     readonly confirmUnpair: () => void;
 
@@ -132,7 +132,7 @@ export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceO
     const busy = ref<string | undefined>();
     // Kept out of `busy`, which also drives which container-verb button spins; keyed by row and command,
     // since three buttons on a row must not spin together.
-    const syncBusy = ref<{ key: string; command: DeviceCommand } | undefined>();
+    const syncBusy = ref<{ key: string; command: DeviceSyncSwitch } | undefined>();
     const agentOp = ref<DeviceAgentOp | undefined>();
     const revoking = ref(false);
     const working = computed(() => busy.value !== undefined || syncBusy.value !== undefined || agentOp.value !== undefined || revoking.value);
@@ -223,7 +223,8 @@ export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceO
                 notice: {
                     tone: `warning`,
                     title: `That device didn't report this sandbox's share of it.`,
-                    detail: `Refresh and try again. If it keeps happening, run intentic-machine upgrade on that computer: its agent is too old to say.`,
+                    // Names the button on this very page, not a command: the agent flow does the upgrade from here.
+                    detail: `Refresh and try again. If it keeps happening, its agent is too old to report a share — Update agent, above, fixes that from here.`,
                 },
             };
             return;
@@ -271,7 +272,7 @@ export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceO
 
     // No confirmation for the reversible four; `sync-unpair` alone routes through the dialog. `sandboxId`
     // present targets one pairing, absent runs the bare machine-wide CLI form.
-    const runSync = async (key: string, sandboxId: string | undefined, command: DeviceCommand): Promise<void> => {
+    const runSync = async (key: string, sandboxId: string | undefined, command: DeviceSyncSwitch): Promise<void> => {
         const hostId = device.value.hostId;
         if (hostId === undefined || working.value) {
             return;
@@ -280,7 +281,7 @@ export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceO
         failure.value = undefined;
         outcome.value = undefined;
         try {
-            const result = await runDeviceCommand(hostId, command, sandboxId);
+            const result = await runDeviceCommand(hostId, command, { sandboxId });
             // The machine's own sentence either way: a refusal names the switch to flip rather than throwing.
             outcome.value = result.ok ? { key, message: result.message } : undefined;
             failure.value = result.ok ? undefined : { key, notice: { tone: `warning`, title: COMMAND_REFUSAL[command], detail: result.message } };
@@ -294,7 +295,7 @@ export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceO
         }
     };
 
-    const syncRunning = (key: string, command: DeviceCommand): boolean =>
+    const syncRunning = (key: string, command: DeviceSyncSwitch): boolean =>
         syncBusy.value?.key === key && (syncBusy.value.command === command || syncBusy.value.command === PAIRED_WITH[command]);
 
     // Unpairing doesn't undo itself (a fresh one-liner re-enrolls), so it parks in the app's own dialog like

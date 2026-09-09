@@ -34,8 +34,15 @@ vi.mock(`./useDesktopSync`, () => ({
 // Whether a device already holds file sync, read off the devices list rather than a status call of its own:
 // file sync is single-holder, so enrolling a second machine is a takeover the reader must be warned about by name.
 const devices = ref<Device[]>([]);
+// Enrolling a machine we can already reach: recorded rather than performed, since the subject is what the card
+// sends — a device, a half, and a folder on THAT machine. The pairing and the command line are the daemon's.
+const installCalls: { hostId: string; command: string; ask?: { mode?: string; localDir?: string } }[] = [];
 vi.mock(`./useDevices`, () => ({
     useDevices: () => ({ devices, error: ref(undefined), isLoading: ref(false), refetch: () => {} }),
+    runDeviceCommand: (hostId: string, command: string, ask?: { mode?: string; localDir?: string }) => {
+        installCalls.push({ hostId, command, ask });
+        return Promise.resolve({ ok: true, message: `That device is enrolled.` });
+    },
 }));
 vi.mock(`../../capabilities/connect/ScriptSourceSwitch.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
@@ -65,6 +72,7 @@ const clickButton = async (label: string): Promise<void> => {
 afterEach(() => {
     canOperate.value = true;
     devices.value = [];
+    installCalls.length = 0;
     pairToken.value = undefined;
     pairMode.value = undefined;
     takeover.value = false;
@@ -129,6 +137,44 @@ it(`does not treat a ports-only device as the sync holder`, () => {
     devices.value = [{ key: `colleague`, label: `colleague-pc`, sync: { machine: `colleague`, mode: `mirror`, seenAt: Date.now() } }];
     mount();
     expect(shown()).not.toContain(`Sync from a different device instead`);
+});
+
+// A machine already connected as a device needs no one-liner: this sandbox can run the install out there itself.
+it(`installs on a connected device instead of handing out its one-liner`, async () => {
+    devices.value = [{ key: `ada-laptop`, label: `ada-laptop`, hostId: `ada-laptop`, online: true }];
+    mount();
+    expect(shown()).toContain(`Set up on ada-laptop`);
+    await clickButton(`Set up on ada-laptop`);
+    // The folder is the mocked card's own value, and it is a path on THAT machine, not in the sandbox.
+    expect(installCalls).toEqual([{ hostId: `ada-laptop`, command: `sync-install`, ask: { mode: `sync`, localDir: `~/intentic/work` } }]);
+});
+
+// Ports-only is the other half of the same button: no folder crosses, because mirroring touches no files.
+it(`enrolls a connected device for ports only without sending a folder`, async () => {
+    devices.value = [{ key: `ada-laptop`, label: `ada-laptop`, hostId: `ada-laptop`, online: true }];
+    mount();
+    await clickButton(`Mirror ports only`);
+    await clickButton(`Set up on ada-laptop`);
+    expect(installCalls).toEqual([{ hostId: `ada-laptop`, command: `sync-install`, ask: { mode: `mirror` } }]);
+});
+
+// Each of these is a machine this sandbox cannot send a command to, or a flow the install command cannot carry.
+it(`keeps to the one-liner for a device it cannot run on`, async () => {
+    // Asleep, and enrolled-already, and a takeover (TAKEOVER=1 rides the one-liner alone).
+    devices.value = [
+        { key: `asleep`, label: `asleep-pc`, hostId: `asleep`, online: false },
+        { key: `paired`, label: `paired-pc`, hostId: `paired`, online: true, sync: { machine: `paired`, mode: `mirror`, seenAt: Date.now() } },
+    ];
+    mount();
+    expect(shown()).not.toContain(`Set up on asleep-pc`);
+    expect(shown()).not.toContain(`Set up on paired-pc`);
+
+    devices.value = [...devices.value, holder(`radarsu-rog`), { key: `ada`, label: `ada-laptop`, hostId: `ada`, online: true }];
+    await nextTick();
+    expect(shown()).toContain(`Set up on ada-laptop`);
+    await clickButton(`Sync from a different device instead`);
+    expect(shown()).not.toContain(`Set up on ada-laptop`);
+    expect(installCalls).toEqual([]);
 });
 
 // Told once, where the old "Syncing from" line used to be, rather than left for the reader to hunt for.

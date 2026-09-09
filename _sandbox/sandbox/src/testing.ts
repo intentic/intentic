@@ -67,6 +67,7 @@ export const testConfig: Config = {
         channel: "",
         previousImage: "",
         definitionSeed: "",
+        devRoot: "",
         prewarm: false,
     },
     // No edge to dial; loopback-only is a supported posture here, not a gap.

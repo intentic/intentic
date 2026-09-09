@@ -4,7 +4,7 @@
     Shapes live in deviceDetail.ts, structurally typed rather than importing the sandbox contract.
 -->
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
+import { computed, onBeforeUnmount, ref, useId, useSlots, watch } from "vue";
 import CopyButton from "../primitives/CopyButton.vue";
 import Icon from "../primitives/Icon.vue";
 import {
@@ -68,7 +68,19 @@ defineSlots<{
     ports?: (props: { group: DeviceSandboxGroup }) => unknown;
     /** What follows the row while it's working: a run log, the result of the last action. */
     footer?: (props: { group: DeviceSandboxGroup }) => unknown;
+    // Restarting this device's agent, beside the state that asks for it. A caller that can reach the machine
+    // (this app IS it; the web tab has the device's socket) fills this, and the two-command prose below is
+    // dropped: a command to type is for a machine nobody here can act on.
+    agentAction?: () => unknown;
 }>();
+
+const slots = useSlots();
+// Whether a click can close this agent's state, which decides between the caller's button and prose naming the two
+// commands. Read off the slot, not a prop: a caller either has a way to that machine or it doesn't.
+const canRestart = computed(() => slots[`agentAction`] !== undefined);
+// The states a restart closes: a dead loop, a stalled one, or one on a build this machine has already replaced. Judged
+// here rather than by the caller, so its button appears in the same three cases the prose named.
+const restartOwed = computed(() => agent !== undefined && (!agent.running || agent.stalled === true || agent.staleBuild !== undefined));
 
 const groups = computed(() => sandboxGroups(pairings, ports, sandboxes));
 
@@ -150,8 +162,11 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                 <template v-if="agent.stalled === true">
                     <StatusBadge variant="warning" :dot="true" size="xs" label="agent stalled" />
                     <span class="text-xs text-warning">
-                        Its process is alive but has stopped making rounds, so ports and commits below may be out of date. Restart it with
-                        <span class="font-mono">intentic-machine run --stop</span> then <span class="font-mono">intentic-machine run</span>
+                        Its process is alive but has stopped making rounds, so ports and commits below may be out of date.
+                        <template v-if="!canRestart">
+                            Restart it with <span class="font-mono">intentic-machine run --stop</span> then
+                            <span class="font-mono">intentic-machine run</span>
+                        </template>
                     </span>
                 </template>
                 <template v-else-if="agent.running">
@@ -178,18 +193,23 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                             The two commands stay whole across a wrap; this sentence is long enough to break
                             mid-command otherwise.
                         -->
-                        — it keeps the build it started with, so restart it with
-                        <span class="font-mono whitespace-nowrap">intentic-machine run --stop</span> then
-                        <span class="font-mono whitespace-nowrap">intentic-machine run</span>
+                        <!-- The colon hugs the word: a `<template>` boundary opening on the next line inserts a space before it. -->
+                        — it keeps the build it started with, so it owes a restart<template v-if="!canRestart"
+                            >: <span class="font-mono whitespace-nowrap">intentic-machine run --stop</span> then
+                            <span class="font-mono whitespace-nowrap">intentic-machine run</span></template
+                        >
                     </span>
                 </template>
                 <template v-else>
                     <StatusBadge variant="warning" :dot="true" size="xs" label="agent stopped" />
                     <span class="text-xs text-warning">
-                        Nothing is reaching this device's folders or ports until it restarts:
-                        <span class="font-mono">intentic-machine run</span>
+                        Nothing is reaching this device's folders or ports until it restarts<template v-if="!canRestart"
+                            >: <span class="font-mono">intentic-machine run</span></template
+                        >
                     </span>
                 </template>
+                <!-- The caller's own way to that machine, beside whichever state is asking for a restart. -->
+                <slot v-if="restartOwed" name="agentAction" />
             </div>
         </div>
 

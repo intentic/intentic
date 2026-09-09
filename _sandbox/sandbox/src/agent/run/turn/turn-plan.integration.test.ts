@@ -72,6 +72,9 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
         // Snapshotted for the judge on every planned turn, so every arm below needs it too.
         safetyPolicy: unstubbed<Services["safetyPolicy"]>("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
+        // No device connected in these arms, which is what the daemon answers with none granted; a turn asks on
+        // every plan, so every arm needs it.
+        hostReach: async () => undefined,
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
             accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),

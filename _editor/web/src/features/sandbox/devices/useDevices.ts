@@ -8,10 +8,11 @@ import {
     type SandboxResourcesAsk,
     DevicesListSchema,
     DeviceCommandResultSchema,
+    hostRunningSandbox,
     SyncStatusSchema,
 } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, type Ref } from "vue";
-import { sandboxError, sandboxJson, sandboxRequest } from "../client/sandboxClient";
+import { sandboxError, SandboxHttpError, sandboxJson, sandboxRequest } from "../client/sandboxClient";
 import { readIntenticLines } from "../../../lib/intenticStream";
 import { DEVICES, SYNC_HEALTH } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
@@ -149,20 +150,49 @@ export async function runDeviceAgentFlow(
     return { message, settled: message !== undefined };
 }
 
+// What a command acts on, beyond its own name: a pairing to scope the sync switches to, and for `sync-install`
+// which half to enroll and the folder on that device. No token and no command line — the daemon builds both.
+export interface DeviceCommandAsk {
+    sandboxId?: string | undefined;
+    mode?: `sync` | `mirror` | undefined;
+    localDir?: string | undefined;
+}
+
 // Runs one device CLI action by a closed-set name; the daemon builds the argv (hosts/device-commands.ts),
 // never forwarding free text. `ok: false` is the device's own refusal as a result; only an unreachable
 // device rejects the promise.
-export async function runDeviceCommand(hostId: string, command: DeviceCommand, sandboxId?: string): Promise<DeviceCommandResult> {
+export async function runDeviceCommand(hostId: string, command: DeviceCommand, ask: DeviceCommandAsk = {}): Promise<DeviceCommandResult> {
     const path = `/system/devices/${encodeURIComponent(hostId)}/commands/${encodeURIComponent(command)}`;
     const response = await sandboxRequest(path, {
         method: `POST`,
         headers: { "content-type": `application/json` },
-        body: JSON.stringify({ id: hostId, command, ...(sandboxId === undefined ? {} : { sandboxId }) }),
+        body: JSON.stringify({
+            id: hostId,
+            command,
+            ...(ask.sandboxId === undefined ? {} : { sandboxId: ask.sandboxId }),
+            ...(ask.mode === undefined ? {} : { mode: ask.mode }),
+            ...(ask.localDir === undefined ? {} : { localDir: ask.localDir }),
+        }),
     });
     if (!response.ok) {
         throw await sandboxError(response, { method: `POST`, path: `/system/devices/{id}/commands/{command}` });
     }
     return DeviceCommandResultSchema.parse(await response.json());
+}
+
+// The same call for a command that takes its own answer down with it: `dev-reload` restarts the container serving
+// this request, so the connection dropping IS the expected ending, reported as `undefined`. Anything the daemon
+// managed to answer — a refusal, a bad request, the device being unreachable — still throws, since a reply that
+// arrived is a reply about what happened.
+export async function runSeveringDeviceCommand(hostId: string, command: DeviceCommand): Promise<DeviceCommandResult | undefined> {
+    try {
+        return await runDeviceCommand(hostId, command);
+    } catch (error) {
+        if (error instanceof SandboxHttpError) {
+            throw error;
+        }
+        return undefined;
+    }
 }
 
 // Revokes one device's desktop-sync key without touching others' enrollment. Drops it from
@@ -174,20 +204,12 @@ export async function revokeSyncDevice(machine: string): Promise<void> {
     }
 }
 
-// The connected, online device running a given sandbox slug, if any (a sync-only agent never reports
-// containers). Shares the Devices query without polling it itself.
+// The connected, online device running a given sandbox slug, if any. The rule itself is the contract's
+// (`hostRunningSandbox`), shared with the daemon so a button here and a turn's own reasoning cannot disagree
+// about which machine is reachable. Shares the Devices query without polling it itself.
 export function useHostRunning(slug: () => string | undefined): ComputedRef<string | undefined> {
     const { devices } = useDevices({ poll: false });
-    return computed(() => {
-        const target = slug();
-        if (target === undefined || target === ``) {
-            return undefined;
-        }
-        return devices.value.find(
-            (device) =>
-                device.hostId !== undefined && device.online === true && (device.report?.sandboxes ?? []).some((box) => box.slug === target),
-        )?.hostId;
-    });
+    return computed(() => hostRunningSandbox(devices.value, slug()));
 }
 
 // Reads /system/sync, not /system/devices, to avoid polling every laptop just to draw a badge.

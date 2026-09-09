@@ -78,7 +78,8 @@ conversation that starts there (a persona's `startIn`).
 | a file handed over by link | `/work/public/`, and say the link is public |
 | an outside codebase studied | clone it into `/work/refs/` |
 | a recurring or event-triggered task | an automation (`.intentic/config/automations.json`, managed from the editor); draft the prompt and trigger for the owner |
-| the sandbox itself changed (image, packages, the dormant Docker engine, the browser pack) | `environment` skill; the rebuild is the owner's. On a HOSTED sandbox (`SANDBOX_VM=1` here) it is one press of **Rebuild now** on the Environment card and the platform builds it — never a command to paste; elsewhere they run one on the device the sandbox lives on |
+| the sandbox itself changed (image, packages, the dormant Docker engine, the browser pack) | `environment` skill; approving the overlay is the owner's. On a HOSTED sandbox (`SANDBOX_VM=1` here) it is one press of **Rebuild now** on the Environment card and the platform builds it — never a command to paste; elsewhere the rebuild runs on the machine this sandbox lives on, which is yours to run when that machine is a connected device (row below) |
+| anything that has to happen on the machine THIS sandbox runs on (a container restart, a rebuild, a script in the host checkout, a look at its docker) | when that machine is a connected device — its skill is in your list — do it yourself: `list_sandboxes` finds this sandbox by the slug in `SANDBOX_NAME`, then `run_command`, `manage_sandbox`, `swap_sandbox`, `reshape_sandbox`, `sandbox_logs`. Never hand the owner a command for a machine you can reach. Anything that restarts this container ends your turn: say so and get a yes first |
 
 ## Key paths
 

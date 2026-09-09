@@ -48,6 +48,9 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         // Read once per turn, above the provider split like settings; the shipped default, what an ungoverned workspace
         // reads.
         safetyPolicy: unstubbed<Services["safetyPolicy"]>("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
+        // No device connected, which is what the daemon answers with no host card granted; every planned turn asks,
+        // so it belongs in the shared fixture rather than in each arm.
+        hostReach: async () => undefined,
         // No translator and no api key: the state both Codex gates refuse from, where most cases here start.
         config: testConfig,
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", { accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }) }),

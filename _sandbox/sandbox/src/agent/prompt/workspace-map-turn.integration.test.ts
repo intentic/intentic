@@ -74,6 +74,9 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
         // Read once per turn and carried for the judge: every planned turn reaches it, map or no map.
         safetyPolicy: unstubbed<Services["safetyPolicy"]>("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
+        // No device connected in these arms, which is what the daemon answers with none granted; a turn asks on
+        // every plan, so every arm needs it.
+        hostReach: async () => undefined,
         async *codexAgent() {},
         async *grokAgent() {},
         async *agent() {},

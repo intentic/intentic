@@ -71,6 +71,7 @@ pub fn run() {
             commands::sandbox_remove,
             commands::sandbox_logs,
             commands::machine_report,
+            commands::machine_restart,
             commands::workspace_open,
             commands::setup_alert,
             commands::setup_progress,

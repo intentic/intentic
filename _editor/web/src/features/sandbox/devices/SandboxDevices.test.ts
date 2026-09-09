@@ -44,8 +44,8 @@ vi.mock(`./useDevices`, async () => {
             verbCalls.push({ hostId, slug, op, ...(payload?.resources === undefined ? {} : { resources: payload.resources }) });
             return Promise.resolve(`Reshaped sandbox "${slug}".`);
         },
-        runDeviceCommand: (hostId: string, command: string, sandboxId?: string) => {
-            mirrorCalls.push({ hostId, command, sandboxId });
+        runDeviceCommand: (hostId: string, command: string, ask?: { sandboxId?: string }) => {
+            mirrorCalls.push({ hostId, command, sandboxId: ask?.sandboxId });
             return Promise.resolve(mirrorAnswer);
         },
         revokeSyncDevice: (machine: string) => {

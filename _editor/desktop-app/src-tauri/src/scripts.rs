@@ -530,6 +530,49 @@ pub fn sync_report() -> Result<Option<String>, String> {
     }
 }
 
+/// Restart this machine's agent loop — `intentic-machine run --stop`, then `intentic-machine run` — the two
+/// commands this window used to tell people to type into a terminal on the very computer it is running on. Both
+/// return promptly: `run` puts the loop in the BACKGROUND unless asked for the foreground.
+///
+/// `--stop` failing is not a failure of the restart: it is what a loop that was already dead answers, and the
+/// state this exists to fix is exactly that one. Only the start's own exit decides, and its output is returned
+/// verbatim so the window shows the agent's words rather than this function's.
+pub fn agent_restart() -> Result<String, String> {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok();
+    let mut last: Option<String> = None;
+    for candidate in sync_agent_candidates(Host::current(), home.as_deref()) {
+        let stopped = quiet(Command::new(&candidate))
+            .args(["run", "--stop"])
+            .stdin(Stdio::null())
+            .output();
+        if stopped.is_err() {
+            continue; // not at this path — try the next one
+        }
+        let started = quiet(Command::new(&candidate))
+            .arg("run")
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|error| format!("the agent on this device could not be started: {error}"))?;
+        let merged = format!(
+            "{}{}",
+            String::from_utf8_lossy(&started.stdout),
+            String::from_utf8_lossy(&started.stderr)
+        );
+        if started.status.success() {
+            return Ok(merged.trim().to_string());
+        }
+        last = Some(merged.trim().to_string());
+    }
+    match last {
+        None => Err("no intentic-machine on this device to restart".to_string()),
+        Some(error) => Err(format!(
+            "the agent on this device would not restart: {error}"
+        )),
+    }
+}
+
 /// The container's last `tail` log lines, BOTH streams merged in the order docker hands them over. The daemon
 /// writes its pino output to stdout and its crashes to stderr, and the line that explains a sandbox that will
 /// not come up is nearly always in the second one — so unlike [`docker_output`], a non-zero exit here still

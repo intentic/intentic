@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type {
     AcpAgentConfig,
     AgentEvent,
+    Capability,
     HostFacts,
     HostScopes,
     RunnerFacts,
@@ -102,6 +103,7 @@ import { type ApprovalsStore, fileApprovalsStore } from "./approvals/approvals-s
 import { fileIssuesStore, type IssuesStore } from "./issues/issues-store.js";
 import { fileInstallsStore, type InstallsStore } from "./store/installs.js";
 import { HOST_PEER, type HostAnnounced, type HostClient, type HostHub, type HostStore } from "./hosts/host-peer.js";
+import { hostDeviceReach, type HostDeviceReach } from "./hosts/self-host.js";
 import { WEBEXT_PEER, type WebExtAnnounced, type WebExtClient, type WebExtHub, type WebExtStore } from "./webext/webext-peer.js";
 import { RUNNER_PEER, type RunnerAnnounced, type RunnerClient, type RunnerHub, type RunnerStore } from "./runners/runner-peer.js";
 import type { ParentCredentials } from "./runners/runner-credentials.js";
@@ -286,6 +288,9 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // The user's own computers as a peer door: durable enrollment plus who is holding a socket right now.
     readonly hosts: HostStore;
     readonly hostHub: HostHub;
+    // Which of those computers a turn may act on, and which one runs this sandbox: composed here rather than reached
+    // for, so a turn's prompt says "run it there" without the agent importing the hosts subsystem.
+    readonly hostReach: (granted: readonly Capability[]) => Promise<HostDeviceReach | undefined>;
     // Same pair for the user's own browsers; a separate bridge token so one leaking can't open the other's door.
     readonly webextBridgeToken: string;
     readonly webexts: WebExtStore;
@@ -985,6 +990,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         agentToken: randomBytes(32).toString("hex"),
         hostBridgeToken: randomBytes(32).toString("hex"),
         hosts: filePeerStore(config.historyRoot, HOST_PEER.store),
+        // Reads only readings already held (hosts/self-host.ts), so composing a turn never waits on a laptop.
+        hostReach: (granted) => hostDeviceReach(services, granted),
         hostHub: createPeerHub<HostClient, HostAnnounced, HostFacts, HostScopes>(HOST_PEER.hub, logger),
         webextBridgeToken: randomBytes(32).toString("hex"),
         webexts: filePeerStore(config.historyRoot, WEBEXT_PEER.store),

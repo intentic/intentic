@@ -172,6 +172,9 @@ export const deviceStatus = async (): Promise<DeviceStatus | undefined> => {
     const raw = await invoke<string | null>(`machine_report`);
     return raw === null ? undefined : (JSON.parse(raw) as DeviceStatus);
 };
+// Stop and start this device's agent loop — the two commands this window used to print for someone to type on the
+// computer it is running on. Resolves with whatever the agent itself said.
+export const deviceAgentRestart = (): Promise<string> => invoke(`machine_restart`);
 // Hands the window back to the workspace, at its root or a path under it — how this window reaches the SPA's
 // Devices tab for the same machine.
 export const workspaceOpen = (path?: string): Promise<void> => invoke(`workspace_open`, { path: path ?? null });

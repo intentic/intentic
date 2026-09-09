@@ -32,6 +32,7 @@ import {
     expectedStop,
     folderEntries,
     forgetResumableSetup,
+    deviceAgentRestart,
     deviceStatus,
     onPendingRecreate,
     onPendingSetup,
@@ -307,6 +308,27 @@ const deviceAgent = computed<DeviceAgentState | undefined>(() => {
     }
     return { ...agent, staleBuild: { running: runningBuild, installed } };
 });
+
+// Restarting the loop from the window: this app runs ON the device the two commands were for, so nothing here has
+// any business asking for a terminal. The report is re-read afterwards, since the agent's state IS the answer.
+const agentRestarting = ref(false);
+const agentRestartError = ref<string | undefined>(undefined);
+const restartAgent = async (): Promise<void> => {
+    if (agentRestarting.value) {
+        return;
+    }
+    agentRestarting.value = true;
+    agentRestartError.value = undefined;
+    try {
+        await deviceAgentRestart();
+    } catch (error) {
+        agentRestartError.value = String(error);
+    } finally {
+        agentRestarting.value = false;
+        // Always, including after a failure: the stop half may have landed, so the row must show what is there now.
+        await refresh();
+    }
+};
 
 // The docker row behind a view group, which every verb below needs.
 const slugOf = (group: DeviceSandboxGroup): string | undefined => group.sandbox?.slug;
@@ -1139,7 +1161,20 @@ onUnmounted(() => {
             -->
             <section v-if="hasRows || reportError" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
                 <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
+                <!-- The agent's own refusal, in its words; the row above already shows whether the loop came back. -->
+                <Notice v-if="agentRestartError" tone="danger" class="text-2xs">{{ agentRestartError }}</Notice>
                 <DeviceDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows" :agent="deviceAgent">
+                    <!-- This window IS that device, so its agent is restarted here rather than named as two commands. -->
+                    <template #agentAction>
+                        <Button
+                            size="small"
+                            severity="secondary"
+                            :label="agentRestarting ? `Restarting…` : `Restart agent`"
+                            :loading="agentRestarting"
+                            :disabled="running || busy !== undefined"
+                            @click="void restartAgent()"
+                        />
+                    </template>
                     <!-- Agent state is a fact about the machine, shown once here rather than repeated per row. -->
                     <template #heading>
                         <span class="flex items-center gap-2 text-2xs font-semibold tracking-wide text-subtle uppercase">

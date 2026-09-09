@@ -54,3 +54,7 @@ deliberate: the UI that offers to create a sandbox and the daemon that creates o
 
 - The allowlist is a floor, not a suggestion. Anything not named does not cross into the container, and widening
   it is a security decision rather than a convenience one.
+- A container name is written and read in one place: `sandboxNames(slug).container` composes it,
+  `sandboxSlugOf(container)` takes the slug back out, and it answers `undefined` for a name that is not one
+  rather than handing back a plausible slug. Three callers had their own regex for that before, and a caller with
+  no slug must be told so, not aimed at whichever sandbox the string resembled.

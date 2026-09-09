@@ -17,8 +17,19 @@ export interface SandboxNames {
     readonly network: string;
 }
 
+// Every container name below the workspace one is this plus a slug; exported so reading a slug back off a name is the
+// same string as writing it (`sandboxSlugOf`), not a regex copied per caller.
+export const SANDBOX_CONTAINER_PREFIX = "intentic-sandbox-";
+
+// The slug inside a container name, or undefined for a name that is not one (an empty env, another project's
+// container). Never guesses: a caller with no slug has to say so rather than aim an action at a plausible one.
+export const sandboxSlugOf = (container: string | undefined): string | undefined => {
+    const slug = container?.startsWith(SANDBOX_CONTAINER_PREFIX) === true ? container.slice(SANDBOX_CONTAINER_PREFIX.length) : undefined;
+    return slug === "" ? undefined : slug;
+};
+
 export const sandboxNames = (slug: string): SandboxNames => ({
-    container: `intentic-sandbox-${slug}`,
+    container: `${SANDBOX_CONTAINER_PREFIX}${slug}`,
     tunnelContainer: `intentic-sandbox-tunnel-${slug}`,
     workspaceVolume: `intentic-workspace-${slug}`,
     historyVolume: `intentic-history-${slug}`,
@@ -179,6 +190,9 @@ export const REPLAY_ENV = [
     // A runner's parent sandbox and pairing token, replayed since a recreate can't re-derive either.
     "RUNNER_PARENT_URL",
     "RUNNER_PAIR_TOKEN",
+    // The dev checkout this container was launched from; allowlisted so `INTENTIC_SET_ENV` can deliver it and every
+    // later dev recreate keeps it. A path on the host, meaningless in here except as an argument sent back out.
+    "SANDBOX_DEV_ROOT",
 ] as const;
 
 // `printenv -0` / `env -0` output → name/value pairs. NUL framing is the only safe channel for these values:

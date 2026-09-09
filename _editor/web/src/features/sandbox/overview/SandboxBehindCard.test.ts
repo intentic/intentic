@@ -12,6 +12,18 @@ vi.mock(`../environment/useEnvironment`, () => ({
     useEnvironment: () => ({ slug: ref(`sandbox-abc123`) }),
 }));
 
+// Whether the machine this sandbox runs on is a connected device, which is what decides between a button here and a
+// command for someone to type out there. Evaluated when the card is first imported, below.
+const hostId = ref<string | undefined>(undefined);
+const severingCalls: string[] = [];
+vi.mock(`../devices/useDevices`, () => ({
+    useHostRunning: () => hostId,
+    runSeveringDeviceCommand: (id: string, command: string) => {
+        severingCalls.push(`${id}:${command}`);
+        return Promise.resolve(undefined);
+    },
+}));
+
 const { default: SandboxBehindCard } = await import("./SandboxBehindCard.vue");
 
 // Baseline daemon level, plus the two ways it can diverge: a missing route, or one with a different shape.
@@ -39,7 +51,11 @@ const mount = (): HTMLElement => {
     return el;
 };
 
-beforeEach(() => resetDaemonRoutes());
+beforeEach(() => {
+    resetDaemonRoutes();
+    hostId.value = undefined;
+    severingCalls.length = 0;
+});
 
 afterEach(() => {
     app?.unmount();
@@ -80,11 +96,26 @@ it(`keeps the warning to the problem, impact, and fixes`, () => {
     expect(text).not.toContain(`Still showing`);
 });
 
-it(`prints the reload for THIS sandbox, not an image rebuild`, () => {
+it(`prints the reload for THIS sandbox, not an image rebuild, when nothing can reach that checkout`, () => {
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     const el = mount();
     const text = el.textContent ?? ``;
     expect(text).toContain(`dev-reload.sh sandbox-abc123`);
     expect(text).not.toContain(`build:sandbox`);
     expect(el.querySelector(`.ui-code`)).not.toBeNull();
+});
+
+// The machine is connected, so the reload is ours to run: a button, and no command block to copy from.
+it(`runs the reload on the device hosting this sandbox instead of printing it`, async () => {
+    hostId.value = `ada-laptop`;
+    setDaemonRoutes(LEVEL, reshaped(`settings.get`));
+    const el = mount();
+    const reload = [...el.querySelectorAll(`button`)].find((button) => button.textContent === `Reload sandbox`);
+    expect(reload).toEqual(expect.any(HTMLButtonElement));
+    expect(el.textContent ?? ``).not.toContain(`dev-reload.sh`);
+    expect(el.querySelector(`.ui-code`)).toBeNull();
+
+    reload?.click();
+    // The command name is the whole ask: the argv is the daemon's to build (hosts/device-commands.ts).
+    expect(severingCalls).toEqual([`ada-laptop:dev-reload`]);
 });

@@ -52,6 +52,8 @@ export const createDeviceSystemRoutes = (services: Services) => {
             });
         }),
         // One named CLI action on a connected device (e.g. the Devices tab's Stop-mirroring button).
+        // `sync-install` needs no extra gate for its mode: this floor is the same maintainer-equivalent one
+        // /system/sync/pair applies to the one-liner it enrolls with (auth/owner-gates.ts).
         runDeviceCommand: i.runDeviceCommand.handler(async ({ input, context }) => {
             await requireMaintainer(context.headers, "only a sandbox maintainer can act on connected devices");
             return await runDeviceCommand(services, input);

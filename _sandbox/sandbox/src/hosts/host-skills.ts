@@ -55,6 +55,32 @@ the ones you need). Then:
 6. **If the machine is offline** the tool says so plainly. It means a closed lid or a dropped network: report it,
    do not retry in a loop.
 
+## If this device is the one running your sandbox
+
+Often it is. \`mcp__\${id}__list_sandboxes\` names the containers on this machine; yours is the row whose slug matches
+your own container, which is \`SANDBOX_NAME\` in your sandbox's env (\`printenv SANDBOX_NAME\`) minus its
+\`intentic-sandbox-\` prefix. When they match, this machine is where your own daemon, your \`/work\` and your ports
+actually live — and everything about this sandbox that cannot be done from inside it becomes something to DO here,
+not something to ask the owner to type:
+
+- **A script that lives in the checkout, not the image.** \`run_command\` takes a \`cwd\` and a timeout up to ten
+  minutes: run it there and report what it printed.
+- **The container's own lifecycle.** \`manage_sandbox\` (start/stop/restart), \`swap_sandbox\` (update, roll back,
+  rebuild the approved environment), \`sandbox_logs\` (why it will not come up).
+- **Its share of the machine.** \`reshape_sandbox\` for memory and CPU caps.
+
+Never write a command out for the owner to paste on a machine you can reach from here. The editor already drives
+this box for port mirroring, file syncing and container management; a pasted command is what we do when a device is
+asleep, not connected, or refuses.
+
+Two things to keep in mind, neither of them a reason not to act:
+
+1. **Anything that restarts, updates, rebuilds or removes YOUR OWN sandbox kills the turn you are in**, mid-sentence:
+   your daemon is that container. Say what will happen, get a yes, and expect the call itself to return nothing —
+   the owner's page reconnects on its own, and the next turn is where you confirm it worked.
+2. **A refusal names a switch on this device's capability card.** Report the switch; do not look for another way to
+   the same effect.
+
 ## Using a website: always the browser tools, never the pointer
 
 For anything on the web, use \`browser_*\`. Do NOT drive a browser with \`device\`: coordinates move when the

@@ -1,4 +1,5 @@
 import { EnvironmentSchema } from "@intentic/api-contract";
+import { ORIGIN_HOST, sandboxSlugOf } from "@intentic/sandbox-run";
 import { computed } from "vue";
 import { sandboxJson } from "../client/sandboxClient";
 import { ENVIRONMENT } from "../../../lib/queryKeys";
@@ -39,9 +40,9 @@ export function useEnvironment() {
     const recurring = computed(() => state.value?.recurring ?? []);
 
     // True for the provider's fixed container name; its rebuild rides `intentic deploy apply`, not a local one-liner.
-    const serverManaged = computed(() => state.value?.container === `intentic-sandbox-workspace`);
-    // The sandbox name a rebuild would target, derived from its container name.
-    const slug = computed(() => state.value?.container?.replace(/^intentic-sandbox-/, ``));
+    const serverManaged = computed(() => state.value?.container === ORIGIN_HOST);
+    // The sandbox name a rebuild would target, read off its container name by the same contract that writes it.
+    const slug = computed(() => sandboxSlugOf(state.value?.container));
 
     return { state, query, isFetching, proposal, pending, applied, recurring, serverManaged, slug };
 }

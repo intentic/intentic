@@ -249,6 +249,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         }),
         // Shipped policy: a planned turn snapshots it for the judge, so every route running a turn reads it.
         safetyPolicy: unstubbed("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
+        // No connected device, which is what the daemon answers with no host card granted; every planned turn asks,
+        // so every route running a turn needs it.
+        hostReach: async () => undefined,
         // Connected by default so the /agent guard doesn't short-circuit turns under test; override for disconnected.
         claudeStore: unstubbed("claudeStore", {
             read: async (id) => (id === "default" ? { id: "default", label: "Claude", connectedAt: 0, accessToken: "tok-xyz" } : undefined),

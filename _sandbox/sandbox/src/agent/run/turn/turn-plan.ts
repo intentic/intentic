@@ -625,6 +625,10 @@ export const planHarnessTurn = async (
         ...peerToolsOf("host", granted, services.config.sandbox.port, services.hostBridgeToken, input.conversationId),
         ...peerToolsOf("webext", granted, services.config.sandbox.port, services.webextBridgeToken),
     ];
+    // What this turn may reach out of the container: the same host cards peerToolsOf just mounted, plus the one running
+    // this sandbox when the held readings already name it. Through Services, since the hosts subsystem reaches back
+    // into this one (host-command-gate.ts) and two subsystems must not import each other's values.
+    const hostDevices = await services.hostReach(granted);
     const { hashlineEdits, iqSearch, outputCleaners, outputHoldout, rules, subagentsAtOnce, subagentsPerTurn, subagentDepth, actionRules } = settings;
     // Standing, not matching: conditions are read at Stop, once the turn has actually edited something to narrow on.
     const turnEndingRules = standing(rules, "turn.ending");
@@ -829,6 +833,9 @@ export const planHarnessTurn = async (
             // Whether the diagnostics server was mounted, so the prompt names its tools only where they can actually be
             // called.
             ...(sdkServers.diagnostics === undefined ? {} : { diagnostics: true }),
+            // The machines this turn can act on, so the prompt tells it to run things there instead of writing out a
+            // command for the owner to paste on a box we can reach.
+            hostDevices,
             // Whether this turn actually carries the iq plugin, so the empty-`rg` notice names iq only where it's real.
             iqAvailable: iqLoaded,
             // Debugging ports for those Chromiums, so the first browser call can register a session the owner can

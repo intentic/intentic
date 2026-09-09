@@ -307,6 +307,7 @@ needs, and say what it is doing to a window instead of a terminal
 | Remove | `cleanup.sh <slug> -y` / `cleanup.ps1 -Slug … -Yes` |
 | Start · Stop · Restart · Logs · the list itself | `docker` directly: there is no script that lists, inspects, cycles or tails. The list reads each container's share off one `docker inspect`, and the form's rails off `docker info` |
 | The machine-agent panel | `intentic-machine status --json` (its own install under `~/.intentic/machine/bin` first, then PATH) |
+| Restart agent | `intentic-machine run --stop` then `intentic-machine run`, same resolution order. The panel used to print those two for someone to type into a terminal on the computer this window is running on; `--stop` failing is the state being fixed, so only the start's exit decides |
 
 The scripts are **bundled as resources** from `_site/site/public/scripts/`, by way of a staging directory:
 [`_tools/scripts/desktop/stage-desktop-scripts.sh`](../../_tools/scripts/desktop/stage-desktop-scripts.sh) empties

@@ -1,4 +1,4 @@
-import { agentBuildSkew, type Device, type DeviceAgent, type DeviceCommand } from "@intentic/sandbox-contract";
+import { agentBuildSkew, type Device, type DeviceAgent, type DeviceSyncSwitch } from "@intentic/sandbox-contract";
 import type { StatusVariant, TallyItem } from "@intentic/ui";
 import {
     type DeviceFolderRow,
@@ -224,7 +224,7 @@ const switchable = (row: DeviceRow, half: DeviceHalf): boolean =>
 // Both halves are the same shape (a state, a word, one or two commands), so one table serves both. A mixed
 // state offers both directions rather than guessing which the reader meant.
 export interface HalfAction {
-    readonly command: DeviceCommand;
+    readonly command: DeviceSyncSwitch;
     readonly label: string;
     readonly hint: string;
 }

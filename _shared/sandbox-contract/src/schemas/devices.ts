@@ -114,17 +114,44 @@ export type DeviceAgentFlowInput = z.infer<typeof DeviceAgentFlowInputSchema>;
 // command: the same socket carries `run_command`, which would grant a shell on the user's machine.
 // `sync-unpair` runs the machine's own `sync uninstall --sandbox` (terminates both Mutagen sessions, drops the pairing,
 // self-revokes enrollment); revoking from the sandbox side is a different route.
-export const DeviceCommandSchema = z.enum(["mirror-off", "mirror-on", "sync-pause", "sync-resume", "sync-unpair"]);
+// `dev-reload` and `sync-install` are the two whose argv the daemon fills from what only it knows — the dev checkout on
+// that machine, a freshly minted pairing token — which is also why neither takes a path or a token from the caller.
+export const DeviceCommandSchema = z.enum([
+    "mirror-off",
+    "mirror-on",
+    "sync-pause",
+    "sync-resume",
+    "sync-unpair",
+    "dev-reload",
+    "sync-install",
+]);
 export type DeviceCommand = z.infer<typeof DeviceCommandSchema>;
+// The reversible sync switches: the subset a device's own row drives with a pair of buttons, as opposed to the two
+// commands a card elsewhere issues once. Its own type so those button tables stay total without carrying entries for
+// commands they can never send.
+export const DeviceSyncSwitchSchema = DeviceCommandSchema.exclude(["dev-reload", "sync-install"]);
+export type DeviceSyncSwitch = z.infer<typeof DeviceSyncSwitchSchema>;
 // Machine's sandbox id (absent = every paired sandbox); must start alphanumeric, else it parses as a CLI flag.
 export const DeviceSandboxIdSchema = z
     .string()
     .max(200)
     .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
+// A folder on the DEVICE for `sync-install` to keep in step. The only caller-supplied string that reaches a command
+// line, so its shape is the guard: `~`, an absolute POSIX path or a drive letter, and none of the characters that would
+// end the argument it sits in. `~` is expanded by the daemon, which is why `$` is not allowed to arrive here.
+export const DeviceLocalDirSchema = z
+    .string()
+    .min(1)
+    .max(4096)
+    .regex(/^(?:~|\/|[A-Za-z]:[\\/])[^"'`$;|&\n\r]*$/);
 export const DeviceCommandInputSchema = z.object({
     id: z.string().min(1),
     command: DeviceCommandSchema,
     sandboxId: DeviceSandboxIdSchema.optional(),
+    // `sync-install` only: which half to enroll (a member's "sync" still comes back mirror, decided daemon-side) and,
+    // for file sync, the folder on that device. The pairing token is minted by the daemon; no caller ever carries one.
+    mode: z.enum(["sync", "mirror"]).optional(),
+    localDir: DeviceLocalDirSchema.optional(),
 });
 export type DeviceCommandInput = z.infer<typeof DeviceCommandInputSchema>;
 // `ok` is the command's own exit status, not this route's: a refusal or non-zero exit is a real answer, not a thrown
@@ -286,6 +313,16 @@ export const DeviceSchema = z.object({
 });
 export type Device = z.infer<typeof DeviceSchema>;
 export const DevicesListSchema = z.object({ devices: z.array(DeviceSchema) });
+
+// The connected, online device whose docker reports a given sandbox slug: the machine that sandbox RUNS ON, as opposed
+// to any machine merely paired with it. Answers the question every "run it there instead of asking the owner to type
+// it" path starts from, and is `undefined` for a sync-only agent, which reports no containers at all.
+export const hostRunningSandbox = (devices: readonly Device[], slug: string | undefined): string | undefined =>
+    slug === undefined || slug === ""
+        ? undefined
+        : devices.find(
+              (device) => device.hostId !== undefined && device.online === true && (device.report?.sandboxes ?? []).some((box) => box.slug === slug),
+          )?.hostId;
 // GET /system/sync: sandbox-level facts only, whether sync is possible, whether anything is enrolled, and raw device
 // reports. Cheap: the sidebar badge reads this and must never fan out to a device.
 export const SyncStatusSchema = z.object({

@@ -320,3 +320,39 @@ test("the terminal hand-off is named on the turns that mounted it, and nowhere e
     const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
     expect(codex.systemAppend ?? "").not.toContain("mcp__terminal__");
 });
+
+// The device sentence exists because a turn with a connected machine still wrote commands out for the owner to paste
+// on it. It rides only where those servers were mounted, and names the sandbox's own host when that is already known.
+test("a connected device is named, with the machine running this sandbox called out when known", () => {
+    const known = sdkSystemPrompt({
+        ...BASE,
+        mode: "intentic",
+        custom: undefined,
+        hostDevices: { ids: ["ada-laptop"], self: "ada-laptop", slug: "work-abc" },
+    }) as string;
+    expect(known).toContain("`ada-laptop`");
+    expect(known).toContain("The one running this sandbox is `ada-laptop`.");
+    expect(known).toContain("ToolSearch (`+mcp__ada-laptop__`)");
+    // The two limits are the whole reason a turn may act at all, so both are stated.
+    expect(known).toContain("ends your");
+    expect(known).toContain("never routed around");
+
+    // Unread is not "no such machine": the turn is told how to ask, with its own slug to match a row by.
+    const unread = sdkSystemPrompt({
+        ...BASE,
+        mode: "intentic",
+        custom: undefined,
+        hostDevices: { ids: ["ada-laptop", "studio-pc"], slug: "work-abc" },
+    }) as string;
+    expect(unread).toContain("`list_sandboxes` answers");
+    expect(unread).toContain("its slug there is `work-abc`");
+    expect(unread).toContain("`studio-pc`");
+
+    // No device, or a card with none granted: no sentence at all rather than one about tools that aren't there.
+    const none = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined }) as string;
+    expect(none).not.toContain("list_sandboxes");
+    const empty = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, hostDevices: { ids: [] } }) as string;
+    expect(empty).not.toContain("list_sandboxes");
+    const preset = sdkSystemPrompt({ ...BASE, mode: "claude", custom: undefined, hostDevices: { ids: ["ada-laptop"] } }) as { append: string };
+    expect(preset.append).toContain("`ada-laptop`");
+});

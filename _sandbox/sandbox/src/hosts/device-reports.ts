@@ -311,6 +311,20 @@ export const devices = async (services: Services): Promise<Device[]> =>
         return mergeDevices(fleet.machines, fleet.reports, answered);
     });
 
+// The host-capability devices as the readings ALREADY IN HAND describe them: `devices` without the asking, for callers
+// that must not spend a round trip on a laptop (composing a turn's prompt, deciding whether a route can act at all).
+// Sync enrollments are absent on purpose rather than for cheapness: a volunteered report carries no `hostId`, so it
+// could never be the machine a command is sent to. A host never read yet reads as a gap, never as an empty machine.
+export const heldHostDevices = async (services: Services): Promise<Device[]> =>
+    mergeDevices(
+        [],
+        [],
+        (await hostSummaries(services)).map((host) => ({
+            host,
+            result: pulled.get(host.id)?.result ?? ({ gap: host.online ? "unreported" : "offline" } as const),
+        })),
+    );
+
 // One management action relayed to the machine and streamed back verbatim (some flows take minutes); the daemon adds no
 // judgement of its own, only drops the cached pull so the next poll reflects the result.
 export async function* manageDeviceSandbox(services: Services, id: string, input: DeviceSandboxFlow): AsyncGenerator<DeviceFlowLine> {

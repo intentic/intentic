@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { errorMessage } from "@intentic/base/errors";
 import type { BundleExport } from "@intentic/sandbox-contract";
+import { sandboxSlugOf } from "@intentic/sandbox-run";
 import type { Services } from "../composition.js";
 import { packBundle } from "./bundle.js";
 
@@ -24,7 +25,7 @@ export class ExportBusyError extends Error {}
 // The file stem, also the owner's downloaded filename: the timestamp keeps bundles sorted and collision-free, and
 // `-with-secrets` says what the file is on any machine.
 const exportName = (sandbox: string, secrets: boolean, now: number): string => {
-    const slug = sandbox === "" ? "sandbox" : sandbox.replace(/^intentic-sandbox-/, "");
+    const slug = sandboxSlugOf(sandbox) ?? (sandbox === "" ? "sandbox" : sandbox);
     const stamp = new Date(now).toISOString().replace(/[:T]/g, "-").slice(0, 19);
     return `intentic-${slug}-${stamp}${secrets ? "-with-secrets" : ""}`;
 };

@@ -1,6 +1,7 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { HISTORY_ROOT } from "@intentic/constants";
 import type { AgentCapabilities, SystemPromptMode, TurnNote } from "@intentic/sandbox-contract";
+import type { HostDeviceReach } from "../../hosts/self-host.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { INTENTIC_PROMPT } from "./intentic-prompt.js";
 import { MEMORY_NOTE_TITLE } from "./workspace-memory.js";
@@ -165,6 +166,28 @@ const DIAGNOSTICS_GUIDANCE =
     "`mcp__diagnostics__resources` is memory, OOM kills and event-loop stalls over time. Each takes a window and " +
     "answers newest-first; none can write.";
 
+// The same failure the terminal sentence below was written for, one machine further out: with a device connected, a
+// turn still hands the owner a command to paste on it. Rides only where those servers were actually mounted, and names
+// the sandbox's own host when the daemon's held readings already say which device that is (hosts/self-host.ts).
+const hostDeviceGuidance = ({ ids, self, slug }: HostDeviceReach): string => {
+    const which =
+        self === undefined
+            ? `Which of them runs this sandbox is what \`list_sandboxes\` answers${slug === undefined ? "" : ` — its slug there is \`${slug}\``}.`
+            : `The one running this sandbox is \`${self}\`.`;
+    return (
+        `The owner's own computers are connected to this turn: ${ids.map((id) => `\`${id}\``).join(", ")}, each behind ` +
+        `deferred tools you load with ToolSearch (\`+mcp__${ids[0] ?? "device"}__\`). ${which} When something has to happen out ` +
+        `there, DO IT and report what came back: \`run_command\` takes a working directory and a deadline of up to ten ` +
+        `minutes, \`read_file\`/\`write_file\`/\`list_dir\` reach that machine's own tree, and \`list_sandboxes\`, ` +
+        `\`manage_sandbox\`, \`swap_sandbox\` and \`sandbox_logs\` act on this sandbox's own container. Do not write a ` +
+        `command out for the owner to run on a machine you can reach — the editor already drives that box for port ` +
+        `mirroring, file syncing and container management, and they are reading your message rather than sitting at its ` +
+        `terminal. Two limits ride with it: anything that restarts, updates, rebuilds or removes THIS sandbox ends your ` +
+        `own turn mid-sentence, so say so and get a yes first; and a call refused for a switch that is off is the owner's ` +
+        `decision, to be reported with the switch's name, never routed around.`
+    );
+};
+
 // Names the situation, not just the tool: pinning the schema alone didn't stop the model from writing commands out in
 // prose for the owner to run by hand. Gated on the server actually being mounted (attended turn, tmux wrapper on).
 const TERMINAL_GUIDANCE =
@@ -282,6 +305,8 @@ export interface SdkSystemPromptInput {
     // Whether agent.ts mounted the terminal hand-off server (attended, tmux wrapper on); the sentence rides only where
     // it's loadable.
     readonly terminal?: boolean;
+    // The devices this turn can act on; absent or `ids: []` ⇒ no sentence about running things out there at all.
+    readonly hostDevices?: HostDeviceReach | undefined;
 }
 
 // This harness's own guidance, most-stable-first, with whatever the turn composed appended after. Shared by both
@@ -293,6 +318,7 @@ const harnessGuidance = ({
     browserAccounts,
     diagnostics,
     terminal,
+    hostDevices,
 }: Omit<SdkSystemPromptInput, "mode" | "custom">): string[] => [
     // First and unconditional: under the Claude preset, this is the only place the product gets named.
     SELF_GUIDANCE,
@@ -311,6 +337,8 @@ const harnessGuidance = ({
     ...(browserOutputDir === undefined ? [] : [browserGuidance(browserOutputDir, browserAccounts === true)]),
     ...(diagnostics === true ? [DIAGNOSTICS_GUIDANCE] : []),
     ...(terminal === true ? [TERMINAL_GUIDANCE] : []),
+    // Only with a device actually mounted: the whole sentence is about tools this turn can load.
+    ...(hostDevices === undefined || hostDevices.ids.length === 0 ? [] : [hostDeviceGuidance(hostDevices)]),
     ...(append === undefined ? [] : [append]),
 ];
 

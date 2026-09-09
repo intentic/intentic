@@ -154,3 +154,32 @@ Per-kind mechanics ([handlers/](../../_sandbox/sandbox/src/capabilities/handlers
 | `host` | A computer of the user's OWN, one capability per machine. Writes the contributed OS skill pack, then pushes the scope switches to the machine if it is up: an edit is a decision about what may happen on somebody's computer *now*, so it travels immediately rather than at the next reconnect. The machine connects itself out-of-band (the card's one-liner enrolls over `/system/hosts/enroll` and dials back); enforcement is on the machine, never here. |
 | `agent` | An ACP agent as a chat provider. `apply`/`status` are a spawn + initialize probe, so a command that doesn't actually speak ACP is caught (with its stderr) before the first chat turn depends on it; the warm turn-serving connection lives in the acp pool. |
 | `endpoint` | A model API the user pointed us at. `apply` and `status` are the SAME probe and neither is fatal: adding an endpoint whose server isn't up yet is the ordinary case, so the entry is stored either way and the card carries the truth ("3 models" vs "no models", the usual way an Ollama install disappoints its owner). |
+
+## A reachable machine is never asked to type
+
+A connected `host` capability is a way IN to somebody's computer, so anything that has to happen out there is
+run from here rather than written out for them to paste. That includes the machine a sandbox itself runs on:
+`hostRunningSandbox` ([schemas/devices.ts](../../_shared/sandbox-contract/src/schemas/devices.ts)) is the one predicate
+for "which connected, online device reports this sandbox's container", read by the browser through
+`useHostRunning` ([useDevices.ts](../../_editor/web/src/features/sandbox/devices/useDevices.ts)) and by the daemon
+through `hostRunningSelf` ([self-host.ts](../../_sandbox/sandbox/src/hosts/self-host.ts)), which answers from readings
+already held so composing a turn never waits on a laptop.
+
+What that buys, per surface: a button where there used to be a command (the update/rebuild/rollback card, the
+container repair, the dev reload, deleting a sandbox from the machine holding it, enrolling desktop sync on a
+device already connected), and a paragraph in every turn's prompt naming the machines it can act on
+([system-prompt.ts](../../_sandbox/sandbox/src/agent/prompt/system-prompt.ts), plus the same rule in the per-device skill
+pack, [host-skills.ts](../../_sandbox/sandbox/src/hosts/host-skills.ts)).
+
+Three rules hold the line:
+
+- **The command line is built here, from a closed set of names** ([device-commands.ts](../../_sandbox/sandbox/src/hosts/device-commands.ts)).
+  The two commands whose argv needs more than a name take it from what only the daemon knows — the dev checkout
+  recorded on the container, a pairing minted for that one call — never from the caller. The only
+  caller-supplied string that reaches a line is a folder on the device, shaped by `DeviceLocalDirSchema`.
+- **A copyable command remains, as the fallback.** A device that is asleep, absent or refusing the scope still
+  leaves the owner a way, and so does a refusal the button itself earned. Bootstrap is the honest exception:
+  the first connect, the setup one-liners and the compose file cannot be run on a machine we have no door to.
+- **A refusal is the machine's answer, in its words.** Nothing here judges a scope; the daemon relays and names
+  the switch. Anything that restarts the sandbox serving the request is expected to lose its own answer, so the
+  caller treats a dropped connection as the ending rather than a failure.

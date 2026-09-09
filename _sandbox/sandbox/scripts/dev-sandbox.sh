@@ -39,6 +39,15 @@ if command -v node >/dev/null 2>&1; then
 fi
 export INTENTIC_DEV_MOUNTS
 
+# Tell the daemon WHERE those mounts came from. It cannot see a host path from inside the container, and knowing
+# it is what lets the Sandbox page's reload button run dev-reload.sh out here (through this machine's own device
+# connection) instead of printing the command for someone to paste. Delivered through the run contract's escape
+# hatch, so it is replayed by every later recreate like any other allowlisted var (REPLAY_ENV in
+# @intentic/sandbox-run); appended, never assigned, so a caller's own INTENTIC_SET_ENV survives.
+INTENTIC_SET_ENV="${INTENTIC_SET_ENV:+$INTENTIC_SET_ENV
+}SANDBOX_DEV_ROOT=$ROOT"
+export INTENTIC_SET_ENV
+
 # The dogfood loop should exercise the checkout's OWN ic (the host-side CLI recreate.sh shims to), not a
 # released download — a flow change and its CLI change land in one commit and are tested together. Skipped
 # when cargo isn't on PATH; the shim then downloads the released binary, which is the old behaviour.

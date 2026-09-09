@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { Device } from "@intentic/sandbox-contract";
-import { Button, ui, Code } from "@intentic/ui";
+import { Button, ui, Code, Notice } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { useDevices } from "./useDevices";
+import { runDeviceCommand, useDevices } from "./useDevices";
 import { useDesktopSync } from "./useDesktopSync";
 import { desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
 import ScriptSourceSwitch from "../../capabilities/connect/ScriptSourceSwitch.vue";
@@ -28,8 +28,44 @@ const {
 } = useDesktopSync();
 
 // Whether a device holds file sync, read off the already-fetched devices list (same query, no extra poll).
-const { devices } = useDevices({ poll: false });
+const { devices, refetch } = useDevices({ poll: false });
 const holder = computed<Device | undefined>(() => devices.value.find((device) => device.sync?.mode === `sync`));
+
+// Machines already connected as devices and answering right now: the install can be RUN on them from here, so
+// there is nothing to paste. One already enrolled with this sandbox is not a candidate — its own row on the
+// Devices board owns everything about that pairing.
+const candidates = computed(() => devices.value.filter((device) => device.hostId !== undefined && device.online === true && device.sync === undefined));
+
+const installing = ref<string | undefined>(undefined);
+const installed = ref<string | undefined>(undefined);
+const installError = ref<string | undefined>(undefined);
+
+// The daemon mints the pairing and builds the line in that device's own shell dialect (hosts/device-commands.ts);
+// this only says which device, which half, and which folder out there.
+const installOn = async (device: Device): Promise<void> => {
+    const id = device.hostId;
+    if (id === undefined || installing.value !== undefined) {
+        return;
+    }
+    installing.value = id;
+    installed.value = undefined;
+    installError.value = undefined;
+    try {
+        const result = await runDeviceCommand(id, `sync-install`, {
+            mode: portsOnly.value ? `mirror` : `sync`,
+            ...(portsOnly.value ? {} : { localDir: folder.value }),
+        });
+        // The device's own words either way: a refusal names the switch to flip rather than throwing.
+        installed.value = result.ok ? result.message : undefined;
+        installError.value = result.ok ? undefined : result.message;
+    } catch (error) {
+        installError.value = error instanceof Error ? error.message : String(error);
+    } finally {
+        installing.value = undefined;
+        // The device's row is what confirms an enrollment, so ask for a fresh reading either way.
+        refetch();
+    }
+};
 
 // Owner's opt-in to ports-only (skip file sync, or mirror while another holds sync); forced on for members.
 const mirrorOnly = ref(false);
@@ -80,6 +116,35 @@ onUnmounted(stop);
                 </div>
 
                 <template v-if="pairToken === undefined">
+                    <!--
+                        Machines this sandbox can already reach: the install runs out there over the connection they
+                        hold open, so no command is pasted anywhere. Hidden for a takeover, which only the one-liner
+                        carries (TAKEOVER=1).
+                    -->
+                    <div v-if="candidates.length > 0 && !takeover" class="flex flex-col gap-1.5">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <Button
+                                v-for="device in candidates"
+                                :key="device.key"
+                                size="small"
+                                :label="`Set up on ${device.label}`"
+                                :loading="installing === device.hostId"
+                                :disabled="installing !== undefined"
+                                @click="void installOn(device)"
+                            >
+                                <template #icon><Icon name="desktop" /></template>
+                            </Button>
+                        </div>
+                        <p class="text-2xs text-subtle">
+                            <template v-if="portsOnly">Already connected, so this installs the agent there and mirrors this sandbox's ports.</template>
+                            <template v-else>
+                                Already connected, so this installs the agent there and syncs the folder above, which is a path on
+                                <b>that</b> device.
+                            </template>
+                        </p>
+                        <Notice v-if="installError" tone="warning" class="text-2xs">{{ installError }}</Notice>
+                        <p v-else-if="installed" class="text-2xs text-muted">{{ installed }}</p>
+                    </div>
                     <div class="flex flex-wrap items-center gap-3">
                         <Button
                             :label="portsOnly ? 'Mirror ports to a device' : takeover ? 'Take over on another device' : 'Enable desktop sync'"

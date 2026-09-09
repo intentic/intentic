@@ -76,6 +76,7 @@ import { defaultQuery, promptInput, type QueryFn, streamSdk } from "./sdk-stream
 import { checklistCloseHooks } from "./checklist-close.js";
 import { checklistSeedOf } from "./task-store.js";
 import { sdkSystemPrompt } from "../prompt/system-prompt.js";
+import type { HostDeviceReach } from "../../hosts/self-host.js";
 import { noteChildWork } from "../subagents/child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
 import { ASK_TOOL_NAMES, formatAnswers } from "../tools/question-answers.js";
@@ -171,6 +172,9 @@ export interface AgentRequest {
     readonly browserOutputDir?: string;
     // Whether turn-plan mounted the diagnostics server; withheld from a persona whose `files` power is `none`.
     readonly diagnostics?: boolean;
+    // The connected devices this turn carries servers for, which of them runs this sandbox (when the daemon's held
+    // readings name it) and this container's slug out there: what the prompt needs to say "run it there yourself".
+    readonly hostDevices?: HostDeviceReach | undefined;
     // Whether the iq plugin is actually loaded, so the empty-search notice can name it only where it's real.
     readonly iqAvailable?: boolean;
     // Each browser profile owner's CDP debugging port, so the first browser call can register a watchable session.
@@ -402,6 +406,7 @@ const baseOptions = (
             browserAccounts: holdsBrowserAccounts(request.browserAccounts),
             diagnostics: request.diagnostics === true,
             terminal: terminalMounted(request, tmuxEnabled),
+            hostDevices: request.hostDevices,
         }),
         // Loads the workspace's .claude/ config: skills, subagents, settings, hooks, .mcp.json; else none. Not the
         // owner's standing rules — those are composed for every runtime alike (workspace-memory.ts), so a CLAUDE.md
