@@ -26,7 +26,8 @@
       while the listener is alive. So a crash, a network drop, a failed self-update or an operator who killed it
       is repaired within minutes, by the machine, with nobody signed in. Task Scheduler's own restart-on-failure
       only fires for what it CALLS a failure, and a listener that exited 0 is not one;
-    • it comes back by itself after a reboot, given -AutoLogon, and does not wait out a sleep, given -KeepAwake.
+    • it comes back by itself after a reboot, given -AutoLogon, and given -KeepAwake it neither sleeps nor locks
+      its own desktop — a locked session is online, accepts jobs, and fails every one of them.
 
   The last two are switches rather than defaults because each one trades something real away (a stored password,
   a machine-wide power policy) and only a dedicated CI box should make that trade.
@@ -43,7 +44,8 @@
   ./setup-windows-runner.ps1 -Url https://github.com/intentic -Token <registration-token>
 
 .EXAMPLE
-  # On a box that exists to be this runner and nothing else: signs itself in after a reboot, never sleeps.
+  # On a box that exists to be this runner and nothing else: signs itself in after a reboot, never sleeps, and
+  # never locks its own desktop out from under the tiers.
   ./setup-windows-runner.ps1 -Url https://github.com/intentic -Token <token> -AutoLogon -KeepAwake
 
 .EXAMPLE
@@ -67,10 +69,11 @@ param(
     # it writes a password into the registry in cleartext, which is a poor trade on a machine anybody uses. Left
     # off, the runner comes back at the next sign-in.
     [switch]$AutoLogon,
-    # Stop this machine sleeping on mains power. OFF by default because it is a machine-wide power policy, and
-    # this script otherwise changes none — but a runner on a box that sleeps is a runner that is OFFLINE for as
-    # long as nobody touches the keyboard, which from GitHub's side is indistinguishable from a broken one: jobs
-    # queue against a label no machine is answering. Worth it on a dedicated CI box, not on somebody's laptop.
+    # Stop this machine sleeping on mains power, AND stop its session locking itself. OFF by default because
+    # both are machine-wide policies and this script otherwise changes none — but a box that sleeps is a runner
+    # that is OFFLINE for as long as nobody touches the keyboard (jobs queue against a label no machine is
+    # answering, which looks like a broken runner), and a box that LOCKS is worse: it stays online, takes the
+    # jobs, and fails every desktop assertion in them. Worth it on a dedicated CI box, not on somebody's laptop.
     [switch]$KeepAwake,
     # Repair an existing registration's session without reconfiguring it. No -Url/-Token needed.
     [switch]$Repair,
@@ -336,11 +339,43 @@ if ($KeepAwake) {
     # A SLEEPING RUNNER IS AN OFFLINE RUNNER, and from GitHub's side that is indistinguishable from a broken
     # one: jobs naming `windows-desktop` queue against a label nothing is answering, with no error anywhere to
     # read. Mains power only — on battery this machine is somebody's laptop and should still be allowed to
-    # sleep. The monitor is left alone deliberately: a blanked screen keeps every window mapped, so it costs the
-    # tiers nothing, and turning it off is not this script's business.
+    # sleep.
     Step 'stopping this machine sleeping on mains power...'
     & powercfg /change standby-timeout-ac 0 | Out-Null
     & powercfg /change hibernate-timeout-ac 0 | Out-Null
+
+    # A LOCKED RUNNER IS WORSE THAN A SLEEPING ONE, because it stays online and fails.
+    #
+    # This block used to leave the display alone on purpose, and said so: "a blanked screen keeps every window
+    # mapped, so it costs the tiers nothing". The observation is true and the conclusion was wrong. What blanks
+    # the display on a stock Windows 11 also LOCKS the session, and a locked desktop refuses every foreground
+    # change and swallows every keystroke — so the tiers install the app, open its confirmation, and then
+    # cannot answer it. It cost two red releases: the machine locked itself at midnight and every run after
+    # that failed six assertions that read as a broken deep link. The smoke `doctor` now names that state, and
+    # this is the switch that stops the machine reaching it.
+    #
+    # Three settings, because three different things lock a Windows session on idle:
+    #   • the display timeout, which is what actually fires on a machine nobody touches;
+    #   • "require a password on wakeup" (CONSOLELOCK), which turns that blank screen into a lock;
+    #   • the screen saver's "on resume, display logon screen", a per-user setting the power plan knows nothing
+    #     about and which locks on its own timer.
+    # setacvalueindex writes into the active scheme, and setactive is what makes the scheme take effect now.
+    Step 'stopping this session locking itself: display timeout, password on wake, screen saver...'
+    & powercfg /change monitor-timeout-ac 0 | Out-Null
+    & powercfg /setacvalueindex SCHEME_CURRENT SUB_NONE CONSOLELOCK 0 | Out-Null
+    & powercfg /setactive SCHEME_CURRENT | Out-Null
+    $userDesktop = 'HKCU:\Control Panel\Desktop'
+    Set-ItemProperty -Path $userDesktop -Name 'ScreenSaveActive' -Value '0'
+    Set-ItemProperty -Path $userDesktop -Name 'ScreenSaverIsSecure' -Value '0'
+    Set-ItemProperty -Path $userDesktop -Name 'ScreenSaveTimeOut' -Value '0'
+
+    # REPORTED, NOT CHANGED. A machine inactivity limit is a security policy — often pushed by Intune or a
+    # domain, where a local edit is reverted at the next refresh and the machine locks again with this script
+    # claiming it fixed that. Naming it points at the one place it can actually be turned off.
+    $inactivity = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'InactivityTimeoutSecs' -ErrorAction SilentlyContinue).InactivityTimeoutSecs
+    if ($inactivity -gt 0) {
+        Step "NOTE: a policy locks this machine after $inactivity seconds idle (InactivityTimeoutSecs), which outlives everything above. It has to be cleared where it is set — local security policy, or whatever manages this box — or the desktop tiers will keep finding a locked session."
+    }
 }
 
 # ── one listener, and it is the task's ───────────────────────────────────────────────────────────────────────
@@ -425,6 +460,6 @@ Step "ready: listener in session $($sessions -join ', '), as $Account, with no w
 Step "it is checked every $WatchdogMinutes minutes ($repetition, read back off the registered task) and restarted if it has stopped — nothing to keep open, nothing to babysit."
 Step "it starts again at every sign-in$(if ($AutoLogon) { ', and this machine signs in on its own' } else { " — after an unattended reboot it waits for one (-AutoLogon changes that, at the cost of a stored password)" })."
 if (-not $KeepAwake) {
-    Step 'this machine may still SLEEP, and a sleeping runner is an offline runner as far as GitHub is concerned (-KeepAwake changes that, at the cost of a machine-wide power policy).'
+    Step 'this machine may still SLEEP or LOCK itself: a sleeping runner is an offline runner as far as GitHub is concerned, and a locked one takes jobs and fails every desktop assertion in them (-KeepAwake changes both, at the cost of a machine-wide power policy).'
 }
 Step 'the tiers reconcile everything else about this machine themselves; nothing here needs doing again.'

@@ -2,6 +2,7 @@
 // `ConvertTo-Json` returns nothing/an object/an array for 0/1/N results; `asList` absorbs that asymmetry once, for
 // every probe here.
 
+import type { SessionState, WindowInfo } from "@intentic/desktop-automation";
 import { posix } from "node:path";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
@@ -184,6 +185,79 @@ export const sandboxSlug = (hostname: string): string => hostname.split(`.`)[0] 
 // Whether a window title is the one being waited for: substring match on the distinctive half, so a wording change
 // doesn't turn into a red build.
 export const titled = (titles: readonly string[], fragment: string): boolean => titles.some((title) => title.includes(fragment));
+
+// The two programs that draw the lock screen: LockApp the picture and clock, LogonUI the credential prompt.
+// Neither has a window `windows()` returns, and either one holding the foreground means no window on this
+// desktop can be given the keyboard — `focusWindow` loses to them by design, however many times it asks.
+const LOCK_SCREEN_APPS = [`LockApp`, `LogonUI`];
+
+/** Whether the keyboard is held by the lock screen, the one holder a tier cannot take it from. */
+export const lockScreenHolds = (session: SessionState): boolean => {
+    const holder = session.foreground?.app.toLowerCase();
+    return holder !== undefined && LOCK_SCREEN_APPS.some((app) => app.toLowerCase() === holder);
+};
+
+export interface DesktopReadiness {
+    /** Whether a tier can expect to take the keyboard; false is a machine to refuse, not a product to blame. */
+    readonly drivable: boolean;
+    /** The one line the transcript carries, whichever way it goes. */
+    readonly summary: string;
+    /** What to do about it, for a person reading a red run at a machine they are not sitting at. */
+    readonly remedy: string | undefined;
+}
+
+const LOCKED_REMEDY =
+    `A locked desktop cannot be driven and cannot be unlocked from inside a job: focus is refused, keystrokes go to a\n` +
+    `desktop this process cannot reach, and every window assertion after it fails as though the app were broken.\n` +
+    `Sign in on that machine (or let the auto-logon do it), then re-run this job. To stop it happening again:\n` +
+    `  _tools/scripts/ci/setup-windows-runner.ps1 -Repair -KeepAwake\n` +
+    `which also turns off the display timeout, the screen saver and require-sign-in-on-wake — a blanked display\n` +
+    `locking the session is how this machine got here.`;
+
+const STUCK_REMEDY =
+    `The session is signed in, so this is a lock screen left holding the foreground rather than a locked machine.\n` +
+    `teardown tries to dismiss it before this check runs; it did not go. Sign in on that machine and back out, or\n` +
+    `end LockApp there:\n` +
+    `  Stop-Process -Name LockApp -Force`;
+
+const heldBy = (foreground: NonNullable<SessionState["foreground"]>): string =>
+    foreground.title === `` ? `an untitled window [${foreground.app}]` : `"${foreground.title}" [${foreground.app}]`;
+
+/*
+ * WHETHER THIS DESKTOP CAN BE DRIVEN, which the window list alone cannot say and used to be asked of it.
+ *
+ * The line this replaces searched `windows()` for the focused row and reported "none holding the foreground"
+ * when it found none — a sentence that is true of an idle desktop and of a machine whose keyboard is held by
+ * the lock screen, because the lock screen has no row to find. A release ran on the second kind: the doctor
+ * declared the machine ready, then six assertions failed in a row, all of them worded as though the product
+ * had stopped answering a deep link.
+ *
+ * So the holder is read from the OS, and a holder the window list does not show is SAID to be one, rather than
+ * silently becoming nobody.
+ */
+export const desktopReadiness = (open: readonly WindowInfo[], session: SessionState): DesktopReadiness => {
+    const count = `${open.length} window(s) currently open`;
+    if (session.locked) {
+        return { drivable: false, summary: `${count}, and Windows is drawing its sign-in screen over this session`, remedy: LOCKED_REMEDY };
+    }
+    if (lockScreenHolds(session)) {
+        const holder = session.foreground === undefined ? `the lock screen` : heldBy(session.foreground);
+        return { drivable: false, summary: `${count}, and the lock screen still holds the foreground: ${holder}`, remedy: STUCK_REMEDY };
+    }
+    const holding = session.foreground;
+    if (holding === undefined) {
+        return { drivable: true, summary: `${count}, none holding the foreground`, remedy: undefined };
+    }
+    // A holder that enumerates is ordinary — the tiers take the foreground off one every run. One that does not
+    // is worth naming as such: it is the shape the lock screen came in, and the next unreadable holder should
+    // arrive already described rather than as a count that looked fine.
+    const listed = open.some((window) => window.id === holding.id);
+    return {
+        drivable: true,
+        summary: `${count}, ${heldBy(holding)} holding the foreground${listed ? `` : `, a window no enumeration of this desktop returns`}`,
+        remedy: undefined,
+    };
+};
 
 // Control-token store shape as auth/control-tokens.ts persists it: sha256 of the raw token, never the token. Kept as a
 // pure decision, separate from the docker exec that writes it.

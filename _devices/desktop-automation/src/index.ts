@@ -5,10 +5,21 @@ import { windowsInput } from "./input-windows.js";
 import { capture, frame } from "./screen.js";
 import { type Desktop, DesktopError } from "./types.js";
 
+export { windowsSession } from "./apps-windows.js";
 export { parseChord, windowsChord, wtypeArgs, xdotoolChord, type Chord, type Modifier } from "./keys.js";
-export { looksLikeUrl, parseSwayTree, parseWindowsJson, parseWmctrl } from "./parse.js";
+export { focusRefusal, looksLikeUrl, parseSessionJson, parseSwayTree, parseWindowsJson, parseWmctrl } from "./parse.js";
 export { capture, frame, hasGraphicalSession, isWayland, pngSize } from "./screen.js";
-export { DesktopError, type Desktop, type MouseButton, type Point, type ScreenFrame, type ScrollDirection, type WindowInfo } from "./types.js";
+export {
+    DesktopError,
+    type Desktop,
+    type ForegroundWindow,
+    type MouseButton,
+    type Point,
+    type ScreenFrame,
+    type ScrollDirection,
+    type SessionState,
+    type WindowInfo,
+} from "./types.js";
 
 // Windows pointer methods take the frame's origin: screenshot pixels and OS coordinates differ there. The frame is
 // read once per call, not per action, to avoid a PowerShell round trip each time.

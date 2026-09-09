@@ -89,7 +89,7 @@ So the task the script registers is unattended in every way a service is, except
 | no window | the listener runs under `intentic-launch.exe` (see below), so there is nothing on the desktop to close by accident and nothing to keep open on purpose |
 | self-healing | a repeating trigger re-runs the task every 3 minutes, and the task's `IgnoreNew` policy makes that a no-op while the listener is alive. A crash, a dropped network, a failed self-update or an operator's Ctrl-C is repaired within minutes, by the machine, with nobody signed in |
 | survives a reboot | `-AutoLogon`, below |
-| does not sleep through work | `-KeepAwake`, below |
+| does not sleep through work, and does not lock its own desktop | `-KeepAwake`, below |
 
 Task Scheduler's own restart-on-failure is set too, as the fast path — but it is not a substitute: it only fires
 for what the scheduler *calls* a failure, and a listener that exited zero, which is what a graceful stop and most
@@ -123,8 +123,16 @@ storing a logon password in the registry in cleartext, which is a poor trade on 
 **`-KeepAwake`.** A sleeping runner is an offline runner, and from GitHub's side that is indistinguishable from a
 broken one — see the queueing above. This stops the machine sleeping or hibernating **on mains power only**; on
 battery it is somebody's laptop and should still be allowed to sleep. It is the only machine-wide setting this
-script will make, which is why it asks. The monitor is deliberately left alone: a blanked screen keeps every
-window mapped, so it costs the tiers nothing.
+script will make, which is why it asks.
+
+It also stops the session **locking itself**, and that half was learned the hard way. This page used to say the
+monitor was deliberately left alone because "a blanked screen keeps every window mapped, so it costs the tiers
+nothing" — true about the windows, wrong about the desktop. What blanks the display on a stock Windows 11 also
+locks the session, and a locked desktop is the worst state this machine can be in: it stays online, accepts
+every job, refuses every focus change and swallows every keystroke. Two releases in a row failed that way,
+identically, four minutes into the install tier, blaming the app for a deep-link confirmation nobody could
+answer. So `-KeepAwake` now also turns off the display timeout, "require a password on wakeup", and the screen
+saver's logon screen — and prints a warning if a machine inactivity policy is set, which outlives all three.
 
 A laptop is the machine this matters most on, and it is worth being blunt about it: a lid that closes is a
 Windows leg of the pipeline that stops, silently, until somebody opens it.
@@ -270,6 +278,8 @@ The Windows runner never builds product binaries. Linux jobs cross-build what ea
 | Windows jobs sit *in progress* for hours, nothing fails, no log | no machine is answering `windows-desktop`. The runner is not running, and a runner that is not running produces no error anywhere: check Settings > Actions > Runners for `offline`, then whether the box is asleep, signed out, or was only ever a console window somebody closed |
 | the runner was there yesterday and is gone today | it was started by hand, not by the logon task. `doctor` says so, in the log of the last run that passed. `-Repair` |
 | every window assertion times out | the runner is a service: session 0 has no desktop |
+| `Windows is drawing its sign-in screen over this session`, or `the lock screen still holds the foreground` | the box locked itself, usually on a display timeout. A locked desktop refuses every focus change and swallows every keystroke, and no job can unlock it from inside. Sign in on the machine, then `setup-windows-runner.ps1 -Repair -KeepAwake` so it stops happening: that switch turns off the display timeout, password-on-wake and the screen saver's logon screen. If it recurs anyway, that script says so on its way past: a machine inactivity policy (`InactivityTimeoutSecs`) outlives every setting it changes and has to be cleared where it is set |
+| `the confirmation could not be answered`, then a run of assertions about the setup screen | the same thing, one release earlier: before `doctor` refused a locked desktop, this is the shape it took — the confirmation opens, nothing can be typed into it, and every assertion after it blames the product. Read the doctor's desktop line first |
 | `already installed` | something the reconcile teardown could not remove: a stuck uninstaller, or an install under a different account |
 | `the daemon runs windows containers, not linux` | Docker Desktop is in Windows-container mode: one tray-menu click |
 | the app starts, no window, WebView2 reported absent | the installer's runtime bootstrapper did not complete; usually no outbound network |

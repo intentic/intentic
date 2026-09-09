@@ -4,9 +4,11 @@ import {
     asList,
     containerNames,
     controlTokenStore,
+    desktopReadiness,
     dockerOsType,
     humanDuration,
     installedApp,
+    lockScreenHolds,
     missingEnvNames,
     nonEmpty,
     publishedPort,
@@ -163,16 +165,10 @@ test("a container's environment answers which names arrived, and an empty value 
     expect(missingEnvNames(inspected, [`SANDBOX_GRANT`, `INGRESS_URL`])).toEqual([]);
 
     // Names absent entirely: what passing them nowhere upstream looks like.
-    expect(missingEnvNames(`PATH=/usr/bin\nCONNECT_TOKEN=tok\n`, [`SANDBOX_GRANT`, `INGRESS_URL`])).toEqual([
-        `SANDBOX_GRANT`,
-        `INGRESS_URL`,
-    ]);
+    expect(missingEnvNames(`PATH=/usr/bin\nCONNECT_TOKEN=tok\n`, [`SANDBOX_GRANT`, `INGRESS_URL`])).toEqual([`SANDBOX_GRANT`, `INGRESS_URL`]);
 
     // Set-but-empty must count as missing, or the bug would read as fixed.
-    expect(missingEnvNames(`SANDBOX_GRANT=\nINGRESS_URL=   \n`, [`SANDBOX_GRANT`, `INGRESS_URL`])).toEqual([
-        `SANDBOX_GRANT`,
-        `INGRESS_URL`,
-    ]);
+    expect(missingEnvNames(`SANDBOX_GRANT=\nINGRESS_URL=   \n`, [`SANDBOX_GRANT`, `INGRESS_URL`])).toEqual([`SANDBOX_GRANT`, `INGRESS_URL`]);
 
     // A value containing `=` is still one value (base64/signed grants end in padding).
     expect(missingEnvNames(`SANDBOX_GRANT=ig1.YWJj==\n`, [`SANDBOX_GRANT`])).toEqual([]);
@@ -191,4 +187,60 @@ test("a repetition interval is reported in the units a person reads", () => {
     expect(humanDuration(`P99999999DT23H59M59S`)).toBe(`P99999999DT23H59M59S`);
     expect(humanDuration(`  PT5M  `)).toBe(`5 minutes`);
     expect(humanDuration(``)).toBe(``);
+});
+
+/* Whether this desktop can be driven, the check whose absence cost two red releases: the doctor looked for the
+ * foreground window in the WINDOW LIST, the lock screen is the one holder that has no row in it, and "none
+ * holding the foreground" was printed about a machine on which nothing could be given the keyboard. */
+
+const idle = { locked: false, foreground: undefined } as const;
+const lockScreen = { locked: false, foreground: { id: "66048", title: "Windows Default Lock Screen", app: "LockApp" } } as const;
+const listed = (id: string, title: string) => ({ id, title, app: "intentic", bounds: { x: 0, y: 0, width: 800, height: 600 }, focused: false });
+
+test("an idle desktop with windows on it is drivable, and says how many", () => {
+    const verdict = desktopReadiness([listed("21", "Intentic"), listed("22", "Set up a sandbox?")], idle);
+    expect(verdict.drivable).toBe(true);
+    expect(verdict.summary).toBe(`2 window(s) currently open, none holding the foreground`);
+});
+
+test("an ordinary window holding the foreground is drivable: the tiers take it off one every run", () => {
+    const verdict = desktopReadiness([listed("21", "Intentic")], { locked: false, foreground: { id: "21", title: "Intentic", app: "intentic" } });
+    expect(verdict.drivable).toBe(true);
+    expect(verdict.summary).toContain(`"Intentic" [intentic] holding the foreground`);
+    expect(verdict.remedy).toBeUndefined();
+});
+
+// The exact machine state of the failing release: nine windows, and the keyboard held by none of them.
+test("a lock screen holding the keyboard is refused, however ordinary the window count looks", () => {
+    const verdict = desktopReadiness([listed("21", "Intentic")], lockScreen);
+    expect(verdict.drivable).toBe(false);
+    expect(verdict.summary).toContain(`the lock screen still holds the foreground`);
+    expect(verdict.remedy).toContain(`Stop-Process -Name LockApp`);
+});
+
+test("a session showing the sign-in screen is refused with the remedy a person can act on", () => {
+    const verdict = desktopReadiness([], { locked: true, foreground: lockScreen.foreground });
+    expect(verdict.drivable).toBe(false);
+    expect(verdict.summary).toContain(`drawing its sign-in screen`);
+    expect(verdict.remedy).toContain(`setup-windows-runner.ps1 -Repair -KeepAwake`);
+});
+
+// Drivable, but never again silently: a holder with no row is how the lock screen arrived, and the next one
+// should be described rather than counted as nobody.
+test("a holder no enumeration returns is named as one", () => {
+    const verdict = desktopReadiness([listed("21", "Intentic")], {
+        locked: false,
+        foreground: { id: "9001", title: "", app: "ApplicationFrameHost" },
+    });
+    expect(verdict.drivable).toBe(true);
+    expect(verdict.summary).toContain(
+        `an untitled window [ApplicationFrameHost] holding the foreground, a window no enumeration of this desktop returns`,
+    );
+});
+
+test("both lock screen programs count, whatever case Windows spells them in", () => {
+    expect(lockScreenHolds(lockScreen)).toBe(true);
+    expect(lockScreenHolds({ locked: true, foreground: { id: "3", title: "", app: "logonui" } })).toBe(true);
+    expect(lockScreenHolds({ locked: false, foreground: { id: "4", title: "Intentic", app: "intentic" } })).toBe(false);
+    expect(lockScreenHolds(idle)).toBe(false);
 });

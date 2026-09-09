@@ -1,7 +1,7 @@
-import type { WindowInfo } from "./types.js";
+import type { SessionState, WindowInfo } from "./types.js";
 
-// Turns platform window-lister output (wmctrl/PowerShell text or JSON) into WindowInfo. Pure functions, testable
-// without a desktop.
+// Turns platform window-lister output (wmctrl/PowerShell text or JSON) into WindowInfo, and writes the one
+// sentence that gets built from such a read rather than from a list. Pure functions, testable without a desktop.
 
 // wmctrl -lGpx columns: nine fields, then the title is everything remaining on the line. `app` is the part of
 // `instance.Class` after the dot.
@@ -107,6 +107,45 @@ export const parseWindowsJson = (json: string): WindowInfo[] => {
             },
         ];
     });
+};
+
+// Undefined rather than a hopeful default when the output is not the shape asked for: "nothing holds the
+// foreground" is an observation about the desktop, and a read that failed has not made one. A caller that
+// cannot tell the two apart reports an unreadable machine as an idle one.
+export const parseSessionJson = (json: string): SessionState | undefined => {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(json);
+    } catch {
+        return undefined;
+    }
+    const record = parsed as Record<string, unknown> | null;
+    if (record === null || typeof record !== "object" || typeof record["locked"] !== "boolean") {
+        return undefined;
+    }
+    const id = String(record["id"] ?? "");
+    // A zero handle is GetForegroundWindow's own "nobody", not a window to go looking for.
+    const foreground = id === "" || id === "0" ? undefined : { id, title: String(record["title"] ?? ""), app: String(record["app"] ?? "unknown") };
+    return { locked: record["locked"], foreground };
+};
+
+const heldBy = (foreground: NonNullable<SessionState["foreground"]>): string =>
+    foreground.title === "" ? `an untitled window [${foreground.app}]` : `"${foreground.title}" [${foreground.app}]`;
+
+// What to say when focus was refused. The old wording listed every cause it might have been ("a UAC prompt, a
+// full-screen app, or a locked session") on every refusal, which reads as a diagnosis and is a guess — and it
+// sent a release investigation looking at the app for a machine whose session was locked. Each branch here is
+// something the machine was asked; `undefined` is the only one that admits to not knowing.
+export const focusRefusal = (id: string, attempts: number, state: SessionState | undefined): string => {
+    const cause =
+        state === undefined
+            ? `nothing here could read which window has it`
+            : state.locked
+              ? `Windows is drawing its sign-in screen over this session (LogonUI is running), so the keyboard is on a desktop no ordinary process can reach — somebody has to sign in on that machine`
+              : state.foreground === undefined
+                ? `nothing holds the foreground: the window is gone, or it belongs to another desktop`
+                : `${heldBy(state.foreground)} holds it and would not let go (a UAC prompt, a full-screen app, or a lock screen still up)`;
+    return `Windows would not give window ${id} the keyboard after ${attempts} attempts: ${cause}.`;
 };
 
 // Whether a launch target should be opened (a URL, or an existing path) rather than run as a command; picks between
