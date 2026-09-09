@@ -179,8 +179,10 @@ misconfigured".
 - **Answering the confirmation is itself checked.** Windows only lets a process move the keyboard under
   conditions a CI harness does not meet by default, and it refuses quietly: so a Return meant for the app's
   dialog can land on whatever else is open on that desktop. `focusWindow` is the step that can tell, and its
-  refusal is reported as its own failure. Without that, every assertion after it waits out its deadline and the
-  log blames the setup screen for a keystroke that was never delivered.
+  refusal is reported as its own failure, **naming the window that kept the keyboard**. Without that, every
+  assertion after it waits out its deadline and the log blames the setup screen for a keystroke that was never
+  delivered — and without the name, the remedy is a guess about a machine nobody is sitting at. The doctor
+  prints the same thing before the tiers start, so a desktop that was already wrong is visible up front.
 - **A failure never stops the run.** One tier reports every assertion it could make, because the second failure
   is usually what explains the first: "no window" plus "the process exited" is a crash, "no window" alone is a
   hang.

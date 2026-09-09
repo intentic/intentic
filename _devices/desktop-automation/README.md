@@ -50,11 +50,21 @@ one row.
 **Taking focus on Windows needs more than `SetForegroundWindow`.** Windows refuses that call from a process
 that is not already in the foreground, and refuses it *quietly*: it flashes the taskbar button and leaves the
 keyboard where it was, so the next `type` or `key` goes to whatever the person at that desk had open. A backend
-running from a fresh `powershell.exe` misses every qualifying condition at once, and a machine whose
-foreground-lock timeout has been raised (gaming and anti-focus-stealing utilities do this) closes the last of
-them for good. So `focusWindow` briefly attaches its input queue to the foreground window's thread and the
-target's, which is what earns the right, and then *checks*: it raises a `DesktopError` rather than returning
-to a caller that is about to type into the wrong window.
+running from a fresh `powershell.exe` misses every qualifying condition at once, so `focusWindow` asks for
+three of them together:
+
+- it attaches its input queue to the foreground window's thread and the target's, which is what earns the right;
+- it zeroes the **foreground-lock timeout** for the duration of the call and puts it back after. While that
+  timeout is armed the refusal is unconditional, and no amount of queue attachment outvotes it. It is armed by
+  ordinary desktop activity, and raised outright by gaming and anti-focus-stealing utilities;
+- it synthesises a lone ALT *key-up*, which makes this process the one that received the last input event —
+  another of the documented conditions. A key-up with no key-down before it is the half of the pair that no
+  window reads as a press, so nothing on the desktop sees an ALT.
+
+Then it *checks*, over three rounds, because the refusal is not always permanent: a window still mapping, or an
+app that activates itself a moment after being asked to, loses the first round and wins the second. If the
+keyboard still went elsewhere it raises a `DesktopError` **naming the window that kept it**, rather than
+returning to a caller that is about to type into the wrong one.
 
 **Wayland enumeration mostly cannot happen**, and that is a design decision rather than a gap: a compositor does
 not let one client enumerate another's windows, the same protection that stops it synthesising input. The

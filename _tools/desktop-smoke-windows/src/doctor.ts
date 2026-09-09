@@ -2,6 +2,7 @@
 // product (a runner-as-service maps no windows; a Windows container answers every Docker probe). Reports only, never
 // fixes: installing or killing something would mask a snapshot that didn't reset.
 
+import type { WindowInfo } from "@intentic/desktop-automation";
 import { PRODUCT_NAME, RUNNER_TASK_NAME, SCHEME } from "./constants.js";
 import type { Harness } from "./harness.js";
 import { humanDuration, runnerSupervision } from "./parse.js";
@@ -11,6 +12,14 @@ export interface DoctorOptions {
     /** Whether Docker is needed; tier 1 doesn't, tiers 2 and 3 do. */
     readonly needsDocker: boolean;
 }
+
+// An empty desktop is normal, and so is a busy one — this box has Docker Desktop and PowerToys resident on every run.
+// What a count alone could not say is which window holds the FOREGROUND, and that is the one machine state that makes
+// the tiers' `focusWindow` fail with nothing wrong with the product.
+const desktopState = (open: readonly WindowInfo[]): string => {
+    const holding = open.find((window) => window.focused);
+    return `${open.length} window(s) currently open, ${holding === undefined ? `none holding the foreground` : `"${holding.title}" holding the foreground`}`;
+};
 
 export const runDoctor = async (harness: Harness, options: DoctorOptions): Promise<void> => {
     harness.section(`the session`);
@@ -51,9 +60,8 @@ export const runDoctor = async (harness: Harness, options: DoctorOptions): Promi
         );
     }
 
-    // Not an assertion: an empty desktop is normal; this just records it for a later failure to reference.
-    const open = await windows();
-    harness.pass(`${open.length} window(s) currently open`);
+    // Not an assertion: recorded for a later failure to reference.
+    harness.pass(desktopState(await windows()));
 
     harness.section(`the runtime the app draws with`);
     const runtime = await webView2();
