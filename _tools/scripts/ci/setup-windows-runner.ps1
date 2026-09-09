@@ -26,7 +26,9 @@
       while the listener is alive. So a crash, a network drop, a failed self-update or an operator who killed it
       is repaired within minutes, by the machine, with nobody signed in. Task Scheduler's own restart-on-failure
       only fires for what it CALLS a failure, and a listener that exited 0 is not one;
-    • it comes back by itself after a reboot, given -AutoLogon, and does not wait out a sleep, given -KeepAwake.
+    • it comes back by itself after a reboot, given -AutoLogon, and neither sleeps nor locks its session, given
+      -KeepAwake (a locked session passes every check that reads window titles and fails every one that needs
+      the keyboard, which is the desktop tiers' whole vocabulary).
 
   The last two are switches rather than defaults because each one trades something real away (a stored password,
   a machine-wide power policy) and only a dedicated CI box should make that trade.
@@ -43,7 +45,7 @@
   ./setup-windows-runner.ps1 -Url https://github.com/intentic -Token <registration-token>
 
 .EXAMPLE
-  # On a box that exists to be this runner and nothing else: signs itself in after a reboot, never sleeps.
+  # On a box that exists to be this runner and nothing else: signs itself in after a reboot, never sleeps or locks.
   ./setup-windows-runner.ps1 -Url https://github.com/intentic -Token <token> -AutoLogon -KeepAwake
 
 .EXAMPLE
@@ -67,10 +69,13 @@ param(
     # it writes a password into the registry in cleartext, which is a poor trade on a machine anybody uses. Left
     # off, the runner comes back at the next sign-in.
     [switch]$AutoLogon,
-    # Stop this machine sleeping on mains power. OFF by default because it is a machine-wide power policy, and
-    # this script otherwise changes none — but a runner on a box that sleeps is a runner that is OFFLINE for as
-    # long as nobody touches the keyboard, which from GitHub's side is indistinguishable from a broken one: jobs
-    # queue against a label no machine is answering. Worth it on a dedicated CI box, not on somebody's laptop.
+    # Stop this machine sleeping on mains power, AND stop it locking its session. OFF by default because both
+    # are machine-wide policies, and this script otherwise changes none — but a runner on a box that sleeps is a
+    # runner that is OFFLINE for as long as nobody touches the keyboard, which from GitHub's side is
+    # indistinguishable from a broken one: jobs queue against a label no machine is answering. A box that LOCKS
+    # is worse: it keeps taking jobs and fails the desktop tiers instead, because the lock screen holds the
+    # foreground and no keystroke can reach the app under test. Worth it on a dedicated CI box, not on
+    # somebody's laptop.
     [switch]$KeepAwake,
     # Repair an existing registration's session without reconfiguring it. No -Url/-Token needed.
     [switch]$Repair,
@@ -341,6 +346,28 @@ if ($KeepAwake) {
     Step 'stopping this machine sleeping on mains power...'
     & powercfg /change standby-timeout-ac 0 | Out-Null
     & powercfg /change hibernate-timeout-ac 0 | Out-Null
+
+    # A LOCKED SESSION IS WORSE THAN A SLEEPING ONE, because it does not look broken. The listener keeps taking
+    # jobs, every window stays mapped, and the desktop tiers keep passing the assertions that only read titles —
+    # but LockApp holds the foreground, so `focusWindow` cannot hand the keyboard to anything and every keystroke
+    # the smoke tier sends lands nowhere. The run then reports the app failing to answer its own dialog. That is
+    # the 2026-09-05 and 2026-09-09 nightlies: six failed assertions each, all of them the lock screen.
+    #
+    # Three separate things lock a Windows session and each has its own switch. The inactivity policy is the one
+    # that bit here (a machine nobody touches for its timeout), but a secure screensaver and require-password-on-
+    # wake reach the same state by other roads, and a box that is only ever driven by CI wants none of them.
+    Step 'stopping this machine locking its session...'
+    $systemPolicy = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+    New-Item -Path $systemPolicy -Force -ErrorAction SilentlyContinue | Out-Null
+    # 0 is "never", not "immediately" — the documented disabled value for the machine inactivity limit.
+    Set-ItemProperty -Path $systemPolicy -Name InactivityTimeoutSecs -Value 0 -Type DWord
+    $desktop = 'HKCU:\Control Panel\Desktop'
+    Set-ItemProperty -Path $desktop -Name ScreenSaveActive -Value '0'
+    Set-ItemProperty -Path $desktop -Name ScreenSaverIsSecure -Value '0'
+    # CONSOLELOCK: "require a password on wakeup". Set under the active scheme on mains only, to match the sleep
+    # settings above; the scheme has to be re-activated for a changed index to take effect.
+    & powercfg /setacvalueindex SCHEME_CURRENT SUB_NONE CONSOLELOCK 0 | Out-Null
+    & powercfg /setactive SCHEME_CURRENT | Out-Null
 }
 
 # ── one listener, and it is the task's ───────────────────────────────────────────────────────────────────────

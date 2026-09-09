@@ -10,10 +10,8 @@ import {
 } from "@intentic/sandbox-contract";
 import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { implement, ORPCError } from "@orpc/server";
-import { authorizeMaintainer, type Caller, bearerFrom } from "../auth/auth.js";
+import type { Caller } from "../auth/auth.js";
 import { listSubagentSessions, pairLiveSubagents } from "../agent/subagents/subagents.js";
-import { runDeviceCommand } from "../hosts/device-commands.js";
-import { manageDeviceSandbox, runDeviceAgentFlow } from "../hosts/device-reports.js";
 import { closeBrowserSession, listBrowserSessions } from "../browser/sessions/browser-sessions.js";
 import { readSubagentTranscript } from "../sessions/subagent-transcript.js";
 import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.handler.js";
@@ -392,49 +390,8 @@ export const createSystemRoutes = (services: Services) => {
                 input.id,
             ),
         })),
-        // Acts on a sandbox on one of the user's devices, streaming the machine's own output; this door can also delete
-        // one. Everything past the gate is the machine's call, including refusing, which arrives as the stream's own
-        // terminal error.
-        manageDeviceSandbox: i.manageDeviceSandbox.handler(async function* ({ input, context }) {
-            if (services.auth !== undefined) {
-                try {
-                    await authorizeMaintainer(services.auth, bearerFrom(context.headers.get("authorization") ?? undefined));
-                } catch {
-                    throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can act on connected devices" });
-                }
-            }
-            yield* manageDeviceSandbox(services, input.id, {
-                op: input.op,
-                slug: input.slug,
-                ...(input.hash === undefined ? {} : { hash: input.hash }),
-                // The reshape's payload: a closed form the machine spells into `ic` flags, never a command line.
-                ...(input.resources === undefined ? {} : { resources: input.resources }),
-            });
-        }),
-        // One named CLI action on a connected device (e.g. the Devices tab's Stop-mirroring button). Maintainer-floored
-        // like the sandbox ops above, checked explicitly here so both routes refuse identically.
-        runDeviceCommand: i.runDeviceCommand.handler(async ({ input, context }) => {
-            if (services.auth !== undefined) {
-                try {
-                    await authorizeMaintainer(services.auth, bearerFrom(context.headers.get("authorization") ?? undefined));
-                } catch {
-                    throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can act on connected devices" });
-                }
-            }
-            return await runDeviceCommand(services, input);
-        }),
-        // Updates or restarts the agent on a connected device; maintainer-floored, since this replaces the binary
-        // everything else on that machine runs through.
-        runDeviceAgentFlow: i.runDeviceAgentFlow.handler(async function* ({ input, context }) {
-            if (services.auth !== undefined) {
-                try {
-                    await authorizeMaintainer(services.auth, bearerFrom(context.headers.get("authorization") ?? undefined));
-                } catch {
-                    throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can update a connected device's agent" });
-                }
-            }
-            yield* runDeviceAgentFlow(services, input.id, { op: input.op });
-        }),
+        // The three `system.*Device*` procedures are implemented in hosts/devices.routes.ts, beside the devices they
+        // act on, and merged into this object by router.ts; the wire shape is the same either way.
         // Destroys one session. The name is validated before it reaches the `kill-session` argv, guarding against
         // something like `-C` being read as a flag; killing an already-gone session is a silent no-op.
         killTerminal: i.killTerminal.handler(async ({ input }) => {

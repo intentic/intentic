@@ -103,7 +103,7 @@ const statusMeta = computed(() =>
                 <span
                     v-if="provider !== undefined || icon !== undefined"
                     class="relative -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
-                    :class="context === undefined ? 'ring-[1.5px] ring-inset ring-content/12' : ''"
+                    :class="context === undefined ? 'ring-(length:--ring-track) ring-inset ring-content/12' : ''"
                 >
                     <ProgressRing v-if="context !== undefined" :value="context" :size="24" :stroke="1.5" class="absolute inset-0" :class="ringTone" />
                     <IdentityTile v-if="provider !== undefined" :title="title" :provider="provider" class="h-4.5 w-4.5 text-2xs" />

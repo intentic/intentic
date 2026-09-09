@@ -12,6 +12,8 @@
 #
 # The drill, on the same clean dind host verify-desktop-setup.sh uses:
 #
+#   0. resolve the two images, and make sure they are two: when :latest and :stable name one image there is
+#      nothing to move onto, so the target becomes those bytes under a marker layer (step 0 below says why)
 #   1. connect a sandbox on the PUBLISHED stable image — the machine a real user has today
 #   2. write sentinels into /work and /history
 #   3. `ic sandbox update` onto the freshly built image (:latest, what main last published)
@@ -57,6 +59,43 @@ docker cp "$ROOT/_sandbox/ic/dist-bin/ic-linux-amd64" "$HOST_CONTAINER:/root/ic"
 in_host chmod +x /root/ic
 docker cp "$ROOT/_site/site/public/scripts/connect.sh" "$HOST_CONTAINER:/root/connect.sh"
 
+# ── 0. TWO DIFFERENT IMAGES TO MOVE BETWEEN ──────────────────────────────────────────────────────────────────
+# `:stable` and `:latest` are the SAME image whenever main has published nothing since the last release
+# promoted one onto the other. That is a normal registry state, not a broken one, and `ic` reports it
+# correctly ("no newer sandbox image is available yet — your sandbox is already on the latest :stable it can
+# pull"). The drill used to read that correct no-op as a broken update engine: step 3's "the container
+# actually moved" failed, and then step 4's rollback had no record to roll back to and took the whole script
+# down with it under `set -e`, so steps 4 and 5 — including the parked-container restore, the most valuable
+# assertion here — never ran at all. The 2026-09-09 nightly failed exactly that way.
+#
+# So the pair is resolved before anything is connected, and when the two tags name one image the target
+# becomes a derivative of it: the same published bytes under a marker layer, which is a different image id for
+# the engine to move onto while running exactly the daemon `:latest` ships. Made with `docker commit` rather
+# than a one-line Dockerfile because the dind host carries the docker CLI and compose, not buildx, and a
+# `docker build` there would be a second thing that can fail for reasons the update engine knows nothing about.
+DRILL_IMAGE="intentic-sandbox:update-drill"
+echo "==> resolving $START_IMAGE and $UPDATE_IMAGE"
+for image in "$START_IMAGE" "$UPDATE_IMAGE"; do
+    if ! in_host docker pull -q "$image" >/dev/null; then
+        echo "error: could not pull $image — the drill has no pair of images to move between, and nothing below" >&2
+        echo "       would be a statement about the update engine. This is the registry or this host's login." >&2
+        exit 1
+    fi
+done
+image_id_of() { in_host docker image inspect -f '{{.Id}}' "$1"; }
+if [ "$(image_id_of "$START_IMAGE")" = "$(image_id_of "$UPDATE_IMAGE")" ]; then
+    echo "    $UPDATE_IMAGE is the same image as $START_IMAGE — main has published nothing since the last"
+    echo "    promotion. Updating onto $DRILL_IMAGE instead: those bytes under a marker layer, so the drill"
+    echo "    still exercises a real move rather than asserting against a correct no-op."
+    # No command argument: the created container inherits the image's own entrypoint and cmd, and `commit`
+    # carries them into the derivative — a `docker create IMAGE true` here would bake `true` in as the CMD and
+    # hand the update engine an image whose daemon never starts.
+    drill_container="$(in_host docker create "$UPDATE_IMAGE")"
+    in_host docker commit --change 'LABEL dev.intentic.update-drill=1' "$drill_container" "$DRILL_IMAGE" >/dev/null
+    in_host docker rm "$drill_container" >/dev/null
+    UPDATE_IMAGE="$DRILL_IMAGE"
+fi
+
 # ── 1. a user's sandbox: the published stable image ──────────────────────────────────────────────────────────
 echo "==> connecting a sandbox on $START_IMAGE"
 in_host env \
@@ -81,6 +120,18 @@ check() { # <label> <command...>
         failures=$((failures + 1))
     fi
 }
+# `check` runs a predicate; `step` runs the thing the predicates are ABOUT. Counted rather than fatal, because
+# under `set -e` a bare `ic` call that exits non-zero takes every assertion after it down too — and the ones
+# after it are the point. A rollback with nothing to roll back to once cost this tier steps 4 AND 5, so the run
+# reported a single unexplained exit where it had three assertions' worth of evidence to hand over.
+step() { # <label> <command...>
+    local label="$1"
+    shift
+    "$@" || {
+        echo "  ✗ $label" >&2
+        failures=$((failures + 1))
+    }
+}
 healthy() { in_host docker exec "$CONTAINER" curl -fsS --max-time 10 localhost:8787/health; }
 sentinels_intact() {
     [ "$(in_host docker exec "$CONTAINER" cat "/work/$SENTINEL" 2>/dev/null)" = "drill" ] &&
@@ -94,7 +145,7 @@ before="$(image_of)"
 
 # ── 3. update ────────────────────────────────────────────────────────────────────────────────────────────────
 echo "==> ic sandbox update → $UPDATE_IMAGE"
-in_host env SANDBOX_IMAGE="$UPDATE_IMAGE" /root/ic sandbox update "$SLUG"
+step "ic sandbox update refused to run at all" in_host env SANDBOX_IMAGE="$UPDATE_IMAGE" /root/ic sandbox update "$SLUG"
 check "the daemon answers /health on the new image" healthy
 check "the sentinels survived the update (/work and /history)" sentinels_intact
 updated="$(image_of)"
@@ -102,7 +153,7 @@ check "the container actually moved to a different image" test "$before" != "$up
 
 # ── 4. rollback ──────────────────────────────────────────────────────────────────────────────────────────────
 echo "==> ic sandbox rollback"
-in_host /root/ic sandbox rollback "$SLUG"
+step "ic sandbox rollback refused to run at all" in_host /root/ic sandbox rollback "$SLUG"
 check "the daemon answers /health after rollback" healthy
 check "the sentinels survived the rollback" sentinels_intact
 check "rollback returned to the pre-update image" test "$(image_of)" = "$before"
