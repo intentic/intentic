@@ -120,7 +120,7 @@ const isNavActive = (to: string): boolean => route.path === to || route.path.sta
 // Mirrors the panel's own priority: uncommitted count (size matters) before an outgoing push (a glyph,
 // since size doesn't); a push in flight comes first, being this tile's only sign of it.
 const workspaceBadge = computed<ViewBadge | undefined>(() => {
-    const push = pushBadge(pushFlow.stage.value, pushFlow.question.value);
+    const push = pushBadge(pushFlow.stage.value, pushFlow.question.value, pushFlow.held.value);
     if (push !== undefined) {
         return push;
     }

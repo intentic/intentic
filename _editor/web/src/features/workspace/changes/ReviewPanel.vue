@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { GitChange, GitDiffSide, LandedMessage, LandedMessageDraft, RepoChanges, RepoTarget } from "@intentic/api-contract";
-import { Button, ChangeStatusMark, growTextarea, ui, Modal, useDevice, type IconName, vAction } from "@intentic/ui";
+import { Button, ChangeStatusMark, growTextarea, ui, Modal, timeAgo, useDevice, type IconName, vAction } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
@@ -50,8 +50,9 @@ import ModuleLabel from "../../../components/ModuleLabel.vue";
 const changes = useChanges();
 // The push, started here but owned above this panel, so leaving the view doesn't lose the run or its question.
 const pushFlow = usePushFlow();
-// Ticks only while a push is actually in flight.
-const now = useNow(() => pushFlow.running.value);
+// Ticks while a push is in flight, and while a verdict stands unanswered below — that line counts up too, and a
+// frozen "4m ago" over a failure from an hour back is worse than no clock at all.
+const now = useNow(() => pushFlow.running.value || pushFlow.held.value !== undefined);
 
 // A repo the daemon couldn't scan (empty lists, `error` set) stays out of every computation below but still
 // renders as its own row, rather than silently disappearing.
@@ -799,11 +800,44 @@ const stageHint = computed<string | undefined>(() => {
     return pushFlow.stage.value === `pushing` ? `Sending ${pushFlow.pending.value?.what ?? `your commits`} to the remote` : undefined;
 });
 
-// The offer and the run are one control in two states, not two stacked rows — the control that was clicked
-// is the control that reports. Also the only place sync is mentioned now; the per-row pills it replaced turned every
-// repo row into a remote dashboard.
-const outgoing = computed<"flow" | "offer" | undefined>(() =>
-    stageLine.value !== undefined ? `flow` : syncMeta.value !== undefined ? `offer` : undefined,
+/* WHAT A CLOSED CARD LEAVES BEHIND, on the control that raised it. Closing the card said "off my screen", not "that
+ * never happened": the check still failed and the push still hasn't gone, so the block that spent three minutes
+ * finding that out keeps saying it, and a press puts the whole card back at no cost. Without this the only route to
+ * a verdict already reached is running the suite again to reach it a second time.
+ *
+ * The age is the point of the line. A verdict is about the files as they were, so "4m ago" is what makes it
+ * trustworthy, and a tree written to since demotes it: still shown, no longer the answer.
+ *
+ * That demotion gets a LINE OF ITS OWN rather than a third clause, and this column is why: at 270px a third
+ * clause truncates to "files c…", which is the one reading that says nothing at all. The stacked pair is the
+ * shape the running state next door already uses for the same reason. */
+const heldLine = computed<string | undefined>(() => {
+    const held = pushFlow.held.value;
+    return held === undefined ? undefined : `${held.question.title} · ${timeAgo(held.at, { now: now.value })}`;
+});
+
+// Whether the button beside the line would spend the suite again. Only a settled failure over an untouched tree is
+// still an answer; a stopped run, one that couldn't start, and a tree written to since all mean measure it again.
+const heldReruns = computed(() => pushFlow.held.value?.check?.status !== `failed` || pushFlow.heldStale.value);
+
+// What the press costs, which is the one thing the line can't say and the whole reason the block is here.
+const heldHint = computed<string | undefined>(() => {
+    const held = pushFlow.held.value;
+    if (held === undefined) {
+        return undefined;
+    }
+    const verb = syncMeta.value?.label ?? `Push`;
+    const shown = `Show what happened: ${held.question.command ?? held.question.title}.`;
+    return heldReruns.value
+        ? `${shown} ${verb} runs the check again`
+        : `${shown} Nothing has been written since, so ${verb} shows this instead of spending the check`;
+});
+
+// The offer and the run are one control in three states, not stacked rows — the control that was clicked is the
+// control that reports, and the one that keeps reporting after the answer was closed. Also the only place sync is
+// mentioned now; the per-row pills it replaced turned every repo row into a remote dashboard.
+const outgoing = computed<"flow" | "held" | "offer" | undefined>(() =>
+    stageLine.value !== undefined ? `flow` : heldLine.value !== undefined ? `held` : syncMeta.value !== undefined ? `offer` : undefined,
 );
 // Commit keeps the primary slot while there's anything to record, so the two buttons are never both full-weight.
 const syncSeverity = computed<"secondary" | undefined>(() => (changes.count.value > 0 ? `secondary` : undefined));
@@ -1110,6 +1144,41 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     v-tooltip.top="'Stop the checks. The push stays waiting on your answer'"
                 >
                     Stop
+                </Button>
+            </template>
+            <!--
+                The verdict the card was closed on, kept where the press that raised it lives. The line itself is the
+                way back into it: a separate "Show" button beside a Push that already reopens it would be two controls
+                for one thought, in a column that has room for neither.
+            -->
+            <template v-else-if="outgoing === `held`">
+                <Icon
+                    name="exclamation-triangle"
+                    class="shrink-0 text-2xs"
+                    :class="heldReruns ? `text-muted` : `text-danger`"
+                    aria-hidden="true"
+                />
+                <button
+                    type="button"
+                    class="flex min-w-0 flex-1 flex-col text-left transition-colors"
+                    :class="heldReruns ? `text-muted hover:text-content` : `text-danger hover:text-content`"
+                    v-tooltip.right="heldHint"
+                    @click="pushFlow.reopen"
+                >
+                    <span class="truncate whitespace-nowrap text-2xs">{{ heldLine }}</span>
+                    <!-- Its own line, not a third clause: truncated to "files c…" this says nothing. -->
+                    <span v-if="pushFlow.heldStale.value" class="truncate whitespace-nowrap text-3xs text-subtle">files changed since</span>
+                </button>
+                <Button
+                    v-if="syncMeta"
+                    size="small"
+                    :severity="syncSeverity"
+                    class="shrink-0 whitespace-nowrap"
+                    :disabled="changes.actionBusy.value"
+                    v-tooltip.top="syncHint"
+                    @click="doSync"
+                >
+                    <Icon :name="syncMeta.icon" />{{ syncMeta.label }}
                 </Button>
             </template>
             <template v-else>

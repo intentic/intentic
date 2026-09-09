@@ -26,9 +26,18 @@ vi.mock(`./usePrepush`, async () => {
             forget: vi.fn(),
             showTerminal: vi.fn(),
         }),
-        // The suite finishing, as the daemon's poll would report it.
+        // The suite finishing, as the daemon's poll would report it: the settle keeps the window the run opened in
+        // (prepush.ts's own `settle` does the same), since that terminal is where the whole of the output is.
         finish: (fields: Partial<CommandRun>): void => {
-            const settled: CommandRun = { status: `passed`, command: `pnpm check`, output: ``, startedAt: 1_000, finishedAt: 61_000, ...fields };
+            const settled: CommandRun = {
+                status: `passed`,
+                command: `pnpm check`,
+                output: ``,
+                startedAt: 1_000,
+                finishedAt: 61_000,
+                ...(run.value.session === undefined ? {} : { session: run.value.session }),
+                ...fields,
+            };
             run.value = settled;
             settle?.(settled);
         },
@@ -38,6 +47,18 @@ vi.mock(`./usePrepush`, async () => {
             run.value = { status: `idle`, command: `pnpm check`, output: `` };
             settle = undefined;
         },
+    };
+});
+
+/* The watcher's stamp, which decides whether a verdict is still about the tree in front of the user. Modelled on the
+ * real one (a stamp, not a digest): quiet since the stream opened, until a case writes something. */
+vi.mock(`../changes/useWorkspaceLive`, () => {
+    let lastAt = 1;
+    return {
+        workspaceChangedSince: (at: number) => lastAt === 0 || lastAt > at,
+        // A file landing in the tree, as the daemon's watcher would report it.
+        writeToTree: (): void => void (lastAt = Date.now()),
+        quietTree: (): void => void (lastAt = 1),
     };
 });
 
@@ -149,6 +170,9 @@ const load = async () => {
     };
     pushRuns.resetPushRuns();
     const suggestion = await import(`../../agents/fleet/sessionSuggestion`);
+    const live = (await import(`../changes/useWorkspaceLive`)) as unknown as { writeToTree: () => void; quietTree: () => void };
+    // As with the seams above: the stamp survives `resetModules`, so each case opens on a tree nobody has written to.
+    live.quietTree();
     const fleet = await import(`../../agents/fleet/useAgents-registry`);
     const fleetArchive = await import(`../../agents/fleet/useAgents-archive`);
     const actions = await import(`../../agents/fleet/agentActions`);
@@ -166,6 +190,7 @@ const load = async () => {
     return {
         finish: seam.finish,
         git,
+        writeToTree: live.writeToTree,
         suggestion,
         fleet,
         archive: fleetArchive.archive,
@@ -232,6 +257,133 @@ test(`a red check raises a question that outlives the surface that asked`, async
 
     const { usePushFlow } = await import(`./usePushFlow`);
     expect(usePushFlow().question.value).toEqual(flow.question.value);
+});
+
+/* CLOSING THE CARD ANSWERS NOTHING, which is what these are about. The complaint they exist for: the only record of
+ * a three-minute verdict was the card, so closing it to read the terminal left running the suite again as the only
+ * way back to what it had already found out. */
+
+test(`a closed card leaves the verdict standing, with everything the card had`, async () => {
+    const { flow, finish } = await load();
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `failed`, exitCode: 1, output: `2 tests failed` });
+    await flush();
+    const asked = flow.question.value;
+    const proposal = flow.proposedFix.value;
+
+    flow.dismiss();
+    expect(flow.question.value).toBeUndefined();
+    expect(flow.held.value).toMatchObject({ question: asked!, fix: proposal!, at: 61_000 });
+    // Still true of the tree in front of the user: nothing has been written since it settled.
+    expect(flow.heldStale.value).toBe(false);
+    // The window it ran in outlives the card too, and is the only place the whole output ever was.
+    expect(flow.terminal.value).toBe(`job-checks`);
+});
+
+test(`reopening puts the same card back, and says it is not news`, async () => {
+    const { flow, finish } = await load();
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `failed`, exitCode: 1, output: `2 tests failed` });
+    await flush();
+    const asked = flow.question.value;
+    const proposal = flow.proposedFix.value;
+    flow.dismiss();
+
+    flow.reopen();
+    expect(flow.question.value).toEqual(asked);
+    expect(flow.proposedFix.value).toEqual(proposal);
+    // The verb the push was asked for is back too, or the override would offer to "Push anyway" with nothing to push.
+    expect(flow.pending.value?.verb).toBe(`Push`);
+    expect(flow.fromMemory.value).toBe(true);
+    // Nothing was started to get it back: no stage, so no suite.
+    expect(flow.stage.value).toBeUndefined();
+});
+
+// The complaint in one case: pressing Push again, having changed nothing, used to spend the whole suite to reprint
+// a verdict the flow was still holding.
+test(`a second press over an untouched tree reprints the verdict instead of running the suite`, async () => {
+    const { flow, git, finish } = await load();
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `failed`, exitCode: 1, output: `2 tests failed` });
+    await flush();
+    const asked = flow.question.value;
+    flow.dismiss();
+
+    flow.askSync(`Push`, `4 commits`, PUSH);
+    await flush();
+    expect(flow.stage.value).toBeUndefined();
+    expect(flow.question.value).toEqual(asked);
+    expect(flow.fromMemory.value).toBe(true);
+    // Reprinting a refusal is not a push: nothing left the machine on the way to saying so.
+    expect(git.syncAll).not.toHaveBeenCalled();
+    // The press it answers is the one just made, since the verdict is about the tree and not about what is outgoing.
+    expect(flow.pending.value?.what).toBe(`4 commits`);
+});
+
+test(`a file written since demotes the verdict, and the next press measures again`, async () => {
+    const { flow, finish, writeToTree } = await load();
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `failed`, exitCode: 1, output: `2 tests failed` });
+    await flush();
+    flow.dismiss();
+
+    writeToTree();
+    expect(flow.heldStale.value).toBe(true);
+    // Still shown (it is what last happened), but no longer an answer: the press spends the suite.
+    expect(flow.held.value).toMatchObject({ question: { kind: `checks` } });
+
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    expect(flow.stage.value).toBe(`checking`);
+    expect(flow.held.value).toBeUndefined();
+});
+
+// A stopped run and one that could not start measured nothing, so neither is an answer to reprint: the press means
+// run it.
+test(`a stopped check is never reprinted; pressing again runs the suite`, async () => {
+    const { flow, finish } = await load();
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    flow.stopChecks();
+    finish({ status: `cancelled` });
+    await flush();
+    flow.dismiss();
+    expect(flow.held.value?.check?.status).toBe(`cancelled`);
+
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    expect(flow.stage.value).toBe(`checking`);
+});
+
+test(`Run again spends the suite on the standing verdict's own push`, async () => {
+    const { flow, git, finish } = await load();
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `failed`, exitCode: 1 });
+    await flush();
+    flow.dismiss();
+
+    flow.runAgain();
+    expect(flow.stage.value).toBe(`checking`);
+    expect(flow.held.value).toBeUndefined();
+    expect(flow.question.value).toBeUndefined();
+
+    // And it is still the same push waiting on the far side of it.
+    finish({ status: `passed` });
+    await flush();
+    expect(git.syncAll).toHaveBeenCalledWith(PUSH);
+});
+
+// A verdict about work that has left the machine would be a warning about a push that already went.
+test(`a push that goes retires the standing verdict`, async () => {
+    const { flow, finish } = await load();
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `failed`, exitCode: 1 });
+    await flush();
+    flow.dismiss();
+    expect(flow.held.value).toMatchObject({ push: { verb: `Push`, what: `3 commits` } });
+
+    flow.reopen();
+    flow.pushAnyway();
+    await flush();
+    expect(flow.pushed.value?.what).toBe(`3 commits`);
+    expect(flow.held.value).toBeUndefined();
 });
 
 // Push anyway never asks twice; the verdict it outran has nobody left to interrupt.
@@ -566,6 +718,25 @@ test(`a push the remote rejected asks with git's reason and proposes no fix`, as
     expect(flow.proposedFix.value).toBeUndefined();
     await flow.startFix();
     expect(suggestion.composeSession).not.toHaveBeenCalled();
+});
+
+// A refused send is filed the same way a red check is, but never reprinted in place of a press: the code is not what
+// refused it, and pressing again means try the remote again.
+test(`a refused push stands after the card is closed, and the next press retries rather than reprints`, async () => {
+    const { flow, git, finish } = await load();
+    const run = refusedBy(`remote`, { reason: `! [rejected] main -> main (fetch first)` });
+    git.failures.value = new Map([[`intentic`, { action: `Push failed`, detail: refusalSummary(run), run }]]);
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `passed` });
+    await flush();
+    const asked = flow.question.value;
+
+    flow.dismiss();
+    expect(flow.held.value).toMatchObject({ question: asked!, runs: [run] });
+    expect(Object.keys(flow.held.value!)).not.toContain(`check`);
+
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    expect(flow.stage.value).toBe(`checking`);
 });
 
 test(`a push that hit its ceiling is named as timed out, in the verb the user clicked`, async () => {

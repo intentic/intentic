@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { AgentRunButton, Button, Code, fixStanceLook, Icon, useAgentRunPick } from "@intentic/ui";
+import { AgentRunButton, Button, Code, fixStanceLook, Icon, timeAgo, useAgentRunPick } from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
 import { type ComponentPublicInstance, computed, ref } from "vue";
 import { shellModelPicking } from "../../features/chat/models/shellModelPicking";
 import { usePushFlow } from "../../features/workspace/push/usePushFlow";
@@ -22,6 +23,26 @@ const fixModel = useAgentRunPick(
 );
 
 const pushAnywayLabel = computed(() => (pushFlow.question.value?.kind === `push` ? `Try again` : `${pushFlow.pending.value?.verb ?? `Push`} anyway`));
+
+/* A CARD THAT IS NOT NEWS SAYS SO. This one is raised twice for the same failure: once when the suite settles, and
+ * again whenever the reader comes back to a verdict they closed rather than answered — which is the point, since the
+ * alternative was spending the suite again to be told the same thing. Reprinted, it dates itself and says whether the
+ * tree has moved under it, because a verdict is about the files as they were and nothing else on the card says when
+ * that was. Its own clock, ticking only while such a card is up. */
+const clock = useNow(() => pushFlow.fromMemory.value);
+const memoryLine = computed<string | undefined>(() => {
+    const at = pushFlow.verdictAt.value;
+    if (!pushFlow.fromMemory.value || at === undefined) {
+        return undefined;
+    }
+    const when = `From ${timeAgo(at, { now: clock.value })}.`;
+    return pushFlow.heldStale.value ? `${when} Files have changed since, so this may no longer be what happens.` : `${when} Nothing has changed since.`;
+});
+
+// A red suite is the one failure a reader can legitimately doubt (flaky, or a fix landed elsewhere), and after a
+// reprint it's the only way to spend the check on purpose. Quiet, beside the terminal link: it's a way back to the
+// truth, not one of the three answers to the question.
+const canRerun = computed(() => pushFlow.question.value?.kind === `checks` && pushFlow.command.value !== ``);
 
 /* ONE SLOT FOR THE AGENT, in three shapes, after the pipelines board's own (PipelineRunRow.vue): no attempt, or
  * a landed one, is a plain "Fix with agent"; an attempt still in play is a chip that opens it, beside a quiet
@@ -69,6 +90,8 @@ const openStartOver = (): void => {
             <p v-if="pushFlow.question.value.detail" class="break-words text-2xs text-muted">
                 {{ pushFlow.question.value.detail }}
             </p>
+            <!-- Only on a reprint: a card reporting a run that just ended dates itself by being here. -->
+            <p v-if="memoryLine" class="break-words text-2xs text-subtle">{{ memoryLine }}</p>
         </div>
 
         <!-- ONE ROW FOR ALL ANSWERS: the way back to the output on the left, the actions on the right.
@@ -79,19 +102,38 @@ const openStartOver = (): void => {
 
              The terminal link appears only where there is a terminal to go to: without the tmux wrapper the
              suite ran in an invisible shell, and a button that opens an empty panel is worse than none. It holds
-             no output itself for the same reason — the whole of it is one press away, in colour. `mr-auto`
-             rather than `justify-between`, so the button keeps the right edge whether or not the link is
-             there. -->
-        <div class="mt-2 flex items-center justify-end gap-2">
-            <button
-                v-if="pushFlow.terminal.value !== undefined"
-                type="button"
-                class="mr-auto flex items-center gap-1.5 rounded text-2xs text-muted transition-colors hover:text-content"
-                @click="pushFlow.showTerminal"
-            >
-                <Icon name="terminal" class="text-2xs" />
-                Show terminal
-            </button>
+             no output itself for the same reason — the whole of it is one press away, in colour. `mr-auto` on
+             the group rather than `justify-between`, so the buttons keep the right edge whether or not either
+             link is there.
+
+             IT WRAPS, because on a phone the lane's card is the viewport's width and four controls do not fit
+             one line of it: unwrapped, the last of them (the override, the one press that matters most here) is
+             squeezed to three letters and painted past the card's own edge. Wrapped, the links take the first
+             line and the buttons keep the right edge of the second. -->
+        <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
+            <!-- Ways back to the truth, not answers to the question: what actually happened, and measuring it again. -->
+            <div class="mr-auto flex items-center gap-3">
+                <button
+                    v-if="pushFlow.terminal.value !== undefined"
+                    type="button"
+                    class="flex items-center gap-1.5 rounded text-2xs text-muted transition-colors hover:text-content"
+                    @click="pushFlow.showTerminal"
+                >
+                    <Icon name="terminal" class="text-2xs" />
+                    Show terminal
+                </button>
+
+                <button
+                    v-if="canRerun"
+                    type="button"
+                    class="flex items-center gap-1.5 rounded text-2xs text-muted transition-colors hover:text-content"
+                    v-tooltip.top="`Run the check again on the tree as it is now`"
+                    @click="pushFlow.runAgain"
+                >
+                    <Icon name="refresh" class="text-2xs" />
+                    Run again
+                </button>
+            </div>
 
             <!-- Hand the failure to an agent. Absent for a check that could not run and for one the user stopped:
                  nothing was learned about the code either way, so an agent sent after it would be hunting a bug

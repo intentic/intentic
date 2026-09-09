@@ -1,4 +1,4 @@
-import { reactive } from "vue";
+import { reactive, ref } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
 import { WORKSPACE_MODULES, WORKSPACE_TREE } from "../../../lib/queryKeys";
@@ -33,11 +33,22 @@ let epoch = 0;
 // Evidence that a ref move also rewrote the tree (checkout/reset/rebase do both; a plain commit only moves
 // the ref). Window is generous: a stale editor after a checkout is worse than a needless buffer drop after a commit.
 const WORKTREE_MOVE_WINDOW_MS = 3000;
-let lastWorkspaceChangeAt = 0;
-export const worktreeMovedRecently = (): boolean => lastWorkspaceChangeAt !== 0 && Date.now() - lastWorkspaceChangeAt < WORKTREE_MOVE_WINDOW_MS;
+// A ref rather than a plain stamp: the push panel keeps a computed over it (whether its verdict has been written
+// over), and a value the watcher mutates behind Vue's back would leave that answer frozen at whatever it first read.
+const lastWorkspaceChangeAt = ref(0);
+export const worktreeMovedRecently = (): boolean =>
+    lastWorkspaceChangeAt.value !== 0 && Date.now() - lastWorkspaceChangeAt.value < WORKTREE_MOVE_WINDOW_MS;
+
+/* WHETHER THE TREE HAS MOVED SINCE A MOMENT, for anything holding a verdict about the files as they were: a red
+ * pre-push check is the answer for exactly as long as nothing has been written (usePushFlow.ts). Answered from the
+ * watcher rather than a digest of the change list, since an edit to an already-dirty file changes no path and no
+ * count. Errs toward "changed": a dropped stream reconnects with the daemon's empty batch, which stamps this, so a
+ * gap in the feed retires a verdict rather than vouching for one. Never having heard anything is not evidence of
+ * quiet, so a zero stamp reads as changed too. */
+export const workspaceChangedSince = (at: number): boolean => lastWorkspaceChangeAt.value === 0 || lastWorkspaceChangeAt.value > at;
 
 export const markWorkspaceChanged = (paths: readonly string[]): void => {
-    lastWorkspaceChangeAt = Date.now();
+    lastWorkspaceChangeAt.value = Date.now();
     for (const path of paths) {
         epochs.set(path, ++epoch);
         recentlyChanged.add(path);
@@ -75,5 +86,5 @@ export const resetWorkspaceLive = (): void => {
     clearTimers.clear();
     epochs.clear();
     recentlyChanged.clear();
-    lastWorkspaceChangeAt = 0;
+    lastWorkspaceChangeAt.value = 0;
 };

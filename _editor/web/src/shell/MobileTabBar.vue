@@ -41,7 +41,7 @@ const approvalsTile = useApprovalsTile();
 // Falls back to the same push-owed glyph as the desktop rail when nothing else needs review.
 const reviewBadge = computed<ViewBadge | undefined>(() => {
     // A push in flight or unsent comes first: it's happening now, and its panel is two taps away.
-    const push = pushBadge(pushFlow.stage.value, pushFlow.question.value);
+    const push = pushBadge(pushFlow.stage.value, pushFlow.question.value, pushFlow.held.value);
     if (push !== undefined) {
         return push;
     }
