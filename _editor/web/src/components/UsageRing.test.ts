@@ -73,7 +73,7 @@ it(`lists every pool with its own figure and reset, and says how old the reading
     // A pool with no reset simply claims none; the other pool's reset is still named.
     expect(panel.textContent).toContain(formatReset(RESETS_AT));
     // One meter per pool: which allowance is about to bite is seen, not parsed.
-    expect(panel.querySelectorAll(`.bg-current`)).toHaveLength(pools.length);
+    expect(panel.querySelectorAll(`.ui-meter-fill`)).toHaveLength(pools.length);
 });
 
 it(`speaks the whole breakdown beside the arc, since a card raised by a pointer never reaches a screen reader`, async () => {

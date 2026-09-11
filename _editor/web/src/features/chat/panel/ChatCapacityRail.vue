@@ -182,7 +182,7 @@ const remeasureLabel = computed(() =>
                                 -->
                                 <span class="block h-1 overflow-hidden rounded-full bg-content/10">
                                     <span
-                                        class="block h-full rounded-full bg-current"
+                                        class="ui-meter-fill block h-full rounded-full"
                                         :class="usageTone(lane.percent)"
                                         :style="{ width: `${Math.max(lane.percent, 1)}%` }"
                                     />

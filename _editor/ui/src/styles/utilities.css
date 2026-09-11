@@ -258,6 +258,33 @@
         cursor: default;
     }
 
+    /* ── THE PAINTED PART OF A METER ──────────────────────────────────────────────────────────────────────
+     * Every bar in the kit that fills a track to say how full something is: the plan-limit meters and their
+     * capacity bar, the usage ring's pool rows, the chat rail's capacity strip. They all work the same way —
+     * the caller sets a status TONE on the element (`text-danger`, `text-warning`, `text-link`), and the fill
+     * takes its colour from that — and they all used to do it with `bg-current`, which paints the ink itself.
+     * Ink is the wrong strength for an area; `--ui-meter-fill` (semantic-colors.css) is where that argument
+     * lives, along with the numbers.
+     *
+     * The class carries the tone through UNCHANGED, so the percentage printed beside the bar stays the legible
+     * text colour and only the bar softens. That is the whole reason this is a fill rule and not a second tone
+     * helper: one element, two jobs, and they want different colours.
+     *
+     * `@supports` GUARDS THE RELATIVE COLOUR SYNTAX, and it is not ceremony. A browser that cannot parse
+     * `oklch(from …)` does not fall back — the custom property still substitutes, `background-color` goes
+     * invalid at computed-value time, and every bar in the app renders transparent. Tailwind 4's own floor
+     * (Chrome 111) is eight versions below where relative colour landed (Chrome 119), so that gap is real,
+     * narrow, and worth three lines. Inside it, the bars keep exactly the colour they had before. */
+    .ui-meter-fill {
+        background-color: currentColor;
+    }
+
+    @supports (color: oklch(from red l c h)) {
+        .ui-meter-fill {
+            background-color: var(--ui-meter-fill);
+        }
+    }
+
     /* ── "NOT RIGHT NOW", FOR THE CONTROLS THE KIT DOES NOT PAINT ─────────────────────────────────────────
      * A <Button> and a chip go to a flat plate, because the design system knows exactly what they are made of.
      * A list row, a card tile, a menu line and a form field are not that: a row's ground belongs to the panel

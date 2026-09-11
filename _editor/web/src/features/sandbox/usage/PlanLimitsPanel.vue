@@ -147,7 +147,7 @@ const roster = computed(() => {
                         v-for="segment in capacity"
                         :key="segment.band"
                         v-tooltip.top="`${segment.count} ${segment.label}`"
-                        class="h-full rounded-full bg-current"
+                        class="ui-meter-fill h-full rounded-full"
                         :class="planLimitBandTone(segment.band)"
                         :style="{ width: `${segment.share}%` }"
                     />
@@ -156,7 +156,7 @@ const roster = computed(() => {
                 <!-- Legend is the sentence: swatch, count and word together, nothing carried by colour alone. -->
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
                     <span v-for="segment in capacity" :key="segment.band" class="flex items-center gap-1.5">
-                        <span class="size-2 shrink-0 rounded-2xs bg-current" :class="planLimitBandTone(segment.band)" />
+                        <span class="ui-meter-fill size-2 shrink-0 rounded-2xs" :class="planLimitBandTone(segment.band)" />
                         <span class="tabular-nums text-content">{{ segment.count }}</span>
                         {{ segment.label }}
                     </span>
@@ -256,7 +256,7 @@ const roster = computed(() => {
                                             class="order-last h-1.5 min-w-0 flex-1 basis-full overflow-hidden rounded-full bg-content/10 @xl:order-none @xl:basis-0"
                                         >
                                             <div
-                                                class="h-full rounded-full bg-current"
+                                                class="ui-meter-fill h-full rounded-full"
                                                 :class="usageTone(pool.percent)"
                                                 :style="{ width: `${Math.max(pool.percent, 1)}%` }"
                                             />
@@ -282,7 +282,7 @@ const roster = computed(() => {
                                     >
                                         <span
                                             v-if="row.percent !== undefined"
-                                            class="w-full rounded-2xs bg-current"
+                                            class="ui-meter-fill w-full rounded-2xs"
                                             :class="usageTone(row.percent)"
                                             :style="{ height: `${Math.max(row.percent, 4)}%` }"
                                         />

@@ -49,7 +49,7 @@ afterEach(() => {
 
 // The bars, by the width each was given, the one part of this column drawn rather than written.
 const barWidths = (el: HTMLElement): string[] =>
-    [...el.querySelectorAll<HTMLElement>(`.bg-current`)].map((bar) => bar.style.width).filter((width) => width !== ``);
+    [...el.querySelectorAll<HTMLElement>(`.ui-meter-fill`)].map((bar) => bar.style.width).filter((width) => width !== ``);
 
 // Reads only the drawn (aria-hidden) row, not the sr-only sentence beside it: `textContent` holds every fact
 // twice by design, so counting across the whole subtree would count the medium, not a repetition.
@@ -61,17 +61,14 @@ const spoken = (el: HTMLElement): string[] => [...el.querySelectorAll(`.sr-only`
 const lanes = (el: HTMLElement): string[] => [...el.querySelectorAll(`.text-3xs`)].map((node) => node.textContent?.trim() ?? ``);
 
 it(`draws one bar for a pool nobody picks among, and never a row per sign-in`, () => {
-    const el = mount(
-        [],
-        {
-            ...NO_ROUTED,
-            gemini: [4, 44, 100, 30, 12, 7].map((percent, index) => ({
-                name: `gemini-${index}`,
-                label: `radarsuspam${index}@gmail.com`,
-                usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: percent, gates: `all` }] },
-            })),
-        },
-    );
+    const el = mount([], {
+        ...NO_ROUTED,
+        gemini: [4, 44, 100, 30, 12, 7].map((percent, index) => ({
+            name: `gemini-${index}`,
+            label: `radarsuspam${index}@gmail.com`,
+            usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: percent, gates: `all` }] },
+        })),
+    });
 
     // One bar, at the pool's roomiest reading: what a turn routed to this provider would land on.
     expect(barWidths(el)).toEqual([`4%`]);
@@ -102,7 +99,11 @@ it(`does not claim a pool has the most room when nothing in it was measured`, ()
 
 it(`names a provider that has fallen off the list, and when it comes back`, () => {
     const el = mount([
-        { id: `a`, label: `spent@example.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 100, resetsAt: 1_700_090_000, gates: `all` }] } },
+        {
+            id: `a`,
+            label: `spent@example.com`,
+            usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 100, resetsAt: 1_700_090_000, gates: `all` }] },
+        },
     ]);
 
     // No offer, so no bar: an empty track over a spent account is what this rail exists not to draw.
@@ -117,7 +118,11 @@ it(`names a provider that has fallen off the list, and when it comes back`, () =
 // by dropping it, which read as the account having gone missing.
 it(`draws an account that is nearly spent in the danger tone rather than dropping it`, () => {
     const el = mount([
-        { id: `a`, label: `first@example.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 96, resetsAt: 1_700_090_000, gates: `all` }] } },
+        {
+            id: `a`,
+            label: `first@example.com`,
+            usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 96, resetsAt: 1_700_090_000, gates: `all` }] },
+        },
     ]);
 
     expect(barWidths(el)).toEqual([`96%`]);
@@ -127,7 +132,11 @@ it(`draws an account that is nearly spent in the danger tone rather than droppin
 
 it(`spells out for a screen reader what the bar says by its width`, () => {
     const el = mount([
-        { id: `a`, label: `first@example.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 41, resetsAt: 1_700_090_000, gates: `all` }] } },
+        {
+            id: `a`,
+            label: `first@example.com`,
+            usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 41, resetsAt: 1_700_090_000, gates: `all` }] },
+        },
     ]);
 
     // Every part the column shortens or drops is spoken here or nowhere; a bar is decoration to a screen reader.

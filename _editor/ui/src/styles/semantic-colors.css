@@ -235,6 +235,35 @@
     --ui-tooltip-fill: color-mix(in oklab, var(--color-surface-800) 82%, var(--color-brand-900));
     --ui-tooltip-content: var(--color-surface-0);
 
+    /* ── A STATUS COLOUR PAINTED AS AN AREA, NOT AS INK ────────────────────────────────────────────────────
+     * The status roles above are TEXT colours, and the block that sets them says so: they sit near 50% L
+     * because that is what an 11px label needs to clear AA. A meter's bar is the same colour asked to do the
+     * opposite job — a solid area, tens of times the ink of the number printed beside it — and at 50% L with
+     * chroma up to 0.20 it does not read as a reading, it reads as an alarm. The Usage page was the proof:
+     * twenty-odd accounts' worth of bars in undiluted danger-700, on paper whose own chroma is 0.011.
+     *
+     * Everything ELSE in the app that paints a status as an area already knew this — `bg-danger/10`,
+     * `bg-warning/15`, `bg-success/10`, seventy-odd call sites, not one of them solid. The meters were the
+     * exception, and this is them rejoining the rule.
+     *
+     * TWO MOVES, AND THE SECOND IS THE ONE THAT MATTERS. Lightness is pinned, so every band reads at one weight
+     * and no tone can shout over another — which is not cosmetic here: `room` is the QUIETEST thing a meter can
+     * say, and undiluted it was the loudest bar on the page, because brand orange at 50% L outweighs a red at
+     * the same number. Chroma is then CAPPED rather than scaled: `min(c, 0.115)` pulls danger's 0.20 down to
+     * the ceiling the others already sit near, and leaves anything under it exactly where it is. That last
+     * clause is load-bearing — the `unread` band is `--color-muted` at chroma 0.019, and it is achromatic ON
+     * PURPOSE (absence of a reading is not a severity). A scale factor would have tinted it; a cap cannot.
+     *
+     * 78% IS MEASURED AGAINST THE THINNEST BAR, not chosen for the widest. These meters are 6px on the usage
+     * page and 4px in the chat rail, and a 4px bar has only its colour to be seen by: at 80% the strip starts
+     * dissolving into its own `bg-content/10` track, and below about 74% amber stops being gold and turns
+     * olive, since a yellow only reads as yellow while it is light. 78% is the window where all four bands are
+     * pastel AND a 4px one still reads.
+     *
+     * Relative colour syntax is what makes it one rule instead of one token per tone: the hue is read off
+     * whatever `currentColor` the caller set, so a band this file has never heard of still comes out pastel. */
+    --ui-meter-fill: oklch(from currentColor 78% min(c, 0.115) h);
+
     --role-series-1:     var(--color-series-1-light);
     --role-series-2:     var(--color-series-2-light);
     --role-series-3:     var(--color-series-3-light);
@@ -283,6 +312,12 @@
 
     --ui-tooltip-fill: var(--color-surface-700);
     --ui-tooltip-content: var(--color-surface-0);
+
+    /* A dark scheme's status roles are ALREADY the light end of their ramps — danger-400 is 72% L where the
+     * light scheme's is 50% — so a bar painted in one is a lit mark on a near-black ground, not a slab of
+     * alarm. There is nothing to soften, and softening it would only push these toward the card they sit on.
+     * Stated as the plain keyword so the meters render exactly as they did before this token existed. */
+    --ui-meter-fill: currentColor;
 
     --role-series-1:     var(--color-series-1-dark);
     --role-series-2:     var(--color-series-2-dark);

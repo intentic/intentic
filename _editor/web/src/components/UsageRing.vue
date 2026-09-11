@@ -142,7 +142,7 @@ onBeforeUnmount(hide);
                         <!-- A pool at 0% still draws a sliver; an empty track would read as no reading at all. -->
                         <div class="h-1.5 overflow-hidden rounded-full bg-content/10">
                             <div
-                                class="h-full rounded-full bg-current"
+                                class="ui-meter-fill h-full rounded-full"
                                 :class="usageTone(pool.percent)"
                                 :style="{ width: `${Math.max(pool.percent, 1)}%` }"
                             />
