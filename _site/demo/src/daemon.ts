@@ -625,6 +625,18 @@ const DEMO_SAVINGS: SavingsReport = {
             { command: `docker compose logs api`, commands: 6, tokens: 28_900 },
         ],
     },
+    dependencies: {
+        checked: 14,
+        improved: 5,
+        updatedAt: STARTED_AT - 12 * 60_000,
+        recent: [
+            { prevented: `moment@2.29.4`, chosen: `date-fns`, reason: `moment is in maintenance mode and ships no new features`, at: STARTED_AT - 12 * 60_000 },
+            { prevented: `rimraf@3.0.2`, chosen: `node:fs rm with recursive: true`, reason: `the platform has covered this since Node 14`, at: STARTED_AT - 45 * 60_000 },
+            { prevented: `request@2.88.2`, chosen: `undici`, reason: `it was deprecated in 2020 and takes no fixes`, at: STARTED_AT - 180 * 60_000 },
+            { prevented: `uuid@8.3.2`, chosen: `crypto.randomUUID`, reason: `the platform has covered v4 since Node 14.17`, at: STARTED_AT - 360 * 60_000 },
+            { prevented: `vue@3.5.20`, chosen: `3.5.22`, reason: `the registry's latest is 3.5.22, behind by patches`, at: STARTED_AT - 720 * 60_000 },
+        ],
+    },
 };
 
 const agentResponse = (agent: AgentSummary | undefined): Response => (agent === undefined ? refuse(`No such agent.`, 404) : json(agent));

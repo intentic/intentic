@@ -511,6 +511,22 @@ export const TierReportSchema = z.object({
     denied: z.number(),
 });
 export type TierReport = z.infer<typeof TierReportSchema>;
+// One dependency version or library improvement suggested or pinned.
+export const DependencyImprovementSchema = z.object({
+    prevented: z.string(),
+    chosen: z.string(),
+    reason: z.string(),
+    at: z.number().optional(),
+});
+export type DependencyImprovement = z.infer<typeof DependencyImprovementSchema>;
+// Rollup of registry freshness interventions over the queried day window.
+export const DependencySavingsSchema = z.object({
+    checked: z.number(),
+    improved: z.number(),
+    recent: z.array(DependencyImprovementSchema),
+    updatedAt: z.number().optional(),
+});
+export type DependencySavings = z.infer<typeof DependencySavingsSchema>;
 export const SavingsReportSchema = z.object({
     input: InputSavingsSchema,
     search: TurnExperimentSchema.optional(),
@@ -518,5 +534,6 @@ export const SavingsReportSchema = z.object({
     map: TurnExperimentSchema.optional(),
     // Automatic tier selection's readout, see TierReportSchema. Absent ⇒ nothing was judged in the window.
     tier: TierReportSchema.optional(),
+    dependencies: DependencySavingsSchema.optional(),
 });
 export type SavingsReport = z.infer<typeof SavingsReportSchema>;
