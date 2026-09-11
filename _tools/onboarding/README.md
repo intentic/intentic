@@ -132,6 +132,17 @@ answering `docker version` as if nothing had happened. The job's daemon now list
 names it in `DOCKER_HOST`, which is also what the tier's own failure message reads back when the port is
 unreachable.
 
+Then, with a daemon of its own on a socket of its own, the CLI lane's box still would not start — and this one
+is worth knowing wherever a daemon runs nested. A container job's own cgroup holds every process the job runs,
+the runner execs one per step straight into it, and a cgroup holding processes may not hand the memory
+controller down to its children. runc settles for the thread-aware ones, which makes that cgroup a thread root,
+which makes `/sys/fs/cgroup/docker` **threaded** as soon as the first container starts. Every container in the
+world asks for no limits and comes up fine; `ic sandbox connect` asks for `--memory`, and dies on `cannot enter
+cgroupv2 "/sys/fs/cgroup/docker" with domain controllers -- it is in threaded mode`. Nine specs green, the
+whole compose lane green, one red lane and a message that reads as a CLI bug. The daemon step now does what the
+official dind entrypoint does before it starts dockerd: moves the job's processes into a child cgroup and
+delegates the controllers down.
+
 ## Key files
 
 - [src/world.ts](src/world.ts): the half of the world every onboarding path shares.

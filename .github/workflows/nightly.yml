@@ -263,6 +263,51 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # CGROUP v2 NESTING BEFORE THE DAEMON, because without it this daemon starts containers that cannot
+          # hold a memory limit — and the box this tier exists to start asks for one (`docker run --memory 22g`).
+          #
+          # This container's own cgroup is the ROOT of its cgroup namespace, and every process the job runs sits
+          # directly in it: the runner execs one shell per step straight into it. A cgroup that holds tasks may
+          # not delegate DOMAIN controllers (memory, io, hugetlb) to its children — the kernel's
+          # no-internal-process rule — so runc's attempt to enable them there fails, and only the thread-aware
+          # ones (cpu, pids) stick. A cgroup with tasks AND thread-aware controllers enabled is by definition a
+          # thread root, which makes every child under it `domain invalid`, and runc's answer to a domain-invalid
+          # cgroup it just created is to write `threaded` into it. So the FIRST container of the run turns
+          # /sys/fs/cgroup/docker threaded for good, and it is always a container that asks for no limits — the
+          # world's own postgres, api and web, which come up perfectly. The first one that does ask dies on
+          #   cannot enter cgroupv2 "/sys/fs/cgroup/docker" with domain controllers -- it is in threaded mode
+          # That is runs 34575319384 and 34645853155, and it reads as an `ic sandbox connect` bug: nine specs
+          # green, the whole [compose] lane green, and the [ic] lane red on the single container in this journey
+          # that carries `--memory`. Nothing in the message points at this step.
+          #
+          # The fix is the official dind entrypoint's (moby's hack/dind): move the tasks into a child cgroup so
+          # this one holds none, then delegate every controller this container was given. The loop is not
+          # superstition — the runner execs a new process into this cgroup for each step, so the move races them,
+          # and the write to subtree_control is what fails when it loses. LATER STEPS STILL RUN: their exec hits
+          # the same EBUSY on this cgroup and runc then joins the cgroup of the container's init process, which
+          # the move put in `init` (libcontainer/process_linux.go, "On cgroup v2 + nesting + domain controllers").
+          if [ -f /sys/fs/cgroup/cgroup.controllers ] && [ "$(cat /proc/self/cgroup)" = "0::/" ]; then
+            mkdir -p /sys/fs/cgroup/init
+            for _ in $(seq 1 20); do
+              # No command, so xargs is `echo`: one pid per write, which is the only shape cgroup.procs accepts.
+              # A pid that exited between the read and the write is expected, hence the swallow.
+              xargs -rn1 < /sys/fs/cgroup/cgroup.procs > /sys/fs/cgroup/init/cgroup.procs 2>/dev/null || true
+              if sed -e 's/ / +/g' -e 's/^/+/' < /sys/fs/cgroup/cgroup.controllers > /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null; then
+                break
+              fi
+            done
+            # Fails HERE rather than six minutes later inside a Playwright trace. Only when the controller was
+            # this container's to give: a job whose own cgroup never had `memory` is one where dockerd reports no
+            # memory-limit support and discards the flag, which the journey survives.
+            if grep -qw memory /sys/fs/cgroup/cgroup.controllers && ! grep -qw memory /sys/fs/cgroup/cgroup.subtree_control; then
+              echo "this job's cgroup holds the memory controller but could not delegate it, so every container with a memory limit will fail to start:" >&2
+              echo "  cgroup.controllers      $(cat /sys/fs/cgroup/cgroup.controllers)" >&2
+              echo "  cgroup.subtree_control  $(cat /sys/fs/cgroup/cgroup.subtree_control)" >&2
+              echo "  tasks still in this cgroup: $(wc -l < /sys/fs/cgroup/cgroup.procs)" >&2
+              exit 1
+            fi
+            echo "cgroup v2 nesting ready: this cgroup delegates [$(cat /sys/fs/cgroup/cgroup.subtree_control)] and holds $(wc -l < /sys/fs/cgroup/cgroup.procs) tasks"
+          fi
           # ON A SOCKET OF ITS OWN, because /var/run/docker.sock IS NOT THIS JOB'S TO LISTEN ON. The runner puts
           # `-v /var/run/docker.sock:/var/run/docker.sock` in the `docker create` line of every container job it
           # starts, whatever this file's `volumes:` say, and a bind-mounted socket cannot be replaced: dockerd
