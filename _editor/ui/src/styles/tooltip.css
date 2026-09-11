@@ -17,12 +17,12 @@
 
     .ui-tooltip-body {
         border-radius: var(--radius-sm);
-        background: var(--color-surface-700);
-        color: var(--color-surface-0);
+        background: var(--ui-tooltip-fill);
+        color: var(--ui-tooltip-content);
         padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
         font-size: var(--text-xs);
         line-height: var(--text-xs--line-height);
-        box-shadow: 0 4px 12px rgb(0 0 0 / 0.28);
+        box-shadow: var(--ui-shadow-1);
         overflow-wrap: anywhere; /* a path or a branch name has no spaces to break at */
         display: -webkit-box;
         -webkit-box-orient: vertical;
@@ -43,27 +43,27 @@
         top: 100%;
         left: var(--ui-tooltip-arrow);
         margin-left: -4px;
-        border-top-color: var(--color-surface-700);
+        border-top-color: var(--ui-tooltip-fill);
     }
 
     .ui-tooltip-bottom::after {
         bottom: 100%;
         left: var(--ui-tooltip-arrow);
         margin-left: -4px;
-        border-bottom-color: var(--color-surface-700);
+        border-bottom-color: var(--ui-tooltip-fill);
     }
 
     .ui-tooltip-left::after {
         left: 100%;
         top: var(--ui-tooltip-arrow);
         margin-top: -4px;
-        border-left-color: var(--color-surface-700);
+        border-left-color: var(--ui-tooltip-fill);
     }
 
     .ui-tooltip-right::after {
         right: 100%;
         top: var(--ui-tooltip-arrow);
         margin-top: -4px;
-        border-right-color: var(--color-surface-700);
+        border-right-color: var(--ui-tooltip-fill);
     }
 }

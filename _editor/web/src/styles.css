@@ -175,8 +175,11 @@
  * these two properties, which is what keeps the strip on the login page and the row in the workspace the same
  * object. The skin sets the shadow in its own key (skins/sanctum.css). */
 :root {
-    --title-bar-fill: color-mix(in srgb, var(--color-canvas) 88%, black);
-    --title-bar-shadow: 0 4px 12px -4px rgb(0 0 0 / 0.28);
+    /* Down a step, and toward the deep end of the BRAND rather than toward black: mixing a warm ground with a
+     * neutral shade greys it, and a grey bar over cream paper is the one seam in the window the eye reads as a
+     * mistake. The drop takes the scheme's own shade (semantic-colors.css) for the same reason. */
+    --title-bar-fill: color-mix(in oklab, var(--color-canvas) 88%, var(--color-brand-950));
+    --title-bar-shadow: 0 4px 12px -4px rgb(var(--ui-shadow-tint) / 0.22);
 }
 [data-mode="dark"] {
     --title-bar-fill: color-mix(in srgb, var(--color-canvas) 55%, black);
@@ -378,9 +381,10 @@
     }
     /* NO RULE HERE REPAINTS A CHIP ON A SELECTED CARD, and that absence is the fix rather than the gap in it.
      * A card's fill is a SURFACE token, so any chip that names another surface token to look inset is a chip
-     * that only works on one of the fills its host can wear: `bg-overlay` reads as a pill on the resting dark
-     * card and vanishes the moment selection lifts that card to overlay — and vanishes in the light scheme
-     * always, where `--role-overlay` and `--role-card` are the same white. A `.session-card-on .bg-overlay`
+     * that only works on one of the fills its host can wear: `bg-overlay` reads as a pill on the resting card and
+     * vanishes the moment selection moves that card TO overlay — in either scheme, and in the light one it used
+     * to vanish at rest as well, back when `--role-overlay` and `--role-card` were the same white (they are two
+     * tones apart now; see semantic-colors.css). A `.session-card-on .bg-overlay`
      * override cannot rescue it either: `bg-overlay` is emitted into Tailwind's `utilities` layer and this
      * sheet's rules are `components`, so the layer order settles it before specificity is ever consulted.
      * The chips take a tint of the INK instead (`bg-content/10`, the recipe PlanLimitsPanel already uses),

@@ -134,20 +134,66 @@
     --color-series-other: var(--role-series-other);
 }
 
-/* Light scheme (default). */
+/* ── Light scheme (default) — PAPER, NOT A LIGHTBOX ─────────────────────────────────────────────────────────
+ * The light scheme used to be four shades of white: canvas 98% L, card and overlay both 99%, the line every
+ * panel in the app is drawn with 96%. A one-point step between the desk and the thing lying on it is not a step
+ * — it is a rounding error, and the product looked it: a fleet board whose cards had no edges, three columns of
+ * workspace with no seam between them, and 88 `hover:`/`active:bg-overlay` rows whose pointer state was
+ * INVISIBLE because `overlay` and `card` were the same colour. Contrast went the same way; `text-subtle` (the
+ * app's most-used text role, 927 call sites) measured 4.17:1 on card and `text-link` 4.37:1, both under WCAG AA
+ * for body text.
+ *
+ * So the scheme is restated here as its own material, rather than as four adjacent steps of one ramp that has to
+ * serve a near-white interface and a near-black one at the same time. Three things change together:
+ *
+ *   1. THE SURFACES SPREAD OUT. canvas 95.0% → overlay 96.6% → card 98.4%: three tones a reader can tell apart
+ *      (luminance ratio 1.11 from desk to plate, where it was 1.02), with the lines at 91.0% and 86.2% so a
+ *      border reads as a border at a glance instead of on inspection.
+ *   2. EVERY STEP IS WARMED. Chroma about doubles (0.005 → 0.011 on canvas): paper under a lamp rather than a
+ *      screen turned all the way up. That is the whole of the "cosy" ask, and it costs nothing but the tint.
+ *   3. THE INK GETS DARKER AND WARMER. content 25.2%, muted 46.2%, subtle 52.5%, and every one of them clears AA
+ *      on all three surfaces (content 15.3:1, muted 6.8:1, subtle 5.2:1 on card; 13.8 / 6.1 / 4.7 on canvas).
+ *
+ * WHY `color-mix` AND NOT TWELVE HAND-PICKED HEXES: the neutral ramp is GENERATED from the reader's accent at
+ * runtime (themeColor.ts writes `--color-neutral-*` onto <html>), so a literal here would be the one colour in
+ * the app that ignores the accent picker — warm paper under a blue accent. Mixed, the paper follows the pick:
+ * choose a cool accent and it cools with it, choose a near-grey one and themeColor's own chroma scale mutes the
+ * tint exactly as far as it mutes the neutrals. `in oklab` rather than `in srgb` because these are lightness
+ * decisions and sRGB interpolation does not preserve them. Every figure quoted above is measured at the shipped
+ * accent; a pick moves the hue and the chroma, and the lightnesses — which is what the contrast is — stand. */
 :root {
-    --role-canvas:      var(--color-surface-50);
-    --role-card:        var(--color-surface-0);
-    --role-overlay:     var(--color-surface-0);
-    --role-line:        var(--color-surface-100);
-    --role-line-strong: var(--color-surface-200);
-    --role-line-subtle: color-mix(in srgb, var(--role-line) 50%, var(--role-card));
-    --role-content:     var(--color-surface-900);
-    --role-muted:       var(--color-surface-600);
-    --role-subtle:      var(--color-surface-500);
-    --role-link:        var(--color-primary-700);
-    /* THE STATUS ROLES ARE TEXT COLOURS FIRST, so they sit where `--role-link` already does — the 700s — and
-     * not one step up. At 600 every one of them failed WCAG AA as text on its own 10% tint: warning measured
+    /* THE TINT — one warm source, stirred into all five surface steps. A brand step rather than an amber or a
+     * fixed hex, so there is exactly one hue in the light scheme and it is the one the reader chose. */
+    --paper-tint: var(--color-brand-300);
+
+    /* The desk, the floating thing, and the plate. Each is a ramp step pulled toward the tint; the percentage is
+     * chosen so the three land on 95.0 / 96.6 / 98.4% L — even steps, roughly 1.7 points apart. */
+    --role-canvas:      color-mix(in oklab, var(--color-surface-100) 94%, var(--paper-tint));
+    --role-card:        color-mix(in oklab, var(--color-surface-0) 97%, var(--paper-tint));
+    /* OVERLAY SITS BETWEEN THE OTHER TWO, WHICH IS NOT THE ORDER THE DARK SCHEME USES, and the reason is that
+     * this token has two jobs. It is the floating surface (menus, popovers, dialogs — 153 call sites) AND it is
+     * the wash a row turns when it is hovered, pressed or worn as a chip (another 88). In the dark those want
+     * the same direction: lighter than the card is both "raised" and "hovered". In the light they do not — a
+     * hover that goes brighter than a 98.4% plate has nowhere to go, which is exactly why hover did nothing
+     * here. A tone a step BELOW the card reads as a wash on a card and as a lift on the canvas, and a floating
+     * panel takes its elevation from the border and the shadow, the way light interfaces have always done it. */
+    --role-overlay:     color-mix(in oklab, var(--color-surface-50) 92%, var(--paper-tint));
+    --role-line:        color-mix(in oklab, var(--color-surface-200) 92%, var(--paper-tint));
+    --role-line-strong: color-mix(in oklab, var(--color-surface-300) 89%, var(--paper-tint));
+    --role-line-subtle: color-mix(in oklab, var(--role-line) 50%, var(--role-card));
+    /* THE INK IS WARM TOO, or the whole picture falls in half: grey type on warm paper reads as a print fault,
+     * and the eye finds it before it finds the words. Each is its neutral step mixed toward the deep end of the
+     * brand — which also darkens it, so warmth and legibility arrive in the same move. */
+    --role-content:     color-mix(in oklab, var(--color-surface-900) 92%, var(--color-brand-800));
+    --role-muted:       color-mix(in oklab, var(--color-surface-600) 88%, var(--color-brand-950));
+    --role-subtle:      color-mix(in oklab, var(--color-surface-500) 78%, var(--color-brand-950));
+    /* 800 RATHER THAN 700, because 700 is 58% L and orange at 58% on near-white is 4.3:1 — the accent colour,
+     * the one thing on the page that has to be legible ON PURPOSE, was the least legible text in the app. At 800
+     * it measures 6.0:1 and lands at 50% L, which is where danger/success/info (700) and warning (800) already
+     * sit: five accent roles at ONE lightness, which is the rule the status block below argues for. */
+    --role-link:        var(--color-primary-800);
+    /* THE STATUS ROLES ARE TEXT COLOURS FIRST, so they sit at the lightness `--role-link` does — around 50% L —
+     * and not one step up. At 600 every one of them failed WCAG AA as text on its own 10% tint: warning measured
      * 2.8:1, danger 3.8:1, and the pattern is not the alert box's, it is the vocabulary's — <StatusBadge>,
      * <CountBar> and every `text-danger` in the app paint the same colour on the same wash.
      *
@@ -166,6 +212,29 @@
     --role-warning-fill:       var(--color-warning-700);
     --role-danger-fill:        var(--color-danger-700);
     --role-fill-content:       var(--color-white);
+
+    /* ── WHAT THE LIGHT CASTS ──────────────────────────────────────────────────────────────────────────────
+     * A warm room does not throw a neutral shadow. Black under a card on paper greys the paper around it, and
+     * grey beside cream is the single most reliable way to make a warm scheme look dirty — so the shade is a
+     * deep brown, and everything that drops a shadow takes it from here.
+     *
+     * `--ui-shadow-tint` and `--ui-shadow-strength` feed Tailwind's own `shadow-*` scale (tokens.css). The three
+     * numbered elevations below are for the surfaces this design system paints by hand, and they are stated per
+     * scheme rather than derived, because the two schemes disagree about alpha as well as hue: on near-black,
+     * depth is a big soft black at 0.3+; on paper, the same alpha is a smudge, and the lift comes from a tight
+     * contact shadow plus a wide, faint ambient one. 1 is a chip or a tooltip, 2 is a menu or popover, 3 is a
+     * dialog or a notification — the only three distances anything in the app is raised by. */
+    --ui-shadow-tint: 61 40 22;
+    --ui-shadow-strength: 1.4;
+    --ui-shadow-1: 0 1px 2px rgb(var(--ui-shadow-tint) / 0.10), 0 2px 6px -1px rgb(var(--ui-shadow-tint) / 0.12);
+    --ui-shadow-2: 0 2px 4px rgb(var(--ui-shadow-tint) / 0.07), 0 12px 28px -8px rgb(var(--ui-shadow-tint) / 0.20);
+    --ui-shadow-3: 0 4px 10px rgb(var(--ui-shadow-tint) / 0.08), 0 24px 56px -12px rgb(var(--ui-shadow-tint) / 0.26);
+
+    /* The inverted chip. `surface-700` is a cold grey box on warm paper — the one element in the light scheme
+     * that would still have been wearing the dark scheme's clothes. Dark keeps it, where it is correct. */
+    --ui-tooltip-fill: color-mix(in oklab, var(--color-surface-800) 82%, var(--color-brand-900));
+    --ui-tooltip-content: var(--color-surface-0);
+
     --role-series-1:     var(--color-series-1-light);
     --role-series-2:     var(--color-series-2-light);
     --role-series-3:     var(--color-series-3-light);
@@ -202,6 +271,19 @@
     --role-warning-fill:       var(--color-warning-400);
     --role-danger-fill:        var(--color-danger-400);
     --role-fill-content:       var(--color-surface-900);
+
+    /* Depth on near-black is black, at the alphas this app already shipped: `--ui-shadow-2` is the anchored
+     * panel's old literal and `--ui-shadow-1` the tooltip's, moved here rather than changed. Strength is 1 so
+     * Tailwind's scale renders exactly as it did before the shade became a variable. */
+    --ui-shadow-tint: 0 0 0;
+    --ui-shadow-strength: 1;
+    --ui-shadow-1: 0 4px 12px rgb(var(--ui-shadow-tint) / 0.28);
+    --ui-shadow-2: 0 10px 30px rgb(var(--ui-shadow-tint) / 0.32);
+    --ui-shadow-3: 0 18px 48px rgb(var(--ui-shadow-tint) / 0.45);
+
+    --ui-tooltip-fill: var(--color-surface-700);
+    --ui-tooltip-content: var(--color-surface-0);
+
     --role-series-1:     var(--color-series-1-dark);
     --role-series-2:     var(--color-series-2-dark);
     --role-series-3:     var(--color-series-3-dark);

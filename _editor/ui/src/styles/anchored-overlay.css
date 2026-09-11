@@ -24,7 +24,7 @@
         border: 1px solid var(--color-line);
         border-radius: var(--ui-radius);
         background: var(--color-card);
-        box-shadow: 0 10px 30px rgb(0 0 0 / 0.32);
+        box-shadow: var(--ui-shadow-2);
     }
 
     /* The arrow: two stacked triangles, the back one a pixel behind the front, so it reads as the surface's own

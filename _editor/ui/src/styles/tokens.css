@@ -139,6 +139,31 @@
      * Tailwind 4 has no `--ring-*` width namespace, so the token cannot become a `ring-track` utility. */
     --ring-track: 1.5px;
 
+    /* ── THE SHADOW SCALE, RESTATED SO IT CAN TAKE A COLOUR FROM THE SCHEME ────────────────────────────────
+     * Tailwind's own `shadow-*` values are pure black at a handful of alphas. Black is the right shade for a
+     * near-black interface and the wrong one for paper: a neutral shadow on a warm surface greys it, which is
+     * precisely the "washed out" look the light scheme was rebuilt to lose. The geometry and the alphas below
+     * are Tailwind's, untouched; only the shade is now a variable, and only the light scheme moves it (see
+     * `--ui-shadow-tint` in semantic-colors.css — dark sets `0 0 0` and renders exactly as before).
+     *
+     * `--ui-shadow-strength` is a multiplier rather than a second set of alphas because these numbers were
+     * chosen for a light background in the first place; a tinted shade at the same alpha darkens slightly less
+     * than black does, and the multiplier is what pays that back. Dark sets it to 1 and is unaffected.
+     *
+     * `var(--tw-shadow-color, …)` is kept in every slot: that is the hook `shadow-<colour>` utilities write to,
+     * and dropping it would silently turn those into no-ops. */
+    --shadow-2xs: 0 1px var(--tw-shadow-color, rgb(var(--ui-shadow-tint) / calc(0.05 * var(--ui-shadow-strength))));
+    --shadow-xs: 0 1px 2px 0 var(--tw-shadow-color, rgb(var(--ui-shadow-tint) / calc(0.05 * var(--ui-shadow-strength))));
+    --shadow-sm: 0 1px 3px 0 var(--tw-shadow-color, rgb(var(--ui-shadow-tint) / calc(0.1 * var(--ui-shadow-strength)))),
+        0 1px 2px -1px var(--tw-shadow-color, rgb(var(--ui-shadow-tint) / calc(0.1 * var(--ui-shadow-strength))));
+    --shadow-md: 0 4px 6px -1px var(--tw-shadow-color, rgb(var(--ui-shadow-tint) / calc(0.1 * var(--ui-shadow-strength)))),
+        0 2px 4px -2px var(--tw-shadow-color, rgb(var(--ui-shadow-tint) / calc(0.1 * var(--ui-shadow-strength))));
+    --shadow-lg: 0 10px 15px -3px var(--tw-shadow-color, rgb(var(--ui-shadow-tint) / calc(0.1 * var(--ui-shadow-strength)))),
+        0 4px 6px -4px var(--tw-shadow-color, rgb(var(--ui-shadow-tint) / calc(0.1 * var(--ui-shadow-strength))));
+    --shadow-xl: 0 20px 25px -5px var(--tw-shadow-color, rgb(var(--ui-shadow-tint) / calc(0.1 * var(--ui-shadow-strength)))),
+        0 8px 10px -6px var(--tw-shadow-color, rgb(var(--ui-shadow-tint) / calc(0.1 * var(--ui-shadow-strength))));
+    --shadow-2xl: 0 25px 50px -12px var(--tw-shadow-color, rgb(var(--ui-shadow-tint) / calc(0.25 * var(--ui-shadow-strength))));
+
     /* Radius scale. */
     /* Chart and table legend swatches — smaller than xs so a colour chip reads square without a full corner. */
     --radius-2xs: 0.125rem;
