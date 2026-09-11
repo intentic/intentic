@@ -560,8 +560,7 @@
      *
      * IT DOES NOT FADE AT THE ENDS, and that is deliberate, because the site's band rule does. Columns stand
      * side by side here, so a fade per column turns one line across the window into a row of dashes. */
-    [data-skin="sanctum"] .view-header,
-    [data-skin="sanctum"] .view-header-wrap {
+    [data-skin="sanctum"] .view-header:not(.view-header-wrap) {
         border-bottom-color: var(--sanctum-rule-strong);
         box-shadow: 0 2px 0 -1px var(--sanctum-whisper);
     }

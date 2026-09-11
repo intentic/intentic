@@ -936,7 +936,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             `.view-header .view-header-wrap` (styles.css): this is the board's bar in the app's top row — the one line
             across the window, the height every other bar has, and inside the desktop app the title bar itself.
         -->
-        <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-3 py-1">
+        <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
                 <!--
                     Drawn only when more than one sandbox exists (scopeOffered): a switch whose two settings look
