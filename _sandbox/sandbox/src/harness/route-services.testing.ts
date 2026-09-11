@@ -170,9 +170,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         controlTokens: {
             mint: async (label, scope) => ({ id: "ct-1", token: `ict_minted-${scope}-${label}` }),
             resolve: async (presented) => {
-                const scope = ({ ict_valid: "editor", "ict_read-token": "read", "ict_drive-token": "drive", "ict_land-token": "land" })[presented] as
-                    | ControlScope
-                    | undefined;
+                const scope = { ict_valid: "editor", "ict_read-token": "read", "ict_drive-token": "drive", "ict_land-token": "land" }[presented] as
+                    ControlScope | undefined;
                 return scope === undefined ? undefined : { id: `ct-${scope}`, label: `${scope} token`, scope };
             },
             touch: async () => undefined,
@@ -186,6 +185,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         platformTunnel: { url: () => undefined, ready: Promise.resolve(), close: () => {} },
         // Read while composing every turn's environment, not just by settings routes, so it's a fake, not unstubbed.
         extensionSecretVault: memorySecretVault(),
+        // No platform to ask, which is the ordinary state under test and the one an export has to survive: a bundle
+        // packed here simply carries no display name or logo. A test that cares overrides this.
+        presentation: async () => undefined,
         // Nothing stored or spent; in-memory, not unstubbed, since the inventory route reads it every call.
         secretRegistry: async () => [],
         secretUses: (() => {

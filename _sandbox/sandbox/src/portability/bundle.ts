@@ -7,8 +7,9 @@ import { type BundleManifest, HISTORY_STATE_FILES, WORKSPACE_STATE_FILES } from 
 import { createIgnoreScope, type IgnoreScope } from "@intentic/workspace-ignore";
 import { pack, type Pack } from "tar-stream";
 import type { Services } from "../composition.js";
+import type { SandboxPresentation } from "../platform/platform-client.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
-import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
+import { carries, historyMayContain, historyPortability, IGNORE_SCOPE_EXCLUSIONS, workspaceMayContain, workspacePortability } from "./classify.js";
 import { deriveDefinition } from "./definition.js";
 
 // Packs a gzipped tar of the sandbox's two volumes, driven by the state manifests so adding a store is what adds it to
@@ -95,9 +96,10 @@ const packTree = async (
 };
 
 // The manifest's `excluded` list, derived from the same tables the walk consults, so it can never describe a different
-// bundle than the one written.
-const excludedEntries = (secrets: boolean): BundleManifest["excluded"] =>
-    [
+// bundle than the one written — plus what the IgnoreScope prunes, which the tables cannot express and which was
+// therefore being left out of the report entirely (IGNORE_SCOPE_EXCLUSIONS says which and why).
+const excludedEntries = (secrets: boolean): BundleManifest["excluded"] => {
+    const declared: BundleManifest["excluded"] = [
         ...WORKSPACE_STATE_FILES.filter((file) => !carries(file.portability, secrets)),
         ...HISTORY_STATE_FILES.filter((file) => !carries(file.portability, secrets)),
     ]
@@ -107,6 +109,25 @@ const excludedEntries = (secrets: boolean): BundleManifest["excluded"] =>
                 : { path: file.path, portability: file.portability, note: file.note },
         )
         .toSorted((left, right) => left.path.localeCompare(right.path));
+    // Appended rather than sorted in: the tables describe named state, these describe whole subtrees, and mixing them
+    // alphabetically would bury the one entry (the shelf) that costs somebody 49 repositories.
+    return [...declared, ...IGNORE_SCOPE_EXCLUSIONS];
+};
+
+// The manifest's `sandbox` block, present when ANY of the three has something to say. Emitted as a whole-or-nothing
+// key so an empty object never lands in the JSON; each field is independently optional, because the container name
+// and the platform's presentation come from different places and either can be missing on its own.
+const sandboxBlock = (
+    containerName: string,
+    presentation: SandboxPresentation | undefined,
+): Pick<BundleManifest, "sandbox"> | Record<string, never> => {
+    const sandbox = {
+        ...(containerName === "" ? {} : { name: containerName }),
+        ...(presentation?.name === undefined ? {} : { displayName: presentation.name }),
+        ...(presentation?.image === undefined ? {} : { image: presentation.image }),
+    };
+    return Object.keys(sandbox).length === 0 ? {} : { sandbox };
+};
 
 // One credential sweep, best-effort in both directions: a seam that throws (a fake never given this member) becomes a
 // caught rejection, so an export can never fail while protecting itself.
@@ -134,9 +155,13 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
             // Manifest embeds the same definition GET /definition emits, so a bundle is definition + state. `repos` is
             // the same list the pack below is filtered by, so the manifest and the tar can never disagree about what's
             // inside.
+            // Asked for, not derived: the display name and logo are platform rows the daemon holds no copy of, and
+            // this is the one moment they can be captured into something portable. Best-effort — a platform that
+            // does not answer costs the bundle its presentation, never the export.
+            const presentation = await services.presentation().catch(() => undefined);
             const manifest: BundleManifest = {
                 version: 3,
-                ...(services.config.sandbox.name === "" ? {} : { sandbox: { name: services.config.sandbox.name } }),
+                ...sandboxBlock(services.config.sandbox.name, presentation),
                 createdAt: options.now,
                 secrets: options.secrets,
                 repos: (await discoverRepos(services.workspace.root)).toSorted(),
@@ -147,6 +172,14 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
             packer.entry({ name: BUNDLE_MANIFEST_ENTRY, size: body.byteLength, type: "file" }).end(body);
 
             // Workspace filtered first by the tree view's own ignore rules, then by the state manifests.
+            //
+            // `descend` at the root, not a bare `createIgnoreScope()`: a fresh scope holds NO layers, and packTree's
+            // walk only descends into CHILD directories — so the workspace root's own .gitignore was never read and
+            // none of its patterns applied. createIgnoreScope says as much ("a root-level .gitignore is read by the
+            // first descend the walker makes"), and workspace-tree.ts makes that descend for its root job. The bundle
+            // did not, so it packed exactly what the file tree grays out: `.playwright-mcp/` (174 files of browser
+            // page snapshots the root .gitignore exists to exclude), `tmp/`, `.scratch/`. `.pnpm-store` escaped only
+            // because IGNORED_DIRS names it independently.
             await packTree(
                 packer,
                 services.workspace.root,
@@ -155,13 +188,27 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
                     carry: (relPath) => carries(workspacePortability(relPath), options.secrets),
                     enter: (relPath) => workspaceMayContain(relPath, options.secrets),
                 },
-                createIgnoreScope(),
+                await createIgnoreScope().descend(services.workspace.root, ""),
             );
             // History filtered by its manifest alone; `gits/` holds the .git dirs the workspace scope would skip.
-            await packTree(packer, services.config.historyRoot, "history/", {
-                carry: (relPath) => carries(historyPortability(relPath), options.secrets),
-                enter: (relPath) => historyMayContain(relPath, options.secrets),
-            });
+            //
+            // With a scope, not without one. The state table can name `gits/` but cannot enumerate what a tool decides
+            // to drop INSIDE it: a Turborepo cache at `gits/.turbo/cache` rode along as 122,593 files / 588M — 98% of
+            // everything under gits/ and roughly twice the size of the real git data — and the restore then discarded
+            // all of it, because arrival restores repos it knows from the manifest. Pure cost: a slower pack, a bigger
+            // file, and it counts against MAX_UPLOAD_BYTES. IGNORED_DIRS already names `.turbo`, so the junk denylist
+            // is the right instrument. Nothing carried is at risk: every node_modules/dist under /history lives in
+            // `engines/`, which is `derived` and never descended.
+            await packTree(
+                packer,
+                services.config.historyRoot,
+                "history/",
+                {
+                    carry: (relPath) => carries(historyPortability(relPath), options.secrets),
+                    enter: (relPath) => historyMayContain(relPath, options.secrets),
+                },
+                await createIgnoreScope().descend(services.config.historyRoot, ""),
+            );
             packer.finalize();
         } catch (error) {
             packer.destroy(error instanceof Error ? error : new Error(String(error)));

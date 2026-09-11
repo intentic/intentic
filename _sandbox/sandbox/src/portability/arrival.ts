@@ -2,7 +2,15 @@ import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { createGunzip } from "node:zlib";
-import type { ArrivalApply, ArrivalHost, ArrivalItem, ArrivalPlan, ArrivalReport, SandboxDefinition } from "@intentic/sandbox-contract";
+import type {
+    ArrivalApply,
+    ArrivalHost,
+    ArrivalItem,
+    ArrivalPlan,
+    ArrivalReport,
+    BundleManifest,
+    SandboxDefinition,
+} from "@intentic/sandbox-contract";
 import { extract } from "tar-stream";
 import {
     type AssistantSetup,
@@ -45,6 +53,10 @@ export interface Arrivals {
     readonly apply: (input: ArrivalApply) => Promise<ArrivalReport>;
     readonly abandon: () => Promise<boolean>;
 }
+
+// What to call a bundle's source on the card: the owner's name for it, falling back to the container's. Both are
+// optional, and a bundle packed by a daemon with neither gets no line rather than an empty one.
+const displayedName = (manifest: BundleManifest): string | undefined => manifest.sandbox?.displayName ?? manifest.sandbox?.name;
 
 // Takes the first bytes off the stream without consuming it, and returns something that replays them. Driven by
 // `next()` alone — never `return()` — so `for await` breaking wouldn't destroy the rest of the upload.
@@ -155,7 +167,10 @@ export const createArrivals = (services: Services): Arrivals => {
             const manifest = held.held.index.manifest;
             return {
                 source: "bundle",
-                ...(manifest.sandbox === undefined ? {} : { name: manifest.sandbox.name }),
+                // The owner's own name for the source when the bundle carries it, since this line is what the card
+                // shows and `name` is the container's (`intentic-sandbox-sandbox-<id>`) — a reader recognises
+                // "radarsu-intentic", not a slug they never typed.
+                ...(displayedName(manifest) === undefined ? {} : { name: displayedName(manifest) }),
                 items: bundleItems(held.held.index),
                 // Whatever its owner chose at export; false just means the values aren't in the file.
                 carriesSecrets: manifest.secrets,

@@ -264,7 +264,10 @@ test("the composed overlay is left for the target to recompose; its source secti
 test("the report names the capabilities a no-secrets bundle left unauthenticated", async () => {
     const source = await makeRoots();
     const target = await makeRoots();
-    const { report } = await arrive(await bundleOf(source, false, [{ id: "docker", kind: "cli", config: { provider: "docker" } } as Capability]), target);
+    const { report } = await arrive(
+        await bundleOf(source, false, [{ id: "docker", kind: "cli", config: { provider: "docker" } } as Capability]),
+        target,
+    );
     const action = report.needsAction.find((entry) => entry.subject === "Reconnect capabilities");
     expect(action?.detail).toContain("docker");
     await cleanup();
@@ -349,5 +352,115 @@ test("an unticked repository is left in the file: its tree and its git dir both 
     await expect(readFile(join(target.work, "huge/blob.bin"), "utf8")).rejects.toThrow();
     await expect(readFile(join(target.history, "gits/huge/HEAD"), "utf8")).rejects.toThrow();
     expect(await readFile(join(target.work, "notes.md"), "utf8")).toBe("# keep me\n");
+    await cleanup();
+});
+
+// A bundle is filtered by two things, and only one of them is the state tables: the walk also runs the workspace's
+// IgnoreScope. These four tests pin what that scope does, because each was wrong in a way no report mentioned.
+
+test("the workspace root's own .gitignore is honoured, not just a nested one", async () => {
+    const source = await makeRoots();
+    // The real root .gitignore's own example: browser page snapshots written beside the workspace, which the file
+    // tree greys out. packBundle used to walk with an EMPTY scope and only descend into children, so a root-level
+    // pattern never applied and these shipped inside every bundle.
+    await writeFile(join(source.work, ".gitignore"), ".playwright-mcp/\nscratch.log\n");
+    await mkdir(join(source.work, ".playwright-mcp"), { recursive: true });
+    await writeFile(join(source.work, ".playwright-mcp/page.yml"), "snapshot\n");
+    await writeFile(join(source.work, "scratch.log"), "noise\n");
+    await writeFile(join(source.work, "keep.md"), "# real content\n");
+
+    const target = await makeRoots();
+    await arrive(await bundleOf(source, false), target);
+
+    expect(await readFile(join(target.work, "keep.md"), "utf8")).toBe("# real content\n");
+    await expect(readFile(join(target.work, ".playwright-mcp/page.yml"), "utf8")).rejects.toThrow();
+    await expect(readFile(join(target.work, "scratch.log"), "utf8")).rejects.toThrow();
+    await cleanup();
+});
+
+test("build junk inside a carried git dir stays out: gits/ is carry, its tool caches are not", async () => {
+    const source = await makeRoots();
+    await mkdir(join(source.history, "gits/app/objects"), { recursive: true });
+    await writeFile(join(source.history, "gits/app/HEAD"), "ref: refs/heads/main\n");
+    await writeFile(join(source.history, "gits/app/objects/blob"), "real git object\n");
+    // A Turborepo cache under the gits root: 588M and 98% of everything under gits/ on the sandbox that found this,
+    // carried by `gits/` being carry wholesale and then discarded by a restore that only knows manifest repos.
+    await mkdir(join(source.history, "gits/.turbo/cache"), { recursive: true });
+    await writeFile(join(source.history, "gits/.turbo/cache/abc.tar.zst"), "x".repeat(4096));
+    await mkdir(join(source.work, "app"), { recursive: true });
+    await writeFile(join(source.work, "app/.git"), `gitdir: ${join(source.history, "gits/app")}\n`);
+
+    const target = await makeRoots();
+    await arrive(await bundleOf(source, false), target);
+
+    expect(await readFile(join(target.history, "gits/app/objects/blob"), "utf8")).toBe("real git object\n");
+    await expect(readFile(join(target.history, "gits/.turbo/cache/abc.tar.zst"), "utf8")).rejects.toThrow();
+    await cleanup();
+});
+
+test("the manifest names the reference shelf it leaves behind, instead of dropping it silently", async () => {
+    const source = await makeRoots();
+    await mkdir(join(source.work, "refs/vscode"), { recursive: true });
+    await writeFile(join(source.work, "refs/vscode/README.md"), "# a reference clone\n");
+    await writeFile(join(source.work, "keep.md"), "# real content\n");
+
+    const target = await makeRoots();
+    const held = await spoolBundle(await bundleOf(source, false), target.history, LIMIT);
+    const excluded = held.index.manifest.excluded;
+    await dropSpool(held.spool);
+
+    // The shelf does not travel — that part is deliberate, since each entry is a clone with its own remote.
+    await arrive(await bundleOf(source, false), target);
+    await expect(readFile(join(target.work, "refs/vscode/README.md"), "utf8")).rejects.toThrow();
+    // What was wrong is that nothing said so: `excluded` was built from the state tables alone, and the tables
+    // cannot describe a subtree the IgnoreScope prunes. A person diffing two sandboxes should not be the mechanism.
+    expect(excluded, "the manifest must name the reference shelf among its exclusions").toContainEqual(
+        expect.objectContaining({ path: "refs/", note: expect.stringMatching(/\S/) }),
+    );
+    await cleanup();
+});
+
+test("a sandbox's display name and logo ride along, since no volume holds them", async () => {
+    const source = await makeRoots();
+    await writeFile(join(source.work, "keep.md"), "# real content\n");
+    const logo = "data:image/webp;base64,UklGRg==";
+
+    const target = await makeRoots();
+    const bundle = await bundleOf(source, false, [], { presentation: async () => ({ name: "radarsu-intentic", image: logo }) });
+    const { report } = await arrive(bundle, target);
+
+    // Handed back rather than applied: they are platform rows, and the daemon holds no owner session to write them.
+    expect(report.presentation).toEqual({ name: "radarsu-intentic", image: logo });
+    await cleanup();
+});
+
+test("presentation is withheld when nothing landed, so a failed arrival cannot rename the sandbox", async () => {
+    const source = await makeRoots();
+    await writeFile(join(source.work, "keep.md"), "# real content\n");
+
+    const target = await makeRoots();
+    const bundle = await bundleOf(source, false, [], { presentation: async () => ({ name: "radarsu-intentic" }) });
+    const { report } = await arrive(bundle, target, { pick: () => false });
+
+    expect(report.applied).toEqual([]);
+    expect(report.presentation).toBeUndefined();
+    await cleanup();
+});
+
+test("an export survives a platform that cannot say how the sandbox presents itself", async () => {
+    const source = await makeRoots();
+    await writeFile(join(source.work, "keep.md"), "# real content\n");
+
+    const target = await makeRoots();
+    const bundle = await bundleOf(source, false, [], {
+        presentation: async () => {
+            throw new Error("the platform did not respond in time");
+        },
+    });
+    const { report } = await arrive(bundle, target);
+
+    expect(report.applied.map((entry) => entry.id)).toContain("bundle:files");
+    expect(report.presentation).toBeUndefined();
+    expect(await readFile(join(target.work, "keep.md"), "utf8")).toBe("# real content\n");
     await cleanup();
 });

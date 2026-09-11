@@ -55,7 +55,13 @@ import { createMediaTickets, type MediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets, type WsTickets } from "./auth/ws-tickets.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { type AgentRequest, runAgent } from "./agent/run/agent.js";
-import { cliProxyAuthDir, type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/providers/translator.js";
+import {
+    cliProxyAuthDir,
+    type CliProxyClient,
+    cliProxyConfigPath,
+    cliProxyManagementUrl,
+    createCliProxyClient,
+} from "./agent/providers/translator.js";
 import { type HeldWakesStore, fileHeldWakesStore } from "./automations/held-wakes-store.js";
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
 import { fileLoopDesignsStore, fileLoopsStore, type LoopDesignsStore, type LoopsStore } from "./loops/loops-store.js";
@@ -109,6 +115,7 @@ import { RUNNER_PEER, type RunnerAnnounced, type RunnerClient, type RunnerHub, t
 import type { ParentCredentials } from "./runners/runner-credentials.js";
 import { createPeerHub } from "./peers/peer-hub.js";
 import { filePeerStore } from "./peers/peer-store.js";
+import { fetchPresentation, type SandboxPresentation } from "./platform/platform-client.js";
 import { syncPairBurnPath, type SyncMode } from "./platform/sync.js";
 import { pairings, type Pairings } from "./store/enrollment.js";
 import { fileTurnJournal, type TurnJournal } from "./agent/run/turn/turn-journal.js";
@@ -185,7 +192,13 @@ import { readSessionLines, spokenLinesOf, transcriptSearchMetrics } from "./sess
 import { fileThreadSessionsStore, type ThreadSessionsStore } from "./sessions/thread-sessions.js";
 import { openSearchIndex, type SearchIndex } from "./sessions/search-index.js";
 import { backfillSearchIndex, type BackfillSource } from "./sessions/search-backfill.js";
-import { agentTranscript, agentTranscriptPage, type AgentTranscriptDeps, spokenTranscript, type TranscriptAgent } from "./sessions/agent-transcript.js";
+import {
+    agentTranscript,
+    agentTranscriptPage,
+    type AgentTranscriptDeps,
+    spokenTranscript,
+    type TranscriptAgent,
+} from "./sessions/agent-transcript.js";
 import { fileTranscriptRecord, type TranscriptPage, type TranscriptWindow } from "./sessions/transcript-record.js";
 import { fileShareStore, type ShareStore } from "./share/share-store.js";
 import { createSpeech, type Speech } from "./speech/transcribe.js";
@@ -325,6 +338,11 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly extensionSecretVault: SecretVault;
     // Settings twin of vaultManifestSecrets: the tracked settings file is agent-editable too.
     readonly vaultExtensionSettingSecrets: () => Promise<readonly string[]>;
+    // How the platform says this sandbox presents itself: the owner's name for it and its switcher logo. Neither is
+    // workspace state, so an export has to ask; injected rather than imported so the bundler stays testable and a
+    // headless daemon can simply not have one. Resolves undefined whenever the platform can't answer — an export
+    // must never fail over presentation.
+    readonly presentation: () => Promise<SandboxPresentation | undefined>;
     // Every credential under a stable name; read by the agent's masking and the exits resolving a reference back.
     readonly secretRegistry: () => Promise<readonly NamedSecret[]>;
     // Use ledger those exits feed, one row per resolved reference, joined onto the secrets inventory as last-used.
@@ -1004,6 +1022,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         tools: internalTools(config.intenticAgentTools),
         capabilities,
         vaultManifestSecrets: () => vaultManifestSecrets(capabilityManifest, secretVault, secretFieldConnectors, onUnvaultable),
+        presentation: () => fetchPresentation(config),
         extensionSecretVault,
         vaultExtensionSettingSecrets: async () =>
             vaultExtensionSettingSecrets(workspace.root, extensionSecretVault, await settingSecretKeys(), onUnvaultableSetting),

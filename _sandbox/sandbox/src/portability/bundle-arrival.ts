@@ -7,6 +7,7 @@ import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { createGunzip } from "node:zlib";
 import { type ArrivalItem, type ArrivalReport, BundleManifestSchema, type BundleManifest, type NeedsAction } from "@intentic/sandbox-contract";
+import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { extract, type Headers } from "tar-stream";
 import { repoGitDir } from "../history/history.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
@@ -277,7 +278,20 @@ export const bundleActions = (manifest: BundleManifest, includeSecrets: boolean)
 
 // A repo's `.git` points at its real dir on /history by absolute path — the source sandbox's path, rewritten here for
 // the target. Includes `root`: /work/.git is a pointer too, and boot convergence can't heal a dangling one.
-const healGitPointers = async (workspaceRoot: string, historyRoot: string, landed: ReadonlySet<string>): Promise<string[]> => {
+//
+// Also prunes worktree registrations, because the bundle's two halves of a worktree disagree BY DESIGN: a git dir
+// under `gits/` is `carry`, and it holds `worktrees/<name>` metadata for every checkout the source had — while
+// `/history/worktrees/` itself is `derived` and deliberately does not travel ("each conversation re-attaches its
+// checkout from its branch on its next turn"). So every registration arrives pointing at a directory that does not
+// exist: 38 per repo on the first bundle this was measured on, all reported `prunable` by `git worktree list`, and
+// each one would refuse a later `git worktree add` at the same path — which is exactly what re-attaching does. The
+// branches are safe either way; they live in the git dir that did travel.
+const healGitPointers = async (
+    workspaceRoot: string,
+    historyRoot: string,
+    landed: ReadonlySet<string>,
+    git: GitRunner = defaultGit,
+): Promise<string[]> => {
     const healed: string[] = [];
     const gitsDir = join(historyRoot, "gits");
     const present = new Set((await readdir(gitsDir, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory()).map((e) => e.name));
@@ -285,8 +299,11 @@ const healGitPointers = async (workspaceRoot: string, historyRoot: string, lande
         if (!present.has(encodeURIComponent(repo))) {
             continue;
         }
-        const pointer = repo === "root" ? join(workspaceRoot, ".git") : join(workspaceRoot, repo, ".git");
-        await writeFile(pointer, `gitdir: ${repoGitDir(historyRoot, repo)}\n`);
+        const tree = repo === "root" ? workspaceRoot : join(workspaceRoot, repo);
+        await writeFile(join(tree, ".git"), `gitdir: ${repoGitDir(historyRoot, repo)}\n`);
+        // Best-effort and after the pointer is written, which is what makes the repo addressable at all. A prune that
+        // fails must not fail an arrival that has already put every byte down.
+        await git(tree, ["worktree", "prune"]).catch(() => undefined);
         healed.push(repo);
     }
     return healed;
@@ -391,7 +408,18 @@ export const applyBundle = async (
             detail: `Their real git directories arrived on this sandbox's own history volume and each working tree now points at it: ${healed.join(", ")}.`,
         });
     }
-    return { applied, failed, refused, needsAction };
+    // Handed back rather than applied: these are platform rows, and this process holds no owner session to write
+    // them with. Only offered when something actually landed — a preview-only or wholly-failed arrival must not
+    // rename the sandbox it was never allowed to touch.
+    const source = held.index.manifest.sandbox;
+    const presentation =
+        applied.length === 0 || source === undefined || (source.displayName === undefined && source.image === undefined)
+            ? undefined
+            : {
+                  ...(source.displayName === undefined ? {} : { name: source.displayName }),
+                  ...(source.image === undefined ? {} : { image: source.image }),
+              };
+    return { applied, failed, refused, needsAction, ...(presentation === undefined ? {} : { presentation }) };
 };
 
 // Called on apply, abandon and the boot sweep alike, so a crash mid-review leaves nothing boot can't clear.

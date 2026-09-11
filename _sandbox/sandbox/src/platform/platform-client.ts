@@ -12,6 +12,34 @@ export interface PlatformResponse {
     readonly json: unknown;
 }
 
+// How this sandbox presents itself, as the platform holds it: the owner's name for it and its switcher logo. Neither
+// is workspace state, so the daemon has no other way to learn them, and a bundle cannot carry them without asking.
+//
+// Best-effort by contract, never a throw: this is read while packing an export, and an export must not fail because
+// the platform is unreachable, headless, or older than this route. An absent answer just means the bundle carries no
+// presentation and the target keeps its own.
+export interface SandboxPresentation {
+    readonly name?: string;
+    readonly image?: string;
+}
+
+export const fetchPresentation = async (config: Config): Promise<SandboxPresentation | undefined> => {
+    try {
+        const { status, json } = await postToPlatform(config, "/sandbox/presentation", {});
+        if (status !== 200 || typeof json !== "object" || json === null) {
+            return undefined;
+        }
+        const { name, image } = json as { name?: unknown; image?: unknown };
+        const presentation: SandboxPresentation = {
+            ...(typeof name === "string" && name !== "" ? { name } : {}),
+            ...(typeof image === "string" && image !== "" ? { image } : {}),
+        };
+        return presentation.name === undefined && presentation.image === undefined ? undefined : presentation;
+    } catch {
+        return undefined;
+    }
+};
+
 // POST `body` (JSON) to `path` on the configured platform with the connect token. Rejects if no platform URL is
 // configured (headless/loopback). Resolves with the status + parsed JSON body (undefined when unparseable),
 // the caller maps non-2xx to a user-facing error.
