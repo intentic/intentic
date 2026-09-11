@@ -7,11 +7,11 @@ what light does when you touch something.
 There is one:
 
 - **Sanctum** (`sanctum.css`): **the site's design system, worn by the app**. Same metals, same ink, same
-  materials, same ornament kit as `_site/site/src/styles/global.css`: a near-colourless warm ash ground with a
-  whisper of tooth in it, one gold rule round everything, cream ink, and the site's two faces. The rail and
-  every overlay are a flat unlit shadow that the icons and the lists sit in; the two filled button tiers are
-  plaques with their labels cut into them, one carved stone and one cast bronze. A distant temple stands on the
-  floor of the window where the app has put nothing in front of it.
+  materials, same ornament kit as `_site/site/src/styles/global.css`: a near-colourless warm ash ground with
+  calm non-uniform stone tooth, one gold rule round everything, cream ink, and the site's two faces. The rail
+  wears a dense, warm, rough-dressed stone relief in shadow while overlays remain unlit; the two filled button
+  tiers are plaques with their labels cut into them, one carved stone and one cast bronze. A distant temple
+  stands on the floor of the window where the app has put nothing in front of it.
 
 **Its structure is FIXED GOLD, and that is the decision worth reading.** `#c9a05c`, the site's own, whatever the
 accent picker says, and the accent is spent only where it means something: a link, a focus ring, a ticked box.
@@ -119,13 +119,11 @@ Sanctum has paid for that rule and seventeen others, and the notes are kept at t
   most of their step off it, which is why cards started reading as panes of glass. Surface tokens under a
   texture have to be chosen against what renders, not against what is written. Anything else keyed to the wall
   (the temple's alpha, the lane's fill) has to be re-checked whenever it moves.
-- **The navigation rail is not a surface, it is a gap.** Three cuts spent the skin's material budget on it:
-  timber, then cloth on a brown ground, then the same cloth on the app's own `bg-card`: and each one failed
-  differently: a directional grain has room for three strokes across 48px, a colour of its own makes a seam
-  against the panel beside it, and a weave has a slow component that never averages out over a column that
-  narrow. The answer was that you look *past* a rail forty times a minute, so anything in it is something to
-  look past. It is flat, unlit, and a step deeper than the wall now. The overlays followed it there for the
-  same reason: a context menu is a thing you look *through* to a list of names.
+- **The navigation rail wears a distinct dense, warm, rough-dressed stone texture in shadow.** Rather than
+  sharing the wall's canvas grain or noisy stippling, the rail uses a denser tooth with rough raking-light relief
+  and a warm bronze/gold undertone. It reads as a separate architectural jamb/pilaster material while remaining
+  quietly recessed behind the icons. The overlays remain unlit and flat for the same reason: a context menu is a
+  thing you look *through* to a list of names.
 - **"In front" is a relationship, not a value.** The overlays used to sit a step ABOVE a card because that is
   what floating usually means. But every plate in this skin is lit (bevel, ledge, drop) so a panel that goes
   the other way, unlit and below the wall, is unmistakably not one of them and reads as floating over the lot

@@ -92,24 +92,11 @@
     --sanctum-rule-strong: rgba(201, 160, 92, 0.26);
     --sanctum-whisper: rgba(201, 160, 92, 0.07);
 
-    /* GRAIN — the tooth in the rock, and the most over-cookable value in the file. ACHROMATIC, unlike an early
-     * cut: a warm speckle at this density is what made the wall read as timber, and the wall is not timber.
-     * One fine, high-frequency scatter with the alpha curve doing all the work.
-     *
-     * IT USED TO BE A SPARKLE AND IS NOW A TOOTH, and that is the correction. The curve was `0.42 * R - 0.31`,
-     * which over noise averaging R = 0.5 leaves the typical pixel at exactly zero and lets only the top two
-     * per cent of the distribution through — a handful of lit crystal faces on an otherwise perfectly flat
-     * field. Measured on a screenshot, the wall's standard deviation was half a luminance level: mathematically
-     * present, invisible to a person, and the reason a skin built out of materials still read as a set of flat
-     * rectangles. `0.20 * R - 0.055` instead: almost every pixel gets SOMETHING, averaging around four per
-     * cent, peaking near a tenth. That is the difference between dust on a surface and the surface having a
-     * surface — and at this frequency it stays under the eye's resolution as pattern, so it reads as tooth
-     * rather than as noise. `stitchTiles` makes the 240px tile seamless, so a 4K window has no grid in it.
-     *
-     * IT LIFTS THE GROUND IT LIES ON, WHICH IS WHY `--role-canvas` IS STATED DARK. A light speckle averages
-     * upward, and there is no way to have one that does not. So the wall's token is chosen against what this
-     * actually renders, not against the number written in it. */
-    --sanctum-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='3' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.52 0 0 0 0 0.52 0 0 0 0 0.52 0.17 0 0 0 -0.05'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23f)'/%3E%3C/svg%3E");
+    /* Calm multi-scale weathered stone tooth with non-uniform organic variation. */
+    --sanctum-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480'%3E%3Cdefs%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006' numOctaves='3' seed='37' stitchTiles='stitch' result='macro'/%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' seed='19' stitchTiles='stitch' result='fine'/%3E%3CfeComposite in='fine' in2='macro' operator='arithmetic' k1='0.35' k2='0.65' k3='0' k4='-0.06' result='grain'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.55 0 0 0 0 0.52 0 0 0 0 0.48 0.12 0 0 0 -0.035'/%3E%3C/filter%3E%3C/defs%3E%3Crect width='480' height='480' filter='url(%23f)'/%3E%3C/svg%3E");
+
+    /* Dense, rough-dressed warm stone pilaster relief for the navigation rail. */
+    --sanctum-rail: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='96'%3E%3Cdefs%3E%3Cfilter id='r' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5 0.3' numOctaves='3' seed='53' stitchTiles='stitch' result='chisel'/%3E%3CfeOffset in='chisel' dx='0' dy='-0.8' result='chiselLit'/%3E%3CfeOffset in='chisel' dx='0' dy='0.8' result='chiselDark'/%3E%3CfeComposite in='chiselLit' in2='chiselDark' operator='arithmetic' k1='0' k2='0.85' k3='-0.85' k4='0.5' result='relief'/%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.6 1.4' numOctaves='3' seed='29' stitchTiles='stitch' result='dense'/%3E%3CfeComposite in='dense' in2='relief' operator='arithmetic' k1='0.4' k2='0.6' k3='0' k4='-0.05' result='combined'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.78 0 0 0 0 0.64 0 0 0 0 0.42 0.22 0 0 0 -0.05'/%3E%3C/filter%3E%3C/defs%3E%3Crect width='48' height='96' filter='url(%23r)'/%3E%3C/svg%3E");
 
     /* THE PLATE'S OWN STONE, for the surfaces that hold sentences — the cards, the slabs, the lanes.
      *
@@ -408,23 +395,33 @@
     [data-skin="sanctum"] body,
     [data-skin="sanctum"] #app > :first-child:not(.entry) {
         background-image:
-            radial-gradient(135% 105% at 50% 36%, transparent 42%, oklch(9% 0.004 78 / 0.42) 100%),
+            radial-gradient(130% 105% at 50% 38%, transparent 46%, rgba(0, 0, 0, 0.20) 76%, rgba(0, 0, 0, 0.42) 100%),
+            linear-gradient(180deg, transparent 56%, rgba(0, 0, 0, 0.14) 82%, rgba(0, 0, 0, 0.28) 100%),
+            radial-gradient(ellipse 76% 62% at 50% 36%, rgba(245, 235, 218, 0.035) 0%, rgba(201, 160, 92, 0.015) 38%, transparent 72%),
+            radial-gradient(ellipse 70% 55% at 50% 38%, color-mix(in oklab, var(--color-surface-950) 45%, transparent) 0%, color-mix(in oklab, var(--color-surface-950) 22%, transparent) 38%, transparent 72%),
             var(--sanctum-horizon),
             var(--sanctum-grain);
-        background-repeat: no-repeat, no-repeat, repeat;
+        background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat;
         background-position:
+            0 0,
+            0 0,
+            0 0,
             0 0,
             center bottom,
             0 0;
         background-size:
             auto,
+            auto,
+            auto,
+            auto,
             auto min(11vh, 84px),
-            auto;
+            480px 480px;
         background-attachment: fixed;
     }
 
     [data-skin="sanctum"] .bg-canvas {
         background-image: var(--sanctum-grain);
+        background-size: 480px 480px;
         background-repeat: repeat;
         background-attachment: fixed;
     }
@@ -1493,10 +1490,13 @@
     /* The stone picks up the accent's hue through --color-surface-950, but the neutral ramp's chroma is too low
      * to read against this much black. Mixing a sliver of brand-950 in gives the rail just enough saturation
      * that switching colours shifts the stone's warmth visibly. */
-    background-color: color-mix(in oklab, color-mix(in oklab, var(--color-surface-950) 85%, var(--color-brand-950)) 80%, black);
-    background-image: var(--sanctum-pit-lip), var(--sanctum-pit), var(--sanctum-tooth-cut), var(--sanctum-mottle), linear-gradient(180deg, rgba(255, 250, 238, 0.05), transparent 46%, rgba(0, 0, 0, 0.07));
-    background-size: 123%;
-    background-repeat: repeat;
+    background-color: color-mix(in oklab, color-mix(in oklab, var(--color-surface-950) 80%, var(--sanctum-gold)) 86%, black);
+    background-image:
+        var(--sanctum-rail),
+        linear-gradient(180deg, rgba(255, 250, 238, 0.05), transparent 42%, rgba(0, 0, 0, 0.14));
+    background-position: 0 0, 0 0;
+    background-size: 48px 96px, 100% 100%;
+    background-repeat: repeat, no-repeat;
 }
 
 /* ICONS ON THE RAIL ARE CUT IN STONE — the same bevel the site's headlines carry, scaled to icon weight.
