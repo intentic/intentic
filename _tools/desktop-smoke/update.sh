@@ -97,6 +97,12 @@ app_log() {
     echo "--- app output ---" >&2
     cat /tmp/intentic-app.log >&2 || true
 }
+# The stub server's access log, which is the only witness to what the PAGE did — every poll for `press` and the
+# status it got back. Read on the two failures that are otherwise indistinguishable from outside.
+stub_log() {
+    echo "--- what the workspace page asked the stub for ---" >&2
+    tail -n 20 /tmp/stub.log >&2 || true
+}
 
 echo "==> smoke: update"
 
@@ -148,6 +154,15 @@ python3 -m http.server 8098 --directory /artifacts >/tmp/releases.log 2>&1 &
 python3 -m http.server 8099 --directory "$STUB" >/tmp/stub.log 2>&1 &
 until_true 15 "the release endpoint is serving" \
     python3 -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8098/latest.json').read()" || exit 1
+# BOTH SERVERS, because the app loads this one the moment it starts and the release endpoint is not asked for
+# until 20 seconds later. An interpreter that has not finished binding by then is a CONNECTION REFUSED in the
+# workspace webview — an error page in place of the stub, whose script is the only thing that ever presses the
+# button. Nothing downstream notices: the update still downloads (that half is Rust, on a timer), the window is
+# still there to be found, the app logs nothing because it was never asked to install anything, and the run
+# dies 120 seconds later on an assertion about the app. Job 103427489791 is that run — green on the same
+# commit, on the same runner, eight minutes earlier and fourteen minutes later.
+until_true 15 "the workspace page is serving" \
+    python3 -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8099/').read()" || exit 1
 
 Xvfb ":${DISPLAY_NUM}" -screen 0 1600x1000x24 >/tmp/xvfb.log 2>&1 &
 until_true 20 "Xvfb is up on ${DISPLAY}" xdpyinfo -display "$DISPLAY" || exit 1
@@ -171,6 +186,15 @@ fi
 # and `intentic://update` does nothing in any state but `ready` (update.rs `act`).
 : >"$STUB/press"
 
+# A PRESS IS ONLY A PRESS ONCE THE PAGE ASKS FOR IT, and that is not a given worth assuming. The button here is
+# a poll inside a webview nothing out here can see into, so a page that stopped polling — an unmapped window, a
+# suspended web process, a script that never loaded — produces a run indistinguishable from an app that ignored
+# the link: a staged download, no install, and an app log with nothing in it either way. That is job
+# 103427489791 exactly, and the evidence that would have settled it was sitting unread in the stub server's
+# access log. It is asserted here so the next one says which half broke.
+took_press() { grep -q 'GET /press HTTP/1.1" 200' /tmp/stub.log; }
+until_true 60 "the workspace page took the press" took_press || stub_log
+
 # ── 3. the file it runs from IS the newer release ─────────────────────────────────────────────────────────────
 if ! until_true 120 "the update installed over the running app" \
     bash -c "[ \"\$(sha256sum $INSTALLED | cut -d' ' -f1)\" = \"$AFTER_EXPECTED\" ]"; then
@@ -181,6 +205,7 @@ if ! until_true 120 "the update installed over the running app" \
         fail "the AppImage changed into something that is neither build (${AFTER:0:12})"
     fi
     app_log
+    stub_log
 fi
 
 # ── 4. and it still starts ────────────────────────────────────────────────────────────────────────────────────
