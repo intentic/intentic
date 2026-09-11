@@ -209,6 +209,22 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   and never the land — and a repo that will not move lands from where it was, which is the old behaviour in
   full. The composition it hands back carries the moved `base` per repo, because landing from the pre-sync
   record would hand `anchorOf` a sha the rebase has just orphaned.
+- **`landedTip` records that a land happened, never that it is still there** (`src/agents/land/sync.ts`
+  `mainAccountsForPrefix`). A land copies content into the main working tree and moves no ref, so discarding
+  every one of those files in the Changes panel leaves the rung pointing at a delivery that no longer exists —
+  which is why the review's per-file `landed` is re-read from the tree instead of from the record. The rebase
+  retry used to take the rung at its word: it drops `base..landedTip` and replays the rest, validated only by
+  `landedTip` still being an ancestor of the branch. A conversation that had landed its whole delta, had it
+  discarded, and then met a main-line commit touching three of its fourteen files got the plain rebase refused,
+  the retry's replay range computed as empty (`landedTip` WAS the tip), and its one commit deleted — branch
+  reset onto main, zero diff, no Land now, reported as a successful sync because `git rebase --onto` replaying
+  nothing exits 0. So the prefix is now checked against main before it is dropped: every path it carries must
+  still read the same in main (committed, or landed and uncommitted, including a created file sitting there
+  untracked, which no diff can see and `presenceOf` hashes instead) or have been moved by main's own history
+  since the fork, which is the user editing what they landed. A path main cannot account for leaves the repo
+  `blocked`, and the branch keeps its work: that costs one conflict errand, where dropping cost the whole
+  delta. The retry's own reason for existing is unchanged — a landed prefix main really does hold still drops,
+  which is what keeps a rebase from stacking redundant commits on top of the user's own copy of them.
 - **A rendered surface gets a different question asked of it than a parser does** (`src/agent/verification/agent-viewing.ts`,
   the `verify-ui-edits` built-in beside `verify-edits`, `verify-removals` and `verify-tests`). The proof ledger weighs edited
   code against the checks that ran, and for a reducer or a route that is the whole story. It is structurally

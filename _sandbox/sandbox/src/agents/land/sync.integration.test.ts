@@ -270,6 +270,60 @@ test("still refuses when the conflict is in work that has not landed", async () 
     expect(await readFile(join(worktree, "app.ts"), "utf8")).toBe("one\ntwo\nAGENT\nfour\nfive\n");
 });
 
+// The rung records that a land happened, never that it is still there: discarding landed files in the Changes panel
+// moves no sha at all. Dropping the prefix on the strength of the record alone deleted a finished conversation's whole
+// delta — branch reset onto main, no diff, no Land now — the one time main had also moved on a file it touched.
+test("refuses instead of dropping a landed prefix the user has discarded", async () => {
+    const { work, worktree, worktrees } = await setup();
+    const base = await sh(work, "rev-parse", "HEAD");
+    await turn(worktree, async () => {
+        await writeFile(join(worktree, "app.ts"), "one\ntwo\nthree\nfour\nAGENT\n");
+        await writeFile(join(worktree, "new.ts"), "the agent's own file\n");
+    });
+    const landed = await landAgent(worktrees, entryOf(base));
+    expect(landed.landed).toBe(true);
+    const tip = await sh(worktree, "rev-parse", "HEAD");
+
+    // The user discards the whole land: the edit reverted, the new file deleted. Nothing about this moves a sha.
+    await sh(work, "checkout", "--", "app.ts");
+    await rm(join(work, "new.ts"));
+    // Then lands another agent over the same line and commits it, which is what makes the plain rebase refuse.
+    await writeFile(join(work, "app.ts"), "one\ntwo\nthree\nfour\nANOTHER\n");
+    await sh(work, "add", "-A");
+    await commit(work, "user lands another agent");
+
+    const [root] = await sync(worktrees, landed.repos[0]?.landedTip);
+    expect(root).toMatchObject({ repo: "root", blocked: true, overlap: ["app.ts"] });
+    // The conversation still holds its work, offered again as a conflict to resolve rather than silently gone.
+    expect(await sh(worktree, "rev-parse", "HEAD")).toBe(tip);
+    expect(await sh(worktree, "status", "--porcelain")).toBe("");
+    expect(await readFile(join(worktree, "new.ts"), "utf8")).toBe("the agent's own file\n");
+});
+
+// A land leaves its content in the main tree uncommitted, so a file it created sits there untracked: present, and
+// invisible to every diff. Reading that as a vanished land would refuse every ordinary post-land sync.
+test("still drops a landed prefix whose new file sits untracked in the main tree", async () => {
+    const { work, worktree, worktrees } = await setup();
+    const base = await sh(work, "rev-parse", "HEAD");
+    await turn(worktree, async () => {
+        await writeFile(join(worktree, "app.ts"), "one\ntwo\nthree\nfour\nAGENT\n");
+        await writeFile(join(worktree, "new.ts"), "the agent's own file\n");
+    });
+    const landed = await landAgent(worktrees, entryOf(base));
+    expect(landed.landed).toBe(true);
+    // The user commits their own tidy of the landed line and leaves `new.ts` where the land put it, untracked.
+    await writeFile(join(work, "app.ts"), "one\ntwo\nthree\nfour\nAGENT, tidied\n");
+    await sh(work, "add", "app.ts");
+    await commit(work, "user commits, with a tweak");
+    const main = await sh(work, "rev-parse", "HEAD");
+
+    const [root] = await sync(worktrees, landed.repos[0]?.landedTip);
+    expect(root?.blocked).toBeUndefined();
+    // Everything the prefix carried is accounted for, so it drops: the branch sits on main with nothing outstanding.
+    expect(await sh(worktree, "rev-parse", "HEAD")).toBe(main);
+    expect(await sh(worktree, "rev-list", "--count", `${main}..HEAD`)).toBe("0");
+});
+
 // A `landedTip` the branch no longer descends from (a merged-in main line, an earlier rewrite) would make `--onto`
 // replay something nobody asked for; refused like a branch that never landed.
 test("ignores a landedTip the branch no longer descends from", async () => {

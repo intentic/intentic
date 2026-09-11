@@ -171,29 +171,33 @@ export const presentInMain = async (
         return NOTHING;
     }
     try {
-        return await probeMain(worktrees, entry, composed, paths, git);
+        const attached = await worktrees.attached(entry.id, composed.repo);
+        const dir = attached ? worktrees.worktreeDir(entry.id, composed.repo) : undefined;
+        return await presenceOf(worktrees.mainDir(composed.repo), dir, entry.branch, paths, git);
     } catch {
         return NOTHING;
     }
 };
 
-const probeMain = async (
-    worktrees: AgentWorktrees,
-    entry: IsolatedAgent,
-    composed: PersistedAgent["repos"][number],
+// The same probe in primitives, for callers that hold the paths rather than a registry row (the sync asks this of the
+// prefix it is about to drop). `worktree` is the conversation's checkout when one is attached, undefined once retired;
+// `tip` is any rev naming its work.
+export const presenceOf = async (
+    main: string,
+    worktree: string | undefined,
+    tip: string,
     paths: readonly string[],
-    git: GitRunner,
+    git: GitRunner = defaultGit,
 ): Promise<MainPresence> => {
-    const main = worktrees.mainDir(composed.repo);
     const own = new Set(paths);
     // Not in `tip`: comparisons against it would misread uncommitted work, so mid-write paths stay outstanding.
-    const dir = worktrees.worktreeDir(entry.id, composed.repo);
-    const midWrite = !(await worktrees.attached(entry.id, composed.repo))
-        ? NO_PATHS
-        : new Set([
-              ...(await pathSet(dir, ["diff", "--name-only", "--no-renames", "-z", "HEAD"], git)),
-              ...(await pathSet(dir, ["ls-files", "--others", "--exclude-standard", "-z"], git)),
-          ]);
+    const midWrite =
+        worktree === undefined
+            ? NO_PATHS
+            : new Set([
+                  ...(await pathSet(worktree, ["diff", "--name-only", "--no-renames", "-z", "HEAD"], git)),
+                  ...(await pathSet(worktree, ["ls-files", "--others", "--exclude-standard", "-z"], git)),
+              ]);
 
     const head = await headSha(main, git);
     // `--no-renames`: the rows this joins onto use rename detection and key by destination path, as these do too.
@@ -201,14 +205,14 @@ const probeMain = async (
         // Against main's history; an unborn main holds nothing, so nothing can be absorbed yet.
         head === undefined
             ? Promise.resolve(new Set(paths) as ReadonlySet<string>)
-            : pathSet(main, ["diff", "--name-only", "--no-renames", "-z", head, entry.branch], git),
+            : pathSet(main, ["diff", "--name-only", "--no-renames", "-z", head, tip], git),
         // Against main's index and working tree, where a land leaves its content.
-        pathSet(main, ["diff", "--name-only", "--no-renames", "-z", entry.branch], git),
+        pathSet(main, ["diff", "--name-only", "--no-renames", "-z", tip], git),
     ]);
 
     const untracked = await pathSet(main, ["ls-files", "--others", "--exclude-standard", "-z"], git);
     const blind = [...vsWorktree].filter((path) => own.has(path) && untracked.has(path));
-    const materialized = blind.length === 0 ? NO_PATHS : await untrackedMatches(main, entry.branch, blind, git);
+    const materialized = blind.length === 0 ? NO_PATHS : await untrackedMatches(main, tip, blind, git);
     return verdicts(own, { midWrite, vsHead, vsWorktree, materialized });
 };
 

@@ -4,12 +4,16 @@ import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { headSha } from "../../git/changes/changes.js";
 import { rebaseOnto, rebaseSince } from "../../git/changes/changes-commits.js";
 import { AGENT_GIT_AUTHOR } from "../../git/git.js";
+import { presenceOf } from "./agent-changes.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
 // Rebases a conversation's branch onto main's HEAD before each turn and again before land; a refused rebase retries
 // with `--onto main landedTip`, replaying only commits main does not already hold. Touches only this conversation's own
 // worktree, never the main checkout; no repo lock is taken.
+//
+// That retry drops commits, so what main holds is read from main rather than taken from the rung: see
+// `mainAccountsForPrefix`.
 
 // A repo whose branch was not on main's tip; `commits` are the main-line commits between the two, gained if rebased,
 // still missing if `blocked`.
@@ -43,10 +47,51 @@ const contains = async (dir: string, tip: string, head: string, git: GitRunner):
     }
 };
 
-// Retries the rebase from `landedTip` only if it is still an ancestor of HEAD; otherwise nothing has landed yet and the
-// refusal stands.
-const replayUnlanded = async (worktree: string, onto: string, landedTip: string | undefined, git: GitRunner): Promise<boolean> => {
+// Whether main can still account for every path the prefix about to be dropped carries. `landedTip` is bookkeeping, not
+// evidence: a land copies content into the main tree and records the rung, and the user can then discard all of it in
+// the Changes panel without a single sha moving. A path is accounted for when main still reads the same on it (the
+// user committed the land, or it is landed and not yet committed) or when main's own history has moved it since the
+// fork, which is the user editing what they landed. One path main has never seen means the land is not there any more:
+// the rung is void and the prefix must not be dropped. Asked only after a plain rebase has already refused, so the cost
+// falls on the conflict path alone.
+const mainAccountsForPrefix = async (
+    worktree: string,
+    main: string,
+    head: string,
+    landedTip: string,
+    // Main-line movement since divergence, already read for the report; `moved ∩ prefix` is the user's own editing.
+    moved: readonly string[],
+    git: GitRunner,
+): Promise<boolean> => {
+    try {
+        // Three-dot: the prefix's own side of the fork, so main-line movement is not mistaken for landed work.
+        const prefix = await pathsOf(worktree, [`${head}...${landedTip}`], git);
+        if (prefix.length === 0) {
+            return true;
+        }
+        const { inWorkspace } = await presenceOf(main, worktree, landedTip, prefix, git);
+        const edited = new Set(moved);
+        return prefix.every((path) => inWorkspace.has(path) || edited.has(path));
+    } catch {
+        // A probe that could not run has proven nothing; refusing costs a conflict errand, dropping costs the work.
+        return false;
+    }
+};
+
+// Retries the rebase from `landedTip` only if it is still an ancestor of HEAD and main still holds what it names;
+// otherwise nothing has landed, or nothing of it is left, and the refusal stands.
+const replayUnlanded = async (
+    worktree: string,
+    main: string,
+    onto: string,
+    landedTip: string | undefined,
+    moved: readonly string[],
+    git: GitRunner,
+): Promise<boolean> => {
     if (landedTip === undefined || !(await contains(worktree, "HEAD", landedTip, git))) {
+        return false;
+    }
+    if (!(await mainAccountsForPrefix(worktree, main, onto, landedTip, moved, git))) {
         return false;
     }
     return (await rebaseSince(worktree, onto, landedTip, AGENT_GIT_AUTHOR, git)).ok;
@@ -86,7 +131,8 @@ const syncOne = async (
         return behind;
     }
     // Refused; retry without the already-landed prefix, the likely cause of the conflict.
-    return (await replayUnlanded(worktree, head, landedTip, git)) ? behind : { ...behind, blocked: true };
+    const replayed = await replayUnlanded(worktree, worktrees.mainDir(repo), head, landedTip, moved, git);
+    return replayed ? behind : { ...behind, blocked: true };
 };
 
 // Syncs every repo of a conversation's composition; returns only repos that were behind, empty when all already sit on
