@@ -235,6 +235,45 @@
     --ui-tooltip-fill: color-mix(in oklab, var(--color-surface-800) 82%, var(--color-brand-900));
     --ui-tooltip-content: var(--color-surface-0);
 
+    /* ── POINTING AT SOMETHING WARMS IT, RATHER THAN GREYING IT ────────────────────────────────────────────
+     * `hover:bg-overlay` is how ~88 controls in this app say "the pointer is on me", and on a near-black
+     * interface it is exactly right: `overlay` stands 7 points of lightness above `card`, so a hovered row
+     * visibly lifts. In the light scheme the same token has 1.9 points to work with — the whole band between
+     * the canvas and the card is 3.4 points wide, and `overlay` has to sit inside it — so hover measured 1.04:1
+     * against the surface under it where dark measures 1.31:1. Seven times weaker: not subtle, absent. The
+     * report was the rail, and it was precise — "on hover the background becomes white, on selected it becomes
+     * the accent, and the combination feels wrong". It was two different materials, and only one of them
+     * showed up.
+     *
+     * SO LIGHT ANSWERS IN HUE WHERE IT HAS NO ROOM LEFT IN LIGHTNESS. A wash of the accent at 8% is
+     * unmistakable on paper at a lightness a neutral plate could never be, and it is the SAME material the
+     * selected state already uses (`bg-primary-600/15` on the rail, `--color-primary-500` at 15% in
+     * `.ui-row-select-on` and `.ui-chip-on`) — so hover and selection stop being two languages and become one
+     * at two depths: pointed at, pressed, on. That is the rule Sanctum wrote for itself years earlier and for
+     * the same reason ("HOVER IS GOLD, NOT GREY", skins/sanctum.css).
+     *
+     * A TRANSLUCENT WASH, NOT A SURFACE, because the ground moves: these controls sit on the canvas, on a card,
+     * and inside popovers, and an opaque tone that darkens a card would lighten the canvas. Mixed with
+     * `transparent`, one value darkens whatever is behind it by the same proportion.
+     *
+     * THESE THREE ARE DECLARED IN THE LIGHT SCOPE ONLY, and the dark scheme sets them back to `initial` — which
+     * is not tidiness, it is how the dark scheme is held still. A hover state is spelled three different ways
+     * in this design system (`hover:bg-overlay` on ~90 controls, `--color-content` at 5% in `.ui-row-select`,
+     * at 6% in `.ui-chip`), and each of those is right where it is. Given a value here, one token would have
+     * had to flatten all three into whatever it said. Left guaranteed-invalid, every `var(--ui-hover-wash, …)`
+     * in the sheet falls through to the value that call site already shipped, so dark renders from its own
+     * declarations and light is the only scheme this token speaks for. */
+    --ui-hover-wash: color-mix(in oklab, var(--color-primary-600) 8%, transparent);
+    --ui-press-wash: color-mix(in oklab, var(--color-primary-600) 13%, transparent);
+
+    /* THE PILL THAT IS ON, in a <SegmentedControl>. Same arithmetic, same fix: its active pill is a plate of
+     * `overlay` on a card, which is 1.9 points in this scheme — the reported "chip backgrounds are almost
+     * indistinguishable from the background", and the screenshot showed exactly that. It takes the accent at a
+     * step below the chip's own 15%, and the accent ink with it, which is what `.ui-chip-on` has always done
+     * for the control next to it. */
+    --ui-pill-on: color-mix(in oklab, var(--color-primary-600) 14%, transparent);
+    --ui-pill-on-content: var(--color-link);
+
     /* ── A STATUS COLOUR PAINTED AS AN AREA, NOT AS INK ────────────────────────────────────────────────────
      * The status roles above are TEXT colours, and the block that sets them says so: they sit near 50% L
      * because that is what an 11px label needs to clear AA. A meter's bar is the same colour asked to do the
@@ -312,6 +351,16 @@
 
     --ui-tooltip-fill: var(--color-surface-700);
     --ui-tooltip-content: var(--color-surface-0);
+
+    /* GUARANTEED-INVALID, ON PURPOSE — the four states the light scheme re-answers in hue are answered here in
+     * lightness, and were already: `hover:`/`active:bg-overlay` resolved to `--color-overlay`, a row hovered to
+     * 5% of the ink and a chip to 6%, and the segmented control's live pill was the overlay plate under the
+     * content ink. Every one of those is still written at its own rule as the `var()` fallback, so dropping
+     * these four here is what makes this scheme render from its own declarations rather than from light's. */
+    --ui-hover-wash: initial;
+    --ui-press-wash: initial;
+    --ui-pill-on: initial;
+    --ui-pill-on-content: initial;
 
     /* A dark scheme's status roles are ALREADY the light end of their ramps — danger-400 is 72% L where the
      * light scheme's is 50% — so a bar painted in one is a lit mark on a near-black ground, not a slab of

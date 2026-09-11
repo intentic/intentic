@@ -1,6 +1,7 @@
 <!-- SegmentedControl control: a row of small toggle pills for switching between a few exclusive views
-     (Preview/Source, Linux/Windows, Name/Content). Active pill sits on the overlay surface; idle
-     pills are muted text. Native buttons keep it keyboard-accessible without ARIA wiring. -->
+     (Preview/Source, Linux/Windows, Name/Content). The active pill wears `.ui-pill-on`, the design system's
+     one answer for "this is the one you are on" (styles/utilities.css); idle pills are muted text. Native
+     buttons keep it keyboard-accessible without ARIA wiring. -->
 <script setup lang="ts" generic="T extends string">
 import type { IconName } from "../../icons/iconSets.js";
 import { useDevice } from "../../composables/useDevice.js";
@@ -57,7 +58,7 @@ const nameOf = (option: { label: string; title?: string; markTitle?: string; mar
             v-tooltip.bottom="option.markTitle ?? option.title"
             class="cursor-pointer rounded-md font-medium transition-colors"
             :class="[
-                model === option.value ? `bg-overlay text-content` : `text-muted hover:text-content`,
+                model === option.value ? `ui-pill-on` : `text-muted hover:text-content`,
                 // Only the compact pill needs it. The stretch track is already ≥36px and its pills sit edge to
                 // edge inside a bordered box, so an overlay reaching 44px would spill past that border and
                 // over the pill beside it: the one shape where a bigger hit area buys a wrong press.

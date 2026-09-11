@@ -10,6 +10,59 @@
         scrollbar-color: var(--color-line-strong) transparent;
     }
 
+    /* ── WHAT `hover:bg-overlay` MEANS, PER SCHEME ────────────────────────────────────────────────────────
+     * ~90 controls in this app say "the pointer is on me" by naming the overlay surface, and on a near-black
+     * interface that is the right answer. In the light scheme it is not: `overlay` has to live in the 3.4
+     * points of lightness between the canvas and the card, so a hovered control moved 1.9 points and read as
+     * nothing at all. `--ui-hover-wash` is the per-scheme answer, and the argument for it — hue where there is
+     * no room left in lightness — is in semantic-colors.css beside the values.
+     *
+     * IT IS DONE HERE, ON TAILWIND'S OWN GENERATED CLASS, rather than by editing ninety call sites, and that is
+     * a deliberate trade. The alternative spellings were worse: a second colour token (`hover:bg-wash`) is the
+     * same change written ninety times and re-promised to every extension, and making `--color-overlay` itself
+     * a translucent wash would break the four floating surfaces that need it opaque — which is the double duty
+     * that caused this in the first place. Restating the utility keeps the vocabulary a call site already knows
+     * ("hover goes to the overlay tone") and lets each scheme decide what that tone is. Dark's token IS
+     * `--color-overlay`, so every one of these rules is a no-op there.
+     *
+     * The escaped selectors are Tailwind v4's emitted names; the group variants are the ones
+     * `extension-surface.css` promises, so a chip revealed inside a hovered row warms with the row it is in.
+     * Same layer as Tailwind's own utilities and later in source order, so it wins the tie without `!important`. */
+    .hover\:bg-overlay:hover,
+    .focus\:bg-overlay:focus,
+    .focus-visible\:bg-overlay:focus-visible {
+        background-color: var(--ui-hover-wash, var(--color-overlay));
+    }
+
+    .active\:bg-overlay:active {
+        background-color: var(--ui-press-wash, var(--color-overlay));
+    }
+
+    :is(.group\/item, .group\/row, .group\/card, .group\/bar, .group\/tile, .group\/cell, .group\/a, .group\/b, .group\/run):hover
+        :is(
+            .group-hover\/item\:bg-overlay,
+            .group-hover\/row\:bg-overlay,
+            .group-hover\/card\:bg-overlay,
+            .group-hover\/bar\:bg-overlay,
+            .group-hover\/tile\:bg-overlay,
+            .group-hover\/cell\:bg-overlay,
+            .group-hover\/a\:bg-overlay,
+            .group-hover\/b\:bg-overlay,
+            .group-hover\/run\:bg-overlay
+        ) {
+        background-color: var(--ui-hover-wash, var(--color-overlay));
+    }
+
+    /* THE PILL THAT IS ON, in a <SegmentedControl>: the same arithmetic and the same fix, on the one state that
+     * is not a hover. The component asks for this class instead of `bg-overlay text-content`, because a pill
+     * that is ON is not a floating surface and never was — it only borrowed the tone that happened to be a step
+     * off the card. `--ui-pill-on*` (semantic-colors.css) is `overlay` plus the content ink in dark, so that
+     * scheme renders exactly as before. */
+    .ui-pill-on {
+        background-color: var(--ui-pill-on, var(--color-overlay));
+        color: var(--ui-pill-on-content, var(--color-content));
+    }
+
     /* Reserve the scrollbar's strip even while the box isn't overflowing, so its content doesn't reflow sideways
      * the moment the scrollbar appears. For the scrollers whose content actually crosses the fold under the user
      * — a lane filling up, a list being filtered — and for nothing else: on a box that cannot overflow, this is
@@ -166,8 +219,11 @@
         transition: background-color 0.1s;
     }
 
+    /* Light re-answers this in the accent, for the reason `--ui-hover-wash` gives: 5% of the ink on paper is
+       1.06:1 against the card under it, which is a row that does not answer the pointer. Dark keeps the ink
+       wash — the fallback is the value this rule has always had. */
     .ui-row-select:hover:not(:disabled) {
-        background: color-mix(in srgb, var(--color-content) 5%, transparent);
+        background: var(--ui-hover-wash, color-mix(in srgb, var(--color-content) 5%, transparent));
     }
 
     .ui-row-select:focus-visible {
@@ -230,6 +286,10 @@
             border-color 0.12s;
     }
 
+    /* NOT the accent wash the rail and the rows take in light, and the reason is the chip's own resting plate:
+       it already carries 6% of the ink, so hovering it deepens something the reader can already see rather
+       than conjuring a plate out of nothing. Painting this in the accent would also put it within two points
+       of `.ui-chip-on` below — a chip you are merely pointing at, wearing the colour of a chip that is on. */
     .ui-chip:hover:not(:disabled) {
         background: color-mix(in srgb, var(--color-content) 11%, transparent);
         color: var(--color-content);
