@@ -141,6 +141,43 @@ describe(`POST /setup/report`, () => {
     });
 });
 
+const presentation = (prisma: PrismaClient, token: string | undefined) =>
+    createApp(config, prisma, logger).app.request(`/sandbox/presentation`, {
+        method: `POST`,
+        headers: { "content-type": `application/json`, ...(token === undefined ? {} : { "x-intentic-connect": token }) },
+        body: JSON.stringify({}),
+    });
+
+describe(`POST /sandbox/presentation`, () => {
+    // A sandbox's display name and logo are columns here and nowhere in its volumes, so the daemon cannot know them
+    // and a bundle could not carry them: a migrated sandbox used to arrive under its auto-name wearing that name's
+    // monogram. This is the read that lets an export capture them.
+    it(`answers the row's name and logo for the token's digest`, async () => {
+        const findUnique = vi.fn().mockResolvedValue({ name: `radarsu-intentic`, image: `data:image/webp;base64,AA==` });
+        const res = await presentation(fakePrisma({ sandbox: { findUnique } }), `tok`);
+
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ name: `radarsu-intentic`, image: `data:image/webp;base64,AA==` });
+        // Narrower than the row on purpose: no token, no daemonUrl, nothing another lane could reuse.
+        expect(findUnique).toHaveBeenCalledWith({
+            where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
+            select: { name: true, image: true },
+        });
+    });
+
+    it(`omits the logo rather than sending null when the row has none`, async () => {
+        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ name: `workspace`, image: null }) } });
+        expect(await (await presentation(prisma, `tok`)).json()).toEqual({ name: `workspace` });
+    });
+
+    it(`refuses a missing token before touching the database, and 404s an unknown one`, async () => {
+        const findUnique = vi.fn();
+        expect((await presentation(fakePrisma({ sandbox: { findUnique } }), undefined)).status).toBe(400);
+        expect(findUnique).not.toHaveBeenCalled();
+        expect((await presentation(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(null) } }), `nope`)).status).toBe(404);
+    });
+});
+
 const announce = (prisma: PrismaClient, token: string | undefined, daemonUrl: unknown) =>
     createApp(config, prisma, logger).app.request(`/sandbox/announce`, {
         method: `POST`,
@@ -335,7 +372,10 @@ describe(`GET /api/reachability/:sandboxId`, () => {
     });
 
     it(`names the lane: a hosted sandbox's app to replay to, or the tunnel it must dial`, async () => {
-        const hosted = await ask(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1`, hosted: { appName: `intentic-sbx-${id}` } }) } }), id);
+        const hosted = await ask(
+            fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1`, hosted: { appName: `intentic-sbx-${id}` } }) } }),
+            id,
+        );
         expect(await hosted.json()).toEqual({ ok: true, lane: `hosted`, app: `intentic-sbx-${id}` });
 
         const own = await ask(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1`, hosted: null }) } }), id);

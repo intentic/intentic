@@ -231,6 +231,31 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         return c.json({ ok: true });
     });
 
+    /* HOW A SANDBOX PRESENTS ITSELF, read by the sandbox itself. Same sessionless door as announce above and the
+     * same credential (possession of the connect token), because the caller is the daemon, not a browser.
+     *
+     * It exists for portability. A sandbox's display name and switcher logo are columns on this row and live
+     * nowhere in /work or /history, so the daemon does not know either one — which meant a bundle could not carry
+     * them and a migrated sandbox arrived wearing the auto-name it was minted with. The daemon asks for them when
+     * it packs a bundle, writes them into the manifest, and the target's browser applies them through
+     * `sandbox.update` after the arrival.
+     *
+     * Read-only, and narrower than the row: no token, no daemonUrl, nothing another lane could use. */
+    app.post(`/sandbox/presentation`, async (c) => {
+        const token = c.req.header(`x-intentic-connect`);
+        if (token === undefined || token === ``) {
+            return c.text(`error: missing token`, 400);
+        }
+        const sandbox = await prisma.sandbox.findUnique({
+            where: { tokenDigest: sha256Hex(token) },
+            select: { name: true, image: true },
+        });
+        if (!sandbox) {
+            return c.text(`error: unknown sandbox`, 404);
+        }
+        return c.json({ name: sandbox.name, ...(sandbox.image === null ? {} : { image: sandbox.image }) });
+    });
+
     // A builder's report, authenticated by its per-build secret; body capped twice against an abusive caller.
     app.post(`/sandbox/hosted-build-report/:buildId`, bodyLimit({ maxSize: 2 * LOG_TAIL_BYTES }), async (c) => {
         const secret = c.req.header(REPORT_HEADERS.secret);
