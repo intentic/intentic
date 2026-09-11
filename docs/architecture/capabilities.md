@@ -171,6 +171,13 @@ device already connected), and a paragraph in every turn's prompt naming the mac
 ([system-prompt.ts](../../_sandbox/sandbox/src/agent/prompt/system-prompt.ts), plus the same rule in the per-device skill
 pack, [host-skills.ts](../../_sandbox/sandbox/src/hosts/host-skills.ts)).
 
+A machine can also be reachable without being a way in: desktop sync is deliberately capability-free, so a laptop
+syncing files holds no card and `hostRunningSandbox` can never name it. That is the state the command block is
+printed in most often, and it has a second question of its own — `deviceSyncingSandbox`
+([deviceRows.ts](../../_editor/web/src/features/sandbox/devices/deviceRows.ts)), "which machine holds this sandbox's
+sync pairing and no command door". It answers with a machine to OFFER connecting, never with the machine a sandbox
+runs on: syncing is not proof of hosting, since a laptop can sync into a sandbox running elsewhere.
+
 Three rules hold the line:
 
 - **The command line is built here, from a closed set of names** ([device-commands.ts](../../_sandbox/sandbox/src/hosts/device-commands.ts)).
@@ -180,6 +187,31 @@ Three rules hold the line:
 - **A copyable command remains, as the fallback.** A device that is asleep, absent or refusing the scope still
   leaves the owner a way, and so does a refusal the button itself earned. Bootstrap is the honest exception:
   the first connect, the setup one-liners and the compose file cannot be run on a machine we have no door to.
+  Where the fallback is printed only because nothing has been connected yet, it carries the way out beside it
+  ([ConnectDeviceHint.vue](../../_editor/web/src/features/sandbox/devices/ConnectDeviceHint.vue)): the machine
+  already syncing this sandbox, named, and a link to the card that would give it commands.
 - **A refusal is the machine's answer, in its words.** Nothing here judges a scope; the daemon relays and names
   the switch. Anything that restarts the sandbox serving the request is expected to lose its own answer, so the
   caller treats a dropped connection as the ending rather than a failure.
+
+## One list of machines, two doors onto them
+
+A machine reaches this sandbox through either of two doors, and only one of them is a capability. The `host` card
+is a way in: commands, files, screen. A desktop-sync enrollment is not, on purpose — syncing a folder never had to
+come with a shell — so it lives in `sync-enrollments.json` and holds no card.
+
+`mergeDevices` ([device-reports.ts](../../_sandbox/sandbox/src/hosts/device-reports.ts)) reconciles both into the one
+list served at `/system/devices`, and every screen that asks "which machines do I have" reads it: the Devices board,
+and the Capabilities device cards, which state a sync-only machine as a row of their own
+([deviceConnections.ts](../../_editor/web/src/features/capabilities/model/deviceConnections.ts)) with the word and
+colour the board gives it and the one thing it cannot do yet. Before that, Capabilities knew only the card door, so a
+live machine could be listed on one screen and missing from the other.
+
+Folding two readings into one row is where a name stops being enough. **WSL hands a distro the Windows machine's own
+hostname**, and a distro is usually named after the machine too, so both of merge's keys collide between environments
+that share nothing else — separate filesystems, separate agents, separate containers. The agent therefore reports
+which environment it is (`wsl`, [wsl.ts](../../_devices/machine/src/wsl.ts)), and a fold is refused whenever the two
+sides positively disagree about that or about their platform (`differentEnvironment`,
+[schemas/devices.ts](../../_shared/sandbox-contract/src/schemas/devices.ts)). Silence is not disagreement: an agent too
+old to report `wsl` folds exactly as it did before the field existed. A distro says so in the loudest ink its row has
+("Arch on WSL"), since that is the whole difference between it and the Windows row beside it.

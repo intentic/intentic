@@ -130,6 +130,7 @@ said so in a log nobody had been pointed at.
 - [src/resident.ts](src/resident.ts) — the one loop, its pidfile, its link stamp, and `reconcileResidency`.
 - [src/device/auto-prepare.ts](src/device/auto-prepare.ts) — the background update-download tick; the judgement about *what* to download stays in `ic sandbox prepare --auto`, on purpose.
 - [src/status.ts](src/status.ts) — both halves as one answer; `--json` is what the desktop app and tray read.
+- [src/wsl.ts](src/wsl.ts) — whether this is a WSL distro, and which one. WSL hands a distro the Windows machine's own hostname, so without this the sandbox cannot tell a distro from the Windows install hosting it, or one distro from its neighbour, and folds two machines into one row.
 - [src/device/policy.ts](src/device/policy.ts) — what the sandbox is permitted to do here; the security surface.
 - [src/device/tools/sandboxes.ts](src/device/tools/sandboxes.ts) — the fleet: the `docker ps`/`inspect` readers, the docker verbs, and the `ic` flows (swap, reshape, remove, runners) with the pure argv builders beside them.
 - [src/sync/mirror.ts](src/sync/mirror.ts) — the sync tick: ports reconcile, git bridge, revocation handling.

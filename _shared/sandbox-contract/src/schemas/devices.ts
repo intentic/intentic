@@ -237,9 +237,14 @@ export const AGENT_STALL_AFTER_MS = 60_000;
 export const agentStalled = (agent: DeviceAgent, now: number): boolean =>
     agent.running && agent.lastTickAt !== undefined && now - agent.lastTickAt > AGENT_STALL_AFTER_MS;
 export const DeviceReportSchema = z.object({
-    // OS hostname; the join key that dedupes a machine seen via sync and via its `host` capability.
+    // OS hostname; the join key that dedupes a machine seen via sync and via its `host` capability. Not unique on its
+    // own: a WSL distro inherits the Windows machine's name, so `wsl` below is what tells those apart.
     hostname: z.string(),
     os: z.string(),
+    // Present only inside a WSL distro. `distro` is that distro's own name ("Arch", "Ubuntu-22.04"), empty when the
+    // machine won't say. Windows, and every distro it hosts, all answer `hostname` with the same string while being
+    // separate filesystems running separate agents, so this is the only thing that keeps them apart.
+    wsl: z.object({ distro: z.string() }).optional(),
     // Filled by the reader, never the agent; empty means no Docker or nothing looked, not that none exist.
     sandboxes: z.array(DeviceSandboxSchema),
     pairings: z.array(DevicePairingSchema),
@@ -255,6 +260,21 @@ export type DeviceReport = z.infer<typeof DeviceReportSchema>;
 // reading was received, never the wall clock: a copy nobody has re-read is old, not evidence the machine went quiet.
 export const REPORT_QUIET_AFTER_MS = 60_000;
 export const reportQuiet = (report: DeviceReport, receivedAt: number): boolean => receivedAt - report.capturedAt > REPORT_QUIET_AFTER_MS;
+
+// The environment a reading came from, as opposed to the machine hosting it: a Windows install and every WSL distro
+// on it are separate filesystems running separate agents, and all of them answer `hostname` with the same string.
+// Undefined when nothing has reported — an absence of evidence, never read as agreement.
+export const environmentOf = (report: DeviceReport | undefined): string | undefined =>
+    report === undefined ? undefined : report.wsl === undefined ? report.os : `wsl:${report.wsl.distro}`;
+
+// Whether two readings positively disagree about which environment they describe. False whenever either side has not
+// said, so this only ever blocks a fold it holds evidence against, and an agent too old to report `wsl` keeps the
+// behaviour it had before the field existed.
+export const differentEnvironment = (left: DeviceReport | undefined, right: DeviceReport | undefined): boolean => {
+    const a = environmentOf(left);
+    const b = environmentOf(right);
+    return a !== undefined && b !== undefined && a !== b;
+};
 
 // Compares running build against installed; silent when the loop is stopped, nothing installed, or installed is a dev
 // build. An unstamped `running` still counts as skew.
@@ -278,8 +298,9 @@ export const DeviceGapSchema = z.enum([
     "unreported",
 ]);
 export type DeviceGap = z.infer<typeof DeviceGapSchema>;
-// A machine may be reachable via desktop sync and a host capability at once; the two are reconciled on `hostname`, and
-// left as separate rows when there is nothing to reconcile them by.
+// A machine may be reachable via desktop sync and a host capability at once; the two are reconciled on `hostname` plus
+// the environment it came from (`environmentOf`), and left as separate rows when there is nothing to reconcile them by
+// or when the environments positively disagree.
 // `machine` is the enrollment's name for the box (the ssh key's comment): what reports are filed under and what the
 // revoke route takes. Two machines sharing a key comment share one enrollment identity.
 export const DeviceSyncSchema = z.object({

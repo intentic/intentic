@@ -10,6 +10,7 @@ import {
     type DeviceSandbox,
     type DeviceSandboxFlow,
     DeviceSandboxSchema,
+    differentEnvironment,
     REPORT_QUIET_AFTER_MS,
 } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -216,6 +217,11 @@ const PLATFORM_SLUGS: Record<string, string> = { win32: "windows", darwin: "maco
 const platformOf = (declared: string | undefined, report: DeviceReport | undefined): string | undefined =>
     declared ?? (report === undefined ? undefined : (PLATFORM_SLUGS[report.os] ?? report.os));
 
+// Two declared platforms that disagree are two machines, whatever they call themselves. Unknown on either side is not
+// disagreement: a card is often connected before its machine has ever answered.
+const differentPlatform = (left: string | undefined, right: string | undefined): boolean =>
+    left !== undefined && right !== undefined && left !== right;
+
 // Pure reconciliation of enrollments, volunteered reports and host pulls into rows, testable without IO. Conservative:
 // a sync enrollment and host capability fold into one row only when both report and their hostnames agree.
 export const mergeDevices = (
@@ -240,10 +246,16 @@ export const mergeDevices = (
 
     // Claims a row by hostname if the host answered, else by capability id matching the enrollment's name. Answered
     // hosts claim first, so a name match never outranks a real answer, and no rule may steal an occupied row.
-    const claim = (report: DeviceReport | undefined, id: string): Device | undefined =>
-        report === undefined
-            ? rows.find((row) => row.hostId === undefined && row.label.toLowerCase() === id.toLowerCase())
-            : rows.find((row) => row.hostId === undefined && row.key === report.hostname);
+    // Neither key is unique across environments: WSL hands a distro the Windows machine's hostname, and a distro is
+    // usually named after the machine too, so both rules would happily merge a Windows install with a Linux one
+    // sitting inside it. A row is claimable only while nothing positively says the two are different environments.
+    const claim = (report: DeviceReport | undefined, id: string, platform: string | undefined): Device | undefined => {
+        const free = (row: Device): boolean =>
+            row.hostId === undefined && !differentEnvironment(row.report, report) && !differentPlatform(row.platform, platform);
+        return report === undefined
+            ? rows.find((row) => free(row) && row.label.toLowerCase() === id.toLowerCase())
+            : rows.find((row) => free(row) && row.key === report.hostname);
+    };
 
     // Row keys must be unique, a shared key is a rendering fault; the capability id always works as a fallback.
     const taken = new Set(rows.map((row) => row.key));
@@ -264,7 +276,7 @@ export const mergeDevices = (
             ...(host.version === undefined ? {} : { agentVersion: host.version }),
             ...(host.lastSeen === undefined ? {} : { lastSeen: host.lastSeen }),
         };
-        const existing = claim(report, host.id);
+        const existing = claim(report, host.id, platform);
         if (existing !== undefined) {
             // Pulled report wins; a shut door removes nothing, only sets online:false. gap only when nothing else
             // shows.

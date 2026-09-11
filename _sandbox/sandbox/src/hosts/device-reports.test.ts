@@ -142,12 +142,73 @@ test("joins an offline device to the machine it is already syncing", () => {
     const merged = mergeDevices(
         [enrolled("radarsu-rog")],
         [{ machine: "radarsu-rog", report: report("radarsu-rog") }],
-        [{ host: host("radarsu-rog", { online: false, platform: "windows" }), result: { gap: "offline" } }],
+        [{ host: host("radarsu-rog", { online: false, platform: "linux" }), result: { gap: "offline" } }],
     );
     expect(merged).toHaveLength(1);
-    expect(merged[0]).toMatchObject({ key: "radarsu-rog", label: "radarsu-rog", hostId: "radarsu-rog", online: false, platform: "windows" });
+    expect(merged[0]).toMatchObject({ key: "radarsu-rog", label: "radarsu-rog", hostId: "radarsu-rog", online: false, platform: "linux" });
     expect(merged[0]?.report?.hostname).toBe("radarsu-rog");
     expect(merged[0]?.gap).toBeUndefined();
+});
+
+// ── environments that share a name ───────────────────────────────────────────
+// WSL hands a distro the Windows machine's own hostname, and the distro is usually named after the machine too, so
+// both of merge's keys collide between two environments that share nothing else: separate filesystems, separate
+// agents, separate containers. Folding them would put one machine's buttons on the other's row.
+
+test("keeps a Windows card off the Linux row that shares its name", () => {
+    const merged = mergeDevices(
+        [enrolled("radarsu-rog")],
+        [{ machine: "radarsu-rog", report: report("radarsu-rog") }],
+        [{ host: host("radarsu-rog", { online: false, platform: "windows" }), result: { gap: "offline" } }],
+    );
+    expect(merged).toHaveLength(2);
+    expect(merged.map((row) => row.platform)).toEqual(["linux", "windows"]);
+    // The sync half stays on the machine that actually reported it, rather than riding the Windows card.
+    expect(merged.find((row) => row.sync !== undefined)?.hostId).toBeUndefined();
+});
+
+test("keeps a WSL distro apart from the Windows install hosting it", () => {
+    const distro = report("radarsu-rog", { wsl: { distro: "Arch" } });
+    const merged = mergeDevices(
+        [enrolled("radarsu-rog")],
+        [{ machine: "radarsu-rog", report: distro }],
+        [{ host: host("radarsu-rog", { platform: "windows" }), result: { report: report("radarsu-rog", { os: "win32" }) } }],
+    );
+    expect(merged).toHaveLength(2);
+    expect(merged.map((row) => row.platform)).toEqual(["linux", "windows"]);
+});
+
+test("keeps two WSL distros on one machine apart", () => {
+    const merged = mergeDevices(
+        [enrolled("radarsu-rog")],
+        [{ machine: "radarsu-rog", report: report("radarsu-rog", { wsl: { distro: "Arch" } }) }],
+        [{ host: host("radarsu-rog-ubuntu"), result: { report: report("radarsu-rog", { wsl: { distro: "Ubuntu-22.04" } }) } }],
+    );
+    expect(merged).toHaveLength(2);
+    expect(merged.map((row) => row.hostId)).toEqual([undefined, "radarsu-rog-ubuntu"]);
+});
+
+test("still folds one distro seen through both doors", () => {
+    const distro = { distro: "Arch" };
+    const merged = mergeDevices(
+        [enrolled("radarsu-rog")],
+        [{ machine: "radarsu-rog", report: report("radarsu-rog", { wsl: distro }) }],
+        [{ host: host("radarsu-rog-wsl-arch"), result: { report: report("radarsu-rog", { wsl: distro }) } }],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ hostId: "radarsu-rog-wsl-arch", sync: enrolled("radarsu-rog") });
+});
+
+// An agent too old to report `wsl` must keep folding exactly as it did before the field existed, rather than
+// splitting every row that has only ever been described by one of the two doors.
+test("folds as it always did when neither side mentions WSL", () => {
+    const merged = mergeDevices(
+        [enrolled("radarsu-rog")],
+        [{ machine: "radarsu-rog", report: report("radarsu-rog") }],
+        [{ host: host("radarsu-rog-wsl-arch"), result: { report: report("radarsu-rog") } }],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.hostId).toBe("radarsu-rog-wsl-arch");
 });
 
 test("lets the device that answered take the row before one that only shares its name", () => {

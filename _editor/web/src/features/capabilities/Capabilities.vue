@@ -42,6 +42,7 @@ import CapabilityEffects from "./connect/CapabilityEffects.vue";
 import CapabilityInstanceRow from "./connect/CapabilityInstanceRow.vue";
 import CapabilityRenameDialog from "./connect/CapabilityRenameDialog.vue";
 import CapabilityRail, { type CapabilityScope } from "./connect/CapabilityRail.vue";
+import SyncOnlyDeviceRow from "./connect/SyncOnlyDeviceRow.vue";
 import VpnConnections from "../../components/VpnConnections.vue";
 import { startAgent } from "../agents/fleet/agentActions";
 import { sandboxJson } from "../sandbox/client/sandboxClient";
@@ -85,6 +86,8 @@ import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } fr
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 import { HOST_DOOR, usePeerConnect, WEBEXT_DOOR } from "../sandbox/devices/usePeerConnect";
 import { useVpn } from "../sandbox/devices/useVpn";
+import { useDevices } from "../sandbox/devices/useDevices";
+import { type DeviceConnection, deviceConnections, isDeviceConnection, machineNamed } from "./model/deviceConnections";
 
 // Capabilities give the agent tools (GitHub, MCP servers, SSH hosts, Stripe) and scaffold managed repos. Core cards are
 // static catalog data; cli cards derive from enabled extensions' contributes.capabilities. Card facts live in
@@ -175,6 +178,16 @@ const cards = computed<CatalogCard[]>(() =>
         return { entry, instances, connected: instances.length, recommendation: recommendationFor(entry.id) };
     }),
 );
+// The other door a machine can arrive through. Desktop sync is capability-free by design, so a laptop syncing files
+// holds no card — which used to mean this page showed no trace of a machine the Devices board called live. Both read
+// the daemon's one device registry now; shared without polling it, since the Devices tab owns that cadence.
+const { devices: fleet, readAt: fleetReadAt } = useDevices({ poll: false });
+const syncOnlyDevices = computed<DeviceConnection[]>(() => deviceConnections(fleet.value, fleetReadAt.value));
+// This card's share of them, for the card pane's own list.
+const selectedDevices = computed<DeviceConnection[]>(() =>
+    selected.value === undefined ? [] : syncOnlyDevices.value.filter((row) => row.cardId === selected.value?.id),
+);
+
 const connectedCards = computed<CatalogCard[]>(() => cards.value.filter((card) => card.connected > 0));
 const recommendedCards = computed<CatalogCard[]>(() => cards.value.filter((card) => card.recommendation !== undefined));
 // Counts connections, not cards: one card can hold several (two Reddit accounts, three SSH boxes).
@@ -634,7 +647,34 @@ const connectionRow = (card: CatalogCard, instance: CapabilitySummary): Connecti
     };
 };
 
-const connections = computed<ConnectionRow[]>(() => cards.value.flatMap((card) => card.instances.map((instance) => connectionRow(card, instance))));
+// A machine reached by desktop sync alone, stated on the card it would be connected on. Its word and colour come
+// from the Devices board's own rules, so one machine cannot read as live on one screen and missing on the other; the
+// note is what this card can't do with it yet.
+const deviceConnectionRow = (card: CatalogCard, device: DeviceConnection): ConnectionRow => ({
+    title: device.title,
+    card: card.entry.name,
+    cardId: card.entry.id,
+    id: device.id,
+    logo: card.entry.logo,
+    icon: entryIcon(card.entry),
+    detail: device.detail,
+    state: device.state,
+    tone: device.tone,
+    note: device.note,
+    category: card.entry.category,
+    rank: device.rank,
+    haystack: `${device.machine} ${card.entry.name} ${card.entry.kind} ${device.detail}`.toLowerCase(),
+});
+
+const connections = computed<ConnectionRow[]>(() => [
+    ...cards.value.flatMap((card) => card.instances.map((instance) => connectionRow(card, instance))),
+    // Joined to the catalog here rather than in the model, so a machine whose card this sandbox doesn't carry is
+    // dropped by the same rule that decides the card exists at all.
+    ...syncOnlyDevices.value.flatMap((device) => {
+        const card = cards.value.find((candidate) => candidate.entry.id === device.cardId);
+        return card === undefined ? [] : [deviceConnectionRow(card, device)];
+    }),
+]);
 
 const visibleConnections = computed<ConnectionRow[]>(() => {
     const needle = search.value.trim().toLowerCase();
@@ -751,11 +791,26 @@ const clearForm = (): void => {
     shaking.value = false;
 };
 
+// The name a freshly opened form carries, and whether it counts as chosen — a chosen one is never overwritten by the
+// live suggestion as connections come and go. Editing keeps the connection's own name; adding suggests a free one.
+const openingName = (entry: CapabilityCatalogEntry, instance: CapabilitySummary | undefined): { name: string; chosen: boolean } => {
+    if (instance !== undefined) {
+        return { name: instance.id, chosen: false };
+    }
+    // Arrived from a machine that already syncs, to grant it the door it lacks. Its own name comes along deliberately:
+    // naming both doors the same is what lets the daemon fold them into one row (mergeDevices) rather than list the
+    // machine twice.
+    const machine = typeof route.query[`device`] === `string` ? route.query[`device`] : ``;
+    return machine === `` ? { name: suggestName(entry, instancesFor(entry)), chosen: false } : { name: machine, chosen: true };
+};
+
 // Re-seeds the form whenever the URL's card or connection changes, so a deep link to an edit works. Keyed on ids
 // rather than objects: both come from the live capability list, and watching objects would empty the form on every
 // refetch.
 watch(
-    [() => selected.value?.id, () => editing.value?.id],
+    // `device` rides along: arriving at a card already open (a Connect on one of its own machine rows) changes
+    // nothing else, and the name it carries is the whole point of that navigation.
+    [() => selected.value?.id, () => editing.value?.id, () => route.query[`device`]],
     () => {
         const entry = selected.value;
         const instance = editing.value;
@@ -763,8 +818,9 @@ watch(
             return;
         }
         clearForm();
-        // Editing keeps the connection's name; adding suggests a free one. Renaming is askRename's job, not this field.
-        name.value = instance?.id ?? suggestName(entry, instancesFor(entry));
+        const opening = openingName(entry, instance);
+        name.value = opening.name;
+        nameEdited.value = opening.chosen;
         // Seed is the live config plus dev autofill; credentials aren't included (see keptSecrets).
         Object.assign(values, seedValues(entry, instance?.config, recommendationFor(entry.id)?.prefill ?? {}), rememberedSecrets(entry));
         keptSecrets.value = new Set(instance?.secrets ?? []);
@@ -803,13 +859,20 @@ const back = (): void => {
 const openEdit = (id: string): void => {
     editingId.value = id;
 };
-// Same landing from Connected, a click away from the card, so it pushes; Back returns to the list.
+// Same landing from Connected, a click away from the card, so it pushes; Back returns to the list. A machine that is
+// only syncing has no connection to open, so it lands on the card's own add form with its name carried over, which
+// is the step it is actually missing.
 const openConnection = (card: string, connection: string): void => {
-    void router.push({ name: `capabilities`, params: { card }, query: { ...elsewhere(), edit: connection } });
+    const query = isDeviceConnection(connection) ? { device: machineNamed(connection) } : { edit: connection };
+    void router.push({ name: `capabilities`, params: { card }, query: { ...elsewhere(), ...query } });
 };
 const stopEditing = (): void => {
     editingId.value = ``;
 };
+// Connect, from a machine's own row on the card that would grant it. Fills the add form with its name and nothing
+// else: connecting a device hands over a shell, its files and its screen, so the switches stay a decision made here
+// rather than something a single click does quietly.
+const connectSyncedDevice = (device: DeviceConnection): void => openConnection(device.cardId, device.id);
 
 // Walks the recommended cards one at a time, reusing each card's own ordinary form rather than a separate wizard.
 // The queue is derived from the query, never snapshotted, so connecting or dismissing a card removes it by itself.
@@ -1168,9 +1231,9 @@ const submitLabel = computed(() => {
                                 @remove="askRemove"
                             />
                             <RowGroup
-                                v-else-if="selectedInstances.length > 0 && !selected.singleton"
+                                v-else-if="(selectedInstances.length > 0 || selectedDevices.length > 0) && !selected.singleton"
                                 label="Your connections"
-                                :count="selectedInstances.length"
+                                :count="selectedInstances.length + selectedDevices.length"
                             >
                                 <CapabilityInstanceRow
                                     v-for="instance in selectedInstances"
@@ -1190,6 +1253,16 @@ const submitLabel = computed(() => {
                                     @edit="openEdit(instance.id)"
                                     @rename="askRename(instance.id)"
                                     @remove="askRemove(instance.id)"
+                                />
+                                <!--
+                                    Last, after what is actually connected: machines already reachable through
+                                    desktop sync, which this card would give commands, files and screen.
+                                -->
+                                <SyncOnlyDeviceRow
+                                    v-for="device in selectedDevices"
+                                    :key="device.id"
+                                    :device="device"
+                                    @connect="connectSyncedDevice(device)"
                                 />
                             </RowGroup>
 

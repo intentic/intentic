@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 import { daemonBehind, daemonDrifted, driftedRoutes, missingRoutes } from "./useDaemonRoutes";
 import { useEnvironment } from "../environment/useEnvironment";
 import { runSeveringDeviceCommand, useHostRunning } from "../devices/useDevices";
+import ConnectDeviceHint from "../devices/ConnectDeviceHint.vue";
 
 // Checks the daemon's route surface against this app's contract, not version strings (SandboxUpdateCard); catches
 // gaps a version compare misses (dev packages are all 0.0.0). A missing route names the daemon as older; a drifted
@@ -94,6 +95,11 @@ const detail = computed(() =>
                             <CopyButton :text="reloadCommand" label="Copy" aria-label="Copy reload command" class="mr-1" />
                         </div>
                     </div>
+                    <!--
+                        Only where the button never had a chance: a refusal means the door is open and something else
+                        went wrong, which connecting a second time would not fix.
+                    -->
+                    <ConnectDeviceHint v-if="!hostId" :slug="slug" gains="this becomes a button." />
                 </div>
                 <div v-else-if="daemonDrifted" class="flex flex-wrap items-center gap-2">
                     <Button label="Reload page" size="small" @click="reloadPage" />

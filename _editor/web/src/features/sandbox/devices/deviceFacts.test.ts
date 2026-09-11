@@ -59,6 +59,34 @@ test(`falls back to the platform when the machine has never described itself`, (
     expect(osTitle(device({ platform: `windows` }))).toBeUndefined();
 });
 
+// The row's loudest fact has to carry this: a distro and the Windows install hosting it arrive under one hostname,
+// so without it the board shows what reads as the same machine listed twice.
+const wsl = (distro: string): NonNullable<Device[`report`]> => ({
+    hostname: `radarsu-rog`,
+    os: `linux`,
+    wsl: { distro },
+    sandboxes: [],
+    pairings: [],
+    ports: [],
+    agent: { running: true, installed: `1.252.0` },
+    capturedAt: NOW,
+});
+
+test(`says a machine is WSL, since that is all that separates it from the Windows row beside it`, () => {
+    expect(osLabel(device({ platform: `linux`, report: wsl(`Arch`) }))).toBe(`Arch on WSL`);
+    // Described by its own capability card as well: the distro's name for itself leads, WSL qualifies it.
+    const connected = device({ hostId: `rog-wsl`, platform: `linux`, facts: { ...WINDOWS, os: `Arch Linux` }, report: wsl(`Arch`) });
+    expect(osLabel(connected)).toBe(`Arch Linux on WSL`);
+    // The suffix is not something the machine said, so it must not turn into a tooltip promising more.
+    expect(osTitle(connected)).toBeUndefined();
+});
+
+test(`marks a distro that would not name itself`, () => {
+    expect(osLabel(device({ report: wsl(``) }))).toBe(`WSL`);
+    // The bare platform is the last resort: every distro on the machine would answer it with the same word.
+    expect(osLabel(device({ platform: `linux`, report: wsl(``) }))).toBe(`Linux on WSL`);
+});
+
 test(`separates what the device is, how it is reached, and which agent it runs`, () => {
     const row = device({
         label: `laptop`,

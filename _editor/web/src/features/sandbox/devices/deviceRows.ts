@@ -5,6 +5,7 @@ import {
     type DeviceSandboxGroup,
     groupNeedsAttention,
     groupSummary,
+    isSameSandbox,
     mirroringOff,
     sandboxGroups,
 } from "@intentic/ui/device";
@@ -90,6 +91,20 @@ export const isSelf = (device: Device, group: DeviceSandboxGroup, ownSlug: strin
 
 export const selfGroup = (row: DeviceRow, ownSlug: string | undefined): DeviceSandboxGroup | undefined =>
     row.groups.find((group) => isSelf(row.device, group, ownSlug));
+
+// The machine holding this sandbox's desktop-sync pairing and no command door. A different question from
+// `hostRunningSandbox`, which asks whose docker holds the container and can only ever answer with a device already
+// connected — the answer every "do it for you instead of printing a command" path needs, and the one that is
+// missing precisely when the command is printed. Syncing is not proof of hosting (a laptop can sync into a sandbox
+// running elsewhere), so this names a machine worth offering to connect, never the machine this sandbox runs on.
+export const deviceSyncingSandbox = (devices: readonly Device[], slug: string | undefined): Device | undefined =>
+    slug === undefined || slug === ``
+        ? undefined
+        : devices.find(
+              (device) =>
+                  device.hostId === undefined &&
+                  (device.report?.pairings ?? []).some((pairing) => pairing.mode === `sync` && isSameSandbox(pairing.sandboxId, slug)),
+          );
 
 // Container verbs show only where a click can work: the machine is a reachable connected device, and the
 // row is a real container rather than a bare pairing.

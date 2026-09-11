@@ -7,6 +7,7 @@ import {
     deviceRows,
     deviceState,
     deviceSwitches,
+    deviceSyncingSandbox,
     deviceTally,
     deviceTone,
     isSelf,
@@ -368,6 +369,46 @@ test(`agrees with isSelf about which group is the one you're using`, () => {
     expect(group).toMatchObject({ sandboxId: `work-abc` });
     expect(isSelf(entry.device, group!, `work-abc`)).toBe(true);
     expect(isSelf(entry.device, group!, `other`)).toBe(false);
+});
+
+// ── the machine worth offering to connect ──────────────────────────────────
+// What the screens that print a command need to know: a machine is already talking to this sandbox, and one card
+// away from being able to run that command for the reader.
+
+// A sync pairing keys this sandbox the way the agent does, by the flattened host, not by docker's shorter slug.
+const pairedTo = (sandboxId: string, mode: `sync` | `mirror` = `sync`): Report =>
+    report({ pairings: [{ sandboxId, mode, localDir: `/home/ada/work` }] });
+
+test(`names the machine holding this sandbox's sync pairing`, () => {
+    const syncing = device({ hostId: undefined, online: undefined, report: pairedTo(`sandbox-82789f4106b4-fra`) });
+    expect(deviceSyncingSandbox([syncing], `sandbox-82789f4106b4`)?.label).toBe(`rog`);
+    // Exactly, too: a pairing that already matches docker's spelling is the same machine.
+    expect(deviceSyncingSandbox([device({ hostId: undefined, report: pairedTo(`work-abc`) })], `work-abc`)?.label).toBe(`rog`);
+});
+
+test(`names nobody when the pairing belongs to a different sandbox`, () => {
+    const other = device({ hostId: undefined, report: pairedTo(`sandbox-999999999999-fra`) });
+    expect(deviceSyncingSandbox([other], `sandbox-82789f4106b4`)).toBeUndefined();
+    // A prefix that isn't a whole label is a different sandbox, not this one.
+    expect(deviceSyncingSandbox([device({ hostId: undefined, report: pairedTo(`work-abcdef`) })], `work-abc`)).toBeUndefined();
+});
+
+// Mirroring is ports only: that machine holds none of this sandbox's files and is not where it runs.
+test(`ignores a machine that only mirrors the ports`, () => {
+    const mirroring = device({ hostId: undefined, report: pairedTo(`work-abc`, `mirror`) });
+    expect(deviceSyncingSandbox([mirroring], `work-abc`)).toBeUndefined();
+});
+
+// Already connected: hostRunningSandbox is the question to ask about it, and offering to connect it again says
+// nothing true.
+test(`ignores a machine that is already a connected device`, () => {
+    expect(deviceSyncingSandbox([device({ report: pairedTo(`work-abc`) })], `work-abc`)).toBeUndefined();
+});
+
+test(`names nobody without a slug to match against`, () => {
+    const syncing = device({ hostId: undefined, report: pairedTo(`work-abc`) });
+    expect(deviceSyncingSandbox([syncing], undefined)).toBeUndefined();
+    expect(deviceSyncingSandbox([syncing], ``)).toBeUndefined();
 });
 
 // ── the two addresses ──────────────────────────────────────────────────────

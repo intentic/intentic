@@ -11,18 +11,34 @@ import { timeAgo } from "@intentic/ui/format";
 // Platform slugs from the capability cards; an unknown slug is shown verbatim rather than as nothing.
 const PLATFORM_NAMES: Record<string, string> = { windows: `Windows`, linux: `Linux`, macos: `macOS` };
 
-// The OS label at row length: the machine's own name with any build/kernel parenthetical stripped (kept in
-// osTitle); falls back to platform when it has never described itself.
-export const osLabel = (device: Device): string | undefined => {
+// The machine's own name for its OS, with any build/kernel parenthetical stripped (that goes to osTitle). Absent
+// until it has connected as a device and described itself.
+const describedOs = (device: Device): string | undefined => {
     const described = device.facts?.os.split(` (`)[0]?.trim();
-    if (described !== undefined && described !== ``) {
-        return described;
-    }
-    return device.platform === undefined ? undefined : (PLATFORM_NAMES[device.platform] ?? device.platform);
+    return described === undefined || described === `` ? undefined : described;
 };
 
-// The full string, when there is more to it than the label shows.
-export const osTitle = (device: Device): string | undefined => (device.facts?.os === osLabel(device) ? undefined : device.facts?.os);
+// What the platform slug is worth saying on its own: the last resort, since every machine of an OS answers it
+// identically.
+const platformName = (device: Device): string | undefined =>
+    device.platform === undefined ? undefined : (PLATFORM_NAMES[device.platform] ?? device.platform);
+
+// The OS label at row length. A WSL distro says so here, in the loudest ink the row has, rather than down in the
+// hardware line: WSL hands the distro the Windows machine's hostname, so two rows can arrive named the same, and
+// which environment each one is is the whole difference between them. The distro's name outranks the bare platform
+// for the same reason — "Linux" is what its neighbour distro would say too.
+export const osLabel = (device: Device): string | undefined => {
+    const wsl = device.report?.wsl;
+    if (wsl === undefined) {
+        return describedOs(device) ?? platformName(device);
+    }
+    const named = describedOs(device) ?? (wsl.distro === `` ? undefined : wsl.distro) ?? platformName(device);
+    return named === undefined ? `WSL` : `${named} on WSL`;
+};
+
+// The full string, when there is more to it than the label shows. Compared against the OS alone, so the WSL suffix
+// never makes a machine look like it has more to say than it does.
+export const osTitle = (device: Device): string | undefined => (device.facts?.os === describedOs(device) ? undefined : device.facts?.os);
 
 // What the machine is, as wrapping parts: arch, shell, then hostname — shown only when it differs from the
 // row's own label.

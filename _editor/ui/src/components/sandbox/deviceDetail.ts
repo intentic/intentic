@@ -119,7 +119,9 @@ const twinKey = (port: DevicePortRow): string => `${port.port}:${port.state}:${p
 
 // The sync agent keys a sandbox by its flattened host (`sandbox-<id>-<name>`); docker knows it by the
 // leading label alone (`sandbox-<id>`). Matched conservatively: equal, or continuing past the slug at a separator.
-const isSameSandbox = (sandboxId: string, slug: string): boolean => sandboxId === slug || sandboxId.startsWith(`${slug}-`);
+// Exported because the same two spellings meet anywhere a screen asks "is that pairing this sandbox", not only
+// where a container and a folder are being joined into one row.
+export const isSameSandbox = (sandboxId: string, slug: string): boolean => sandboxId === slug || sandboxId.startsWith(`${slug}-`);
 
 // Most-human-first: a recorded display name, then the synced folder's own leaf, then the raw id. The
 // exact id survives as `subtitle` rather than being replaced, since it's the string somebody actually types.

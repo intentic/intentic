@@ -4,6 +4,7 @@ import { livePidRecord } from "@intentic/local-agent";
 import type { DeviceAgent, DevicePairing, DevicePort, DeviceReport } from "@intentic/sandbox-contract";
 import { runPidPath } from "../config.js";
 import { installedBuild } from "../installed.js";
+import { wslEnvironment } from "../wsl.js";
 import { mirrorHeartbeatPath, type Pairing, readState, type SyncState } from "./config.js";
 import { backupSessionName, readSessionState, sessionName } from "./mutagen.js";
 
@@ -75,10 +76,19 @@ const portRows = (pairing: Pairing): DevicePort[] => [
 ];
 
 // `mutagen` undefined skips the session reads but still returns pairings, folders, ports and the agent.
-// `capturedAt` is stamped here, where the reading happens; downstream ages the report against it.
-export const buildReport = (state: SyncState, mutagen: string | undefined, agent: DeviceAgent, capturedAt: number): DeviceReport => ({
+// `capturedAt` is stamped here, where the reading happens; downstream ages the report against it. `wsl` is passed in
+// for the same reason `agent` is: it costs a read, and this stays a pure shaping of what was already gathered.
+export const buildReport = (
+    state: SyncState,
+    mutagen: string | undefined,
+    agent: DeviceAgent,
+    capturedAt: number,
+    wsl?: { readonly distro: string } | undefined,
+): DeviceReport => ({
     hostname: hostname(),
     os: platform(),
+    // Omitted rather than set to undefined off WSL, so a report says nothing at all about it instead of saying no.
+    ...(wsl === undefined ? {} : { wsl }),
     sandboxes: [],
     pairings: state.pairings.map((pairing) => pairingReport(mutagen, pairing)),
     ports: state.pairings.flatMap(portRows),
@@ -87,8 +97,10 @@ export const buildReport = (state: SyncState, mutagen: string | undefined, agent
 });
 
 // The report for this machine right now, the one entry point every carrier uses.
-export const deviceReport = async (mutagen: string | undefined): Promise<DeviceReport> =>
-    buildReport(await readState(), mutagen, await agentState(installedBuild()), Date.now());
+export const deviceReport = async (mutagen: string | undefined): Promise<DeviceReport> => {
+    const [state, agent, wsl] = await Promise.all([readState(), agentState(installedBuild()), wslEnvironment()]);
+    return buildReport(state, mutagen, agent, Date.now(), wsl);
+};
 
 // One pairing's slice for posting to its sandbox: only that pairing and its ports cross the network. A `mirror`
 // enrollment's folder drops too, since it never had a localDir to begin with.

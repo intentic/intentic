@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Pins the wording this card shows for a missing vs. a drifted route, and which side (if any) it blames.
 // jsdom: mounts the component tree and reads rendered text.
-import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
+import { type Device, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, ref } from "vue";
 import { resetDaemonRoutes, setDaemonRoutes } from "./useDaemonRoutes";
@@ -16,8 +16,12 @@ vi.mock(`../environment/useEnvironment`, () => ({
 // command for someone to type out there. Evaluated when the card is first imported, below.
 const hostId = ref<string | undefined>(undefined);
 const severingCalls: string[] = [];
+// The daemon's device list, which the card's fallback reads to find a machine already talking to this sandbox:
+// empty stands for "nothing to offer", where only the command remains.
+const fleet = ref<Device[]>([]);
 vi.mock(`../devices/useDevices`, () => ({
     useHostRunning: () => hostId,
+    useDevices: () => ({ devices: fleet, readAt: ref(0), error: ref(undefined), isLoading: ref(false), refetch: vi.fn() }),
     runSeveringDeviceCommand: (id: string, command: string) => {
         severingCalls.push(`${id}:${command}`);
         return Promise.resolve(undefined);
@@ -46,6 +50,16 @@ const mount = (): HTMLElement => {
             setup: (props) => () => h(`button`, props.label),
         }),
     );
+    // Registered app-wide by the router plugin in the real app; the connect offer below is a link.
+    app.component(
+        `RouterLink`,
+        defineComponent({
+            setup:
+                (_, { slots }) =>
+                () =>
+                    h(`a`, slots["default"]?.()),
+        }),
+    );
     app.directive(`tooltip`, {});
     app.mount(el);
     return el;
@@ -54,6 +68,7 @@ const mount = (): HTMLElement => {
 beforeEach(() => {
     resetDaemonRoutes();
     hostId.value = undefined;
+    fleet.value = [];
     severingCalls.length = 0;
 });
 
@@ -118,4 +133,39 @@ it(`runs the reload on the device hosting this sandbox instead of printing it`, 
     reload?.click();
     // The command name is the whole ask: the argv is the daemon's to build (hosts/device-commands.ts).
     expect(severingCalls).toEqual([`ada-laptop:dev-reload`]);
+});
+
+// The case the command block was hiding: a machine is already syncing this sandbox, so the reason there is no
+// button is a card away, and saying so is worth more than the command it sits under.
+it(`offers to connect the machine already syncing this sandbox`, () => {
+    fleet.value = [
+        {
+            key: `radarsu-rog`,
+            label: `radarsu-rog`,
+            platform: `linux`,
+            sync: { machine: `radarsu-rog`, mode: `sync` },
+            report: {
+                hostname: `radarsu-rog`,
+                os: `linux`,
+                sandboxes: [],
+                // Keyed as the sync agent keys it, which is docker's slug plus the zone.
+                pairings: [{ sandboxId: `sandbox-abc123-fra`, mode: `sync`, localDir: `/home/ada/work` }],
+                ports: [],
+                agent: { running: true },
+                capturedAt: 0,
+            },
+        },
+    ];
+    setDaemonRoutes(LEVEL, reshaped(`settings.get`));
+    const text = mount().textContent ?? ``;
+    expect(text).toContain(`radarsu-rog`);
+    expect(text).toContain(`syncs this sandbox but is not connected as a device`);
+    // The command stays: connecting is an offer, not a precondition for getting out of this state now.
+    expect(text).toContain(`dev-reload.sh sandbox-abc123`);
+});
+
+// Nothing to offer, so nothing is said: an invitation to connect a machine that isn't there is noise.
+it(`says nothing about connecting when no machine syncs this sandbox`, () => {
+    setDaemonRoutes(LEVEL, reshaped(`settings.get`));
+    expect(mount().textContent ?? ``).not.toContain(`not connected as a device`);
 });

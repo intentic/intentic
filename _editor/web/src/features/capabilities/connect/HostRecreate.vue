@@ -15,6 +15,7 @@ import {
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { manageDeviceSandbox, useHostRunning } from "../../sandbox/devices/useDevices";
+import ConnectDeviceHint from "../../sandbox/devices/ConnectDeviceHint.vue";
 import { DESKTOP_DOWNLOADS, desktopRecreateLink, desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
 
@@ -212,6 +213,11 @@ const command = computed(() => {
                 ]"
             />
             <Code :code="command" :lang="commandLang(cmdOs)" :label="`${action} command`" :wrap="true" />
+            <!--
+                The cheaper way out where it exists: the machine is already talking to this sandbox, and one card
+                turns that into the button above. Offered before the download, which asks for an install instead.
+            -->
+            <ConnectDeviceHint :slug="slug" :gains="`${action.toLowerCase()} becomes a button here.`" />
             <!--
                 Offered here, not just at setup, since this is the moment reaching for the app repeatedly starts to pay
                 off.
