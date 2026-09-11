@@ -89,6 +89,10 @@ export const ArrivalReportSchema = z.object({
     failed: z.array(z.object({ id: z.string(), label: z.string(), error: z.string() })),
     refused: z.array(z.string()),
     needsAction: z.array(NeedsActionSchema),
+    // The source's presentation, when the artifact carried it: what its owner called it and its switcher logo. The
+    // daemon cannot apply these itself — they are platform rows, and it holds no owner session — so they are handed
+    // back for the caller that does. Absent for every artifact that carries none.
+    presentation: z.object({ name: z.string().optional(), image: z.string().optional() }).optional(),
 });
 export type ArrivalReport = z.infer<typeof ArrivalReportSchema>;
 
