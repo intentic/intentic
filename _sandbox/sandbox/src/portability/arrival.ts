@@ -56,7 +56,7 @@ export interface Arrivals {
 
 // What to call a bundle's source on the card: the owner's name for it, falling back to the container's. Both are
 // optional, and a bundle packed by a daemon with neither gets no line rather than an empty one.
-const displayedName = (manifest: BundleManifest): string | undefined => manifest.sandbox?.displayName ?? manifest.sandbox?.name;
+const displayedName = (manifest: BundleManifest): string | undefined => manifest.presentation?.name ?? manifest.sandbox?.name;
 
 // Takes the first bytes off the stream without consuming it, and returns something that replays them. Driven by
 // `next()` alone — never `return()` — so `for await` breaking wouldn't destroy the rest of the upload.

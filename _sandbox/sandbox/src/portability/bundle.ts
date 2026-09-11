@@ -114,19 +114,22 @@ const excludedEntries = (secrets: boolean): BundleManifest["excluded"] => {
     return [...declared, ...IGNORE_SCOPE_EXCLUSIONS];
 };
 
-// The manifest's `sandbox` block, present when ANY of the three has something to say. Emitted as a whole-or-nothing
-// key so an empty object never lands in the JSON; each field is independently optional, because the container name
-// and the platform's presentation come from different places and either can be missing on its own.
-const sandboxBlock = (
+// The manifest's `sandbox` and `presentation` blocks. Two keys rather than one because they come from different
+// places and either can be missing on its own: the container name is this process's own environment, the display
+// name and logo are platform rows fetched over the wire. Each is emitted whole-or-nothing, so an empty object never
+// lands in the JSON.
+const sourceBlocks = (
     containerName: string,
     presentation: SandboxPresentation | undefined,
-): Pick<BundleManifest, "sandbox"> | Record<string, never> => {
-    const sandbox = {
-        ...(containerName === "" ? {} : { name: containerName }),
-        ...(presentation?.name === undefined ? {} : { displayName: presentation.name }),
+): Pick<BundleManifest, "sandbox" | "presentation"> => {
+    const presented = {
+        ...(presentation?.name === undefined ? {} : { name: presentation.name }),
         ...(presentation?.image === undefined ? {} : { image: presentation.image }),
     };
-    return Object.keys(sandbox).length === 0 ? {} : { sandbox };
+    return {
+        ...(containerName === "" ? {} : { sandbox: { name: containerName } }),
+        ...(Object.keys(presented).length === 0 ? {} : { presentation: presented }),
+    };
 };
 
 // One credential sweep, best-effort in both directions: a seam that throws (a fake never given this member) becomes a
@@ -161,7 +164,7 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
             const presentation = await services.presentation().catch(() => undefined);
             const manifest: BundleManifest = {
                 version: 3,
-                ...sandboxBlock(services.config.sandbox.name, presentation),
+                ...sourceBlocks(services.config.sandbox.name, presentation),
                 createdAt: options.now,
                 secrets: options.secrets,
                 repos: (await discoverRepos(services.workspace.root)).toSorted(),

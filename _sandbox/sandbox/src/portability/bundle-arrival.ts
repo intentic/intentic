@@ -409,16 +409,12 @@ export const applyBundle = async (
         });
     }
     // Handed back rather than applied: these are platform rows, and this process holds no owner session to write
-    // them with. Only offered when something actually landed — a preview-only or wholly-failed arrival must not
-    // rename the sandbox it was never allowed to touch.
-    const source = held.index.manifest.sandbox;
+    // them with. The manifest carries the report's own shape, so this is a pass-through, withheld when nothing landed
+    // — a preview-only or wholly-failed arrival must not rename the sandbox it was never allowed to touch — and when
+    // the key arrived empty, which this packer never writes but a hand-made manifest can.
+    const source = held.index.manifest.presentation;
     const presentation =
-        applied.length === 0 || source === undefined || (source.displayName === undefined && source.image === undefined)
-            ? undefined
-            : {
-                  ...(source.displayName === undefined ? {} : { name: source.displayName }),
-                  ...(source.image === undefined ? {} : { image: source.image }),
-              };
+        applied.length === 0 || source === undefined || (source.name === undefined && source.image === undefined) ? undefined : source;
     return { applied, failed, refused, needsAction, ...(presentation === undefined ? {} : { presentation }) };
 };
 

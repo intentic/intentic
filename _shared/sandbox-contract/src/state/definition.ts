@@ -128,20 +128,20 @@ export type WorkspaceRemote = z.infer<typeof WorkspaceRemoteSchema>;
 export const BundleManifestSchema = z.object({
     // Bumped when the layout changes in a way an older daemon would misread; refused rather than guessed at.
     version: z.literal(3),
-    // Where it came from, for the report's first line; never used to authorize anything.
-    //
-    // `name` is the CONTAINER's name (SANDBOX_NAME, `intentic-sandbox-sandbox-<id>`), which is why the other two
-    // exist: how a sandbox presents itself — what its owner named it and the logo the switcher draws — is a platform
-    // row (`sandbox.name` / `sandbox.image`), held nowhere under /work or /history. So it cannot ride along the way
-    // every other piece of state does, and a move used to land a workspace called "workspace" wearing a "W"
-    // monogram with the source's identity left behind. A bundle is the only artifact that crosses both, so it
-    // carries them and the report hands them back for the browser to apply.
-    sandbox: z
+    // Where it came from, for the report's first line; never used to authorize anything. The CONTAINER's name
+    // (SANDBOX_NAME, `intentic-sandbox-sandbox-<id>`), so the block is absent on a headless daemon that has none.
+    sandbox: z.object({ name: z.string() }).optional(),
+    // How the source presented itself: what its owner called it and the logo the switcher draws. Its own key rather
+    // than two more fields on `sandbox`, because these are platform rows (`sandbox.name` / `sandbox.image`) held
+    // nowhere under /work or /history, and either can be known when the container name is not — hanging them off
+    // `sandbox` would have made a sandbox's presentation ride on an unrelated string being set, and loosening that
+    // block's `name` to allow it would have shrunk a shipped surface. Without this a move landed a workspace called
+    // "workspace" wearing a "W" monogram, the source's identity left behind. A bundle is the only artifact that
+    // crosses both, so it carries them and the report hands them straight back, in this same shape, for the caller
+    // holding the owner session to apply.
+    presentation: z
         .object({
-            // Optional like the other two: display-only, and a headless daemon has no container name to give. Gating
-            // the whole block on it would have made a sandbox's presentation ride on an unrelated string being set.
             name: z.string().optional(),
-            displayName: z.string().optional(),
             // A data URL, same shape and 150 KB ceiling the platform's own ImageDataUrlSchema enforces on the way in.
             image: z.string().optional(),
         })
