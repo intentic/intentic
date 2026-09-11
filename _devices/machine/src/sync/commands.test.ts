@@ -1,6 +1,6 @@
-import { DEV_VERSION, type DevicePairing, type DeviceReport, AGENT_STALL_AFTER_MS } from "@intentic/sandbox-contract";
+import { DEV_VERSION, type DevicePairing, type DeviceReport, AGENT_STALL_AFTER_MS, HostScopesSchema } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { agentLine, buildSkewLine, conflictLines, pairingLine, statusSummary } from "../status.js";
+import { agentLine, buildSkewLine, conflictLines, linkLine, pairingLine, statusSummary } from "../status.js";
 import { enrollKey, selectPairings } from "./commands.js";
 import type { Pairing, SyncState } from "./config.js";
 
@@ -283,6 +283,61 @@ describe("buildSkewLine and the status summary", () => {
         // A stalled loop outranks it: nothing is being served at all, whichever build is doing the not-serving.
         expect(statusSummary(4242, 0, report({ ...serving, lastTickAt: NOW - AGENT_STALL_AFTER_MS - 60_000 }, "1.240.0"), NOW)).toContain("STALLED");
         expect(statusSummary(undefined, 0, skewed, NOW)).toContain("NOT RUNNING");
+    });
+});
+
+/* THE WORD THIS COMMAND USED TO GIVE AWAY. Its whole job is to answer "is my machine connected", and it
+ * answered it from the link list on disk, which records what the machine is MEANT to reach. A sandbox whose host
+ * had been returning 502 for four hours, with the agent retrying it every 30 seconds, printed the same line as a
+ * healthy one. */
+describe("linkLine", () => {
+    // Scopes are beside the point for this line and are taken from the schema's own defaults rather than written
+    // out here, so a scope added later can't break a test that never looks at one.
+    const link = { sandboxUrl: "https://sandbox-0738cd6b5027.example.dev", id: "radarsu-omen", scopes: HostScopesSchema.parse({}) } as const;
+
+    it("says connected only for a socket that is open", () => {
+        expect(linkLine({ ...link, state: "open" })).toContain("connected as radarsu-omen");
+        expect(linkLine({ ...link, state: "open" })).not.toContain("NOT connected");
+    });
+
+    it("says NOT connected for a link that is down, and whether anything is still trying", () => {
+        expect(linkLine({ ...link, state: "connecting" })).toContain("NOT connected (retrying)");
+        expect(linkLine({ ...link, state: "closed" })).toContain("NOT connected as radarsu-omen");
+        expect(linkLine({ ...link, state: "closed" })).not.toContain("retrying");
+    });
+
+    // An agent too old to stamp its links is the case this line must not paper over: no answer is not a yes, and
+    // the reader is told which they have rather than being handed the reassuring one.
+    it("says it does not know when the running agent cannot say", () => {
+        const unknown = linkLine(link);
+        expect(unknown).toContain("radarsu-omen");
+        expect(unknown).not.toContain("connected as");
+        expect(unknown).toContain("doesn't report");
+    });
+});
+
+// The tray reads the summary and nothing else, so a link that is down has to reach that one line too.
+describe("the summary's link count", () => {
+    const NOW = 1_700_000_000_000;
+    const quiet: DeviceReport = {
+        hostname: "radarsu-omen",
+        os: "win32",
+        sandboxes: [],
+        pairings: [],
+        ports: [],
+        agent: { running: true, pid: 4242 },
+        capturedAt: NOW,
+    };
+
+    it("counts the links that are connected, not the ones that are configured", () => {
+        expect(statusSummary(4242, 2, quiet, NOW, 1)).toContain("1 of 2 sandboxes connected");
+        expect(statusSummary(4242, 2, quiet, NOW, 0)).toContain("0 of 2 sandboxes connected");
+        expect(statusSummary(4242, 2, quiet, NOW, 2)).toContain("2 sandboxes connected");
+    });
+
+    // An agent that cannot report its links keeps the sentence it always printed: the count is unknown, not zero.
+    it("keeps the old wording when nothing knows", () => {
+        expect(statusSummary(4242, 2, quiet, NOW)).toContain("2 sandboxes connected");
     });
 });
 

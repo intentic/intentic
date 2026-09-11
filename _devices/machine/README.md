@@ -83,6 +83,9 @@ halves in one process ([src/resident.ts](src/resident.ts)):
   that bought that rule is written out in [src/sync/mirror.ts](src/sync/mirror.ts).
 - It stamps **the build it is running** into its pidfile (`pid boot build`). Nothing else knows it: replacing the
   binary does not touch the process, so a machine can hold a current agent and keep serving a months-old one.
+- It stamps **what each link's socket is doing** into `links.tick` every five seconds, for the same reason: the
+  only process that knows is this one and the only process that is asked is `status`, in another terminal. See
+  **Linked vs connected**.
 
 ### Installed vs running
 
@@ -101,6 +104,22 @@ its loop posts to and its installed build to one reading over a `host` capabilit
 - A loop already on the installed build is never bounced, and a loop that is stopped is never started: `run
   --stop` is a thing people do on purpose.
 
+### Linked vs connected
+
+The same gap one level down, on the command whose entire job is to answer "is my machine connected". `device.json`
+records the sandboxes this machine is **meant** to answer to and nothing whatever about whether it reaches any of
+them, so `status` printed `connected as <id>` for every line in it — including, on the machine this was written
+for, a sandbox whose host had been answering 502 for four hours while the loop retried it every 30 seconds and
+said so in a log nobody had been pointed at.
+
+- The loop's stamp is the answer: `status` prints `connected`, `NOT connected (retrying)` or `NOT connected`
+  per link, and the summary the tray reads counts the links that are actually up (`1 of 2 sandboxes connected`).
+- The stamp **ages** on purpose, since it describes sockets held in a process that may be gone. Four ticks past
+  the last write it is no answer at all — which is also what an agent too old to write one leaves behind — and
+  both cases print `linked as <id>` with the reason in words. A link nothing can vouch for must not read like a
+  healthy one; the permissions line beneath it had been hedged as "last pushed by the sandbox" for years for the
+  same reason, and this line had not.
+
 ## Key files
 
 - [src/commands.ts](src/commands.ts) — the CLI surface: `device setup|uninstall|updates`, `sync setup|pause|resume|mirror|uninstall`, shared `run|status|version|upgrade|uninstall`.
@@ -108,7 +127,7 @@ its loop posts to and its installed build to one reading over a `host` capabilit
 - [src/upgrade.ts](src/upgrade.ts) — `upgrade`: what is published, then download → probe → stop → swap → start, with a rollback behind every step, and a restart when the file is current but the loop is not.
 - [src/installed.ts](src/installed.ts) — which build the *file* at `bin/intentic-machine` is, as opposed to the one running: free while the two agree, one probe per swap after they stop.
 - [src/daemon-base.ts](src/daemon-base.ts) — where a sandbox's daemon is dialled, for both halves: loopback first when `/health` proves it is ours, the public URL as the floor.
-- [src/resident.ts](src/resident.ts) — the one loop, its pidfile, and `reconcileResidency`.
+- [src/resident.ts](src/resident.ts) — the one loop, its pidfile, its link stamp, and `reconcileResidency`.
 - [src/device/auto-prepare.ts](src/device/auto-prepare.ts) — the background update-download tick; the judgement about *what* to download stays in `ic sandbox prepare --auto`, on purpose.
 - [src/status.ts](src/status.ts) — both halves as one answer; `--json` is what the desktop app and tray read.
 - [src/device/policy.ts](src/device/policy.ts) — what the sandbox is permitted to do here; the security surface.

@@ -5,6 +5,20 @@
 // Reconnect backoff: fast floor for a restart, low cap so a reopened laptop is back within a minute.
 export const PEER_LINK_BACKOFF = { floorMs: 1_000, capMs: 30_000, stableMs: 60_000 } as const;
 
+/* HOW MUCH A LINK THAT CANNOT BE REACHED IS ALLOWED TO SAY, which is a different question from how often it
+ * may try. At the cap above, a far end that is gone for good — a sandbox deleted, a tunnel pointed elsewhere —
+ * costs two lines every 30 seconds for as long as the machine is on: 5,760 a day. One laptop's agent had
+ * written 1,992 pairs of them, 2.3 MB, and this log is exactly where its owner had been sent to read why a
+ * DIFFERENT thing had failed; the answer was in there, under an hour of repetition.
+ *
+ * The cadence is not the problem and is deliberately untouched — a reopened laptop must be back within a
+ * minute, which is what the low cap buys. The REPETITION is. So the first few failures are reported in full,
+ * then the loop says so once more to mark that it is going quiet, and after that repeats itself at most once
+ * per QUIET_LOG_MS with the attempt count that says how long it has been trying. A link that opens resets all
+ * of it: every reconnect is news, and the reconnect line is what reports it. */
+const LOUD_ATTEMPTS = 3;
+const QUIET_LOG_MS = 10 * 60_000;
+
 /* HOW LONG A SOCKET MAY SAY NOTHING before this side calls the link dead, as a multiple of the door's own
  * heartbeat: the hub pings every live peer on an interval (peer-hub.ts), so a socket with nothing on it for
  * three heartbeats is not quiet, it is gone.
@@ -57,12 +71,16 @@ export interface PeerDialSpec<S extends SocketLike> {
     readonly revoked: () => void;
 }
 
+// What the socket is doing right now. "connecting" covers a dial in flight and a retry waiting on the ladder:
+// nobody should start another. Named, because processes that are not this one report it (a machine agent stamps
+// it for `status`, which otherwise has only the link list on disk and no idea whether any of it is up).
+export type PeerLinkState = "open" | "connecting" | "closed";
+
 export interface PeerLink {
     // Resolves when the loop is asked to stop or refused for good; never rejects, a connection error is a retry.
     readonly done: Promise<void>;
     readonly stop: (reason?: string) => void;
-    // "connecting" covers a dial in flight and a retry waiting on the ladder: nobody should start another.
-    readonly state: () => "open" | "connecting" | "closed";
+    readonly state: () => PeerLinkState;
 }
 
 export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink => {
@@ -77,6 +95,32 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
     const done = new Promise<void>((resolve) => {
         resolveDone = resolve;
     });
+    // Consecutive attempts that have failed since this link was last open, and when the loop last complained out
+    // loud: between them they are the whole of the quiet rule above.
+    let failures = 0;
+    let quietSince = 0;
+
+    /* What ONE failed attempt is allowed to say. Three sentences rather than one repeated forever: the first few
+     * failures in full, then the line that marks the loop going quiet (so a reader who sees it knows the retries
+     * continue unlogged), then a complaint carrying the attempt count at most once per window. */
+    const complain = (said: string, delay: number): void => {
+        const every = `retrying every ${Math.round(delay / 1000)}s`;
+        if (failures <= LOUD_ATTEMPTS) {
+            spec.log(`${said}; reconnecting in ${Math.round(delay / 1000)}s`);
+            return;
+        }
+        if (failures === LOUD_ATTEMPTS + 1) {
+            quietSince = Date.now();
+            spec.log(
+                `${said}; still nothing after ${failures} attempts — ${every}, and saying so at most every ${Math.round(QUIET_LOG_MS / 60_000)} minutes from here`,
+            );
+            return;
+        }
+        if (Date.now() - quietSince >= QUIET_LOG_MS) {
+            quietSince = Date.now();
+            spec.log(`${said}; ${failures} failed attempts, ${every}`);
+        }
+    };
 
     const open = async (): Promise<void> => {
         waiting = true;
@@ -123,7 +167,8 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
             }
             const delay = spec.backoff.next(openedAt === undefined ? 0 : Date.now() - openedAt);
             openedAt = undefined;
-            spec.log(`${said}; reconnecting in ${Math.round(delay / 1000)}s`);
+            failures += 1;
+            complain(said, delay);
             waiting = true;
             setTimeout(() => void open(), delay);
         };
@@ -149,6 +194,10 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
                 return; // abandoned mid-connect: this socket is already closed and its replacement is on the ladder
             }
             openedAt = Date.now();
+            // A link that is up owes nothing to the failures behind it: the next outage is news again, and the
+            // "connected to …" line this open is about to log is what reports the recovery.
+            failures = 0;
+            quietSince = 0;
             arm();
             spec.attach(ws);
             const send = (hello: Record<string, unknown>): void => {
@@ -184,8 +233,15 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
             drop(`disconnected (${event.code ?? "no code"})`);
         });
 
-        // Always followed by a close event that owns the retry; this only records a cause the close code can't carry.
-        ws.addEventListener("error", () => spec.log("connection error"));
+        /* Always followed by a close event that owns the retry; this only records a cause the close code can't
+         * carry, so it is silenced with the rest once the loop goes quiet — it is half of every repeated pair in
+         * a dead link's log, and it says nothing the drop line beside it does not. The attempt that finally
+         * reconnects is loud again, this line included. */
+        ws.addEventListener("error", () => {
+            if (failures < LOUD_ATTEMPTS) {
+                spec.log("connection error");
+            }
+        });
     };
 
     void open();

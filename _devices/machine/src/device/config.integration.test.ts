@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HostScopes } from "@intentic/sandbox-contract";
@@ -89,6 +89,33 @@ test("the credential file is written so only this user can read it", async () =>
     expect(JSON.parse(await readFile(config.configPath, "utf8"))).toEqual({
         links: [expect.objectContaining({ sandboxUrl: "https://one.example" })],
     });
+});
+
+/* THE STAMP THE RESIDENT LOOP LEAVES FOR `status`, whose whole point is that it AGES. The states it carries are
+ * about sockets held in another process, so a stamp that outlives the loop that wrote it is worse than no stamp:
+ * it would have `status` report a dead link as connected. What is asserted here is the boundary — inside the
+ * window the stamp is the answer, outside it there is no answer at all. */
+test("a machine whose agent never stamped its links has no answer, rather than a wrong one", async () => {
+    // Runs before anything below writes a stamp: this is an agent too old to have the code, seen from here.
+    expect(await config.readLinkStates()).toBeUndefined();
+});
+
+test("a stamp inside its window is the answer; past it, the loop that wrote it is presumed gone", async () => {
+    const states = { "https://one.example": "open", "https://two.example": "connecting" } as const;
+    await config.stampLinkStates(states);
+    // The instant the writer recorded, read back from the stamp rather than sampled beside it: the boundary is
+    // measured from that, and a millisecond spent writing the file would otherwise land a case on the wrong side.
+    const { at } = JSON.parse(await readFile(config.linkStatePath, "utf8")) as { at: number };
+
+    expect(await config.readLinkStates(at)).toEqual(states);
+    expect(await config.readLinkStates(at + config.LINK_STAMP_STALE_MS)).toEqual(states);
+    expect(await config.readLinkStates(at + config.LINK_STAMP_STALE_MS + 1)).toBeUndefined();
+});
+
+test("a stamp caught half-written reads as no answer, since the next one is seconds away", async () => {
+    await writeFile(config.linkStatePath, '{"at":1700000000000,"links":{"https://one.exa');
+
+    expect(await config.readLinkStates()).toBeUndefined();
 });
 
 test("the background-download switch defaults to on, and survives every link writer", async () => {

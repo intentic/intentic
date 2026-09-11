@@ -1,7 +1,8 @@
 import type { HostScopes, DeviceConflict, DeviceConflictChange, DevicePort, DeviceReport } from "@intentic/sandbox-contract";
+import type { PeerLinkState } from "@intentic/sandbox-contract/peer-dial";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { agentBuildSkew, agentStalled } from "@intentic/sandbox-contract";
-import { auditPath, readLinks } from "./device/config.js";
+import { auditPath, readLinks, readLinkStates } from "./device/config.js";
 import { runLogPath } from "./config.js";
 import { readResidentPid } from "./resident.js";
 import { ensureMutagen, existingSyncSessions, runMutagen, syncSessionNames } from "./sync/mutagen.js";
@@ -19,19 +20,40 @@ export interface DeviceStatus {
     // The whole answer as one sentence, for surfaces with room for exactly one line (the desktop app's tray row
     // above all). Composed here so the tray cannot drift from the terminal.
     readonly summary: string;
-    readonly device: { readonly links: readonly { readonly sandboxUrl: string; readonly id: string; readonly scopes: HostScopes }[] };
+    readonly device: { readonly links: readonly StatusLink[] };
     readonly sync: DeviceReport;
 }
 
+// One link, as every surface reads it. `state` is what the resident loop last stamped (device/config.ts) and is
+// ABSENT when there is no answer rather than defaulted to one: an agent too old to stamp, or a stamp too old to
+// be about now, is a thing this command does not know, not a link that is down.
+export interface StatusLink {
+    readonly sandboxUrl: string;
+    readonly id: string;
+    readonly scopes: HostScopes;
+    readonly state?: PeerLinkState;
+}
+
+// The device half of the summary. A count of LINKS is all this could ever say; a count of connected links is
+// what it can say once the loop stamps them, and the difference is a tray that read "2 sandboxes connected" on a
+// machine that had reached neither. An unknown count keeps the old sentence rather than inventing a worse one.
+const linksHalf = (links: number, connected: number | undefined): string | undefined => {
+    if (links === 0) {
+        return undefined;
+    }
+    const sandboxes = `sandbox${links === 1 ? "" : "es"}`;
+    return connected === undefined || connected === links ? `${links} ${sandboxes} connected` : `${connected} of ${links} ${sandboxes} connected`;
+};
+
 // The one-line summary. Health first, since a stopped or stalled loop outranks any count, then the counts in
 // the cards' vocabulary, only for the halves in use.
-export const statusSummary = (running: number | undefined, links: number, sync: DeviceReport, now: number): string => {
+export const statusSummary = (running: number | undefined, links: number, sync: DeviceReport, now: number, connected?: number): string => {
     const working = links > 0 || sync.pairings.length > 0;
     if (!working) {
         return "nothing connected";
     }
     const halves = [
-        links === 0 ? undefined : `${links} sandbox${links === 1 ? "" : "es"} connected`,
+        linksHalf(links, connected),
         sync.pairings.length === 0 ? undefined : `syncing ${sync.pairings.length} sandbox${sync.pairings.length === 1 ? "" : "es"}`,
     ].filter((part) => part !== undefined);
     if (running === undefined) {
@@ -54,12 +76,22 @@ export const statusSummary = (running: number | undefined, links: number, sync: 
 };
 
 export const deviceStatus = async (mutagen: string | undefined): Promise<DeviceStatus> => {
-    const [pid, links, sync] = await Promise.all([readResidentPid(), readLinks(), deviceReport(mutagen)]);
+    const [pid, links, sync, stamped] = await Promise.all([readResidentPid(), readLinks(), deviceReport(mutagen), readLinkStates()]);
+    /* A loop that is not running holds no sockets, so every link is closed and that needs no stamp to know; a
+     * loop that IS running is the only thing that knows, and its stamp is the whole answer. Neither leaves the
+     * question open, which the shape carries as an absent `state` and every surface below reports as unknown. */
+    const states: readonly (PeerLinkState | undefined)[] = links.map((link) => (pid === undefined ? "closed" : stamped?.[link.sandboxUrl]));
+    const connected = states.every((state) => state !== undefined) ? states.filter((state) => state === "open").length : undefined;
     return {
         version: MACHINE_VERSION,
         ...(pid === undefined ? {} : { running: pid }),
-        summary: statusSummary(pid, links.length, sync, Date.now()),
-        device: { links: links.map((link) => ({ sandboxUrl: link.sandboxUrl, id: link.id, scopes: link.scopes })) },
+        summary: statusSummary(pid, links.length, sync, Date.now(), connected),
+        device: {
+            links: links.map((link, at) => {
+                const state = states[at];
+                return { sandboxUrl: link.sandboxUrl, id: link.id, scopes: link.scopes, ...(state === undefined ? {} : { state }) };
+            }),
+        },
         sync,
     };
 };
@@ -176,6 +208,24 @@ export const buildSkewLine = (report: DeviceReport): string | undefined => {
     return `${which} — the loop keeps the build it started with. Restart it with \`intentic-machine run --stop\` then \`intentic-machine run\`.`;
 };
 
+/* ONE LINK'S LINE, and the word in it that was not earned. "connected" is a claim about a socket, and this
+ * printed it from the link list alone: a sandbox unreachable for hours read exactly like a healthy one, on the
+ * command whose entire job is to say which of the two you have. The permissions line beneath it had been hedged
+ * as "last pushed by the sandbox" for the same reason and this line had not. Unknown now says so in words rather
+ * than picking the reassuring one. */
+export const linkLine = (link: StatusLink): string => {
+    switch (link.state) {
+        case "open":
+            return `  ${link.sandboxUrl}  connected as ${link.id}`;
+        case "connecting":
+            return `  ${link.sandboxUrl}  NOT connected (retrying) as ${link.id}`;
+        case "closed":
+            return `  ${link.sandboxUrl}  NOT connected as ${link.id}`;
+        default:
+            return `  ${link.sandboxUrl}  linked as ${link.id} (this machine's agent doesn't report whether the link is up)`;
+    }
+};
+
 const printReport = (report: DeviceReport, out: (message: string) => void): void => {
     out(`Paired sandboxes (${report.pairings.length}):`);
     for (const pairing of report.pairings) {
@@ -237,7 +287,7 @@ export const status = buildCommand<StatusFlags>({
         // One block per sandbox, since the grants are per sandbox: a device allowed to run commands for one and only
         // watched by another is the ordinary case.
         for (const link of links) {
-            out(`  ${link.sandboxUrl}  connected as ${link.id}`);
+            out(linkLine(link));
             // The cached grant, flagged as such: the sandbox's card is the source of truth, and saying so stops a stale
             // line here from being read as current.
             out(

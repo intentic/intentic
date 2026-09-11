@@ -12,9 +12,10 @@ import {
     unregisterAutostart,
     writeSecretFile,
 } from "@intentic/local-agent";
+import type { PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import { MACHINE_AUTOSTART } from "./autostart.js";
 import { startAutoPrepare } from "./device/auto-prepare.js";
-import { readLinks } from "./device/config.js";
+import { type HostLink, LINK_STAMP_MS, linkStatePath, readLinks, stampLinkStates } from "./device/config.js";
 import { connect } from "./device/connection.js";
 import { baseDir, runLogPath, runPidPath } from "./config.js";
 import { mirrorHeartbeatPath, readState } from "./sync/config.js";
@@ -75,11 +76,12 @@ export const stopResident = async (): Promise<number | undefined> => {
     return pid;
 };
 
-// What a leaving loop must not leave behind: a pidfile claiming a gone pid, and a heartbeat reading as a
-// recent pass.
+// What a leaving loop must not leave behind: a pidfile claiming a gone pid, a heartbeat reading as a recent
+// pass, and a link stamp reading as a live socket.
 const cleanup = async (): Promise<void> => {
     await rm(runPidPath, { force: true });
     await rm(mirrorHeartbeatPath, { force: true });
+    await rm(linkStatePath, { force: true });
 };
 
 // Bring the resident state in line with the config: restart when there is anything to serve, retire the login
@@ -102,6 +104,23 @@ export const reconcileResidency = async (log: Log): Promise<void> => {
 // The device half's background tick: keep each local sandbox's next update downloaded (device/auto-prepare.ts).
 // Gated on links, since the sync half alone may be mirroring a sandbox that runs elsewhere entirely.
 const deviceTick = (links: number, log: Log): { stop: () => void } | undefined => (links > 0 ? startAutoPrepare(log) : undefined);
+
+// The device half's other tick: publish what each link's socket is doing, since the only process that knows is
+// this one and the only process that is asked is `status`, in another terminal (device/config.ts says what that
+// gap used to print). Index-aligned with the links the connections were built from.
+// Answers the stop, so a machine with nothing linked (sync-only, and legitimate) needs no case of its own here.
+const stampLinks = (links: readonly HostLink[], connections: readonly PeerLink[]): (() => void) => {
+    if (links.length === 0) {
+        return () => undefined;
+    }
+    const stamp = (): void =>
+        void stampLinkStates(Object.fromEntries(links.map((link, at) => [link.sandboxUrl, connections[at]?.state() ?? "closed"] as const)));
+    stamp();
+    const timer = setInterval(stamp, LINK_STAMP_MS);
+    // The sockets are what keep this process alive; a stamp timer must never be the reason it outlives them.
+    timer.unref();
+    return () => clearInterval(timer);
+};
 
 // The foreground loop, what a supervisor (systemd, launchd, the Windows launcher stub) runs. Claims the shared
 // pidfile and refuses if a live loop already holds it, since two of these tear down each other's sessions
@@ -132,8 +151,10 @@ export const runForeground = async (log: Log): Promise<void> => {
     // Nothing is multiplexed or shared but this log.
     const connections = links.map((link) => connect(link, MACHINE_VERSION, log));
     const autoPrepare = deviceTick(links.length, log);
+    const stopStamping = stampLinks(links, connections);
     const shutdown = (signal: NodeJS.Signals): void => {
         autoPrepare?.stop();
+        stopStamping();
         for (const connection of connections) {
             connection.stop();
         }

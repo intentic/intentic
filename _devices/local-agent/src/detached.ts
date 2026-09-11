@@ -85,6 +85,10 @@ const SETTLE_POLL_MS = 100;
 // wedged.
 const STUB_REPLY_MS = 10_000;
 
+// How long a stub that has already exited in failure is given to finish saying why: `exit` can beat the last of its
+// stderr, and that text is the whole of the error message.
+const STUB_DRAIN_MS = 250;
+
 // Starts the loop directly, the way every platform without a stub does.
 const spawnHere = (logPath: string, launcher: CliLauncher, args: readonly string[]): number => {
     const logFd = openSync(logPath, "a");
@@ -97,36 +101,68 @@ const spawnHere = (logPath: string, launcher: CliLauncher, args: readonly string
     return child.pid;
 };
 
-// Reads the pid the stub prints on stdout, since the stub's own pid belongs to a process that's already exited by the
-// time anything checks it. Stub failures are reported from its log and stderr.
-const spawnThroughStub = async (stub: string, logPath: string, launcher: CliLauncher, args: readonly string[]): Promise<number> => {
+/* Reads the pid the stub prints on stdout, since the stub's own pid belongs to a process that's already exited by the
+ * time anything checks it. Stub failures are reported from its log and stderr.
+ *
+ * THE LINE IS THE ANSWER, NOT THE END OF THE PIPE, and the difference is the whole of this function. The stub prints a
+ * pid and exits within milliseconds, but the pipes it was handed are INHERITABLE and the loop it starts inherits them
+ * — CreateProcess copies every inheritable handle to the child, not only the three named in STARTUPINFO — so their
+ * write end stays open for as long as the loop runs, which is forever by design. Waiting for stdio EOF (node's `close`
+ * event, which is `exit` AND every stream ended) therefore waits for the resident loop to exit, and every `setup` on
+ * Windows failed with "intentic-launch.exe did not answer within 10000ms" ten seconds after starting the loop
+ * perfectly. Measured on Windows 11: pid on stdout at 21 ms, stub exited at 28 ms, stdout EOF only when the child died.
+ *
+ * So success is the first complete line, failure is a non-zero exit, and the pipes are dropped either way: a handle the
+ * loop still owns would otherwise hold this process's event loop open after the stub has said all it has to say.
+ *
+ * Exported for its own tests: the stub path only runs on Windows in production, but a child that inherits the pipes is
+ * every platform's behaviour, so a stand-in stub reproduces it in CI where no Windows runner is. */
+export const spawnThroughStub = async (stub: string, logPath: string, launcher: CliLauncher, args: readonly string[]): Promise<number> => {
     const [command, ...rest] = stubCommand(stub, logPath, [...launcher, ...args]);
     const child = spawn(command, rest, { detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let answered = "";
     let complained = "";
-    child.stdout?.on("data", (chunk: Buffer) => (answered += chunk.toString()));
-    child.stderr?.on("data", (chunk: Buffer) => (complained += chunk.toString()));
-    const status = await new Promise<number | null>((resolve, reject) => {
-        const timer = globalThis.setTimeout(() => {
-            child.kill();
-            reject(new Error(`${basename(stub)} did not answer within ${STUB_REPLY_MS}ms. Details: ${logPath}`));
-        }, STUB_REPLY_MS);
-        timer.unref();
-        child.once("error", (error) => {
-            clearTimeout(timer);
-            reject(error);
+    try {
+        return await new Promise<number>((resolve, reject) => {
+            const timer = globalThis.setTimeout(() => {
+                child.kill();
+                reject(new Error(`${basename(stub)} did not answer within ${STUB_REPLY_MS}ms. Details: ${logPath}`));
+            }, STUB_REPLY_MS);
+            timer.unref();
+            const settle = (outcome: () => void): void => {
+                clearTimeout(timer);
+                outcome();
+            };
+            const refused = (): Error => {
+                const said = complained.trim();
+                return new Error(`${basename(stub)} could not start the background loop${said === "" ? "" : `: ${said}`}. Details: ${logPath}`);
+            };
+            child.stdout?.on("data", (chunk: Buffer) => {
+                answered += chunk.toString();
+                const end = answered.indexOf("\n");
+                if (end < 0) {
+                    return;
+                }
+                const pid = Number(answered.slice(0, end).trim());
+                settle(() => (Number.isInteger(pid) && pid > 0 ? resolve(pid) : reject(refused())));
+            });
+            child.stderr?.on("data", (chunk: Buffer) => (complained += chunk.toString()));
+            child.once("error", (error) => settle(() => reject(error)));
+            // A stub that exits 0 has started something and printed its pid; the line is already in flight and the
+            // timeout above covers one that never arrives. Only a non-zero exit is news, and it comes with no loop
+            // holding the pipes open, so its stderr ends on its own.
+            child.once("exit", (code) => {
+                if (code === 0) {
+                    return;
+                }
+                void setTimeout(STUB_DRAIN_MS).then(() => settle(() => reject(refused())));
+            });
         });
-        child.once("close", (code) => {
-            clearTimeout(timer);
-            resolve(code);
-        });
-    });
-    const pid = Number(answered.trim());
-    if (status !== 0 || !Number.isInteger(pid) || pid <= 0) {
-        const said = complained.trim();
-        throw new Error(`${basename(stub)} could not start the background loop${said === "" ? "" : `: ${said}`}. Details: ${logPath}`);
+    } finally {
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        child.unref();
     }
-    return pid;
 };
 
 // Answers the pid only once the loop survives the settle window: a pid alone proves only that a process was created,

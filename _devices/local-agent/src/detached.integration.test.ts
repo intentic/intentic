@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isProcessAlive, livePid, livePidRecord, pidFileBody, spawnDetached } from "./detached.js";
+import { isProcessAlive, livePid, livePidRecord, pidFileBody, spawnDetached, spawnThroughStub } from "./detached.js";
 
 // Tests that a returned pid means something is actually running under it, not which spawn flags were used (the
 // runtime's job).
@@ -34,6 +34,41 @@ describe("spawnDetached", () => {
 
         expect(isProcessAlive(pid)).toBe(true);
         process.kill(pid);
+    });
+});
+
+/* The stub path, which only Windows takes in production. What broke there is not Windows-specific: the loop inherits
+ * the stub's pipes and holds them open for its whole life, so the stub's stdio never reaches EOF and anything waiting
+ * for EOF waits forever. A `sh` stand-in reproduces that exactly, which is what lets CI hold the line without a Windows
+ * runner; skipped ON Windows only because a shell script is not a program there. */
+describe.skipIf(process.platform === "win32")("spawnThroughStub", () => {
+    const stubFile = (body: string): string => {
+        const stub = join(mkdtempSync(join(tmpdir(), "stub-")), "launch.sh");
+        writeFileSync(stub, body);
+        chmodSync(stub, 0o755);
+        return stub;
+    };
+
+    // Starts a child that inherits its stdout and stderr, prints that child's pid, exits at once: intentic-launch.exe,
+    // in the two lines of it that this function has to survive.
+    const stubThatLeaksItsPipes = (): string => stubFile("#!/bin/sh\nsleep 30 &\necho $!\n");
+
+    it("answers as soon as the stub prints the pid, without waiting on the loop that holds its pipes open", async () => {
+        const started = Date.now();
+        const pid = await spawnThroughStub(stubThatLeaksItsPipes(), logFile(), [process.execPath], stayAlive);
+
+        expect(isProcessAlive(pid)).toBe(true);
+        // The loop's own lifetime (30s here, unbounded in production) must not be in this number.
+        expect(Date.now() - started).toBeLessThan(5_000);
+        process.kill(pid);
+    });
+
+    // The other half of the same rewrite: with the pid line as the success signal, a stub that fails has to be heard
+    // through its exit code instead — and its stderr is the only place that says why.
+    it("blames a stub that exits in failure with what it said on stderr", async () => {
+        const stub = stubFile("#!/bin/sh\necho 'no such program' >&2\nexit 1\n");
+
+        await expect(spawnThroughStub(stub, logFile(), [process.execPath], stayAlive)).rejects.toThrow("no such program");
     });
 });
 

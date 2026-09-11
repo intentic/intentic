@@ -35,6 +35,10 @@ class FakeSocket implements SocketLike {
     says(): void {
         this.emit("message");
     }
+    // What a socket that cannot reach its far end emits before it closes: no code, no reason, just a fault.
+    errors(): void {
+        this.emit("error");
+    }
     private emit(type: string, code?: number): void {
         for (const listener of this.listeners.get(type) ?? []) {
             listener(code === undefined ? {} : { code });
@@ -57,7 +61,7 @@ const ladder = (delay = 1_000) => {
     };
 };
 
-const dialling = () => {
+const dialling = (delay?: number) => {
     const sockets: FakeSocket[] = [];
     const attached: FakeSocket[] = [];
     const said: string[] = [];
@@ -70,7 +74,7 @@ const dialling = () => {
         },
         hello: () => ({ type: "hello", token: "iht_test", version: "1.0.0" }),
         attach: (socket) => void attached.push(socket),
-        backoff: ladder(),
+        backoff: ladder(delay),
         silenceMs: SILENCE_MS,
         log: (message) => void said.push(message),
         revoked,
@@ -145,6 +149,73 @@ test("a socket that goes silent is abandoned and redialled, though no close ever
         sockets[0]?.drops(1006);
         await vi.advanceTimersByTimeAsync(10_000);
         expect(sockets).toHaveLength(2);
+
+        link.stop();
+        await link.done;
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+/* THE FAR END THAT IS NEVER COMING BACK, which is not a failure the loop can fix and not one it may narrate
+ * forever: a sandbox deleted, a tunnel repointed, a machine left on for a week. Every attempt here errors and
+ * closes without ever opening, exactly as a laptop's agent did 1,992 times into a 2.3 MB log. What is asserted
+ * is BOTH halves: the log stops repeating, and the dialling does not slow down to achieve it. */
+test("a far end that never answers is reported a few times, then retried quietly at the same cadence", async () => {
+    vi.useFakeTimers();
+    try {
+        const { link, sockets, said } = dialling(60_000);
+        for (let attempt = 1; attempt <= 20; attempt += 1) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one attempt after another is the thing under test
+            await vi.waitFor(() => expect(sockets).toHaveLength(attempt));
+            sockets.at(-1)?.errors();
+            sockets.at(-1)?.drops(1006);
+            // oxlint-disable-next-line eslint/no-await-in-loop -- the ladder's own wait, serial by construction
+            await vi.advanceTimersByTimeAsync(60_000);
+        }
+
+        // Twenty minutes of a dead link: eight lines, the last of them a count rather than a repetition.
+        expect(said).toEqual([
+            "connection error",
+            "disconnected (1006); reconnecting in 60s",
+            "connection error",
+            "disconnected (1006); reconnecting in 60s",
+            "connection error",
+            "disconnected (1006); reconnecting in 60s",
+            expect.stringContaining("still nothing after 4 attempts"),
+            expect.stringContaining("14 failed attempts"),
+        ]);
+        // The retries themselves are untouched: one dial per ladder delay, still going, plus the one now armed.
+        await vi.waitFor(() => expect(sockets).toHaveLength(21));
+
+        link.stop();
+        await link.done;
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+// Quiet is a property of the current outage, not of the link: whatever it hid, the next one starts from nothing.
+test("a link that comes back is loud again about the outage after it", async () => {
+    vi.useFakeTimers();
+    try {
+        const { link, sockets, said } = dialling();
+        for (let attempt = 1; attempt <= 5; attempt += 1) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one attempt after another is the thing under test
+            await vi.waitFor(() => expect(sockets).toHaveLength(attempt));
+            sockets.at(-1)?.drops(1006);
+            // oxlint-disable-next-line eslint/no-await-in-loop -- the ladder's own wait, serial by construction
+            await vi.advanceTimersByTimeAsync(1_000);
+        }
+        const whileQuiet = said.length;
+
+        await vi.waitFor(() => expect(sockets).toHaveLength(6));
+        sockets.at(-1)?.opens();
+        await vi.waitFor(() => expect(said.at(-1)).toBe("connected #6"));
+        sockets.at(-1)?.drops(1006);
+
+        expect(said.at(-1)).toBe("disconnected (1006); reconnecting in 1s");
+        expect(said).toHaveLength(whileQuiet + 2);
 
         link.stop();
         await link.done;
