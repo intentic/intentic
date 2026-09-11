@@ -76,13 +76,28 @@ fly certs add '*.sbx.intentic.dev'        # the one wildcard every sandbox hostn
 **Verify with `/health`**, which is also how a single-machine deployment gives itself away:
 
 ```jsonc
-{ "status": "ok", "tunnels": 5, "instance": "148e…", "peers": 1, "remote": 3, "replay": true }
+{ "status": "ok", "tunnels": 5, "instance": "148e…", "peers": 1, "remote": 3, "replay": true, "build": "turbo-9f2c…" }
 ```
 
+- `build` is which image this process is, baked in at build time (`Dockerfile` `ARG BUILD_ID`, set by `docker-release.sh` to the content-addressed tag it pushes). It is the only field that can tell you the **process** is current rather than merely well-configured, and `deploy-ingress.sh` refuses to pass until it matches the image it just deployed.
 - `peers` is how many *other* machines discovery currently sees. **`0` on an app that has been scaled past one machine means discovery is broken**, and every request for a sandbox held next door is a 502.
 - `remote` is how many ids this machine would forward rather than serve. Persistently `0` alongside a healthy `peers` on a multi-region app is worth a look — it usually means one region is holding every tunnel.
 - `replay` is whether hosted sandboxes are replayed to their apps here. **`false` on the production edge means every hosted sandbox answers 502**, with nothing else looking wrong.
 - An answer with **no `instance`/`peers`/`remote` fields at all** predates the cluster: that build is a single machine no matter how many you scale to.
+- An answer with **no `build` field at all** predates the replay lane, and is the exact shape of the outage below: hosted sandboxes cannot be routed by that process at all.
+
+### Why this is now deployed by CI, and what it cost to learn
+
+The edge was the one platform component nothing rolled. `images-platform` in `ci.yml` built and pushed all three images and then rolled the **Komodo stack** — which is the api and the web. The ingress runs here, on Fly, and `intentic-ingress` appeared in exactly one file in the whole repository: the `fly.toml` describing it. So `ingress:latest` moved on every push to main and the machines serving production kept the build they had been started with, for ten days, while the pipeline went green each time.
+
+What that cost: hosted sandboxes had meanwhile moved off tunnels onto `fly-replay`, so a hosted machine dials nothing at all by design. The running edge predated the replay lane, so every hosted sandbox answered `502 … is not connected right now.` at its own public name, probed itself for five minutes, and told its owner to start it over — which could never help, because nothing about the sandbox was wrong. Nothing alarmed: the rows were right, the machines were up, the api was healthy, and the one process between a person and their sandbox was never asked anything.
+
+Two things close it, and they are deliberately independent — one in the pipeline, one at runtime, because the pipeline cannot see a machine somebody rolled back by hand:
+
+- [`_tools/scripts/platform/deploy-ingress.sh`](../../_tools/scripts/platform/deploy-ingress.sh) rolls this app right after its image is pushed and then reads `build` back off the **public** `/health`. A push that does not land is a red job. Inert without `FLY_API_TOKEN`, so forks and local runs skip it.
+- `hosted-health.ts`'s `edge` reading asks this `/health` every sweep and mails the admins when hosted is enabled but the edge cannot serve it — treating a **missing** `replay` field as the fault it is, not as an absent reading.
+
+The commands above remain the runbook for a first deploy, a rollback, or an edge outside CI.
 
 ## Conventions & gotchas
 

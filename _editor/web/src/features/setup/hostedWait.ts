@@ -157,8 +157,14 @@ const unreachableFailure = (input: HostedWaitInput): Stall | undefined => {
         step: `connecting`,
         failure: {
             problem: input.boot?.detail ?? `Your sandbox is running, but it can't be reached at its address.`,
-            remedy: `The sandbox itself is fine, it's the connection to it that didn't come up. Starting it over sets that up again; nothing on it is lost.`,
-            // Box and files are healthy; only the boot's networking half needs rerunning.
+            /* PROMISES NOTHING A RESTART CANNOT KEEP. This used to read "Starting it over sets that up again",
+             * which is true on the tunnel lane and false on this one: a hosted sandbox dials nothing, and when
+             * the fault is the edge in front of it — an old build, a missing prefix — restarting the sandbox
+             * puts a healthy machine back behind the same wall. People pressed it repeatedly and read the
+             * unchanged result as their own fault. The last clause is now a fact rather than a courtesy: the
+             * platform alarms on exactly this (hosted-health.ts `edge`), so somebody is genuinely told. */
+            remedy: `Nothing on your side causes this and nothing on the sandbox is lost: it's the connection in front of it that isn't routing. Starting it over is worth one try. If it comes back, it's ours to fix and we're already being told.`,
+            // Box and files are healthy; only the boot's networking half could need rerunning.
             action: `reboot`,
         },
     };

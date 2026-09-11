@@ -33,6 +33,8 @@ export interface IngressServerOptions {
     readonly heartbeatIntervalMs?: number;
     // App-name prefix for hosted sandboxes (`<prefix>-<id>`); absent disables replay.
     readonly hostedAppPrefix?: string;
+    // Which build this process is, from the image (config.ts `build`); empty means an unreleased one.
+    readonly build?: string;
 }
 
 export interface IngressServer {
@@ -114,6 +116,10 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
                     remote: options.cluster?.remoteCount() ?? 0,
                     // Whether hosted sandboxes are replayed here; a deployment fact easy to get wrong invisibly.
                     replay: options.hostedAppPrefix !== undefined,
+                    // WHICH BUILD IS ANSWERING. Every field above describes what this process was configured to
+                    // do; this one is the only way to tell that the process itself is the one CI last pushed.
+                    // deploy-ingress.sh asserts it, and hosted-health.ts alarms on an edge too old to name it.
+                    build: options.build ?? ``,
                 }),
             );
             return;

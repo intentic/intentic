@@ -79,6 +79,7 @@ const ingress = createIngressServer({
     peers,
     instanceId,
     ...(config.hosted.appPrefix === `` ? {} : { hostedAppPrefix: config.hosted.appPrefix }),
+    build: config.ingress.build,
     log: (event, message) => logger.info(event, message),
 });
 
@@ -88,6 +89,8 @@ logger.info(
         port: config.ingress.port,
         host: config.ingress.host,
         instance: instanceId,
+        // Which build this is, so the first log line of a machine answers "did the deploy land" on its own.
+        build: config.ingress.build === `` ? `(unreleased build)` : config.ingress.build,
         // Whether revocation is enforced, stated plainly so a misconfigured check doesn't look off on purpose.
         revocation: config.platform.url === `` ? `off (no PLATFORM_URL)` : config.platform.url,
         // Whether this machine sees one machine, a static list, or a watched Fly app.

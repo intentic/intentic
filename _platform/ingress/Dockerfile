@@ -22,6 +22,9 @@
 #   INGRESS_PEERS           off Fly only: the other machines, `host[:port[:internalPort]]` comma-separated, with
 #                           INGRESS_ADVERTISE_HOST naming this one as they reach it. On Fly both are derived.
 #   INGRESS_INSTANCE_ID     this machine's name in logs and on /health; defaults to FLY_MACHINE_ID.
+# The ONE value that is baked rather than injected, because a deployment must not be able to claim a build it
+# is not running: BUILD_ID becomes INGRESS_BUILD, which /health reports and deploy-ingress.sh asserts against
+# the tag it just pushed. Left at `unreleased` by a hand-run `docker build`.
 # The private half NEVER appears here: this image can verify grants and can never mint one, which is the whole
 # of why a compromised edge cannot make anything reachable.
 # BUN CANARY, PINNED BY DIGEST, AND THE ONE REASON IT IS NOT A RELEASED TAG: the edge asks the platform
@@ -41,6 +44,10 @@ FROM oven/bun:canary-slim@sha256:6285dc2ad21f26e6b57f6887905cccccc62f151a6e4b433
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 WORKDIR /app
 COPY . /app
-ENV NODE_ENV=production INGRESS_HOST=0.0.0.0 INGRESS_PORT=8080
+# Declared AFTER the FROM it applies to, and defaulted so a hand build needs no argument. docker-release.sh
+# passes the content-addressed tag it pushes, so identical content always bakes an identical value and the
+# registry-side retag skip stays correct.
+ARG BUILD_ID=unreleased
+ENV NODE_ENV=production INGRESS_HOST=0.0.0.0 INGRESS_PORT=8080 INGRESS_BUILD=$BUILD_ID
 EXPOSE 8080
 CMD ["bun", "src/main.ts"]

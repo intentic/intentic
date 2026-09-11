@@ -1136,6 +1136,19 @@ jobs:
       - run: DEPLOY_VERSION="${GITHUB_SHA::8}" bash _tools/scripts/platform/deploy-platform.sh
         shell: bash
 
+      # AND THE EDGE, which the step above does not roll and for ten days nobody noticed it didn't. The Komodo
+      # stack is the api and the web; the ingress runs on Fly, so pushing its image above changed nothing about
+      # what production was serving. Hosted sandboxes had meanwhile moved onto `fly-replay`, which the running
+      # edge was too old to do, so each one answered 502 at its own address and told its owner to start it over.
+      # deploy-ingress.sh rolls it and then reads the build back off the public /health, so a push that does not
+      # land is a red job rather than a silent one.
+      #
+      # Inert without FLY_API_TOKEN, exactly as deploy-platform.sh is without a stack: a fork sees a skip.
+      - run: bash _tools/scripts/platform/deploy-ingress.sh
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
       # AND THEN CHECK THAT A STRANGER CAN STILL SIGN IN, which nothing else here does.
       #
       # The step above proves the api boots and answers /health. It says nothing about the front door, and the

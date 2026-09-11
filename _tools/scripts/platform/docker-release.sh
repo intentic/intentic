@@ -67,9 +67,22 @@ for registry in $REGISTRIES; do
         tag_args+=(-t "$registry/$APP:$tag")
     done
 done
+# WHAT THE IMAGE WILL SAY IT IS, and the reason it is the content-addressed tag rather than the commit: this
+# value is baked, so if it were $GITHUB_SHA every commit would change image content and the skip above — the
+# whole point of which is that identical content is never rebuilt — would never hit again. The turbo hash IS
+# the content, so identical content bakes an identical value and the two stay consistent by construction.
+#
+# Passed only to an image that DECLARES it, because docker warns about a build-arg nothing consumed and a
+# warning every platform image prints on every push is how real ones stop being read. Declaring `ARG BUILD_ID`
+# is how an app opts in.
+BUILD_ID="${HASH_TAG:-${SHORT_SHA:+sha-$SHORT_SHA}}"
+build_args=()
+if grep -q '^ARG BUILD_ID' Dockerfile; then
+    build_args+=(--build-arg "BUILD_ID=${BUILD_ID:-unreleased}")
+fi
 # --provenance=false keeps a plain manifest (not an attestation-bearing OCI index) so the hash-tag alias
 # above stays a straight retag. -f is explicit because a pruned context carries its own copy of the Dockerfile.
-docker build --provenance=false -f Dockerfile "${tag_args[@]}" "$CONTEXT"
+docker build --provenance=false -f Dockerfile "${build_args[@]}" "${tag_args[@]}" "$CONTEXT"
 
 for registry in $REGISTRIES; do
     for tag in $TAGS ${TURBO_HASH:+turbo-$TURBO_HASH}; do

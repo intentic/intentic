@@ -16,6 +16,19 @@ export const configSchema = z.object({
             port: z.coerce.number().int().positive().default(8080),
             // Binds every interface; TLS terminates in front of this and the process itself speaks plain HTTP.
             host: z.string().default(`0.0.0.0`),
+            /* WHICH BUILD IS ACTUALLY RUNNING, baked into the image at build time (Dockerfile BUILD_ID, set by
+             * docker-release.sh to the same content-addressed tag it pushes) and never set by the deployment.
+             * INGRESS_BUILD.
+             *
+             * This exists because its absence cost a customer an evening. The edge is the one platform component
+             * nothing rolled automatically: CI pushed `ingress:latest` and the Fly machines kept serving a build
+             * from ten days earlier, which is invisible from outside a process whose /health said only `status`
+             * and `tunnels`. Hosted sandboxes had moved to `fly-replay` in that window, the old edge had no
+             * replay in it, and every hosted sandbox answered 502 at its own public name for five minutes and
+             * then told its owner to start it over. Empty means a build that did not come from the release
+             * script; deploy-ingress.sh compares this against the tag it just pushed and goes red on a
+             * mismatch, so a push that does not land can no longer look like a deploy. */
+            build: z.string().default(``),
             // Configures the cluster: one anycast address behind several machines, forwarding to whichever holds a
             // tunnel.
             // Instance's name to peers and /health; empty falls back to a machine id, else random. INGRESS_INSTANCE_ID.

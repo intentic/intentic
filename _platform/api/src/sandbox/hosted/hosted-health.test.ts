@@ -27,14 +27,30 @@ const config = (over: Record<string, unknown> = {}): Config =>
         },
     }) as unknown as Config;
 
+// The edge's own /health, as a CURRENT build answers it: `replay` present and true is what says this edge can
+// route a hosted sandbox at all. Every stub below answers it, because the sweep asks on every pass and a stub
+// that stayed silent would fail each fleet test for the edge's reason rather than its own.
+const EDGE_URL = `https://ingress.sbx.test/health`;
+const EDGE_OK = { status: `ok`, tunnels: 0, instance: `m1`, peers: 1, remote: 0, replay: true, build: `turbo-abc` };
+
+const edgeAnswer = (target: string, edge: unknown): Response | undefined =>
+    target === EDGE_URL ? new Response(JSON.stringify(edge)) : undefined;
+
 const stubApps = (...names: string[]) => {
-    vi.stubGlobal(`fetch`, () => Promise.resolve(new Response(JSON.stringify({ apps: names.map((name) => ({ name })) }))));
+    vi.stubGlobal(`fetch`, (url: URL | string) =>
+        Promise.resolve(edgeAnswer(String(url), EDGE_OK) ?? new Response(JSON.stringify({ apps: names.map((name) => ({ name })) }))),
+    );
 };
 
 // The org's app list and what each app runs, since ownership is now read off the provider, not a missing row.
-const stubFly = (apps: string[], machines: Record<string, unknown[]> = {}) => {
+// `edge` is what the edge answers, so a test can hand back an old build without touching the Fly half.
+const stubFly = (apps: string[], machines: Record<string, unknown[]> = {}, edge: unknown = EDGE_OK) => {
     vi.stubGlobal(`fetch`, (url: URL | string) => {
         const target = String(url);
+        const edgeResponse = edgeAnswer(target, edge);
+        if (edgeResponse !== undefined) {
+            return Promise.resolve(edgeResponse);
+        }
         const app = /\/apps\/([^/]+)\/machines$/.exec(target)?.[1];
         const body =
             app !== undefined
@@ -131,6 +147,53 @@ describe(`hosted health`, () => {
         const health = await sweepHostedHealth(prisma, config({ poolSize: 0, regionEu: ``, maxMachines: 1 }), logger);
         expect(health?.capacity).toEqual({ used: 1, cap: 1, full: true, reason: `cap` });
         expect(health?.healthy).toBe(false);
+    });
+
+    /* THE OUTAGE THIS WATCH WAS MISSING, and the shape of it is the whole point: every row has its machine,
+     * both pools are stocked, the fleet and the database agree completely — and not one hosted sandbox can be
+     * reached, because the process in front of them is a build from before the replay lane existed. The sweep
+     * used to call this healthy, and did for ten days while people were told to start their sandboxes over. */
+    it(`is unhealthy on a perfect fleet when the edge is an old build with no replay lane`, async () => {
+        const { status, tunnels } = EDGE_OK;
+        // Exactly what the pre-replay edge answered: no `replay` key at all, so absence is the only signal.
+        stubFly([`intentic-sbx-a`, `intentic-sbx-pool-1`], {}, { status, tunnels });
+        const prisma = prismaWith([taken(`intentic-sbx-a`)], [warm(`intentic-sbx-pool-1`)]);
+        const health = await sweepHostedHealth(prisma, config({ poolSize: 1, regionEu: `` }), logger);
+        expect(health?.missing).toEqual([]);
+        expect(health?.strangers).toEqual([]);
+        expect(health?.edge?.replay).toBeUndefined();
+        expect(health?.edge?.fault).toContain(`OLD BUILD`);
+        expect(health?.healthy).toBe(false);
+    });
+
+    // Told apart from the old build above because the remedy differs: one variable, not a deploy.
+    it(`is unhealthy, and blames the prefix, when the edge runs with replay switched off`, async () => {
+        stubFly([`intentic-sbx-pool-1`], {}, { ...EDGE_OK, replay: false });
+        const prisma = prismaWith([], [warm(`intentic-sbx-pool-1`)]);
+        const health = await sweepHostedHealth(prisma, config({ poolSize: 1, regionEu: `` }), logger);
+        expect(health?.edge?.replay).toBe(false);
+        expect(health?.edge?.fault).toContain(`HOSTED_APP_PREFIX`);
+        expect(health?.healthy).toBe(false);
+    });
+
+    // The edge unreachable means nothing is reachable, tunnel lane included; it must not read as a fleet fault.
+    it(`says so when the edge cannot be reached at all`, async () => {
+        vi.stubGlobal(`fetch`, (url: URL | string) =>
+            String(url) === EDGE_URL ? Promise.reject(new Error(`getaddrinfo ENOTFOUND`)) : Promise.resolve(new Response(JSON.stringify({ apps: [] }))),
+        );
+        const health = await sweepHostedHealth(prismaWith([], []), config({ poolSize: 0, regionEu: `` }), logger);
+        expect(health?.edge?.fault).toContain(`could not be reached at all`);
+        expect(health?.healthy).toBe(false);
+    });
+
+    // No ingress means no hosted lane at all (hostedEnabled → ingressEnabled), so there is no edge to ask and
+    // nothing to alarm about. Pinned because the edge probe must never fire on a platform that has no edge.
+    it(`asks no edge when the platform has no ingress configured`, async () => {
+        const fetchSpy = vi.fn();
+        vi.stubGlobal(`fetch`, fetchSpy);
+        const noIngress = { ...config({ poolSize: 1, regionEu: `` }), ingress: { url: ``, signingKey: ``, zone: `` } } as never;
+        expect(await sweepHostedHealth(prismaWith([], []), noIngress, logger)).toBeUndefined();
+        expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it(`does nothing at all when the lane is off`, async () => {

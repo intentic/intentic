@@ -58,7 +58,7 @@ const verdict = computed(() => {
         >
             <template #control>
                 <SegmentedControl
-                    :model-value="settings?.dependencyFreshness ?? `off`"\
+                    :model-value="settings?.dependencyFreshness ?? `off`"
                     :options="freshnessOptions"
                     @update:model-value="(dependencyFreshness: string) => patch({ dependencyFreshness: dependencyFreshness as DependencyFreshness })"
                 />

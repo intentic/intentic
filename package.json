@@ -48,7 +48,7 @@
         "demo:down": "tsgo -b tsconfig.libs.json && node _deploy/cli/dist/demo.js down",
         "demo:clear": "tsgo -b tsconfig.libs.json && node _deploy/cli/dist/demo.js clear",
         "publish:images": "bash _tools/scripts/image/publish-images.sh",
-        "publish:platform-images": "turbo run docker:release --filter=@intentic/api --filter=@intentic/web",
+        "publish:platform-images": "turbo run docker:release --filter=@intentic/api --filter=@intentic/web --filter=@intentic/ingress",
         "build:sandbox": "bash _tools/scripts/image/prepare-image-trees.sh && node _tools/scripts/image/compose-image-dockerfile.mjs standard > .image-out/Dockerfile.standard && DOCKER_BUILDKIT=1 docker build --build-context trees=.image-out -f .image-out/Dockerfile.standard -t intentic-sandbox:dev .",
         "dev:sandbox": "node _sandbox/sandbox/scripts/dev-sandbox.mjs",
         "swap:sandbox": "sh _sandbox/sandbox/scripts/dev-sandbox.sh",

@@ -47,23 +47,46 @@ export interface ReachReporter {
     readonly status: () => ReachState;
 }
 
+/* WHICH LANE THE WORDS DESCRIBE, and getting this wrong is why a customer sat in front of a 502 for five
+ * minutes and then pressed a button that could not help. A hosted sandbox (posture `direct`) dials NO TUNNEL
+ * BY DESIGN: it is a Fly app the platform's edge replays requests to. Every failure below used to say "its
+ * tunnel" regardless, so its owner read a sentence about a component their sandbox does not have, phrased as
+ * something that was still coming up — and the only true remedy, rolling the edge, was nobody's to guess at
+ * from that text. The daemon knows its own posture at the moment it starts probing, so it says which thing
+ * is actually not answering. */
+type ProbeLane = "tunnel" | "direct";
+
+const wording = (lane: ProbeLane, publicUrl: string) =>
+    lane === `direct`
+        ? {
+              timedOut: `${publicUrl} accepted the connection but never answered: the edge is routing here, but nothing is serving yet.`,
+              unreachable: `${publicUrl} could not be reached from inside the sandbox: the edge in front of it is not answering for this address.`,
+              // No "yet": on this lane nothing inside the sandbox will change this, which the old wording implied.
+              status: (code: number) => `${publicUrl} answered ${code} instead of this sandbox: the platform's edge is not routing to this machine.`,
+          }
+        : {
+              timedOut: `${publicUrl} accepted the connection but never answered: its tunnel is up with nothing behind it yet.`,
+              unreachable: `${publicUrl} could not be reached from inside the sandbox, its tunnel has not come up.`,
+              status: (code: number) => `${publicUrl} answered ${code} instead of this sandbox, its tunnel is not routing here yet.`,
+          };
+
 // One round trip to our own public address, over plain fetch since this must verify TLS like a real browser would.
-// Every failure is worded for the setup page it lands on.
-export const probeSelf = async (publicUrl: string, expectedId: string | undefined): Promise<{ ok: true } | { ok: false; detail: string }> => {
+// Every failure is worded for the setup page it lands on, and for the lane this sandbox is actually on.
+export const probeSelf = async (
+    publicUrl: string,
+    expectedId: string | undefined,
+    lane: ProbeLane = `tunnel`,
+): Promise<{ ok: true } | { ok: false; detail: string }> => {
+    const says = wording(lane, publicUrl);
     let response: Response;
     try {
         response = await fetch(`${publicUrl}/health`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
     } catch (error) {
         const timedOut = error instanceof DOMException && error.name === "TimeoutError";
-        return {
-            ok: false,
-            detail: timedOut
-                ? `${publicUrl} accepted the connection but never answered: its tunnel is up with nothing behind it yet.`
-                : `${publicUrl} could not be reached from inside the sandbox, its tunnel has not come up.`,
-        };
+        return { ok: false, detail: timedOut ? says.timedOut : says.unreachable };
     }
     if (!response.ok) {
-        return { ok: false, detail: `${publicUrl} answered ${response.status} instead of this sandbox, its tunnel is not routing here yet.` };
+        return { ok: false, detail: says.status(response.status) };
     }
     const body = (await response.json().catch(() => undefined)) as HealthAnswer | undefined;
     // A 200 from something else is the worst failure to leave unnamed: traffic looks healthy and goes elsewhere.
@@ -81,6 +104,8 @@ export const createReachReporter = (config: Config, logger: Logger, bootOf: () =
     let backoff = 3_000;
     let status: ReachState = { state: "off" };
     let unsubscribeBoot: (() => void) | undefined;
+    // Set from the posture the moment probing starts; only `direct` and `tunnel` ever reach the loop.
+    let lane: ProbeLane = "tunnel";
     const publicUrl = config.sandbox.publicUrl;
     const expectedId = sandboxIdFromToken(config.connectToken);
 
@@ -141,7 +166,7 @@ export const createReachReporter = (config: Config, logger: Logger, bootOf: () =
     };
 
     const attempt = async (): Promise<void> => {
-        const verdict = await probeSelf(publicUrl, expectedId);
+        const verdict = await probeSelf(publicUrl, expectedId, lane);
         if (verdict.ok) {
             logger.info({ publicUrl }, "sandbox is reachable at its public address");
             status = { state: "reachable", at: Date.now() };
@@ -181,6 +206,7 @@ export const createReachReporter = (config: Config, logger: Logger, bootOf: () =
                 void tell("unreachable", detail, false);
                 return;
             }
+            lane = posture.by === `direct` ? `direct` : `tunnel`;
             deadline = Date.now() + REACH_GIVE_UP_MS;
             status = { state: "checking", at: Date.now() };
             reportWhenConverged();

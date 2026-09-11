@@ -58,6 +58,22 @@ describe("probeSelf", () => {
         expect(verdict.ok === false && verdict.detail).toContain("502");
     });
 
+    /* A HOSTED SANDBOX HAS NO TUNNEL, so it must not be told about one. It is a Fly app the platform's edge
+     * replays to (ingress-tunnel.ts reachPosture → `direct`) and dials nothing itself, so the 502 it meets
+     * when the edge is not routing is the edge's, and the old wording — "its tunnel is not routing here yet" —
+     * named a component it does not have and implied waiting would fix it. Five minutes of that is what a
+     * customer read before being offered a restart that could not help. */
+    it("blames the edge, not a tunnel, for a hosted sandbox's 502", async () => {
+        vi.stubGlobal("fetch", async () => new Response("not connected right now", { status: 502 }));
+        const verdict = await probeSelf(PUBLIC_URL, "abc", "direct");
+        expect(verdict.ok).toBe(false);
+        if (verdict.ok === false) {
+            expect(verdict.detail).toContain("502");
+            expect(verdict.detail).toContain("edge");
+            expect(verdict.detail).not.toContain("tunnel");
+        }
+    });
+
     it("names an address that cannot be reached at all", async () => {
         vi.stubGlobal("fetch", async () => {
             throw new TypeError("fetch failed");
