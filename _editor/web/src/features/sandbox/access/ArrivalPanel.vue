@@ -14,12 +14,15 @@ import Checkbox from "primevue/checkbox";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../client/sandboxClient";
+import { useSandbox } from "../client/useSandbox";
 import { helpTopics, SOURCE_GUIDES } from "../overview/assistantGuide";
 
 // Inbound half of <MoveCard>: one picker, one checklist, one report for all four arrival sources. The daemon detects
 // the source from the file itself, so the picker never asks; every source becomes a plan first, and only Apply writes.
 // Credentials are a separate consent, the same lock-in-a-box as <ExportBundleDialog>'s.
 
+// Held for the one write the daemon cannot make itself (adoptPresentation below), and for the id to make it against.
+const sandbox = useSandbox();
 const hosts = ref<ArrivalHost[]>([]);
 const picked = ref<AssistantSource | undefined>(undefined);
 const plan = ref<ArrivalPlan | undefined>(undefined);
@@ -112,7 +115,36 @@ const apply = (): Promise<void> =>
         );
         plan.value = undefined;
         picked.value = undefined;
+        await adoptPresentation(report.value.presentation);
     }, `Could not bring that in.`);
+
+// The one part of an arrival the daemon cannot finish. A sandbox's name and switcher logo are platform rows, so the
+// bundle carries them and this — the side holding the owner's session — writes them. Without it a migrated sandbox
+// keeps the auto-name it was minted with and draws the monogram of that name, which is how a move announced itself
+// as "W" instead of the workspace it actually was.
+//
+// Never fails the arrival: every byte is already on disk by the time this runs, and a rename that did not take is
+// worth a line of prose, not an error over a successful import.
+const adopted = ref<string | undefined>(undefined);
+const adoptPresentation = async (presentation: ArrivalReport["presentation"]): Promise<void> => {
+    adopted.value = undefined;
+    const id = sandbox.active.value?.id;
+    if (presentation === undefined || id === undefined) {
+        return;
+    }
+    try {
+        await sandbox.update(id, {
+            ...(presentation.name === undefined ? {} : { name: presentation.name }),
+            ...(presentation.image === undefined ? {} : { image: presentation.image }),
+        });
+        adopted.value =
+            presentation.name === undefined
+                ? `Took the logo from the bundle.`
+                : `Now called "${presentation.name}"${presentation.image === undefined ? `` : `, with its logo`}, taken from the bundle.`;
+    } catch {
+        adopted.value = `The files arrived, but this sandbox kept its own name and logo — the bundle's could not be applied.`;
+    }
+};
 
 const cancel = (): Promise<void> =>
     runPlan(async () => {
@@ -292,6 +324,8 @@ const cancel = (): Promise<void> =>
                 <StatusBadge variant="success" label="arrived" dot />
                 <p class="text-2xs text-subtle">{{ report.applied.length }} item{{ report.applied.length === 1 ? `` : `s` }}.</p>
             </div>
+            <!-- Taking the source's name and logo renames what the owner is looking at, so it is said, never silent. -->
+            <p v-if="adopted" class="text-2xs text-subtle">{{ adopted }}</p>
             <!-- Label is a slot so a failure group can wear its own tone without RowGroup knowing about tones. -->
             <RowGroup v-if="report.failed.length > 0" flat>
                 <template #label><span :class="ui.sectionLabel(`text-danger`)">Didn't land</span></template>
