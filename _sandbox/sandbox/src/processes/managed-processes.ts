@@ -68,26 +68,42 @@ export interface ManagedProcessesOptions {
  * Keyed by port, not session name: it is unique per launch, filename-safe without sanitizing, and
  * container-local, this history is meant to die with the pane.
  *
- * npm_config_verify-deps-before-run: pnpm's own pre-run install, switched off, because the daemon already
+ * PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: pnpm's own pre-run install, switched off, because the daemon already
  * decided whether to install. Every dev command here runs behind a `test -d node_modules || pnpm install`
  * guard, and the baked starter site arrives with its node_modules copied out of the image so that guard is
- * satisfied on a fresh box. pnpm 11 then re-examines the workspace on its own before `pnpm --filter <app> dev`
+ * satisfied on a fresh box. pnpm then re-examines the workspace on its own before `pnpm --filter <app> dev`
  * (a copied tree never passes its up-to-date check) and runs a full install first: a lockfile walk, a
  * supply-chain verification that can go to the registry, every lifecycle script. Measured on a warm box that
  * is a second; on the throttled first boot of a hosted machine, or behind a slow network, it is minutes of a
  * pane whose foreground command is `node`, which the launch state below can only call "starting", and a
  * verification that fails leaves the shell at its prompt, which reads as the dev server having crashed. Either
- * way the site the sandbox exists to show sat behind "Preparing the preview…". The DASHED spelling is the one
- * pnpm reads from the environment (`npm_config_verify_deps_before_run` is ignored), and a dashed name is
- * legal in a process environment even though no shell can name it as a variable: tmux `-e` sets it and zsh
- * passes it through to every child. Inert for anything that is not pnpm. */
+ * way the site the sandbox exists to show sat behind "Preparing the preview…".
+ *
+ * And that install can END AT A QUESTION. When the node_modules it walks into is not one it would have built
+ * — a different layout version, hoist pattern or store, which is what a tree lifted out of an image and into a
+ * workspace can look like — pnpm asks `The modules directory at "…" will be removed and reinstalled from
+ * scratch. Proceed? (Y/n)` and waits. A pane is a TTY, so pnpm prompts instead of failing, and the preview
+ * then sits behind "Preparing the preview…" for as long as the sandbox lives, because the keystroke it wants
+ * is in a terminal nobody told the user to open. Switching the pre-run install off is what closes that, by
+ * never reaching it: the three levers pnpm names for the prompt itself are all out of reach here. `CI=true`
+ * also flips `frozen-lockfile` on, so the install fails instead of asking; `--force` is not ours to pass,
+ * since pnpm builds this install's argv itself; and `confirmModulesPurge: false` is read from a workspace
+ * manifest only — measured, it is not read from the environment under any spelling — and the manifests here
+ * belong to the user's repos, not to the daemon.
+ *
+ * THE PREFIX IS THE WHOLE POINT. pnpm 11 and 12 read their settings from `PNPM_CONFIG_<UPPER_SNAKE>` (the
+ * generic reader in pnpm's config/reader/lib/env.js) and ignore the `npm_config_` prefix entirely — measured
+ * both ways, against `pnpm store path` for a setting with a visible value and against a `pnpm run` over a
+ * stale tree for this one. The spelling that stood here before (`npm_config_verify-deps-before-run`) was
+ * therefore inert, and every preview pane went on paying for the install it was meant to prevent, up to and
+ * including that prompt. Inert for anything that is not pnpm. */
 export const launchEnv = (spec: ProcessSpec & { port: number }, path: string): Record<string, string> => ({
     ...spec.env,
     ...Object.fromEntries((spec.portEnv ?? []).map((name) => [name, String(spec.port)])),
     PATH: `${join(spec.cwd, "node_modules", ".bin")}:${path}`,
     PORT: String(spec.port),
     HISTFILE: `/tmp/intentic-panel-${spec.port}.zsh_history`,
-    "npm_config_verify-deps-before-run": "false",
+    PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false",
 });
 
 const defaultRunner: ProcessRunner = {
