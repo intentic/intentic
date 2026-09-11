@@ -54,6 +54,26 @@ vi.mock(`./useDevices`, async () => {
         },
     };
 });
+// Reconnecting an unreachable machine mints a credential rather than running anything, so the pairing door is
+// recorded, not opened: which machine this page asked a command for is the whole of what it decides.
+const pairingsAsked: string[] = [];
+vi.mock(`./usePeerConnect`, async () => ({
+    // The door's own descriptor is real, so the dialog is mounted on the same one the app opens.
+    ...(await import(`./usePeerConnect`)),
+    usePeerConnect: () => ({
+        peerFor: () => undefined,
+        pairToken: ref(`pair_abc`),
+        minting: ref(false),
+        error: ref(undefined),
+        connect: (id: string) => {
+            pairingsAsked.push(id);
+            return Promise.resolve();
+        },
+        start: () => {},
+        stop: () => {},
+        close: () => {},
+    }),
+}));
 // Revoking another device's access is owner-only, matching the daemon's own floor.
 const owner = ref(true);
 vi.mock(`../secrets/useRole`, () => ({ useRole: () => ({ isOwner: owner }) }));
@@ -68,7 +88,7 @@ const latest = ref<string | undefined>(`1.183.0`);
 vi.mock(`../overview/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ latest }) }));
 // The owner's per-device switches, so a row can say "Manage sandboxes is off" before a click; mocked since the
 // real hook needs vue-query's injected client.
-const capabilities = ref<{ id: string; config: Record<string, string> }[]>([]);
+const capabilities = ref<{ id: string; kind: string; config: Record<string, string> }[]>([]);
 vi.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
 // ContainerHealthCard needs the active sandbox's boot report, which this file's useSandbox stub omits.
 vi.mock(`./ContainerHealthCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
@@ -172,6 +192,7 @@ afterEach(() => {
     mirrorCalls.length = 0;
     verbCalls.length = 0;
     revokeCalls.length = 0;
+    pairingsAsked.length = 0;
     startedTurns.length = 0;
     mirrorAnswer = { ok: true, message: `Port mirroring OFF for: work-abc` };
     app?.unmount();
@@ -223,6 +244,37 @@ it(`falls back to the platform, and ages a device that is not here`, () => {
     const text = el.textContent ?? ``;
     expect(text).toContain(`Linux`);
     expect(text).toContain(`last seen 3h ago`);
+});
+
+// A machine holding no connection is the one state nothing else on this page can act on: every other button
+// travels over the socket it isn't holding. So the way back in is offered here, rather than on the capability
+// card the reader would have to go find.
+const asleep = (): Device => ({ key: `rog`, label: `rog`, hostId: `host-rog`, online: false, platform: `linux`, gap: `offline` });
+
+it(`hands an offline machine a fresh pairing command without leaving its page`, async () => {
+    const el = mount([asleep()]);
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`Asleep or offline.`);
+    // The cheaper of the two ways back, for a machine that is awake with only its agent down.
+    expect(text).toContain(`intentic-machine run`);
+
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).includes(`Reconnect`))?.click();
+    await nextTick();
+    expect(pairingsAsked).toEqual([`host-rog`]);
+    expect(everything()).toContain(`Connect host-rog`);
+});
+
+// Minting is owner-only at the daemon, so a member is never handed a button whose answer is a 403.
+it(`offers a member the sentence without the pairing`, () => {
+    owner.value = false;
+    expect(labels(mount([asleep()]))).not.toContain(`Reconnect`);
+});
+
+// Desktop sync enrolls a folder, not a device: there is no host capability to re-pair, and the Add a device
+// flow owns the one-liner that would enroll one.
+it(`offers no pairing for a machine reached only through desktop sync`, () => {
+    const el = mount([{ key: `laptop`, label: `laptop`, sync: paired(), platform: `linux` }]);
+    expect(labels(el)).not.toContain(`Reconnect`);
 });
 
 // Names chosen so alphabetical order is the exact opposite of the useful order.
@@ -298,7 +350,7 @@ const labels = (el: HTMLElement): string[] => [...el.querySelectorAll(`button, a
 // Every switch granted: the state the verb tests below assume; without it the row states the missing grant
 // instead.
 const granted = (): void => {
-    capabilities.value = [{ id: `host-1`, config: { platform: `linux`, shell: `on`, sandboxes: `on`, sandboxRemove: `on` } }];
+    capabilities.value = [{ id: `host-1`, kind: `host`, config: { platform: `linux`, shell: `on`, sandboxes: `on`, sandboxRemove: `on` } }];
 };
 
 it(`puts one verb on the row and everything else behind a menu`, () => {
@@ -435,14 +487,14 @@ it(`explains the gap without a button when there is no card to connect the machi
 });
 
 it(`names the switch a connected device is missing before anything is clicked`, () => {
-    capabilities.value = [{ id: `host-1`, config: { platform: `linux`, shell: `on` } }];
+    capabilities.value = [{ id: `host-1`, kind: `host`, config: { platform: `linux`, shell: `on` } }];
     const el = mount([managed(true)]);
     expect(el.textContent ?? ``).toContain(`Manage sandboxes on this device`);
     expect(labels(el)).toContain(`Open its permissions`);
 });
 
 it(`names the removal switch on a machine that may do everything else`, () => {
-    capabilities.value = [{ id: `host-1`, config: { platform: `linux`, shell: `on`, sandboxes: `on` } }];
+    capabilities.value = [{ id: `host-1`, kind: `host`, config: { platform: `linux`, shell: `on`, sandboxes: `on` } }];
     const text = mount([managed(true)]).textContent ?? ``;
     expect(text).toContain(`Remove sandboxes from this device`);
     expect(text).not.toContain(`Turn on "Manage sandboxes on this device"`);

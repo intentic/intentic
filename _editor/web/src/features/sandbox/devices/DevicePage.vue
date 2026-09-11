@@ -17,7 +17,7 @@ import {
     StatusBadge,
     ui,
 } from "@intentic/ui";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
 import DeviceRunners from "./DeviceRunners.vue";
 import { boardRoute } from "./deviceLinks";
@@ -27,7 +27,9 @@ import { useDeviceOps } from "./deviceOps";
 import { type ConflictAsk, conflictAsk } from "./conflictAsk";
 import { type DeviceScopes, deviceDoors, deviceHardware, lastSeenNote, manageBlock, osLabel, osTitle, syncNote, syncStopped } from "./deviceFacts";
 import { startAgent } from "../../agents/fleet/agentActions";
+import HostConnectDialog from "../../capabilities/connect/HostConnectDialog.vue";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
+import { machineGrants } from "../../capabilities/model/connections";
 import { useRole } from "../secrets/useRole";
 
 // One machine, as a page rather than an accordion body: who it is, what it wants from you, what this
@@ -49,11 +51,18 @@ const ops = useDeviceOps(() => row, refetch);
 
 // Why a row has no buttons, read from the capability rather than discovered by a click.
 const { capabilities } = useCapabilities();
-const scopes = computed<DeviceScopes | undefined>(() =>
-    device.value.hostId === undefined ? undefined : capabilities.value.find((capability) => capability.id === device.value.hostId)?.config,
+const capability = computed(() =>
+    device.value.hostId === undefined ? undefined : capabilities.value.find((entry) => entry.id === device.value.hostId),
 );
+const scopes = computed<DeviceScopes | undefined>(() => capability.value?.config);
 const block = computed(() => manageBlock(device.value, scopes.value));
-const concerns = computed(() => deviceAttention(row, { block: block.value, latest, readAt }));
+
+// Owner-only, per machine, no fleet-wide equivalent: the only path that works for a laptop that is lost,
+// wiped, or someone else's. Minting this machine a fresh pairing has the same floor (the daemon refuses a
+// member's), so the same answer decides whether Reconnect is offered at all.
+const { isOwner } = useRole();
+
+const concerns = computed(() => deviceAttention(row, { block: block.value, latest, readAt, canPair: isOwner.value }));
 
 const cardRoute = (fix: DeviceCardFix): RouteLocationRaw => {
     const card = { name: `capabilities`, params: { card: fix.card } };
@@ -66,6 +75,16 @@ const hardware = computed(() => [...deviceHardware(device.value), ...deviceDoors
 
 const switches = computed(() => deviceSwitches(row));
 
+// Reconnecting is the one remedy that doesn't travel over the machine's own socket — there isn't one — so it is a
+// dialog rather than an op: it mints a fresh single-use command here for the reader to run out there. Opened from
+// the sentence that explains the silence, instead of sending anyone off to find the machine's capability card.
+const reconnecting = ref(false);
+// Which installer the command is built for: the card's own platform first, the row's fallback second, the same
+// order manageBlock reads them in.
+const connectPlatform = computed(() => String(scopes.value?.[`platform`] ?? device.value.platform ?? `linux`));
+// What the machine will enforce once it is back, in its card's own words; the dialog states it under the command.
+const grants = computed(() => machineGrants(capability.value));
+
 const conflictTurn = (group: DeviceSandboxGroup): ConflictAsk =>
     conflictAsk({
         machine: device.value.label,
@@ -75,10 +94,6 @@ const conflictTurn = (group: DeviceSandboxGroup): ConflictAsk =>
         conflicts: group.folder?.conflicts ?? 0,
         conflictedPaths: group.folder?.conflictedPaths ?? [],
     });
-
-// Owner-only, per machine, no fleet-wide equivalent: the only path that works for a laptop that is lost,
-// wiped, or someone else's.
-const { isOwner } = useRole();
 
 // The one sandbox this page should arrive with unfolded; <DeviceDetail> unfolds anything needing attention
 // on its own.
@@ -174,6 +189,20 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                         v-tooltip.top="concern.fix.hint"
                         @click="void ops.runAgent(concern.fix.op)"
                     />
+                    <!--
+                        Not gated on `ops.working`, unlike every button above: this one runs nothing on the machine,
+                        it only asks this sandbox for a command to carry there.
+                    -->
+                    <Button
+                        v-else-if="concern.fix?.kind === `connect`"
+                        size="small"
+                        severity="secondary"
+                        :label="concern.fix.label"
+                        v-tooltip.top="concern.fix.hint"
+                        @click="reconnecting = true"
+                    >
+                        <template #icon><Icon name="desktop" /></template>
+                    </Button>
                 </span>
             </Notice>
 
@@ -420,6 +449,21 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             </RowNote>
             <RowNote v-else-if="ops.outcome.value?.key === ops.accessKey.value">{{ ops.outcome.value.message }}</RowNote>
         </RowGroup>
+
+        <!--
+            The machine's own pairing dialog, the one its capability card opens, mounted where its silence is read:
+            a fresh single-use command to run out there, which flips to a confirmation by itself the moment the
+            machine dials back in. Only ever for a machine that is a connected device — a sync-only enrollment has
+            no host capability to re-pair.
+        -->
+        <HostConnectDialog
+            v-if="device.hostId !== undefined"
+            :id="device.hostId"
+            v-model:visible="reconnecting"
+            :platform="connectPlatform"
+            :permissions="grants"
+            @connected="refetch()"
+        />
 
         <!-- Red only for removal: an image swap keeps the sandbox's files, so it isn't destructive. -->
         <ConfirmDialog

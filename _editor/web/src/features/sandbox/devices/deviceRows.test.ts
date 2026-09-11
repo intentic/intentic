@@ -244,9 +244,17 @@ test(`states the halves without offering the switches on a machine it cannot rea
 // Every per-device switch granted, so a case about the agent is not also a case about permissions.
 const GRANTED = { sandboxes: `on`, sandboxRemove: `on` };
 
-const concernsOf = (overrides: Partial<Device> = {}, held: Partial<Report> = {}, latest?: string, scopes?: Record<string, string>) => {
+// `canPair` is the reader's own standing (owner, by default here): the daemon refuses a member's mint, so it
+// decides whether a machine that isn't answering is offered a fresh pairing at all.
+const concernsOf = (
+    overrides: Partial<Device> = {},
+    held: Partial<Report> = {},
+    latest?: string,
+    scopes?: Record<string, string>,
+    canPair = true,
+) => {
     const entry = row(overrides, held, latest);
-    return deviceAttention(entry, { block: manageBlock(entry.device, scopes), latest, readAt: NOW });
+    return deviceAttention(entry, { block: manageBlock(entry.device, scopes), latest, readAt: NOW, canPair });
 };
 
 test(`says nothing at all about a healthy, fully-permitted machine`, () => {
@@ -300,11 +308,51 @@ test(`names the switch a connected machine is missing, and where to flip it`, ()
     expect(block?.fix).toMatchObject({ kind: `card`, card: `linux`, connection: `host-rog`, label: `Open its permissions` });
 });
 
+// A held report means the machine's own words survive a shut door, so the silence is explained by the block
+// rather than by a gap; both ways back are named all the same.
 test(`names the command, not a card, where the fix is a command on that machine`, () => {
     const concerns = concernsOf({ online: false, platform: `linux` }, {}, undefined, { platform: `linux` });
     const block = concerns.find((concern) => concern.key === `block`);
     expect(block?.command).toBe(`intentic-machine run`);
-    expect(block?.fix).toBeUndefined();
+    expect(block?.fix).toMatchObject({ kind: `connect`, label: `Reconnect` });
+});
+
+test(`offers a machine that stopped answering a fresh pairing, since nothing else here can reach it`, () => {
+    const concerns = concernsOf({ online: false, report: undefined, gap: `offline` });
+    const gap = concerns.find((concern) => concern.key === `gap`);
+    expect(gap?.text).toContain(`Asleep or offline.`);
+    // The cheaper of the two, for a machine that is awake with only its loop down.
+    expect(gap?.command).toBe(`intentic-machine run`);
+    expect(gap?.fix).toMatchObject({ kind: `connect`, label: `Reconnect` });
+});
+
+test(`keeps the sentence and drops the pairing for a reader the daemon would refuse`, () => {
+    const concerns = concernsOf({ online: false, report: undefined, gap: `offline` }, {}, undefined, undefined, false);
+    const gap = concerns.find((concern) => concern.key === `gap`);
+    expect(gap?.command).toBe(`intentic-machine run`);
+    expect(gap?.fix).toBeUndefined();
+});
+
+// Desktop sync enrolls a folder, not a device: there is no host capability to re-pair, so re-enrolling one is
+// the Add-a-device flow's job, not this sentence's.
+test(`offers no pairing to a machine this sandbox reaches only through desktop sync`, () => {
+    const concerns = concernsOf({ hostId: undefined, online: undefined, report: undefined, gap: `unreported` });
+    expect(concerns.find((concern) => concern.key === `gap`)?.fix).toBeUndefined();
+});
+
+// Every other gap is a machine that does answer: its own sentence names the switch or the install that closes
+// it, and a second button offering a pairing beside that would point at the wrong errand.
+test(`keeps both ways back for the one gap that is silence`, () => {
+    const remedies = ([`offline`, `scope-off`, `no-agent`, `unreported`] as const).map((gap) => {
+        const concern = concernsOf({ gap, report: undefined }).find((entry) => entry.key === `gap`);
+        return [gap, concern?.command, concern?.fix?.kind];
+    });
+    expect(remedies).toEqual([
+        [`offline`, `intentic-machine run`, `connect`],
+        [`scope-off`, undefined, undefined],
+        [`no-agent`, undefined, undefined],
+        [`unreported`, undefined, undefined],
+    ]);
 });
 
 test(`explains the gap without a button when there is no card to connect the machine`, () => {

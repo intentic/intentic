@@ -52,6 +52,7 @@ import {
     awaitingLogin,
     connectionFacts,
     connectionState,
+    machineGrants,
     rebuildStep,
     signsInByHand,
     vpnFacts,
@@ -490,15 +491,12 @@ const connectVisible = ref(false);
 const connectId = ref(``);
 const connectPlatform = ref(``);
 const connectPermissions = ref(``);
-// Grant in the machine's own words, read off the same effects the card renders, so dialog and card agree.
-const hostGrants = (instance: CapabilitySummary): string => {
-    const machine = instanceEffects(instance).find((effect) => effect.kind === `machine`);
-    return machine === undefined ? `read files` : machine.grants.join(`, `);
-};
 const openConnect = (instance: CapabilitySummary): void => {
     connectId.value = instance.id;
     connectPlatform.value = String(instance.config[`platform`] ?? `linux`);
-    connectPermissions.value = hostGrants(instance);
+    // Grant in the machine's own words (model/connections), shared with the Devices tab, which opens this same
+    // dialog on a machine that has stopped answering.
+    connectPermissions.value = machineGrants(instance);
     connectVisible.value = true;
 };
 

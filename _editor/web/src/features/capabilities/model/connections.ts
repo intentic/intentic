@@ -1,4 +1,5 @@
 import type { CapabilitySummary } from "@intentic/api-contract";
+import { capabilityEffects } from "@intentic/capability-catalog";
 import type { CapabilityKind, CapabilityState, VpnLink } from "@intentic/sandbox-contract";
 import type { StatusVariant } from "@intentic/ui";
 
@@ -62,6 +63,23 @@ const CONNECTION_STATES: Readonly<Record<CapabilityState, ConnectionState>> = {
 const NEEDS_SIGN_IN: ConnectionState = { label: `needs sign-in`, tone: `warning`, rank: 1 };
 const ONLINE: ConnectionState = { label: `online`, tone: `success`, rank: 3 };
 const OFFLINE: ConnectionState = { label: `offline`, tone: `neutral`, rank: 2 };
+
+// What a connected machine's agent may do out there, in the words its own card uses. Read from the effects rather
+// than the config so the pairing dialog, wherever it is opened from — the capability card, an offline device's page
+// — promises exactly what the card's switches say. The floor, and the fallback for a config too old to describe
+// itself, is reading files: no card grants less.
+export const machineGrants = (instance: CapabilitySummary | undefined): string => {
+    // Asked of a card that hands on no machine — or of nothing at all, while the manifest is still arriving — the
+    // answer is the floor rather than a guess, and never the throw an unknown kind would cost (capabilityEffects
+    // indexes its kinds).
+    if (instance?.kind !== `host`) {
+        return `read files`;
+    }
+    const machine = capabilityEffects({ kind: instance.kind, id: instance.id, config: instance.config }).find(
+        (effect) => effect.kind === `machine`,
+    );
+    return machine === undefined ? `read files` : machine.grants.join(`, `);
+};
 
 // The kinds whose sign-in is a window the user drives themselves, rather than a credential they paste.
 const SIGNS_IN_BY_HAND = new Set<CapabilityKind>([`browser`, `identity`]);

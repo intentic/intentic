@@ -25,7 +25,15 @@ export interface DeviceAgentFix {
     readonly hint: string;
 }
 
-export type DeviceFix = DeviceCardFix | DeviceAgentFix;
+// Mints this machine a fresh pairing command, the same one its capability card hands out: the only remedy left
+// once the machine stops answering, since every other button here travels over the connection it isn't holding.
+export interface DeviceConnectFix {
+    readonly kind: `connect`;
+    readonly label: string;
+    readonly hint: string;
+}
+
+export type DeviceFix = DeviceCardFix | DeviceAgentFix | DeviceConnectFix;
 
 export interface DeviceConcern {
     readonly key: string;
@@ -39,7 +47,9 @@ export interface DeviceConcern {
 // Each gap is a different errand and gets its own sentence; `scope-off` names the switch to flip, since
 // that's the only one closed in a single click.
 const GAP_TEXT: Record<NonNullable<Device[`gap`]>, string> = {
-    offline: `Asleep or offline.`,
+    // The only gap with nothing on the other end to ask, so it names both ways back in: the machine's own agent
+    // command for one that is merely awake with its loop down, and, on the button, a fresh pairing.
+    offline: `Asleep or offline. A machine that wakes dials back in by itself; one that is already awake needs its agent started.`,
     "scope-off": `Turn on "Run commands" in this device's capability card to see what it is running.`,
     "no-agent": `Reachable, but it has no agent, so nothing here knows its folders or ports.`,
     unreported: `Enrolled, but it hasn't reported yet. An agent from before machine reports never will. Re-run its install to update it.`,
@@ -63,19 +73,37 @@ const BLOCK_TEXT: Record<ManageBlock[`kind`], string> = {
     "remove-off": `Removing a sandbox needs "Remove sandboxes from this device" on this device's capability card. Everything else below already works.`,
 };
 
-// Set in mono like every other command this view names, rather than left as bare text inside a sentence.
-const BLOCK_COMMAND: Partial<Record<ManageBlock[`kind`], string>> = { offline: `intentic-machine run` };
+// What a machine that is awake with its loop down needs typed on it. One constant for the two sentences that can
+// say it — the gap (nothing was ever heard) and the block (a report is held, the device door is shut) — which are
+// mutually exclusive by construction, so a reader never sees it twice.
+const AGENT_START = `intentic-machine run`;
 
-// Only the kinds a click can close; an offline device gets no button, since its fix is a command on that
-// machine, not a capability card.
+// Set in mono like every other command this view names, rather than left as bare text inside a sentence.
+const GAP_COMMAND: Partial<Record<NonNullable<Device[`gap`]>, string>> = { offline: AGENT_START };
+const BLOCK_COMMAND: Partial<Record<ManageBlock[`kind`], string>> = { offline: AGENT_START };
+
+// Only the kinds a capability card can close; an offline device's card holds no switch that would bring it back,
+// so its button mints a pairing instead (RECONNECT below).
 const BLOCK_ACTION: Partial<Record<ManageBlock[`kind`], string>> = {
     connect: `Connect this device`,
     "sandboxes-off": `Open its permissions`,
     "remove-off": `Open its permissions`,
 };
 
-// `connect` opens the card that adds a device; the other two open the existing connection's own form.
-const blockFix = (block: ManageBlock): DeviceFix | undefined => {
+// The one remedy that works on a machine holding no connection: the same fresh, single-use command its capability
+// card hands out, which installs or re-enrolls the agent and registers it to come back after a reboot.
+const RECONNECT: DeviceConnectFix = {
+    kind: `connect`,
+    label: `Reconnect`,
+    hint: `Hands you a fresh one-time command to run on that machine. It installs or re-enrolls its agent and brings the device back — it can't wake a machine that is asleep.`,
+};
+
+// `connect` opens the card that adds a device; two more open the existing connection's own form; `offline` has no
+// card worth opening.
+const blockFix = (block: ManageBlock, reconnectable: boolean): DeviceFix | undefined => {
+    if (block.kind === `offline`) {
+        return reconnectable ? RECONNECT : undefined;
+    }
     const label = BLOCK_ACTION[block.kind];
     // No card for this platform (a Mac, an unrecognised slug) means nowhere to send anyone: the sentence
     // runs alone rather than beside a dead control.
@@ -145,15 +173,61 @@ const updateConcern = (row: DeviceRow, latest: string | undefined): DeviceConcer
     };
 };
 
+// Why the machine isn't answering, and the two ways back: the command for a machine whose loop alone is down,
+// and the pairing for one whose agent is gone. Only `offline` carries either — every other gap is a machine that
+// answers, whose own sentence already names its errand.
+const gapConcern = (device: Device, reconnectable: boolean): DeviceConcern | undefined => {
+    if (device.gap === undefined) {
+        return undefined;
+    }
+    const command = GAP_COMMAND[device.gap];
+    return {
+        key: `gap`,
+        tone: GAP_TONE[device.gap],
+        text: GAP_TEXT[device.gap],
+        ...(command === undefined ? {} : { command }),
+        ...(device.gap === `offline` && reconnectable ? { fix: RECONNECT } : {}),
+    };
+};
+
+// The switch standing between this machine's sandboxes and their buttons, and whichever remedy closes it: a
+// capability card for the three that are permissions, the machine's own two ways back for the one that isn't.
+const blockConcern = (block: ManageBlock, reconnectable: boolean): DeviceConcern => {
+    const fix = blockFix(block, reconnectable);
+    const command = BLOCK_COMMAND[block.kind];
+    return {
+        key: `block`,
+        tone: `info`,
+        text: BLOCK_TEXT[block.kind],
+        ...(command === undefined ? {} : { command }),
+        ...(fix === undefined ? {} : { fix }),
+    };
+};
+
 export const deviceAttention = (
     row: DeviceRow,
-    { block, latest, readAt }: { block: ManageBlock | undefined; latest: string | undefined; readAt: number },
+    {
+        block,
+        latest,
+        readAt,
+        canPair,
+    }: {
+        block: ManageBlock | undefined;
+        latest: string | undefined;
+        readAt: number;
+        /** Whether this reader may mint this machine a pairing: the daemon's own floor for it is the owner. */
+        canPair: boolean;
+    },
 ): readonly DeviceConcern[] => {
     const concerns: DeviceConcern[] = [];
     const { device } = row;
+    // Offered wherever the silence is explained, since minting is the one thing that works without the machine:
+    // a row with no device connection has nothing to re-pair, and a member may not mint at all.
+    const reconnectable = canPair && device.hostId !== undefined;
     // Whether the machine answers at all comes first: it decides what the rest of the page is worth.
-    if (device.gap !== undefined) {
-        concerns.push({ key: `gap`, tone: GAP_TONE[device.gap], text: GAP_TEXT[device.gap] });
+    const gap = gapConcern(device, reconnectable);
+    if (gap !== undefined) {
+        concerns.push(gap);
     }
     // A report is a snapshot of a device that may since have closed its lid, so its age qualifies everything
     // under it. Aged against the reading, so this is what the machine was doing when we heard from it, not how long
@@ -178,15 +252,7 @@ export const deviceAttention = (
     }
     // Last, and quietest: nothing here is broken, it only explains an absence of buttons.
     if (block !== undefined) {
-        const fix = blockFix(block);
-        const command = BLOCK_COMMAND[block.kind];
-        concerns.push({
-            key: `block`,
-            tone: `info`,
-            text: BLOCK_TEXT[block.kind],
-            ...(command === undefined ? {} : { command }),
-            ...(fix === undefined ? {} : { fix }),
-        });
+        concerns.push(blockConcern(block, reconnectable));
     }
     return concerns;
 };
