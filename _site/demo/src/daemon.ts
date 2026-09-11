@@ -12,6 +12,7 @@ import {
     type OauthAccount,
     type OauthAccountList,
     type PresenceUser,
+    type RepoChecksList,
     SANDBOX_ROUTE_NAMES,
     type SavingsReport,
     type SubagentsList,
@@ -360,6 +361,10 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/settings/savings`, () => json(DEMO_SAVINGS)],
     // No rule has ever fired in a recorded demo; an empty table is the honest answer.
     [`GET`, `/settings/rule-firings`, () => json({})],
+    // What the two repositories in this workspace declare for themselves, in the three states the group has to be able
+    // to show: running, waiting on the owner, and held because the file changed under an adoption.
+    [`GET`, `/settings/repo-checks`, () => json(DEMO_REPO_CHECKS)],
+    [`POST`, `/settings/repo-checks/adopt`, () => refuse(`This is the demo workspace: there is no repository here to run a check on.`)],
     [`GET`, `/vpn`, () => json({ networks: [] })],
 
     // CI board data is real; the badge reflects the fixture's own state. Rerun, cancel and Fix-with-agent
@@ -605,6 +610,33 @@ const DEMO_CATALOGS: Record<string, { models: Model[]; default: string }> = {
 
 // An empty rule table puts a finished agent in Ready to land, with nothing else deciding otherwise.
 const DEMO_SETTINGS = { rules: [], systemPromptMode: `intentic`, stableSystemPrompt: true, skills: [] };
+
+/* The checks each repository declares for itself (`<repo>/.intentic/checks.json`), one repository per state the group
+ * can be in: `web` running, `api` declared and waiting on the owner, and the workspace's own held because the file
+ * changed after it was adopted. A recording that showed only the happy one would be a demo of a feature nobody has to
+ * decide anything about. */
+const DEMO_REPO_CHECKS: RepoChecksList = {
+    repos: [
+        {
+            repo: `web`,
+            path: `web/.intentic/checks.json`,
+            checks: [
+                { when: `turn`, run: `pnpm -C web lint` },
+                { when: `push`, run: `pnpm -C web test` },
+            ],
+            adopted: true,
+            changed: false,
+        },
+        { repo: `api`, path: `api/.intentic/checks.json`, checks: [{ when: `push`, run: `pnpm -C api test` }], adopted: false, changed: false },
+        {
+            repo: `root`,
+            path: `.intentic/checks.json`,
+            checks: [{ when: `push`, run: `./scripts/release-guard.sh --strict` }],
+            adopted: false,
+            changed: true,
+        },
+    ],
+};
 
 // What the tool-output cleaners saved over the shown window, reported per-stage like the real product.
 const DEMO_SAVINGS: SavingsReport = {

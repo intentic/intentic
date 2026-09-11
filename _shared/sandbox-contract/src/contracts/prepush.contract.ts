@@ -1,6 +1,22 @@
 import { oc } from "@orpc/contract";
+import { z } from "zod";
 import { CommandRunSchema } from "../schemas/ci.js";
 import { OkSchema } from "../schemas/shared.js";
+
+// Which repositories are about to be pushed. The check is one run over one working tree, but what stands in it is not
+// the same for every push: a repository's own checks (repo-checks.ts) run only when that repository is going out, and a
+// rule the owner aimed at one repository does the same.
+// `prefault`, so a caller that sends no body at all still starts the check: a browser tab open since before this input
+// existed is the ordinary case, and refusing its push over a missing field would be the worst possible way to say so.
+export const PrepushRunSchema = z
+    .object({
+        repos: z
+            .array(z.string().min(1))
+            .max(100)
+            .default([])
+            .describe("The repositories going out, by workspace id. Empty runs only what stands for every push, whichever repository it is."),
+    })
+    .prefault({});
 
 // The pre-push check, the command the workspace runs when the user pushes, before anything leaves the machine
 // (see CommandRunSchema for where this sits and why). Three verbs about ONE run: the check answers about the
@@ -27,8 +43,9 @@ export const prepushContract = {
             path: "/prepush/run",
             summary: "Run the checks before pushing",
             description:
-                "Starts the suite the workspace runs before anything leaves the machine, and answers immediately. A suite takes minutes, and a request held open that long dies at the first proxy. It runs in a real terminal, so watch it there and poll for the verdict.",
+                "Starts the suite the workspace runs before anything leaves the machine, and answers immediately. A suite takes minutes, and a request held open that long dies at the first proxy. It runs in a real terminal, so watch it there and poll for the verdict. Name the repositories going out, and each one's own checks run in its own directory.",
         })
+        .input(PrepushRunSchema)
         .output(OkSchema),
     cancel: oc
         .route({

@@ -369,8 +369,18 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Whether a turn killed by the sandbox restarting is re-run once it comes back. Off to begin with, for the same reason: it would spend your allowance on work you are not watching and edit files while you are still waiting for the sandbox to return. Either way the interruption is recorded rather than silently lost.",
         ),
+    // Which repositories' own declarations (`<repo>/.intentic/checks.json`) the owner has switched on, each against the
+    // fingerprint of what was declared when they did. A declaration that has since changed no longer matches its
+    // fingerprint and is held rather than run, which is what makes adoption a decision about a command rather than a
+    // permanent permission on a folder. Keyed by repo id, so `/` in the key is ordinary.
+    adoptedChecks: z
+        .record(z.string(), z.string())
+        .default({})
+        .describe(
+            "Which repositories may run the checks they declare for themselves, and exactly which version of those checks you agreed to. A repository's declaration does nothing until it appears here, the same rule git keeps for hooks, which are never cloned; and a declaration that changes afterwards is held until you look at it again.",
+        ),
     // Lives in the owner's own settings, not the workspace: a rule can hold work and gate a push, so it answers to the
-    // sandbox owner alone. Repo- or extension-contributed rules aren't supported yet.
+    // sandbox owner alone. A repository may declare a COMMAND of its own (see `adoptedChecks`), never a verdict.
     rules: z
         .array(RuleSchema)
         .max(50)

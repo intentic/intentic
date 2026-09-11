@@ -78,6 +78,16 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   before every Bash command and compared after it, so a file `sed -i` or a heredoc rewrote gets the same type
   diagnostics an Edit does (agent-diagnostics.ts), in the agent's own names. Two snapshots rather than a rolling
   comparison, so the edit tools' work between two commands is never charged to the second.
+- [src/rules/repo-checks.ts](../src/rules/repo-checks.ts): the checks a REPOSITORY declares for itself, at
+  `<repo>/.intentic/checks.json`, read into ordinary rules aimed at that repository. The line between this and the
+  owner's own rule table is authority rather than subject: a repository may say WHAT to run, because the command
+  belongs beside the `package.json` scripts it names and travels with the checkout; only the settings say what happens
+  when it fails, so no repository can decide that its own work lands or that a push goes. Nothing declared runs until
+  the owner adopts it (settings `adoptedChecks`, keyed by repo id and holding the fingerprint of what was declared at
+  the time), and a declaration rewritten afterwards is held rather than inherited — git's own rule for hooks, which are
+  never cloned. Merged into the rule list at one point per moment (turn planning, `prepush.ts`), so the note, the Stop,
+  the push gate and the firing stamps read one list; and a rule naming a repository runs IN it
+  ([src/rules/rule-cwd.ts](../src/rules/rule-cwd.ts)), which is what a command spelled `cd x && …` was working around.
 - [src/agent/verification/turn-checks.ts](../src/agent/verification/turn-checks.ts): what the turn's own `turn.ending` command check said, kept
   per conversation from the Stop that ran it to the land that reads it. The last run wins, which is what the
   re-measuring follow-up loop (rules/turn-ending.ts) is for; a turn whose check is still red lands as

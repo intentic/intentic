@@ -26,6 +26,19 @@ export interface RuleFacts {
 }
 
 const repoHolds = (when: RuleCondition, facts: RuleFacts): boolean => when.repo === undefined || (facts.repos ?? []).includes(when.repo);
+
+// Which repositories a set of workspace-relative paths falls in, for the moments that know paths but not repos (a turn
+// ending knows what it edited, not where each file belongs). The longest id wins, since a nested repository is its own
+// and not its parent's; anything under none of them belongs to the workspace's own repository, "root".
+export const reposOf = (paths: readonly string[], repos: readonly string[]): string[] => {
+    // Longest first, so `extensions/logs` is preferred over `extensions` without comparing lengths per candidate.
+    const ordered = [...repos].sort((left, right) => right.length - left.length);
+    const found = new Set<string>();
+    for (const path of paths) {
+        found.add(ordered.find((repo) => path === repo || path.startsWith(`${repo}/`)) ?? "root");
+    }
+    return [...found];
+};
 const pathsHold = (when: RuleCondition, facts: RuleFacts): boolean =>
     when.paths === undefined || when.paths.length === 0 || touches(facts.paths ?? [], when.paths);
 const outcomeHolds = (when: RuleCondition, facts: RuleFacts): boolean =>

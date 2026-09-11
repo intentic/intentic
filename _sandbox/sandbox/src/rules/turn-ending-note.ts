@@ -15,6 +15,13 @@ const whenSuffix = (rule: Rule): string => {
     return paths.length === 0 ? " (when its condition matches)" : ` (after edits to ${paths.map((glob) => `\`${glob}\``).join(" or ")})`;
 };
 
+// Where it runs, when that isn't simply here. Worth a clause of its own: a check named for a repository runs INSIDE it,
+// so an agent reading this note must not go and prefix the command with a `cd` of its own.
+const whereClause = (rule: Rule): string => {
+    const repo = rule.when?.repo;
+    return repo === undefined || repo === "root" ? "" : `, run in \`${repo}\``;
+};
+
 /* Command rules run without the model's help, so naming them prevents duplicate checks. Built-ins and
  * instructions need model action and are deliberately omitted. */
 export const turnEndingNote = (rules: readonly Rule[]): TurnNote | undefined => {
@@ -29,7 +36,7 @@ export const turnEndingNote = (rules: readonly Rule[]): TurnNote | undefined => 
             "",
             "These run automatically when you finish:",
             "",
-            ...commands.map((rule) => `- **${rule.label}:** \`${rule.action.command}\`${whenSuffix(rule)}`),
+            ...commands.map((rule) => `- **${rule.label}:** \`${rule.action.command}\`${whereClause(rule)}${whenSuffix(rule)}`),
             "",
             "Do not run or announce them yourself. Use targeted checks only when you need an earlier result.",
         ].join("\n"),

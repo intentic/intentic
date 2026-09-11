@@ -115,6 +115,15 @@ vi.mock(`../../sandbox/overview/useSandboxSettings`, async () => {
 
 // Resolves against what this sandbox can reach, so the proposal names a model that can actually be sent;
 // provider readiness is a different suite's business.
+/* What the repositories declare for themselves, which this flow reads to decide whether a push is checked at all. A
+ * workspace where none of them declares anything, so these cases turn on the owner's own rule above — the reader over
+ * both (rules.ts adoptedChecksFor) is pure and is NOT mocked, so a case that added a declaring repository here would
+ * still be answered by the real one. */
+vi.mock(`../../sandbox/environment/useRepoChecks`, async () => {
+    const { computed } = await import(`vue`);
+    return { useRepoChecks: () => ({ repos: computed(() => []) }) };
+});
+
 vi.mock(`../../chat/session/access`, () => ({ providerReady: () => true }));
 
 vi.mock(`../../sandbox/client/useSandbox`, async () => {

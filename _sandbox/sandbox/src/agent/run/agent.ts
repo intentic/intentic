@@ -162,6 +162,8 @@ export interface AgentRequest {
     readonly verifyTests?: () => Promise<string | undefined>;
     // What the tree says the turn changed, for the Stop's conditions: a shell edit is invisible to the edit ledger.
     readonly changedPaths?: () => Promise<readonly string[]>;
+    // This tree's repositories, for a rule aimed at one; asked at the Stop only when such a rule stands.
+    readonly turnRepos?: () => Promise<readonly string[]>;
     // Absolute plugin checkout dirs; the SDK's loader parses their skills/agents/hooks/commands/.mcp.json.
     readonly plugins?: readonly string[];
     // In-process SDK MCP servers whose handlers run in the daemon itself, merged into mcpServers alongside `tools`.
@@ -491,6 +493,7 @@ const baseOptions = (
                 onFollowUpOutcome: request.onFollowUpOutcome,
                 tests: request.verifyTests,
                 changedPaths: request.changedPaths,
+                repos: request.turnRepos,
             }),
             // The harness's own ask beside the owner's rules: a checklist about to be left open is said back once, since
             // the board reads that list to tell a finished session from one that stopped short.

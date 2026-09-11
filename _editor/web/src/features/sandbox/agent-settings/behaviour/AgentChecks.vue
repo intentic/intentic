@@ -168,8 +168,16 @@ const savePrepush = (): void => {
         <!--
             Runs the same check CI would, before the push leaves the machine. Full-width input, not a small control slot:
             truncating a long shell command would make a configured check look mistyped.
+
+            Named for its reach now that a repository can carry its own (the group below): one command here runs before
+            EVERY push, whichever repository is going out, which is the right home for a workspace-wide check and the
+            wrong one for a build that belongs to one repository.
         -->
-        <Row icon="shield" title="Check before you push" description="Run a check before pushing code.">
+        <Row
+            icon="shield"
+            title="Before every push"
+            description="Run one check before any push, whichever repository is going out. A repository's own build belongs in the repository, below."
+        >
             <template #below>
                 <div
                     class="ui-field-shell flex items-center gap-2 px-2.5 py-1.5"

@@ -1,4 +1,5 @@
 import type { CommandRun } from "@intentic/sandbox-contract";
+import { jsonBody } from "../../sandbox/client/jsonBody";
 import { sandboxJson } from "../../sandbox/client/sandboxClient";
 import { createRunWatcher, type RunWatcher } from "./runWatcher";
 
@@ -12,15 +13,17 @@ import { createRunWatcher, type RunWatcher } from "./runWatcher";
 
 const IDLE: CommandRun = { status: `idle`, command: ``, output: `` };
 
-const watcher: RunWatcher<CommandRun> = createRunWatcher<CommandRun>({
+// The repositories going out travel with the start: what stands before a push is not the same for every repository,
+// since a repository's own declared checks and a rule aimed at one only run when that repository is in the push.
+const watcher: RunWatcher<CommandRun, readonly string[]> = createRunWatcher<CommandRun, readonly string[]>({
     idle: IDLE,
-    start: () => sandboxJson(`/prepush/run`, { method: `POST` }),
+    start: (repos) => sandboxJson(`/prepush/run`, jsonBody(`POST`, { repos })),
     state: () => sandboxJson<CommandRun>(`/prepush/state`),
     cancel: () => sandboxJson(`/prepush/cancel`, { method: `POST` }),
     reveal: (run) => ({ title: `Running your pre-push check`, detail: run.command }),
     subject: `checks`,
 });
 
-export function usePrepush(): RunWatcher<CommandRun> {
+export function usePrepush(): RunWatcher<CommandRun, readonly string[]> {
     return watcher;
 }

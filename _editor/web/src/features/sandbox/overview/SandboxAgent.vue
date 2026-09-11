@@ -15,6 +15,7 @@ import AgentInstructions from "../agent-settings/skills/AgentInstructions.vue";
 import AgentMemory from "../agent-settings/skills/AgentMemory.vue";
 import AgentModels from "../agent-settings/models/AgentModels.vue";
 import AgentRecovery from "../agent-settings/behaviour/AgentRecovery.vue";
+import AgentRepoChecks from "../agent-settings/behaviour/AgentRepoChecks.vue";
 import AgentRules from "../agent-settings/safety/AgentRules.vue";
 import AgentSafetyJudge from "../agent-settings/safety/AgentSafetyJudge.vue";
 import AgentSafetyLog from "../agent-settings/safety/AgentSafetyLog.vue";
@@ -129,6 +130,8 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
         <!-- The two ways a turn ends: proof and delivery, then last the recovery path for a turn that broke instead. -->
         <template v-else>
             <AgentChecks />
+            <!-- Directly under the sandbox-wide checks, since the question both answer is the same one: what runs. -->
+            <AgentRepoChecks />
             <AgentFinishedWork />
             <AgentChangelog />
             <AgentRecovery />

@@ -12,7 +12,8 @@ const rule = (over: Partial<Rule> = {}): Rule => ({
     ...over,
 });
 
-const runner = (answer: EditCommandRun) => vi.fn<(command: string, timeoutMs: number) => Promise<EditCommandRun>>(async () => answer);
+// The third argument is the rule's own repository, undefined for a rule that names none: it runs where the turn is.
+const runner = (answer: EditCommandRun) => vi.fn<(command: string, timeoutMs: number, repo?: string) => Promise<EditCommandRun>>(async () => answer);
 
 describe("the file.edited moment", () => {
     test("no rule standing there is no reviewer at all, so a workspace without one pays nothing", () => {
@@ -24,7 +25,7 @@ describe("the file.edited moment", () => {
         const run = runner({ status: "passed", output: "clean" });
         const review = fileEditedReviewer([rule()], { run });
         expect(await review?.(`${WORKSPACE_ROOT}/intentic/src/a b.ts`, "this edit")).toBeUndefined();
-        expect(run).toHaveBeenCalledWith(`node lint.mjs '${WORKSPACE_ROOT}/intentic/src/a b.ts'`, EDIT_COMMAND_CEILING_MS);
+        expect(run).toHaveBeenCalledWith(`node lint.mjs '${WORKSPACE_ROOT}/intentic/src/a b.ts'`, EDIT_COMMAND_CEILING_MS, undefined);
     });
 
     test("a failing command's output is the message, named by the rule and the file, and the rule is counted as fired", async () => {
@@ -66,7 +67,31 @@ describe("the file.edited moment", () => {
             place: (file) => file.replace(`${WORKSPACE_ROOT}/`, `${HISTORY_ROOT}/worktrees/c/`),
         });
         await review?.(`${WORKSPACE_ROOT}/intentic/a.ts`, "this edit");
-        expect(run).toHaveBeenCalledWith(`check '${HISTORY_ROOT}/worktrees/c/intentic/a.ts'`, EDIT_COMMAND_CEILING_MS);
+        expect(run).toHaveBeenCalledWith(`check '${HISTORY_ROOT}/worktrees/c/intentic/a.ts'`, EDIT_COMMAND_CEILING_MS, undefined);
+    });
+
+    // A rule aimed at a repository is about that repository at every moment, this one included — and the command runs
+    // there, which is the whole reason the form offers it instead of leaving people to write `cd` into the command.
+    test("a rule naming a repository only reviews files inside it, and says where to run", async () => {
+        const run = runner({ status: "failed", output: "no" });
+        const review = fileEditedReviewer([rule({ when: { repo: "intentic" } })], {
+            run,
+            roots: [WORKSPACE_ROOT],
+            repos: async () => [`intentic`, `docs`],
+        });
+        expect(await review?.(`${WORKSPACE_ROOT}/docs/c.md`, "this edit")).toBeUndefined();
+        expect(run).not.toHaveBeenCalled();
+        expect(await review?.(`${WORKSPACE_ROOT}/intentic/a.ts`, "this edit")).toContain("intentic/a.ts");
+        expect(run).toHaveBeenCalledWith(`node lint.mjs '${WORKSPACE_ROOT}/intentic/a.ts'`, EDIT_COMMAND_CEILING_MS, `intentic`);
+    });
+
+    // Nothing can say which repository a file is in, so a rule that names one stays unmatched rather than firing
+    // against a repository nobody confirmed.
+    test("a rule naming a repository does not fire where the repositories are unknown", async () => {
+        const run = runner({ status: "failed", output: "no" });
+        const review = fileEditedReviewer([rule({ when: { repo: "intentic" } })], { run, roots: [WORKSPACE_ROOT] });
+        expect(await review?.(`${WORKSPACE_ROOT}/intentic/a.ts`, "this edit")).toBeUndefined();
+        expect(run).not.toHaveBeenCalled();
     });
 
     test("several rules standing here contribute to one message, in the owner's order", async () => {

@@ -609,3 +609,13 @@ test("a rule's command enters the turn's namespace, and only when there is one",
     // An unisolated turn already runs where it means to; wrapping it would only add a process.
     expect(ruleCommandIn(`pnpm lint`, undefined)).toBe(`pnpm lint`);
 });
+
+// Inside the namespace the directory comes from `--wdns`, not from the cwd the daemon-side process was handed, so a
+// rule naming a repository has to say so this far down or it runs at the root of the worktree while every other part
+// of the system agrees it is running in the repository.
+test("a rule naming a repository enters the namespace inside that repository", () => {
+    const anchor = { pid: 4242, cwd: `/work`, plan: {} as never, dispose: () => undefined };
+    expect(ruleCommandIn(`pnpm verify:push`, anchor, `intentic`)).toContain(`--wdns=/work/intentic`);
+    // "root" is the workspace's own repository, which is where an unaimed command already runs.
+    expect(ruleCommandIn(`pnpm verify:push`, anchor, `root`)).toContain(`--wdns=/work`);
+});

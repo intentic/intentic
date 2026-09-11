@@ -71,6 +71,15 @@ export const ACTIONS: Record<RuleMoment, readonly [ActionWords, ...ActionWords[]
 
 export const momentOf = (moment: RuleMoment): MomentWords => MOMENTS.find((entry) => entry.value === moment) ?? MOMENTS[0];
 
+/* THE WHOLE WORKSPACE, as the repository picker's own value. Not a repo id and never saved: a rule about everywhere is
+ * a rule with no repository on it, so this sentinel exists only between the picker and the draft. A rule that does name
+ * one runs IN it (the daemon resolves the directory), which is why the form offers this at all rather than leaving
+ * people to write `cd` into the command. */
+export const ANYWHERE = `*`;
+
+// "root" is the workspace's own repository; nobody calls it that when they mean it.
+export const repoLabel = (repo: string): string => (repo === `root` ? `The workspace itself` : repo);
+
 // Splits on commas or whitespace: a comma-separated and a space-separated list are the same intention.
 export const globsOf = (text: string): string[] => text.split(/[\s,]+/).filter((glob) => glob !== ``);
 

@@ -1,4 +1,5 @@
 import { oc } from "@orpc/contract";
+import { RepoChecksAdoptSchema, RepoChecksListSchema } from "../schemas/repo-checks.js";
 import { BuiltinPromptSchema, BuiltinPromptTextSchema, RuleFiringsSchema, SandboxSettingsSchema, SavingsReportSchema } from "../schemas/settings.js";
 import { OkSchema } from "../schemas/shared.js";
 import { DayWindowQuerySchema } from "../schemas/usage.js";
@@ -54,4 +55,25 @@ export const settingsContract = {
                 "A separate read rather than a field on the settings, because a rule firing is not somebody editing anything: folding it in would turn every firing into a settings write and put a self-changing value inside the object a screen edits.",
         })
         .output(RuleFiringsSchema),
+    // Read off the repositories themselves, not out of the settings file: the declaration is a tracked file in each
+    // repository, and only the owner's answer to it lives here.
+    repoChecks: oc
+        .route({
+            method: "GET",
+            path: "/settings/repo-checks",
+            summary: "What each repository asks to run on its own code",
+            description:
+                "Every repository that declares its own checks at `.intentic/checks.json`, what it declares, and whether you have switched it on. A repository declares what to run because the command belongs beside the scripts it names; nothing it declares runs until you say so.",
+        })
+        .output(RepoChecksListSchema),
+    adoptRepoChecks: oc
+        .route({
+            method: "POST",
+            path: "/settings/repo-checks/adopt",
+            summary: "Switch a repository's own checks on or off",
+            description:
+                "Adopts exactly what that repository declares as it stands now. If the declaration changes afterwards it stops running until you adopt it again, so a command nobody has read cannot inherit the answer given to a different one.",
+        })
+        .input(RepoChecksAdoptSchema)
+        .output(OkSchema),
 };

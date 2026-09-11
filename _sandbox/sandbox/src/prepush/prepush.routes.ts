@@ -18,8 +18,10 @@ export const createPrepushRoutes = (services: PrepushRoutesDeps) => {
     const check = prepushCheck(services);
     return {
         state: i.state.handler(() => check.state()),
-        run: i.run.handler(async () => {
-            await check.run();
+        // The repositories going out travel with the press: what stands before a push is not the same for every
+        // repository in the workspace, and only the caller knows which ones this push is about.
+        run: i.run.handler(async ({ input }) => {
+            await check.run(input.repos);
             return { ok: true as const };
         }),
         // Cancelling a check that has already settled is not an error, the kill finds no pid and does nothing,

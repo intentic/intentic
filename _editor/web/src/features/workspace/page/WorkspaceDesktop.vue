@@ -11,6 +11,7 @@ import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { usePanels } from "../../extensions/usePanels";
 import { personaStartDirs } from "../../sandbox/personas/personaCard";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
+import { useRepoChecks } from "../../sandbox/environment/useRepoChecks";
 import { lensPersonaId, reachOf, reachSentence } from "../directory-ui/personaReach";
 import { workspaceAgent } from "../health/workspaceScope";
 import { detectActivations } from "../../../core-views/registry";
@@ -40,6 +41,7 @@ import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { dragOffer, watchDragSource } from "../explorer/transfer/dragSource";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
+import DirectoryChecks from "../directory-ui/DirectoryChecks.vue";
 import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
 import EditorPane from "../files/EditorPane.vue";
 import HistoryPanel from "../changes/HistoryPanel.vue";
@@ -237,6 +239,15 @@ const personaDirs = computed(() => personaStartDirs(personas.value));
 // Folder whose personas are open in the quick panel; undefined means closed.
 const personaDir = ref<string | undefined>(undefined);
 
+// Repositories carrying their own checks, keyed by repo id, which is also the tree path for every repo but the
+// workspace root (which has no row of its own).
+const { repos: declaringRepos } = useRepoChecks();
+const checkDirs = computed(
+    () => new Map((declaringRepos.value ?? []).map((entry) => [entry.repo, { adopted: entry.adopted, changed: entry.changed }])),
+);
+// Repository whose checks are open in the quick panel; undefined means closed.
+const checksDir = ref<string | undefined>(undefined);
+
 // What each directory row offers beside its name (documents, health, history, personas, management). Composed
 // here, where the openers live; passed as a function so only on-screen rows are asked.
 const rowActions = (dir: string): readonly RowAction[] =>
@@ -245,11 +256,15 @@ const rowActions = (dir: string): readonly RowAction[] =>
         manageableDirs: manageableDirs.value,
         previewableDirs: previewableDirs.value,
         personaDirs: personaDirs.value,
+        checkDirs: checkDirs.value,
         openHealth,
         openDirectory,
         openPreview: (target: string): void => openPreview(router, repoTargetId(target)),
         openPersonas: (target: string): void => {
             personaDir.value = target;
+        },
+        openChecks: (target: string): void => {
+            checksDir.value = target;
         },
         openDocument,
     });
@@ -1025,6 +1040,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
         </ConfirmDialog>
         <!-- Opened by a directory row's person icon: who works there, and how to add one. Mounted here, not the tree. -->
         <DirectoryPersonas v-model="personaDir" />
+        <DirectoryChecks v-model="checksDir" />
     </div>
 </template>
 

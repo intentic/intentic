@@ -1,6 +1,6 @@
 import type { Rule } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "vitest";
-import { conditionHolds, landingVerdict, matching } from "./rules.js";
+import { conditionHolds, landingVerdict, matching, reposOf } from "./rules.js";
 
 const rule = (over: Partial<Rule> & Pick<Rule, "id" | "moment" | "action">): Rule => ({
     label: over.id,
@@ -48,6 +48,27 @@ describe(`conditions`, () => {
         expect(conditionHolds({ repo: `api`, outcome: [`error`, `conflict`] }, facts)).toBe(true);
         expect(conditionHolds({ repo: `docs`, outcome: [`error`] }, facts)).toBe(false);
         expect(conditionHolds({ repo: `api`, outcome: [`clean`] }, facts)).toBe(false);
+    });
+});
+
+describe(`which repositories a change is in`, () => {
+    // The moments that know paths but not repositories (a turn ending) work theirs out here, so `when.repo` means the
+    // same thing at every moment rather than only where a repository happens to be handed in.
+    test(`a path belongs to the longest repository id that contains it`, () => {
+        expect(reposOf([`extensions/logs/src/index.ts`], [`extensions`, `extensions/logs`])).toEqual([`extensions/logs`]);
+    });
+
+    test(`a path under no repository belongs to the workspace's own`, () => {
+        expect(reposOf([`README.md`], [`intentic`])).toEqual([`root`]);
+    });
+
+    test(`one turn can touch several, and each is named once`, () => {
+        expect(reposOf([`intentic/a.ts`, `intentic/b.ts`, `docs/c.md`], [`intentic`, `docs`]).toSorted()).toEqual([`docs`, `intentic`]);
+    });
+
+    // The guard against a prefix that is not a folder boundary: `intentic-site` is not inside `intentic`.
+    test(`a repository's name is not a prefix match`, () => {
+        expect(reposOf([`intentic-site/a.ts`], [`intentic`])).toEqual([`root`]);
     });
 });
 

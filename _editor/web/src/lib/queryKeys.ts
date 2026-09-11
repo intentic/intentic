@@ -89,6 +89,9 @@ export const RUNNERS = family(`runners`);
 // `family("public").of()` and its `api.key("public")` produce the identical key and share one push.
 export const PUBLIC = family(`public`);
 export const REGISTRY = family(`registry`);
+// What each repository declares for itself. Its own key rather than part of the settings: the declaration is a tracked
+// file in the repository, so it changes with a commit or a pull, not only when somebody edits the settings.
+export const REPO_CHECKS = family(`repo-checks`);
 export const RULE_FIRINGS = family(`rule-firings`);
 // Two keys, not one: the policy document changes at human speed, the log several times a turn, so sharing a key would
 // refetch the text someone is editing on every judged command.

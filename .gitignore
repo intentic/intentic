@@ -74,8 +74,11 @@ Thumbs.db
 /.stryker-tmp
 /reports/mutation
 
-# intentic dogfood / demo (local only)
-/.intentic
+# intentic dogfood / demo (local only): when this repo is itself opened as a workspace, the daemon writes its
+# config, records and caches here. `checks.json` is the exception and is ours to commit — it is this repository
+# telling any sandbox what to run on it (rules/repo-checks.ts), which is only worth writing if it travels.
+/.intentic/*
+!/.intentic/checks.json
 /intent
 /desired-state
 /app

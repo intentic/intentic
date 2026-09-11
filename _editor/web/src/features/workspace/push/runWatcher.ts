@@ -20,10 +20,13 @@ const POLL_MS = 700;
 
 // What a source says about its run: where it starts, is read, stops, and its words for the terminal panel and
 // error line. Everything else (cadence, reveal, settle) is the watcher's, shared by every source.
-export interface RunSource<R extends CommandRun> {
+// `A` is what a start needs to know, for a source whose run isn't the same every time: the pre-push check is about the
+// repositories going out, while a push run is already bound to its own. Defaults to nothing, so a source that takes no
+// argument declares none and its callers keep writing `start()`.
+export interface RunSource<R extends CommandRun, A = void> {
     // The shape at rest: what the watcher shows before the first poll and after `forget`.
     readonly idle: R;
-    readonly start: () => Promise<unknown>;
+    readonly start: (args: A) => Promise<unknown>;
     readonly state: () => Promise<R>;
     readonly cancel: () => Promise<unknown>;
     // What the terminal panel is told it's opening on, since the panel can't know; undefined means no panel to open.
@@ -32,7 +35,7 @@ export interface RunSource<R extends CommandRun> {
     readonly subject: string;
 }
 
-export interface RunWatcher<R extends CommandRun> {
+export interface RunWatcher<R extends CommandRun, A = void> {
     readonly run: ComputedRef<R>;
     readonly error: ComputedRef<string | undefined>;
     readonly running: ComputedRef<boolean>;
@@ -40,7 +43,7 @@ export interface RunWatcher<R extends CommandRun> {
     readonly terminal: ComputedRef<string | undefined>;
     // Starts a run and follows it to a terminal state, resolving with the settled run so a call site reads as one
     // sentence. The daemon arbitrates "one at a time", so calling it again just joins a run already going.
-    readonly start: () => Promise<R>;
+    readonly start: (args: A) => Promise<R>;
     // Stops the run; the daemon settles it as `cancelled`, so the wording matches any other outcome's.
     readonly cancel: () => Promise<void>;
     // Drops the run from view without touching the daemon (what closing the surface does); a run still going
@@ -50,7 +53,7 @@ export interface RunWatcher<R extends CommandRun> {
     readonly showTerminal: () => void;
 }
 
-export const createRunWatcher = <R extends CommandRun>(source: RunSource<R>): RunWatcher<R> => {
+export const createRunWatcher = <R extends CommandRun, A = void>(source: RunSource<R, A>): RunWatcher<R, A> => {
     const run = ref(source.idle) as { value: R };
     const error = ref<string | undefined>(undefined);
     // The follow in progress, aborted by `forget` and the next `start`; one at a time per watcher.
@@ -72,13 +75,13 @@ export const createRunWatcher = <R extends CommandRun>(source: RunSource<R>): Ru
         }
     };
 
-    const start = async (): Promise<R> => {
+    const start = async (args: A): Promise<R> => {
         stopFollowing();
         error.value = undefined;
         shown = false;
         run.value = { ...source.idle, status: `running` };
         try {
-            await source.start();
+            await source.start(args);
         } catch (cause) {
             error.value = errorMessage(cause, `Could not start the ${source.subject}.`);
             run.value = source.idle;

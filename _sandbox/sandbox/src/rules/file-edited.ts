@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import type { Rule } from "@intentic/sandbox-contract";
 import { plainText } from "@intentic/base/plain-text";
-import { conditionHolds, standing } from "./rules.js";
+import { conditionHolds, reposOf, standing } from "./rules.js";
 import { workspaceRelative } from "./turn-ending.js";
 
 // Runs every standing file.edited rule on a file the instant it is written, folding the result into that edit's
@@ -15,7 +15,8 @@ export interface EditCommandRun {
 }
 
 // One shell line for this moment, injected so it is testable without a shell and placeable in the turn's namespace.
-export type EditCommandRunner = (command: string, timeoutMs: number) => Promise<EditCommandRun>;
+// `repo` is the rule's own, when it named one: the binder resolves it against the turn's tree, as at the other moments.
+export type EditCommandRunner = (command: string, timeoutMs: number, repo?: string) => Promise<EditCommandRun>;
 
 export const EDIT_COMMAND_CEILING_MS = 60_000;
 // How much of a failing command's tail rides back in the message.
@@ -31,6 +32,9 @@ export interface FileEditedDeps {
     readonly roots?: readonly string[] | undefined;
     // The command may need a different file name than the one this hook heard; absent uses the name as is.
     readonly place?: ((file: string) => string) | undefined;
+    // The tree's repositories, for a rule aimed at one; absent leaves every such rule unmatched, the same answer a
+    // workspace with no repositories gives.
+    readonly repos?: (() => Promise<readonly string[]>) | undefined;
     readonly onFired?: ((rule: Rule) => void) | undefined;
 }
 
@@ -44,6 +48,21 @@ const relativeTo = (file: string, roots: readonly string[] | undefined): string 
     return file;
 };
 
+// Which repository a just-written file belongs to; undefined when nothing can say, which leaves a rule that names one
+// unmatched rather than firing it against a repository nobody confirmed.
+const repoOfFile = async (relative: string, repos: FileEditedDeps["repos"]): Promise<readonly string[] | undefined> =>
+    repos === undefined ? undefined : reposOf([relative], await repos().catch((): readonly string[] => []));
+
+// What a run that did not pass says to the model. An `error` never ran, so it is worded as a fact about the command
+// rather than a verdict on the file: nobody should be sent to repair something nothing measured.
+const noteOf = (rule: Rule, run: EditCommandRun, relative: string, how: string): string => {
+    const output = run.output.trim().slice(-OUTPUT_BYTES);
+    const command = rule.action.kind === "command" ? rule.action.command : "";
+    return run.status === "error"
+        ? `"${rule.label}" could not run on ${relative} after ${how} (\`${command}\`): ${output}. That is not a verdict on the file.`
+        : `"${rule.label}" on ${relative} after ${how}:\n${output}`;
+};
+
 // What every standing file.edited rule says about one file, or nothing.
 // Runs beside the type check in the diagnostics hook set, after both an edit tool and a shell command that changed the
 // file.
@@ -55,26 +74,26 @@ export const fileEditedReviewer = (
     if (armed.length === 0) {
         return undefined;
     }
+    // Asked once, and only where a rule here actually names a repository: every other workspace pays nothing for this.
+    const aimed = armed.some((rule) => rule.when?.repo !== undefined);
     return async (file, how) => {
         const relative = relativeTo(file, deps.roots);
         const placed = deps.place === undefined ? file : deps.place(file);
+        const repos = aimed ? await repoOfFile(relative, deps.repos) : undefined;
         const notes: string[] = [];
         for (const rule of armed) {
-            if (rule.action.kind !== "command" || !conditionHolds(rule.when, { paths: [relative] })) {
+            if (rule.action.kind !== "command" || !conditionHolds(rule.when, { paths: [relative], repos })) {
                 continue;
             }
             const command = rule.action.command.replaceAll(FILE_TOKEN, shellQuoted(placed));
-            const run = await deps.run(command, Math.min(rule.action.timeoutMs, EDIT_COMMAND_CEILING_MS));
+            // In the repository it named, like every other moment; the file itself travels as an absolute path, so the
+            // working directory changes where the command runs without changing what it is given.
+            const run = await deps.run(command, Math.min(rule.action.timeoutMs, EDIT_COMMAND_CEILING_MS), rule.when?.repo);
             if (run.status === "passed") {
                 continue;
             }
             deps.onFired?.(rule);
-            const output = run.output.trim().slice(-OUTPUT_BYTES);
-            notes.push(
-                run.status === "error"
-                    ? `"${rule.label}" could not run on ${relative} after ${how} (\`${rule.action.command}\`): ${output}. That is not a verdict on the file.`
-                    : `"${rule.label}" on ${relative} after ${how}:\n${output}`,
-            );
+            notes.push(noteOf(rule, run, relative, how));
         }
         return notes.length === 0 ? undefined : notes.join("\n\n");
     };

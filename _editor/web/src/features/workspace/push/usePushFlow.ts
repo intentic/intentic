@@ -13,6 +13,7 @@ import {
     planFixAttempt,
     type PushRun,
     pushFixConversationId,
+    type RepoChecksSummary,
 } from "@intentic/sandbox-contract";
 import type { AgentRunAttempt, AgentRunChoice } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
@@ -26,7 +27,8 @@ import { modelLabelFor } from "../../chat/accounts/providerCatalog";
 import { useRoleModel } from "../../chat/accounts/roleModel";
 import type { Conversation } from "../../chat/session/conversation";
 import { useSandbox } from "../../sandbox/client/useSandbox";
-import { prepushCommandOf } from "../../sandbox/environment/rules";
+import { adoptedChecksFor, prepushCommandOf, pushChecksOf } from "../../sandbox/environment/rules";
+import { useRepoChecks } from "../../sandbox/environment/useRepoChecks";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
 import { checkFixPrompt, checkNudgePrompt, checkOutcome, fixSignature, outcomeSummary, pushFixPrompt, pushNudgePrompt } from "../health/fixProposal";
 import { type SyncTarget, useChanges } from "../changes/useChanges";
@@ -83,6 +85,13 @@ export interface PushQuestion {
 
 // How long the panel says "Pushed": long enough to catch on the way back, short enough not to linger.
 const PUSHED_NOTE_MS = 8_000;
+
+// The first command the repositories going out contribute themselves (their own `.intentic/checks.json`, switched on by
+// the owner); empty when none of them does.
+const declaredPushCommand = (summaries: readonly RepoChecksSummary[], repos: readonly string[]): string =>
+    adoptedChecksFor(summaries, `push`, repos)
+        .flatMap((entry) => entry.checks)
+        .find((check) => check.when === `push`)?.run ?? ``;
 
 const pending = shallowRef<PendingPush | undefined>(undefined);
 const stage = ref<PushStage | undefined>(undefined);
@@ -371,12 +380,35 @@ export const resetPushFlow = (): void => {
 export function usePushFlow() {
     git ??= useChanges();
     const { settings } = useSandboxSettings();
+    // What the repositories themselves ask for, beside what the owner wrote: both decide whether this push is checked.
+    const { repos: declaringRepos } = useRepoChecks();
     // This job's own model list: a pre-push fix reads a failing check on work about to leave the machine.
     const prePushFix = useRoleModel(`pre-push-fix`);
     if (sandboxId === undefined) {
         sandboxId = useSandbox().activeSandboxId;
         watch(sandboxId, (id) => readTypical(id), { immediate: true });
     }
+
+    // Which repositories a press is sending, the question every check below is asked about.
+    const pushedRepos = (push: PendingPush): string[] => [...new Set(push.targets.filter((target) => target.push).map((target) => target.repo))];
+
+    // Whether anything at all stands before this push: a rule the owner wrote, or a check one of these repositories
+    // declares for itself and the owner has switched on. Nothing standing means the push simply goes.
+    const checksStandFor = (push: PendingPush): boolean => {
+        const repos = pushedRepos(push);
+        return (
+            pushChecksOf(settings.value?.rules ?? [], repos).length > 0 || adoptedChecksFor(declaringRepos.value ?? [], `push`, repos).length > 0
+        );
+    };
+
+    // What the waiting line names while nothing has been polled yet: the first command standing for whatever push is in
+    // question, the owner's rules ahead of a repository's own, since that is the order they run in.
+    const firstCheckCommand = (): string => {
+        const push = pending.value ?? standing.value?.push;
+        const repos = push === undefined ? [] : pushedRepos(push);
+        const owned = prepushCommandOf(settings.value?.rules ?? [], repos);
+        return owned === `` ? declaredPushCommand(declaringRepos.value ?? [], repos) : owned;
+    };
 
     // The one door every Push, Sync and Publish arrives at, so the check can't be walked around by another route.
     // A pull-only sync, or a workspace with no check configured, both pass straight through and still report their
@@ -389,8 +421,9 @@ export function usePushFlow() {
         // The head of the pre-push-fix list, read early: a no-check push can still be hook-refused and reuse this.
         const head = prePushFix.choice.value;
         fixWith = head === undefined ? {} : { model: modelPinKey(head), effort: head.effort };
-        const command = prepushCommandOf(settings.value?.rules ?? []);
-        if (command === `` || !targets.some((target) => target.push)) {
+        // Asked of the repositories this press is actually sending: a rule aimed at one, and a repository's own
+        // declared checks, stand only for their own. So a docs-only push is no longer gated by the app's suite.
+        if (!checksStandFor(push) || !targets.some((target) => target.push)) {
             void send(push);
             return;
         }
@@ -410,7 +443,7 @@ export function usePushFlow() {
      * already, and there is nobody left to interrupt. */
     function runChecks(push: PendingPush): void {
         enter(push, `checking`);
-        void prepush.start().then((settled) => {
+        void prepush.start(pushedRepos(push)).then((settled) => {
             rememberTypical(settled);
             if (pending.value !== push || stage.value !== `checking`) {
                 return;
@@ -641,7 +674,9 @@ export function usePushFlow() {
         running: computed(() => stage.value !== undefined),
         // The command for the line that says what's happening: from the run while there is one, from settings before
         // the first poll answers.
-        command: computed(() => (prepush.run.value.command === `` ? prepushCommandOf(settings.value?.rules ?? []) : prepush.run.value.command)),
+        // The command the line names before the first poll answers: whichever stands first for the repositories this
+        // press is sending, the owner's own ahead of a repository's, since that is the order they run in.
+        command: computed(() => (prepush.run.value.command === `` ? firstCheckCommand() : prepush.run.value.command)),
         // The terminal of whichever run the moment is about; absent on a sandbox with no tmux wrapper, where a button
         // would only open an empty panel.
         terminal: computed(() => currentTerminal()?.session),

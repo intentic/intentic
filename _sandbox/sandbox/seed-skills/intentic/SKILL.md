@@ -95,6 +95,12 @@ conversation that starts there (a persona's `startIn`).
                                      your branch's checkout, and a file you write here (an approval, an
                                      environment.d fragment, a skill) reaches the daemon when the turn lands,
                                      reviewed like code. The live copy is at /mnt/intentic-main/.intentic/config/
+<repo>/.intentic/checks.json         what THAT repository asks to have run on its own code: a list of
+                                     {when: "turn"|"push", run: "<command>"}, run in the repository itself.
+                                     Tracked in the repository, so it travels with a clone; inert until the
+                                     owner switches it on (Sandbox ▸ Agent ▸ Finishing, or the repo's own row
+                                     in the tree), and held again if it changes afterwards. Propose one as an
+                                     ordinary diff; never expect a check you just wrote to run this turn.
 /work/.intentic/records/             sessions/ (transcripts), artifacts/browser/ (screenshots). Shared live
 /work/.intentic/local/               cache/, tmp/, environment.approved.Dockerfile (the composed overlay). Shared live
 /work/.agents/skills/                the loaded skills every runtime reads (Claude links them from .claude/skills/)

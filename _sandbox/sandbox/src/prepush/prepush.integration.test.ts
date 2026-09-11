@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -10,6 +10,7 @@ import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import type { TerminalRunner } from "../terminal/terminal-run.js";
 import { CHECKS_SESSION } from "../terminal/terminal-session.js";
+import { fingerprintOf } from "../rules/repo-checks.js";
 import { createPrepushCheck } from "./prepush.js";
 
 // Fixtures use `unstubbed` so the fake is only what a test touches; nothing persists. Tests state a command and
@@ -300,4 +301,73 @@ test("run with no command configured starts nothing", async () => {
     await wait(100);
     expect(runs()).toBe(0);
     expect((await check.state()).status).toBe("idle");
+});
+
+/* WHAT A REPOSITORY ASKS FOR ITSELF, at the one moment it matters: a push. Three facts, each of which was untrue while
+ * one command in the settings stood for every repository in the workspace — it ran for pushes it had nothing to do
+ * with, it ran from the workspace root, and it could not be written by the repository that owns the build. */
+
+// A workspace with one repository that declares a check of its own; the marker file is how a test proves WHERE a
+// command ran, since a `cd` in the wrong place is the failure this whole change is about.
+const workspaceDeclaring = (repo: string, checks: { when: "turn" | "push"; run: string }[]): { root: string; fingerprint: string } => {
+    const root = mkdtempSync(join(tmpdir(), "prepush-repo-"));
+    mkdirSync(join(root, repo, ".git"), { recursive: true });
+    mkdirSync(join(root, repo, ".intentic"), { recursive: true });
+    writeFileSync(join(root, repo, ".intentic", "checks.json"), JSON.stringify({ checks }));
+    // Exists only inside the repository, so a command that finds it was run there and not at the workspace root.
+    writeFileSync(join(root, repo, "in-this-repo"), "");
+    return { root, fingerprint: fingerprintOf(checks) };
+};
+
+test("a repository's own check runs when that repository is pushed, in its own directory", async () => {
+    const { root, fingerprint } = workspaceDeclaring("app", [{ when: "push", run: "test -f in-this-repo" }]);
+    const { services, settings } = fakeServices({ root, prepushCommand: "" });
+    settings.current = { ...settings.current, adoptedChecks: { app: fingerprint } };
+    const check = createPrepushCheck(services);
+    await check.run(["app"]);
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("passed"), SETTLES);
+});
+
+// The failure the old single command could not avoid: pushing the docs repo ran the app's suite.
+test("it does not run when a different repository is the one going out", async () => {
+    const { root, fingerprint } = workspaceDeclaring("app", [{ when: "push", run: "test -f in-this-repo" }]);
+    const { services, settings, runs } = fakeServices({ root, prepushCommand: "" });
+    settings.current = { ...settings.current, adoptedChecks: { app: fingerprint } };
+    const check = createPrepushCheck(services);
+    await check.run(["docs"]);
+    await wait(100);
+    expect(runs()).toBe(0);
+    expect((await check.state()).status).toBe("idle");
+});
+
+// The gate itself: a file in a repository is a command somebody else may have written.
+test("a declaration nobody has adopted runs nothing at all", async () => {
+    const { root } = workspaceDeclaring("app", [{ when: "push", run: "test -f in-this-repo" }]);
+    const { services, runs } = fakeServices({ root, prepushCommand: "" });
+    const check = createPrepushCheck(services);
+    await check.run(["app"]);
+    await wait(100);
+    expect(runs()).toBe(0);
+});
+
+// The same directory rule for a rule the OWNER wrote and aimed at a repository, so neither has to spell a `cd`.
+test("an owner's rule naming a repository also runs inside it", async () => {
+    const { root } = workspaceDeclaring("app", []);
+    const { services, settings } = fakeServices({ root, prepushCommand: "" });
+    settings.current = {
+        ...settings.current,
+        rules: [
+            {
+                id: "app-check",
+                label: "App check",
+                moment: "push.starting",
+                when: { repo: "app" },
+                action: { kind: "command", command: "test -f in-this-repo", timeoutMs: 60_000 },
+                enabled: true,
+            },
+        ],
+    };
+    const check = createPrepushCheck(services);
+    await check.run(["app"]);
+    await vi.waitFor(async () => expect((await check.state()).status).toBe("passed"), SETTLES);
 });

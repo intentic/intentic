@@ -57,6 +57,8 @@ import { createHashlineServer } from "../../../hashline/hashline-tools.js";
 import { createDiagnosticsServer } from "../../../logs/diagnostics-tools.js";
 import { type RuleCommandRun, runRuleCommand } from "../../../rules/rule-command.js";
 import { fileEditedReviewer, spawnEditCommand } from "../../../rules/file-edited.js";
+import { repoCheckRules, withRepoChecks } from "../../../rules/repo-checks.js";
+import { repoCwd } from "../../../rules/rule-cwd.js";
 import { verifyTestsMessage } from "../../verification/agent-tests.js";
 import { passesAgainstHead } from "../../verification/agent-test-strength.js";
 import { recordCheckVerdict } from "../../verification/turn-checks.js";
@@ -236,8 +238,18 @@ const experimentStamps = (
 // Runs a rule's command inside the turn's own namespace via nsenter, like the Bash tool's rewrite, since the
 // daemon-side worktree has empty dependency directories. `bash -c` with the whole line quoted, since nsenter takes an
 // argv and a rule's command is a shell line.
-export const ruleCommandIn = (command: string, anchor: IsolationAnchor | undefined): string =>
-    anchor === undefined ? command : `${nsenterPrefix(anchor.pid, anchor.cwd)}bash -c ${shellQuote(command)}`;
+// `repo` is the rule's own, when it named one. It has to travel this far: inside the namespace the directory is decided
+// by `--wdns`, not by the cwd the daemon-side process was given, so a repository-scoped check would otherwise run at
+// the root of somebody's worktree while every other path in the system agreed it was running in the repository.
+export const ruleCommandIn = (command: string, anchor: IsolationAnchor | undefined, repo?: string): string =>
+    anchor === undefined ? command : `${nsenterPrefix(anchor.pid, repoCwd(anchor.cwd, repo))}bash -c ${shellQuote(command)}`;
+
+/* THE RULES A TURN RUNS UNDER: the owner's own, plus the checks each repository declares for itself and the owner has
+ * adopted (rules/repo-checks.ts). Merged once, at the top of planning, so the end-of-turn note, the Stop's rules and
+ * the per-file rules all read one list and none of them has to know a check can come from a repository. Never written
+ * back anywhere: settings.json holds what the owner wrote, and nothing else. */
+const underRepoChecks = (settings: SandboxSettings, declared: readonly Rule[]): SandboxSettings =>
+    declared.length === 0 ? settings : { ...settings, rules: withRepoChecks(settings.rules, declared) };
 
 export const planTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
     // Checked before anything else and above the dispatch, so a box out of memory refuses every provider arm alike, and
@@ -260,7 +272,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     const conversationTurns = entry?.turns ?? 0;
     // Resolved before dispatch since the composition of this turn's instructions reads it (see `honoured` below).
     const settings = context.settings ?? (await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()));
-    const [installed, setup, cast, skillCatalogNote, contextNote] = await Promise.all([
+    const [installed, setup, cast, skillCatalogNote, contextNote, declaredChecks] = await Promise.all([
         // cli/mcp/plugin/browser/agent-kind capabilities the owner installed; not the persona-filtered record, which
         // answers what the runtime can do instead.
         services.perf.track("turn.plan.capabilities", {}, () => services.capabilities.list()),
@@ -283,7 +295,12 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         // What the conversation's tree holds, for a conversation a context shelf narrowed, on the two turns that owe
         // the note.
         services.perf.track("turn.plan.context", {}, () => contextNoteIfDue(services, input, entry, conversationTurns)),
+        // What the workspace's repositories ask to have run on their own code, as rules (rules/repo-checks.ts). Read
+        // every turn rather than cached: the file belongs to the repository, and a check the owner switched off this
+        // morning must not keep running out of a cache.
+        services.perf.track("turn.plan.repo-checks", {}, () => repoCheckRules(services)),
     ]);
+    const effective = underRepoChecks(settings, declaredChecks);
     // Resolved above the provider split so every runtime, not just the Claude Code plan, inherits the same account and
     // tool bounds instead of enforcing the card on only one dropdown's worth of sessions.
     const persona = turnPersona({ personas: cast, actsAs: input.actsAs, unattended: input.unattended === true });
@@ -344,7 +361,9 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     );
     const shared: TurnContext = {
         ...context,
-        settings,
+        // The merged rule list travels with the settings, since every reader below already takes settings and none of
+        // them should have to ask a second question to find out what stands.
+        settings: effective,
         conversationTurns,
         iqSearchEnabled,
         ...(iqSearchNote !== undefined ? { iqSearchNote } : {}),
@@ -921,8 +940,11 @@ export const planHarnessTurn = async (
                 ? {
                       editReviewers: [
                           fileEditedReviewer(fileEditedRules, {
-                              run: (command, timeoutMs) =>
-                                  spawnEditCommand(context.localCwd)(ruleCommandIn(command, context.base.isolation?.anchor), timeoutMs),
+                              // In the repository the rule named, as at every other moment; the file itself travels as
+                              // an absolute path, so where the command runs changes without what it is given changing.
+                              run: (command, timeoutMs, repo) =>
+                                  spawnEditCommand(repoCwd(context.localCwd, repo))(ruleCommandIn(command, context.base.isolation?.anchor, repo), timeoutMs),
+                              repos: () => discoverRepos(context.localCwd),
                               roots: [context.localCwd, context.base.isolation?.plan?.root, services.workspace.root].filter(
                                   (root): root is string => root !== undefined,
                               ),
@@ -987,17 +1009,17 @@ export const planHarnessTurn = async (
                       // Logged like the pre-push check, since a red `turn.ending` command has two very different causes
                       // (broken work, or a check that never saw the workspace's dependencies) told apart only by
                       // whether it ran anchored in the turn's namespace.
-                      runRuleCommand: async (command: string, timeoutMs: number) => {
+                      runRuleCommand: async (command: string, timeoutMs: number, repo?: string) => {
                           const anchor = context.base.isolation?.anchor;
                           const from = Date.now();
-                          services.logger.info(
-                              { command, anchored: anchor !== undefined, cwd: context.localCwd, session: CHECKS_SESSION },
-                              "checks: check started",
-                          );
+                          // A rule naming a repository runs inside it, in this turn's own tree: for an isolated turn
+                          // that is its worktree's copy of the repository, not the one on /work.
+                          const cwd = repoCwd(context.localCwd, repo);
+                          services.logger.info({ command, anchored: anchor !== undefined, cwd, session: CHECKS_SESSION }, "checks: check started");
                           const run = await runRuleCommand(services, {
-                              command: ruleCommandIn(command, anchor),
+                              command: ruleCommandIn(command, anchor, repo),
                               timeoutMs,
-                              cwd: context.localCwd,
+                              cwd,
                               session: CHECKS_SESSION,
                               window: "checks",
                               outputBytes: TURN_RULE_OUTPUT_BYTES,
@@ -1021,6 +1043,9 @@ export const planHarnessTurn = async (
                           (await services.dependencies.status())
                               .filter((project) => project.state === "installing")
                               .map((project) => (project.dir === "" ? "the workspace root" : project.dir)),
+                      // This tree's repositories, so a rule aimed at one can be told whether the turn was in it. Asked
+                      // at the Stop and only when such a rule stands (turn-ending.ts touchedRepos), never per turn.
+                      turnRepos: () => discoverRepos(context.localCwd),
                       // What the tree says the turn changed, for the Stop's conditions; an edit via `sed -i` or a
                       // script is invisible to the edit ledger but not to git. Only for an isolated turn, whose
                       // worktree starts clean, so its dirty paths are its own.

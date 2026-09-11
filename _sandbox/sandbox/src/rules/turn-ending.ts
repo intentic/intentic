@@ -16,7 +16,7 @@ import {
 import { createViewLedger, isObservingCall, type ViewLedger, verifyUiEditsMessage } from "../agent/verification/agent-viewing.js";
 import { inWorktree, type IsolationPlan } from "../agents/worktrees/isolation.js";
 import type { RuleCommandRun } from "./rule-command.js";
-import { conditionHolds, type RuleFacts } from "./rules.js";
+import { conditionHolds, reposOf, type RuleFacts } from "./rules.js";
 import { EDIT_TOOLS, editedPath } from "./edit-tools.js";
 
 // The only one of turn.ending, push.starting and agent.finished that can send work back: a Stop that says something
@@ -45,8 +45,9 @@ export const workspaceRelative = (path: string, cwd: string | undefined): string
 };
 
 // Injected rather than imported, so the hook set is testable without a tmux server and usable where turn-plan stands,
-// not the daemon's services.
-export type TurnRuleCommand = (command: string, timeoutMs: number) => Promise<RuleCommandRun>;
+// not the daemon's services. `repo` is the rule's own, when it named one: the binder resolves it against the turn's
+// tree (rules/rule-cwd.ts), since only the binder knows whether that tree is /work or an isolated worktree.
+export type TurnRuleCommand = (command: string, timeoutMs: number, repo?: string) => Promise<RuleCommandRun>;
 
 export interface TurnEndingDeps {
     readonly isolation?: IsolationPlan | undefined;
@@ -64,6 +65,9 @@ export interface TurnEndingDeps {
     readonly installing?: (() => Promise<readonly string[]>) | undefined;
     // Misses what the edit ledger can't hear: a shell rewrite (sed -i, a heredoc). Absent uses the ledger alone.
     readonly changedPaths?: (() => Promise<readonly string[]>) | undefined;
+    // The turn tree's repositories, so a rule aimed at one knows whether this turn was in it; absent leaves every such
+    // rule unmatched, which is the same answer a workspace with no repositories would give.
+    readonly repos?: (() => Promise<readonly string[]>) | undefined;
     // Every command run, whatever it said; the land step (agent/turn-checks.ts) reads the last one to decide.
     readonly onCheckRun?: ((rule: Rule, run: RuleCommandRun) => void) | undefined;
     // The verify-tests built-in's whole answer, bound by the planner; absent means it has nothing to say.
@@ -150,12 +154,12 @@ const BUILTINS: Record<RuleBuiltin, (deps: TurnEndingDeps, ledgers: Ledgers) => 
 
 // Re-runs a failing check only when its output names a missing binary, the sign of a mid-install tree. Not a retry
 // loop: two runs answer it, and a tool still missing on the second is a workspace problem to report, not hide.
-const settledRun = async (runCommand: TurnRuleCommand, command: string, timeoutMs: number): Promise<RuleCommandRun> => {
-    const first = await runCommand(command, timeoutMs);
+const settledRun = async (runCommand: TurnRuleCommand, command: string, timeoutMs: number, repo: string | undefined): Promise<RuleCommandRun> => {
+    const first = await runCommand(command, timeoutMs, repo);
     if (first.status === "passed" || first.status === "cancelled" || notFoundBinary(first.output) === undefined) {
         return first;
     }
-    return runCommand(command, timeoutMs);
+    return runCommand(command, timeoutMs, repo);
 };
 
 // A command rule's contribution: what its run said, or what stood in the way of a run saying anything.
@@ -166,7 +170,9 @@ const commandContribution = async (
     deps: TurnEndingDeps,
 ): Promise<string | undefined> => {
     const { command, timeoutMs } = action;
-    const run = await settledRun(runCommand, command, timeoutMs);
+    // Aimed at a repository ⇒ run there. What the rule says and where it runs are the same fact, so neither the owner
+    // nor a repository's own declaration has to spell a `cd` into the command.
+    const run = await settledRun(runCommand, command, timeoutMs, rule.when?.repo);
     deps.onCheckRun?.(rule, run);
     // Cancelled counts as nothing to say too, same as a pass: the turn is free to end either way.
     if (run.status === "passed" || run.status === "cancelled") {
@@ -185,6 +191,20 @@ const commandContribution = async (
     ]
         .filter((line) => line !== "")
         .join("\n");
+};
+
+// Which repositories this turn's paths fall in, or nothing: a tree walk is worth paying for only when a rule standing
+// here actually names a repository, and a failed walk leaves those rules unmatched rather than firing them blind.
+export const touchedRepos = async (
+    rules: readonly Rule[],
+    paths: readonly string[],
+    deps: Pick<TurnEndingDeps, "repos">,
+): Promise<readonly string[] | undefined> => {
+    if (deps.repos === undefined || !rules.some((rule) => rule.enabled && rule.when?.repo !== undefined)) {
+        return undefined;
+    }
+    const repos = await deps.repos().catch((): readonly string[] => []);
+    return reposOf(paths, repos);
 };
 
 // The command rules standing at turn.ending whose condition holds, run in the owner's order, each failure as the
@@ -393,7 +413,10 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                         // unconditioned rules.
                         const edited = ledgers.verification.edited().map((path) => workspaceRelative(path, deps.cwd));
                         const changed = deps.changedPaths === undefined ? [] : await deps.changedPaths().catch(() => []);
-                        const facts = { paths: [...new Set([...edited, ...changed])], draw };
+                        const paths = [...new Set([...edited, ...changed])];
+                        // Which repositories those paths belong to, asked only where a rule here narrows by one: it
+                        // costs a tree walk, and most turns have nothing to spend it on.
+                        const facts = { paths, draw, repos: await touchedRepos(rules, paths, deps) };
                         const { parts, spoke } = await contributionsAt(facts);
                         if (parts.length === 0) {
                             return {};

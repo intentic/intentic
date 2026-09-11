@@ -115,6 +115,13 @@ const firedOf = (rule: Rule): string => {
                         <span v-else-if="verdictOf(rule) !== undefined" class="min-w-0 max-w-full truncate font-medium text-content">
                             {{ verdictOf(rule) }}
                         </span>
+                        <!-- Which repository, when it names one: it is where the command RUNS, not only a narrowing. -->
+                        <span v-if="rule.when?.repo !== undefined" class="inline-flex min-w-0 items-center gap-1.5 text-muted">
+                            <span class="shrink-0 text-subtle">in</span>
+                            <span class="max-w-48 truncate rounded border border-line-subtle bg-overlay px-2 py-0.5 font-mono text-content">
+                                {{ rule.when.repo }}
+                            </span>
+                        </span>
                         <!-- Paths shown as their globs, not a count: which paths is the whole question a reader has. -->
                         <span v-if="(rule.when?.paths?.length ?? 0) > 0" class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-muted">
                             <span class="shrink-0 text-subtle">only when touching</span>

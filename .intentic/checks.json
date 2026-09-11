@@ -1,0 +1,6 @@
+{
+    "checks": [
+        { "when": "turn", "run": "pnpm verify:turn" },
+        { "when": "push", "run": "pnpm verify:push" }
+    ]
+}

@@ -26,16 +26,21 @@ export interface RowActionSources {
     readonly previewableDirs: ReadonlySet<string>;
     // Count of personas starting here, not a set: the icon says whether there's one or several.
     readonly personaDirs: ReadonlyMap<string, number>;
+    // Repositories that declare checks of their own, and whether those are running: the icon is evidence the file
+    // exists, and its tooltip is the one thing a reader wants from it, which is whether anything happens.
+    readonly checkDirs: ReadonlyMap<string, { readonly adopted: boolean; readonly changed: boolean }>;
     readonly openHealth: (repo: string) => void;
     readonly openDirectory: (dir: string) => void;
     readonly openPersonas: (dir: string) => void;
+    readonly openChecks: (dir: string) => void;
     // Opens the Preview area's rail panel with this repo's target selected, not an in-tree tab.
     readonly openPreview: (dir: string) => void;
     readonly openDocument: (extension: string, provider: string, path: string, title: string, icon: string) => void;
 }
 
-// Actions in reading order: what the directory is (documents), has been (health, history), and can be done to (persona,
-// manage), matching the rail. Called per row on every render, so lookups here stay cheap.
+// Actions in reading order: what the directory is (documents), has been (health, history), what it carries (personas,
+// checks), and what can be done to it (preview, manage), matching the rail. Called per row on every render, so lookups
+// here stay cheap.
 export const rowActionsFor = (dir: string, sources: RowActionSources): readonly RowAction[] => {
     const actions: RowAction[] = documentsAt(dir).map(({ provider, offer }) => ({
         id: `document:${provider.owner}:${provider.id}`,
@@ -68,6 +73,23 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
                     : `Change who works here, ${personaCount} personas`,
             standing: true,
             run: (): void => sources.openPersonas(dir),
+        });
+    }
+    /* A repository that carries its own checks says so on its row, standing like a persona's: the file is a fact about
+     * this folder, not an action you can take on any folder. A declaration nobody has switched on is the one state
+     * worth interrupting for, so it is the one the tooltip leads with. */
+    const checks = sources.checkDirs.get(dir);
+    if (checks !== undefined) {
+        actions.push({
+            id: `checks`,
+            icon: `shield`,
+            tooltip: checks.changed
+                ? `Its checks changed since you switched them on, so they are not running`
+                : checks.adopted
+                  ? `Checks this repository runs on its own code`
+                  : `This repository declares checks, not switched on`,
+            standing: true,
+            run: (): void => sources.openChecks(dir),
         });
     }
     // Door into the Preview area with this repo's target selected; hover-only, alongside the other things you can do to

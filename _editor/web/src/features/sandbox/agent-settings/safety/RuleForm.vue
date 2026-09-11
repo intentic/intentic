@@ -2,7 +2,8 @@
 import type { Rule, RuleMoment } from "@intentic/api-contract";
 import { Button, ui, Icon, Picker, ProseField, SegmentedControl } from "@intentic/ui";
 import { computed, ref } from "vue";
-import { ACTIONS, type Choice, globsOf, MOMENTS, momentOf, nameOf, type RuleDraft } from "./ruleWords";
+import { useRepos } from "../../../workspace/explorer/useRepos";
+import { ACTIONS, ANYWHERE, type Choice, globsOf, MOMENTS, momentOf, nameOf, repoLabel, type RuleDraft } from "./ruleWords";
 
 // One form for creating a rule and for editing one already saved, ordered as the sentence it writes: when, only if,
 // then. The name is derived from what's typed (see nameOf) unless overwritten below.
@@ -31,10 +32,22 @@ const action = ref<Choice>(choiceOf(rule));
 const command = ref(rule?.action.kind === `command` ? rule.action.command : ``);
 const text = ref(rule?.action.kind === `instruct` ? rule.action.text : ``);
 const label = ref(rule?.label ?? ``);
+// Which repository this is about; `ANYWHERE` is the whole workspace, and is what a rule with no repository means.
+const repo = ref<string>(rule?.when?.repo ?? ANYWHERE);
 const globs = ref<string[]>([...(rule?.when?.paths ?? [])]);
 const globDraft = ref(``);
 // Starts open if the rule already has globs; a new rule starts collapsed.
 const narrowing = ref(globs.value.length > 0);
+
+// Every repository in the workspace, plus "anywhere". A rule aimed at one runs there, so this is both the condition
+// and the working directory; the note under the picker is the only place that can say so.
+const { options: repoOptions } = useRepos();
+// Each option carries a glyph like the moment picker's above it: two stacked pickers where only one has a mark leave
+// the chosen values on two different left edges, which reads as a misalignment rather than a distinction.
+const repoChoices = computed(() => [
+    { value: ANYWHERE, label: `Anywhere in the workspace`, icon: `sitemap` as const },
+    ...repoOptions.value.map((id) => ({ value: id, label: repoLabel(id), icon: `folder` as const })),
+]);
 
 const chosenMoment = computed(() => momentOf(moment.value));
 const momentOptions = computed(() => MOMENTS.map(({ value, label: name, icon, cost }) => ({ value, label: name, icon, description: cost })));
@@ -132,10 +145,16 @@ const save = (): void => {
     if (missing.value !== undefined) {
         return;
     }
+    // One `when` assembled from both narrowings; with neither, the rule saves without a condition at all, which is
+    // what an absent `when` means everywhere else.
+    const when = {
+        ...(repo.value === ANYWHERE ? {} : { repo: repo.value }),
+        ...(globs.value.length > 0 ? { paths: [...globs.value] } : {}),
+    };
     emit(`save`, {
         label: label.value.trim() === `` ? derived.value : label.value.trim(),
         moment: moment.value,
-        ...(globs.value.length > 0 ? { when: { paths: [...globs.value] } } : {}),
+        ...(Object.keys(when).length > 0 ? { when } : {}),
         action: actionOf(),
     });
 };
@@ -155,6 +174,27 @@ const save = (): void => {
                 header="When this rule runs"
                 @update:model-value="pickMoment"
             />
+        </div>
+
+        <!--
+            Which repository, above the path narrowing because it is the coarser of the two and because it decides
+            something the paths don't: where the command runs. Only shown where there is more than one repository to
+            choose between, since a one-repository workspace has no question to answer here.
+        -->
+        <div v-if="repoChoices.length > 2" class="flex flex-col gap-1.5">
+            <span :class="ui.sectionLabel(`text-2xs`)">Where</span>
+            <Picker
+                v-model="repo"
+                :options="repoChoices"
+                :disabled="disabled"
+                class="w-full py-1.5 text-xs"
+                aria-label="Which repository this rule is about"
+                header="Which repository"
+            />
+            <p v-if="repo !== ANYWHERE && action === `command`" class="text-2xs text-muted">
+                Runs in <span class="font-mono text-content">{{ repo === `root` ? `the workspace root` : repo }}</span
+                >, so write the command as you would in a terminal there.
+            </p>
         </div>
 
         <!-- Collapsed states the default in words; expanded shows the paths as removable chips. -->

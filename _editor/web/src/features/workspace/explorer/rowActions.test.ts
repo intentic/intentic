@@ -10,10 +10,12 @@ const sources = (over: Partial<RowActionSources> = {}): RowActionSources => ({
     manageableDirs: new Set<string>(),
     previewableDirs: new Set<string>(),
     personaDirs: new Map<string, number>(),
+    checkDirs: new Map<string, { adopted: boolean; changed: boolean }>(),
     openHealth: vi.fn(),
     openDirectory: vi.fn(),
     openPersonas: vi.fn(),
     openPreview: vi.fn(),
+    openChecks: vi.fn(),
     openDocument: vi.fn(),
     ...over,
 });
@@ -52,6 +54,31 @@ describe(`rowActionsFor`, () => {
     it(`gives a repo its health, and a managed repo its cog`, () => {
         const actions = rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]), manageableDirs: new Set([`intentic`]) }));
         expect(actions.map((action) => action.id)).toEqual([`health`, `directory`]);
+    });
+
+    // A repository's own checks are evidence the file exists, so they stand rather than waiting for a hover, and they
+    // sit with what the folder CARRIES (personas) rather than with what can be done to it (preview, manage).
+    it(`gives a repo that declares checks a standing shield, before the cog`, () => {
+        const source = sources({
+            repoDirs: new Set([`intentic`]),
+            manageableDirs: new Set([`intentic`]),
+            checkDirs: new Map([[`intentic`, { adopted: true, changed: false }]]),
+        });
+        const actions = rowActionsFor(`intentic`, source);
+        expect(actions.map((action) => action.id)).toEqual([`health`, `checks`, `directory`]);
+        const checks = actions.find((action) => action.id === `checks`);
+        expect(checks?.standing).toBe(true);
+        checks?.run();
+        expect(source.openChecks).toHaveBeenCalledWith(`intentic`);
+    });
+
+    // The two states that are not "it runs": each has to be readable without opening the panel, since the point of the
+    // switch is that a declaration nobody agreed to does nothing.
+    it(`says whether declared checks are waiting or have changed under an adoption`, () => {
+        const waiting = rowActionsFor(`shop`, sources({ checkDirs: new Map([[`shop`, { adopted: false, changed: false }]]) }));
+        expect(waiting[0]?.tooltip).toBe(`This repository declares checks, not switched on`);
+        const changed = rowActionsFor(`shop`, sources({ checkDirs: new Map([[`shop`, { adopted: false, changed: true }]]) }));
+        expect(changed[0]?.tooltip).toBe(`Its checks changed since you switched them on, so they are not running`);
     });
 
     // Eye opens the Preview area, not another in-tree tab.

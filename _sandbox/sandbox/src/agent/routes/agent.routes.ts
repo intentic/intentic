@@ -52,7 +52,7 @@ import { limitReopensAt } from "../models/limit-reset.js";
 import { createFrameLedger } from "../verification/agent-verification.js";
 import { createViewFrameLedger } from "../verification/agent-viewing.js";
 import { nudgeUnverifiedWork } from "../verification/verify-nudge.js";
-import { commandRuleFindings, workspaceRelative } from "../../rules/turn-ending.js";
+import { commandRuleFindings, touchedRepos, workspaceRelative } from "../../rules/turn-ending.js";
 import { mentionsSpentAllowance } from "../providers/failure-sentences.js";
 import { conversationOf } from "../tools/agent-requests.js";
 import { actorOf, type TurnInput } from "../run/turn/turn-actor.js";
@@ -807,9 +807,13 @@ const daemonStopFindings = async (
     const { request } = turn;
     try {
         const changed = request.changedPaths === undefined ? [] : await request.changedPaths().catch((): readonly string[] => []);
+        const rules = request.turnEndingRules ?? [];
+        const paths = [...new Set([...turn.edited.map((path) => workspaceRelative(path, turn.cwd)), ...changed])];
         return await commandRuleFindings(
-            request.turnEndingRules ?? [],
-            { paths: [...new Set([...turn.edited.map((path) => workspaceRelative(path, turn.cwd)), ...changed])], draw: Math.random() },
+            rules,
+            // Same facts the hook path builds at its own Stop, repositories included, or the same rule would mean two
+            // different things depending on which runtime ran the turn.
+            { paths, draw: Math.random(), repos: await touchedRepos(rules, paths, { repos: request.turnRepos }) },
             {
                 runCommand: request.runRuleCommand,
                 onCheckRun: request.onCheckRun,
