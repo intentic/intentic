@@ -117,6 +117,12 @@ needs* is the table.
 
 ## Key files
 
+The [window synchronization suite](window-sync/window-sync.spec.ts) runs the production floating-window and
+chat projection modules in separate Chromium pages, with real BroadcastChannels and Web Locks. Only sandbox
+selection and the tab-state input are fixtures; it needs no platform, daemon or sign-in. Run it with
+`pnpm --filter @intentic/e2e exec playwright test --config window-sync/playwright.config.ts`.
+It covers startup order, lost state messages, reload, suspension, competing windows and sandbox switches.
+
 - [specs](specs): the browser journeys themselves.
 - [smoke-signin.mjs](smoke-signin.mjs): the post-deploy front-door check, the only thing here that meets real Google.
 - [stack.ts](stack.ts): bringing the whole stack up, including the published daemon image.

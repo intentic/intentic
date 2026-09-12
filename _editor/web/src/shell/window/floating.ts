@@ -38,18 +38,25 @@ const post = (note: FloatingNote): void => {
 // Other windows' claims only; a BroadcastChannel never delivers to its own poster, so this window's own claim is
 // `mine`. Kept in a plain Map rather than reactive state, since presence changes rarely.
 interface Sighting {
+    readonly panel: FloatingPanel;
     readonly id: string;
     // When that window's claim began; used to break ties between competing claims for the same panel.
     readonly since: number;
     readonly seenAt: number;
 }
 
-const sightings = new Map<FloatingPanel, Sighting>();
-const elsewhere = shallowRef<ReadonlySet<FloatingPanel>>(new Set());
+const sightings = new Map<string, Sighting>();
+const elsewhere = shallowRef<ReadonlyMap<FloatingPanel, string>>(new Map());
 
 const publish = (): void => {
-    const next = new Set(sightings.keys());
-    if (next.size === elsewhere.value.size && [...next].every((panel) => elsewhere.value.has(panel))) {
+    const next = new Map<FloatingPanel, string>();
+    const ordered = [...sightings.values()].sort((a, b) => a.since - b.since || (a.id < b.id ? -1 : a.id === b.id ? 0 : 1));
+    for (const sighting of ordered) {
+        if (!next.has(sighting.panel)) {
+            next.set(sighting.panel, sighting.id);
+        }
+    }
+    if (next.size === elsewhere.value.size && [...next].every(([panel, id]) => elsewhere.value.get(panel) === id)) {
         return;
     }
     elsewhere.value = next;
@@ -90,30 +97,45 @@ const holdLiveness = (name: string): (() => void) => {
     };
 };
 
-// Snapshot of held lock names, refreshed once per sweep; can lag behind by up to one sweep interval.
-let heldLocks: ReadonlySet<string> = new Set();
 let looking = false;
+let sweep: ReturnType<typeof setInterval> | undefined;
 
-const lookAtLocks = (): void => {
-    if (globalThis.navigator?.locks === undefined || looking) {
+// Expiry must use a fresh lock query; a cached result can predate a browser suspension or a new claim.
+const retireSightings = (heldLocks: ReadonlySet<string>): void => {
+    for (const [id, sighting] of sightings) {
+        if (Date.now() - sighting.seenAt > STALE_MS && !heldLocks.has(lockName(sighting.panel, id))) {
+            sightings.delete(id);
+        }
+    }
+    publish();
+    if (sightings.size === 0 && sweep !== undefined) {
+        clearInterval(sweep);
+        sweep = undefined;
+    }
+};
+
+const sweepSightings = (): void => {
+    if (looking) {
+        return;
+    }
+    if (globalThis.navigator?.locks === undefined) {
+        retireSightings(new Set());
         return;
     }
     looking = true;
     void navigator.locks
         .query()
         .then((state) => {
-            heldLocks = new Set((state.held ?? []).flatMap((lock) => (lock.name === undefined ? [] : [lock.name])));
+            retireSightings(new Set((state.held ?? []).flatMap((lock) => (lock.name === undefined ? [] : [lock.name]))));
         })
         // Unavailable: fall back to heartbeat alone by clearing held locks.
         .catch(() => {
-            heldLocks = new Set();
+            retireSightings(new Set());
         })
         .finally(() => {
             looking = false;
         });
 };
-
-let sweep: ReturnType<typeof setInterval> | undefined;
 
 // Retires a panel once its heartbeat is stale past STALE_MS and its liveness lock is not held; runs only while
 // something is floating.
@@ -121,26 +143,16 @@ const startSweeping = (): void => {
     if (sweep !== undefined) {
         return;
     }
-    lookAtLocks();
-    sweep = setInterval(() => {
-        const now = Date.now();
-        for (const [panel, sighting] of sightings) {
-            if (now - sighting.seenAt > STALE_MS && !heldLocks.has(lockName(panel, sighting.id))) {
-                sightings.delete(panel);
-            }
-        }
-        publish();
-        if (sightings.size === 0 && sweep !== undefined) {
-            clearInterval(sweep);
-            sweep = undefined;
-            return;
-        }
-        lookAtLocks();
-    }, SWEEP_MS);
+    sweep = setInterval(sweepSightings, SWEEP_MS);
 };
 
 // This window's own claim, if any; set when a floating route mounts and cleared when its scope disposes.
 const mine = shallowRef<FloatingPanel | undefined>(undefined);
+const myId = shallowRef<string>();
+
+// A replacement realm has a different owner even when the panel never stops floating.
+export const floatingOwner = (panel: FloatingPanel): ComputedRef<string | undefined> =>
+    computed(() => (mine.value === panel ? myId.value : elsewhere.value.get(panel)));
 
 // Readers of incoming notes held by this window's claim; a set so a hot update can't leave a stale reader behind.
 const claimants = new Set<(note: FloatingNote) => void>();
@@ -237,6 +249,7 @@ const centred = (size: { width: number; height: number }): Frame => ({
 export const claimFloating = (panel: FloatingPanel, onDock: () => void): void => {
     const id = uuid();
     const since = Date.now();
+    myId.value = id;
     mine.value = panel;
 
     // Acquired before the first heartbeat, so the window is never announced without its liveness token.
@@ -285,13 +298,16 @@ export const claimFloating = (panel: FloatingPanel, onDock: () => void): void =>
         post({ kind: `gone`, panel, id });
     };
     window.addEventListener(`pagehide`, leaving);
+    window.addEventListener(`pageshow`, beat);
 
     const release = (): void => {
         clearInterval(timer);
         claimants.delete(heard);
         window.removeEventListener(`pagehide`, leaving);
+        window.removeEventListener(`pageshow`, beat);
         if (mine.value === panel) {
             mine.value = undefined;
+            myId.value = undefined;
         }
         dropLiveness();
         leaving();
@@ -309,12 +325,12 @@ export const claimFloating = (panel: FloatingPanel, onDock: () => void): void =>
  */
 export const receiveFloatingNote = (note: FloatingNote): void => {
     if (note.kind === `here`) {
-        sightings.set(note.panel, { id: note.id, since: note.since, seenAt: Date.now() });
+        sightings.set(note.id, { panel: note.panel, id: note.id, since: note.since, seenAt: Date.now() });
         publish();
         startSweeping();
-    } else if (note.kind === `gone` && sightings.get(note.panel)?.id === note.id) {
+    } else if (note.kind === `gone` && sightings.get(note.id)?.panel === note.panel) {
         // Matched by id: a losing window's `gone` must not retire the winner's claim it raced against.
-        sightings.delete(note.panel);
+        sightings.delete(note.id);
         publish();
     }
     for (const claimant of claimants) {

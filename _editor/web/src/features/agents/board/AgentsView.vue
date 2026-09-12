@@ -21,7 +21,7 @@ import { refreshAcross, subscribe as watchOtherBoxes } from "../../sandbox/live/
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, runsNeedingYou, useWorkflowRuns } from "../fleet/useWorkflowRuns";
 import { hold } from "../../../shell/notifications/notifications";
 import { relativeTime } from "../../chat/models/catalog";
-import { chatRun, showingRunGraph } from "../../chat/run/chatRun";
+import { showingRunGraph } from "../../chat/run/chatRun";
 import { chatWide } from "../../chat/panel/chatPanelLayout";
 import { openRunInChat } from "../../chat/run/openRun";
 import { traceFocus } from "../../chat/run/focusTrace";
@@ -72,7 +72,7 @@ const {
 // Whole store, not a destructure: the first-screen connect offer acts on the focused chat, and the card is that
 // conversation's view as one object.
 const chat = useChat();
-const { active, panes, connected, accountsLoaded } = chat;
+const { active, connected, accountsLoaded } = chat;
 // A refusal lands on the board's notice strip, since a press with no visible effect reads as broken.
 const synthesize = async (): Promise<void> => {
     const result = await synthesizeSessions();
@@ -273,8 +273,8 @@ const runGraphUp = computed(
     () =>
         chatWide.value &&
         showingRunGraph(
-            workflowRuns.value.find((run) => run.runId === chatRun.value?.runId),
-            chatRun.value,
+            workflowRuns.value.find((run) => run.runId === chatStrip.value.run?.runId),
+            chatStrip.value.run,
             chatStrip.value.panes,
         ),
 );
@@ -966,8 +966,15 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     Appears exactly when two or more chats sit side by side (the panes are the selection); opens a
                     draft composed from their transcripts but not sent.
                 -->
-                <Button v-if="panes.length >= 2" size="small" severity="secondary" :disabled="synthesizing" class="shrink-0" @click="synthesize">
-                    <Icon :name="synthesizing ? `spinner` : `sparkles`" :spin="synthesizing" />Synthesize {{ panes.length }}
+                <Button
+                    v-if="chatStrip.panes.length >= 2"
+                    size="small"
+                    severity="secondary"
+                    :disabled="synthesizing"
+                    class="shrink-0"
+                    @click="synthesize"
+                >
+                    <Icon :name="synthesizing ? `spinner` : `sparkles`" :spin="synthesizing" />Synthesize {{ chatStrip.panes.length }}
                 </Button>
                 <Button size="small" class="shrink-0" @click="startAgent()"> <Icon name="plus" />New agent </Button>
             </div>
@@ -1181,7 +1188,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             :key="run.runId"
                             :run="run"
                             :dense="narrow"
-                            :selected="chatRun?.runId === run.runId"
+                            :selected="chatStrip.run?.runId === run.runId"
                             :needs-you="needingYou.has(run.runId)"
                             :stopping="stoppingRuns.has(run.runId)"
                             @open="openRun(run)"

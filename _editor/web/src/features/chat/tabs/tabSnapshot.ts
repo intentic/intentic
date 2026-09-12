@@ -3,6 +3,7 @@ import type { AgentStanding } from "../../agents/fleet/agentStatus";
 import type { Conversation } from "../session/conversation";
 import type { TurnPick } from "../run/turnDefaults";
 import type { SessionRef } from "../run/turnRequest";
+import type { ChatRunView } from "../run/chatRun";
 import { forgetWindowState, readWindowState, writeWindowState } from "../../../shell/window/windowStore";
 
 // Where a sandbox's open chat tabs persist between page loads: identity, title, and composer draft, one JSON
@@ -107,6 +108,7 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
 // A sandbox's whole strip: open tabs, the focused one, and which are on screen (panes, column order). Coherent
 // by construction: `active` and every pane name a tab in `tabs`, and `active` is always among the panes.
 export interface TabSnapshot {
+    readonly run?: ChatRunView;
     readonly active: string;
     readonly panes: readonly string[];
     readonly tabs: readonly StoredTab[];
@@ -199,8 +201,7 @@ const readFork = (raw: unknown): { forkOf?: StoredTab["forkOf"] } => {
 const readStanding = (raw: unknown): { standing?: AgentStanding } => {
     const standing = (typeof raw === `object` && raw !== null ? raw : {}) as Record<string, unknown>;
     const attention = (typeof standing[`attention`] === `object` && standing[`attention`] !== null ? standing[`attention`] : undefined) as
-        | AgentStanding["attention"]
-        | undefined;
+        AgentStanding["attention"] | undefined;
     if (typeof standing[`status`] !== `string` || standing[`status`] === `` || attention === undefined) {
         return {};
     }
@@ -279,11 +280,18 @@ export const readStoredTabs = (raw: string): StoredTab[] => {
     return tabs;
 };
 
+const readRun = (raw: unknown): ChatRunView | undefined => {
+    if (typeof raw !== `object` || raw === null || !(`runId` in raw) || typeof raw.runId !== `string` || !(`mode` in raw)) {
+        return undefined;
+    }
+    return raw.mode === `graph` || raw.mode === `live` || raw.mode === `pinned` ? { runId: raw.runId, mode: raw.mode } : undefined;
+};
+
 // Parses a stored blob into a coherent snapshot: readable tabs, plus a focus and panes that name them.
 const parse = (raw: string): TabSnapshot | undefined => {
-    let stored: { active?: unknown; panes?: unknown };
+    let stored: { active?: unknown; panes?: unknown; run?: unknown };
     try {
-        stored = JSON.parse(raw) as { active?: unknown; panes?: unknown };
+        stored = JSON.parse(raw) as typeof stored;
     } catch {
         return undefined;
     }
@@ -298,7 +306,7 @@ const parse = (raw: string): TabSnapshot | undefined => {
     const panes = (Array.isArray(stored.panes) ? (stored.panes as unknown[]) : []).filter(
         (id): id is string => typeof id === `string` && seen.has(id),
     );
-    return { active, panes: panes.includes(active) ? panes : [...panes, active], tabs };
+    return { active, panes: panes.includes(active) ? panes : [...panes, active], tabs, run: readRun(stored.run) };
 };
 
 // This window's tabs for a sandbox, else the last window's (the seed) if this one never opened it.

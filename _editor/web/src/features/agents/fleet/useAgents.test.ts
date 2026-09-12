@@ -401,6 +401,7 @@ describe("draft cards", () => {
         ...(words === undefined ? {} : { preview: words }),
         ...(at === undefined ? {} : { draftAt: at }),
     });
+    let stripRevision = 0;
     const strip = (...tabs: TabFacts[]): Strip => ({ active: tabs[0]?.id, panes: tabs.slice(0, 1).map((tab) => tab.id), tabs });
 
     beforeEach(() => {
@@ -578,7 +579,10 @@ describe("draft cards", () => {
         const { receiveFloatingNote } = await import("../../../shell/window/floating");
         receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
         // This window's own strip is empty of it; the card is drawn from the other window's note anyway.
-        receiveChatNote({ sandbox: undefined, note: { kind: `strip`, strip: strip(draftTab(`fresh`, `fix the login redirect`, 1_700)) } });
+        receiveChatNote({
+            sandbox: undefined,
+            note: { kind: `strip`, owner: `w1`, revision: ++stripRevision, strip: strip(draftTab(`fresh`, `fix the login redirect`, 1_700)) },
+        });
 
         // The age comes off the strip too; guessing here would report this window's own boot time instead.
         expect(
@@ -591,7 +595,7 @@ describe("draft cards", () => {
             })),
         ).toEqual([{ id: `fresh`, preview: `fix the login redirect`, unsent: true, draftAt: 1_700, open: true }]);
 
-        receiveChatNote({ sandbox: undefined, note: { kind: `strip`, strip: strip() } });
+        receiveChatNote({ sandbox: undefined, note: { kind: `strip`, owner: `w1`, revision: ++stripRevision, strip: strip() } });
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
     });
 
@@ -608,14 +612,24 @@ describe("draft cards", () => {
         receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
         receiveChatNote({
             sandbox: undefined,
-            note: { kind: `strip`, strip: strip({ ...draftTab(`a1`, `fix the login redirect`), registered: true, standing: `resumed` }) },
+            note: {
+                kind: `strip`,
+                owner: `w1`,
+                revision: ++stripRevision,
+                strip: strip({ ...draftTab(`a1`, `fix the login redirect`), registered: true, standing: `resumed` }),
+            },
         });
         expect(useAgents().lanes.value.finished.map((card) => card.unsent)).toEqual([true]);
 
         // Sent out there: the holder's next strip carries the tab without words; this window's own copy was stale.
         receiveChatNote({
             sandbox: undefined,
-            note: { kind: `strip`, strip: strip({ ...draftTab(`a1`), registered: true, standing: `resumed` }) },
+            note: {
+                kind: `strip`,
+                owner: `w1`,
+                revision: ++stripRevision,
+                strip: strip({ ...draftTab(`a1`), registered: true, standing: `resumed` }),
+            },
         });
 
         expect(useAgents().lanes.value.finished.map((card) => ({ id: card.id, unsent: card.unsent }))).toEqual([{ id: `a1`, unsent: false }]);
@@ -629,7 +643,10 @@ describe("draft cards", () => {
         const { receiveChatNote } = await import("../../chat/run/chatChannel");
         const { receiveFloatingNote } = await import("../../../shell/window/floating");
         receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
-        receiveChatNote({ sandbox: undefined, note: { kind: `strip`, strip: strip(draftTab(`fresh`, `fix the login redirect`, 1_700)) } });
+        receiveChatNote({
+            sandbox: undefined,
+            note: { kind: `strip`, owner: `w1`, revision: ++stripRevision, strip: strip(draftTab(`fresh`, `fix the login redirect`, 1_700)) },
+        });
         const card = (): { id: string; open: boolean; unsent: boolean; preview: string | undefined; updatedAt: number }[] =>
             useAgents().lanes.value.active.map((entry) => ({
                 id: entry.id,
@@ -663,7 +680,7 @@ describe("draft cards", () => {
         expect(card()).toEqual([{ id: `fresh`, open: true, unsent: true, preview: `fix the login redirect`, updatedAt: 0 }]);
 
         // Then the tab is gone from the strip: the card stands for the message alone, undated.
-        receiveChatNote({ sandbox: undefined, note: { kind: `strip`, strip: strip() } });
+        receiveChatNote({ sandbox: undefined, note: { kind: `strip`, owner: `w1`, revision: ++stripRevision, strip: strip() } });
         expect(card()).toEqual([{ id: `fresh`, open: false, unsent: true, preview: `fix the login redirect`, updatedAt: 0 }]);
 
         forgetClosedDraft(`fresh`);

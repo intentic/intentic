@@ -114,6 +114,17 @@ describe(`a panel floating in another window`, () => {
         expect(surface.shows.value).toBe(true);
     });
 
+    it(`waits for a fresh liveness query before expiring a claim after suspension`, async () => {
+        const surface = createFloatingSurface(`chat`, size);
+        stubLocks([`intentic.floating.chat.w-1`]);
+        receiveFloatingNote(here(`chat`, `w-1`));
+
+        vi.advanceTimersByTime(4_000);
+        await Promise.resolve();
+
+        expect(surface.shows.value).toBe(false);
+    });
+
     it(`raises that window instead of opening a second one`, () => {
         const surface = createFloatingSurface(`chat`, size);
         const open = vi.fn((_url: string, _target: string, _features: string) => null);
@@ -132,6 +143,16 @@ describe(`a panel floating in another window`, () => {
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `loser` });
 
         expect(surface.shows.value).toBe(false);
+    });
+
+    it(`keeps the winning window when a competing claim arrives and closes`, () => {
+        const surface = createFloatingSurface(`chat`, size);
+        receiveFloatingNote(here(`chat`, `winner`, 1_000));
+        receiveFloatingNote(here(`chat`, `loser`, 2_000));
+        receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `loser` });
+
+        expect(surface.shows.value).toBe(false);
+        expect(surface.floats.value).toBe(true);
     });
 });
 

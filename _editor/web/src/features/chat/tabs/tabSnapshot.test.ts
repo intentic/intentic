@@ -40,6 +40,22 @@ beforeEach(() => {
 });
 
 describe(`reading a tab snapshot`, () => {
+    it(`restores the workflow selection alongside the tabs and pane order`, () => {
+        const run = { runId: `run-1`, mode: `pinned` };
+        writeTabSnapshot(`sb1`, JSON.stringify({ active: `b`, panes: [`a`, `b`], tabs: [tab(`a`), tab(`b`)], run }));
+
+        const snapshot = readTabSnapshot(`sb1`);
+        expect(snapshot?.run).toEqual(run);
+        expect(snapshot?.active).toBe(`b`);
+        expect(snapshot?.panes).toEqual([`a`, `b`]);
+    });
+
+    it(`drops an invalid workflow selection without dropping readable tabs`, () => {
+        writeTabSnapshot(`sb1`, JSON.stringify({ active: `a`, tabs: [tab(`a`)], run: { runId: `run-1`, mode: `invalid` } }));
+
+        expect(readTabSnapshot(`sb1`)?.run).toBeUndefined();
+        expect(readTabSnapshot(`sb1`)?.active).toBe(`a`);
+    });
     it(`prefers this window's own tabs over the seed the last window left`, () => {
         local.set(KEY, blob(`other`, [tab(`other`, `Another window's chat`)]));
         session.set(KEY, blob(`mine`, [tab(`mine`, `This window's chat`)]));
@@ -194,7 +210,9 @@ describe(`reading a tab snapshot`, () => {
         const stored = (displacedModel: unknown): string =>
             JSON.stringify({
                 active: `a`,
-                tabs: [{ conversationId: `a`, draft: ``, provider: `gemini`, model: `gemini-3.1-pro-low`, displacedModel, attachments: [], queued: [] }],
+                tabs: [
+                    { conversationId: `a`, draft: ``, provider: `gemini`, model: `gemini-3.1-pro-low`, displacedModel, attachments: [], queued: [] },
+                ],
             });
 
         session.set(KEY, stored(`claude-opus-4-6-thinking`));

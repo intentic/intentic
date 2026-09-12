@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { effectScope, nextTick } from "vue";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatEnvelope } from "./chatChannel";
 import type { Strip, TabFacts } from "../tabs/tabFacts";
 
@@ -28,6 +28,7 @@ class FakeChannel {
 }
 
 vi.stubGlobal(`BroadcastChannel`, FakeChannel);
+vi.useFakeTimers();
 
 const { drawsChat, elsewhereStrip, publishStrip } = await import("./chatEcho");
 const { receiveChatNote } = await import("./chatChannel");
@@ -58,7 +59,9 @@ const strip = (...tabs: TabFacts[]): Strip => ({ active: tabs[0]?.id, panes: tab
 // Only the strips this window posted; the roll-call note is a separate case.
 const postedStrips = (): Strip[] => posted.flatMap((envelope) => (envelope.note.kind === `strip` ? [envelope.note.strip] : []));
 
-const hear = (heard: Strip, sandbox = `sb1`): void => receiveChatNote({ sandbox, note: { kind: `strip`, strip: heard } });
+let revision = 0;
+const hear = (heard: Strip, sandbox = `sb1`, owner = `w1`): void =>
+    receiveChatNote({ sandbox, note: { kind: `strip`, owner, revision: ++revision, strip: heard } });
 
 beforeEach(() => {
     posted.length = 0;
@@ -67,12 +70,72 @@ beforeEach(() => {
 afterEach(() => {
     dock();
     hear(EMPTY_STRIP);
-    publishStrip(EMPTY_STRIP);
+    publishStrip(EMPTY_STRIP, `sb1`);
 });
+afterAll(() => vi.useRealTimers());
 
 // What the board is told about a strip it can't see: with the chat popped out, this is the window hearing what the
 // drawing window says it's showing.
 describe(`elsewhereStrip`, () => {
+    it(`retries a lost roll-call without waiting for a user gesture or another edit`, async () => {
+        popOut();
+        await nextTick();
+        posted.length = 0;
+
+        await vi.advanceTimersByTimeAsync(2_500);
+
+        expect(posted).toContainEqual({ sandbox: `sb1`, note: { kind: `roll` } });
+    });
+
+    it(`rejects a competing window's state and keeps the elected owner's entire strip`, () => {
+        popOut();
+        const current = { ...strip(draftTab(`a`), draftTab(`b`)), panes: [`a`, `b`], run: { runId: `run-1`, mode: `pinned` as const } };
+        hear(current);
+        hear(strip(draftTab(`wrong`)), `sb1`, `loser`);
+
+        expect(elsewhereStrip.value).toEqual(current);
+    });
+
+    it(`rejects an older revision from the same owner`, () => {
+        popOut();
+        const current = strip(draftTab(`a`, `latest words`));
+        hear(current);
+        receiveChatNote({ sandbox: `sb1`, note: { kind: `strip`, owner: `w1`, revision: revision - 1, strip: EMPTY_STRIP } });
+
+        expect(elsewhereStrip.value).toEqual(current);
+    });
+
+    it(`re-asks after owner replacement and rejects the retired realm's delayed snapshot`, async () => {
+        popOut();
+        hear(strip(draftTab(`old`)));
+        receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w2`, since: 2 });
+        dock();
+        hear(strip(draftTab(`late-old`)));
+        await nextTick();
+
+        expect(elsewhereStrip.value).toEqual(EMPTY_STRIP);
+        expect(posted).toContainEqual({ sandbox: `sb1`, note: { kind: `roll` } });
+        const current = strip(draftTab(`replacement`));
+        hear(current, `sb1`, `w2`);
+        expect(elsewhereStrip.value).toEqual(current);
+        receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w2` });
+    });
+    it(`requests the current strip when a holder appears after the boot roll-call`, async () => {
+        popOut();
+        await nextTick();
+
+        expect(posted).toContainEqual({ sandbox: `sb1`, note: { kind: `roll` } });
+    });
+
+    it(`repairs missed updates when the board regains focus`, () => {
+        popOut();
+        hear(strip(draftTab(`c1`, `old words`)));
+        posted.length = 0;
+
+        window.dispatchEvent(new Event(`focus`));
+
+        expect(posted).toContainEqual({ sandbox: `sb1`, note: { kind: `roll` } });
+    });
     it(`is empty while this window draws the chat itself: its own strip is the answer`, () => {
         hear(strip(draftTab(`c1`, `hello`)));
 
@@ -127,8 +190,24 @@ describe(`elsewhereStrip`, () => {
 // `showsPanel` is optimistic during boot, so every window briefly reads as drawing the chat until a holder's first beat
 // arrives; holder identity also lets a reloaded holder retire its predecessor's strip.
 describe(`strip publisher ownership`, () => {
+    it(`never labels the previous sandbox's cached strip with the next sandbox`, async () => {
+        const scope = effectScope();
+        scope.run(() => claimFloating(`chat`, vi.fn()));
+        publishStrip(strip(draftTab(`private-to-sb1`, `first box`)), `sb1`);
+        await nextTick();
+        useSandbox().activeSandboxId.value = `sb2`;
+        await nextTick();
+        posted.length = 0;
+
+        receiveChatNote({ sandbox: `sb2`, note: { kind: `roll` } });
+
+        expect(postedStrips()).toEqual([]);
+        scope.stop();
+        useSandbox().activeSandboxId.value = `sb1`;
+        await nextTick();
+    });
     it(`does not let a docked or booting window overwrite the floating chat's strip`, () => {
-        publishStrip(strip(draftTab(`c1`, `a stale local copy`)));
+        publishStrip(strip(draftTab(`c1`, `a stale local copy`)), `sb1`);
         receiveChatNote({ sandbox: `sb1`, note: { kind: `roll` } });
 
         expect(postedStrips()).toEqual([]);
@@ -138,7 +217,7 @@ describe(`strip publisher ownership`, () => {
         popOut();
         hear(strip(draftTab(`c1`, `already sent`)));
         // Simulates the replacement realm restoring with an empty strip before its route claims the panel.
-        publishStrip(EMPTY_STRIP);
+        publishStrip(EMPTY_STRIP, `sb1`);
 
         const scope = effectScope();
         scope.run(() => claimFloating(`chat`, vi.fn()));
@@ -152,7 +231,7 @@ describe(`strip publisher ownership`, () => {
         const scope = effectScope();
         scope.run(() => claimFloating(`chat`, vi.fn()));
         await nextTick();
-        publishStrip(strip(draftTab(`c1`, `what the holder shows`)));
+        publishStrip(strip(draftTab(`c1`, `what the holder shows`)), `sb1`);
         posted.length = 0;
 
         receiveChatNote({ sandbox: `sb1`, note: { kind: `roll` } });

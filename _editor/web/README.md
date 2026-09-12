@@ -58,6 +58,14 @@ scaffolds, profiles, …), and the environment-overlay rebuild flow: is document
 
 ## Conventions
 
+Chat state across windows has one read boundary: [`chatStrip`](src/features/chat/panel/useChat-strip.ts).
+It carries the visible owner's tabs, focus, pane order and workflow selection. Fleet cards, workflow highlights
+and synthesis read that projection; hidden windows' conversation objects are only local working copies.
+[`chatEcho`](src/features/chat/run/chatEcho.ts) binds snapshots to the elected floating-window identity, the
+restored sandbox and a monotonic revision. Ownership changes, focus and page restoration trigger reconciliation;
+periodic roll-calls recover missed messages. Tab persistence includes workflow selection for reload and docking.
+The authority and recovery rules are documented in [Chat state across windows](../../docs/design/chat-window-state.md).
+
 The setup picker's **My own computer** option remains available during hosted provisioning. Switching waits
 only for the platform to record cancellation; resource deletion continues independently. Late provision and
 poll responses cannot restore the hosted selection or open its workspace, and the local install receives a

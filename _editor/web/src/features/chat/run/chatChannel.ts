@@ -4,16 +4,13 @@ import type { Summons } from "./summon";
 import type { Strip } from "../tabs/tabFacts";
 import type { StoredTab } from "../tabs/tabSnapshot";
 
-// One BroadcastChannel for everything the chat tells the app's other windows: a board gesture (summon.ts), the drawing
-// window's strip (chatEcho.ts), and closed chats with a message set aside (closedDrafts.ts). One channel guarantees one
-// delivery order and one sandbox guard, applied on the envelope rather than by each reader. Queued turns and full draft
-// text never ride it.
+// All chat messages share a sandbox guard and delivery order; snapshots additionally require the current owner's identity.
 
 export type ChatNote =
     // A gesture made outside the panel, for every window's panel to apply.
     | { readonly kind: `summons`; readonly summons: Summons }
     // What the drawing window is showing, for windows that aren't; a full snapshot, never a patch.
-    | { readonly kind: `strip`; readonly strip: Strip }
+    | { readonly kind: `strip`; readonly owner: string; readonly revision: number; readonly strip: Strip }
     // Asks "what are you showing" on boot or sandbox switch, since asking is cheaper than waiting for the next change.
     | { readonly kind: `roll` }
     // The whole set of chats closed with a message still in them.

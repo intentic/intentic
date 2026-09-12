@@ -1,9 +1,9 @@
 import type { TranscriptRow, TranscriptQuestion, TranscriptTool, ToolCallContent } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { track } from "../../../app/analytics";
-import type { Conversation } from "../../chat/session/conversation";
+import type { TabFacts } from "../../chat/tabs/tabFacts";
 import { summonChat } from "../../chat/run/summon";
-import { useChat } from "../../chat/run/useChat";
+import { chatStrip } from "../../chat/panel/useChat-strip";
 import { sandboxRequest, sandboxUpload } from "../../sandbox/client/sandboxClient";
 import { revealConversation } from "./agentActions";
 import { composeSession } from "./sessionSuggestion";
@@ -59,7 +59,13 @@ const renderQuestion = (question: TranscriptQuestion): string => {
     const lines = question.questions.map((asked) => {
         const picks = question.answers?.[asked.question] ?? [];
         const answer =
-            question.status === `answered` ? (picks.length > 0 ? picks.join(`, `) : `(no answer)`) : question.status === `cancelled` ? `(dismissed)` : `(unanswered)`;
+            question.status === `answered`
+                ? picks.length > 0
+                    ? picks.join(`, `)
+                    : `(no answer)`
+                : question.status === `cancelled`
+                  ? `(dismissed)`
+                  : `(unanswered)`;
         return `- ${asked.header || asked.question}: ${answer}`;
     });
     return lines.join(`\n`);
@@ -140,9 +146,9 @@ const slugOf = (title: string): string => {
     return cleaned === `` ? `conversation` : cleaned;
 };
 
-const transcriptOf = async (conversation: Conversation): Promise<TranscriptRow[] | undefined> => {
+const transcriptOf = async (conversation: TabFacts): Promise<TranscriptRow[] | undefined> => {
     try {
-        const response = await sandboxRequest(`/agents/${encodeURIComponent(conversation.conversationId)}/transcript`);
+        const response = await sandboxRequest(`/agents/${encodeURIComponent(conversation.id)}/transcript`);
         if (!response.ok) {
             return undefined;
         }
@@ -161,16 +167,16 @@ export const synthesizeSessions = async (): Promise<SynthesisAsk> => {
     if (synthesizing.value) {
         return refused(`A synthesis is already being prepared.`);
     }
-    const { panes, conversations } = useChat();
-    const sources = panes.value.map((id) => conversations.value.find((conversation) => conversation.conversationId === id));
+    const { panes, tabs } = chatStrip.value;
+    const sources = panes.map((id) => tabs.find((tab) => tab.id === id));
     if (sources.length < 2 || sources.some((source) => source === undefined)) {
         return refused(`Open at least two conversations side by side to synthesize them.`);
     }
     const settled = sources.filter((source) => source !== undefined);
-    if (settled.some((source) => source.messages.value.length === 0)) {
+    if (settled.some((source) => source.standing === `draft`)) {
         return refused(`Every conversation to synthesize needs at least one completed turn.`);
     }
-    if (settled.some((source) => source.streaming.value)) {
+    if (settled.some((source) => source.standing === `starting`)) {
         return refused(`Wait for every selected agent to finish, or stop it: before synthesizing.`);
     }
     synthesizing.value = true;
@@ -182,7 +188,7 @@ export const synthesizeSessions = async (): Promise<SynthesisAsk> => {
         const refs: SourceRef[] = [];
         const attachments = settled.map((source, index) => {
             const label = String.fromCharCode(65 + index);
-            const title = source.title.value ?? `Untitled agent`;
+            const title = source.title ?? `Untitled agent`;
             const name = `source-${label}-${slugOf(title)}.md`;
             const path = `.intentic/records/artifacts/attachments/${uuid()}/${name}`;
             refs.push({ label, title, path });

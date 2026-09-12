@@ -2,6 +2,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { sandboxRouteName, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { nextTick } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { chatRun } from "./chatRun";
 
 vi.mock("../../sandbox/client/sandboxClient", () => {
     const sandboxRequest = vi.fn();
@@ -642,6 +643,21 @@ describe(`per-tab turn settings`, () => {
 // Tab set belongs to the window it's open in (the daemon multiplexes per connection). Last-writer-wins on a shared key
 // would leak one window's tabs into another's.
 describe(`tab snapshots across windows and sandboxes`, () => {
+    it(`restores workflow selection with the tab snapshot and clears it for an empty sandbox`, async () => {
+        const chat = useChat();
+        chat.draft.value = `keep this tab`;
+        const focused = chat.activeId.value;
+        chatRun.value = { runId: `run-1`, mode: `graph` };
+        await nextTick();
+
+        resetChat();
+
+        expect(chat.activeId.value).toBe(focused);
+        expect(chatRun.value).toEqual({ runId: `run-1`, mode: `graph` });
+        storage.clear();
+        resetChat();
+        expect(chatRun.value).toBeUndefined();
+    });
     // Simulates what another window would write: a snapshot naming conversations by id; each tab carries composer text
     // so it counts as real, not an untouched draft.
     const foreignSnapshot = (active: string, ids: readonly string[]): string =>
@@ -942,6 +958,8 @@ describe(`abandoned drafts`, () => {
             sandbox: `sb1`,
             note: {
                 kind: `strip`,
+                owner: `w1`,
+                revision: 1,
                 strip: {
                     active: `far`,
                     panes: [`far`],
@@ -1927,7 +1945,9 @@ describe(`unsent drafts keep their own picks`, () => {
     const bothConnected = (): void => {
         mockConnections({
             accounts: (path) =>
-                path.startsWith(`/accounts/claude`) || path.startsWith(`/accounts/cursor`) ? [{ id: `a-${path.split(`/`)[2]}`, label: `Personal`, connectedAt: 0 }] : [],
+                path.startsWith(`/accounts/claude`) || path.startsWith(`/accounts/cursor`)
+                    ? [{ id: `a-${path.split(`/`)[2]}`, label: `Personal`, connectedAt: 0 }]
+                    : [],
         });
     };
 

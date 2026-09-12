@@ -52,6 +52,9 @@ const newChat = () => {
 };
 
 const { renderTranscript, synthesisPrompt, synthesizeSessions } = await import("./synthesizeSessions");
+const { chatStrip } = await import("../../chat/panel/useChat-strip");
+const { receiveFloatingNote } = await import("../../../shell/window/floating");
+const { receiveChatNote } = await import("../../chat/run/chatChannel");
 
 beforeEach(() => {
     local.clear();
@@ -64,6 +67,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
     vi.clearAllMocks();
 });
 
@@ -168,6 +172,24 @@ describe(`synthesisPrompt`, () => {
 });
 
 describe(`synthesizeSessions`, () => {
+    it(`uses the floating chat's panes when this board's own tabs show a different selection`, async () => {
+        const [first, second] = openTwoPanes();
+        const remote = JSON.parse(JSON.stringify(chatStrip.value)) as typeof chatStrip.value;
+        useChat().collapsePanes();
+        receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
+        receiveChatNote({ sandbox: `sb1`, note: { kind: `strip`, owner: `w1`, revision: 1, strip: remote } });
+        mockTranscripts({
+            [first]: [{ role: `assistant`, text: `first complete result` }],
+            [second]: [{ role: `assistant`, text: `second complete result` }],
+        });
+
+        expect(useChat().panes.value).toEqual([second]);
+        expect(await synthesizeSessions()).toEqual({ started: true });
+        const uploads = await Promise.all(sandboxUploadMock.mock.calls.map(async ([, body]) => (body as Blob).text()));
+        expect(uploads).toHaveLength(2);
+        expect(uploads[0]).toContain(`first complete result`);
+        expect(uploads[1]).toContain(`second complete result`);
+    });
     it(`refuses with one pane on screen`, async () => {
         const before = useChat().conversations.value.length;
 

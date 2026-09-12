@@ -2,6 +2,7 @@ import { computed, ref, shallowRef, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { forgetClosedDraft, keepClosedDraft } from "../drafts/closedDrafts";
 import { drawsChat } from "../run/chatEcho";
+import { chatRun } from "../run/chatRun";
 import { traceFocus } from "../run/focusTrace";
 import { Conversation } from "../session/conversation";
 import { rememberedAccountFor } from "../accounts/providerAccounts";
@@ -128,7 +129,7 @@ export const active = computed<Conversation>(() => {
 
 // Snapshot shape/storage live in tabSnapshot.ts; here is only when it's read/written. The sandbox is recorded
 // at restore, not read live, so a mid-flip write can't land in the incoming sandbox's key as the outgoing one's.
-let scopedSandboxId: string | undefined;
+export const scopedSandboxId = ref<string>();
 
 // Everything waiting to be sent, back in the composer: message, age, staged files, queued turns. Its own
 // function since two arrivals restore a composer (a snapshot restore, a reopened closed draft).
@@ -217,12 +218,13 @@ export const restoreTab = (tab: StoredTab): Conversation => {
 // Rebuilds this window's tabs for the active sandbox: its own snapshot, the last window's as a seed, or one
 // fresh tab if neither exists; focuses the stored active tab.
 export const restoreTabs = (): void => {
-    scopedSandboxId = activeSandboxId.value;
+    scopedSandboxId.value = activeSandboxId.value;
     // Scoped before the tabs are built: a fresh or restored conversation resolves its account from this pick.
-    scopeAccountPreference(scopedSandboxId);
-    const stored = readTabSnapshot(scopedSandboxId);
+    scopeAccountPreference(scopedSandboxId.value);
+    const stored = readTabSnapshot(scopedSandboxId.value);
+    chatRun.value = stored?.run;
     // The list is replaced wholesale, focus included; rare and otherwise invisible, hence the trace.
-    traceFocus(`restore-tabs`, { sandbox: scopedSandboxId ?? `none`, stored: stored?.tabs.length ?? 0, active: stored?.active ?? `none` });
+    traceFocus(`restore-tabs`, { sandbox: scopedSandboxId.value ?? `none`, stored: stored?.tabs.length ?? 0, active: stored?.active ?? `none` });
     if (stored === undefined) {
         // Nothing to restore: opens on the blank, with no board card for a chat never started.
         const conversation = standIn();
@@ -283,10 +285,11 @@ watch(
             active: activeId.value,
             panes: panes.value,
             tabs: conversations.value.map(snapshotTab),
+            run: chatRun.value,
         }),
     (json) => {
-        if (scopedSandboxId !== undefined && drawsChat.value) {
-            writeTabSnapshot(scopedSandboxId, json);
+        if (scopedSandboxId.value !== undefined && drawsChat.value) {
+            writeTabSnapshot(scopedSandboxId.value, json);
         }
     },
 );
@@ -296,7 +299,7 @@ watch(drawsChat, (draws) => {
         restoreTabs();
         return;
     }
-    forgetTabSnapshot(scopedSandboxId);
+    forgetTabSnapshot(scopedSandboxId.value);
 });
 
 // A signal since the caret belongs to whichever surface is mounted; a counter so repeat requests each land.

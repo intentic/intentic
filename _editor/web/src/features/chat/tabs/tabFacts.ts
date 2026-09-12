@@ -1,6 +1,7 @@
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
 import type { ClientAgentStatus } from "../../agents/fleet/agentStatus";
 import type { Conversation } from "../session/conversation";
+import type { ChatRunView } from "../run/chatRun";
 import { draftPreview } from "../drafts/draftPreview";
 
 // What a card needs to draw a tab, computed by the window drawing the chat and published as `chatStrip`
@@ -48,6 +49,7 @@ export interface TurnFacts {
 // The whole strip: focused chat, on-screen panes (column order), and every open tab. `active` is undefined
 // only before anything is published.
 export interface Strip {
+    readonly run?: ChatRunView;
     readonly active: string | undefined;
     readonly panes: readonly string[];
     readonly tabs: readonly TabFacts[];
