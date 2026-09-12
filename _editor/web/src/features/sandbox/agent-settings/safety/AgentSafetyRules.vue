@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { COMMAND_RULE_CATALOG, type CommandLocus, type CommandRuleTier } from "@intentic/sandbox-contract";
-import { Row, RowGroup, RowNote, StatusBadge, type StatusVariant } from "@intentic/ui";
+import { Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
 import RuleCommand from "./RuleCommand.vue";
 
 // Read-only table of COMMAND_RULE_CATALOG (safety-policy.ts): one row per command class, one column per machine
@@ -67,7 +67,22 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
             </div>
 
             <div class="relative divide-y divide-line-subtle">
-                <Row v-for="rule in COMMAND_RULE_CATALOG" :key="rule.commandClass" :title="rowTitle(rule.label)">
+                <Row v-for="rule in COMMAND_RULE_CATALOG" :key="rule.commandClass">
+                    <template #title>
+                        <span class="inline-flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
+                            <span>{{ rowTitle(rule.label) }}:</span>
+                            <span
+                                v-for="pattern in rule.patterns"
+                                :key="pattern.code"
+                                v-tooltip.top="pattern.qualifier"
+                                class="inline-flex max-w-full items-center rounded bg-overlay px-1.5 py-0.5 text-2xs"
+                                :class="pattern.qualifier !== undefined ? `cursor-help` : undefined"
+                            >
+                                <RuleCommand :command="pattern.code" />
+                            </span>
+                        </span>
+                    </template>
+
                     <!--
                         A pill per cell, centred on its track: an answer with an edge round it belongs to one row and one
                         machine, where a bare word in a shared field belonged to neither. #meta is already trailing, so
@@ -83,62 +98,17 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
                         </span>
                     </template>
 
+                    <!-- Narrow: no columns to tell apart, so the same TIERS lookup is spoken as a sentence. -->
                     <template #below>
-                        <div class="flex flex-col gap-2">
-                            <!--
-                                Narrow: no columns to tell apart, so the same TIERS lookup is spoken as a sentence
-                                rather than drawn as a cell, and the two spellings cannot drift apart.
-                            -->
-                            <p class="flex flex-wrap gap-x-3 gap-y-0.5 text-2xs @2xl:hidden">
-                                <span v-for="machine in MACHINES" :key="machine.locus">
-                                    <span class="text-subtle">{{ machine.label }} — </span>
-                                    <span :class="TIERS[rule.tiers[machine.locus]].tone">{{ TIERS[rule.tiers[machine.locus]].label }}</span>
-                                </span>
-                            </p>
-
-                            <!--
-                                Everything under the row ends where the machine columns begin. The gutter is an empty
-                                second copy of those columns — same `COLUMN`, same `gap-2`, same outer `gap-4` <Row>
-                                itself uses — rather than a typed `pr-*`, which is how a chip ended up wrapping
-                                underneath a verdict and reading as one.
-                            -->
-                            <div class="flex gap-4">
-                                <div class="flex min-w-0 flex-1 flex-col gap-2">
-                                    <ul class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-                                        <li v-for="pattern in rule.patterns" :key="pattern.code" class="min-w-0">
-                                            <!-- Fill, no border: 40-odd outlined chips made the panel read as a grid of boxes. -->
-                                            <span
-                                                v-tooltip.top="pattern.qualifier"
-                                                class="inline-flex max-w-full items-center rounded bg-overlay px-1.5 py-0.5 text-2xs"
-                                                :class="pattern.qualifier !== undefined ? `cursor-help` : undefined"
-                                            >
-                                                <RuleCommand :command="pattern.code" />
-                                            </span>
-                                        </li>
-                                    </ul>
-
-                                    <!-- Meaning depends on the machine: "a whole root" differs by machine, so both answers show, not just one. -->
-                                    <div v-if="rule.notes !== undefined" class="flex flex-col gap-0.5 rounded-md bg-content/4 px-2.5 py-1.5">
-                                        <p class="text-2xs text-muted">What counts as a root:</p>
-                                        <p v-for="machine in MACHINES" :key="machine.locus" class="text-2xs text-subtle">
-                                            <span class="text-muted">{{ machine.label }}</span> — {{ rule.notes[machine.locus] }}
-                                        </p>
-                                    </div>
-                                </div>
-                                <span aria-hidden="true" class="hidden shrink-0 gap-2 @2xl:flex">
-                                    <span v-for="machine in MACHINES" :key="machine.locus" :class="COLUMN" />
-                                </span>
-                            </div>
-                        </div>
+                        <p class="flex flex-wrap gap-x-3 gap-y-0.5 text-2xs @2xl:hidden">
+                            <span v-for="machine in MACHINES" :key="machine.locus">
+                                <span class="text-subtle">{{ machine.label }} — </span>
+                                <span :class="TIERS[rule.tiers[machine.locus]].tone">{{ TIERS[rule.tiers[machine.locus]].label }}</span>
+                            </span>
+                        </p>
                     </template>
                 </Row>
             </div>
         </div>
-
-        <!-- A command that only mentions a pattern (echo, grep, a heredoc) does not match it here. -->
-        <RowNote>
-            A command that only mentions one of these — printed by an <code class="font-mono text-content">echo</code>, searched for by a
-            <code class="font-mono text-content">grep</code>, written into a heredoc — is not doing it, and never reaches the rules above.
-        </RowNote>
     </RowGroup>
 </template>

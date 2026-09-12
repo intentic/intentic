@@ -74,9 +74,8 @@ test("says where each class stands on each machine, at both widths", () => {
 
 test("names both machines, at the head and again on every row", () => {
     const host = mount();
-    // perMachine counts three places a machine name appears: the column head, each row's narrow line, and rows with
-    // a root note.
-    const perMachine = 1 + COMMAND_RULE_CATALOG.length + COMMAND_RULE_CATALOG.filter((rule) => rule.notes !== undefined).length;
+    // perMachine counts two places a machine name appears: the column head and each row's narrow line.
+    const perMachine = 1 + COMMAND_RULE_CATALOG.length;
     expect(occurrences(text(host), `This sandbox`)).toBe(perMachine);
     expect(occurrences(text(host), `My devices`)).toBe(perMachine);
     expect(text(host)).toContain(`This sandbox — Always asks`);
@@ -102,20 +101,6 @@ test("draws every pattern fragment; qualifiers live on the chip tooltip, not inl
     expect(host.querySelectorAll(`code`).length).toBeGreaterThanOrEqual(
         COMMAND_RULE_CATALOG.reduce((total, rule) => total + rule.patterns.length, 0),
     );
-});
-
-// A root means different things per machine (specific paths vs. the whole layout); the panel must show both.
-test("says what a root is on each machine", () => {
-    const host = mount();
-    const noted = COMMAND_RULE_CATALOG.filter((rule) => rule.notes !== undefined);
-    expect(noted.length).toBeGreaterThan(0);
-    // The caption above the notes is what turns them into an answer rather than two loose paths.
-    expect(text(host)).toContain(`What counts as a root:`);
-    for (const rule of noted) {
-        for (const note of Object.values(rule.notes ?? {})) {
-            expect(text(host), rule.commandClass).toContain(note);
-        }
-    }
 });
 
 test("offers nothing to edit", () => {
