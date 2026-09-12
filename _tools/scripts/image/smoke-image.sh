@@ -46,15 +46,25 @@ set -euo pipefail
 
 [ "$#" -gt 0 ] || { echo "usage: smoke-image.sh <image-ref> [<image-ref>...]" >&2; exit 2; }
 
-# Generous because it covers a COLD boot on a runner that may also be pulling: the daemon's own steps are
-# seconds, but the pull that precedes `docker run` is not, and testcontainers gives the same boot 180s.
+# The pull below goes through the shared registry retry, the same judgment the pushes use: a conversation with
+# ghcr.io that the network drops is the same "wait and try again" whichever way the bytes were moving. Its
+# defaults are sized for GHCR's rate-limit window, which is a clock worth waiting out in minutes; what drops a
+# pull here is a TCP connect that clears in seconds, so these gaps are short. Set before the source so an
+# operator's own values still win.
+: "${REGISTRY_RETRY_ATTEMPTS:=4}"
+: "${REGISTRY_RETRY_DELAY:=15}"
+. "$(dirname "$0")/../lib/registry-retry.sh"
+
+# The boot budget alone — the pull is a separate step below and its own clock — kept generous because these
+# runners boot cold while they are still busy with the build behind them, and testcontainers gives the same
+# boot 180s.
 TIMEOUT="${SMOKE_TIMEOUT:-240}"
 
 # Drop each image from the local store once it has been smoked. OFF by default, because on the self-hosted
 # fleet the pulled layers are a warm parent for the next pipeline's build and throwing them away is pure loss.
 # ON for the GitHub-hosted arm runners: buildx pushes from its own cache without populating the docker store,
-# so `docker run` pulls a second ~5 GB copy of an image that runner has just built — and a hosted runner's disk
-# is the one place that matters.
+# so the pull below fetches a second ~5 GB copy of an image that runner has just built — and a hosted runner's
+# disk is the one place that matters.
 RMI="${SMOKE_RMI:-0}"
 
 # Every container this run started, so a cancelled job (the one exit path the per-verdict cleanup below cannot
@@ -159,9 +169,29 @@ smoke() { # <image-ref>
     local out="" rc=0 deadline
 
     echo "==> smoking $image"
+
+    # THE PULL IS ITS OWN STEP, AND IT RETRIES. `docker run` pulls an image the runner does not hold, which on
+    # this pipeline is always: buildx pushed these bytes straight from its own cache and never populated the
+    # docker image store. That implicit pull is the one part of this gate that can fail for reasons the image
+    # knows nothing about, and on 2026-09-12 it took the 1.254.1 release down — the amd64 half died on
+    # `dial tcp 140.82.121.33:443: connectex: A connection attempt failed`, twenty seconds before the core half
+    # pulled its 5 GB off the same registry without a complaint.
+    #
+    # Left inside `docker run`, that failure was also MIS-DIAGNOSED. The run exits without creating anything,
+    # the loop below finds no container and blames the daemon — "the container EXITED (code ?) — the daemon
+    # never came up" — and then dumps logs that say "No such container". Every word of that points at the image
+    # under test, and none of it was true. Pulling here names the registry as the registry.
+    if ! registry_retry docker pull "$image"; then
+        echo "  ✗ could not pull $image — the REGISTRY refused or dropped it, which says nothing about this image" >&2
+        return 1
+    fi
+
     docker rm -f "$name" >/dev/null 2>&1 || true
     STARTED="$STARTED $name"
-    docker run -d --name "$name" "$image" >/dev/null
+    if ! docker run -d --name "$name" "$image" >/dev/null; then
+        echo "  ✗ the image is on this runner but no container could be created from it" >&2
+        return 1
+    fi
 
     # `docker logs` is the whole diagnosis for a daemon that died on import — the stack trace is on stderr and
     # nowhere else — so the container is removed here rather than with `--rm`, which would take the logs with it.

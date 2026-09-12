@@ -26,7 +26,7 @@ which jobs a push starts — and it asserts each one exists rather than silently
 | [packages.sh](lib/packages.sh) | `PUB` / `VERSIONED`: the first-party release set, in topological order |
 | [packages.mjs](lib/packages.mjs) | the same list, read out of that file for the readers written in JavaScript (`publishSet`, `manifestOf`) |
 | [github.sh](lib/github.sh) | the GitHub REST calls a release makes: releases, assets, `make_latest`, the `stable` tag |
-| [registry-retry.sh](lib/registry-retry.sh) | which failed **image push** is worth a second attempt, and which must fail at once |
+| [registry-retry.sh](lib/registry-retry.sh) | which failed **image push or pull** is worth a second attempt, and which must fail at once |
 | [npm-publish-retry.sh](lib/npm-publish-retry.sh) | the same judgment for an **npm publish** the transparency log dropped |
 | [desktop-artifacts.sh](lib/desktop-artifacts.sh) | what a desktop artifact is CALLED, for everything that builds, verifies or ships one |
 | [dind-host.sh](lib/dind-host.sh) | a clean Docker-in-Docker host to run a user's setup on (`start_dind_host`, `in_host`) |

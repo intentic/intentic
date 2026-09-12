@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Retry a registry write that GHCR itself dropped — going too fast, or losing an upload halfway — and nothing else.
+# Retry a registry call that GHCR or the wire itself dropped — going too fast, losing an upload halfway, or
+# never answering the connect — and nothing else.
 #
 #   . "$(dirname "$0")/../lib/registry-retry.sh"
 #   registry_retry docker buildx build ... --push "$context"
+#   registry_retry docker pull "$image"
 #
 # ONE PIPELINE WRITES THE SANDBOX IMAGE SIX TIMES: two profiles (`standard` + `core-`) × two arches × the
 # images and release lanes, every one of them ending in a manifest PUT to ghcr.io under the same token,
@@ -32,6 +34,19 @@
 # bytes of that same commit twenty minutes later without complaint, which is the whole argument that nothing
 # was wrong with the build. It is the same "try it again" as the rate limit: the session is gone, a retry
 # opens a new one, and every blob that did land is skipped on the way back through.
+#
+# AND THE CONNECTION IS SOMETIMES NEVER MADE AT ALL. Reads count too — smoke-image.sh pulls each half back
+# off GHCR to boot it — and a pull is one HTTPS conversation with nothing of ours in it to get wrong:
+#
+#   docker: Error response from daemon: failed to resolve reference "ghcr.io/intentic/sandbox:1.254.1-amd64":
+#   ... dial tcp 140.82.121.33:443: connectex: A connection attempt failed because the connected party did not
+#   properly respond after a period of time
+#
+# That is what killed the 1.254.1 release, on the smoke gate, AFTER both halves had built and pushed clean —
+# and the second half pulled 5 GB off that same registry twenty seconds later. The dial never completed; there
+# was nothing to be wrong about yet. Matched on `dial tcp` and on Go's Windows spelling of a refused connect,
+# never on the `failed to resolve reference` around it: a tag that genuinely is not there says the same words
+# and must fail on the first attempt.
 #
 # ONLY THAT CLASS OF FAILURE RETRIES. A broken Dockerfile, a missing build context or a token that genuinely
 # lacks `packages: write` must fail on the FIRST attempt — three silent backoffs before the same error is how
@@ -72,6 +87,8 @@ registry_retry_transient() {
         -e 'connection reset by peer' \
         -e 'unexpected eof' \
         -e '(tls handshake|i/o) timeout' \
+        -e 'connectex: a connection attempt failed' \
+        -e 'dial tcp.*(connection refused|connection timed out|no route to host)' \
         -- "$1"
 }
 
@@ -93,7 +110,7 @@ registry_retry() {
             return "$status"
         fi
         delay=$((REGISTRY_RETRY_DELAY * attempt))
-        echo "==> registry refused this write as too fast (attempt $attempt/$REGISTRY_RETRY_ATTEMPTS) — waiting ${delay}s and trying again" >&2
+        echo "==> the registry dropped this call (attempt $attempt/$REGISTRY_RETRY_ATTEMPTS) — waiting ${delay}s and trying again" >&2
         sleep "$delay"
         attempt=$((attempt + 1))
     done
