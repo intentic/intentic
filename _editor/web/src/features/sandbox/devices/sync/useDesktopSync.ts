@@ -1,12 +1,12 @@
 import { roleAtLeast, type SyncStatus, syncFolder } from "@intentic/sandbox-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
-import { desktopSyncLink } from "../../../app/environments/desktop";
-import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
-import { onRuntimeChanged } from "../live/runtimeEvents";
-import { DEVICES } from "../../../lib/queryKeys";
-import { sandboxRequest } from "../client/sandboxClient";
-import { useSandbox } from "../client/useSandbox";
+import { desktopSyncLink } from "../../../../app/environments/desktop";
+import { bashCommand, psCommand } from "../../../../app/environments/scriptCommand";
+import { onRuntimeChanged } from "../../live/runtimeEvents";
+import { DEVICES } from "../../../../lib/queryKeys";
+import { sandboxRequest } from "../../client/sandboxClient";
+import { useSandbox } from "../../client/useSandbox";
 
 // Mints a device pairing and renders the one-liner that spends it (single-use, redeemed once to enroll an SSH
 // key). Mode reflects what the daemon granted, never what was requested. Everything else about an existing

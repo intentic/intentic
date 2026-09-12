@@ -37,14 +37,14 @@ const devices = ref<Device[]>([]);
 // Enrolling a machine we can already reach: recorded rather than performed, since the subject is what the card
 // sends — a device, a half, and a folder on THAT machine. The pairing and the command line are the daemon's.
 const installCalls: { hostId: string; command: string; ask?: { mode?: string; localDir?: string } }[] = [];
-vi.mock(`./useDevices`, () => ({
+vi.mock(`../useDevices`, () => ({
     useDevices: () => ({ devices, error: ref(undefined), isLoading: ref(false), refetch: () => {} }),
     runDeviceCommand: (hostId: string, command: string, ask?: { mode?: string; localDir?: string }) => {
         installCalls.push({ hostId, command, ask });
         return Promise.resolve({ ok: true, message: `That device is enrolled.` });
     },
 }));
-vi.mock(`../../capabilities/connect/ScriptSourceSwitch.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+vi.mock(`../../../capabilities/connect/ScriptSourceSwitch.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: DesktopSyncCard } = await import("./DesktopSyncCard.vue");
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Modal } from "@intentic/ui";
-import DesktopSyncCard from "./DesktopSyncCard.vue";
+import DesktopSyncCard from "./sync/DesktopSyncCard.vue";
 
 // Pairing a machine is a task, not a state to read, so it lives in a box you open and close rather than in
 // a permanently-expanded card at the foot of the board.

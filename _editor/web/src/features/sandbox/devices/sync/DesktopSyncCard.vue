@@ -2,10 +2,10 @@
 import type { Device } from "@intentic/sandbox-contract";
 import { Button, ui, Code, Notice } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { runDeviceCommand, useDevices } from "./useDevices";
+import { runDeviceCommand, useDevices } from "../useDevices";
 import { useDesktopSync } from "./useDesktopSync";
-import { desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
-import ScriptSourceSwitch from "../../capabilities/connect/ScriptSourceSwitch.vue";
+import { desktopVersion, openDesktopLink } from "../../../../app/environments/desktop";
+import ScriptSourceSwitch from "../../../capabilities/connect/ScriptSourceSwitch.vue";
 
 // Mints a device pairing: pick a folder, click Enable, run the one-liner on the target machine. Two modes:
 // full sync (file sync + ports, single holder, owner-only) and mirror (ports only, any device). Body only:

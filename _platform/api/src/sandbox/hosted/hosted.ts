@@ -27,7 +27,7 @@ import {
     LIVE_STATES,
 } from "./fly/fly.js";
 import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
-import { resolveHostedImage } from "./hosted-image.js";
+import { resolveHostedImage } from "./build/hosted-image.js";
 import { hostedSlotsOf } from "./hosted-plan.js";
 
 // Hosted lane orchestration over fly.ts: one machine and one volume in one app per sandbox, named `<prefix>-<12-hex

@@ -1,5 +1,5 @@
 import type { Logger } from "pino";
-import type { Config } from "../../config.js";
+import type { Config } from "../../../config.js";
 
 /* WHICH IMAGE THE WARM POOL IS ACTUALLY HOLDING, as a digest rather than as a tag, and the outage that makes
  * this worth a module.

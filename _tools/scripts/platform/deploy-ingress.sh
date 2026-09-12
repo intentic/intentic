@@ -31,7 +31,9 @@ if [ -z "${FLY_API_TOKEN:-}" ]; then
     exit 0
 fi
 
-ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+. "$(dirname "$0")/../lib/repo-root.sh"
+
+ROOT="$(repo_root)"
 CONFIG="$ROOT/_platform/ingress/fly.toml"
 APP="${INGRESS_APP:-intentic-ingress}"
 IMAGE="${INGRESS_IMAGE:-ghcr.io/intentic/ingress:latest}"

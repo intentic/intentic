@@ -3,7 +3,7 @@ import { rollupAdminDaily } from "./admin/admin-rollup.js";
 import { JOB_RETENTION, runExclusive } from "./jobs-lock.js";
 import { reapOrphanDnsRecords } from "./sandbox/cloudflare.js";
 import { reapHostedOrphans } from "./sandbox/hosted/hosted.js";
-import { sweepHostedBuilds } from "./sandbox/hosted/hosted-build.js";
+import { sweepHostedBuilds } from "./sandbox/hosted/build/hosted-build.js";
 import { reapIdleHosted } from "./sandbox/hosted/hosted-idle.js";
 import type { Config } from "./config.js";
 import type { Logger } from "pino";

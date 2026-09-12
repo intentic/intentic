@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { REPO_CHECKS_FILE } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { declaredRepoChecks, readRepoDeclaration } from "./repo-checks.js";
 
@@ -10,9 +11,9 @@ import { declaredRepoChecks, readRepoDeclaration } from "./repo-checks.js";
 const setup = (): string => mkdtempSync(join(tmpdir(), "repo-checks-"));
 
 const declare = (root: string, repo: string, body: string): void => {
-    const dir = repo === "root" ? join(root, ".intentic") : join(root, repo, ".intentic");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "checks.json"), body);
+    const file = repo === "root" ? join(root, REPO_CHECKS_FILE) : join(root, repo, REPO_CHECKS_FILE);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, body);
 };
 
 test("a repository with no declaration is not a row at all", async () => {

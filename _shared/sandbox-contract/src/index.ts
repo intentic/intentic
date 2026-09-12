@@ -168,7 +168,6 @@ export * from "./schemas/provider-oauth.js";
 export * from "./schemas/provider-subscriptions.js";
 export * from "./schemas/public.js";
 export * from "./schemas/push.js";
-export * from "./schemas/repo-checks.js";
 export * from "./schemas/secrets.js";
 export * from "./schemas/sessions.js";
 export * from "./schemas/settings.js";

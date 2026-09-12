@@ -7,7 +7,7 @@ import { sandboxRoutes } from "../sandbox.routes.js";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { HostedAlreadyProvisioned, hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, wakeHosted } from "./hosted.js";
 import { AT_CAPACITY_MESSAGE, forgetProviderCapacity, HostedAtCapacity } from "./hosted-capacity.js";
-import { forgetHostedImage } from "./hosted-image.js";
+import { forgetHostedImage } from "./build/hosted-image.js";
 import { testIngressConfig } from "../../testing.js";
 
 /* The settle between a machine's config update and its start (hosted.ts SETTLE_MS) is half a second of real

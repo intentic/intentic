@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type RepoCheck, RepoChecksFileSchema, type RepoChecksSummary, type Rule } from "@intentic/sandbox-contract";
+import { REPO_CHECKS_FILE, type RepoCheck, RepoChecksFileSchema, type RepoChecksSummary, type Rule } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 
@@ -17,9 +17,6 @@ import { discoverRepos } from "../workspace/layout/repo-discovery.js";
  *
  * Nothing declared runs until the owner adopts it (settings `adoptedChecks`), against a fingerprint of what was
  * declared at the time. Git has kept the same rule for hooks since the beginning: they are never cloned. */
-
-// Where a repository declares them, under the same `.intentic/` folder a directory already uses for its own UI.
-export const REPO_CHECKS_FILE = ".intentic/checks.json";
 
 // Same ceiling a rule's own command gets when the form leaves it unsaid.
 const DEFAULT_TIMEOUT_MS = 900_000;

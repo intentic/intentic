@@ -1,5 +1,7 @@
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
+import { repoRoot } from "@intentic/constants/node";
 import { type Persona, type SandboxSettings, PersonaPowersSchema, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../../../composition.js";
@@ -32,7 +34,7 @@ vi.mock("../../../browser/tools/browser-tools.js", () => ({
  * and no prompt assertion below depends on whatever happens to be checked out on the machine running it. The
  * cases that need a REAL tree (a dependency notice, a skill catalogue read off disk) are asserted where one can
  * be built: turn-plan.integration.test.ts. The seams themselves live in turn-plan.testing.ts, shared with it. */
-const IQ_PLUGIN_DIR = new URL("../../../../../../_search/iq/plugin", import.meta.url).pathname;
+const IQ_PLUGIN_DIR = join(repoRoot(import.meta.url), "_search/iq/plugin");
 
 beforeEach(() => {
     credentials.mockReset();

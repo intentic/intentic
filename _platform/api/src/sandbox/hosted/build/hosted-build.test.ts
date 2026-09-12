@@ -1,8 +1,8 @@
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { PrismaClient } from "@intentic/prisma";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Config } from "../../config.js";
-import { testIngressConfig } from "../../testing.js";
+import type { Config } from "../../../config.js";
+import { testIngressConfig } from "../../../testing.js";
 import { BUILD_ENV, BUILD_PATHS } from "./hosted-build-script.js";
 import {
     buildStateOf,
@@ -14,7 +14,7 @@ import {
     requestHostedBuild,
     sweepHostedBuilds,
 } from "./hosted-build.js";
-import { hostedInstanceId } from "./hosted.js";
+import { hostedInstanceId } from "../hosted.js";
 
 /* The settle between a machine's config update and its start (hosted.ts SETTLE_MS) is half a second of real
  * time in production, polled up to sixty times. Here the wait is a no-op: every case that crosses it is about

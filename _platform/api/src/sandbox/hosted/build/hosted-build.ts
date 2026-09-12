@@ -5,9 +5,9 @@ import { isOfficialSandboxImage, lintOverlay, overlayBase, rewriteOverlayBase } 
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { flyBuildMachineConfig } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
-import type { Config } from "../../config.js";
-import { decryptSecret } from "../../crypto.js";
-import { JOB_HOSTED_BUILD, runExclusive } from "../../jobs-lock.js";
+import type { Config } from "../../../config.js";
+import { decryptSecret } from "../../../crypto.js";
+import { JOB_HOSTED_BUILD, runExclusive } from "../../../jobs-lock.js";
 import {
     createMachine,
     destroyMachine,
@@ -18,12 +18,12 @@ import {
     isFlyGone,
     listMachines,
     updateMachine,
-} from "./fly/fly.js";
-import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "./fly/fly-tokens.js";
-import { hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
+} from "../fly/fly.js";
+import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "../fly/fly-tokens.js";
+import { hostedCapacity, noteProviderAtCapacity } from "../hosted-capacity.js";
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson, LOG_TAIL_BYTES } from "./hosted-build-script.js";
-import { hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs, startAfterUpdate } from "./hosted.js";
-import { chargeMinutes, hostedBudgetOf, usageMonth } from "./hosted-usage.js";
+import { hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs, startAfterUpdate } from "../hosted.js";
+import { chargeMinutes, hostedBudgetOf, usageMonth } from "../hosted-usage.js";
 
 // Executes `ic sandbox rebuild` for hosted sandboxes: builds the approved overlay in a builder machine inside the
 // sandbox's own Fly app, then swaps the sandbox machine's config like a restart. Money-relevant rules:

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Config } from "../../config.js";
+import type { Config } from "../../../config.js";
 import { forgetHostedImage, parseImageRef, resolveHostedImage } from "./hosted-image.js";
 
 // The pool's whole value is that a warm machine already holds the image. A tag stops naming the same bytes the

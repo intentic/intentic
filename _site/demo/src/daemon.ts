@@ -12,6 +12,7 @@ import {
     type OauthAccount,
     type OauthAccountList,
     type PresenceUser,
+    REPO_CHECKS_FILE,
     type RepoChecksList,
     SANDBOX_ROUTE_NAMES,
     type SavingsReport,
@@ -619,7 +620,7 @@ const DEMO_REPO_CHECKS: RepoChecksList = {
     repos: [
         {
             repo: `web`,
-            path: `web/.intentic/checks.json`,
+            path: `web/${REPO_CHECKS_FILE}`,
             checks: [
                 { when: `turn`, run: `pnpm -C web lint` },
                 { when: `push`, run: `pnpm -C web test` },
@@ -627,10 +628,10 @@ const DEMO_REPO_CHECKS: RepoChecksList = {
             adopted: true,
             changed: false,
         },
-        { repo: `api`, path: `api/.intentic/checks.json`, checks: [{ when: `push`, run: `pnpm -C api test` }], adopted: false, changed: false },
+        { repo: `api`, path: `api/${REPO_CHECKS_FILE}`, checks: [{ when: `push`, run: `pnpm -C api test` }], adopted: false, changed: false },
         {
             repo: `root`,
-            path: `.intentic/checks.json`,
+            path: REPO_CHECKS_FILE,
             checks: [{ when: `push`, run: `./scripts/release-guard.sh --strict` }],
             adopted: false,
             changed: true,

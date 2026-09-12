@@ -24,7 +24,7 @@ import { boardRoute } from "./deviceLinks";
 import { type DeviceCardFix, deviceAttention } from "./deviceAttention";
 import { commandable, type DeviceRow, deviceState, deviceSwitches, deviceTone, fixable, manageable, pausable, selfGroup } from "./deviceRows";
 import { useDeviceOps } from "./deviceOps";
-import { type ConflictAsk, conflictAsk } from "./conflictAsk";
+import { type ConflictAsk, conflictAsk } from "./sync/conflictAsk";
 import { type DeviceScopes, deviceDoors, deviceHardware, lastSeenNote, manageBlock, osLabel, osTitle, syncNote, syncStopped } from "./deviceFacts";
 import { startAgent } from "../../agents/fleet/agentActions";
 import HostConnectDialog from "../../capabilities/connect/HostConnectDialog.vue";
@@ -327,7 +327,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                         <div class="mt-1 flex flex-wrap items-center gap-2">
                             <!--
                                 First, since a row with conflicts is open because of them; starts a turn rather than a
-                                command, because choosing between two edited copies is per-file judgement (conflictAsk.ts).
+                                command, because choosing between two edited copies is per-file judgement (sync/conflictAsk.ts).
                             -->
                             <Button
                                 v-if="fixable(device, group)"

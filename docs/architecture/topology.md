@@ -136,7 +136,7 @@ flowchart TB
   honest, at the stated cost that scheduled automations run only while the box is awake. The platform is
   also this lane's rebuild executor: an owner-approved environment overlay is built on a builder machine
   the platform creates inside the sandbox's own app and applied as a config replacement
-  ([hosted-build.ts](../../_platform/api/src/sandbox/hosted/hosted-build.ts)), with the builder's minutes metered
+  ([hosted-build.ts](../../_platform/api/src/sandbox/hosted/build/hosted-build.ts)), with the builder's minutes metered
   to the owner like awake minutes and platform-wide ceilings behind every per-owner limit.
 
 The lifecycle, from first sign-in to a reconciled deployment the operator can watch:

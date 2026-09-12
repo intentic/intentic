@@ -1,6 +1,14 @@
 import { oc } from "@orpc/contract";
-import { RepoChecksAdoptSchema, RepoChecksListSchema } from "../schemas/repo-checks.js";
-import { BuiltinPromptSchema, BuiltinPromptTextSchema, RuleFiringsSchema, SandboxSettingsSchema, SavingsReportSchema } from "../schemas/settings.js";
+import {
+    BuiltinPromptSchema,
+    BuiltinPromptTextSchema,
+    REPO_CHECKS_FILE,
+    RepoChecksAdoptSchema,
+    RepoChecksListSchema,
+    RuleFiringsSchema,
+    SandboxSettingsSchema,
+    SavingsReportSchema,
+} from "../schemas/settings.js";
 import { OkSchema } from "../schemas/shared.js";
 import { DayWindowQuerySchema } from "../schemas/usage.js";
 
@@ -62,8 +70,7 @@ export const settingsContract = {
             method: "GET",
             path: "/settings/repo-checks",
             summary: "What each repository asks to run on its own code",
-            description:
-                "Every repository that declares its own checks at `.intentic/checks.json`, what it declares, and whether you have switched it on. A repository declares what to run because the command belongs beside the scripts it names; nothing it declares runs until you say so.",
+            description: `Every repository that declares its own checks at \`${REPO_CHECKS_FILE}\`, what it declares, and whether you have switched it on. A repository declares what to run because the command belongs beside the scripts it names; nothing it declares runs until you say so.`,
         })
         .output(RepoChecksListSchema),
     adoptRepoChecks: oc

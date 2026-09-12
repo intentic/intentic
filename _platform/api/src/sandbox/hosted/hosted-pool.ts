@@ -8,7 +8,7 @@ import { JOB_HOSTED_POOL, runExclusive } from "../../jobs-lock.js";
 import { mintConnectToken } from "../mint-sandbox.js";
 import { createApp, createMachine, createVolume, deleteApp, flyWarmRole, FlyError, getMachine, isFlyCapacity } from "./fly/fly.js";
 import { hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
-import { resolveHostedImage } from "./hosted-image.js";
+import { resolveHostedImage } from "./build/hosted-image.js";
 import { hostedEnabled, hostedInstanceId } from "./hosted.js";
 
 // The warm pool's whole lifecycle except the claim (hosted.ts, since a claim's product is a HostedMachine). A pool

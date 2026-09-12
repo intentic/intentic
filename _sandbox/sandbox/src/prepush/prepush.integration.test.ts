@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { REPO_CHECKS_FILE, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
 import type { Services } from "../composition.js";
@@ -312,8 +312,9 @@ test("run with no command configured starts nothing", async () => {
 const workspaceDeclaring = (repo: string, checks: { when: "turn" | "push"; run: string }[]): { root: string; fingerprint: string } => {
     const root = mkdtempSync(join(tmpdir(), "prepush-repo-"));
     mkdirSync(join(root, repo, ".git"), { recursive: true });
-    mkdirSync(join(root, repo, ".intentic"), { recursive: true });
-    writeFileSync(join(root, repo, ".intentic", "checks.json"), JSON.stringify({ checks }));
+    const declaration = join(root, repo, REPO_CHECKS_FILE);
+    mkdirSync(dirname(declaration), { recursive: true });
+    writeFileSync(declaration, JSON.stringify({ checks }));
     // Exists only inside the repository, so a command that finds it was run there and not at the workspace root.
     writeFileSync(join(root, repo, "in-this-repo"), "");
     return { root, fingerprint: fingerprintOf(checks) };
