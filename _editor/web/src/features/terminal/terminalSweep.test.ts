@@ -2,7 +2,7 @@
 // waits.
 import { expect, test } from "vitest";
 import type { TerminalTab } from "./useTerminal";
-import { inactiveReason, inactiveTerminals, QUIET_MS } from "./terminalSweep";
+import { inactiveTerminals, QUIET_MS } from "./terminalSweep";
 
 const NOW = Date.UTC(2026, 8, 7, 12, 0, 0);
 const minutesAgo = (minutes: number): number => NOW - minutes * 60_000;
@@ -57,9 +57,4 @@ test(`a strip of every kind sweeps down to the quiet and the finished`, () => {
         tab(`svc-docker`, { kind: `process` }),
     ];
     expect(swept(strip, `web-here`)).toEqual([`web-old`, `agent-a1b2`]);
-});
-
-test(`each swept terminal says why it qualified`, () => {
-    expect(inactiveReason(tab(`web-old`, { activityAt: minutesAgo(42) }), NOW)).toBe(`last output 42m ago`);
-    expect(inactiveReason(tab(`panel-app`, { running: false, activityAt: 0 }), NOW)).toBe(`finished`);
 });

@@ -11,7 +11,7 @@ import { useSandbox } from "../sandbox/client/useSandbox";
 import { showWorkTerminals } from "./useWorkTerminals";
 import { KIND_ICONS, setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "./terminalMeta";
 import { useTerminalsQuery } from "./terminalsQuery";
-import { inactiveReason, inactiveTerminals, QUIET_MS } from "./terminalSweep";
+import { inactiveTerminals } from "./terminalSweep";
 import { fetchScrollback } from "./terminalScrollback";
 import { copySelection, pasteIntoTerminal } from "./terminalSession";
 import { createTerminalTabs, type TerminalTab, type TerminalTabsSource, terminalSessionOf } from "./useTerminal";
@@ -172,14 +172,19 @@ const killable = computed(() => order.value.filter((tab) => tab.kind !== `proces
 const sweepNow = ref(Date.now());
 const inactive = computed(() => inactiveTerminals(order.value, { now: sweepNow.value, focused: activeName.value }));
 const sweepInactive = (): void => {
+    if (killTabs === undefined) {
+        return;
+    }
     sweepNow.value = Date.now();
-    requestKill(
-        inactive.value.map((tab) => tab.name),
-        true,
-    );
+    const names = inactive.value.map((tab) => tab.name);
+    if (names.length === 0) {
+        return;
+    }
+    killTabs(names);
+    selectedKeys.value = [];
 };
-// What a dialog stands over: a sweep asks 'these are quiet', a bulk kill asks 'these are running'.
-const pendingKill = ref<{ names: string[]; inactive: boolean }>();
+// What a dialog stands over: a busy session, or a bulk kill the gesture never named.
+const pendingKill = ref<string[]>();
 const runningIn = (names: string[]): TerminalTab[] => order.value.filter((tab) => names.includes(tab.name) && tab.running);
 // Tabs with work in them; a process's × closes a view, not a session, so it never asks this question.
 const busyIn = (names: string[]): TerminalTab[] =>
@@ -189,17 +194,14 @@ const isBusy = (name: string): boolean => {
     return tab !== undefined && tab.kind !== `process` && tab.command !== undefined;
 };
 // What the dialog lists: busy sessions if that's why it opened, else the live ones a kill ends; never both.
-const pendingKillBusy = computed(() => (pendingKill.value === undefined ? [] : busyIn(pendingKill.value.names)));
+const pendingKillBusy = computed(() => (pendingKill.value === undefined ? [] : busyIn(pendingKill.value)));
 const pendingKillItems = computed(() => {
-    const pending = pendingKill.value;
-    if (pending === undefined) {
+    const names = pendingKill.value;
+    if (names === undefined) {
         return [];
     }
-    if (pendingKillBusy.value.length > 0) {
-        return pendingKillBusy.value;
-    }
-    // A sweep lists every terminal it takes, finished included, or the dialog would undercount the promise.
-    return pending.inactive ? order.value.filter((tab) => pending.names.includes(tab.name)) : runningIn(pending.names);
+    const busy = pendingKillBusy.value;
+    return busy.length > 0 ? busy : runningIn(names);
 });
 const killHeader = computed(() => {
     const busy = pendingKillBusy.value;
@@ -211,38 +213,29 @@ const killHeader = computed(() => {
         return `Kill ${busy.length} busy terminals?`;
     }
     const count = pendingKillItems.value.length;
-    // A sweep can hold no busy terminal and still hold dead ones, so it names itself 'inactive', not 'running'.
-    if (pendingKill.value?.inactive === true) {
-        return `Kill ${count} inactive ${count === 1 ? `terminal` : `terminals`}?`;
-    }
     return count === 1 ? `Kill the running terminal?` : `Kill ${count} running terminals?`;
 });
-// Sweep's quiet threshold, said in the dialog so a row that kills three terminals explains why.
-const QUIET_LABEL = `${Math.round(QUIET_MS / 60_000)} minutes`;
-const killBody = computed(() => {
-    if (pendingKill.value?.inactive === true) {
-        return `Nothing is running in any of them: each has either finished or sat at its prompt for ${QUIET_LABEL}. Scrollback goes with them, and there is no undo.`;
-    }
-    return pendingKillBusy.value.length > 0
+const killBody = computed(() =>
+    pendingKillBusy.value.length > 0
         ? `This stops what ${pendingKillBusy.value.length === 1 ? `it is` : `they are`} doing. Scrollback goes with it, and there is no undo.`
-        : `Killing these ends whatever they are running. Scrollback goes with them.`;
-});
-const requestKill = (names: string[], sweep = false): void => {
+        : `Killing these ends whatever they are running. Scrollback goes with them.`,
+);
+const requestKill = (names: string[]): void => {
     if (killTabs === undefined || names.length === 0) {
         return;
     }
-    // Nothing running and nothing bulk: the click is the whole decision; a sweep of inactives is the same.
-    if (busyIn(names).length === 0 && (names.length === 1 || runningIn(names).length === 0 || sweep)) {
+    // Nothing running and nothing bulk: the click is the whole decision.
+    if (busyIn(names).length === 0 && (names.length === 1 || runningIn(names).length === 0)) {
         killTabs(names);
         selectedKeys.value = [];
         return;
     }
-    pendingKill.value = { names, inactive: sweep };
+    pendingKill.value = names;
 };
 const confirmKill = (): void => {
-    const pending = pendingKill.value;
-    if (pending !== undefined) {
-        killTabs?.(pending.names);
+    const names = pendingKill.value;
+    if (names !== undefined) {
+        killTabs?.(names);
         selectedKeys.value = [];
     }
     pendingKill.value = undefined;
@@ -1344,8 +1337,6 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 <Icon :name="segmentIcon(item.name)" class="shrink-0 text-2xs text-muted" />
                 <span class="shrink-0 text-content">{{ segmentLabel(item.name) }}</span>
                 <span v-if="item.command" class="truncate font-mono text-xs text-muted">{{ item.command }}</span>
-                <!-- What made this one inactive: finished, or how long since it last said anything, making the row's count checkable. -->
-                <span v-else-if="pendingKill?.inactive" class="truncate text-xs text-muted">{{ inactiveReason(item, sweepNow) }}</span>
             </template>
             <p class="mt-3 text-xs text-muted">{{ killBody }}</p>
         </ConfirmDialog>
