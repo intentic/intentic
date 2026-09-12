@@ -186,10 +186,19 @@ const announce = (prisma: PrismaClient, token: string | undefined, daemonUrl: un
     });
 
 describe(`POST /sandbox/announce`, () => {
-    it(`stamps daemonUrl + lastSeenAt on the row matched by the token's digest`, async () => {
-        const update = vi.fn().mockResolvedValue({});
+    it(`refuses an announcement whose token was revoked after its lookup`, async () => {
+        const updateMany = vi.fn().mockResolvedValue({ count: 0 });
         const findUnique = vi.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null });
-        const prisma = fakePrisma({ sandbox: { findUnique, update } });
+        const res = await announce(fakePrisma({ sandbox: { findUnique, updateMany } }), `tok`, `https://sandbox-abc.intentic.dev`);
+        expect(res.status).toBe(404);
+        expect(updateMany).toHaveBeenCalledWith(
+            expect.objectContaining({ where: { id: `s1`, tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) } }),
+        );
+    });
+    it(`stamps daemonUrl + lastSeenAt on the row matched by the token's digest`, async () => {
+        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+        const findUnique = vi.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null });
+        const prisma = fakePrisma({ sandbox: { findUnique, updateMany } });
 
         const res = await announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`);
         expect(res.status).toBe(200);
@@ -198,8 +207,8 @@ describe(`POST /sandbox/announce`, () => {
             where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
             include: { hosted: { select: { id: true } } },
         });
-        expect(update).toHaveBeenCalledWith({
-            where: { id: `s1` },
+        expect(updateMany).toHaveBeenCalledWith({
+            where: { id: `s1`, tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
             // The refusal record clears here: a sandbox just accepted at its proper address no longer has one.
             data: { daemonUrl: `https://sandbox-abc.intentic.dev`, lastSeenAt: expect.any(Date), announceRefusal: Prisma.DbNull },
         });
@@ -219,15 +228,15 @@ describe(`POST /sandbox/announce`, () => {
     });
 
     it(`refuses a daemonUrl that isn't the address derived from the sandbox's own token`, async () => {
-        const update = vi.fn().mockResolvedValue({});
+        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
         // setupPayload was stored by the setup mint, so the row's address is a pure derivation, known before boot.
         const row = { id: `s1`, token: `tok`, setupPayload: `{}`, daemonUrl: null, hosted: null };
-        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row), update } });
+        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row), updateMany } });
 
         const res = await announce(prisma, `tok`, `https://evil.example`);
         expect(res.status).toBe(409);
-        expect(update).toHaveBeenCalledExactlyOnceWith({
-            where: { id: `s1` },
+        expect(updateMany).toHaveBeenCalledExactlyOnceWith({
+            where: { id: `s1`, tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
             data: { announceRefusal: { announced: `evil.example`, expected: HOSTNAME } },
         });
 
@@ -235,18 +244,18 @@ describe(`POST /sandbox/announce`, () => {
     });
 
     it(`derives the address for a hosted sandbox too, off its machine row`, async () => {
-        const update = vi.fn().mockResolvedValue({});
+        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
         const row = { id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: { id: `h1` } };
-        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row), update } });
+        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row), updateMany } });
 
         expect((await announce(prisma, `tok`, `https://evil.example`)).status).toBe(409);
         expect((await announce(prisma, `tok`, `https://${HOSTNAME}`)).status).toBe(200);
     });
 
     it(`derives nothing on a platform with no reachability fabric`, async () => {
-        const update = vi.fn().mockResolvedValue({});
+        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
         const row = { id: `s1`, token: `tok`, setupPayload: `{}`, daemonUrl: null, hosted: null };
-        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row), update } });
+        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row), updateMany } });
         const fabricless = configSchema.parse({
             database: { url: `postgres://x` },
             betterAuth: { secret: `s` },
@@ -264,13 +273,13 @@ describe(`POST /sandbox/announce`, () => {
     });
 
     it(`pins on first announce when nothing on the row predicts the address`, async () => {
-        const update = vi.fn().mockResolvedValue({});
+        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
         const bare = { id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null };
-        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(bare), update } });
+        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(bare), updateMany } });
         expect((await announce(prisma, `tok`, `https://self-hosted.example`)).status).toBe(200);
 
         const pinned = { ...bare, daemonUrl: `https://self-hosted.example` };
-        const after = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(pinned), update } });
+        const after = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(pinned), updateMany } });
         expect((await announce(after, `tok`, `https://self-hosted.example`)).status).toBe(200);
         expect((await announce(after, `tok`, `https://evil.example`)).status).toBe(409);
     });
@@ -286,17 +295,26 @@ const bootReport = (prisma: PrismaClient, token: string | undefined, body: unkno
 // Whether the sandbox's public address answers, established by the box probing itself; separate from announce since the
 // two can fail independently.
 describe(`POST /sandbox/boot-report`, () => {
-    it(`stores the verdict against the sandbox, stamping 'at' server-side`, async () => {
-        const update = vi.fn().mockResolvedValue({});
+    it(`refuses a boot report whose token was revoked after its lookup`, async () => {
+        const updateMany = vi.fn().mockResolvedValue({ count: 0 });
         const findUnique = vi.fn().mockResolvedValue({ id: `s1` });
-        const prisma = fakePrisma({ sandbox: { findUnique, update } });
+        const res = await bootReport(fakePrisma({ sandbox: { findUnique, updateMany } }), `tok`, { reach: `reachable` });
+        expect(res.status).toBe(404);
+        expect(updateMany).toHaveBeenCalledWith(
+            expect.objectContaining({ where: { id: `s1`, tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) } }),
+        );
+    });
+    it(`stores the verdict against the sandbox, stamping 'at' server-side`, async () => {
+        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+        const findUnique = vi.fn().mockResolvedValue({ id: `s1` });
+        const prisma = fakePrisma({ sandbox: { findUnique, updateMany } });
 
         const res = await bootReport(prisma, `tok`, { reach: `unreachable`, detail: `its tunnel has not come up.` });
         expect(res.status).toBe(200);
         // Matched by the token's digest, exactly like announce: the same secret, the same lookup.
         expect(findUnique).toHaveBeenCalledWith({ where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) } });
-        expect(update).toHaveBeenCalledExactlyOnceWith({
-            where: { id: `s1` },
+        expect(updateMany).toHaveBeenCalledExactlyOnceWith({
+            where: { id: `s1`, tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
             data: {
                 bootReport: {
                     reach: `unreachable`,
@@ -309,24 +327,24 @@ describe(`POST /sandbox/boot-report`, () => {
     });
 
     it(`accepts a bare verdict: the healthy path carries no detail`, async () => {
-        const update = vi.fn().mockResolvedValue({});
-        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1` }), update } });
+        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1` }), updateMany } });
         expect((await bootReport(prisma, `tok`, { reach: `reachable` })).status).toBe(200);
-        expect(update).toHaveBeenCalledExactlyOnceWith({
-            where: { id: `s1` },
+        expect(updateMany).toHaveBeenCalledExactlyOnceWith({
+            where: { id: `s1`, tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
             data: { bootReport: { reach: `reachable`, at: expect.any(String) } },
         });
     });
 
     it(`refuses a missing token, an unknown one, and a verdict that isn't one`, async () => {
         const findUnique = vi.fn().mockResolvedValue({ id: `s1` });
-        const prisma = fakePrisma({ sandbox: { findUnique, update: vi.fn() } });
+        const prisma = fakePrisma({ sandbox: { findUnique, updateMany: vi.fn() } });
         expect((await bootReport(prisma, undefined, { reach: `reachable` })).status).toBe(400);
         expect((await bootReport(prisma, `tok`, { reach: `probably` })).status).toBe(400);
         // Neither reached the database: both are refusals of the request, not of the sandbox.
         expect(findUnique).not.toHaveBeenCalled();
 
-        const unknown = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(null), update: vi.fn() } });
+        const unknown = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(null), updateMany: vi.fn() } });
         expect((await bootReport(unknown, `nope`, { reach: `reachable` })).status).toBe(404);
     });
 });

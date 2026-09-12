@@ -173,7 +173,7 @@ describe(`reconcileHostedPool`, () => {
             logger,
         );
         expect(deleteRow).toHaveBeenCalledWith({ where: { id: `p1` } });
-        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.endsWith(`/apps/${poolRow().appName}`))).toBe(true);
+        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.endsWith(`/apps/${poolRow().appName}?force=true`))).toBe(true);
     });
 
     it(`flips a build to ready once its prewarm boot is observed stopped`, async () => {

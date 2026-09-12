@@ -65,11 +65,12 @@ export const sandboxContract = {
         .output(z.object({ ok: z.boolean() })),
     // Zones a pasted Cloudflare token can see, for the in-app capability; the token is used once and discarded.
     zones: oc.route({ method: "POST", path: "/sandbox/zones" }).input(CfTokenSchema).output(CfZonesSchema),
-    // Attaches or detaches a platform-run machine on an existing sandbox row; the row itself never changes lanes.
-    // `hostedRelease` only destroys a machine that has never connected; `wake` starts a stopped one and returns at
-    // once.
+    // Provision requests are bound to the identity that release revokes.
     hostedOffer: oc.route({ method: "GET", path: "/sandbox/hosted-offer" }).output(HostedOfferSchema),
-    hostedProvision: oc.route({ method: "POST", path: "/sandbox/hosted-provision" }).input(sandboxIdInput).output(SandboxSummarySchema),
+    hostedProvision: oc
+        .route({ method: "POST", path: "/sandbox/hosted-provision" })
+        .input(z.object({ sandboxId: z.string(), token: z.string().min(1) }))
+        .output(SandboxSummarySchema),
     hostedRelease: oc.route({ method: "POST", path: "/sandbox/hosted-release" }).input(sandboxIdInput).output(SandboxSummarySchema),
     // What the machine is doing, asked of the provider; polled only during a hosted wait, never from `list`.
     hostedStatus: oc.route({ method: "POST", path: "/sandbox/hosted-status" }).input(sandboxIdInput).output(HostedStatusSchema),

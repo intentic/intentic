@@ -99,25 +99,33 @@ const create = async (name: string): Promise<SandboxSummary> => {
     return sandbox;
 };
 
-// Attaches/detaches a hosted machine to an existing sandbox row (made by `create`); both write the returned row
-// into the list cache like `update` does.
-const hostedProvision = async (sandboxId: string): Promise<SandboxSummary> => {
-    const updated = await apiClient.sandbox.hostedProvision({ sandboxId });
+// A provision response cannot overwrite a cancellation that started after it.
+const hostedChanges = new Map<string, number>();
+
+const hostedProvision = async (sandboxId: string, token: string): Promise<SandboxSummary> => {
+    const version = hostedChanges.get(sandboxId);
+    const updated = await apiClient.sandbox.hostedProvision({ sandboxId, token });
     await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
-    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
-        live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)),
-    );
+    if (hostedChanges.get(sandboxId) === version) {
+        queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
+            live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)),
+        );
+    }
     return updated;
 };
 
-const hostedRelease = async (sandboxId: string): Promise<SandboxSummary> => {
-    const updated = await apiClient.sandbox.hostedRelease({ sandboxId });
-    await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
-    queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
-        live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)),
-    );
-    return updated;
-};
+const hostedRelease = withConcurrency(
+    async (sandboxId: string): Promise<SandboxSummary> => {
+        hostedChanges.set(sandboxId, (hostedChanges.get(sandboxId) ?? 0) + 1);
+        const updated = await apiClient.sandbox.hostedRelease({ sandboxId });
+        await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
+        queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
+            live.map((sandbox) => (sandbox.id === updated.id ? updated : sandbox)),
+        );
+        return updated;
+    },
+    { mode: `singleFlight`, key: (sandboxId) => sandboxId },
+);
 
 // Wakes a sleeping hosted sandbox on a network-shaped connection failure, from any path that lands on it.
 // PAYMENT_REQUIRED (spent hours) is the one refusal kept and shown rather than swallowed.
@@ -156,7 +164,9 @@ watch(
     },
 );
 // Whether the ACTIVE sandbox's last wake was refused for spent hours.
-const activeWakeRefused = computed(() => (wakeRefused.value !== undefined && wakeRefused.value.sandboxId === active.value?.id ? wakeRefused.value : undefined));
+const activeWakeRefused = computed(() =>
+    wakeRefused.value !== undefined && wakeRefused.value.sandboxId === active.value?.id ? wakeRefused.value : undefined,
+);
 
 // Renames and/or re-logos a sandbox (owner-only; `image: null` clears it). Named explicitly rather than taken
 // from the active selection, since the two can differ mid-reconcile.

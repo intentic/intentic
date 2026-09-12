@@ -5,6 +5,8 @@ import { runHostedCanary } from "./hosted-canary.js";
 import { forgetProviderCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
 import { testIngressConfig } from "../../testing.js";
 
+vi.mock(`./hosted-app-lock.js`, async () => ({ withHostedAppLock: (await import(`../../testing.js`)).fakeHostedAppLock }));
+
 // Catches a lane that's intact but broken: the health sweep only notices a machine going missing, not one that never
 // checks in at all.
 
@@ -45,8 +47,8 @@ const prismaWith = (lastSeenAt: Date | null, over: Record<string, Record<string,
         user: { findUnique: vi.fn().mockResolvedValue({ id: `canary-user` }), create: vi.fn().mockResolvedValue({ id: `canary-user` }) },
         sandbox: {
             findMany: vi.fn().mockResolvedValue([]),
-            create: vi.fn().mockResolvedValue(sandbox),
-            findUnique: vi.fn().mockResolvedValue({ ...sandbox, lastSeenAt }),
+            create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => Object.assign(sandbox, data)),
+            findUnique: vi.fn(async () => ({ ...sandbox, lastSeenAt })),
             findUniqueOrThrow: vi.fn().mockResolvedValue(sandbox),
             update: vi.fn().mockResolvedValue(sandbox),
             delete: vi.fn().mockResolvedValue(sandbox),
@@ -55,6 +57,12 @@ const prismaWith = (lastSeenAt: Date | null, over: Record<string, Record<string,
         // this same fake, the lock is a no-op, and `hostedMachine.count` below is the canary owner's use, none.
         $transaction: vi.fn((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
         $executeRaw: vi.fn().mockResolvedValue(0),
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        hostedCleanup: {
+            create: vi.fn().mockResolvedValue({}),
+            findUnique: vi.fn().mockResolvedValue({}),
+            deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+        },
         // The slot count reads the owner's plan (hosted-plan.ts hostedSlotsOf): the canary's account has none.
         hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
         // The counts are how the run asks whether the lane has any machines left before it spends one
@@ -62,10 +70,14 @@ const prismaWith = (lastSeenAt: Date | null, over: Record<string, Record<string,
         // case's own config and refusals say it is.
         hostedMachine: {
             create: vi.fn().mockResolvedValue({}),
-            findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-canary` }),
+            findUnique: vi.fn(async ({ where }: { where: { appName?: string } }) => (where.appName ? null : { appName: `intentic-sbx-canary` })),
             count: vi.fn().mockResolvedValue(0),
         },
-        hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
+        hostedPoolMachine: {
+            findMany: vi.fn().mockResolvedValue([]),
+            count: vi.fn().mockResolvedValue(0),
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        },
         hostedBuild: { count: vi.fn().mockResolvedValue(0) },
         ...over,
     };

@@ -203,6 +203,10 @@ const hostedOffered = computed(() => hostedOffer.value?.enabled === true);
 const provisionOffered = computed(() => addressed.value || hostedOffered.value);
 // Provisioning/releasing a machine is a round-trip with a provider; the card says so rather than freezing.
 const hostedBusy = ref(false);
+const releasingHosted = ref(false);
+const releaseRequested = ref(false);
+const hostedRequested = ref(false);
+let hostedAction = 0;
 // Why the hosted lane failed, shown on the step where it was clicked; kept separate from the arrival `error`.
 const hostedError = ref<NoticeModel | undefined>(undefined);
 // Created row is a hosted one; the wait card renders off this, not the picker, so a resumed row narrates right.
@@ -320,14 +324,14 @@ const factHost = `${factSlot} fact-host font-mono`;
 // the code.
 const targetKey = computed<string | undefined>(() => {
     // Hosted lane never mints: its machine already holds the tunnel, so a code would buy a command nothing runs.
-    if (created.value === null || lane.value === `attach` || machine.value === `hosted` || hostedRow.value !== null) {
+    if (created.value === null || lane.value === `attach` || machine.value === `hosted` || hostedRow.value !== null || releasingHosted.value) {
         return undefined;
     }
     // Nor a platform with no addresses to mint, either mode: the gate is server-side, so asking anyway just spins.
     if (!addressed.value) {
         return undefined;
     }
-    return created.value.id;
+    return `${created.value.id}:${created.value.token}`;
 });
 
 // The command can be built only once the chosen target has a code minted for it.
@@ -570,17 +574,24 @@ const enterWorkspace = async (): Promise<void> => {
 // `created.id` in the fresh list, never via `sandbox.active`, which can point elsewhere mid-wait.
 const check = async (): Promise<void> => {
     const pending = created.value;
-    if (pending === null || checking.value) {
+    if (pending === null || checking.value || releaseRequested.value) {
         return;
     }
     // Code this poll asked about; a response after a re-mint must not report the previous command as claimed.
     const askedFor = mintedFor.value;
+    const action = hostedAction;
     checking.value = true;
     try {
         const live = await sandbox.refresh();
+        if (action !== hostedAction || pending.id !== created.value?.id || releasingHosted.value) {
+            return;
+        }
         // A reachable platform clears any earlier "can't reach" warning: it must not outlive its cause.
         status.value = undefined;
         const row = live.find((entry) => entry.id === pending.id);
+        if (machine.value === `mine` && (row?.token !== pending.token || row?.hosted != null)) {
+            return;
+        }
         if (askedFor === mintedFor.value) {
             const claim = row?.setupCodeClaimedAt ?? null;
             if (claim !== null && claimedAt.value === null) {
@@ -607,6 +618,9 @@ const check = async (): Promise<void> => {
                 (await apiClient.sandbox.hostedStatus({ sandboxId: pending.id }).catch(() => undefined))?.machine ?? hostedMachine.value;
         }
         const seen = row?.lastSeenAt ?? null;
+        if (action !== hostedAction || releasingHosted.value) {
+            return;
+        }
         // Holds the hosted lane on this card until reachable (a check-in only proves a start); silence passes through.
         // Or its boot chain is still converging: handing over would land on a second card that just repeats this one.
         const holding = hostedRow.value !== null && (hostedWait.value.reachable === false || hostedWait.value.booting);
@@ -668,27 +682,36 @@ const recheckCapacity = async (): Promise<void> => {
 // attempt, leaving the sandbox untouched. Returns false if it didn't happen.
 const provisionHosted = async (): Promise<boolean> => {
     const row = created.value;
-    if (row === null || hostedBusy.value) {
+    if (row === null || row.token === null || hostedBusy.value || releasingHosted.value) {
         return false;
     }
     hostedBusy.value = true;
+    const action = ++hostedAction;
+    hostedRequested.value = true;
     hostedError.value = undefined;
     try {
-        const updated = await sandbox.hostedProvision(row.id);
+        const updated = await sandbox.hostedProvision(row.id, row.token);
+        if (action !== hostedAction || machine.value !== `hosted` || created.value?.id !== row.id) {
+            return false;
+        }
         created.value = updated;
         hostedSince.value = Date.now();
         // Zero-command milestone: `sandbox_connected` will complete once this machine exists.
         track(`sandbox_hosted_created`, {});
         return true;
     } catch (err) {
+        if (action !== hostedAction) {
+            return false;
+        }
         // No machines left isn't a failure notice; the card replaces itself with what to do instead.
         hostedRefusedForRoom.value = isAtCapacity(err);
         hostedError.value = noticeFrom(err, `Couldn't start a machine for you right now.`);
         return false;
     } finally {
-        // Re-reads the count either way (a refusal often means it moved); rungs stay unclickable in the busy window.
-        await refreshHostedOffer();
-        hostedBusy.value = false;
+        if (action === hostedAction) {
+            hostedBusy.value = false;
+            void refreshHostedOffer();
+        }
     }
 };
 
@@ -696,19 +719,28 @@ const provisionHosted = async (): Promise<boolean> => {
 // kept). Clock restarts with the machine.
 const restartHosted = async (): Promise<void> => {
     const row = created.value;
-    if (row === null || hostedBusy.value) {
+    if (row === null || hostedBusy.value || releasingHosted.value) {
         return;
     }
     const remake = hostedWait.value.failure?.action === `remake`;
     let released = false;
+    const action = ++hostedAction;
     hostedBusy.value = true;
     hostedError.value = undefined;
     try {
         if (remake) {
-            created.value = await sandbox.hostedRelease(row.id);
+            const updated = await sandbox.hostedRelease(row.id);
+            if (action !== hostedAction) {
+                return;
+            }
+            created.value = updated;
+            baseline.value = null;
             released = true;
         } else {
             await apiClient.sandbox.hostedRestart({ sandboxId: row.id });
+        }
+        if (action !== hostedAction) {
+            return;
         }
         // Whatever the machine last said about itself describes the boot we just replaced.
         bootReport.value = null;
@@ -717,25 +749,29 @@ const restartHosted = async (): Promise<void> => {
         hostedMachine.value = undefined;
         hostedSince.value = Date.now();
     } catch (err) {
+        if (action !== hostedAction) {
+            return;
+        }
         // A rebuild needs a new machine, so it can hit a full fleet like any provision, worded the same way.
         hostedRefusedForRoom.value = isAtCapacity(err);
         hostedError.value = hostedRefusedForRoom.value
             ? noticeOf(`We're out of machines right now, so we can't build you another one this minute.`, { tone: `warning` })
             : noticeFrom(err, `Couldn't start it over. Try again in a moment.`);
     } finally {
-        hostedBusy.value = false;
+        if (action === hostedAction) {
+            hostedBusy.value = false;
+        }
     }
     // Outside the busy window on purpose (provisioning shares the flag); must not leave a machine handed back empty.
-    if (released) {
+    if (released && action === hostedAction && machine.value === `hosted`) {
         await provisionHosted();
     }
 };
 
-// Moves a machine, never the sandbox: choosing hosted provisions one for the existing row, choosing away hands
-// it back (never connected, nothing lost). A failure leaves the reader where they were.
+// Cancellation must remain available while provisioning is in flight.
 const chooseMachine = async (next: "hosted" | "mine"): Promise<void> => {
     const prev = machine.value;
-    if (creating.value || hostedBusy.value) {
+    if (creating.value || releasingHosted.value || (next === `hosted` && hostedBusy.value)) {
         return;
     }
     if (next === prev) {
@@ -749,18 +785,29 @@ const chooseMachine = async (next: "hosted" | "mine"): Promise<void> => {
         machine.value = next;
         return;
     }
-    if (rowHosted && row !== null) {
-        hostedBusy.value = true;
+    if (row !== null && (rowHosted || hostedRequested.value || hostedBusy.value || releaseRequested.value)) {
+        hostedAction += 1;
+        releaseRequested.value = true;
+        releasingHosted.value = true;
+        hostedBusy.value = false;
         try {
             created.value = await sandbox.hostedRelease(row.id);
+            releaseRequested.value = false;
+            hostedRequested.value = false;
             hostedSince.value = undefined;
+            baseline.value = null;
+            bootReport.value = null;
+            announceRefusal.value = null;
+            announced.value = false;
+            hostedMachine.value = undefined;
+            claimedAt.value = null;
+            report.value = null;
         } catch (err) {
             hostedError.value = noticeFrom(err, `Couldn't remove the machine we started. Try again in a moment.`);
             return;
         } finally {
-            // Re-reads the allowance before rungs go live, so the one just handed back is takeable once clickable.
-            await refreshHostedOffer();
-            hostedBusy.value = false;
+            releasingHosted.value = false;
+            void refreshHostedOffer();
         }
     }
     machine.value = next;
@@ -1144,6 +1191,7 @@ document.addEventListener(`visibilitychange`, recheck);
 window.addEventListener(`focus`, recheck);
 
 onUnmounted(() => {
+    hostedAction += 1;
     clearInterval(timer);
     clearTimeout(mintTimer);
     document.removeEventListener(`visibilitychange`, recheck);
@@ -1491,7 +1539,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 type="button"
                                 role="radio"
                                 :aria-checked="machine === option.value"
-                                :disabled="hostedBusy || (option.value === `hosted` && hostedSpent)"
+                                :disabled="releasingHosted || (option.value === `hosted` && (hostedBusy || hostedSpent))"
                                 class="rung"
                                 :class="machine === option.value ? `rung-on` : ``"
                                 v-action="() => chooseMachine(option.value)"
@@ -1719,7 +1767,11 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     minutes and has no limits at all, or check back a little later and we'll have room.
                                 </p>
                                 <div class="flex flex-wrap items-center gap-3">
-                                    <Button label="Set it up on my own computer" class="w-full justify-center md:w-fit" @click="chooseMachine(`mine`)">
+                                    <Button
+                                        label="Set it up on my own computer"
+                                        class="w-full justify-center md:w-fit"
+                                        @click="chooseMachine(`mine`)"
+                                    >
                                         <template #icon><Icon name="desktop" /></template>
                                     </Button>
                                     <button type="button" :class="ui.linkButton()" :disabled="hostedBusy" @click="recheckCapacity">
@@ -1931,8 +1983,8 @@ const warmSandboxCredential = async (): Promise<void> => {
                                          Once the app is reporting, the strip under this line is the answer and this
                                          line only names what is happening. -->
                                     <template v-else-if="handoff === `handed` && launched && desktopReport">
-                                        <span class="font-medium text-content">The app is setting it up.</span> This page opens your workspace
-                                        the moment it answers.
+                                        <span class="font-medium text-content">The app is setting it up.</span> This page opens your workspace the
+                                        moment it answers.
                                     </template>
                                     <template v-else-if="handoff === `handed` && launched">
                                         <span class="font-medium text-content">Handed to the app.</span> Follow it in the Intentic window. This page

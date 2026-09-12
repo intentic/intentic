@@ -21,5 +21,9 @@ The seam between web and API. Add or change an endpoint here first; the API gets
 
 ## Conventions & gotchas
 
+- `sandbox.hostedProvision` requires the owner's current connect token alongside `sandboxId`, binding the
+  request to that setup attempt. `hostedRelease` cancels at any boot stage, revokes that token, and returns the
+  updated sandbox once cleanup is durable. Provider deletion may still be running when it returns.
+
 - Edit shapes here, never inline in a route or component: that's how the two sides stay in sync.
 - Built before the API runs under `tsx` (it's an imported workspace package); run `pnpm build` after changes. Depends on `@orpc/contract` + Zod.

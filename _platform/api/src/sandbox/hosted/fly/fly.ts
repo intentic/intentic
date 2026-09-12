@@ -114,7 +114,7 @@ export const createApp = async (token: string, org: string, name: string): Promi
 // Deleting the app tears down its machines and volumes with it. An already-gone app (404) counts as success: delete's
 // contract is not there anymore.
 export const deleteApp = async (token: string, name: string): Promise<void> => {
-    const response = await flyFetch(`DELETE`, `/apps/${encodeURIComponent(name)}`, { headers: { authorization: `Bearer ${token}` } });
+    const response = await flyFetch(`DELETE`, `/apps/${encodeURIComponent(name)}?force=true`, { headers: { authorization: `Bearer ${token}` } });
     if (response.ok || response.status === 404) {
         return;
     }
@@ -129,6 +129,18 @@ export const deleteApp = async (token: string, name: string): Promise<void> => {
         failure.success ? `Fly refused DELETE /apps/${name}: ${failure.data.error}` : `Fly DELETE /apps/${name} failed with HTTP ${response.status}`,
         response.status,
     );
+};
+
+export const appExists = async (token: string, name: string): Promise<boolean> => {
+    try {
+        await call(token, `GET`, `/apps/${encodeURIComponent(name)}`);
+        return true;
+    } catch (error) {
+        if (isFlyGone(error)) {
+            return false;
+        }
+        throw error;
+    }
 };
 
 // Every app name in the org; the reaper diffs this against the DB to find orphans (prefix-filtered there, since the org

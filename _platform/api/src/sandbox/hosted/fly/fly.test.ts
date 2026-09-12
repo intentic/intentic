@@ -69,7 +69,7 @@ describe(`fly`, () => {
     });
 
     it(`lists app names and tolerates delete's empty body`, async () => {
-        stubFetch([
+        const calls = stubFetch([
             {
                 match: (method, url) => method === `GET` && url.includes(`/apps?org_slug=`),
                 respond: () => json({ apps: [{ name: `a` }, { name: `b` }] }),
@@ -78,6 +78,7 @@ describe(`fly`, () => {
         ]);
         expect(await listAppNames(`tok`, `intentic`)).toEqual([`a`, `b`]);
         await expect(deleteApp(`tok`, `a`)).resolves.toBeUndefined();
+        expect(calls.at(-1)).toMatchObject({ method: `DELETE`, url: `https://api.machines.dev/v1/apps/a?force=true` });
     });
 
     it(`reads machine state and starts machines`, async () => {
@@ -146,9 +147,7 @@ describe(`fly`, () => {
                 guest: { cpus: 2, memoryMb: 4096 },
                 volumeId: `vol_1`,
             });
-            const refused = await createMachine(`tok`, `app`, { name: `app`, region: `iad`, config: machineConfig }).catch(
-                (error: unknown) => error,
-            );
+            const refused = await createMachine(`tok`, `app`, { name: `app`, region: `iad`, config: machineConfig }).catch((error: unknown) => error);
             const placed = await createVolume(`tok`, `app`, `iad`, 20).catch((error: unknown) => error);
             expect(isFlyCapacity(refused)).toBe(true);
             expect(isFlyCapacity(placed)).toBe(true);

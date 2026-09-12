@@ -1,4 +1,26 @@
 import { generateKeyPairSync } from "node:crypto";
+import type { withHostedAppLock } from "./sandbox/hosted/hosted-app-lock.js";
+
+const hostedAppLocks = new Map<string, Promise<void>>();
+
+export const fakeHostedAppLock: typeof withHostedAppLock = async (_config, appName, wait, work) => {
+    const held = hostedAppLocks.get(appName);
+    if (held && !wait) {
+        return undefined;
+    }
+    const done = Promise.withResolvers<void>();
+    const queued = (held ?? Promise.resolve()).then(() => done.promise);
+    hostedAppLocks.set(appName, queued);
+    await held;
+    try {
+        return await work();
+    } finally {
+        done.resolve();
+        if (hostedAppLocks.get(appName) === queued) {
+            hostedAppLocks.delete(appName);
+        }
+    }
+};
 
 // Shared fixtures for the platform api's suites, one per seam. The ingress keypair is real, not faked: a grant is
 // Ed25519 over a canonical payload, so tests sign and verify with it directly, with nothing to stub. Generated once per

@@ -16,6 +16,10 @@ The **database layer**: the Prisma schema, the generated client, and the migrati
 
 ## Workflow
 
+`HostedCleanup` stores app teardown obligations independently of sandbox rows, so cascades and API restarts
+cannot erase unfinished cleanup. Provisioning records an app before contacting its provider and removes the
+record with its successful handoff; cancellation and failed provisions leave it for the cleanup worker.
+
 - `pnpm generate`: regenerate the client after editing `schema.prisma`.
 - `pnpm migrate:dev`: create/apply a dev migration (`prisma migrate dev`).
 - `pnpm migrate:deploy`: apply pending migrations (`prisma migrate deploy`, CI/prod/local startup).

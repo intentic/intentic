@@ -5,10 +5,13 @@ import type { OrpcContext } from "../../context.js";
 import type { Config } from "../../config.js";
 import { sandboxRoutes } from "../sandbox.routes.js";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
-import { HostedAlreadyProvisioned, hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, wakeHosted } from "./hosted.js";
+import { hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, wakeHosted } from "./hosted.js";
+import { HostedAlreadyProvisioned } from "./hosted-cleanup.js";
 import { AT_CAPACITY_MESSAGE, forgetProviderCapacity, HostedAtCapacity } from "./hosted-capacity.js";
 import { forgetHostedImage } from "./build/hosted-image.js";
 import { testIngressConfig } from "../../testing.js";
+
+vi.mock(`./hosted-app-lock.js`, async () => ({ withHostedAppLock: (await import(`../../testing.js`)).fakeHostedAppLock }));
 
 /* The settle between a machine's config update and its start (hosted.ts SETTLE_MS) is half a second of real
  * time in production, polled up to sixty times. Here the wait is a no-op: every case that crosses it is about
@@ -69,25 +72,41 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof v
             typeof work === `function` ? work(prisma) : Promise.all(work),
         ),
         $executeRaw: vi.fn().mockResolvedValue(0),
+        $queryRaw: vi.fn().mockResolvedValue([]),
         ...overrides,
+        hostedCleanup: {
+            findUnique: vi.fn().mockResolvedValue({}),
+            create: vi.fn().mockResolvedValue({}),
+            deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+            upsert: vi.fn().mockResolvedValue({}),
+            findMany: vi.fn().mockResolvedValue([]),
+            ...overrides[`hostedCleanup`],
+        },
         // Empty pool by default so tests not about the pool exercise the cold path.
         hostedPoolMachine: {
             findMany: vi.fn().mockResolvedValue([]),
             updateMany: vi.fn().mockResolvedValue({ count: 1 }),
             delete: vi.fn().mockResolvedValue({}),
+            deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
             ...overrides[`hostedPoolMachine`],
         },
         // `findMany` is the hour meter's live read (an owner's open stretches): none open unless a test says so;
         // `count` is the owner's slot use at the row write, none unless a test says so.
         hostedMachine: {
             update: vi.fn().mockResolvedValue({}),
+            findUnique: vi.fn().mockResolvedValue(null),
             findMany: vi.fn().mockResolvedValue([]),
             count: vi.fn().mockResolvedValue(0),
             ...overrides[`hostedMachine`],
         },
         // The claim adopts the pool machine's identity onto the sandbox row inside the hand-off transaction, and
         // the slot write reads the row's owner first.
-        sandbox: { update: vi.fn().mockResolvedValue({}), findUniqueOrThrow: vi.fn().mockResolvedValue({ ownerId: `u1` }), ...overrides[`sandbox`] },
+        sandbox: {
+            update: vi.fn().mockResolvedValue({}),
+            findUnique: vi.fn().mockResolvedValue({ tokenDigest: sha256Hex(`t0k3n`) }),
+            findUniqueOrThrow: vi.fn().mockResolvedValue({ ownerId: `u1` }),
+            ...overrides[`sandbox`],
+        },
     };
     return prisma as unknown as OrpcContext[`prisma`];
 };
@@ -474,7 +493,10 @@ describe(`provisionHosted`, () => {
     it(`boots the digest the warm machine already holds, never the configured tag`, async () => {
         const machine = settlingMachine(`m7`);
         const calls = stubFetch([
-            { match: (_method, url) => url.includes(`/v2/intentic/sandbox/manifests/`), respond: () => new Response(null, { status: 200, headers: { "docker-content-digest": POOL_DIGEST } }) },
+            {
+                match: (_method, url) => url.includes(`/v2/intentic/sandbox/manifests/`),
+                respond: () => new Response(null, { status: 200, headers: { "docker-content-digest": POOL_DIGEST } }),
+            },
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ id: `m7`, state: `stopped` }) },
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7/start`), respond: () => machine.start() },
             { match: (method, url) => method === `GET` && url.includes(`/machines/m7`), respond: () => machine.read() },
@@ -499,7 +521,10 @@ describe(`provisionHosted`, () => {
     // the pull, so the claim steps over it and reconcile destroys it on its own tick.
     it(`steps over a warm machine on a superseded image and builds cold instead`, async () => {
         const calls = stubFetch([
-            { match: (_method, url) => url.includes(`/v2/intentic/sandbox/manifests/`), respond: () => new Response(null, { status: 200, headers: { "docker-content-digest": POOL_DIGEST } }) },
+            {
+                match: (_method, url) => url.includes(`/v2/intentic/sandbox/manifests/`),
+                respond: () => new Response(null, { status: 200, headers: { "docker-content-digest": POOL_DIGEST } }),
+            },
             { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a1` }) },
             { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
             { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m1`, state: `created` }) },
@@ -508,7 +533,11 @@ describe(`provisionHosted`, () => {
         const prisma = fakePrisma({
             hostedMachine: { create: vi.fn().mockResolvedValue({}) },
             hostedPoolMachine: {
-                findMany: vi.fn().mockResolvedValue([{ ...poolRow, image: `ghcr.io/intentic/sandbox@sha256:0000000000000000000000000000000000000000000000000000000000000000` }]),
+                findMany: vi
+                    .fn()
+                    .mockResolvedValue([
+                        { ...poolRow, image: `ghcr.io/intentic/sandbox@sha256:0000000000000000000000000000000000000000000000000000000000000000` },
+                    ]),
                 updateMany: vi.fn().mockResolvedValue({ count: 1 }),
                 delete: poolDelete,
             },
@@ -572,7 +601,7 @@ describe(`provisionHosted`, () => {
             hostedMachine: {
                 create: created,
                 // Winner's row already exists: this is the concurrent-provision race, not an appName collision.
-                findUnique: vi.fn().mockResolvedValue({ id: `hm1` }),
+                findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ id: `hm1` }),
             },
             hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([poolRow, second]), updateMany: claim, delete: poolDelete },
         });
@@ -596,7 +625,10 @@ describe(`provisionHosted`, () => {
             { match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) },
         ]);
         const prisma = fakePrisma({
-            hostedMachine: { create: vi.fn().mockRejectedValue(duplicate), findUnique: vi.fn().mockResolvedValue({ id: `hm1` }) },
+            hostedMachine: {
+                create: vi.fn().mockRejectedValue(duplicate),
+                findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ id: `hm1` }),
+            },
         });
         await expect(provisionHosted(prisma as never, config(), logger, args)).rejects.toBeInstanceOf(HostedAlreadyProvisioned);
         expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(`/apps/intentic-sbx-`))).toBe(true);
@@ -821,7 +853,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         name: `mine`,
         image: null,
         ownerId: `u1`,
-        token: `tok`,
+        token: `t0k3n`,
         tunnelId: `abcdef012345`,
         daemonUrl: null,
         lastSeenAt: null,
@@ -835,7 +867,9 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             sandbox: { findFirst: vi.fn().mockResolvedValue(ownedRow) },
             hostedMachine: { findUnique: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(1) },
         });
-        await expect(call(sandboxRoutes.hostedProvision, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).rejects.toMatchObject({
+        await expect(
+            call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context: routeContext({ prisma }) }),
+        ).rejects.toMatchObject({
             code: `BAD_REQUEST`,
         });
         expect(fetchSpy).toHaveLength(0);
@@ -884,7 +918,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             hostedBuild: { count: vi.fn().mockResolvedValue(0) },
         });
         const context = routeContext({ prisma, config: config({ hosted: { ...config().hosted, maxMachines: 100 } }) });
-        await expect(call(sandboxRoutes.hostedProvision, { sandboxId: `s1` }, { context })).rejects.toMatchObject({
+        await expect(call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context })).rejects.toMatchObject({
             code: `SERVICE_UNAVAILABLE`,
             message: AT_CAPACITY_MESSAGE,
         });
@@ -895,7 +929,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         await expect(
             call(
                 sandboxRoutes.hostedProvision,
-                { sandboxId: `s1` },
+                { sandboxId: `s1`, token: `t0k3n` },
                 { context: routeContext({ config: config({ hosted: { ...config().hosted, flyOrg: `` } }) }) },
             ),
         ).rejects.toMatchObject({ code: `NOT_FOUND` });
@@ -910,7 +944,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             },
             hostedMachine: { findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-pool-abc123`, machineId: `m1` }), count: vi.fn() },
         });
-        const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1` }, { context: routeContext({ prisma }) });
+        const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context: routeContext({ prisma }) });
         // `warm` is read off the app name: a pool claim keeps its pool-assigned name.
         expect(summary.hosted).toEqual({ region: `iad`, warm: true });
         expect(fetchSpy).toHaveLength(0);
@@ -936,38 +970,38 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             },
             hostedMachine: {
                 // Null for the route's own pre-flight read, then the winner's row once the write is refused.
-                findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ id: `hm1` }),
+                findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValue({ id: `hm1` }),
                 count: vi.fn().mockResolvedValue(0),
                 create: vi.fn().mockRejectedValue(duplicate),
             },
         });
         const context = routeContext({ prisma, headers: new Headers() });
-        const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1` }, { context });
+        const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context });
         expect(summary.hosted).toEqual({ region: `iad`, warm: true });
         expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(`/apps/intentic-sbx-`))).toBe(true);
     });
 
-    // A connected sandbox has files on its machine; destroying that belongs to the delete dialog, not release.
-    it(`hostedRelease destroys the machine of a never-started sandbox and refuses on a live one`, async () => {
-        const calls = stubFetch([{ match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) }]);
+    it.each([null, new Date()])(`hostedRelease durably cancels setup with lastSeenAt %s`, async (lastSeenAt) => {
+        const fetch = vi.fn();
+        vi.stubGlobal(`fetch`, fetch);
         const machineDelete = vi.fn().mockResolvedValue({});
+        const upsert = vi.fn().mockResolvedValue({});
         const prisma = fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue(ownedRow), findUniqueOrThrow: vi.fn().mockResolvedValue({ ...ownedRow, hosted: null }) },
+            sandbox: {
+                findFirst: vi.fn().mockResolvedValue({ ...ownedRow, lastSeenAt }),
+                findUniqueOrThrow: vi
+                    .fn()
+                    .mockResolvedValueOnce({ ...ownedRow, lastSeenAt, hosted: { id: `h1`, appName: `intentic-sbx-a`, wokeAt: null } })
+                    .mockResolvedValue({ ...ownedRow, hosted: null }),
+            },
+            hostedCleanup: { upsert },
             hostedMachine: { findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-a` }), delete: machineDelete },
         });
         const summary = await call(sandboxRoutes.hostedRelease, { sandboxId: `s1` }, { context: routeContext({ prisma }) });
         expect(summary.hosted).toBeNull();
-        expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(1);
-        // Called once: a second delete would race whatever claims the freed app name next.
-        expect(machineDelete).toHaveBeenCalledTimes(1);
-
-        const live = fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue({ ...ownedRow, lastSeenAt: new Date() }) },
-            hostedMachine: { findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-a` }), delete: vi.fn() },
-        });
-        await expect(call(sandboxRoutes.hostedRelease, { sandboxId: `s1` }, { context: routeContext({ prisma: live }) })).rejects.toMatchObject({
-            code: `BAD_REQUEST`,
-        });
+        expect(fetch).not.toHaveBeenCalled();
+        expect(upsert).toHaveBeenCalledExactlyOnceWith({ where: { appName: `intentic-sbx-a` }, create: { appName: `intentic-sbx-a` }, update: {} });
+        expect(machineDelete).toHaveBeenCalledExactlyOnceWith({ where: { id: `h1` } });
     });
 
     it(`hostedRestart refreshes the current image onto the existing volume before starting`, async () => {
@@ -1003,7 +1037,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         };
         expect(update.config.image).toBe(`ghcr.io/intentic/sandbox:stable`);
         expect(update.config.mounts).toEqual([{ volume: `vol_1`, path: `/data` }]);
-        expect(update.config.env[`CONNECT_TOKEN`]).toBe(`tok`);
+        expect(update.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
         expect(update.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
         // The replacement itself carries the launch; the wake that follows only confirms it landed (fly.ts).
         expect(update.skip_launch).toBeUndefined();
@@ -1034,7 +1068,8 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             hostedMachine: {
                 findUnique: vi
                     .fn()
-                    .mockResolvedValue({ id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, volumeId: `vol_1`, region: `iad`, wokeAt: null }),
+                    .mockResolvedValueOnce({ id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, volumeId: `vol_1`, region: `iad`, wokeAt: null })
+                    .mockResolvedValue(null),
                 create: machineCreate,
                 delete: rowDelete,
                 update: vi.fn().mockResolvedValue({}),
@@ -1094,13 +1129,20 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const written: unknown[] = [];
         const prisma = fakePrisma({
             sandbox: {
-                findFirst: vi.fn().mockResolvedValue({ id: `s1`, ownerId: `u1`, hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null } }),
+                findFirst: vi
+                    .fn()
+                    .mockResolvedValue({ id: `s1`, ownerId: `u1`, hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null } }),
                 update: vi.fn((args: unknown) => {
                     written.push(args);
                     return Promise.resolve({});
                 }),
             },
-            hostedMachine: { delete: vi.fn((args: unknown) => { written.push(args); return Promise.resolve({}); }) },
+            hostedMachine: {
+                delete: vi.fn((args: unknown) => {
+                    written.push(args);
+                    return Promise.resolve({});
+                }),
+            },
         });
         await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).rejects.toMatchObject({
             code: `NOT_FOUND`,
@@ -1117,7 +1159,9 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const remove = vi.fn();
         const prisma = fakePrisma({
             sandbox: {
-                findFirst: vi.fn().mockResolvedValue({ id: `s1`, ownerId: `u1`, hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null } }),
+                findFirst: vi
+                    .fn()
+                    .mockResolvedValue({ id: `s1`, ownerId: `u1`, hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null } }),
                 update: vi.fn().mockResolvedValue({}),
             },
             hostedMachine: { delete: remove },

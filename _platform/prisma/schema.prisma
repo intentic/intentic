@@ -250,6 +250,14 @@ model HostedMachine {
     @@map("hosted_machine")
 }
 
+// Cleanup records must survive sandbox deletion and API restarts.
+model HostedCleanup {
+    appName   String   @id
+    createdAt DateTime @default(now())
+
+    @@map("hosted_cleanup")
+}
+
 /* ONE OVERLAY BUILD for a hosted machine: the platform's `ic sandbox rebuild`, run on a builder machine inside
  * the sandbox's own Fly app (hosted-build.ts). `content` is the approved overlay exactly as the owner reviewed
  * it, `hash` its sha256 (re-hashed on arrival, the same guarantee the rebuild command's argument gives on a

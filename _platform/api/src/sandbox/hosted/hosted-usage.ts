@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@intentic/prisma";
+import type { Prisma, PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { onHostedPlan } from "./hosted-plan.js";
@@ -55,7 +55,7 @@ export const hostedBudgetOf = async (prisma: PrismaClient, config: Config, userI
 
 // Adds a settled stretch to its owner's month; atomic upsert so two racing settlements both increment. Also used by an
 // overlay build's minutes (hosted-build.ts), charged once when it ends.
-export const chargeMinutes = async (prisma: PrismaClient, userId: string, month: string, minutes: number): Promise<void> => {
+export const chargeMinutes = async (prisma: Prisma.TransactionClient, userId: string, month: string, minutes: number): Promise<void> => {
     if (minutes <= 0) {
         return;
     }
@@ -108,7 +108,7 @@ export const settleHostedStretch = async (
  * the row erased them, and provision → work a day → delete → provision again was a month that never filled.
  * Answers the minutes charged. Idempotent, a machine with no open stretch is 0 and no write. */
 export const closeHostedStretch = async (
-    prisma: PrismaClient,
+    prisma: Prisma.TransactionClient,
     machine: { id: string; wokeAt: Date | null },
     ownerId: string,
     endedAt?: Date,

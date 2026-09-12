@@ -7,6 +7,7 @@ import { createLogger } from "./logger.js";
 import { createPrisma } from "./prisma.js";
 import { startHostedBuilds } from "./sandbox/hosted/build/hosted-build.js";
 import { startHostedCanary } from "./sandbox/hosted/hosted-canary.js";
+import { startHostedCleanup } from "./sandbox/hosted/hosted-cleanup.js";
 import { startHostedHealth } from "./sandbox/hosted/hosted-health.js";
 import { startHostedMeter } from "./sandbox/hosted/hosted-meter.js";
 import { hostedPlanEnabled } from "./sandbox/hosted/hosted-plan.js";
@@ -32,10 +33,13 @@ if (!config.email.apiKey || !config.email.from) {
 }
 // A plan on sale with no webhook secret would take payment and refuse activation for every buyer via a 400.
 if (hostedPlanEnabled(config) && !config.hostedPlan.stripeWebhookSecret) {
-    logger.error(`HOSTED_PLAN_STRIPE_WEBHOOK_SECRET unset while the hosted plan is on sale: every payment will be taken and no plan will ever activate`);
+    logger.error(
+        `HOSTED_PLAN_STRIPE_WEBHOOK_SECRET unset while the hosted plan is on sale: every payment will be taken and no plan will ever activate`,
+    );
 }
 
 const prisma = createPrisma(config);
+startHostedCleanup(prisma, config, logger);
 startRetention(prisma, config, logger);
 // Keeps warm hosted machines built ahead of demand, and drains them when the pool is off (hosted-pool.ts).
 startHostedPool(prisma, config, logger);

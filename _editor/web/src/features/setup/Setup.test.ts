@@ -40,7 +40,7 @@ vi.mock(import(`@intentic/ui`), async (importOriginal) => {
 const sandboxes = ref<SandboxSummary[]>([]);
 const list = vi.fn<() => Promise<SandboxSummary[]>>();
 const create = vi.fn<(name: string) => Promise<SandboxSummary>>();
-const hostedProvision = vi.fn<(sandboxId: string) => Promise<SandboxSummary>>();
+const hostedProvision = vi.fn<(sandboxId: string, token: string) => Promise<SandboxSummary>>();
 const hostedRelease = vi.fn<(sandboxId: string) => Promise<SandboxSummary>>();
 // The 3s poll's read; the wait card is driven entirely by what it returns.
 const refresh = vi.fn<() => Promise<SandboxSummary[]>>();
@@ -220,7 +220,7 @@ it(`discards the sandbox it made when the reader leaves without committing`, asy
 it(`keeps the sandbox once a machine has been started for it`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     await mount();
-    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
+    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     leave();
     expect(remove).not.toHaveBeenCalled();
 });
@@ -290,7 +290,7 @@ it(`starts a machine of ours for a browser, on arrival`, async () => {
     const el = await mount();
     // The row is created the ordinary way: the lane only decides what machine is attached to it.
     expect(create).toHaveBeenCalledWith(`workspace`);
-    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
+    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     await nextTick();
     // The wait names each step rather than a single generic sentence.
     expect(el.textContent).toContain(`Starting the machine`);
@@ -334,7 +334,7 @@ it(`starts nothing, and offers the other rung, when the platform is out of machi
 it(`offers the rung it did not take, without taking it`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
+    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     expect(el.textContent).toContain(`Other ways to set up`);
     buttonLabelled(`Run it on my own computer`)!.click();
     await nextTick();
@@ -348,7 +348,7 @@ it(`offers the rung it did not take, without taking it`, async () => {
 it(`says what is happening rather than asking, when the arrival answered`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
+    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     expect(el.textContent).toContain(`We're starting a machine for you`);
     expect(el.textContent).not.toContain(`Pick where it runs`);
 });
@@ -366,7 +366,7 @@ it(`starts a machine for a phone too`, async () => {
     mobileDevice.value = true;
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
+    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     expect(el.textContent).toContain(`Starting the machine`);
     expect(buttonLabelled(`Start my machine`)).toBeUndefined();
 });
@@ -502,7 +502,7 @@ it(`names a refused check-in on the wait card, with a way out`, async () => {
     const restart = [...el.querySelectorAll<HTMLElement>(`button`)].find((button) => button.textContent?.includes(`Start it over`));
     restart!.click();
     await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
-    expect(hostedProvision).toHaveBeenCalledWith(`h1`);
+    expect(hostedProvision).toHaveBeenCalledWith(`h1`, `tok`);
     expect(hostedRestart).not.toHaveBeenCalled();
 });
 
@@ -564,7 +564,7 @@ it(`hands the machine back when another rung is chosen, keeping the same sandbox
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
     // The arrival started it; the reader opens the rung it did not take and steps off.
-    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
+    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     buttonLabelled(`Run it on my own computer`)!.click();
     await nextTick();
     const mine = (): HTMLButtonElement =>
@@ -592,6 +592,68 @@ it(`offers the hosted rung again once its machine has been handed back`, async (
     await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
     await vi.waitFor(() => expect(rung(`Start instantly`).disabled).toBe(false));
     expect(el.textContent).not.toContain(`Already using yours`);
+});
+
+it(`switches during provisioning and ignores the machine's late response`, async () => {
+    const provisioning = Promise.withResolvers<SandboxSummary>();
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+    hostedProvision.mockReturnValue(provisioning.promise);
+    hostedRelease.mockResolvedValue(sandboxRow({ id: `new`, token: `local-token` }));
+    const el = await mount();
+    buttonLabelled(`Run it on my own computer`)!.click();
+    await nextTick();
+    const mine = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`My own computer`))!;
+    expect(mine.disabled).toBe(false);
+    mine.click();
+    await vi.waitFor(() => expect(mine.getAttribute(`aria-checked`)).toBe(`true`));
+    expect(hostedRelease).toHaveBeenCalledExactlyOnceWith(`new`);
+    await vi.waitFor(() => expect(setupCode).toHaveBeenCalledWith({ sandboxId: `new` }));
+    provisioning.resolve(sandboxRow({ id: `new`, hosted: { region: `iad`, warm: true }, lastSeenAt: new Date().toISOString() }));
+    await nextTick();
+    await nextTick();
+    expect(mine.getAttribute(`aria-checked`)).toBe(`true`);
+    expect(el.textContent).not.toContain(`Starting the machine`);
+    expect(push).not.toHaveBeenCalled();
+});
+
+it(`can retry cancellation while the provision request is still pending`, async () => {
+    const provisioning = Promise.withResolvers<SandboxSummary>();
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+    hostedProvision.mockReturnValue(provisioning.promise);
+    hostedRelease.mockRejectedValueOnce(new Error(`network`)).mockResolvedValue(sandboxRow({ id: `new`, token: `local-token` }));
+    const el = await mount();
+    buttonLabelled(`Run it on my own computer`)!.click();
+    await nextTick();
+    const mine = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`My own computer`))!;
+    mine.click();
+    await vi.waitFor(() => expect(el.textContent).toContain(`Couldn't remove the machine`));
+    mine.click();
+    await vi.waitFor(() => expect(mine.getAttribute(`aria-checked`)).toBe(`true`));
+    expect(hostedRelease).toHaveBeenCalledTimes(2);
+    provisioning.reject(new Error(`cancelled`));
+    await nextTick();
+    expect(el.textContent).not.toContain(`Couldn't start a machine`);
+});
+
+it(`ignores a ready hosted poll returned after switching to the local install`, async () => {
+    vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`] });
+    const hosted = sandboxRow({ id: `h1`, hosted: { region: `iad`, warm: true } });
+    list.mockResolvedValue([hosted]);
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 0 });
+    const poll = Promise.withResolvers<SandboxSummary[]>();
+    refresh.mockReturnValue(poll.promise);
+    hostedRelease.mockResolvedValue(sandboxRow({ id: `h1`, token: `local-token` }));
+    const el = await mount();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    const mine = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`My own computer`))!;
+    mine.click();
+    await vi.waitFor(() => expect(mine.getAttribute(`aria-checked`)).toBe(`true`));
+    poll.resolve([{ ...hosted, lastSeenAt: new Date().toISOString(), bootReport: { reach: `reachable`, at: new Date().toISOString() } }]);
+    await nextTick();
+    await nextTick();
+    expect(push).not.toHaveBeenCalled();
+    expect(mine.getAttribute(`aria-checked`)).toBe(`true`);
 });
 
 // A 404 on the mint means nothing is offered; say so immediately rather than flashing rungs that can't work.
@@ -635,7 +697,7 @@ it(`keeps the hosted lane when the platform hosts but mints no addresses`, async
     addressOffer.mockResolvedValue({ enabled: false });
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`));
+    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     expect(el.textContent).toContain(`Starting the machine`);
     expect(el.textContent).not.toContain(`Connect your sandbox`);
     expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);

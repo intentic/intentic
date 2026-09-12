@@ -2,7 +2,9 @@ import type { SandboxSummary } from "@intentic/api-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
-vi.mock("../../../lib/useApi", () => ({ apiClient: { sandbox: { list: vi.fn(), delete: vi.fn(), leave: vi.fn() } } }));
+vi.mock("../../../lib/useApi", () => ({
+    apiClient: { sandbox: { list: vi.fn(), delete: vi.fn(), leave: vi.fn(), hostedProvision: vi.fn(), hostedRelease: vi.fn() } },
+}));
 const { apiClient } = await import("../../../lib/useApi");
 const listMock = vi.mocked(apiClient.sandbox.list);
 const { queryClient } = await import("../../../lib/queryPersistence");
@@ -45,6 +47,34 @@ describe(`sandbox list cache retention`, () => {
 });
 
 describe(`useSandbox list/mutation race`, () => {
+    it(`cannot restore a hosted machine from a provision response returned after release`, async () => {
+        const sandbox = useSandbox();
+        const row = summary(`a`);
+        listMock.mockResolvedValue({ sandboxes: [row] });
+        await sandbox.refresh();
+        const provision = Promise.withResolvers<SandboxSummary>();
+        vi.mocked(apiClient.sandbox.hostedProvision).mockReturnValue(provision.promise);
+        const provisioning = sandbox.hostedProvision(row.id, row.token!);
+        const local = { ...row, token: `local-token` };
+        vi.mocked(apiClient.sandbox.hostedRelease).mockResolvedValue(local);
+        await sandbox.hostedRelease(row.id);
+        provision.resolve({ ...row, hosted: { region: `iad`, warm: true } });
+        await provisioning;
+        expect(sandbox.sandboxes.value).toEqual([local]);
+        expect(apiClient.sandbox.hostedProvision).toHaveBeenCalledExactlyOnceWith({ sandboxId: row.id, token: row.token });
+    });
+
+    it(`shares a pending cancellation instead of rotating the local identity twice`, async () => {
+        const sandbox = useSandbox();
+        const release = Promise.withResolvers<SandboxSummary>();
+        vi.mocked(apiClient.sandbox.hostedRelease).mockReturnValue(release.promise);
+        const first = sandbox.hostedRelease(`a`);
+        const second = sandbox.hostedRelease(`a`);
+        expect(apiClient.sandbox.hostedRelease).toHaveBeenCalledExactlyOnceWith({ sandboxId: `a` });
+        const local = summary(`a`);
+        release.resolve(local);
+        expect(await Promise.all([first, second])).toEqual([local, local]);
+    });
     it(`cancels an in-flight list() so its pre-delete response can't resurrect a removed sandbox`, async () => {
         const sandbox = useSandbox();
         const a = summary(`a`);

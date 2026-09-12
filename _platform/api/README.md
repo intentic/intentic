@@ -18,6 +18,13 @@ The **platform backend**, Hono + oRPC + Prisma + Better Auth. The platform is an
 
 ## Routes (see [src/app.ts](src/app.ts))
 
+Hosted setup can be cancelled before or after its first announcement. Release rotates the sandbox identity,
+clears its setup reports, and records machine teardown in `HostedCleanup` before returning. Provisioning also
+records each app before writing to Fly; its final handoff checks the original identity under a database row
+lock. An app lock prevents cleanup from racing its provision across API replicas. Cleanup runs immediately
+after release and every minute after API startup, force-deleting the whole app and retaining its record until
+Fly confirms absence. These records survive sandbox deletion and failed or interrupted provisioning.
+
 - `/api/auth/**`: Better Auth (Google OAuth redirect, the browser-minted Google ID token at `one-tap/callback`, session).
 - `${API_BASE_PATH}/*`, the oRPC OpenAPI handler ([src/router.ts](src/router.ts): `me`, `setup.connect`, `setup.zones`, `setup.bind`, `setup.binding`). `bind` stores the browser-derived `daemonUrl`; `binding` reads it back.
 - `/trial/*`: the free trial's model API (`/trial/status`, `/trial/v1/models`, `/trial/v1/chat/completions`), authenticated by the sandbox connect token. 404s entirely when `TRIAL_KEYS` is unset.

@@ -212,15 +212,15 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         const expected = expectedDaemonHost(config, sandbox);
         if (expected !== undefined && hostOf(daemonUrl) !== expected) {
             c.get(`logger`).warn({ sandboxId: sandbox.id, announced: hostOf(daemonUrl), expected }, `announce rejected: daemonUrl host mismatch`);
-            await prisma.sandbox.update({
-                where: { id: sandbox.id },
+            await prisma.sandbox.updateMany({
+                where: { id: sandbox.id, tokenDigest: sha256Hex(token) },
                 data: { announceRefusal: { announced: hostOf(daemonUrl) ?? daemonUrl, expected } },
             });
             return c.text(`error: this sandbox announces at ${expected}`, 409);
         }
         // Cleared here since a stored refusal must describe a live disagreement; firstAnnouncedAt is written once.
-        await prisma.sandbox.update({
-            where: { id: sandbox.id },
+        const announced = await prisma.sandbox.updateMany({
+            where: { id: sandbox.id, tokenDigest: sha256Hex(token) },
             data: {
                 daemonUrl,
                 lastSeenAt: new Date(),
@@ -228,7 +228,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
                 ...(sandbox.firstAnnouncedAt === null ? { firstAnnouncedAt: new Date() } : {}),
             },
         });
-        return c.json({ ok: true });
+        return announced.count === 0 ? c.text(`error: unknown sandbox`, 404) : c.json({ ok: true });
     });
 
     /* HOW A SANDBOX PRESENTS ITSELF, read by the sandbox itself. Same sessionless door as announce above and the
@@ -304,8 +304,11 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (!sandbox) {
             return c.text(`error: unknown sandbox`, 404);
         }
-        await prisma.sandbox.update({ where: { id: sandbox.id }, data: { bootReport: report.data } });
-        return c.json({ ok: true });
+        const updated = await prisma.sandbox.updateMany({
+            where: { id: sandbox.id, tokenDigest: sha256Hex(token) },
+            data: { bootReport: report.data },
+        });
+        return updated.count === 0 ? c.text(`error: unknown sandbox`, 404) : c.json({ ok: true });
     });
 
     // Unauthenticated by design (existence isn't secret); matches `tunnelId` exactly, never a prefix over it.

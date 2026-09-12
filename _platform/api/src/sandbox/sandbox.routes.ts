@@ -12,9 +12,7 @@ import { requireOwnedSandbox, requireUser } from "../guards.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
 import { getMachine, isFlyGone, stopMachine } from "./hosted/fly/fly.js";
 import {
-    destroyHosted,
     forgetHostedMachine,
-    HostedAlreadyProvisioned,
     type HostedProvisionArgs,
     hostedEnabled,
     HostedSlotsExhausted,
@@ -23,11 +21,24 @@ import {
     slotsMessage,
     wakeHosted,
 } from "./hosted/hosted.js";
-import { HostedBuildRefused, type HostedBuildRefusal, hostedBuildStatus, rebuildOnMovedBase, requestHostedBuild } from "./hosted/build/hosted-build.js";
+import {
+    HostedBuildRefused,
+    type HostedBuildRefusal,
+    hostedBuildStatus,
+    rebuildOnMovedBase,
+    requestHostedBuild,
+} from "./hosted/build/hosted-build.js";
 import { HostedAtCapacity, hostedCapacity } from "./hosted/hosted-capacity.js";
 import { kickHostedPool } from "./hosted/hosted-pool.js";
+import {
+    assertHostedIdentity,
+    HostedAlreadyProvisioned,
+    HostedProvisionCancelled,
+    kickHostedCleanup,
+    releaseHosted,
+} from "./hosted/hosted-cleanup.js";
 import { hostedPlanEnabled, hostedSlotsOf, onHostedPlan } from "./hosted/hosted-plan.js";
-import { closeHostedStretch, hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
+import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { mintSandbox } from "./mint-sandbox.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
@@ -231,32 +242,12 @@ export const sandboxRoutes = {
         });
         return toSummary(sandbox, `owner`, context);
     }),
-    // Deleting the row is the revocation: a grant signs the sandbox's id, so a missing row just fails the next tunnel
-    // registration. The machine is destroyed after the row, so a slow provider can't keep a removed sandbox on screen.
+    // Provider cleanup must survive the sandbox row's cascade.
     delete: os.sandbox.delete.handler(async ({ context, input }) => {
-        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
-        // Read the hosted record BEFORE the row goes, the cascade takes it, and its appName is the teardown.
-        const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: input.sandboxId } });
-        if (hosted !== null) {
-            /* The machine's open awake stretch is charged to its owner's month BEFORE the cascade takes the row
-             * that holds it (hosted-usage.ts closeHostedStretch): the meter reads open stretches live off the
-             * row, so a delete used to be the one act that made hours disappear, and provision → work → delete
-             * → provision was a free lane with no ceiling at all. The machine is destroyed below, so now is
-             * when it stops. */
-            await closeHostedStretch(context.prisma, hosted, sandbox.ownerId);
-        }
+        await requireOwnedSandbox(context, input.sandboxId);
+        await releaseHosted(context.prisma, context.config, input.sandboxId);
         await context.prisma.sandbox.delete({ where: { id: input.sandboxId } });
-        // Best-effort, after the row: a failed teardown just leaves an app the reaper collects.
-        if (hosted !== null) {
-            try {
-                await destroyHosted(context.config, hosted.appName);
-            } catch (error) {
-                context.logger.warn(
-                    { err: error, sandboxId: input.sandboxId, app: hosted.appName },
-                    `hosted machine teardown failed; orphaned for the reaper`,
-                );
-            }
-        }
+        kickHostedCleanup(context.prisma, context.config, context.logger);
         return { ok: true };
     }),
     // Drops the caller's own membership; sandbox, owner and daemon are untouched, idempotent.
@@ -316,6 +307,14 @@ export const sandboxRoutes = {
             throw new ORPCError(`NOT_FOUND`, { message: `hosted sandboxes are not enabled on this platform` });
         }
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        try {
+            await assertHostedIdentity(context.prisma, sandbox.id, input.token);
+        } catch (error) {
+            if (error instanceof HostedProvisionCancelled) {
+                throw new ORPCError(`CONFLICT`, { message: error.message });
+            }
+            throw error;
+        }
         const existing = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: sandbox.id } });
         if (existing !== null) {
             const already = await context.prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, include: { hosted: true } });
@@ -328,11 +327,14 @@ export const sandboxRoutes = {
         try {
             await provisionHosted(context.prisma, context.config, context.logger, {
                 sandboxId: sandbox.id,
-                connectToken: decryptSecret(context.config, sandbox.token),
+                connectToken: input.token,
                 ownerEmail: user.email.toLowerCase(),
                 region: hostedRegionFor(context.config.hosted, context.headers),
             });
         } catch (error) {
+            if (error instanceof HostedProvisionCancelled) {
+                throw new ORPCError(`CONFLICT`, { message: error.message });
+            }
             // The `existing` check above has no lock, so a concurrent provision can slip past it; answered with the
             // machine that now exists rather than a gateway error.
             // No machine to give (hosted-capacity.ts), never this caller's fault: SERVICE_UNAVAILABLE, not BAD_GATEWAY,
@@ -375,27 +377,11 @@ export const sandboxRoutes = {
             expiresAt: new Date(issuedAtMs + OWNER_TICKET_TTL_MS).toISOString(),
         };
     }),
-    // Destroys the machine, keeps the sandbox; narrow on purpose — a sandbox that has ever connected has files on it,
-    // and destroying that belongs to the delete dialog, not this card. Idempotent: no machine is a no-op.
+    // A boot announcement cannot make setup uncancellable.
     hostedRelease: os.sandbox.hostedRelease.handler(async ({ context, input }) => {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
-        const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: sandbox.id } });
-        if (hosted !== null) {
-            if (sandbox.lastSeenAt !== null) {
-                throw new ORPCError(`BAD_REQUEST`, {
-                    message: `already started; remove it first to destroy the machine`,
-                });
-            }
-            try {
-                await destroyHosted(context.config, hosted.appName);
-            } catch (error) {
-                throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `destroying the machine failed` });
-            }
-            // A machine runs from the moment it is created (its row opens a stretch at provision), so even a
-            // never-connected one has awake minutes to charge before its row goes; delete's reasoning verbatim.
-            await closeHostedStretch(context.prisma, hosted, sandbox.ownerId);
-            await context.prisma.hostedMachine.delete({ where: { sandboxId: sandbox.id } });
-        }
+        await releaseHosted(context.prisma, context.config, sandbox.id);
+        kickHostedCleanup(context.prisma, context.config, context.logger);
         const fresh = await context.prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, include: { hosted: true } });
         return toSummary(fresh, `owner`, context);
     }),

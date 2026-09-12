@@ -15,6 +15,7 @@ import {
     createVolume,
     deleteApp,
     FLY_META_PLATFORM,
+    FlyError,
     flySandboxRole,
     getMachine,
     isFlyCapacity,
@@ -29,6 +30,7 @@ import {
 import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
 import { resolveHostedImage } from "./build/hosted-image.js";
 import { hostedSlotsOf } from "./hosted-plan.js";
+import { assertHostedIdentity, HostedAlreadyProvisioned, HostedProvisionCancelled, lockHostedSandbox, withHostedApp } from "./hosted-cleanup.js";
 
 // Hosted lane orchestration over fly.ts: one machine and one volume in one app per sandbox, named `<prefix>-<12-hex
 // tunnel id>` always. Reachability is a replay: the edge answers `sandbox-<id>` with `fly-replay: app=<prefix>-<id>`,
@@ -62,10 +64,6 @@ export const hostedInstanceId = (config: Config): string => {
 const hostedAppName = (config: Config, sandboxId: string, connectToken: string): string =>
     `${config.hosted.appPrefix}-${sandboxIdFromToken(connectToken) ?? sandboxId}`;
 
-// Raised when a concurrent provision already gave this sandbox a machine; the caller should answer with the existing
-// machine, not a failure.
-export class HostedAlreadyProvisioned extends Error {}
-
 /* THE OWNER HAS NO SLOT LEFT, thrown where the row would have been written. Its own class for the route's sake:
  * this is a refusal in the owner's own words (BAD_REQUEST, "remove one first"), never a provider fault. */
 export class HostedSlotsExhausted extends Error {}
@@ -91,10 +89,14 @@ export const slotsMessage = (used: number): string =>
 const withHostedSlot = async <T>(
     prisma: PrismaClient,
     config: Config,
-    sandboxId: string,
+    args: HostedProvisionArgs,
+    appName: string,
     write: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> =>
     prisma.$transaction(async (tx) => {
+        const { sandboxId } = args;
+        await lockHostedSandbox(tx, sandboxId);
+        await assertHostedIdentity(tx, sandboxId, args.connectToken);
         const { ownerId } = await tx.sandbox.findUniqueOrThrow({ where: { id: sandboxId }, select: { ownerId: true } });
         // Two int4 keys, the first naming the purpose, so nothing else on this database can share the owner's lock.
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('hosted-slot'), hashtext(${ownerId}))`;
@@ -102,7 +104,9 @@ const withHostedSlot = async <T>(
         if (used >= slots) {
             throw new HostedSlotsExhausted(slotsMessage(used));
         }
-        return write(tx);
+        const result = await write(tx);
+        await tx.hostedCleanup.deleteMany({ where: { appName } });
+        return result;
     });
 
 /* Did this sandbox get its machine from somewhere else while this call was building one?
@@ -203,11 +207,17 @@ export const wakeHosted = async (config: Config, hosted: { appName: string; mach
 const SETTLE_ATTEMPTS = 60;
 const SETTLE_MS = 500;
 const RUNNING_STATES = new Set([`created`, `starting`, `started`]);
-export const startAfterUpdate = async (config: Config, hosted: { appName: string; machineId: string }): Promise<void> => {
+export const startAfterUpdate = async (
+    config: Config,
+    hosted: { appName: string; machineId: string },
+    assertActive?: () => Promise<void>,
+): Promise<void> => {
     let lastError: unknown;
     for (let attempt = 1; attempt <= SETTLE_ATTEMPTS; attempt += 1) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- settling is sequential by definition
         const machine = await getMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch(() => undefined);
+        // oxlint-disable-next-line eslint/no-await-in-loop -- cancellation must stop the settling loop before another start
+        await assertActive?.();
         if (machine !== undefined && RUNNING_STATES.has(machine.state)) {
             return;
         }
@@ -259,40 +269,47 @@ const claimPoolMachine = async (
             continue;
         }
         try {
-            // Machine's identity, not the row's: the config, hostname and row all follow it.
-            const connectToken = decryptSecret(config, row.token);
-            const adopted: HostedProvisionArgs = { ...args, connectToken };
-            // oxlint-disable-next-line eslint/no-await-in-loop
-            // `row.image` and not the configured tag: this machine already holds that exact digest, so replacing
-            // its config changes identity and env only, and it starts instead of pulling.
-            await updateMachine(
-                config.hosted.flyApiToken,
-                row.appName,
-                row.machineId,
-                hostedMachineConfig(config, adopted, row.appName, row.volumeId, STOCK_OVERLAY, row.image),
-            );
-            // oxlint-disable-next-line eslint/no-await-in-loop
-            await startAfterUpdate(config, row);
-            // oxlint-disable-next-line eslint/no-await-in-loop
-            await withHostedSlot(prisma, config, args.sandboxId, async (tx) => {
-                await tx.hostedMachine.create({
-                    data: {
-                        sandboxId: args.sandboxId,
-                        appName: row.appName,
-                        machineId: row.machineId,
-                        volumeId: row.volumeId,
-                        region: row.region,
-                        warm: true,
-                        wokeAt: new Date(),
-                    },
+            // The pool row remains claimed until the handoff or durable cleanup completes.
+            return await withHostedApp(prisma, config, logger, args, row.appName, async () => {
+                // Machine's identity, not the row's: the config, hostname and row all follow it.
+                const connectToken = decryptSecret(config, row.token);
+                const adopted: HostedProvisionArgs = { ...args, connectToken };
+                // oxlint-disable-next-line eslint/no-await-in-loop
+                // `row.image` and not the configured tag: this machine already holds that exact digest, so replacing
+                // its config changes identity and env only, and it starts instead of pulling.
+                await updateMachine(
+                    config.hosted.flyApiToken,
+                    row.appName,
+                    row.machineId,
+                    hostedMachineConfig(config, adopted, row.appName, row.volumeId, STOCK_OVERLAY, row.image),
+                );
+                await assertHostedIdentity(prisma, args.sandboxId, args.connectToken);
+                // oxlint-disable-next-line eslint/no-await-in-loop
+                await startAfterUpdate(config, row, () => assertHostedIdentity(prisma, args.sandboxId, args.connectToken));
+                // oxlint-disable-next-line eslint/no-await-in-loop
+                await withHostedSlot(prisma, config, args, row.appName, async (tx) => {
+                    await tx.hostedMachine.create({
+                        data: {
+                            sandboxId: args.sandboxId,
+                            appName: row.appName,
+                            machineId: row.machineId,
+                            volumeId: row.volumeId,
+                            region: row.region,
+                            warm: true,
+                            wokeAt: new Date(),
+                        },
+                    });
+                    await tx.hostedPoolMachine.delete({ where: { id: row.id } });
+                    // The ciphertext moves as it is (same key, and a fresh IV bought nothing); the derived
+                    // columns are the same derivation the mint writes.
+                    await tx.sandbox.update({ where: { id: args.sandboxId }, data: { token: row.token, ...connectTokenIdentity(connectToken) } });
                 });
-                await tx.hostedPoolMachine.delete({ where: { id: row.id } });
-                // The ciphertext moves as it is (same key, and a fresh IV bought nothing); the derived
-                // columns are the same derivation the mint writes.
-                await tx.sandbox.update({ where: { id: args.sandboxId }, data: { token: row.token, ...connectTokenIdentity(connectToken) } });
+                return { appName: row.appName, region: row.region, warm: true };
             });
-            return { appName: row.appName, region: row.region, warm: true };
         } catch (error) {
+            if (error instanceof HostedProvisionCancelled || error instanceof HostedAlreadyProvisioned) {
+                throw error;
+            }
             // The one failure that must not try the next candidate: a `sandboxId` collision means this sandbox already
             // has a machine, so every further candidate would be branded and stranded for nothing.
             // oxlint-disable-next-line eslint/no-await-in-loop -- the loop is sequential by design; see above
@@ -323,6 +340,7 @@ export const provisionHosted = async (
     logger: Logger,
     args: HostedProvisionArgs,
 ): Promise<HostedProvisioned> => {
+    await assertHostedIdentity(prisma, args.sandboxId, args.connectToken);
     const { flyApiToken, flyOrg, volumeGb } = config.hosted;
     const { region } = args;
     const claimed = await claimPoolMachine(prisma, config, logger, args);
@@ -343,41 +361,50 @@ export const provisionHosted = async (
     // Pinned like the pool's, so cold and warm machines are the same rootfs and a later config replacement on
     // this machine (an overlay, a wake) cannot silently re-resolve the tag underneath it.
     const stockImage = await resolveHostedImage(config, logger);
-    await createApp(flyApiToken, flyOrg, appName);
-    try {
-        const { volumeId } = await createVolume(flyApiToken, appName, region, volumeGb);
-        const { machineId } = await createMachine(flyApiToken, appName, {
-            name: appName,
-            region,
-            config: hostedMachineConfig(config, args, appName, volumeId, STOCK_OVERLAY, stockImage),
-        });
-        // `wokeAt` opens the hour meter's first stretch: a machine is RUNNING from the moment it is created,
-        // so the free lane's clock starts here rather than at the first wake, which is the only version that
-        // does not hand out an uncounted first session to everyone who ever provisions one.
-        await withHostedSlot(prisma, config, args.sandboxId, (tx) =>
-            tx.hostedMachine.create({
-                data: { sandboxId: args.sandboxId, appName, machineId, volumeId, region, warm: false, wokeAt: new Date() },
-            }),
-        );
-        return { appName, region, warm: false };
-    } catch (error) {
-        await deleteApp(flyApiToken, appName).catch((cleanupError: unknown) =>
-            logger.warn({ err: cleanupError, appName }, `hosted: cleanup after failed provision failed; orphaned for the reaper`),
-        );
-        // The claim loop's race, one step later: this call's own app can't collide by name (that would fail at
-        // createApp), so the winner's machine is the answer, not a failure.
-        if (await alreadyProvisioned(prisma, args.sandboxId, error)) {
-            throw new HostedAlreadyProvisioned(`this sandbox already has a machine`);
+    return withHostedApp(prisma, config, logger, args, appName, async () => {
+        try {
+            try {
+                await createApp(flyApiToken, flyOrg, appName);
+            } catch (error) {
+                // A refused create grants no ownership of an app that already exists.
+                if (error instanceof FlyError && error.status !== undefined && error.status >= 400 && error.status < 500 && error.status !== 408) {
+                    await prisma.hostedCleanup.deleteMany({ where: { appName } });
+                }
+                throw error;
+            }
+            await assertHostedIdentity(prisma, args.sandboxId, args.connectToken);
+            const { volumeId } = await createVolume(flyApiToken, appName, region, volumeGb);
+            await assertHostedIdentity(prisma, args.sandboxId, args.connectToken);
+            const { machineId } = await createMachine(flyApiToken, appName, {
+                name: appName,
+                region,
+                config: hostedMachineConfig(config, args, appName, volumeId, STOCK_OVERLAY, stockImage),
+            });
+            // `wokeAt` opens the hour meter's first stretch: a machine is RUNNING from the moment it is created,
+            // so the free lane's clock starts here rather than at the first wake, which is the only version that
+            // does not hand out an uncounted first session to everyone who ever provisions one.
+            await withHostedSlot(prisma, config, args, appName, (tx) =>
+                tx.hostedMachine.create({
+                    data: { sandboxId: args.sandboxId, appName, machineId, volumeId, region, warm: false, wokeAt: new Date() },
+                }),
+            );
+            return { appName, region, warm: false };
+        } catch (error) {
+            // The claim loop's race, one step later: this call's own app can't collide by name (that would fail at
+            // createApp), so the winner's machine is the answer, not a failure.
+            if (await alreadyProvisioned(prisma, args.sandboxId, error)) {
+                throw new HostedAlreadyProvisioned(`this sandbox already has a machine`);
+            }
+            // Read as the same refusal whatever the cause, and latched briefly so the next arrivals skip the round trip;
+            // logged at error because only an operator raising a quota fixes it.
+            if (isFlyCapacity(error)) {
+                noteProviderAtCapacity(region);
+                logger.error({ err: error, region, appName }, `hosted: the provider has no machine left to give; the lane is full`);
+                throw new HostedAtCapacity(AT_CAPACITY_MESSAGE);
+            }
+            throw error;
         }
-        // Read as the same refusal whatever the cause, and latched briefly so the next arrivals skip the round trip;
-        // logged at error because only an operator raising a quota fixes it.
-        if (isFlyCapacity(error)) {
-            noteProviderAtCapacity(region);
-            logger.error({ err: error, region, appName }, `hosted: the provider has no machine left to give; the lane is full`);
-            throw new HostedAtCapacity(AT_CAPACITY_MESSAGE);
-        }
-        throw error;
-    }
+    });
 };
 
 // Explicit repair/update boundary: a plain stop/start can't fix a boot-crashing machine pinned to its original rootfs,
@@ -508,11 +535,12 @@ export const reapHostedOrphans = async (prisma: PrismaClient, config: Config, lo
     if (names.length === 0) {
         return;
     }
-    const [machines, pooled] = await Promise.all([
+    const [machines, pooled, pending] = await Promise.all([
         prisma.hostedMachine.findMany({ select: { appName: true } }),
         prisma.hostedPoolMachine.findMany({ select: { appName: true } }),
+        prisma.hostedCleanup.findMany({ select: { appName: true } }),
     ]);
-    const known = new Set([...machines, ...pooled].map((row) => row.appName));
+    const known = new Set([...machines, ...pooled, ...pending].map((row) => row.appName));
     const { doomed, skipped } = await sortUnknownApps(
         config,
         names.filter((candidate) => !known.has(candidate)),
