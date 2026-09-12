@@ -5,7 +5,13 @@ import type { Rule, RuleBuiltin } from "@intentic/sandbox-contract";
 import { notFoundBinary } from "../agent/providers/agent-installs.js";
 import { TEST_FILE } from "@intentic/constants/assertion-measure";
 import { TEST_WRITING_NOTE } from "../agent/verification/agent-tests.js";
-import { createRemovalLedger, type FileReader, readWorkspaceFile, type RemovalLedger, verifyRemovalsMessage } from "../agent/verification/agent-removals.js";
+import {
+    createRemovalLedger,
+    type FileReader,
+    readWorkspaceFile,
+    type RemovalLedger,
+    verifyRemovalsMessage,
+} from "../agent/verification/agent-removals.js";
 import {
     commandExitCode,
     createVerificationLedger,
@@ -293,6 +299,19 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
         }
         return { parts, spoke };
     };
+    // The last Stop cannot ask again, but its command verdicts must describe the tree the turn actually leaves.
+    const refreshCommandVerdicts = async (facts: RuleFacts): Promise<void> => {
+        if (deps.runCommand === undefined) {
+            return;
+        }
+        for (const rule of rules) {
+            if (rule.moment !== "turn.ending" || rule.action.kind !== "command" || !conditionHolds(rule.when, facts)) {
+                continue;
+            }
+            const run = await settledRun(deps.runCommand, rule.action.command, rule.action.timeoutMs, rule.when?.repo);
+            deps.onCheckRun?.(rule, run);
+        }
+    };
     // Settles the previous Stop's asks against what happened since; the counts are deltas, so two asks read alike.
     const settleAsks = (): void => {
         for (const ask of asked) {
@@ -406,9 +425,6 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                             return {};
                         }
                         settleAsks();
-                        if (followUps >= MAX_FOLLOW_UPS) {
-                            return {};
-                        }
                         // Edited paths plus what the tree shows changed; a turn with nothing edited still fires
                         // unconditioned rules.
                         const edited = ledgers.verification.edited().map((path) => workspaceRelative(path, deps.cwd));
@@ -417,6 +433,10 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                         // Which repositories those paths belong to, asked only where a rule here narrows by one: it
                         // costs a tree walk, and most turns have nothing to spend it on.
                         const facts = { paths, draw, repos: await touchedRepos(rules, paths, deps) };
+                        if (followUps >= MAX_FOLLOW_UPS) {
+                            await refreshCommandVerdicts(facts);
+                            return {};
+                        }
                         const { parts, spoke } = await contributionsAt(facts);
                         if (parts.length === 0) {
                             return {};

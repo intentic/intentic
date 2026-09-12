@@ -347,6 +347,36 @@ describe("the follow-up budget", () => {
         expect(verdicts).toEqual(["check:failed", "check:passed"]);
     });
 
+    test("the final Stop refreshes a repaired command verdict without spending a third ask", async () => {
+        const verdicts: string[] = [];
+        let attempt = 0;
+        const check = rule({ id: "check", action: { kind: "command", command: "pnpm verify", timeoutMs: 900_000 } });
+        const hooks = armed([check], {
+            runCommand: async () => {
+                attempt += 1;
+                return attempt < 3 ? { status: "failed", exitCode: 1, output: "1 failed" } : { status: "passed", exitCode: 0, output: "ok" };
+            },
+            onCheckRun: (fired, run) => verdicts.push(`${fired.id}:${run.status}`),
+        });
+        expect(await stop(hooks)).toContain("exited 1");
+        expect(await stop(hooks, true)).toContain("exited 1");
+        expect(await stop(hooks, true)).toBeUndefined();
+        expect(verdicts).toEqual(["check:failed", "check:failed", "check:passed"]);
+    });
+
+    test("the final Stop preserves a command verdict that is still failing", async () => {
+        const verdicts: string[] = [];
+        const check = rule({ id: "check", action: { kind: "command", command: "pnpm verify", timeoutMs: 900_000 } });
+        const hooks = armed([check], {
+            runCommand: async () => ({ status: "failed", exitCode: 1, output: "1 failed" }),
+            onCheckRun: (fired, run) => verdicts.push(`${fired.id}:${run.status}`),
+        });
+        expect(await stop(hooks)).toContain("exited 1");
+        expect(await stop(hooks, true)).toContain("exited 1");
+        expect(await stop(hooks, true)).toBeUndefined();
+        expect(verdicts).toEqual(["check:failed", "check:failed", "check:failed"]);
+    });
+
     test("several rules speaking at one stop spend one ask between them", async () => {
         const hooks = armed([VERIFY, rule({ id: "changelog", action: { kind: "instruct", text: "Update the changelog." } })]);
         await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
@@ -543,20 +573,28 @@ describe("reporting", () => {
 });
 
 describe("the daemon's own run of the command rules", () => {
-    const CHECK = rule({ id: "check", label: "Verify before you finish", action: { kind: "command", command: "pnpm verify:turn", timeoutMs: 900_000 } });
+    const CHECK = rule({
+        id: "check",
+        label: "Verify before you finish",
+        action: { kind: "command", command: "pnpm verify:turn", timeoutMs: 900_000 },
+    });
 
     test("a failing command is one finding worded for the model, told to onCheckRun and onFired", async () => {
         const runs: string[] = [];
         const checked: string[] = [];
         const fired: string[] = [];
-        const findings = await commandRuleFindings([CHECK], { paths: ["src/a.ts"] }, {
-            runCommand: async (command) => {
-                runs.push(command);
-                return { status: "failed", exitCode: 1, output: FAILED };
+        const findings = await commandRuleFindings(
+            [CHECK],
+            { paths: ["src/a.ts"] },
+            {
+                runCommand: async (command) => {
+                    runs.push(command);
+                    return { status: "failed", exitCode: 1, output: FAILED };
+                },
+                onCheckRun: (checkRule, run) => checked.push(`${checkRule.id}:${run.status}`),
+                onFired: (checkRule) => fired.push(checkRule.id),
             },
-            onCheckRun: (checkRule, run) => checked.push(`${checkRule.id}:${run.status}`),
-            onFired: (checkRule) => fired.push(checkRule.id),
-        });
+        );
         expect(runs).toEqual(["pnpm verify:turn"]);
         expect(findings).toHaveLength(1);
         expect(findings[0]).toContain('"Verify before you finish" ran this and it exited 1');
@@ -582,7 +620,11 @@ describe("the daemon's own run of the command rules", () => {
 });
 
 describe("what a follow-up bought", () => {
-    const CHECK = rule({ id: "check", label: "Verify before you finish", action: { kind: "command", command: "pnpm verify:turn", timeoutMs: 900_000 } });
+    const CHECK = rule({
+        id: "check",
+        label: "Verify before you finish",
+        action: { kind: "command", command: "pnpm verify:turn", timeoutMs: 900_000 },
+    });
 
     test("the Stop after a follow-up reports the edits and commands since, per rule that spoke", async () => {
         const outcomes: { id: string; edits: number; looks: number; commands: number }[] = [];
