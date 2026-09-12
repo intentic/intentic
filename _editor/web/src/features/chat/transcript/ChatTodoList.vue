@@ -28,7 +28,7 @@ const todoText = (todo: TodoItem): string => (props.live && todo.status === `in_
 </script>
 
 <template>
-    <div class="flex w-full flex-col gap-1 rounded-lg border border-line bg-overlay/40 px-3 py-2">
+    <div class="flex w-full flex-col gap-1 px-3 py-2">
         <div v-for="(todo, index) in todos" :key="index" class="flex items-start gap-2 text-xs">
             <Icon v-bind="todoIcon(todo)" class="mt-0.5 text-2xs" />
             <span :class="{ 'text-subtle': todo.status === 'completed', 'line-through': todo.status === 'completed' }">{{ todoText(todo) }}</span>

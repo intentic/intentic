@@ -35,7 +35,7 @@ const {
 </script>
 
 <template>
-    <div class="chat-surface chat-card w-full overflow-hidden rounded-xl">
+    <div class="w-full overflow-hidden">
         <div class="chat-card-header flex gap-2 px-3.5 py-2" :class="prose ? `items-start` : `items-center`">
             <Icon :name="icon" class="text-sm" :class="[iconClass, { 'mt-0.5': prose }]" />
             <!-- A prose title wraps in full; a name truncates, with the full text on hover. -->
