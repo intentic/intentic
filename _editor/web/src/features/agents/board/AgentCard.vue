@@ -562,7 +562,7 @@ const grab = (event: PointerEvent): void => {
                     <Icon name="arrow-right" class="text-sm" />
                 </button>
             </template>
-            <Icon v-if="pending !== undefined" name="spinner" spin class="shrink-0 text-xs text-link" />
+            <Icon v-if="pending !== undefined" name="spinner" spin class="shrink-0 text-sm text-link" />
             <span v-else-if="reason !== undefined" class="ui-status-pill shrink-0 text-2xs font-semibold" :class="reasonTone">{{
                 reason
             }}</span>
@@ -580,7 +580,7 @@ const grab = (event: PointerEvent): void => {
                 Deliberately not chip-styled like the exceptions above: a board of forty "Idle" pills would spend its
                 whole attention budget on nothing, and an "Unfinished" pill per stopped-short card was the same spend.
             -->
-            <StatusGlyph v-else :meta="statusMeta" :unfinished="agent.unfinished" :now="now" class="text-xs" />
+            <StatusGlyph v-else :meta="statusMeta" :unfinished="agent.unfinished" :now="now" class="text-sm" />
         </div>
         <p v-if="edit.error !== undefined" class="text-2xs text-danger">{{ edit.error }}</p>
 
