@@ -159,7 +159,7 @@ test(`the strip says what a busy terminal is running`, async () => {
 });
 
 // Selection logic has its own cases in terminalSweep.test.ts; this is the panel enacting it through the dialog.
-test(`the sweep takes the quiet and the finished, and says why each qualified`, async () => {
+test(`the sweep takes the quiet and the finished without asking`, async () => {
     const { killed } = await openPanel([
         idle(`web-here`, 90),
         idle(`web-old`, 42),
@@ -169,22 +169,17 @@ test(`the sweep takes the quiet and the finished, and says why each qualified`, 
     ]);
     runCommand(`terminal.killInactive`);
     await nextTick();
-    expect(killed).toEqual([]);
-    expect(dialogText()).toContain(`Kill 2 inactive terminals?`);
-    expect(dialogText()).toContain(`last output 42m ago`);
-    expect(dialogText()).toContain(`finished`);
-    clickButton(`Kill anyway`);
-    await nextTick();
+    expect(dialogText()).not.toContain(`Kill anyway`);
     // `web-here` is the open tab, `web-fresh` is recent, `web-build` is busy: all spared.
     expect(killed).toEqual([`web-old`, `panel-app`]);
 });
 
-test(`a sweep of nothing but dead panes still asks first`, async () => {
+test(`a sweep of nothing but dead panes goes through`, async () => {
     const { killed } = await openPanel([idle(`web-here`, 90), finished(`panel-app`)]);
     runCommand(`terminal.killInactive`);
     await nextTick();
-    expect(killed).toEqual([]);
-    expect(dialogText()).toContain(`Kill 1 inactive terminal?`);
+    expect(killed).toEqual([`panel-app`]);
+    expect(dialogText()).not.toContain(`Kill anyway`);
 });
 
 test(`a strip of terminals in use sweeps nothing`, async () => {

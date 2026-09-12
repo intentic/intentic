@@ -231,8 +231,8 @@ const requestKill = (names: string[], sweep = false): void => {
     if (killTabs === undefined || names.length === 0) {
         return;
     }
-    // Nothing running and nothing bulk: the click is the whole decision; a sweep never takes this road regardless.
-    if (!sweep && busyIn(names).length === 0 && (names.length === 1 || runningIn(names).length === 0)) {
+    // Nothing running and nothing bulk: the click is the whole decision; a sweep of inactives is the same.
+    if (busyIn(names).length === 0 && (names.length === 1 || runningIn(names).length === 0 || sweep)) {
         killTabs(names);
         selectedKeys.value = [];
         return;
