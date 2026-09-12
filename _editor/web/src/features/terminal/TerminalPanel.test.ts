@@ -102,11 +102,6 @@ const closeButton = (host: HTMLElement, label: string): HTMLElement => {
     return found as HTMLElement;
 };
 const dialogText = (): string => document.body.textContent ?? ``;
-const clickButton = (label: string): void => {
-    const button = [...document.querySelectorAll(`button`)].find((candidate) => candidate.textContent?.includes(label));
-    expect(button, `no button labelled ${label}`).toEqual(expect.any(Object));
-    button?.click();
-};
 // Runs the panel's own command registration (shared by the row handler and the palette), not a menu click.
 const runCommand = (id: string): void => {
     const registered = commands.value.find((entry) => entry.command === id);
@@ -167,8 +162,11 @@ test(`the sweep takes the quiet and the finished without asking`, async () => {
         busy(`web-build`, `pnpm build`),
         finished(`panel-app`),
     ]);
+    expect(killed).toEqual([]);
     runCommand(`terminal.killInactive`);
     await nextTick();
+    expect(document.querySelector(`[role="dialog"], [role="alertdialog"]`)).toBeNull();
+    expect(dialogText()).not.toContain(`Kill 2 inactive terminals?`);
     expect(dialogText()).not.toContain(`Kill anyway`);
     // `web-here` is the open tab, `web-fresh` is recent, `web-build` is busy: all spared.
     expect(killed).toEqual([`web-old`, `panel-app`]);
