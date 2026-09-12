@@ -1220,7 +1220,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     >
                         {{ filtering ? "No matches in this lane." : lane.empty }}
                     </p>
-                    <div v-else class="relative flex flex-col gap-2.5 pb-2.5">
+                    <div v-else class="relative flex flex-col gap-3.5 pb-2.5">
                         <!--
                             Skips a card whose inputs haven't changed: the roster ticks about once a second per running
                             turn, and without this every lane would redraw every card just to update one elapsed
