@@ -449,6 +449,38 @@
     .chat-pane .chat-run-bar {
         padding-block: 0.25rem;
     }
+    /* Edges use --color-line; the middle holds --color-line-subtle so the dip stays on the hairline, not the pane. */
+    .chat-pane .chat-run-line {
+        background: linear-gradient(
+            90deg,
+            var(--color-line) 0%,
+            var(--color-line-subtle) 18%,
+            var(--color-line-subtle) 50%,
+            var(--color-line-subtle) 82%,
+            var(--color-line) 100%
+        );
+        transition: background 120ms ease-out;
+    }
+    .chat-pane .chat-run-bar:hover .chat-run-line:not(.chat-run-line-failed) {
+        background: linear-gradient(
+            90deg,
+            var(--color-line-strong) 0%,
+            var(--color-line) 22%,
+            var(--color-line-subtle) 50%,
+            var(--color-line) 78%,
+            var(--color-line-strong) 100%
+        );
+    }
+    .chat-pane .chat-run-line-failed {
+        background: linear-gradient(
+            90deg,
+            color-mix(in srgb, var(--color-danger) 35%, transparent) 0%,
+            color-mix(in srgb, var(--color-danger) 18%, transparent) 18%,
+            color-mix(in srgb, var(--color-danger) 18%, transparent) 50%,
+            color-mix(in srgb, var(--color-danger) 18%, transparent) 82%,
+            color-mix(in srgb, var(--color-danger) 35%, transparent) 100%
+        );
+    }
     /* Left edge on the far side of the controls' gutter, right edge wherever the count leaves it: see the lane
        rule above. `right` is deliberately not set — with both, the pill would be stretched to the outset rather
        than sized by its contents, and the ring would run out past the number it is drawn around.

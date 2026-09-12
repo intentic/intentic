@@ -42,11 +42,8 @@ const hint = computed(() => {
             :aria-label="hint"
             @click="toggle"
         >
-            <!-- Fades in from the left toward the mark, reading as a line leading somewhere rather than a divider. -->
-            <span
-                class="chat-run-line h-px flex-1 bg-gradient-to-r from-transparent transition-colors"
-                :class="run.failed ? 'via-danger/25 to-danger/50' : 'via-line to-line group-hover/run:via-line-strong group-hover/run:to-line-strong'"
-            ></span>
+            <!-- Gradient stops live in chat.css so the middle can stay visibly darker over a wide band. -->
+            <span class="chat-run-line h-px flex-1" :class="run.failed && 'chat-run-line-failed'"></span>
             <!--
                 Ring is painted (box-shadow), not a border, since borders can't render below 1px and would outweigh the
                 hairline it sits on. Padding compensates for the pixel a border would have taken from layout.
