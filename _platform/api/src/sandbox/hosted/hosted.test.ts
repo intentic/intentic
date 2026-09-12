@@ -229,7 +229,13 @@ describe(`provisionHosted`, () => {
         };
         expect(machine.config.mounts).toEqual([{ volume: `vol_1`, path: `/data` }]);
         // Platform stamp lets this deployment's reaper distinguish its own machines from others sharing the org.
-        expect(machine.config.metadata).toEqual({ intentic_role: `sandbox`, intentic_sandbox: `s1`, intentic_platform: INSTANCE });
+        // The owner rides with it so the Fly console can answer "whose machine is this?" without a database.
+        expect(machine.config.metadata).toEqual({
+            intentic_role: `sandbox`,
+            intentic_sandbox: `s1`,
+            intentic_platform: INSTANCE,
+            intentic_owner: `owner@example.com`,
+        });
         expect(machine.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
         expect(machine.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://${hostnameOf(`t0k3n`)}`);
         // Hosted machines are reached via the edge replaying to their app; no tunnel grant or edge to dial.
@@ -344,7 +350,13 @@ describe(`provisionHosted`, () => {
             skip_launch?: boolean;
         };
         // Stamp flips with the identity in the same call; it's the only way to tell this machine left the pool.
-        expect(update.config.metadata).toEqual({ intentic_role: `sandbox`, intentic_sandbox: `s1`, intentic_platform: INSTANCE });
+        // Warm stock carries no owner, so gaining one is also the moment the machine stops being nobody's.
+        expect(update.config.metadata).toEqual({
+            intentic_role: `sandbox`,
+            intentic_sandbox: `s1`,
+            intentic_platform: INSTANCE,
+            intentic_owner: `owner@example.com`,
+        });
         // App was named for its build-time token, and the edge replays `sandbox-<id>` straight to app `<prefix>-<id>`:
         // this machine's identity must become the sandbox it now serves.
         expect(update.config.env[`CONNECT_TOKEN`]).toBe(POOL_TOKEN);

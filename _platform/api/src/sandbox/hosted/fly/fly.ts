@@ -11,11 +11,20 @@ const BASE = `https://api.machines.dev/v1`;
 // sibling platforms can mint identical app names; the reaper proves ownership by this stamp.
 export const FLY_META_ROLE = `intentic_role`;
 export const FLY_META_PLATFORM = `intentic_platform`;
+/* WHOSE MACHINE THIS IS, in the provider's own console. Everything else here is an id: the app name carries the
+ * sandbox's tunnel id, the stamp below carries its row id, and answering "who is this costing money for?" meant
+ * joining both against the platform's database — which is exactly the question somebody asks while looking at a
+ * Fly bill, with no database in front of them. The owner's email is the one fact that makes the list readable
+ * without a join. Written at create and re-written with every config replacement, so it follows a machine that
+ * is claimed, rebuilt or moved onto an overlay. Warm stock deliberately has none: it is nobody's yet, and that
+ * absence is how the console shows stock apart from a person's sandbox. */
+export const FLY_META_OWNER = `intentic_owner`;
 export const flyWarmRole = (instance: string): Record<string, string> => ({ [FLY_META_ROLE]: `warm`, [FLY_META_PLATFORM]: instance });
-export const flySandboxRole = (sandboxId: string, instance: string): Record<string, string> => ({
+export const flySandboxRole = (sandboxId: string, instance: string, owner?: string): Record<string, string> => ({
     [FLY_META_ROLE]: `sandbox`,
     intentic_sandbox: sandboxId,
     [FLY_META_PLATFORM]: instance,
+    ...(owner === undefined || owner === `` ? {} : { [FLY_META_OWNER]: owner }),
 });
 // A builder (hosted-build.ts): the second machine a sandbox's app holds, for one overlay build. Stamped like the
 // sandbox so the reaper and health watch read it as ours.
@@ -271,4 +280,13 @@ export const updateMachine = async (token: string, app: string, machineId: strin
 
 export const stopMachine = async (token: string, app: string, machineId: string): Promise<void> => {
     await call(token, `POST`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}/stop`);
+};
+
+// One metadata key, written on its own. Unlike updateMachine this replaces no config, so it never takes a machine
+// through `replacing` and never restarts it: the backfill in hosted-fleet.ts can stamp a fleet of stopped machines
+// without waking one of them or costing anybody a second of uptime.
+export const setMachineMetadata = async (token: string, app: string, machineId: string, key: string, value: string): Promise<void> => {
+    await call(token, `POST`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}/metadata/${encodeURIComponent(key)}`, {
+        value,
+    });
 };

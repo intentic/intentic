@@ -171,7 +171,9 @@ export const hostedMachineConfig = (
             ],
             frontDoor: { hostname },
         }),
-        metadata: flySandboxRole(args.sandboxId, hostedInstanceId(config)),
+        // The owner rides along: this config is replaced on every claim, overlay and restart, so the stamp stays
+        // true to whoever the machine currently belongs to rather than to whoever first got it.
+        metadata: flySandboxRole(args.sandboxId, hostedInstanceId(config), args.ownerEmail),
     };
 };
 

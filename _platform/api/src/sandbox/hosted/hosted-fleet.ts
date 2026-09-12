@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
-import { listAppNames } from "./fly/fly.js";
+import { FLY_META_OWNER, listAppNames, setMachineMetadata } from "./fly/fly.js";
 import { hostedCapacity } from "./hosted-capacity.js";
 import { hostedEnabled } from "./hosted.js";
 
@@ -21,6 +21,8 @@ export interface HostedFleetEntry {
     // Present for `taken` only: owner, and whether awake (an open `wokeAt` is the meter's running stretch).
     readonly owner?: string;
     readonly sandboxId?: string;
+    // `taken` only, and only so the owner stamp below can be written without a config replacement.
+    readonly machineId?: string;
     readonly awake?: boolean;
     // True when the platform holds a row for an app Fly no longer lists.
     readonly missing: boolean;
@@ -44,6 +46,7 @@ export const hostedFleet = async (prisma: PrismaClient, config: Config): Promise
             region: row.region,
             owner: row.sandbox.owner.email,
             sandboxId: row.sandboxId,
+            machineId: row.machineId,
             awake: row.wokeAt !== null,
             missing: !onFly.has(row.appName),
         })),
@@ -61,6 +64,38 @@ export const hostedFleet = async (prisma: PrismaClient, config: Config): Promise
         entries.push({ appName, role: `orphan`, region: `?`, missing: false });
     }
     return entries.toSorted((left, right) => ORDER[left.role] - ORDER[right.role] || left.appName.localeCompare(right.appName));
+};
+
+/* BACKFILLS THE OWNER STAMP onto machines that were created before the platform wrote one (fly.ts
+ * FLY_META_OWNER). New and re-configured machines carry it already; a stopped machine nobody has claimed or
+ * rebuilt since would otherwise never get one, which is precisely the fleet somebody is squinting at in the Fly
+ * console asking whose each machine is.
+ *
+ * Writes one metadata key per machine, never a config: nothing restarts, nothing wakes, and a machine that is
+ * already stamped is skipped so re-running this costs almost nothing. Best effort per machine — a Fly refusal on
+ * one is reported and the rest still get stamped. */
+export const stampHostedOwners = async (
+    prisma: PrismaClient,
+    config: Config,
+    report: (line: string) => void = () => undefined,
+): Promise<{ stamped: number; failed: number }> => {
+    const entries = (await hostedFleet(prisma, config)).filter(
+        (entry) => entry.role === `taken` && !entry.missing && entry.machineId !== undefined && entry.owner !== undefined,
+    );
+    let stamped = 0;
+    let failed = 0;
+    for (const entry of entries) {
+        try {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one small write per machine, gentle on a rate-limited API
+            await setMachineMetadata(config.hosted.flyApiToken, entry.appName, entry.machineId ?? ``, FLY_META_OWNER, entry.owner ?? ``);
+            stamped += 1;
+            report(`stamped ${entry.appName} -> ${entry.owner ?? ``}`);
+        } catch (error) {
+            failed += 1;
+            report(`FAILED ${entry.appName}: ${error instanceof Error ? error.message : `unknown`}`);
+        }
+    }
+    return { stamped, failed };
 };
 
 // awake/asleep reflects the hour meter's stretch, not a live probe: an idled-out machine still reads `awake` until the

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../../config.js";
-import { hostedFleet, renderHostedFleet, type HostedFleetRole } from "./hosted-fleet.js";
+import { hostedFleet, renderHostedFleet, stampHostedOwners, type HostedFleetRole } from "./hosted-fleet.js";
 
 /* WHAT THE FLY CONSOLE CANNOT SAY. The fleet view exists for exactly one confusion: a warm machine's app is
  * named `<prefix>-pool-<hex>` before anybody claims it, and Fly never lets a name change, so after a claim
@@ -34,6 +34,73 @@ const stubApps = (names: string[]) =>
 
 afterEach(() => {
     vi.unstubAllGlobals();
+});
+
+/* WHOSE MACHINE IS THIS, asked of the Fly console rather than of the database. Every other stamp is an id, so
+ * reading a bill meant joining Fly's app list against the platform's rows; the owner's email is the one fact
+ * that makes the list answer on its own. New machines carry it from their config, and this backfills the ones
+ * built before it existed — which, being stopped, may never be re-configured at all. */
+describe(`stampHostedOwners`, () => {
+    // Records every Fly write so the test can assert what was stamped, and on which machines.
+    const stubFleetAndWrites = (names: string[]) => {
+        const writes: { url: string; body: unknown }[] = [];
+        vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
+            const target = String(url);
+            if (target.includes(`/metadata/`)) {
+                writes.push({ url: target, body: typeof init?.body === `string` ? JSON.parse(init.body) : undefined });
+                return Promise.resolve(new Response(null, { status: 204 }));
+            }
+            return Promise.resolve(new Response(JSON.stringify({ apps: names.map((name) => ({ name })) }), { status: 200 }));
+        });
+        return writes;
+    };
+
+    it(`writes each taken machine's owner email into its Fly metadata`, async () => {
+        const writes = stubFleetAndWrites([`intentic-sbx-pool-claimed1`]);
+        const prisma = fakePrisma([taken({ machineId: `m1` })], []);
+        const result = await stampHostedOwners(prisma, config());
+        expect(result).toEqual({ stamped: 1, failed: 0 });
+        expect(writes).toHaveLength(1);
+        expect(writes[0]?.url).toContain(`/apps/intentic-sbx-pool-claimed1/machines/m1/metadata/intentic_owner`);
+        expect(writes[0]?.body).toEqual({ value: `owner@example.com` });
+    });
+
+    // Warm stock is nobody's, and that absence is how the console tells stock from a person's sandbox.
+    it(`stamps no warm machine, because stock has no owner to name`, async () => {
+        const writes = stubFleetAndWrites([`intentic-sbx-pool-warm1`]);
+        const prisma = fakePrisma([], [{ appName: `intentic-sbx-pool-warm1`, region: `arn`, state: `ready` }]);
+        expect(await stampHostedOwners(prisma, config())).toEqual({ stamped: 0, failed: 0 });
+        expect(writes).toEqual([]);
+    });
+
+    // A row whose app Fly no longer lists has nothing to stamp; writing would only earn a 404 per tick.
+    it(`skips a row whose machine is gone from the provider`, async () => {
+        const writes = stubFleetAndWrites([]);
+        const prisma = fakePrisma([taken({ machineId: `m1` })], []);
+        expect(await stampHostedOwners(prisma, config())).toEqual({ stamped: 0, failed: 0 });
+        expect(writes).toEqual([]);
+    });
+
+    // Best effort per machine: one refusal must not cost the rest of the fleet its stamp.
+    it(`keeps stamping the rest when Fly refuses one machine`, async () => {
+        vi.stubGlobal(`fetch`, (url: URL | string) => {
+            const target = String(url);
+            if (target.includes(`/machines/m1/metadata/`)) {
+                return Promise.resolve(new Response(`nope`, { status: 500 }));
+            }
+            if (target.includes(`/metadata/`)) {
+                return Promise.resolve(new Response(null, { status: 204 }));
+            }
+            return Promise.resolve(
+                new Response(JSON.stringify({ apps: [{ name: `intentic-sbx-a` }, { name: `intentic-sbx-b` }] }), { status: 200 }),
+            );
+        });
+        const prisma = fakePrisma(
+            [taken({ appName: `intentic-sbx-a`, machineId: `m1` }), taken({ appName: `intentic-sbx-b`, machineId: `m2`, sandboxId: `s2` })],
+            [],
+        );
+        expect(await stampHostedOwners(prisma, config())).toEqual({ stamped: 1, failed: 1 });
+    });
 });
 
 describe(`hostedFleet`, () => {
