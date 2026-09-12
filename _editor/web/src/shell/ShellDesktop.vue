@@ -768,6 +768,11 @@ useKeybindings();
     height: var(--icon-rail-tile-size);
 }
 
+.icon-rail-tile:focus-visible {
+    outline: 2px solid var(--color-primary-500);
+    outline-offset: -2px;
+}
+
 .icon-rail-divider {
     width: var(--icon-rail-divider-width);
 }

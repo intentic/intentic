@@ -719,14 +719,14 @@
 
     /* `:not(.ui-field-box)` because <Picker>'s bordered trigger is a <button> that IS a field — it sits in form
      * rows next to text inputs and wears the field class — so it takes the field's inward ring, not the
-     * button's outward one. Without the exclusion it matched both and the button rule, being later, won. */
+     * button's outward one. Without the exclusion it matched both and the button rule, being later, won.
+     * Focus outline uses negative offset so it is drawn inward and never clipped by scroll containers. */
     [data-skin="sanctum"] button:not(.ui-field-box):focus-visible,
+    [data-skin="sanctum"] a:focus-visible,
     [data-skin="sanctum"] [tabindex]:focus-visible {
-        outline: none;
-        border-color: var(--sanctum-gold);
-        box-shadow:
-            inset 0 0 0 1px rgba(229, 196, 137, 0.3),
-            0 0 0 3px color-mix(in oklab, var(--color-primary-500) 24%, transparent);
+        outline: 2px solid var(--sanctum-gold);
+        outline-offset: -2px;
+        box-shadow: inset 0 0 0 1px rgba(229, 196, 137, 0.3);
     }
 
     /* ── THE SEARCH BAND, WHICH IS A CHANNEL THE WIDTH OF THE PANEL ───────────────────────────────────────
@@ -1522,6 +1522,10 @@
  * The app marks it with `bg-primary-600/15`; this replaces that accent wash with the structural metal. */
 [data-skin="sanctum"] .icon-rail-tile.bg-primary-600\/15 {
     background: rgba(201, 160, 92, 0.15) !important;
+}
+[data-skin="sanctum"] .icon-rail-tile:focus-visible {
+    outline: 2px solid var(--sanctum-gold);
+    outline-offset: -2px;
 }
 
 /* ── THE PICKED CARD, IN THE SAME METAL AS THE PICKED ROW ──────────────────────────────────────────────────

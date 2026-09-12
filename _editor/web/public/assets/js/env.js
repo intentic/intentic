@@ -1,6 +1,6 @@
 "use strict";
 (() => {
-  // ../../_tools/constants/dist/index.js
+  // ../../../../../../work/intentic/_tools/constants/dist/index.js
   var GOOGLE_CLIENT_ID = "481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.apps.googleusercontent.com";
   var GOOGLE_TOKEN_STORAGE_KEY = `intentic.gid.${GOOGLE_CLIENT_ID}`;
 
