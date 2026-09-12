@@ -241,6 +241,8 @@ onUnmounted(() => {
     z-index: 40;
     display: flex;
     height: var(--bar-height);
+    background-color: var(--title-bar-fill);
+    background-image: none;
     border-block-end: 1px solid var(--color-line);
 }
 
