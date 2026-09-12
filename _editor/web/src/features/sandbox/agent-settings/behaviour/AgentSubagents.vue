@@ -43,8 +43,8 @@ const spawnDenied = computed(() => posture.value === `deny`);
                     @update:model-value="(next: Posture | undefined) => next !== undefined && setPosture(next)"
                 />
             </template>
-            <template #below>
-                <p v-if="spawnDenied" class="text-2xs text-muted">
+            <template v-if="spawnDenied" #below>
+                <p class="text-2xs text-muted">
                     Delegation is refused outright, so the three limits below bound nothing until this is changed.
                 </p>
             </template>
