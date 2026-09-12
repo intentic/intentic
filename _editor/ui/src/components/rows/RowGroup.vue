@@ -18,8 +18,8 @@ import { provideRowDensity, type RowDensity } from "./row.js";
 // remains <Row>'s own fallback outside a group (a card masthead outranking the rows under it). Override
 // only as an argued exception; `_tools/checks/row-tiers.mjs` refuses a group that merely restates the default.
 // Pins the header to the top of the scroll while rows pass under it, for a header that carries a control
-// over the rows (a select-all, bulk verbs) rather than only a label. Takes the canvas colour and padding
-// only when sticky, so an unstuck header doesn't paint a band nobody asked for.
+// over the rows (a select-all, bulk verbs) rather than only a label. Padding only when sticky, not a fill:
+// bg-canvas on this band reads as a dark box against the card below on the sanctum skin.
 const { density = `compact` } = defineProps<{
     label?: string;
     count?: string | number;
@@ -41,11 +41,8 @@ provideRowDensity(computed(() => density));
             class="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-1"
             :class="
                 sticky === true
-                    ? // The gap to the surface becomes PADDING rather than margin, so the band the header
-                      // paints reaches the top row instead of stopping short of it: a transparent 10px margin
-                      // is a slot for half a line of the row underneath to scroll through, which reads as the
-                      // header failing to cover rather than as content passing behind it.
-                      `sticky top-0 z-20 -mx-1 bg-canvas px-2 pb-2.5 pt-2`
+                    ? // Gap to the surface is padding, not margin, so the sticky header sits flush above the card.
+                      `sticky top-0 z-20 -mx-1 px-2 pb-2.5 pt-2`
                     : `mb-2.5`
             "
         >
