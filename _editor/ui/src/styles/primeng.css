@@ -33,9 +33,17 @@
      * Two classes deep on purpose. Aura sets `gap` on `.p-button`, PrimeVue injects its styles into this
      * same layer, and same-specificity rules in one layer are settled by source order — which between a
      * runtime-injected <style> and a bundled sheet is not ours to promise. `.p-button.p-button-sm` wins
-     * on specificity instead, so the size holds however the two land in <head>. */
+     * on specificity instead, so the size holds however the two land in <head>.
+     *
+     * THE LEADING IS SPELLED OUT AS A LENGTH, tier × ratio, and not handed over as the bare ratio. A button's
+     * height is its padding plus its line box, and this button's line box must be the 2xs one whatever glyph
+     * is in it — while the icon-only variant below deliberately re-sizes the FONT to text-sm so a lone mark is
+     * not drawn at label size. A ratio multiplies whatever font-size it lands on, so it would take that
+     * override with it and stand every small icon-only button in the app ~5px taller than its labelled twin.
+     * Written this way the control keeps one height, and still follows a surface that rescales the tier under
+     * it (chat.css's popped-out transcript). */
     .p-button.p-button-sm {
-        line-height: var(--text-2xs--line-height);
+        line-height: calc(var(--text-2xs) * var(--text-2xs--line-height));
         gap: var(--spacing);
     }
 

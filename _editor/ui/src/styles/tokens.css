@@ -22,8 +22,12 @@
      * FIRST glyph blank ("pnpm test &&" + space renders "pnpm test  &"), which no repaint recovers. */
     --font-mono--font-feature-settings: "liga" 0, "calt" 0;
 
+    /* Leading is a RATIO on every step of this scale, never a length. A length stops tracking its own step the
+     * moment a surface rescales the scale — the popped-out transcript does exactly that (chat.css) — and the
+     * step then arrives with another tier's leading. Tailwind's own steps are written this way; these three
+     * are ours, and each ratio below is the rem it replaces, exactly. */
     --text-2xs: 0.6875rem;
-    --text-2xs--line-height: 1rem;
+    --text-2xs--line-height: calc(1 / 0.6875);
 
     /* BELOW 2xs — the graph sizes. A commit lane, a branch chip and a stat cell are read in the corner of the
      * eye beside something else, and the app had been spelling them as one-off `text-[0.6rem]`, `[0.65rem]`,
@@ -31,9 +35,9 @@
      * exists to stop. Two steps carry all of it. They are also what makes those screens PORTABLE: an arbitrary
      * value cannot be promised to an extension (see extension-surface.css), and a named step can. */
     --text-3xs: 0.625rem;
-    --text-3xs--line-height: 0.875rem;
+    --text-3xs--line-height: calc(0.875 / 0.625);
     --text-4xs: 0.5rem;
-    --text-4xs--line-height: 0.75rem;
+    --text-4xs--line-height: calc(0.75 / 0.5);
 
     /* THE READING COLUMN, named. A paragraph of prose stops being readable somewhere past sixty characters, so
      * every screen that shows writing — a draft, a story, a chore's explanation, a generated doc — had reached

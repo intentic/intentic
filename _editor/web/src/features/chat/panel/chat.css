@@ -159,11 +159,13 @@
    sticky element's flow box IS the element, so shrinking it at the moment it pins pulls everything below up by
    the difference — measured at 355px on the transcript that prompted this — yanking the answer out from under
    the reader mid-sentence. Clamped in both states, the pin costs nothing at the threshold.
-   Six lines is stated as arithmetic, not as the rem it happened to work out to: the bubble is `text-xs
-   leading-relaxed px-3 py-2`, so its line box is 1.625 × --text-xs and its padding is 1rem. A literal height
-   silently becomes five-and-a-bit lines the next time that token moves. */
+   Six lines is stated as six LINE BOXES plus the bubble's own 1rem of padding, never as the rem it happens to
+   work out to: `lh` is the element's own line-height, so the cap tracks whatever size and leading the bubble is
+   actually drawn at. Written out as `6 × 1.625 × var(--text-xs)` it was a copy of two values the bubble owns —
+   its tier and its `leading-relaxed` — and it stopped being six lines the moment either moved, which the
+   popped-out rescale and the prompt's own tier (both below) do. */
 .chat-prompt-text {
-    max-height: calc(6 * 1.625 * var(--text-xs) + 1rem);
+    max-height: calc(6lh + 1rem);
     overflow: hidden;
 }
 /* The open/close control rides ON the bubble, over the 1.75rem of gradient the clamp already spends saying
@@ -240,9 +242,9 @@
    beside the code it is about, not instead of it. A pass that lifted every tier ~8-18% (and split
    prose off at 0.875rem) is what made the panel feel bloated; it was reverted. If a tier ever needs
    retuning, it is the app's token in _editor/ui/src/styles/tokens.css that moves, so the chat
-   and the rest of the shell stay on one scale — do NOT reintroduce a chat-local scale that quietly
-   redefines what `text-xs` means inside this subtree, and do NOT put absolute font sizes in the chat
-   templates.
+   and the rest of the shell stay on one scale — do NOT give the chat tier VALUES of its own, and do NOT
+   put absolute font sizes in the chat templates. The popped-out rescale below is the one thing allowed to
+   touch these tokens in here, and all it may do is multiply them.
 
    Touch bumps a step, so shared surfaces are written as a pair — `text-base md:text-xs` on inputs
    (16px is iOS's zoom threshold), `text-sm md:text-xs` on menu rows. The mobile-only components
@@ -252,26 +254,61 @@
    the controls framing the input never out-weigh the message being written in it.
    Mono runs a tier below its sans context — it reads optically larger at the same nominal size.
 
-   Popped out, the transcript alone moves one step up — read on its own, not beside the code, while the
-   tab rail and composer keep the docked scale. The capture lives on .chat-floating-root
-   (FloatingArea.vue) so .chat-turns can alias without reading its own overrides. */
+   ── POPPED OUT, THE TRANSCRIPT MOVES UP BY ONE RATIO ────────────────────────────────────────────
+   A window holding nothing but the chat is read on its own rather than beside the code, so the column can
+   afford the size the docked panel cannot. Only .chat-turns takes it: the tab rail and the composer are
+   chrome around the reading column and stay exactly where the docked panel has them.
 
-/* Snapshots the app tiers before the popped-out transcript redefines them on .chat-turns. */
+   IT IS A MULTIPLIER, NOT A STEP ALONG THE SCALE, and that distinction is the whole of this block. The
+   app's scale is not geometric — 0.6875 → 0.75 is 9%, 0.75 → 0.875 is 17% — so promoting each tier to the
+   next named one RE-SPACES THE TIERS AGAINST EACH OTHER: meta fell from 92% of body to 86%, and a fold
+   header, a timestamp and a notice suddenly read a size below the prose they were level with, which is the
+   meta tier arriving from a different type scale than the answer beside it. One factor moves the whole
+   scale and leaves every interval in it exactly as the app drew it.
+
+   Nothing here restates a line-height. Every step's leading is a unitless ratio (tokens.css says why), so
+   it follows its own step's font-size and a rescaled tier keeps the rhythm it has docked. A line-height
+   written as a length in this block would silently undo that.
+
+   The capture lives on .chat-floating-root (FloatingArea.vue) because a custom property's var() is
+   substituted where it is DECLARED: read on .chat-turns, `var(--text-xs)` would be reading the override
+   this block is in the middle of writing. */
+
+/* Snapshots the docked tiers before the popped-out transcript rescales them on .chat-turns. */
 .chat-floating-root {
-    --chat-pop-meta: var(--text-2xs);
-    --chat-pop-meta-lh: var(--text-2xs--line-height);
-    --chat-pop-body: var(--text-xs);
-    --chat-pop-body-lh: var(--text-xs--line-height);
-    --chat-pop-title: var(--text-sm);
-    --chat-pop-title-lh: var(--text-sm--line-height);
+    --chat-pop-3xs: var(--text-3xs);
+    --chat-pop-2xs: var(--text-2xs);
+    --chat-pop-xs: var(--text-xs);
+    --chat-pop-sm: var(--text-sm);
+    --chat-pop-base: var(--text-base);
 }
 .chat-floating-root .chat-turns {
-    --text-2xs: var(--chat-pop-body);
-    --text-2xs--line-height: var(--chat-pop-body-lh);
-    --text-xs: var(--chat-pop-title);
-    --text-xs--line-height: var(--chat-pop-title-lh);
-    --text-sm: var(--text-base);
-    --text-sm--line-height: var(--text-base--line-height);
+    /* 7/6 is the body tier's own step, 0.75rem → 0.875rem: the size the reader asked for, spent on every tier. */
+    --chat-pop: 7 / 6;
+    --text-3xs: calc(var(--chat-pop-3xs) * (var(--chat-pop)));
+    --text-2xs: calc(var(--chat-pop-2xs) * (var(--chat-pop)));
+    --text-xs: calc(var(--chat-pop-xs) * (var(--chat-pop)));
+    --text-sm: calc(var(--chat-pop-sm) * (var(--chat-pop)));
+    --text-base: calc(var(--chat-pop-base) * (var(--chat-pop)));
+}
+/* A DECISION CARD'S ANSWER BUTTONS, which the rescale above cannot reach. PrimeVue's size tokens are emitted
+   on :root and resolve there, so `--p-button-sm-font-size: var(--text-2xs)` (theme.ts) has already become
+   0.6875rem by the time anything in here inherits it — while primeng.css sets that button's LINE-HEIGHT in an
+   ordinary rule, which does re-resolve. Left alone, an Approve button in a rescaled card wears docked type in
+   rescaled leading. Stated as a rule rather than by re-declaring the token, so it does not depend on a
+   generated token name. Three classes, so it outranks PrimeVue's own one-class rule at any injection order. */
+.chat-floating-root .chat-turns .p-button.p-button-sm {
+    font-size: var(--text-2xs);
+}
+/* THE PROMPT READS A TIER UNDER THE ANSWER IT STANDS OVER. It is recall — which question am I reading the
+   answer to (see .chat-prompt) — and the docked column is narrow enough that a bubble capped at 85% of it is
+   self-evidently the smaller object. Given the popped-out window's full measure the same bubble is a slab of
+   full-contrast text on a lit surface, sitting above prose at the same size and out-weighing it. A tier down
+   is 92% of the body size — enough to settle the order, not enough to turn what you typed into a caption, and
+   it is a step the scale already owns rather than a number invented here. Popped out only: the docked panel
+   has nothing to fix, and a tier assignment that differs between the two is worth exactly this sentence. */
+.chat-floating-root .chat-turns .chat-prompt-text {
+    font-size: var(--text-2xs);
 }
 
 /* The assistant's rendered answer. Everything about how markdown looks lives in prose.css, which the
