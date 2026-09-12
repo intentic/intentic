@@ -167,14 +167,14 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             </button>
             <span v-else-if="location || tool.target" class="min-w-0 truncate font-mono">{{ tool.target ?? location?.path }}</span>
             <!-- Working in the background while the parent moved on: why this card can sit unfinished for minutes. -->
-            <span v-if="subagent?.background === true && subagentLive" class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-subtle"
+            <span v-if="subagent?.background === true && subagentLive" class="ui-status-pill shrink-0 bg-overlay text-2xs text-subtle"
                 >background</span
             >
             <!--
                 The delegate itself reports being stuck on a permission or question; the one live state worth shouting,
                 since the terminal button beside it is where to answer it.
             -->
-            <span v-if="subagent?.status === `blocked`" class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-warning">needs input</span>
+            <span v-if="subagent?.status === `blocked`" class="ui-status-pill shrink-0 bg-overlay text-2xs text-warning">needs input</span>
             <!--
                 The result phrase stays visible while collapsed, pushed right as a trailing annotation; a call that never
                 reported back says so via the clock in its place.

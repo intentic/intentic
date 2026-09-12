@@ -339,7 +339,7 @@ const roster = computed(() => {
                         All accounts
                         <span class="text-subtle">{{ rows.length }}</span>
                     </button>
-                    <button v-if="rosterProvider !== undefined" type="button" class="ui-chip gap-1 px-2 py-0.5" @click="rosterProvider = undefined">
+                    <button v-if="rosterProvider !== undefined" type="button" class="ui-chip gap-1" @click="rosterProvider = undefined">
                         {{ providerLabel(rosterProvider) }}<Icon name="times" />
                     </button>
                     <SearchBar

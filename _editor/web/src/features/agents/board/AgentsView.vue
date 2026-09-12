@@ -1109,7 +1109,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                 type="button"
                                 :aria-label="`Open the archive (${archiveSize})`"
                                 v-tooltip.bottom="'Taken off the board: branches and conversations are kept'"
-                                class="ui-chip shrink-0 gap-1 px-1 py-px"
+                                class="ui-chip shrink-0 gap-1"
                                 :class="pulsing ? `ui-chip-on ring-1 ring-primary-500/50` : ``"
                                 @click="toggleArchive"
                             >

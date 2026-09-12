@@ -96,7 +96,7 @@ const logText = computed(() => {
             <span class="flex flex-wrap items-center gap-x-2 gap-y-1 font-normal">
                 <span class="truncate text-sm font-medium text-content">{{ resource.name }}</span>
                 <!-- Kind is a fact, not a state, so it wears a neutral chip, not a coloured badge (reserved for problems). -->
-                <span v-if="resource.kind === `stack`" class="shrink-0 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle">
+                <span v-if="resource.kind === `stack`" class="shrink-0 rounded border border-line px-2.5 py-1 text-2xs font-medium text-subtle">
                     stack
                 </span>
                 <StatusBadge v-if="resource.updateAvailable" variant="info" size="xs" label="new image" class="shrink-0" />

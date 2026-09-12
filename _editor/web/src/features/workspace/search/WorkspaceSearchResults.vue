@@ -219,7 +219,7 @@ const onKeydown = (event: KeyboardEvent): void => {
                         <span class="min-w-0 truncate text-content/90">{{ basename(painted.row.group.path) }}</span>
                         <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ parentDir(painted.row.group.path) }}</span>
                         <!-- `+` marks a file where the engine stopped counting its matches, same as the summary's `+`. -->
-                        <span class="shrink-0 rounded-full bg-overlay px-1.5 text-2xs text-muted"
+                        <span class="ui-status-pill shrink-0 bg-overlay text-2xs text-muted"
                             >{{ painted.row.group.hits.length }}{{ painted.row.group.capped ? `+` : `` }}</span
                         >
                     </button>

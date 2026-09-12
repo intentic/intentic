@@ -731,7 +731,7 @@ const keepTab = (event: Event, id: string): void => {
                             <template v-if="hasMeta({ conversation: c, agent })" #meta>
                                 <span
                                     v-if="agent !== undefined && attentionReason(agent) !== undefined"
-                                    class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px font-semibold text-warning"
+                                    class="ui-status-pill shrink-0 bg-warning/15 font-semibold text-warning"
                                     >{{ attentionReason(agent) }}</span
                                 >
                                 <!-- Same slot as the attention chip: never both at once, "needs you" outranks "unread". -->
@@ -742,7 +742,7 @@ const keepTab = (event: Event, id: string): void => {
                                             ? undefined
                                             : `Worked since you last opened it, ${relativeTime(unreadBadge(agent)!.seenAt!)}`
                                     "
-                                    class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-px font-semibold text-link"
+                                    class="ui-status-pill shrink-0 bg-primary-600/15 font-semibold text-link"
                                     >{{ unreadBadge(agent)!.label }}</span
                                 >
                                 <!--

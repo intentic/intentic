@@ -513,7 +513,7 @@ const runPending = async (): Promise<void> => {
             <!-- Checked-out branch with its switch/create/delete popover; detached HEAD shows no pill but keeps the switcher. -->
             <BranchSwitcher :repo="repoRef" />
             <!-- Rows drawn, and while searching, out of how many are loaded; scoped to fetched pages, not the whole history. -->
-            <span class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{
+            <span class="ui-status-pill shrink-0 bg-overlay text-2xs text-muted">{{
                 searching ? `${matched.length} of ${commits.length}` : commits.length
             }}</span>
             <div class="relative min-w-0 flex-1 max-w-44">

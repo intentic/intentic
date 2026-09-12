@@ -23,8 +23,8 @@ const DOT: Record<StatusVariant, string> = {
 };
 
 const SIZE: Record<`sm` | `xs`, string> = {
-    sm: `gap-1.5 px-2.5 py-1 text-xs`,
-    xs: `gap-1 px-2 py-0.5 text-2xs`,
+    sm: `gap-1.5 text-xs`,
+    xs: `gap-1 text-2xs`,
 };
 </script>
 
@@ -43,7 +43,7 @@ const {
 </script>
 
 <template>
-    <span class="inline-flex items-center whitespace-nowrap rounded-full font-medium lowercase" :class="[VARIANT[variant], SIZE[size]]">
+    <span class="ui-status-pill whitespace-nowrap font-medium lowercase" :class="[VARIANT[variant], SIZE[size]]">
         <span v-if="dot" class="h-1.5 w-1.5 rounded-full" :class="DOT[variant]"></span>
         <slot>{{ label }}</slot>
     </span>

@@ -426,7 +426,7 @@ const openHistory = (event: Event): void => {
                 </span>
                 <span
                     v-if="attentionCount > 0"
-                    class="flex shrink-0 items-center gap-1 rounded-full bg-warning/15 px-1.5 font-semibold text-warning"
+                    class="ui-status-pill flex shrink-0 items-center gap-1 bg-warning/15 font-semibold text-warning"
                     :aria-label="`${attentionCount} need you`"
                     v-tooltip.bottom="`${attentionCount} waiting for you`"
                 >

@@ -46,11 +46,11 @@ const logoFailed = reactive(new Set<string>());
                 <div class="flex min-w-0 flex-wrap items-center gap-2">
                     <span class="truncate font-medium text-content">{{ resource.id }}</span>
                     <StatusBadge :variant="statusVariant(resource.status)" :label="statusLabel(resource.status)" size="xs" dot />
-                    <span class="inline-flex items-center rounded-full bg-subtle/10 px-1.5 py-0.5 text-2xs font-medium text-subtle">{{
+                    <span class="ui-status-pill bg-subtle/10 text-2xs font-medium text-subtle">{{
                         resource.type
                     }}</span>
                     <span
-                        class="inline-flex items-center rounded-full px-1.5 py-0.5 text-2xs font-medium"
+                        class="ui-status-pill text-2xs font-medium"
                         :class="groupAccent(resource.group).frame"
                         >{{ resource.group }}</span
                     >
@@ -99,7 +99,7 @@ const logoFailed = reactive(new Set<string>());
                     v-for="dep in resource.dependsOn"
                     :key="dep"
                     type="button"
-                    class="ui-chip px-2 py-0.5 font-mono text-content"
+                    class="ui-chip font-mono text-content"
                     @click="selectedId = dep"
                 >
                     {{ dep }}
@@ -113,7 +113,7 @@ const logoFailed = reactive(new Set<string>());
                     v-for="dep in requiredBy"
                     :key="dep"
                     type="button"
-                    class="ui-chip px-2 py-0.5 font-mono text-content"
+                    class="ui-chip font-mono text-content"
                     @click="selectedId = dep"
                 >
                     {{ dep }}

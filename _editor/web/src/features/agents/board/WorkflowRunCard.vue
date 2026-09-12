@@ -91,7 +91,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
             <span
                 v-if="needsYou"
                 v-tooltip.top="`A step is waiting on you: open the run to answer it`"
-                class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-semibold text-warning"
+                class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold text-warning"
                 >needs you</span
             >
             <button

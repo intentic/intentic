@@ -340,7 +340,7 @@ const confirmDiscard = async (): Promise<void> => {
             -->
             <span
                 v-if="remoteName !== undefined"
-                class="inline-flex shrink-0 items-center gap-1 rounded bg-overlay px-1.5 py-px text-2xs text-muted"
+                class="ui-status-pill inline-flex shrink-0 items-center gap-1 bg-overlay text-2xs text-muted"
                 v-tooltip.bottom="`This agent is in ${remoteName}, not in the sandbox you're in`"
             >
                 <Icon name="server" class="text-2xs" />
@@ -355,7 +355,7 @@ const confirmDiscard = async (): Promise<void> => {
             <span
                 v-if="fleetAgent?.branch !== undefined"
                 ref="identityAnchor"
-                class="hidden max-w-[16rem] shrink-0 items-center rounded bg-overlay px-1.5 py-px @2xl:inline-flex"
+                class="ui-status-pill hidden max-w-[16rem] shrink-0 items-center bg-overlay @2xl:inline-flex"
             >
                 <SessionChip :branch="fleetAgent.branch" reveal @reveal="identityOpen = !identityOpen" />
             </span>

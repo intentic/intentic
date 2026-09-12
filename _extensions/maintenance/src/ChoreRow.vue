@@ -255,7 +255,7 @@ watch(
             <span
                 v-if="answer"
                 :title="answerTitle"
-                class="flex shrink-0 items-center gap-1 rounded-full border border-line/60 px-1.5 py-0.5 text-2xs text-subtle"
+                class="ui-status-pill flex shrink-0 items-center gap-1 border border-line/60 text-2xs text-subtle"
             >
                 <Icon name="check-circle" class="text-2xs" />
                 <!-- Lowercases only the outcome word, not the whole mark, or a `freshness` date lowercases too. -->

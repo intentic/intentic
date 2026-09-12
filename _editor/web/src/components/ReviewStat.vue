@@ -47,7 +47,7 @@ const fill = computed<number | undefined>(() => {
 <template>
     <span
         v-if="commentsOnly"
-        class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-overlay px-1 py-px text-2xs text-subtle"
+        class="ui-status-pill inline-flex shrink-0 items-center gap-0.5 bg-overlay text-2xs text-subtle"
         v-tooltip.top="hint"
     >
         <Icon name="eye-slash" class="text-2xs" />comments

@@ -166,7 +166,7 @@ const hasSpend = computed(() => current.value.length > 0);
             <SegmentedControl v-model="preset" :options="RANGE_PRESETS" />
             <span class="h-4 w-px bg-line" />
             <SegmentedControl v-model="providerFilter" :options="providerOptions" size="xs" />
-            <button v-if="agentFilter !== undefined" type="button" class="ui-chip gap-1 px-2 py-0.5" @click="clearAgentFilter">
+            <button v-if="agentFilter !== undefined" type="button" class="ui-chip gap-1" @click="clearAgentFilter">
                 <Icon name="sliders-h" />{{ agentTitle(agentFilter) }}<Icon name="times" />
             </button>
             <button

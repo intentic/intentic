@@ -324,7 +324,7 @@ const confirmRemove = async (): Promise<void> => {
                 <!-- What's waiting in that sandbox; nothing waiting draws nothing, an unanswered box draws a dash. -->
                 <span
                     v-else-if="answered(option) && attentionFor(option)! > 0"
-                    class="shrink-0 rounded-full bg-warning/15 px-1.5 py-0.5 text-2xs font-semibold leading-4 text-warning"
+                    class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold leading-4 text-warning"
                     v-tooltip.top="`${attentionFor(option)} waiting for you in ${option.name}`"
                     >{{ attentionFor(option) }}</span
                 >
@@ -335,7 +335,7 @@ const confirmRemove = async (): Promise<void> => {
                     aria-label="Not answering"
                     >&ndash;</span
                 >
-                <span v-if="option.role !== 'owner'" class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle"
+                <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle"
                     >Shared</span
                 >
                 <!-- Which digit this row is, the only place the chord can be learned; fades under the trash icon's hover. -->

@@ -563,13 +563,13 @@ const grab = (event: PointerEvent): void => {
                 </button>
             </template>
             <Icon v-if="pending !== undefined" name="spinner" spin class="shrink-0 text-xs text-link" />
-            <span v-else-if="reason !== undefined" class="shrink-0 rounded-full px-1.5 py-px text-2xs font-semibold" :class="reasonTone">{{
+            <span v-else-if="reason !== undefined" class="ui-status-pill shrink-0 text-2xs font-semibold" :class="reasonTone">{{
                 reason
             }}</span>
             <span
                 v-else-if="unread !== undefined"
                 v-tooltip.top="unread.hint"
-                class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-px text-2xs font-semibold text-link"
+                class="ui-status-pill shrink-0 bg-primary-600/15 text-2xs font-semibold text-link"
                 >{{ unread.label }}</span
             >
             <!--
@@ -642,7 +642,7 @@ const grab = (event: PointerEvent): void => {
                 -->
                 <span
                     v-if="box !== undefined"
-                    class="flex min-w-0 shrink-0 items-center gap-1 truncate rounded bg-content/10 px-1 py-px text-muted"
+                    class="flex min-w-0 shrink-0 items-center gap-1 truncate rounded bg-content/10 px-2.5 py-1 text-muted"
                     v-tooltip.top="`In ${box.name}, not in the sandbox you're in`"
                 >
                     <img v-if="box.image !== undefined" :src="box.image" alt="" class="h-3 w-3 shrink-0 rounded-sm object-cover" />

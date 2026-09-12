@@ -1149,7 +1149,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         <!-- What the sandbox does with this entry, which its name doesn't say (specialPaths.ts); hover gives the rule. -->
                         <span
                             v-if="specialChip(row.entry.path)"
-                            class="shrink-0 rounded-full px-1.5 text-2xs font-medium"
+                            class="ui-status-pill shrink-0 text-2xs font-medium"
                             :class="specialChip(row.entry.path)?.tone === `warning` ? `bg-warning/10 text-warning` : `bg-subtle/10 text-subtle`"
                             v-tooltip.right="specialChip(row.entry.path)?.tooltip"
                             >{{ specialChip(row.entry.path)?.label }}</span

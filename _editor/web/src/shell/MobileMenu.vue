@@ -150,7 +150,7 @@ const logout = async (): Promise<void> => {
                 <span class="min-w-0 flex-1 truncate" :class="option.id === sandbox.activeSandboxId.value ? 'text-link' : 'text-content'">{{
                     option.name
                 }}</span>
-                <span v-if="option.role !== 'owner'" class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle"
+                <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle"
                     >Shared</span
                 >
                 <span
@@ -226,7 +226,7 @@ const logout = async (): Promise<void> => {
                         <!-- The count only, when there's no tooltip; min-w-0 shrinks a long number instead of pushing the name off. -->
                         <span
                             v-if="area.badge && badgeChip(area.badge) && area.badge.tooltip === undefined"
-                            class="min-w-0 shrink rounded-full px-1.5 py-px text-2xs font-semibold"
+                            class="ui-status-pill min-w-0 shrink text-2xs font-semibold"
                             :class="badgeClass(area.badge)"
                             >{{ area.badge.count }}</span
                         >

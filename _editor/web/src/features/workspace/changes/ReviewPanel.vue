@@ -1248,7 +1248,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 v-for="entry in legend.agents"
                 :key="entry.id"
                 type="button"
-                class="ui-chip min-w-0 max-w-full gap-1 py-px pl-1 pr-1.5 transition-opacity"
+                class="ui-chip min-w-0 max-w-full gap-1 transition-opacity"
                 :class="[
                     originHue(entry.id).chip,
                     originFilter === entry.id ? 'shrink' : 'shrink-0',
@@ -1284,7 +1284,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             <button
                 v-if="legend.yours > 0"
                 type="button"
-                class="ui-chip shrink-0 gap-1 px-1.5 py-px transition-opacity"
+                class="ui-chip shrink-0 gap-1 transition-opacity"
                 :class="originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : ''"
                 @click="toggleOrigin(YOURS)"
                 v-tooltip.right="'Your own edits, the terminal, a main-tree chat'"

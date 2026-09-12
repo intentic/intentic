@@ -287,7 +287,7 @@ const openStartOver = (): void => {
                     :href="superseded.url"
                     target="_blank"
                     rel="noopener"
-                    class="touch-target inline-flex shrink-0 items-center gap-1 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle hover:text-link"
+                    class="touch-target inline-flex shrink-0 items-center gap-1 rounded border border-line px-2.5 py-1 text-2xs font-medium text-subtle hover:text-link"
                     v-tooltip.top="`${run.branch} went green again in this run: open it to check the job that failed here even ran`"
                 >
                     <Icon name="check-circle" class="text-2xs text-success" />
@@ -295,7 +295,7 @@ const openStartOver = (): void => {
                     <span class="font-mono">{{ superseded.sha.slice(0, 7) }}</span>
                 </a>
                 <!-- Only unusual origins earn a chip; a plain push is every repo's default. -->
-                <span v-if="trigger" class="shrink-0 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle">
+                <span v-if="trigger" class="shrink-0 rounded border border-line px-2.5 py-1 text-2xs font-medium text-subtle">
                     {{ trigger }}
                 </span>
             </div>

@@ -515,7 +515,7 @@ const onPick = (event: Event): void => {
                             <!-- What the sandbox does with this entry (specialPaths.ts). No hover on touch, so the chip alone names it. -->
                             <span
                                 v-if="specialChip(node.path)"
-                                class="shrink-0 rounded-full px-1.5 text-2xs font-medium"
+                                class="ui-status-pill shrink-0 text-2xs font-medium"
                                 :class="specialChip(node.path)?.tone === 'warning' ? 'bg-warning/10 text-warning' : 'bg-subtle/10 text-subtle'"
                                 >{{ specialChip(node.path)?.label }}</span
                             >

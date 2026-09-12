@@ -67,7 +67,7 @@ const location = computed(() => props.group.tools[0]?.locations?.[0]);
             <span v-else-if="group.target" class="min-w-0 truncate font-mono">{{ group.target }}</span>
             <span class="ml-auto flex shrink-0 items-center gap-2">
                 <span v-if="summary" class="tabular-nums" :class="failed ? 'text-danger' : 'text-subtle'">{{ summary }}</span>
-                <span class="rounded-full bg-overlay px-1.5 py-0.5 text-subtle">×{{ group.tools.length }}</span>
+                <span class="ui-status-pill bg-overlay text-subtle">×{{ group.tools.length }}</span>
             </span>
         </div>
         <div v-if="expanded" class="ml-4 flex flex-col gap-1 border-l border-line pl-2">

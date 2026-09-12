@@ -247,14 +247,25 @@
         box-shadow: none;
     }
 
+    /* ── THE STATUS PILL — READ-ONLY STATE INK, SAME GEOMETRY AS THE CHIP ───────────────────────────────
+     * StatusBadge and every hand-drawn attention label share this padding; interactive filters wear
+     * `.ui-chip` instead, which copies the same block and inline measures. */
+    .ui-status-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 9999px;
+        padding-block: var(--spacing);
+        padding-inline: calc(var(--spacing) * 2.5);
+    }
+
     /* ── THE CHIP — A PILL THAT CARRIES A STATE, WHICH IS WHY IT IS NOT A BUTTON ──────────────────────────
      * A filter you can switch on, a lane you can narrow to, an origin you can isolate, a handoff mode. The
      * shape says "one of a set" and the fill says "this one is on"; a <Button> says neither, because a button's
      * tiers are RANKS and a chip has no rank — six of them side by side are equals.
      *
      * IT IS HERE BECAUSE IT WAS EVERYWHERE ELSE. Twenty-one of these were hand-written across the chat strip,
-     * the review panel, the usage pages, the workflow designer and the browser board, in six geometries
-     * (`px-1.5 py-px` through `px-3 py-1.5`), and the ON state was spelled four ways — `bg-primary-600/15
+     * the review panel, the usage pages, the workflow designer and the browser board, in six geometries,
+     * and the ON state was spelled four ways — `bg-primary-600/15
      * text-link`, `bg-link/10 border-link`, `bg-primary-600/25 ring-1`, and a bare `text-link`. The one that
      * mattered is that some of them said "on" with a FILL and some with a BORDER, so a screen carrying both
      * had two chips lit in two different languages.
@@ -264,8 +275,8 @@
      * (transparent) rather than added when lit, so lighting one cannot shift the row it sits in by two pixels.
      *
      * GEOMETRY IS THE CALLER'S TO NARROW, not to invent: utilities sit in a later layer, so `class="ui-chip
-     * px-2 py-px"` still works for the tight inline band inside a notice. What a caller cannot do by accident
-     * is disagree about the radius, the tone, the hover or what ON looks like. */
+     * px-3 py-1.5"` still works for a wider band inside a notice. What a caller cannot do by accident is
+     * disagree about the radius, the tone, the hover or what ON looks like. */
     .ui-chip {
         display: inline-flex;
         align-items: center;

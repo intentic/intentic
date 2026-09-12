@@ -739,10 +739,10 @@ const seamWidth = computed<number>({
                             >
                                 <Icon class="shrink-0 text-2xs text-subtle" :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'" />
                                 <span class="min-w-0 truncate text-2xs font-semibold uppercase tracking-wide text-muted">{{ group.repo }}</span>
-                                <span class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{ groupLabel(group.files) }}</span>
+                                <span class="shrink-0 ui-status-pill bg-overlay text-2xs text-muted">{{ groupLabel(group.files) }}</span>
                                 <span
                                     v-if="group.blocked > 0"
-                                    class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-warning/20 px-1.5 py-px text-2xs font-medium text-warning"
+                                    class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill bg-warning/20 text-2xs font-medium text-warning"
                                 >
                                     <Icon name="exclamation-triangle" class="text-2xs" />{{ group.blocked }}
                                 </span>
@@ -787,7 +787,7 @@ const seamWidth = computed<number>({
                                         -->
                                         <span
                                             v-if="bucket.blocked > 0"
-                                            class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-warning/20 px-1.5 py-px text-2xs font-medium text-warning"
+                                            class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill bg-warning/20 text-2xs font-medium text-warning"
                                         >
                                             <Icon name="exclamation-triangle" class="text-2xs" />{{ bucket.blocked }}
                                         </span>
@@ -846,7 +846,7 @@ const seamWidth = computed<number>({
                                             -->
                                             <span
                                                 v-if="file.blocked !== undefined"
-                                                class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-warning/20 px-1 py-px text-2xs font-medium text-warning"
+                                                class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill bg-warning/20 text-2xs font-medium text-warning"
                                                 v-tooltip.right="REASON_COPY[file.blocked].row"
                                             >
                                                 <Icon :name="REASON_COPY[file.blocked].icon" class="text-2xs" />{{ REASON_COPY[file.blocked].mark }}
@@ -948,7 +948,7 @@ const seamWidth = computed<number>({
                         <template #badges>
                             <span
                                 v-if="selected.blocked !== undefined"
-                                class="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-medium text-warning"
+                                class="inline-flex shrink-0 items-center gap-1 ui-status-pill bg-warning/15 text-2xs font-medium text-warning"
                                 v-tooltip.bottom="REASON_COPY[selected.blocked].row"
                             >
                                 <Icon :name="REASON_COPY[selected.blocked].icon" class="text-2xs" />blocked · {{ REASON_COPY[selected.blocked].mark }}
@@ -960,14 +960,14 @@ const seamWidth = computed<number>({
                             -->
                             <span
                                 v-else-if="selected.carriedBy !== undefined"
-                                class="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/15 px-1.5 py-px font-mono text-2xs font-medium text-success"
+                                class="inline-flex shrink-0 items-center gap-1 ui-status-pill bg-success/15 font-mono text-2xs font-medium text-success"
                                 v-tooltip.bottom="'You committed this file here. The diff is what the agent wrote, not the commit\'s own patch.'"
                             >
                                 <Icon name="check" class="text-2xs" />{{ selected.carriedBy.short }}
                             </span>
                             <span
                                 v-else-if="!selected.change.landed"
-                                class="shrink-0 rounded-full bg-warning/15 px-1.5 py-px text-2xs font-medium text-warning"
+                                class="shrink-0 ui-status-pill bg-warning/15 text-2xs font-medium text-warning"
                                 v-tooltip.bottom="'Still waiting for Land now'"
                             >
                                 not landed
