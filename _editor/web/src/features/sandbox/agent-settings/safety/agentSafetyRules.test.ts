@@ -90,9 +90,11 @@ test("draws every pattern fragment; qualifiers live on the chip tooltip, not inl
             expect(text(host), `${rule.commandClass}: ${pattern.code}`).toContain(pattern.code);
             if (pattern.qualifier !== undefined) {
                 expect(text(host), `${rule.commandClass}: ${pattern.qualifier}`).not.toContain(pattern.qualifier);
+                // Typed to the element the selector already names: `closest` with an attribute selector falls back
+                // to its generic overload and hands back a bare `Element`, which carries no `dataset`.
                 const chip = [...host.querySelectorAll(`code`)]
                     .find((el) => el.textContent?.includes(pattern.code))
-                    ?.closest(`span[data-tooltip]`);
+                    ?.closest<HTMLSpanElement>(`span[data-tooltip]`);
                 expect(chip?.dataset[`tooltip`], `${rule.commandClass}: ${pattern.code}`).toBe(pattern.qualifier);
             }
         }
