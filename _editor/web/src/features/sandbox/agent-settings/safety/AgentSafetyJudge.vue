@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
+import { Button, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { modelChoiceLabel } from "../../../chat/models/modelPins";
@@ -51,14 +51,6 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
                         anything.
                     </p>
                     <p v-else class="text-2xs text-muted">The verdict decides: allowed silently, held on a card, or refused.</p>
-
-                    <!-- Same floor as the policy's own notice: turning the judge off does not disable the gate itself. -->
-                    <!-- No `text-content` span here: inside a toned Notice it paints near-black over the tone's colour. -->
-                    <Notice v-if="mode !== `on`" tone="info" class="text-2xs">
-                        Wiping a block device, deleting <code>/</code>, or deleting anything under <code>/history</code> still asks — and on your own
-                        computers, so does any delete. Those rules are typed rather than judged, so no setting here reaches them. They are listed
-                        under “What gets stopped” below.
-                    </Notice>
                 </div>
             </template>
         </Row>

@@ -18,11 +18,6 @@ const draft = useDraft(() => (isLoading.value ? undefined : text.value));
     <RowGroup label="Safety policy">
         <template #info><SafetyPolicyInfo /></template>
 
-        <RowNote>
-            What the assistant should stop and ask you about before it runs something. Written for a reader, not a parser: a model reads this and
-            applies it to each command. You can ask the assistant to edit it too.
-        </RowNote>
-
         <RowNote variant="block">
             <!--
                 The frame owns the scroll, so a long policy stays inside the row rather than pushing the Save button off the page; the prose measure
@@ -46,16 +41,6 @@ const draft = useDraft(() => (isLoading.value ? undefined : text.value));
                     </template>
                 </MarkdownDocument>
             </div>
-
-            <!--
-                States the rules that aren't in the document and can't be edited away, so deleting every line above doesn't look like it switches the
-                gate off.
-            -->
-            <Notice tone="info" class="mt-2 text-2xs">
-                Whatever this says, wiping a block device, deleting <code>/</code>, or deleting anything under <code>/history</code> always asks — and
-                on your own computers, so does any delete. Those rules are not written here and cannot be edited away, because nothing brings what
-                they take back. They are listed in full under “What gets stopped” above.
-            </Notice>
 
             <Notice v-if="error !== undefined" tone="danger" class="mt-2 text-2xs">{{ error }}</Notice>
         </RowNote>

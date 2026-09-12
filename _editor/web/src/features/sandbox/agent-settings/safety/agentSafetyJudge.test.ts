@@ -84,19 +84,6 @@ test("moving the switch writes the mode and says what that mode does", async () 
     expect(host.textContent).toContain(`nothing is ever held`);
 });
 
-// "Off" stops the judge itself, not the hard-coded rule; no setting can turn that rule off.
-test("the states that stop holding commands say what still asks", async () => {
-    const host = mount();
-    expect(host.textContent).not.toContain(`still asks`);
-
-    for (const mode of [`Off`, `Watch`]) {
-        pill(host, mode).click();
-        await nextTick();
-        expect(host.textContent, mode).toContain(`still asks`);
-        expect(host.textContent, mode).toContain(`/history`);
-    }
-});
-
 // Which model applies the policy: the account a verdict is billed to, drawn from modelRoles.
 
 // A sandbox with no models set still runs on the standing rule alone; nothing here should look configured.
