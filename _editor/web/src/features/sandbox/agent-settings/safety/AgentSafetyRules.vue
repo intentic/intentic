@@ -54,58 +54,65 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
             <div class="relative hidden @2xl:block">
                 <Row>
                     <template #meta>
-                        <span
-                            v-for="machine in MACHINES"
-                            :key="machine.locus"
-                            class="flex items-center justify-center whitespace-nowrap px-3 text-center text-3xs font-medium uppercase tracking-wide"
-                            :class="COLUMN"
-                        >
-                            {{ machine.label }}
-                        </span>
+                        <div class="flex self-stretch items-center gap-2">
+                            <span
+                                v-for="machine in MACHINES"
+                                :key="machine.locus"
+                                class="flex h-full items-center justify-center whitespace-nowrap px-3 text-center text-3xs font-medium uppercase tracking-wide"
+                                :class="COLUMN"
+                            >
+                                {{ machine.label }}
+                            </span>
+                        </div>
                     </template>
                 </Row>
             </div>
 
-            <div class="relative divide-y divide-line-subtle">
+            <div class="relative">
                 <Row v-for="rule in COMMAND_RULE_CATALOG" :key="rule.commandClass">
                     <template #title>
-                        <span class="inline-flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
-                            <span>{{ rowTitle(rule.label) }}:</span>
-                            <span
-                                v-for="pattern in rule.patterns"
-                                :key="pattern.code"
-                                v-tooltip.top="pattern.qualifier"
-                                class="inline-flex max-w-full items-center rounded bg-overlay px-1.5 py-0.5 text-2xs"
-                                :class="pattern.qualifier !== undefined ? `cursor-help` : undefined"
-                            >
-                                <RuleCommand :command="pattern.code" />
+                        <div>
+                            <span class="inline-flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
+                                <span>{{ rowTitle(rule.label) }}:</span>
+                                <span
+                                    v-for="pattern in rule.patterns"
+                                    :key="pattern.code"
+                                    v-tooltip.top="pattern.qualifier"
+                                    class="inline-flex max-w-full items-center rounded bg-overlay px-1.5 py-0.5 text-2xs"
+                                    :class="pattern.qualifier !== undefined ? `cursor-help` : undefined"
+                                >
+                                    <RuleCommand :command="pattern.code" />
+                                </span>
                             </span>
-                        </span>
+                            <!-- Narrow: no columns to tell apart, so the same TIERS lookup is spoken as a sentence. -->
+                            <p class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-2xs @2xl:hidden">
+                                <span v-for="machine in MACHINES" :key="machine.locus">
+                                    <span class="text-subtle">{{ machine.label }} — </span>
+                                    <span :class="TIERS[rule.tiers[machine.locus]].tone">{{ TIERS[rule.tiers[machine.locus]].label }}</span>
+                                </span>
+                            </p>
+                        </div>
                     </template>
 
                     <!--
-                        A pill per cell, centred on its track: an answer with an edge round it belongs to one row and one
-                        machine, where a bare word in a shared field belonged to neither. #meta is already trailing, so
-                        reusing it lines the cells up with the heads for free.
+                        self-stretch + h-full: badges stay centred on the row when the title wraps to several lines.
+                        #meta is already trailing, so reusing it lines the cells up with the heads for free.
                     -->
                     <template #meta>
-                        <span v-for="machine in MACHINES" :key="machine.locus" class="hidden justify-center @2xl:flex" :class="COLUMN">
-                            <StatusBadge
-                                size="xs"
-                                :variant="TIERS[rule.tiers[machine.locus]].badge"
-                                :label="TIERS[rule.tiers[machine.locus]].label"
-                            />
-                        </span>
-                    </template>
-
-                    <!-- Narrow: no columns to tell apart, so the same TIERS lookup is spoken as a sentence. -->
-                    <template #below>
-                        <p class="flex flex-wrap gap-x-3 gap-y-0.5 text-2xs @2xl:hidden">
-                            <span v-for="machine in MACHINES" :key="machine.locus">
-                                <span class="text-subtle">{{ machine.label }} — </span>
-                                <span :class="TIERS[rule.tiers[machine.locus]].tone">{{ TIERS[rule.tiers[machine.locus]].label }}</span>
+                        <div class="hidden self-stretch items-center gap-2 @2xl:flex">
+                            <span
+                                v-for="machine in MACHINES"
+                                :key="machine.locus"
+                                class="flex h-full items-center justify-center"
+                                :class="COLUMN"
+                            >
+                                <StatusBadge
+                                    size="xs"
+                                    :variant="TIERS[rule.tiers[machine.locus]].badge"
+                                    :label="TIERS[rule.tiers[machine.locus]].label"
+                                />
                             </span>
-                        </p>
+                        </div>
                     </template>
                 </Row>
             </div>
