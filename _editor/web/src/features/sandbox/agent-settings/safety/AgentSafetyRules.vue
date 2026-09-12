@@ -8,9 +8,9 @@ import RuleCommand from "./RuleCommand.vue";
 // in the policy below, not here.
 
 const MACHINES = [
-    { locus: `sandbox`, label: `This sandbox` },
-    { locus: `device`, label: `My devices` },
-] as const satisfies readonly { locus: CommandLocus; label: string }[];
+    { locus: `sandbox`, label: `This sandbox`, track: `bg-content/[0.02]` },
+    { locus: `device`, label: `My devices`, track: `bg-content/[0.045]` },
+] as const satisfies readonly { locus: CommandLocus; label: string; track: string }[];
 
 // ONE RECORD PER TIER, three views of it: the word, the pill it wears in a machine's column, and the tone it takes in
 // the narrow line, so a tier cannot end up spelled two ways. "Judged" and "Always asks" name the consequence, not the
@@ -22,7 +22,8 @@ const TIERS: Readonly<Record<CommandRuleTier, { label: string; badge: StatusVari
 
 // ONE MACHINE'S COLUMN, WRITTEN ONCE. Its head, its track, every verdict in it and the empty spacer that holds the
 // patterns out of it are the same column seen four times, so a column that changes width stays a column.
-const COLUMN = `w-24`;
+const COLUMN = `w-28`;
+const COLUMN_PAD = `px-5`;
 
 // Labels are lowercase in the contract so gate copy can say "would wipe a disk"; row titles here stand alone.
 const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(1);
@@ -37,13 +38,21 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
         -->
         <div class="relative">
             <!--
-                TWO tracks with a gap, not one wash across both: a single field made the right-hand side one grey
-                area with words floating in it, and which answer belonged to which machine had to be worked out from
-                alignment alone. Decorative, and positioned, so it is drawn under the rows, which are positioned after
-                it (`relative`, below). `right-4` is the row's own padding, so the tracks sit exactly under the cells.
+                TWO tracks, touching: each machine gets its own wash so the columns read apart without a gutter between
+                them. Decorative, and positioned, so it is drawn under the rows (`relative`, below). `right-4` is the
+                row's own padding, so the tracks sit exactly under the cells.
             -->
-            <div aria-hidden="true" class="pointer-events-none absolute inset-y-0 right-4 hidden gap-2 @2xl:flex">
-                <span v-for="machine in MACHINES" :key="machine.locus" class="rounded-md bg-content/[0.025]" :class="COLUMN" />
+            <div aria-hidden="true" class="pointer-events-none absolute inset-y-0 right-4 hidden @2xl:flex">
+                <span
+                    v-for="(machine, index) in MACHINES"
+                    :key="machine.locus"
+                    :class="[
+                        COLUMN,
+                        machine.track,
+                        index === 0 ? `rounded-l-md` : ``,
+                        index === MACHINES.length - 1 ? `rounded-r-md` : ``,
+                    ]"
+                />
             </div>
 
             <!--
@@ -54,12 +63,12 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
             <div class="relative hidden @2xl:block">
                 <Row>
                     <template #meta>
-                        <div class="flex self-stretch items-center gap-2">
+                        <div class="flex self-stretch items-center">
                             <span
                                 v-for="machine in MACHINES"
                                 :key="machine.locus"
-                                class="flex h-full items-center justify-center whitespace-nowrap px-3 text-center text-3xs font-medium uppercase tracking-wide"
-                                :class="COLUMN"
+                                class="flex h-full items-center justify-center whitespace-nowrap text-center text-3xs font-medium uppercase tracking-wide"
+                                :class="[COLUMN, COLUMN_PAD]"
                             >
                                 {{ machine.label }}
                             </span>
@@ -99,12 +108,12 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
                         #meta is already trailing, so reusing it lines the cells up with the heads for free.
                     -->
                     <template #meta>
-                        <div class="hidden self-stretch items-center gap-2 @2xl:flex">
+                        <div class="hidden self-stretch items-center @2xl:flex">
                             <span
                                 v-for="machine in MACHINES"
                                 :key="machine.locus"
                                 class="flex h-full items-center justify-center"
-                                :class="COLUMN"
+                                :class="[COLUMN, COLUMN_PAD]"
                             >
                                 <StatusBadge
                                     size="xs"
