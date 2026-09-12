@@ -114,8 +114,11 @@ const configSchema = z.object({
             // sandbox.toml (base64) seeding an empty workspace on first boot; lands as a proposal, never approved.
             definitionSeed: z.string().default(""),
             // Host path of the checkout a DEV container was launched from (dev-sandbox.sh, replayed like the rest);
-            // empty everywhere else, which is what makes a dev-only action refuse itself instead of guessing a path.
-            devRoot: z.string().default(""),
+            // undefined everywhere else, which is what makes a dev-only action refuse itself instead of guessing a path.
+            devRoot: z
+                .string()
+                .default("")
+                .transform((value) => (value.trim() === "" ? undefined : value.trim())),
             // An unowned pool machine that warms caches then exits; no owner or token, so identity subsystems stay off.
             prewarm: z
                 .string()

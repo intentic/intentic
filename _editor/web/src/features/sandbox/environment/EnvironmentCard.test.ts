@@ -20,6 +20,8 @@ const pending = ref<Environment[`approved`] | undefined>(undefined);
 // The built overlay and the runtime-install attention list; the card renders only when either is set.
 const applied = ref<Environment[`approved`] | undefined>(environment.approved);
 const recurring = ref<NonNullable<Environment[`recurring`]>>([]);
+// Set only on a sandbox whose base was compiled from a checkout; undefined is every published sandbox.
+const localImage = ref<Environment[`localImage`]>(undefined);
 vi.mock(`./useEnvironment`, () => ({
     ENVIRONMENT_KEY: [`environment`],
     useEnvironment: () => ({
@@ -33,6 +35,7 @@ vi.mock(`./useEnvironment`, () => ({
         recurring,
         serverManaged: ref(false),
         slug: ref(`demo`),
+        localImage,
     }),
 }));
 
@@ -64,6 +67,7 @@ vi.mock(`../../workspace/viewers/DiffToolbar.vue`, () => ({ default: defineCompo
 // Marks each executor with data-executor, so a test can tell which one rendered without mounting it.
 vi.mock(`../../capabilities/connect/HostRecreate.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `host` }) }) }));
 vi.mock(`./HostedRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `hosted` }) }) }));
+vi.mock(`./DevRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `checkout` }) }) }));
 
 const { default: EnvironmentCard } = await import("./EnvironmentCard.vue");
 
@@ -83,6 +87,7 @@ afterEach(() => {
     pending.value = undefined;
     applied.value = environment.approved;
     recurring.value = [];
+    localImage.value = undefined;
     active.value = { id: `sb1`, role: `owner` };
     app?.unmount();
     app = undefined;
@@ -119,6 +124,27 @@ it(`hands a pending overlay to the platform's builder on a hosted sandbox`, () =
     const el = mount();
     expect(el.querySelector(`[data-executor="hosted"]`)).not.toBeNull();
     expect(el.querySelector(`[data-executor="host"]`)).toBeNull();
+});
+
+// A checkout-built sandbox is the one shape where the image itself can be behind the code, so the offer that rebuilds
+// it from source belongs here — and nowhere else, since every other sandbox has no checkout to rebuild from.
+it(`offers a rebuild from the checkout only on a sandbox whose base was built from one`, () => {
+    expect(mount().querySelector(`[data-executor="checkout"]`)).toBeNull();
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    localImage.value = { base: `intentic-sandbox:dev`, root: `/home/ada/intentic` };
+    expect(mount().querySelector(`[data-executor="checkout"]`)).not.toBeNull();
+});
+
+// Two rebuilds on one card: the recipe's, which re-applies what was approved to the image already built, and the
+// checkout's, which builds a new one. Saying so is what stops the second from reading as a duplicate of the first.
+it(`separates the recipe's rebuild from the checkout's when a pending overlay meets a local base`, () => {
+    pending.value = { content: OVERLAY, hash: `pending` };
+    localImage.value = { base: `intentic-sandbox:dev`, root: `/home/ada/intentic` };
+    const el = mount();
+    expect(el.querySelector(`[data-executor="host"]`)).not.toBeNull();
+    expect(el.textContent).toContain(`re-applies this recipe on the image it already runs`);
 });
 
 it(`stands down once the only runtime installs left are ones you dismissed`, () => {

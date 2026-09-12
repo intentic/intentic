@@ -2,6 +2,9 @@ import type { HostScopes } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { ScopeError } from "../policy.js";
 import {
+    devRebuildArgv,
+    devRebuildSandbox,
+    devRebuildUnsupported,
     icCandidates,
     icReconnectArgs,
     icRemoveArgs,
@@ -109,6 +112,26 @@ test("a rebuild without the approved digest is refused rather than built against
     expect(() => icSwapArgs("rebuild", "work", "")).toThrow(/approved/);
 });
 
+// The one flow that builds an image instead of swapping onto one. Everything asserted here is about what reaches a
+// shell on somebody's machine, since that is what separates it from every other op in this file.
+test("a rebuild from source sends the slug as a shell parameter, never as script", () => {
+    const { args } = devRebuildArgv("linux", `work"; rm -rf ~ #`);
+    expect(args).toEqual(["-lc", `pnpm rebuild:sandbox "$1"`, "intentic", `work"; rm -rf ~ #`]);
+});
+
+test("a rebuild from source is refused on Windows, where the checkout's scripts cannot run", () => {
+    expect(devRebuildUnsupported("win32", "work", "C:\\src\\intentic")).toContain("POSIX-only");
+    expect(devRebuildUnsupported("linux", "work", "/home/ada/intentic")).toBeUndefined();
+    expect(devRebuildUnsupported("darwin", "work", "/Users/ada/intentic")).toBeUndefined();
+});
+
+test("a rebuild from source is refused without a checkout to run in, and by the sandboxes switch", async () => {
+    // Both refusals land before docker is asked anything: an op that cannot run must not first cost a fleet read.
+    await expect(devRebuildSandbox("work", undefined, scopes(), () => undefined)).rejects.toThrow(/checkout/);
+    await expect(devRebuildSandbox("work", "", scopes(), () => undefined)).rejects.toThrow(/checkout/);
+    await expect(devRebuildSandbox("work", "/home/ada/intentic", scopes({ sandboxes: "off" }), () => undefined)).rejects.toBeInstanceOf(ScopeError);
+});
+
 // The reshape argv: every value is a flag with a word after it, never a bare flag, and `null` becomes ic's own
 // `default`.
 test("a reshape builds ic's flags from the ask, with null as default and switches spelled out", () => {
@@ -125,7 +148,15 @@ test("a reshape builds ic's flags from the ask, with null as default and switche
         "--gpus",
         "off",
     ]);
-    expect(icReshapeArgs("work", { memoryGib: null, cpus: null })).toEqual(["sandbox", "reshape", "work", "--memory", "default", "--cpus", "default"]);
+    expect(icReshapeArgs("work", { memoryGib: null, cpus: null })).toEqual([
+        "sandbox",
+        "reshape",
+        "work",
+        "--memory",
+        "default",
+        "--cpus",
+        "default",
+    ]);
     // Only what was asked rides: an untouched switch must not be re-stated as either state.
     expect(icReshapeArgs("work", { gpu: true })).toEqual(["sandbox", "reshape", "work", "--gpus", "on"]);
 });
@@ -165,7 +196,11 @@ test("a container's share of the machine is read off its HostConfig and its two 
 });
 
 test("an unbounded container reads as having no caps, no privileges and no asks", () => {
-    const bare = resourcesFrom({ Name: "/intentic-sandbox-work", HostConfig: { Memory: 0, NanoCpus: 0, Privileged: false, DeviceRequests: null }, Config: { Env: [] } });
+    const bare = resourcesFrom({
+        Name: "/intentic-sandbox-work",
+        HostConfig: { Memory: 0, NanoCpus: 0, Privileged: false, DeviceRequests: null },
+        Config: { Env: [] },
+    });
     expect(bare).toEqual({ privileged: false, gpu: false, hostRuntime: [], overlayRuntime: [] });
     expect(bare).not.toHaveProperty("memoryBytes");
     expect(bare).not.toHaveProperty("cpus");
@@ -254,9 +289,7 @@ test("a machine with no home still tries the rest", () => {
 });
 
 test("swapping is refused by the sandboxes switch, like managing", async () => {
-    await expect(swapSandbox("update", "work", undefined, scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(
-        /Manage sandboxes on this device/,
-    );
+    await expect(swapSandbox("update", "work", undefined, scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
 });
 
 // The point of the separate switch, asserted: a user who delegated the fleet did not thereby agree to lose one

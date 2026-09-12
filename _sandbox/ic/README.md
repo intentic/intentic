@@ -24,7 +24,9 @@ once, here, in Rust: a single static binary with no runtime to ship.
 - `ic sandbox update / rebuild / rollback / dev`: swap the container onto a different image, preserving
   /work, /history, the tunnel and every setting; the channel + rollback record makes a bad update reversible.
   A swap that cannot read the approved environment out of a sandbox built from one stops there: dropping an
-  environment is never a side effect of asking for a newer image.
+  environment is never a side effect of asking for a newer image. `update` refuses a sandbox running the
+  dogfood image (`intentic-sandbox:dev`), because a pull would replace what a checkout built rather than
+  refresh it: rebuild it from that checkout (`pnpm rebuild:sandbox <slug>`), or pass `--force` to mean it.
 - `ic sandbox prepare`, the same flow stopped before the container is touched: pull the next image, rebuild
   the approved environment on it, record what was built, and leave the sandbox running what it was running.
   A later `update` recognises the staged build and swaps straight onto it, which is what turns an update from

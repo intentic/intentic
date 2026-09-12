@@ -94,6 +94,10 @@ enum SandboxCommand {
         /// Move onto a release channel and stay there (e.g. stable)
         #[arg(long)]
         channel: Option<String>,
+        /// Update a sandbox built from a checkout anyway, leaving its locally-built image behind — the
+        /// published image replaces it, and only a rebuild from that checkout brings it back
+        #[arg(long)]
+        force: bool,
     },
     /// Download and build the next update WITHOUT applying it, so the update itself is a short restart
     Prepare {
@@ -252,9 +256,11 @@ fn main() {
             SandboxCommand::Connect { setup_code, yes } => {
                 sandbox::connect::run(sandbox::connect::Args { setup_code, yes })
             }
-            SandboxCommand::Update { slug, channel } => {
-                sandbox::recreate::run(sandbox::recreate::Mode::Update { channel }, slug)
-            }
+            SandboxCommand::Update {
+                slug,
+                channel,
+                force,
+            } => sandbox::recreate::run(sandbox::recreate::Mode::Update { channel, force }, slug),
             SandboxCommand::Prepare {
                 slug,
                 channel,
@@ -458,15 +464,33 @@ mod tests {
     #[test]
     fn update_takes_a_channel_by_name_and_refuses_a_bare_one() {
         let Ok(Cli {
-            command: Command::Sandbox(SandboxCommand::Update { slug, channel }),
+            command:
+                Command::Sandbox(SandboxCommand::Update {
+                    slug,
+                    channel,
+                    force,
+                }),
         }) = parse(&["sandbox", "update", "abc123", "--channel", "core-stable"])
         else {
             panic!("update --channel did not parse")
         };
         assert_eq!(slug.as_deref(), Some("abc123"));
         assert_eq!(channel.as_deref(), Some("core-stable"));
+        // The guard that refuses to update a checkout-built sandbox is only lifted by asking for it.
+        assert!(!force);
         // A valueless --channel must not swallow the next thing or default to something.
         assert!(parse(&["sandbox", "update", "abc123", "--channel"]).is_err());
+    }
+
+    #[test]
+    fn update_force_is_a_flag_that_takes_no_value() {
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Update { force: true, .. }),
+        }) = parse(&["sandbox", "update", "abc123", "--force"])
+        else {
+            panic!("update --force did not parse")
+        };
+        assert!(parse(&["sandbox", "update", "abc123", "--force", "yes"]).is_err());
     }
 
     #[test]

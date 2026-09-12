@@ -59,7 +59,7 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
                 channel: "",
                 previousImage: "",
                 definitionSeed: "",
-                devRoot: "",
+                devRoot: undefined,
                 prewarm: false,
             },
             extensionsDir: EXTENSIONS_DIR,

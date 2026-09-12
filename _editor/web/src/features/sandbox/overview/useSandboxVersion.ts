@@ -12,7 +12,7 @@ import { useEnvironment } from "../environment/useEnvironment";
 const INFO_KEY = SANDBOX_INFO.of();
 
 export function useSandboxVersion() {
-    const { serverManaged, state: envState } = useEnvironment();
+    const { serverManaged, state: envState, localImage } = useEnvironment();
 
     const { query } = useSandboxQuery({
         queryKey: INFO_KEY,
@@ -62,6 +62,9 @@ export function useSandboxVersion() {
         runtimeIssue,
         serverManaged,
         slug,
+        // A checkout-built base: the published release is not this sandbox's update, so the card offers the rebuild
+        // that is.
+        localImage,
         // The /info read is still out; without this, "the sandbox hasn't said" looks identical to "the sandbox says
         // nothing".
         isLoading: query.isLoading,

@@ -3,7 +3,7 @@ import type { DeviceCommand, DeviceCommandInput, DeviceCommandResult } from "@in
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import { callTool, forgetPull } from "./device-reports.js";
-import { devRoot, ownSlug } from "./self-host.js";
+import { ownSlug } from "./self-host.js";
 
 // This product's own CLI, run from a button on a device the user connected. The set of actions is closed and the
 // command line is built here: what reaches the argv is a NAME from the contract's enum, a pattern-bounded sandbox id
@@ -130,7 +130,7 @@ const commandFacts = async (services: Services, input: DeviceCommandInput): Prom
     return {
         sandboxId: input.sandboxId,
         ownSlug: ownSlug(services),
-        devRoot: devRoot(services),
+        devRoot: services.config.sandbox.devRoot,
         publicUrl: services.config.sandbox.publicUrl,
         platform: card?.kind === "host" ? card.config.platform : undefined,
         mode: input.mode,

@@ -69,6 +69,11 @@ export const EnvironmentRuntimeDecisionSchema = z.object({
     decision: z.enum(["adopt", "dismiss", "restore"]),
 });
 export type EnvironmentRuntimeDecision = z.infer<typeof EnvironmentRuntimeDecisionSchema>;
+// A base that was built on the host rather than published, which is what a dogfooding checkout runs: the recipe is
+// rebuilt from that checkout, and a registry update would move the sandbox off it. `root` is the checkout's path out
+// there (SANDBOX_DEV_ROOT), absent on a sandbox that was handed a local image without one.
+export const EnvironmentLocalImageSchema = z.object({ base: z.string(), root: z.string().optional() });
+export type EnvironmentLocalImage = z.infer<typeof EnvironmentLocalImageSchema>;
 export const EnvironmentSchema = z.object({
     proposal: environmentFileSchema.optional(),
     // The owner-approved agent-written custom section (.intentic/config/environment.custom.Dockerfile).
@@ -82,6 +87,8 @@ export const EnvironmentSchema = z.object({
     drift: EnvironmentDriftSchema.optional(),
     // Runtime installs worth the owner's attention: recurring across sessions, or present-and-doomed right now.
     recurring: z.array(EnvironmentRecurringSchema).optional(),
+    // Absent on a sandbox running a published image, which is every sandbox but a dogfooding one.
+    localImage: EnvironmentLocalImageSchema.optional(),
 });
 export type Environment = z.infer<typeof EnvironmentSchema>;
 export const EnvironmentApproveSchema = z.object({ hash: z.string().min(1) });

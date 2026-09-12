@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Button, Notice, RowGroup, RowNote, StatusBadge, useOsPreference } from "@intentic/ui";
+import { Button, Code, commandLang, Notice, RowGroup, RowNote, StatusBadge, useOsPreference } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { computed, ref } from "vue";
+import DevRebuild from "../environment/DevRebuild.vue";
 import HostRecreate from "../../capabilities/connect/HostRecreate.vue";
 import { turnInFlight } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
@@ -13,8 +14,20 @@ import { apiClient } from "../../../lib/useApi";
 // HostRecreate); a server-managed sandbox updates on its next deploy instead. Also shown with no update when a
 // rollback exists, and splits download from apply so it can offer a bounded restart once staged.
 
-const { installed, latest, updateAvailable, updateNotes, moreUpdateNotes, breakingNotes, updateStaged, stagedBehind, info, serverManaged, slug } =
-    useSandboxVersion();
+const {
+    installed,
+    latest,
+    updateAvailable,
+    updateNotes,
+    moreUpdateNotes,
+    breakingNotes,
+    updateStaged,
+    stagedBehind,
+    info,
+    serverManaged,
+    slug,
+    localImage,
+} = useSandboxVersion();
 const { cmdOs } = useOsPreference();
 
 // A hosted sandbox has no host to run a command on: this restart replaces the machine's image via the platform,
@@ -51,7 +64,16 @@ const toggleRollback = (): void => {
 const { fleet } = useAgents();
 const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
 
+// Neutral on a checkout-built sandbox: the two versions still differ and the badge still says so, but an amber "take
+// this" on a card telling you not to would be the card arguing with itself.
+const versionBadge = computed(() => (localImage.value !== undefined ? `neutral` : breaking.value ? `danger` : `warning`));
+
 const updateHeading = computed(() => {
+    // A checkout-built sandbox has no update on offer here at all: what it runs comes from a working tree, and the
+    // published release below is named as what it would be traded for.
+    if (localImage.value !== undefined) {
+        return `Built from your checkout`;
+    }
     if (breaking.value) {
         return `Update available: changes how things work`;
     }
@@ -67,7 +89,7 @@ const updateHeading = computed(() => {
         <template #actions>
             <div class="flex flex-wrap items-center justify-end gap-2">
                 <StatusBadge v-if="updateAvailable && updateStaged && !breaking" variant="success" label="downloaded" dot />
-                <StatusBadge v-if="updateAvailable" :variant="breaking ? `danger` : `warning`" :label="`${installed ?? '?'} → ${latest}`" dot />
+                <StatusBadge v-if="updateAvailable" :variant="versionBadge" :label="`${installed ?? '?'} → ${latest}`" dot />
                 <StatusBadge v-else-if="channel === `stable`" variant="success" label="up to date" dot />
                 <StatusBadge v-else-if="channel" variant="neutral" :label="channel" />
             </div>
@@ -75,7 +97,7 @@ const updateHeading = computed(() => {
 
         <RowNote variant="block">
             <div class="flex flex-col gap-4">
-                <p v-if="breaking || updateAvailable" class="text-xs text-muted">
+                <p v-if="(breaking || updateAvailable) && !localImage" class="text-xs text-muted">
                     <template v-if="breaking">
                         This update removes or changes things you may rely on: read what changes below before taking it. Your files (in /work) are
                         kept either way, and you can roll back afterwards:
@@ -109,7 +131,7 @@ const updateHeading = computed(() => {
                     Shown above the cost and the button, so the reader has something to weigh an update against. Same text as the
                     changelog for that release; absent when there's nothing to say.
                 -->
-                <div v-if="updateAvailable && updateNotes.length > 0" class="mt-3 flex flex-col gap-1.5">
+                <div v-if="updateAvailable && updateNotes.length > 0 && !localImage" class="mt-3 flex flex-col gap-1.5">
                     <p class="text-xs font-medium text-content">What's new</p>
                     <ul class="flex flex-col gap-1">
                         <li v-for="note in updateNotes" :key="note" class="flex gap-2 text-2xs text-muted">
@@ -151,8 +173,30 @@ const updateHeading = computed(() => {
                     </p>
                 </template>
                 <template v-else-if="slug">
+                    <!--
+                        A sandbox on a checkout-built base is not updated from the registry: a pull would REPLACE its
+                        image with a published build, not refresh it, so the rebuild that does apply is what's offered
+                        and the trade is spelled out rather than made by a click.
+                    -->
+                    <template v-if="localImage">
+                        <DevRebuild :slug="slug" :base="localImage.base" :root="localImage.root" />
+                        <!-- A command, not a button: taking the published image throws away what a checkout built, which is
+                             a thing to mean rather than to click. Its own block, so it stays copyable whole. -->
+                        <template v-if="updateAvailable">
+                            <p class="text-2xs text-subtle">
+                                The published {{ latest }} is newer than what this sandbox reports, but taking it discards the image built from your
+                                checkout. On the device that runs it:
+                            </p>
+                            <Code
+                                :code="`ic sandbox update ${slug} --force`"
+                                :lang="commandLang(cmdOs)"
+                                label="Take the published image instead"
+                                :wrap="true"
+                            />
+                        </template>
+                    </template>
                     <!-- Gate for a breaking update: the copy-paste command appears only after this explicit click. -->
-                    <template v-if="breaking && !acknowledged">
+                    <template v-else-if="breaking && !acknowledged">
                         <Button label="I've read what changes: show me the update" size="small" severity="secondary" @click="acknowledged = true" />
                     </template>
                     <!--

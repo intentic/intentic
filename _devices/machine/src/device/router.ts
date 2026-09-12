@@ -1,10 +1,20 @@
 import { narrate } from "@intentic/base/async";
-import { type HostScopes, type DeviceFlowLine, type DeviceSandboxFlow, hostContract } from "@intentic/sandbox-contract";
+import { type HostScopes, type DeviceFlowLine, type DeviceSandboxFlow, type DeviceSandboxOp, hostContract } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 import { handleMcpMessage } from "./mcp.js";
 import { hostFacts } from "./tools/describe.js";
 import { runAgentOp } from "./tools/agent.js";
-import { manageSandbox, reconnectSandbox, removeSandbox, reshapeSandbox, runnerFlow, swapSandbox, tailSandboxLogs } from "./tools/sandboxes.js";
+import {
+    devRebuildSandbox,
+    manageSandbox,
+    reconnectSandbox,
+    removeSandbox,
+    reshapeSandbox,
+    runnerFlow,
+    type SandboxSwap,
+    swapSandbox,
+    tailSandboxLogs,
+} from "./tools/sandboxes.js";
 
 // What this device answers, as the oRPC server on the socket it dialled out; the peer that dials and the peer
 // that serves are independent, oRPC's websocket adapter attaches to any socket-like object. `scopes` is a live
@@ -20,49 +30,80 @@ export interface HostRuntime {
 const streamFlow = (run: (onLine: (line: string) => void) => Promise<string>): AsyncGenerator<DeviceFlowLine> =>
     narrate(run, (outcome): DeviceFlowLine => (outcome.ok ? { kind: "result", message: outcome.value } : { kind: "error", message: outcome.error }));
 
-// Which function each op is. Start/stop/restart are a docker call, `logs` is a read, the rest run `ic` and
-// narrate themselves for minutes.
-const flowFor = (
-    { op, slug, hash, resources, setupCode, parentUrl, pair, definition, overlay, overlayHash }: DeviceSandboxFlow,
-    scopes: HostScopes,
-): ((onLine: (line: string) => void) => Promise<string>) => {
-    switch (op) {
-        case "remove":
-            return (onLine) => removeSandbox(slug, scopes, onLine);
-        // The same image with a different share of this machine: the one op with a payload of its own.
-        case "reshape":
-            return (onLine) => reshapeSandbox(slug, resources, scopes, onLine);
-        // setupCode carries the values a drifted sandbox is missing; nothing on this machine can supply them.
-        case "reconnect":
-            return (onLine) => reconnectSandbox(slug, setupCode, scopes, onLine);
-        // A container that belongs to the asking sandbox rather than to a person; `slug` is the runner's name. The
-        // parent's shape rides to `ic` as files, so the runner starts as its twin instead of a bare base image.
-        case "runner-up":
-        case "runner-remove":
-            return (onLine) =>
-                runnerFlow(
-                    op,
-                    slug,
-                    parentUrl,
-                    pair,
-                    {
-                        ...(definition !== undefined ? { definition } : {}),
-                        ...(overlay !== undefined ? { overlay } : {}),
-                        ...(overlayHash !== undefined ? { overlayHash } : {}),
-                    },
-                    scopes,
-                    onLine,
-                );
-        case "logs":
-            return (onLine) => tailSandboxLogs(slug, scopes, onLine);
-        case "prepare":
-        case "update":
-        case "rebuild":
-        case "rollback":
-            return (onLine) => swapSandbox(op, slug, hash, scopes, onLine);
-        default:
-            return async () => await manageSandbox(op, slug, scopes);
-    }
+type Flow = (onLine: (line: string) => void) => Promise<string>;
+type FlowFor = (flow: DeviceSandboxFlow, scopes: HostScopes) => Flow;
+
+// A container that belongs to the asking sandbox rather than to a person; `slug` is the runner's name. The parent's
+// shape rides to `ic` as files, so the runner starts as its twin instead of a bare base image.
+const runnerFlowFor: FlowFor =
+    ({ op, slug, parentUrl, pair, definition, overlay, overlayHash }, scopes) =>
+    (onLine) =>
+        runnerFlow(
+            op === "runner-remove" ? op : "runner-up",
+            slug,
+            parentUrl,
+            pair,
+            {
+                ...(definition === undefined ? {} : { definition }),
+                ...(overlay === undefined ? {} : { overlay }),
+                ...(overlayHash === undefined ? {} : { overlayHash }),
+            },
+            scopes,
+            onLine,
+        );
+
+// The four that move a sandbox between images that already exist, all one `ic` flow; `hash` pins which overlay.
+const swapFlowFor =
+    (swap: SandboxSwap): FlowFor =>
+    ({ slug, hash }, scopes) =>
+    (onLine) =>
+        swapSandbox(swap, slug, hash, scopes, onLine);
+
+// Which function each op is, total over the op enum so a new op cannot be added without one: start/stop/restart are a
+// docker call, `logs` is a read, `dev-rebuild` builds an image from a checkout, and the rest run `ic` and narrate
+// themselves for minutes.
+const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
+    start:
+        ({ slug }, scopes) =>
+        async () =>
+            await manageSandbox("start", slug, scopes),
+    stop:
+        ({ slug }, scopes) =>
+        async () =>
+            await manageSandbox("stop", slug, scopes),
+    restart:
+        ({ slug }, scopes) =>
+        async () =>
+            await manageSandbox("restart", slug, scopes),
+    prepare: swapFlowFor("prepare"),
+    update: swapFlowFor("update"),
+    rebuild: swapFlowFor("rebuild"),
+    rollback: swapFlowFor("rollback"),
+    // The only op that builds an image from source: every other one swaps the sandbox between images that exist.
+    "dev-rebuild":
+        ({ slug, root }, scopes) =>
+        (onLine) =>
+            devRebuildSandbox(slug, root, scopes, onLine),
+    // The same image with a different share of this machine: the one op with a payload of its own.
+    reshape:
+        ({ slug, resources }, scopes) =>
+        (onLine) =>
+            reshapeSandbox(slug, resources, scopes, onLine),
+    remove:
+        ({ slug }, scopes) =>
+        (onLine) =>
+            removeSandbox(slug, scopes, onLine),
+    logs:
+        ({ slug }, scopes) =>
+        (onLine) =>
+            tailSandboxLogs(slug, scopes, onLine),
+    // setupCode carries the values a drifted sandbox is missing; nothing on this machine can supply them.
+    reconnect:
+        ({ slug, setupCode }, scopes) =>
+        (onLine) =>
+            reconnectSandbox(slug, setupCode, scopes, onLine),
+    "runner-up": runnerFlowFor,
+    "runner-remove": runnerFlowFor,
 };
 
 export const createHostRouter = (runtime: HostRuntime) => {
@@ -82,7 +123,7 @@ export const createHostRouter = (runtime: HostRuntime) => {
         mcp: os.mcp.handler(async ({ input }) => await handleMcpMessage(input, runtime.scopes())),
         // Read here, per call, exactly as the MCP handler reads them: a stream opened before the owner flipped a
         // switch must not outlive the decision.
-        runSandboxFlow: os.runSandboxFlow.handler(({ input }) => streamFlow(flowFor(input, runtime.scopes()))),
+        runSandboxFlow: os.runSandboxFlow.handler(({ input }) => streamFlow(FLOWS[input.op](input, runtime.scopes()))),
         // The agent's own update/restart, through the same adapter, and the one stream whose ending is not its answer:
         // both ops kill the process serving this socket. The work is detached first (tools/agent.ts); the reader
         // confirms by the version.

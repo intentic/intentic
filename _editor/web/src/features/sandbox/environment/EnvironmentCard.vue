@@ -10,6 +10,7 @@ import { ENVIRONMENT_KEY, useEnvironment } from "./useEnvironment";
 import { useEnvironmentContents } from "./useEnvironmentContents";
 import { useRole } from "../secrets/useRole";
 import { useSandbox } from "../client/useSandbox";
+import DevRebuild from "./DevRebuild.vue";
 import HostedRebuild from "./HostedRebuild.vue";
 import HostRecreate from "../../capabilities/connect/HostRecreate.vue";
 import EnvironmentContents from "./EnvironmentContents.vue";
@@ -34,7 +35,7 @@ const actionNotice = computed<NoticeModel | undefined>(() =>
 const { canShip: canOperate } = useRole();
 
 // The derived environment state (shared with the shell's rebuild banner via one vue-query fetch).
-const { state, query, isFetching, proposal, pending, applied, recurring, serverManaged, slug } = useEnvironment();
+const { state, query, isFetching, proposal, pending, applied, recurring, serverManaged, slug, localImage } = useEnvironment();
 
 // A hosted sandbox has no host to run `ic` on, so its rebuild is a platform button (HostedRebuild) rather
 // than a device command (HostRecreate). Read off the active sandbox's platform row.
@@ -165,8 +166,19 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
                 <template v-else-if="slug">
                     <p class="text-xs font-medium text-content">To finish, rebuild your sandbox:</p>
                     <HostRecreate :slug="slug" :hash="pending.hash" action="Rebuild" />
+                    <!-- Two rebuilds are on this card for a dogfooding sandbox, and only their inputs differ. -->
+                    <p v-if="localImage" class="text-2xs text-subtle">
+                        That re-applies this recipe on the image it already runs. Rebuilding from your checkout, below, does the same and picks up the
+                        code you've written since.
+                    </p>
                 </template>
             </template>
+
+            <!--
+                A base compiled from a checkout: what a newer image contains comes from there, not from a release. Offered
+                under every state, since source moves without the recipe changing.
+            -->
+            <DevRebuild v-if="localImage && slug && canOperate" :slug="slug" :base="localImage.base" :root="localImage.root" />
 
             <Notice v-if="actionNotice" :of="actionNotice" />
         </RowNote>

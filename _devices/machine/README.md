@@ -23,7 +23,10 @@ The **device half** (`src/device/`, the machine side of the `host` capability):
   with their **share of the machine** (one `docker inspect` per listing: memory and CPU caps, privileged, GPU,
   and who asked for each directive, the approved environment or the owner), start/stop/restart, run the `ic`
   flows (prepare, update, rebuild, rollback, reshape, remove) narrating their output line by line, and tail
-  their logs. `reshape` changes a sandbox's share or privileges through `ic sandbox reshape` on the same
+  their logs. `dev-rebuild` is the one flow that is not an `ic` swap: for a sandbox whose base was compiled
+  from a checkout on this machine, it runs that checkout's own `pnpm rebuild:sandbox <slug>` — the checkout's
+  path comes from the sandbox, which is the only side that knows it, and the slug rides as a shell parameter
+  rather than as script. `reshape` changes a sandbox's share or privileges through `ic sandbox reshape` on the same
   switch as the swaps, because another reshape undoes it; its ask is a closed form (two caps, two switches)
   spelled into `ic` flags here, so nothing a browser or a model sends reaches docker as text. `describe`
   reports the docker engine's size beside the OS, which is the ceiling those caps are held to.

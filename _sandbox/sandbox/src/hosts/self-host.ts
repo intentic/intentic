@@ -10,13 +10,6 @@ import { heldHostDevices } from "./device-reports.js";
 // Slug docker knows this container by, or undefined on a bare dev run with no container name in the env.
 export const ownSlug = (services: Services): string | undefined => sandboxSlugOf(services.config.sandbox.name);
 
-// The checkout a dev container was launched from, as a path on the HOST, not in here (SANDBOX_DEV_ROOT, set by
-// dev-sandbox.sh). Empty on every non-dev sandbox, which is what makes a dev-only action refuse itself.
-export const devRoot = (services: Services): string | undefined => {
-    const root = services.config.sandbox.devRoot.trim();
-    return root === "" ? undefined : root;
-};
-
 // The connected device running this sandbox, from readings already held: never forces a pull, so composing a turn or
 // answering a route costs no round trip to a laptop that may be asleep. Undefined also when nothing has been read yet,
 // so a caller must treat it as "not known to be reachable", not as "no such machine".

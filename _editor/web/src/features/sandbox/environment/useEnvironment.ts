@@ -43,6 +43,9 @@ export function useEnvironment() {
     const serverManaged = computed(() => state.value?.container === ORIGIN_HOST);
     // The sandbox name a rebuild would target, read off its container name by the same contract that writes it.
     const slug = computed(() => sandboxSlugOf(state.value?.container));
+    // Set only on a sandbox whose base was compiled from a checkout: what a newer image comes from is that checkout,
+    // not the registry, so every "update" surface offers the rebuild instead.
+    const localImage = computed(() => state.value?.localImage);
 
-    return { state, query, isFetching, proposal, pending, applied, recurring, serverManaged, slug };
+    return { state, query, isFetching, proposal, pending, applied, recurring, serverManaged, slug, localImage };
 }

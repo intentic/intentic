@@ -166,8 +166,9 @@ through `hostRunningSelf` ([self-host.ts](../../_sandbox/sandbox/src/hosts/self-
 already held so composing a turn never waits on a laptop.
 
 What that buys, per surface: a button where there used to be a command (the update/rebuild/rollback card, the
-container repair, the dev reload, deleting a sandbox from the machine holding it, enrolling desktop sync on a
-device already connected), and a paragraph in every turn's prompt naming the machines it can act on
+container repair, the dev reload, the rebuild of a checkout-built sandbox from its checkout, deleting a sandbox
+from the machine holding it, enrolling desktop sync on a device already connected), and a paragraph in every
+turn's prompt naming the machines it can act on
 ([system-prompt.ts](../../_sandbox/sandbox/src/agent/prompt/system-prompt.ts), plus the same rule in the per-device skill
 pack, [host-skills.ts](../../_sandbox/sandbox/src/hosts/host-skills.ts)).
 

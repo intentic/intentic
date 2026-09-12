@@ -1,8 +1,15 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { type Environment, type EnvironmentRecurring, type EnvironmentRuntimeDecision, isOfficialSandboxImage } from "@intentic/sandbox-contract";
+import {
+    DEV_SANDBOX_IMAGE,
+    type Environment,
+    type EnvironmentRecurring,
+    type EnvironmentRuntimeDecision,
+    isOfficialSandboxImage,
+} from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
+import type { Config } from "../env.config.js";
 import { AUTO_MARKER, autoDraftedTools, draftContent, draftFileName, named, stepFor } from "./auto-drafts.js";
 import { containerBornAtMs, installLive } from "./drift.js";
 import { capabilityFragments, workspaceExtensionFragments } from "./fragment-sources.js";
@@ -173,21 +180,33 @@ const runtimeAttention = async (services: Services, baked: string): Promise<Pick
     };
 };
 
+// What the runner stamped on THIS container, none of it agent-writable: the overlay it was built from, the name a
+// rebuild targets, and whether its base was compiled from a checkout rather than published. That last one is the
+// dogfood shape, and it changes what the Environment card can offer: such a sandbox is rebuilt from its checkout, and
+// an update would move it onto the published image rather than refresh it.
+export const containerFacts = (sandbox: Config["sandbox"]): Pick<Environment, "appliedHash" | "container" | "localImage"> => {
+    const { environmentHash, name, devRoot } = sandbox;
+    const base = baseImageOf(sandbox.baseImage, sandbox.image);
+    return {
+        ...(environmentHash === "" ? {} : { appliedHash: environmentHash }),
+        ...(name === "" ? {} : { container: name }),
+        ...(base === DEV_SANDBOX_IMAGE ? { localImage: { base, ...(devRoot === undefined ? {} : { root: devRoot }) } } : {}),
+    };
+};
+
 export const readEnvironment = async (services: Services): Promise<Environment> => {
     // Folds in drafts since the last read, so the card's hash is the one approve will check against.
     await mergeProposalDrafts(services);
     const proposal = await fileState(services, proposalPath(services));
     const custom = await fileState(services, customPath(services));
     const approved = await fileState(services, approvedPath(services));
-    const { environmentHash: appliedHash, name } = services.config.sandbox;
     // Approved contains custom by composition, so one string answers "already baked or already approved".
     const attention = await runtimeAttention(services, `${custom?.content ?? ""}\n${approved?.content ?? ""}`);
     return {
         ...(proposal !== undefined ? { proposal } : {}),
         ...(custom !== undefined ? { custom } : {}),
         ...(approved !== undefined ? { approved } : {}),
-        ...(appliedHash !== "" ? { appliedHash } : {}),
-        ...(name !== "" ? { container: name } : {}),
+        ...containerFacts(services.config.sandbox),
         ...attention,
     };
 };

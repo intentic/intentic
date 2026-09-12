@@ -57,8 +57,15 @@ const DEV_TAG: &str = "intentic-sandbox:dev";
 pub(crate) const DEFAULT_REGISTRY: &str = "ghcr.io/intentic/sandbox";
 
 pub enum Mode {
-    Rebuild { hash: String },
-    Update { channel: Option<String> },
+    Rebuild {
+        hash: String,
+    },
+    /// `force` is the owner saying they mean to leave a locally-built image behind; without it, an update
+    /// aimed at a sandbox built from a checkout is refused rather than granted (see `built_from_checkout`).
+    Update {
+        channel: Option<String>,
+        force: bool,
+    },
     Rollback,
     Dev,
     Reshape(Reshape),
@@ -136,7 +143,15 @@ pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
 /// offered the channel it deliberately left, low disk is "not now" rather than a warning scrolled past, and
 /// a container parked mid-recreate is left exactly where a person's interrupted command left it.
 pub fn prepare(slug: Option<String>, channel: Option<String>, auto: bool) -> Result<()> {
-    recreate(Mode::Update { channel }, slug, Reach::Staged, auto)
+    recreate(
+        Mode::Update {
+            channel,
+            force: false,
+        },
+        slug,
+        Reach::Staged,
+        auto,
+    )
 }
 
 fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Result<()> {
@@ -204,6 +219,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     let channel = match &mode {
         Mode::Update {
             channel: Some(chosen),
+            ..
         } => chosen.clone(),
         _ => saved
             .channel
@@ -243,6 +259,20 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     {
         println!("intentic: sandbox {slug} runs a pinned or locally-built image — background downloads don't apply to it.");
         return Ok(());
+    }
+
+    /* AN UPDATE DOES NOT REFRESH AN IMAGE BUILT FROM A CHECKOUT, IT REPLACES IT. The dogfood loop's base is
+     * compiled on this machine from a working tree; pulling `:{channel}` over it hands the sandbox somebody
+     * else's build, and the only way back is the checkout. Narrower than the `prepare` skip above on purpose:
+     * a ROLLBACK pin is also a local tag, and updating off one is the ordinary way back to the channel. The
+     * refusal names the rebuild that is this sandbox's update, and `--force` is for meaning to leave. */
+    if matches!(mode, Mode::Update { force: false, .. })
+        && image_override.is_none()
+        && built_from_checkout(current_base.as_deref(), sandbox_image.as_deref())
+    {
+        bail!(
+            "sandbox {slug} runs an image built from a checkout ({DEV_TAG}), so an update would move it onto {registry_image} rather than refresh it.\n       Rebuild it from that checkout instead: `pnpm rebuild:sandbox {slug}`.\n       To move it onto the published image anyway: `ic sandbox update {slug} --force`."
+        );
     }
 
     let old_base_id = if current_base.is_none() || current_base == sandbox_image {
@@ -1125,6 +1155,15 @@ fn restore_parked(container: &str, parked: &str, slug: &str, saved: &record::Cha
 /// from happening behind their back). Their next update puts the base back on the registry, and the timer
 /// resumes with it. A container carrying neither stamp predates the run contract; a background job does not
 /// guess about a box it cannot classify.
+/// Was this sandbox's image built from a checkout on this machine (the dogfood loop's `intentic-sandbox:dev`,
+/// or an environment overlay composed on top of it)? Exactly that one tag, never "any non-registry image":
+/// a rollback pin is a local tag too, and an update off one is how a rolled-back sandbox rejoins its channel.
+/// The daemon's twin, which decides what the Environment card offers, is DEV_SANDBOX_IMAGE in the contract's
+/// policy/overlay-lint.ts.
+fn built_from_checkout(current_base: Option<&str>, sandbox_image: Option<&str>) -> bool {
+    current_base.or(sandbox_image) == Some(DEV_TAG)
+}
+
 fn follows_registry(current_base: Option<&str>, sandbox_image: Option<&str>) -> bool {
     current_base.or(sandbox_image).is_some_and(|followed| {
         followed
@@ -1399,6 +1438,33 @@ mod tests {
         assert!(!follows_registry(None, None));
         // The registry name alone, with no tag, names nothing pullable.
         assert!(!follows_registry(Some("ghcr.io/intentic/sandbox:"), None));
+    }
+
+    #[test]
+    fn only_the_dogfood_base_refuses_a_registry_update() {
+        // The dev loop, with and without an overlay of its own: a pull would hand it a published build, and the
+        // working tree it came from would be the only way back.
+        assert!(built_from_checkout(Some(DEV_TAG), Some(DEV_TAG)));
+        assert!(built_from_checkout(
+            Some(DEV_TAG),
+            Some("intentic-sandbox-dev-env-abc:0123456789ab")
+        ));
+        // No base stamped at all, the shape of a bare dev run: the image itself answers.
+        assert!(built_from_checkout(None, Some(DEV_TAG)));
+        // NARROWER THAN follows_registry ON PURPOSE. Both of these are unpublished too, and updating off either is
+        // ordinary: a rollback pin is how a rolled-back sandbox rejoins its channel, and a pinned build is a choice
+        // of image rather than a checkout.
+        assert!(!built_from_checkout(
+            Some("intentic-sandbox-rollback-abc:0123456789ab"),
+            None
+        ));
+        assert!(!built_from_checkout(None, Some("my-own-build:latest")));
+        assert!(!built_from_checkout(
+            Some("ghcr.io/intentic/sandbox:stable"),
+            Some("intentic-sandbox-env-abc:0123456789ab")
+        ));
+        // A container older than the run contract stamps neither, and is left updatable.
+        assert!(!built_from_checkout(None, None));
     }
 
     #[test]
