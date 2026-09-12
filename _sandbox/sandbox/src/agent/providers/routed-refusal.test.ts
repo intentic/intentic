@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { probeRoutedEndpoint, routedRefusal, routedEndpointOf } from "./routed-refusal.js";
+import { probeRoutedEndpoint, routedRefusal, routedEndpointOf, transientUpstream } from "./routed-refusal.js";
 
 // Pins the distinction the module exists for: a 5xx to ride out vs. one to never wait for, both arriving from the SDK
 // as `server_error` with no body. Strings below are verbatim from this sandbox's translator.
@@ -46,6 +46,44 @@ test.each([
 
 test("an unparseable body that names a refusal is quoted as it stands", () => {
     expect(routedRefusal("auth_unavailable: no auth available")).toBe("auth_unavailable: no auth available");
+});
+
+// The same envelope the plan refusal above arrives in, wrapped around a failure that never reached the model. All
+// three are verbatim from this sandbox's daemon log; the credential served other turns minutes either side of them.
+const DNS_STALL =
+    "unexpected status 503 Service Unavailable: auth_unavailable: no auth available (providers=codex, model=gpt-6-astra; " +
+    'last upstream error: Post "https://chatgpt.com/backend-api/codex/responses": utls: dial upstream: dial tcp: ' +
+    "lookup chatgpt.com on 127.0.0.11:53: read udp 127.0.0.1:36274->127.0.0.11:53: i/o timeout), url: http://127.0.0.1:8789/v1/responses";
+
+const REFUSED_DIAL =
+    "unexpected status 503 Service Unavailable: auth_unavailable: no auth available (providers=codex, model=gpt-6-astra; " +
+    'last upstream error: Post "https://chatgpt.com/backend-api/codex/responses": utls: dial upstream: ' +
+    "dial tcp 104.18.32.47:443: connect: connection refused), url: http://127.0.0.1:8789/v1/responses";
+
+const NO_CAPACITY = JSON.stringify({
+    type: "error",
+    error: {
+        type: "api_error",
+        message:
+            "auth_unavailable: no auth available (providers=antigravity, model=claude-opus-4-6-thinking; last upstream error: " +
+            '{"error":{"code":503,"message":"No capacity available for model claude-opus-4-6-thinking on the server","status":"UNAVAILABLE"}})',
+    },
+});
+
+test.each([
+    ["a stalled name lookup", DNS_STALL],
+    ["a refused dial", REFUSED_DIAL],
+    ["an upstream with no capacity", NO_CAPACITY],
+])("%s wears the refusal envelope but keeps riding the retry ladder", (_case, body) => {
+    expect(transientUpstream(body)).toBe(true);
+    expect(routedRefusal(body)).toBeUndefined();
+});
+
+test("a plan that does not cover the model is not transient, however often it is asked", () => {
+    expect(transientUpstream(AUTH_UNAVAILABLE)).toBe(false);
+    expect(transientUpstream(UPSTREAM_401)).toBe(false);
+    // The envelope every one of these 503s carries: read alone it would make a plan refusal look like an outage.
+    expect(transientUpstream("unexpected status 503 Service Unavailable: auth_unavailable: no auth available")).toBe(false);
 });
 
 test("an endpoint is only routed when all three of its parts are there", () => {

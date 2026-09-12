@@ -26,11 +26,30 @@ export const routedRefusal = (body: string): string | undefined => {
     if (!TERMINAL_REFUSALS.some((marker) => haystack.includes(marker))) {
         return undefined;
     }
+    // The envelope names the credential whatever went wrong, so the cause decides: a stalled dial is this minute's
+    // problem, not this plan's.
+    if (transientUpstream(body)) {
+        return undefined;
+    }
     return upstreamSentence(body) ?? body.trim().slice(0, REFUSAL_CHARS);
 };
 
+// Causes that clear on their own, in the words the proxy's Go transport and the vendors' gateways use. The proxy files
+// the credential away for any of them and then reports "no auth available", which is why the envelope can't be read
+// alone. `Service Unavailable` is deliberately absent: it wraps every one of these 503s, terminal ones included.
+const TRANSIENT_CAUSES =
+    /i\/o timeout|context deadline exceeded|connection (?:refused|reset)|no such host|temporary failure in name resolution|dial (?:tcp|upstream)|\bEOF\b|tls handshake|no capacity available/i;
+
+// True when the failure behind a refusal envelope is transport or capacity, so the credential is worth another call.
+// Reads the cause the proxy names, not the envelope around it.
+export const transientUpstream = (body: string): boolean => TRANSIENT_CAUSES.test(upstreamCause(body) ?? body);
+
 // Long enough for the vendor's sentence, short enough that a JSON wall never becomes the shown error.
 const REFUSAL_CHARS = 400;
+
+// The cause the proxy names after 'last upstream error', minus its own error code and closing paren. Undefined when
+// the text names no upstream cause, which is the envelope standing alone.
+const upstreamCause = (text: string): string | undefined => /last upstream error:\s*(?:[a-z_]+:\s*)?(.+?)\)?\s*$/is.exec(text)?.[1];
 
 // Extracts the vendor's own sentence from the proxy's error envelope: the tail after 'last upstream error' when
 // present, else the whole message. Undefined when there's no JSON to read.
@@ -46,8 +65,7 @@ const upstreamSentence = (body: string): string | undefined => {
     if (message === undefined) {
         return undefined;
     }
-    const upstream = /last upstream error:\s*(?:[a-z_]+:\s*)?(.+?)\)?\s*$/is.exec(message);
-    return (upstream?.[1] ?? message).trim().slice(0, REFUSAL_CHARS);
+    return (upstreamCause(message) ?? message).trim().slice(0, REFUSAL_CHARS);
 };
 
 export interface RoutedEndpoint {

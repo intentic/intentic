@@ -1,6 +1,6 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import { SteeringQueue } from "../../agent/anchors/agent-steering.js";
@@ -546,6 +546,91 @@ test("turn failures and thrown runners become error events followed by done", as
     ]);
 });
 
+// Verbatim from the daemon log, minus the wrapping: the translator's answer when its Go transport never reached the
+// model, which wears the same words as a plan that excludes it.
+const DNS_STALL =
+    "unexpected status 503 Service Unavailable: auth_unavailable: no auth available (providers=codex, model=gpt-6-astra; " +
+    'last upstream error: Post "https://chatgpt.com/backend-api/codex/responses": utls: dial upstream: dial tcp: ' +
+    "lookup chatgpt.com on 127.0.0.11:53: read udp 127.0.0.1:36274->127.0.0.11:53: i/o timeout), url: http://127.0.0.1:8789/v1/responses";
+
+test("one failure reported on both of Codex's channels reddens the turn once", async () => {
+    // app-server publishes a failure on its error notification AND in turn/completed; two frames would post the same
+    // sentence to the chat twice, which is what the user sees.
+    const failure = "Your workspace is out of credits.";
+    const { runner } = fakeCodexRunner([
+        { type: "thread.started", thread_id: "thr-8" },
+        { type: "error", message: failure },
+        { type: "turn.failed", error: { message: failure } },
+    ]);
+    expect(await collect(createTestAgent(runner), request)).toEqual([
+        { kind: "session", sessionId: "thr-8" },
+        { kind: "error", message: failure },
+        { kind: "done" },
+    ]);
+});
+
+test("a turn the translator never got to the model is re-run, not surfaced", async () => {
+    const { runner, calls } = fakeCodexRunner(
+        [
+            { type: "thread.started", thread_id: "thr-a" },
+            { type: "error", message: DNS_STALL },
+            { type: "turn.failed", error: { message: DNS_STALL } },
+        ],
+        [
+            { type: "thread.started", thread_id: "thr-b" },
+            { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Added the route." } },
+        ],
+    );
+    vi.useFakeTimers();
+    try {
+        const events = collect(createTestAgent(runner), request);
+        await vi.advanceTimersByTimeAsync(3_000);
+        expect(await events).toEqual([
+            { kind: "session", sessionId: "thr-a" },
+            { kind: "provider_retry", attempt: 1, maxAttempts: 3, nextAttemptAt: expect.any(Number) as number },
+            { kind: "session", sessionId: "thr-b" },
+            { kind: "delta", text: "Added the route." },
+            { kind: "text_end" },
+            { kind: "done" },
+        ]);
+    } finally {
+        vi.useRealTimers();
+    }
+    expect(calls).toHaveLength(2);
+});
+
+test("the same failure after the turn did work is surfaced, since a re-run would repeat it", async () => {
+    // The prompt is re-sent on a retry, so a transport failure only earns one while the attempt has nothing to lose.
+    const { runner, calls } = fakeCodexRunner([
+        { type: "thread.started", thread_id: "thr-c" },
+        {
+            type: "item.completed",
+            item: { id: "c1", type: "command_execution", command: "pnpm test", aggregated_output: "1 passed", exit_code: 0, status: "completed" },
+        },
+        { type: "turn.failed", error: { message: DNS_STALL } },
+    ]);
+    const events = await collect(createTestAgent(runner), request);
+    expect(events.at(-2)).toEqual({ kind: "error", message: DNS_STALL });
+    expect(calls).toHaveLength(1);
+});
+
+test("a transport failure that outlasts the retries is surfaced in the end", async () => {
+    const { runner, calls } = fakeCodexRunner([
+        { type: "thread.started", thread_id: "thr-d" },
+        { type: "turn.failed", error: { message: DNS_STALL } },
+    ]);
+    vi.useFakeTimers();
+    try {
+        const events = collect(createTestAgent(runner), request);
+        await vi.advanceTimersByTimeAsync(11_000);
+        expect((await events).filter((event) => event.kind === "error")).toEqual([{ kind: "error", message: DNS_STALL }]);
+    } finally {
+        vi.useRealTimers();
+    }
+    // Three attempts: the two waits are the cap, and the third failure is the turn's answer.
+    expect(calls).toHaveLength(3);
+});
+
 test("a streamed error survives the app-server process-exit throw", async () => {
     // The generic process-exit wrapper must not overwrite an actionable message Codex already streamed.
     const runner: CodexRunner = async function* () {
@@ -721,7 +806,9 @@ const approvalTurn = (command: string, respond: (allow: boolean) => void): Codex
     };
 
 // Stub judge: returns one constant verdict for whatever it's shown.
-const judging = (decision: "allow" | "ask" | "refuse"): AgentRequest["judge"] => async () => ({ decision, sentence: "It does the thing." });
+const judging =
+    (decision: "allow" | "ask" | "refuse"): AgentRequest["judge"] =>
+    async () => ({ decision, sentence: "It does the thing." });
 
 test("a refused command declines rather than cancelling the turn", async () => {
     const decisions: boolean[] = [];

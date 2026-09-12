@@ -5,6 +5,7 @@ import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-no
 import { unsentParameterFrame } from "../../agent/run/error-frames.js";
 import { isUnsentParameterRefusalText, mentionsSpentAllowance } from "../../agent/providers/failure-sentences.js";
 import { EXECUTE_PROMPT, type ExecutePhase, type PlanPhase, runPlanEmulation } from "../../agent/prompt/plan-emulation.js";
+import { transientUpstream } from "../../agent/providers/routed-refusal.js";
 import { toolCategoryOf, workspacePath } from "../../agent/tools/tool-calls.js";
 import { openBrowserSession } from "../../browser/sessions/browser-sessions.js";
 import { ROUTED_BROWSER_SERVER } from "../../browser/tools/browser-tools.js";
@@ -270,6 +271,100 @@ const codexFailureFrame = (event: Extract<AgentEvent, { kind: "error" }>): Agent
     // Tags an unusable model so the client reloads the catalog and drops the bad pin, mirroring grok-model-invalid.
     return CODEX_MODEL_INVALID.test(event.message) ? { ...event, code: "codex-model-invalid" as const } : event;
 };
+
+// Waits before re-running a turn the translator never got to the model, in ms: long enough for a stalled resolver or a
+// refused dial to pass, short enough that the user is still watching. One entry per retry, so the list is the cap.
+const UPSTREAM_WAITS_MS = [3_000, 8_000] as const;
+const UPSTREAM_ATTEMPTS = UPSTREAM_WAITS_MS.length + 1;
+
+// The wait before re-running, or undefined when this failure is the turn's answer. Only a transport or capacity failure
+// earns a re-run: the proxy files its credential away for one of those and then refuses in the words of a plan that
+// excludes the model, so the sentence alone would end a turn the next call would serve. A spent allowance is ruled out
+// first, since it belongs in a countdown the user waits out, not in a ladder that spends attempts on the same refusal.
+const upstreamWaitMs = (attempt: number, message: string): number | undefined =>
+    !isRateLimited(message) && transientUpstream(message) ? UPSTREAM_WAITS_MS[attempt - 1] : undefined;
+
+// Frames a turn emits before it does any work: its thread id, its skill list, its usage and limit snapshots. Anything
+// else means a re-run would repeat work the user has already seen.
+const TURN_BOOKKEEPING = new Set<AgentEvent["kind"]>([
+    "session",
+    "commands",
+    "usage",
+    "rate_limit_info",
+    "account_usage",
+    "context_usage",
+    "init",
+    "mode",
+    "provider_retry",
+]);
+
+// One attempt's frames, plus what to do after it: the failure it surfaced, or the wait before re-running when the
+// translator never reached the model. `surfaced` carries in what earlier attempts already showed.
+interface AttemptOutcome {
+    readonly surfaced?: string;
+    readonly waitMs?: number;
+}
+
+const attemptOutcome = (surfaced: string | undefined, waitMs?: number): AttemptOutcome => ({
+    ...(surfaced === undefined ? {} : { surfaced }),
+    ...(waitMs === undefined ? {} : { waitMs }),
+});
+
+// An advisory rides the same channel as a failure without being one: it must never count as the surfaced error, or the
+// real failure that follows arrives silent.
+const isCodexFailure = (event: AgentEvent): event is Extract<AgentEvent, { kind: "error" }> =>
+    event.kind === "error" && event.code !== "codex-advisory";
+
+const thrownMessage = (error: unknown): string => (error instanceof Error ? error.message : "codex agent failed");
+
+// Waits out a retry's backoff, and stops waiting the moment the turn is cancelled: a turn nobody is waiting for must
+// not hold the run open for the rest of its wait.
+const waitFor = (ms: number, signal: AbortSignal | undefined): Promise<void> =>
+    new Promise((resolve) => {
+        const timer = setTimeout(resolve, ms);
+        signal?.addEventListener(
+            "abort",
+            () => {
+                clearTimeout(timer);
+                resolve();
+            },
+            { once: true },
+        );
+    });
+
+async function* consumeAttempt(
+    turn: AsyncGenerator<AgentEvent>,
+    attempt: number,
+    surfaced: string | undefined,
+): AsyncGenerator<AgentEvent, AttemptOutcome> {
+    let shown = surfaced;
+    // A re-run re-sends the prompt, so only an attempt that produced nothing may be retried.
+    let produced = false;
+    try {
+        for await (const event of turn) {
+            if (!isCodexFailure(event)) {
+                produced ||= !TURN_BOOKKEEPING.has(event.kind);
+                yield event;
+                continue;
+            }
+            const waitMs = produced ? undefined : upstreamWaitMs(attempt, event.message);
+            if (waitMs !== undefined) {
+                return attemptOutcome(shown, waitMs);
+            }
+            if (shown === undefined) {
+                shown = event.message;
+                yield codexFailureFrame(event);
+            }
+        }
+    } catch (error) {
+        // The app-server died: its own message stands only when the turn hasn't already said what went wrong.
+        if (shown === undefined) {
+            shown = thrownMessage(error);
+            yield codexFailureFrame({ kind: "error", message: shown });
+        }
+    }
+    return attemptOutcome(shown);
+}
 
 // What phase 1 of a plan turn holds back: the thread id to resume for execution, and the trailing message the user
 // approves as the plan.
@@ -649,55 +744,57 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
             gate,
             ...(request.conversationId === undefined ? {} : { conversationId: request.conversationId }),
         };
-        // If app-server reports an error and then dies, keep that frame over the generic process-exit wrapper.
         const { images, others } = splitAttachments(request.attachments);
-        const steering = request.permissionMode === "plan" ? undefined : channel?.();
-        const turn =
-            request.permissionMode === "plan"
-                ? runCodexPlanTurn(request, runner, turnBase, context, browser, channel)
-                : streamTurn(
-                      runner({
-                          prompt: withFileNote(request.prompt, others),
-                          ...(images.length > 0 ? { images } : {}),
-                          ...(request.sessionId !== undefined ? { sessionId: request.sessionId } : {}),
-                          ...turnBase,
-                          ...(steering !== undefined ? { steering: steering.steering } : {}),
-                          options: threadOptions(request, "danger-full-access", gate.enforcing),
-                          signal: request.signal,
-                      }),
-                      {
-                          ...context,
-                          holdMessages: false,
-                          ...(browser === undefined
-                              ? {}
-                              : { browser: { ...browser, ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }) } }),
-                      },
-                  );
-        let surfacedError = false;
-        try {
-            for await (const event of turn) {
-                if (event.kind === "error") {
-                    // An advisory isn't a failure and must not count as the surfaced error, or a later real failure
-                    // gets swallowed.
-                    if (event.code === "codex-advisory") {
-                        yield event;
-                        continue;
-                    }
-                    surfacedError = true;
-                    yield codexFailureFrame(event);
-                    continue;
-                }
-                yield event;
+        // One whole attempt at the turn, borrowing its own steering channel: a retry runs a new app-server, and the
+        // channel it steers dies with the process it was borrowed for.
+        const runAttempt = async function* (): AsyncGenerator<AgentEvent> {
+            if (request.permissionMode === "plan") {
+                yield* runCodexPlanTurn(request, runner, turnBase, context, browser, channel);
+                return;
             }
-        } catch (error) {
-            if (!surfacedError) {
-                const message = error instanceof Error ? error.message : "codex agent failed";
-                yield codexFailureFrame({ kind: "error", message });
+            const steering = channel?.();
+            try {
+                yield* streamTurn(
+                    runner({
+                        prompt: withFileNote(request.prompt, others),
+                        ...(images.length > 0 ? { images } : {}),
+                        ...(request.sessionId !== undefined ? { sessionId: request.sessionId } : {}),
+                        ...turnBase,
+                        ...(steering !== undefined ? { steering: steering.steering } : {}),
+                        options: threadOptions(request, "danger-full-access", gate.enforcing),
+                        signal: request.signal,
+                    }),
+                    {
+                        ...context,
+                        holdMessages: false,
+                        ...(browser === undefined
+                            ? {}
+                            : { browser: { ...browser, ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }) } }),
+                    },
+                );
+            } finally {
+                // Leaving the channel open would park the steering pump on a promise nothing resolves.
+                steering?.close();
+            }
+        };
+        // The failure this run has already put in front of the user, carried across attempts: Codex reports one failure
+        // on both of its channels and then dies, and no repeat of it may redden the turn again.
+        let surfaced: string | undefined;
+        try {
+            for (let attempt = 1; ; attempt += 1) {
+                const outcome = yield* consumeAttempt(runAttempt(), attempt, surfaced);
+                surfaced = outcome.surfaced;
+                if (outcome.waitMs === undefined) {
+                    break;
+                }
+                yield { kind: "provider_retry", attempt, maxAttempts: UPSTREAM_ATTEMPTS, nextAttemptAt: Date.now() + outcome.waitMs };
+                await waitFor(outcome.waitMs, request.signal);
+                // A turn cancelled while it waited has no second attempt to run.
+                if (request.signal?.aborted === true) {
+                    break;
+                }
             }
         } finally {
-            // Its app-server is gone; leaving the channel open would park the steering pump on a promise nothing
-            // resolves.
-            steering?.close();
             // This turn's outside-content bit dies with it; the next turn starts clean unless it takes something in
             // too.
             release();
