@@ -31,7 +31,7 @@ const toggle = (): void => {
     <div class="flex w-full flex-col overflow-hidden rounded-lg transition-colors" :class="open ? `bg-overlay/35` : ``">
         <button
             type="button"
-            class="group/fold flex w-full items-center gap-2 px-2 py-1 text-left text-2xs text-subtle transition-colors"
+            class="group/fold flex w-full items-center gap-2 px-2 py-1 text-left text-2xs leading-none text-subtle transition-colors"
             :class="!open && `hover:bg-overlay`"
             :aria-expanded="open"
             @click="toggle"
