@@ -37,7 +37,8 @@ test("lists every class from the contract, with nothing to open first", () => {
     // Heading text is the panel's own wording, not from the contract, so it's spelled out here rather than read off
     // the component.
     expect(text(host)).toContain(`What gets stopped`);
-    expect(text(host)).toContain(`${COMMAND_RULE_CATALOG.length} kinds`);
+    // No tally beside the heading: the rows are the answer, and "7 kinds" only competed with the label for the eye.
+    expect(text(host)).not.toContain(`${COMMAND_RULE_CATALOG.length} kinds`);
     for (const rule of COMMAND_RULE_CATALOG) {
         expect(text(host), rule.commandClass).toContain(rule.label);
     }
