@@ -79,8 +79,14 @@ export const hostedCapacity = async (
         prisma.hostedMachine.count(),
         prisma.hostedPoolMachine.count(),
         prisma.hostedBuild.count({ where: { state: BUILD_RUNNING } }),
+        /* NOT FILTERED BY IMAGE, and deliberately so now that a row's image is a DIGEST rather than the
+         * configured tag (hosted-image.ts). Matching the tag here would count every row as drift and report a
+         * stocked pool as empty; matching the digest would mean resolving it, and this function is on the path
+         * that REFUSES a full fleet — which must not make an outbound call before saying no. Reconcile destroys
+         * drifted rows every tick, so a `ready` row with an identity is current except inside one tick, and in
+         * that window over-counting only makes the lane more willing to try. The claim itself is exact. */
         prisma.hostedPoolMachine.count({
-            where: { state: `ready`, image: config.hosted.image, NOT: { token: `` }, ...(region === undefined ? {} : { region }) },
+            where: { state: `ready`, NOT: { token: `` }, ...(region === undefined ? {} : { region }) },
         }),
     ]);
     const used = machines + pooled + building;

@@ -7,6 +7,7 @@ import { sandboxRoutes } from "../sandbox.routes.js";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { HostedAlreadyProvisioned, hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, wakeHosted } from "./hosted.js";
 import { AT_CAPACITY_MESSAGE, forgetProviderCapacity, HostedAtCapacity } from "./hosted-capacity.js";
+import { forgetHostedImage } from "./hosted-image.js";
 import { testIngressConfig } from "../../testing.js";
 
 /* The settle between a machine's config update and its start (hosted.ts SETTLE_MS) is half a second of real
@@ -148,6 +149,9 @@ afterEach(() => {
     vi.unstubAllGlobals();
     // Clears module-level capacity-refusal memory so tests don't leak state between cases.
     forgetProviderCapacity();
+    // Likewise the resolved-image memo: a case that stubs a registry would otherwise hand its digest to every
+    // later case, which reads as those cases claiming stock they should have stepped over.
+    forgetHostedImage();
 });
 
 describe(`hostedEnabled`, () => {
@@ -298,6 +302,9 @@ describe(`provisionHosted`, () => {
     const POOL_APP = `intentic-sbx-${sandboxIdFromToken(POOL_TOKEN)}`;
     const SECOND_TOKEN = `p00l-t0k3n-2`;
     const SECOND_APP = `intentic-sbx-${sandboxIdFromToken(SECOND_TOKEN)}`;
+    // What the registry reports for the configured tag in these tests, and the pinned name that follows from it.
+    const POOL_DIGEST = `sha256:a2efc11a3e6b517557ad0b46cbae6f2b6270b632d93e09cb8b816c7ad8487125`;
+    const PINNED_IMAGE = `ghcr.io/intentic/sandbox@${POOL_DIGEST}`;
     const poolRow = {
         id: `p1`,
         appName: POOL_APP,
@@ -408,7 +415,10 @@ describe(`provisionHosted`, () => {
         await provisionHosted(prisma as never, config(), logger, { ...args, region: `arn` });
         expect(findMany).toHaveBeenCalledWith({
             // Excludes pool rows with no token: such a row names no app the edge could reach.
-            where: { region: `arn`, state: `ready`, image: `ghcr.io/intentic/sandbox:stable`, NOT: { token: `` } },
+            // The IMAGE is no longer part of this query: a row now stores the digest its machine actually holds,
+            // which only a registry round trip can name, and an empty pool must not pay for one to learn it is
+            // empty. The claim filters the rows it got back against the resolved digest instead.
+            where: { region: `arn`, state: `ready`, NOT: { token: `` } },
             orderBy: { createdAt: `asc` },
         });
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(true);
@@ -437,6 +447,65 @@ describe(`provisionHosted`, () => {
         expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(true);
         // Won row stays `claimed`, not put back: a half-branded machine already carries this sandbox's tokens, so
         // reconcile collects it instead.
+        expect(poolDelete).not.toHaveBeenCalled();
+    });
+
+    /* THE CLAIM MUST NOT CHANGE WHAT THE MACHINE IS HOLDING, and this is the assertion that says so.
+     *
+     * A warm machine is worth having because the sandbox image is already on its disk. The claim replaces its
+     * config to give it an identity, and that config names an image — so if it names the configured TAG, Fly
+     * re-resolves the tag, and after a re-push that is a different digest and the machine must pull before it
+     * can start. `startAfterUpdate` allows thirty seconds; a pull is minutes. Measured in production: one
+     * re-push of `sandbox:stable`, then four claims, then four "did not start after its config was replaced"
+     * and four users waiting out the cold build the pool exists to avoid. Naming the row's own digest is the
+     * whole fix, so it is pinned here rather than left to read correctly. */
+    it(`boots the digest the warm machine already holds, never the configured tag`, async () => {
+        const machine = settlingMachine(`m7`);
+        const calls = stubFetch([
+            { match: (_method, url) => url.includes(`/v2/intentic/sandbox/manifests/`), respond: () => new Response(null, { status: 200, headers: { "docker-content-digest": POOL_DIGEST } }) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ id: `m7`, state: `stopped` }) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7/start`), respond: () => machine.start() },
+            { match: (method, url) => method === `GET` && url.includes(`/machines/m7`), respond: () => machine.read() },
+        ]);
+        const prisma = fakePrisma({
+            hostedMachine: { create: vi.fn().mockResolvedValue({}) },
+            hostedPoolMachine: {
+                findMany: vi.fn().mockResolvedValue([{ ...poolRow, image: PINNED_IMAGE }]),
+                updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+                delete: vi.fn().mockResolvedValue({}),
+            },
+        });
+        const result = await provisionHosted(prisma as never, config(), logger, args);
+        expect(result.warm).toBe(true);
+        const booted = calls
+            .filter((entry) => entry.method === `POST` && entry.url.endsWith(`/machines/m7`))
+            .map((entry) => (entry.body as { config: { image: string } }).config.image);
+        expect(booted).toEqual([PINNED_IMAGE]);
+    });
+
+    // The other half: stock whose digest the tag no longer names is not stock. Adopting it is what used to cost
+    // the pull, so the claim steps over it and reconcile destroys it on its own tick.
+    it(`steps over a warm machine on a superseded image and builds cold instead`, async () => {
+        const calls = stubFetch([
+            { match: (_method, url) => url.includes(`/v2/intentic/sandbox/manifests/`), respond: () => new Response(null, { status: 200, headers: { "docker-content-digest": POOL_DIGEST } }) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a1` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m1`, state: `created` }) },
+        ]);
+        const poolDelete = vi.fn().mockResolvedValue({});
+        const prisma = fakePrisma({
+            hostedMachine: { create: vi.fn().mockResolvedValue({}) },
+            hostedPoolMachine: {
+                findMany: vi.fn().mockResolvedValue([{ ...poolRow, image: `ghcr.io/intentic/sandbox@sha256:0000000000000000000000000000000000000000000000000000000000000000` }]),
+                updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+                delete: poolDelete,
+            },
+        });
+        const result = await provisionHosted(prisma as never, config(), logger, args);
+        expect(result.warm).toBe(false);
+        expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(true);
+        // Never touched: not claimed, not destroyed here. Reconcile owns drifted stock.
+        expect(calls.some((entry) => entry.url.endsWith(`/machines/m7`))).toBe(false);
         expect(poolDelete).not.toHaveBeenCalled();
     });
 

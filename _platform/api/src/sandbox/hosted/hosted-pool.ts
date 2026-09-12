@@ -8,6 +8,7 @@ import { JOB_HOSTED_POOL, runExclusive } from "../../jobs-lock.js";
 import { mintConnectToken } from "../mint-sandbox.js";
 import { createApp, createMachine, createVolume, deleteApp, flyWarmRole, FlyError, getMachine, isFlyCapacity } from "./fly/fly.js";
 import { hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
+import { resolveHostedImage } from "./hosted-image.js";
 import { hostedEnabled, hostedInstanceId } from "./hosted.js";
 
 // The warm pool's whole lifecycle except the claim (hosted.ts, since a claim's product is a HostedMachine). A pool
@@ -28,8 +29,8 @@ const TICK_MS = 5 * 60 * 1000;
 
 // Builds one pool machine: app, volume, then a machine whose boot is the prewarm, stamped `building`. The reconcile
 // flips it `ready` once Fly reports the boot stopped; a failed build deletes the app.
-const buildPoolMachine = async (prisma: PrismaClient, config: Config, logger: Logger, region: string): Promise<void> => {
-    const { flyApiToken, flyOrg, image, cpus, memoryMb, volumeGb } = config.hosted;
+const buildPoolMachine = async (prisma: PrismaClient, config: Config, logger: Logger, region: string, image: string): Promise<void> => {
+    const { flyApiToken, flyOrg, cpus, memoryMb, volumeGb } = config.hosted;
     // Identity first, since the app is named after it; same derivation as a built-to-order app's.
     const token = mintConnectToken();
     const appName = `${config.hosted.appPrefix}-${sandboxIdFromToken(token) ?? ``}`;
@@ -90,6 +91,8 @@ const refillStock = async (
     logger: Logger,
     live: Map<string, { id: string; appName: string }[]>,
     target: number,
+    // The digest the pool is being stocked against, resolved once per tick by the caller.
+    image: string,
 ): Promise<void> => {
     let headroom = (await hostedCapacity(prisma, config)).headroom;
     // Both regions hold their own stock (residency); one knob sizes both, deduped for a single-region setup.
@@ -112,7 +115,7 @@ const refillStock = async (
             headroom -= 1;
             // A capacity refusal ends the whole tick: the allowance is the org's, so every region meets the same wall.
             // oxlint-disable-next-line eslint/no-await-in-loop
-            const atCapacity = await buildPoolMachine(prisma, config, logger, region).then(
+            const atCapacity = await buildPoolMachine(prisma, config, logger, region, image).then(
                 () => false,
                 (error: unknown) => {
                     logger.error({ err: error, region }, `hosted pool: build failed; retried next tick`);
@@ -160,10 +163,18 @@ export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, 
         }
         return;
     }
+    /* THE DIGEST THE TAG NAMES RIGHT NOW, which is what makes the drift check below a real one. It used to
+     * compare `row.image` against `config.hosted.image` — a tag against the same tag, equal by construction —
+     * so a re-pushed sandbox image was never detected, the pool kept machines whose rootfs no longer matched
+     * it, and the cost landed on whoever signed up next: their claim rewrote the machine with the tag, Fly
+     * resolved it to the new digest, and the machine had to pull before it could start. Comparing digests
+     * turns that into ordinary background work: a push drains the stale stock and rebuilds it here, on a tick,
+     * with nobody waiting on it. */
+    const stockImage = await resolveHostedImage(config, logger);
     const live = new Map<string, (typeof rows)[number][]>();
     for (const row of rows) {
         // A drifted image or a row with no identity is worth nothing claimable, for the same reason a wrong rootfs is.
-        if (row.image !== config.hosted.image || row.token === ``) {
+        if (row.image !== stockImage || row.token === ``) {
             // oxlint-disable-next-line eslint/no-await-in-loop
             await destroyPoolMachine(prisma, config, row).catch((error: unknown) =>
                 logger.error({ err: error, app: row.appName }, `hosted pool: replacing a drifted machine failed`),
@@ -193,7 +204,7 @@ export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, 
         }
         live.set(row.region, [...(live.get(row.region) ?? []), row]);
     }
-    await refillStock(prisma, config, logger, live, target);
+    await refillStock(prisma, config, logger, live, target, stockImage);
 };
 
 // One locked, error-swallowed reconcile: the interval's tick, and the nudge a claim fires the moment it empties a slot,

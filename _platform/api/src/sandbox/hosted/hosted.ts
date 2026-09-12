@@ -27,6 +27,7 @@ import {
     LIVE_STATES,
 } from "./fly/fly.js";
 import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
+import { resolveHostedImage } from "./hosted-image.js";
 import { hostedSlotsOf } from "./hosted-plan.js";
 
 // Hosted lane orchestration over fly.ts: one machine and one volume in one app per sandbox, named `<prefix>-<12-hex
@@ -140,12 +141,18 @@ export const hostedMachineConfig = (
     machineName: string,
     volumeId: string,
     overlay: HostedOverlay = STOCK_OVERLAY,
+    /* WHICH STOCK IMAGE TO BOOT, when the caller knows a more exact name for it than the configured tag —
+     * which, for a warm machine, is the digest already on its disk (hosted-image.ts). Passing it is what makes
+     * a claim a start rather than a pull: hand Fly the tag again and it re-resolves, and after a re-push that
+     * means a different digest, a fresh pull, and a claim that times out before the machine ever runs.
+     * `baseImage` stays the configured tag on purpose: it is the overlay bookkeeping's key, not the rootfs. */
+    stockImage: string = config.hosted.image,
 ) => {
     const hostname = sandboxHostname(config.ingress.zone, args.connectToken);
     return {
         ...flyMachineConfig({
             name: machineName,
-            image: overlay.image ?? config.hosted.image,
+            image: overlay.image ?? stockImage,
             baseImage: config.hosted.image,
             ...(overlay.image !== null && overlay.environmentHash !== null ? { environmentHash: overlay.environmentHash } : {}),
             guest: { cpus: config.hosted.cpus, memoryMb: config.hosted.memoryMb },
@@ -227,11 +234,22 @@ const claimPoolMachine = async (
     logger: Logger,
     args: HostedProvisionArgs,
 ): Promise<HostedProvisioned | undefined> => {
-    const candidates = await prisma.hostedPoolMachine.findMany({
+    const ready = await prisma.hostedPoolMachine.findMany({
         // Rows with no token predate identities and name no app the edge could route to; reconcile replaces them.
-        where: { region: args.region, state: `ready`, image: config.hosted.image, NOT: { token: `` } },
+        where: { region: args.region, state: `ready`, NOT: { token: `` } },
         orderBy: { createdAt: `asc` },
     });
+    // Resolved only once there is something to match it against: an empty pool is the ordinary cold path, and it
+    // must not pay for a registry round trip to learn it has nothing.
+    if (ready.length === 0) {
+        return undefined;
+    }
+    /* ROWS ON ANY OTHER IMAGE ARE DRIFT, not stock. Their machine holds a digest the tag no longer names, so
+     * adopting one would rewrite its config onto the current image and make it pull before it could start —
+     * thirty seconds of settle budget against a minutes-long pull, which is exactly the failure this whole
+     * change exists to end. Reconcile destroys them on its own tick; the claim simply does not touch them. */
+    const stockImage = await resolveHostedImage(config, logger);
+    const candidates = ready.filter((row) => row.image === stockImage);
     for (const row of candidates) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- each iteration races other claimers for one row; parallelism is the bug
         const won = await prisma.hostedPoolMachine.updateMany({ where: { id: row.id, state: `ready` }, data: { state: `claimed` } });
@@ -243,11 +261,13 @@ const claimPoolMachine = async (
             const connectToken = decryptSecret(config, row.token);
             const adopted: HostedProvisionArgs = { ...args, connectToken };
             // oxlint-disable-next-line eslint/no-await-in-loop
+            // `row.image` and not the configured tag: this machine already holds that exact digest, so replacing
+            // its config changes identity and env only, and it starts instead of pulling.
             await updateMachine(
                 config.hosted.flyApiToken,
                 row.appName,
                 row.machineId,
-                hostedMachineConfig(config, adopted, row.appName, row.volumeId),
+                hostedMachineConfig(config, adopted, row.appName, row.volumeId, STOCK_OVERLAY, row.image),
             );
             // oxlint-disable-next-line eslint/no-await-in-loop
             await startAfterUpdate(config, row);
@@ -318,13 +338,16 @@ export const provisionHosted = async (
         throw new HostedAtCapacity(AT_CAPACITY_MESSAGE);
     }
     const appName = hostedAppName(config, args.sandboxId, args.connectToken);
+    // Pinned like the pool's, so cold and warm machines are the same rootfs and a later config replacement on
+    // this machine (an overlay, a wake) cannot silently re-resolve the tag underneath it.
+    const stockImage = await resolveHostedImage(config, logger);
     await createApp(flyApiToken, flyOrg, appName);
     try {
         const { volumeId } = await createVolume(flyApiToken, appName, region, volumeGb);
         const { machineId } = await createMachine(flyApiToken, appName, {
             name: appName,
             region,
-            config: hostedMachineConfig(config, args, appName, volumeId),
+            config: hostedMachineConfig(config, args, appName, volumeId, STOCK_OVERLAY, stockImage),
         });
         // `wokeAt` opens the hour meter's first stretch: a machine is RUNNING from the moment it is created,
         // so the free lane's clock starts here rather than at the first wake, which is the only version that
