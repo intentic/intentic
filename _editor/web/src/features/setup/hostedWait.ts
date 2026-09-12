@@ -67,18 +67,36 @@ const MINUTE_MS = 60_000;
 // Long enough that a cold first boot isn't accused of being broken; applies only when nothing better is known.
 const SILENT_MS = 3 * MINUTE_MS;
 // Matches the daemon's give-up window (reach-report.ts REACH_GIVE_UP_MS); past this, nothing is still trying.
+// Only a fallback for a daemon too old to send `retrying`: a daemon that says it stopped outranks this clock.
 const UNREACHABLE_MS = 5 * MINUTE_MS;
+// When a probe that keeps failing starts being quoted under the steps: long enough that a boot's ordinary first
+// misses are never narrated, short enough that nobody watches a bare spinner for the whole give-up window.
+const PROBE_LOUD_MS = MINUTE_MS;
 // When each origin's promise is spent, and the note turns to reassurance: warm past ~1 min, cold past its range.
 const WARM_SPENT_MS = 90_000;
 const COLD_SPENT_MS = 5 * MINUTE_MS;
 // Ceiling for a stuck machine: SILENT_MS never fires while the provider reports `starting`/`created`.
 const MACHINE_STUCK_MS = 10 * MINUTE_MS;
 
+/* WHAT THE SANDBOX ITSELF IS SAYING, while it is still saying it. The daemon reports why its own address did
+ * not answer on every probe, and the card used to hold all of it back until the give-up window was spent —
+ * five minutes of a bare spinner over a diagnosis already in hand. Quoted verbatim (reach-report.ts writes it
+ * for this screen) and never as a verdict: the probe is still running, and most of these clear themselves. */
+const stillTrying = (input: HostedWaitInput, inFor: string): string | undefined => {
+    const detail = input.boot?.reach === `unreachable` ? input.boot.detail : undefined;
+    return detail === undefined || input.waitedMs < PROBE_LOUD_MS ? undefined : `${inFor}${detail} Still trying.`;
+};
+
 // Note under the step list. The estimate comes from the machine's origin, never the clock; the clock only tracks
 // how much of that promise is spent.
-const noteFor = (warm: boolean | undefined, waitedMs: number): string => {
+const noteFor = (input: HostedWaitInput): string => {
+    const { warm, waitedMs } = input;
     const minutes = Math.floor(waitedMs / MINUTE_MS);
     const inFor = minutes >= 1 ? `${minutes} min in, ` : ``;
+    const failing = stillTrying(input, inFor);
+    if (failing !== undefined) {
+        return failing;
+    }
     if (warm === false) {
         return waitedMs > COLD_SPENT_MS
             ? `${inFor}longer than usual, but still going. You'll be taken in as soon as it's ready.`
@@ -149,8 +167,13 @@ const finalFailure = (input: HostedWaitInput): Stall | undefined => {
 // Only a verdict once the daemon's window is spent; before that a tunnel is ordinarily still coming up.
 // `checking` counts here too, once spent.
 const unreachableFailure = (input: HostedWaitInput): Stall | undefined => {
-    const stopped = input.boot?.reach === `unreachable` || input.boot?.reach === `checking`;
-    if (!stopped || input.waitedMs <= UNREACHABLE_MS) {
+    const failing = input.boot?.reach === `unreachable` || input.boot?.reach === `checking`;
+    /* THE DAEMON'S OWN GIVE-UP OUTRANKS THIS PAGE'S CLOCK. `retrying: false` means the probe loop has stopped
+     * for good (its window spent, or a posture that can never answer, which is settled the moment it is asked),
+     * so waiting out a window of our own only holds a spinner over a finished verdict — and a page opened late
+     * has no clock worth waiting on anyway. Absent on an older daemon, which is what UNREACHABLE_MS still covers. */
+    const spent = input.boot?.retrying === false || input.waitedMs > UNREACHABLE_MS;
+    if (!failing || !spent) {
         return undefined;
     }
     return {
@@ -234,7 +257,7 @@ export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
         chain?.step === undefined
             ? origin
             : origin.map((step) => (step.key === `booting` ? { ...step, label: `Starting your sandbox: ${chain.step}` } : step));
-    const note = noteFor(input.warm, input.waitedMs);
+    const note = noteFor(input);
     const stall = finalFailure(input) ?? stalledFailure(input);
     const booting = chain !== undefined;
     return stall === undefined

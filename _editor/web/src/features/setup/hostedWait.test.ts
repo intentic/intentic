@@ -13,7 +13,13 @@ const wait = (over: Partial<HostedWaitInput> = {}): HostedWaitInput => ({
     ...over,
 });
 
-const boot = (reach: BootReport[`reach`], detail?: string): BootReport => ({ reach, at: `2026-08-13T10:00:00.000Z`, ...(detail ? { detail } : {}) });
+// `retrying` is the daemon's own account of whether the probe loop is still running; absent on an older one.
+const boot = (reach: BootReport[`reach`], detail?: string, retrying?: boolean): BootReport => ({
+    reach,
+    at: `2026-08-13T10:00:00.000Z`,
+    ...(detail ? { detail } : {}),
+    ...(retrying === undefined ? {} : { retrying }),
+});
 
 // Which step the list is sitting on: the card's whole progress claim in one value.
 const active = (input: HostedWaitInput): string | undefined => hostedWaitView(input).steps.find((step) => step.state === `active`)?.key;
@@ -50,6 +56,34 @@ describe(`hostedWaitView`, () => {
         const view = hostedWaitView(wait({ machine: `started`, announced: true, boot: boot(`checking`), waitedMs: 6 * 60_000 }));
         expect(view.failure?.problem).toContain(`can't be reached`);
         expect(view.failure?.action).toBe(`reboot`);
+    });
+
+    /* THE FIVE MINUTES OF BARE SPINNER THIS CARD USED TO KEEP. The daemon says why its own address did not
+     * answer on every probe, and the card held all of it back until its own clock ran out — which is what an
+     * owner was reading while the lane was down. Quoted as progress, not as a verdict: the probe is running. */
+    it(`quotes the sandbox's own reason while the probe is still running`, () => {
+        const detail = `https://sandbox-abc.sbx.test answered 502 instead of this sandbox: the platform's edge is not routing to this machine.`;
+        const probing = wait({ machine: `started`, announced: true, boot: boot(`unreachable`, detail, true), waitedMs: 90_000 });
+        const view = hostedWaitView(probing);
+        expect(view.failure).toBeUndefined();
+        expect(view.note).toContain(detail);
+        expect(view.note).toContain(`Still trying`);
+        // A boot's first misses are expected to fail, so nothing is said about them at all.
+        expect(hostedWaitView({ ...probing, waitedMs: 20_000 }).note).not.toContain(detail);
+    });
+
+    // The daemon's window and this page's are the same five minutes, but only one of them knows a posture that
+    // can never answer — and a page opened late has no clock worth waiting out.
+    it(`fails as soon as the daemon says it has stopped retrying, without waiting out a window of its own`, () => {
+        const gaveUp = wait({
+            machine: `started`,
+            announced: true,
+            boot: boot(`unreachable`, `nothing will answer at https://sandbox-abc.sbx.test`, false),
+            waitedMs: 20_000,
+        });
+        expect(hostedWaitView(gaveUp).failure?.problem).toContain(`nothing will answer`);
+        expect(hostedWaitView(gaveUp).failure?.action).toBe(`reboot`);
+        expect(active(gaveUp)).toBe(`connecting`);
     });
 
     it(`names a refused check-in with both halves, and outranks every other reading`, () => {

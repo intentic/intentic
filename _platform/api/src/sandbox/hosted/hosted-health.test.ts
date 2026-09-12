@@ -70,9 +70,17 @@ const flyMachine = (platform: string, ageMinutes = 120) => ({
     config: { metadata: { intentic_role: `sandbox`, intentic_platform: platform } },
 });
 
+// What the daemons last said about their own addresses; zero of each is a platform nobody has booted on today.
+type Reach = { reachable: number; unreachable: number };
+
 // Counts mirror the same rows as the listings; pool count is asked twice (whole pool, then claimable).
-const prismaWith = (machines: unknown[], pooled: unknown[]) =>
+const prismaWith = (machines: unknown[], pooled: unknown[], reach: Reach = { reachable: 0, unreachable: 0 }) =>
     ({
+        sandbox: {
+            count: vi.fn().mockImplementation((args: { where: { bootReport: { equals: string } } }) =>
+                Promise.resolve(args.where.bootReport.equals === `reachable` ? reach.reachable : reach.unreachable),
+            ),
+        },
         hostedMachine: { findMany: vi.fn().mockResolvedValue(machines), count: vi.fn().mockResolvedValue(machines.length) },
         hostedPoolMachine: {
             findMany: vi.fn().mockResolvedValue(pooled),
@@ -184,6 +192,39 @@ describe(`hosted health`, () => {
         const health = await sweepHostedHealth(prismaWith([], []), config({ poolSize: 0, regionEu: `` }), logger);
         expect(health?.edge?.fault).toContain(`could not be reached at all`);
         expect(health?.healthy).toBe(false);
+    });
+
+    /* THE OUTAGE EVERY OTHER READING HERE CALLS HEALTHY. On 2026-09-12 the fleet was perfect and the edge
+     * answered its own /health with the current build and `replay: true` — and Fly refused every replay it
+     * sent, because the org had cross-network replays off and each sandbox app is on its own 6PN. The only
+     * witnesses were the sandboxes themselves, each posting `reach: unreachable` before giving up. */
+    it(`is unhealthy when every sandbox that checked in says its own address does not answer`, async () => {
+        stubFly([`intentic-sbx-a`, `intentic-sbx-pool-1`]);
+        const prisma = prismaWith([taken(`intentic-sbx-a`)], [warm(`intentic-sbx-pool-1`)], { reachable: 0, unreachable: 3 });
+        const health = await sweepHostedHealth(prisma, config({ poolSize: 1, regionEu: `` }), logger);
+        expect(health?.edge?.fault).toBeUndefined();
+        expect(health?.missing).toEqual([]);
+        expect(health?.lane).toMatchObject({ reachable: 0, unreachable: 3 });
+        expect(health?.lane.fault).toContain(`cross-network-replays`);
+        expect(health?.healthy).toBe(false);
+    });
+
+    // One box failing on its own is not a lane verdict; the admin panel lists it, nobody is woken for it.
+    it(`keeps quiet about the lane when a single sandbox is the only one failing`, async () => {
+        stubFly([`intentic-sbx-a`, `intentic-sbx-pool-1`]);
+        const prisma = prismaWith([taken(`intentic-sbx-a`)], [warm(`intentic-sbx-pool-1`)], { reachable: 0, unreachable: 1 });
+        const health = await sweepHostedHealth(prisma, config({ poolSize: 1, regionEu: `` }), logger);
+        expect(health?.lane.fault).toBeUndefined();
+        expect(health?.healthy).toBe(true);
+    });
+
+    // One sandbox getting through proves the lane delivers; the rest are their own faults, not the fabric's.
+    it(`keeps quiet about the lane while anybody at all is getting through`, async () => {
+        stubFly([`intentic-sbx-a`, `intentic-sbx-pool-1`]);
+        const prisma = prismaWith([taken(`intentic-sbx-a`)], [warm(`intentic-sbx-pool-1`)], { reachable: 1, unreachable: 4 });
+        const health = await sweepHostedHealth(prisma, config({ poolSize: 1, regionEu: `` }), logger);
+        expect(health?.lane.fault).toBeUndefined();
+        expect(health?.healthy).toBe(true);
     });
 
     // No ingress means no hosted lane at all (hostedEnabled → ingressEnabled), so there is no edge to ask and

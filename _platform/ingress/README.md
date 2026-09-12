@@ -50,7 +50,7 @@ What follows from that is most of this package's character:
 
 Two of the dashed arrows are dashed for the same reason: they are exceptions. The hop to another machine runs only when anycast put a tunnel and its browser on different machines, which for the owner at home they are not. The platform is asked when a tunnel registers and when a hostname nobody holds arrives, and is on no other path — so a platform outage does not take reachability with it. That is what the fail-open in `revocation.ts` protects, and it is the reason reachability moved off the platform in the first place.
 
-The third dashed arrow is the hosted lane, and it is dashed because *this process is not on it*. The edge answers a hosted sandbox's first request with the three replay headers (`fly-replay`, `fly-replay-cache`, `fly-replay-cache-ttl-secs`, `replayHeaders` in server.ts); Fly's proxy replays that request to the sandbox's app and remembers the route for the hostname for `REPLAY_CACHE_TTL_SECS`, keyed on the `Host` header ([fly.toml](fly.toml)), so every later request goes browser → proxy → machine. The app needs no public address and no certificate of its own — a replay reaches an app on its own private network — and the edge derives its name from the id in the hostname (`<prefix>-<id>`), or takes the one the platform names when it can be asked. Two Fly rules shape the code: a request over 1 MB cannot be replayed (only the first request on a hostname per TTL can ever meet this, and from a browser that is a GET), and the app that answers with a replay must not negotiate a WebSocket upgrade itself, so an upgrade is replayed by answering a plain head and letting the machine send the 101.
+The third dashed arrow is the hosted lane, and it is dashed because *this process is not on it*. The edge answers a hosted sandbox's first request with the three replay headers (`fly-replay`, `fly-replay-cache`, `fly-replay-cache-ttl-secs`, `replayHeaders` in server.ts); Fly's proxy replays that request to the sandbox's app and remembers the route for the hostname for `REPLAY_CACHE_TTL_SECS`, keyed on the `Host` header ([fly.toml](fly.toml)), so every later request goes browser → proxy → machine. The app needs no public address and no certificate of its own — a replay reaches an app on its own private network, but only in an org that has **cross-network replays** switched on (below), since every hosted app is created on a 6PN of its own and this process is not on it — and the edge derives its name from the id in the hostname (`<prefix>-<id>`), or takes the one the platform names when it can be asked. Two Fly rules shape the code: a request over 1 MB cannot be replayed (only the first request on a hostname per TTL can ever meet this, and from a browser that is a GET), and the app that answers with a replay must not negotiate a WebSocket upgrade itself, so an upgrade is replayed by answering a plain head and letting the machine send the 101.
 
 Notice also that the edge forwards to **one** port, and the replay delivers to **one** service. It routes to a *sandbox*; which port inside that sandbox answers a given hostname is the container's own business, and the preview proxy is what decides it.
 
@@ -73,6 +73,15 @@ fly certs add '*.sbx.intentic.dev'        # the one wildcard every sandbox hostn
 
 `HOSTED_APP_PREFIX` is the switch for the hosted lane and must equal the api's: it is how the edge names `<prefix>-<id>` when the platform cannot be asked. Leave it unset on an edge that does not run in the Fly org the hosted apps are created in (a replay cannot cross organisations) and on a platform with no hosted lane; a hostname nobody holds is then simply "not connected". Adding a machine needs nothing else set: `FLY_APP_NAME`, `FLY_PRIVATE_IP` and `FLY_MACHINE_ID` are injected, the app's own DNS lists the machines, and [src/peers.ts](src/peers.ts) polls it.
 
+**One org-level setting is a prerequisite of the whole hosted lane**, and it is not in any file here:
+
+```sh
+fly orgs cross-network-replays status --org <org>   # "disabled" means no hosted sandbox is reachable
+fly orgs cross-network-replays enable --org <org> --yes
+```
+
+The platform creates every hosted sandbox as an app on a private network of its own (`fly.ts createApp`, `network: <app name>`) so sandboxes cannot reach each other; this edge runs on the org's default network. Fly refuses a replay across that boundary unless the org allows it — `app 'intentic-ingress' used 'fly-replay' response header to target app '…', but cross-network replays are not allowed` in this app's proxy log — and answers the browser a bodiless 502. Nothing else changes appearance: the machine is up, its front-door check passes, and `/health` here still says `replay: true`. Enabling it permits replays between apps of this org only; it exposes nothing publicly and leaves each sandbox's 6PN isolation intact.
+
 **Verify with `/health`**, which is also how a single-machine deployment gives itself away:
 
 ```jsonc
@@ -83,6 +92,7 @@ fly certs add '*.sbx.intentic.dev'        # the one wildcard every sandbox hostn
 - `peers` is how many *other* machines discovery currently sees. **`0` on an app that has been scaled past one machine means discovery is broken**, and every request for a sandbox held next door is a 502.
 - `remote` is how many ids this machine would forward rather than serve. Persistently `0` alongside a healthy `peers` on a multi-region app is worth a look — it usually means one region is holding every tunnel.
 - `replay` is whether hosted sandboxes are replayed to their apps here. **`false` on the production edge means every hosted sandbox answers 502**, with nothing else looking wrong.
+- `replay: true` says this process *emits* the header, never that Fly honoured it. A refused replay is a bodiless 502 from the proxy, and the only place its reason appears is `fly logs -a intentic-ingress`; the org setting below is the usual cause, and `hosted-health.ts`'s `lane` reading is what notices, by reading the sandboxes' own verdicts rather than this endpoint.
 - An answer with **no `instance`/`peers`/`remote` fields at all** predates the cluster: that build is a single machine no matter how many you scale to.
 - An answer with **no `build` field at all** predates the replay lane, and is the exact shape of the outage below: hosted sandboxes cannot be routed by that process at all.
 

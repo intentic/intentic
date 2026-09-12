@@ -8,8 +8,9 @@ import { hostedFleet } from "./hosted-fleet.js";
 import { hostedEnabled, type OrphanSkip, sortUnknownApps } from "./hosted.js";
 import { HOUR_MS } from "../../durations.js";
 
-// Watches the rows-vs-Fly gap other sweeps act on but never report; read-only, fixes nothing. Five shapes:
+// Watches the rows-vs-Fly gap other sweeps act on but never report; read-only, fixes nothing. Six shapes:
 // - edge: whether the edge in front of the lane is a build that can actually serve it
+// - lane: whether the sandboxes that booted could be reached at their own addresses
 // - missing: a row whose Fly app is gone (several at once is another deployment's reaper eating this fleet)
 // - strangers: apps under our prefix running another deployment's machine; the only orphan shape that mails anybody
 // - litter: our-prefix apps with no row, the reaper's ordinary work; reported, never mailed
@@ -18,6 +19,11 @@ import { HOUR_MS } from "../../durations.js";
 
 // One alert per window per problem shape; the log line still writes every tick.
 const ALERT_EVERY_MS = 6 * HOUR_MS;
+
+// How far back check-ins are read for the lane verdict below.
+const LANE_WINDOW_MS = 24 * HOUR_MS;
+// Below this many failing sandboxes the window says nothing about the lane: one box can be broken on its own.
+const LANE_MIN_SAMPLE = 2;
 
 // Long enough for a cross-region round trip to the edge's public address, short enough not to hold a sweep.
 const EDGE_TIMEOUT_MS = 10_000;
@@ -82,9 +88,43 @@ const edgeReading = async (config: Config): Promise<EdgeReading | undefined> => 
     return { build, replay, fault: edgeFault(where, replay) };
 };
 
+/* THE READING THAT COMES FROM THE SANDBOXES THEMSELVES. Every other check here describes what this platform
+ * configured; each daemon probes its own public address from the inside and posts the verdict
+ * (reach-report.ts), so the rows already hold the one fact nothing else can establish — whether anybody could
+ * get in. A lane that routes to nobody looks perfect from every other angle: rows right, machines up, edge
+ * answering its own /health, and not one sandbox reachable. Read here rather than left to the admin panel,
+ * because a fault nobody is told about is a fault nobody fixes. */
+export interface LaneReading {
+    // Hosted sandboxes that checked in within the window and last said their address answered with their own id.
+    readonly reachable: number;
+    // ... and said it did not.
+    readonly unreachable: number;
+    // In the operator's words; undefined while any sandbox at all is getting through.
+    readonly fault: string | undefined;
+}
+
+// Several sandboxes failing with none succeeding is the lane; a mix is per-sandbox trouble the admin panel lists.
+const laneFault = (reachable: number, unreachable: number): string | undefined =>
+    reachable > 0 || unreachable < LANE_MIN_SAMPLE
+        ? undefined
+        : `${unreachable} hosted sandboxes checked in over the last day and EVERY ONE of them reported that its own public address answers something other than itself, while none reported getting through. The machines are fine and their daemons are running: what is between a browser and them is not delivering. Each sandbox app sits on its own Fly private network, so the first thing to check is that the org still allows cross-network replays (\`fly orgs cross-network-replays status\`), then that the edge's HOSTED_APP_PREFIX still names these apps.`;
+
+const laneReading = async (prisma: PrismaClient, now: () => number): Promise<LaneReading> => {
+    const since = new Date(now() - LANE_WINDOW_MS);
+    // Hosted rows only: a sandbox on somebody's own machine is reached down a tunnel and says nothing about this lane.
+    const checkedIn = (reach: string) => ({ hosted: { isNot: null }, lastSeenAt: { gt: since }, bootReport: { path: [`reach`], equals: reach } });
+    const [reachable, unreachable] = await Promise.all([
+        prisma.sandbox.count({ where: checkedIn(`reachable`) }),
+        prisma.sandbox.count({ where: checkedIn(`unreachable`) }),
+    ]);
+    return { reachable, unreachable, fault: laneFault(reachable, unreachable) };
+};
+
 export interface HostedHealth {
     // The edge in front of the lane; undefined when this platform has no ingress configured to ask.
     readonly edge: EdgeReading | undefined;
+    // What the daemons that booted said about being reachable at their own addresses.
+    readonly lane: LaneReading;
     // The fleet is at its provider ceiling with no warm stock left; the only fault where rows and Fly fully agree.
     readonly capacity: {
         // Undefined when nothing needed counting: no ceiling configured and no refusal to explain.
@@ -104,8 +144,13 @@ export interface HostedHealth {
     readonly healthy: boolean;
 }
 
-export const hostedHealth = async (prisma: PrismaClient, config: Config): Promise<HostedHealth> => {
-    const [fleet, capacity, edge] = await Promise.all([hostedFleet(prisma, config), hostedCapacity(prisma, config), edgeReading(config)]);
+export const hostedHealth = async (prisma: PrismaClient, config: Config, now: () => number = Date.now): Promise<HostedHealth> => {
+    const [fleet, capacity, edge, lane] = await Promise.all([
+        hostedFleet(prisma, config),
+        hostedCapacity(prisma, config),
+        edgeReading(config),
+        laneReading(prisma, now),
+    ]);
     const missing = fleet.filter((entry) => entry.missing).map((entry) => entry.appName);
     // `orphan` says an app has no row, not whose; the reaper's classifier answers that, skipped when nothing to ask.
     const orphans = fleet.filter((entry) => entry.role === `orphan`).map((entry) => entry.appName);
@@ -121,15 +166,17 @@ export const hostedHealth = async (prisma: PrismaClient, config: Config): Promis
     }));
     return {
         edge,
+        lane,
         capacity: { used: capacity.used, cap: capacity.cap, full: capacity.full, reason: capacity.reason },
         missing,
         strangers,
         litter,
         stock,
-        // An edge that cannot serve the lane outranks every row-level reading: the fleet can be perfect and
-        // still reach nobody.
+        // An edge that cannot serve the lane, or a lane no sandbox got through, outranks every row-level
+        // reading: the fleet can be perfect and still reach nobody.
         healthy:
             edge?.fault === undefined &&
+            lane.fault === undefined &&
             !capacity.full &&
             missing.length === 0 &&
             strangers.length === 0 &&
@@ -153,6 +200,7 @@ const capacityLine = (capacity: HostedHealth[`capacity`]): string => {
 const alertSubject = (health: HostedHealth): string => {
     const said = [
         health.edge?.fault === undefined ? `` : `the edge cannot serve hosted sandboxes`,
+        health.lane.fault === undefined ? `` : `no sandbox can be reached at its address`,
         health.capacity.full
             ? `the fleet is full (${health.capacity.used ?? `all`}${health.capacity.cap === 0 ? `` : ` of ${health.capacity.cap}`} machines)`
             : ``,
@@ -162,18 +210,23 @@ const alertSubject = (health: HostedHealth): string => {
     return `intentic hosted: ${said.join(`, `)}`;
 };
 
+// Reachability leads whichever reading established it: to the reader both mean their sandbox does not answer.
+const alertHeading = (health: HostedHealth): string => {
+    if (health.edge?.fault !== undefined || health.lane.fault !== undefined) {
+        return `Hosted sandboxes cannot be reached at their addresses`;
+    }
+    return health.capacity.full ? `The hosted lane has run out of machines` : `The hosted fleet and the database disagree`;
+};
+
 const alertMail = (config: Config, health: HostedHealth) => ({
     subject: alertSubject(health),
     html: linkEmail({
-        heading:
-            health.edge?.fault !== undefined
-                ? `Hosted sandboxes cannot be reached at their addresses`
-                : health.capacity.full
-                  ? `The hosted lane has run out of machines`
-                  : `The hosted fleet and the database disagree`,
+        heading: alertHeading(health),
         body: [
             // First, and in its own words: it is already a diagnosis, and it makes the rest moot while it stands.
             health.edge?.fault ?? ``,
+            // Second: the sandboxes' own verdict, which stands whether or not the edge could explain it.
+            health.lane.fault ?? ``,
             health.capacity.full ? capacityLine(health.capacity) : ``,
             health.missing.length > 0
                 ? `${health.missing.length} sandbox row(s) point at Fly apps that no longer exist: ${health.missing.join(`, `)}.`
@@ -207,6 +260,9 @@ const faultLine = (health: HostedHealth): string => {
     if (health.edge?.fault !== undefined) {
         return `hosted health: ${health.edge.fault}`;
     }
+    if (health.lane.fault !== undefined) {
+        return `hosted health: ${health.lane.fault}`;
+    }
     return health.capacity.full
         ? `hosted health: the lane is full; nobody can be given a new machine until the provider's allowance is raised`
         : `hosted health: the fleet and the database disagree`;
@@ -215,7 +271,11 @@ const faultLine = (health: HostedHealth): string => {
 // Short stock is ordinary weather and isn't mailed; a full fleet is, since no tick fixes it. An edge that
 // cannot serve the lane always is: no tick fixes that either, and while it stands nobody reaches anything.
 const worthMailing = (health: HostedHealth): boolean =>
-    health.edge?.fault !== undefined || health.capacity.full || health.missing.length > 0 || health.strangers.length > 0;
+    health.edge?.fault !== undefined ||
+    health.lane.fault !== undefined ||
+    health.capacity.full ||
+    health.missing.length > 0 ||
+    health.strangers.length > 0;
 
 // One pass: read, log, and mail at most every ALERT_EVERY_MS. Errors are the caller's to swallow; a health check that
 // takes the process down would be worse than the fault it watches for.
@@ -228,11 +288,17 @@ export const sweepHostedHealth = async (
     if (!hostedEnabled(config)) {
         return undefined;
     }
-    const health = await hostedHealth(prisma, config);
+    const health = await hostedHealth(prisma, config, now);
     // Litter rides on both branches: it doesn't affect health, and would otherwise be invisible on a healthy day.
     if (health.healthy) {
         logger.info(
-            { stock: health.stock, litter: health.litter, capacity: health.capacity, edge: health.edge?.build ?? `(not asked)` },
+            {
+                stock: health.stock,
+                litter: health.litter,
+                capacity: health.capacity,
+                edge: health.edge?.build ?? `(not asked)`,
+                lane: health.lane,
+            },
             `hosted health: fleet and database agree, and the edge serves the lane`,
         );
         return health;
@@ -240,6 +306,7 @@ export const sweepHostedHealth = async (
     logger.error(
         {
             edge: health.edge,
+            lane: health.lane,
             capacity: health.capacity,
             missing: health.missing,
             strangers: health.strangers,

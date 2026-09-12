@@ -107,6 +107,8 @@ const call = async (token: string, method: string, path: string, body?: unknown)
 };
 
 // `network: name` gives the app its own private network, so sandboxes never share Fly's org-wide 6PN.
+// The edge crosses that boundary only while the org allows cross-network replays; with the setting off, Fly
+// refuses every replay to these apps and no hosted sandbox is reachable (ingress README, "Deploying").
 export const createApp = async (token: string, org: string, name: string): Promise<void> => {
     await call(token, `POST`, `/apps`, { app_name: name, org_slug: org, network: name });
 };
