@@ -865,18 +865,20 @@ test("a write the tree refuses after a clean preflight reports the path as a con
     await writeFile(join(work, "pkg", "index.ts"), "export {};\n");
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "pkg");
-    // Main holds a real, populated directory where the branch puts a symlink; untracked, so no diff sees it.
-    await mkdir(join(work, "pkg", "node_modules", "dep"), { recursive: true });
-    await writeFile(join(work, "pkg", "node_modules", "dep", "index.js"), "module.exports = {};\n");
+    // Main holds a real, populated directory where the branch puts a symlink; untracked, so no diff sees it. Not a
+    // mirrored dir (node_modules, dist, .venv, generated): a worktree links those in itself and excludes them, so no
+    // delta can carry one.
+    await mkdir(join(work, "pkg", "vendor", "dep"), { recursive: true });
+    await writeFile(join(work, "pkg", "vendor", "dep", "index.js"), "module.exports = {};\n");
     const conversation = await worktrees.ensure("c2", []);
-    await symlink("../shared", join(conversation.cwd, "pkg", "node_modules"));
+    await symlink("../shared", join(conversation.cwd, "pkg", "vendor"));
     await writeFile(join(conversation.cwd, "pkg", "index.ts"), "export const x = 1;\n");
 
     const result = await landAgent(worktrees, isolatedAgent(conversation.repos, { id: "c2" }));
 
     expect(result.landed).toBe(false);
-    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "pkg/node_modules", reason: "workspace" }], clean: 1, mainBranch: "main" }]);
-    expect(existsSync(join(work, "pkg", "node_modules", "dep", "index.js"))).toBe(true);
+    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "pkg/vendor", reason: "workspace" }], clean: 1, mainBranch: "main" }]);
+    expect(existsSync(join(work, "pkg", "vendor", "dep", "index.js"))).toBe(true);
     // Refused before any tip moved: the next land carries the same delta.
     expect(result.repos.find((repo) => repo.repo === "root")?.landedTip).toBeUndefined();
 });

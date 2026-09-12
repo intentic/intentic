@@ -12,6 +12,7 @@ import { refreshChangesAcross } from "../../workspace/changes/changesAcross";
 import { type RequestOptions, sandboxJson, sandboxJsonAt } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "../review/conflictResolution";
+import type { FleetAgent } from "./useAgents-fleet";
 import { useAgents } from "./useAgents";
 import { AGENT_DIFF, GIT_CHANGES, HISTORY_SNAPSHOTS } from "../../../lib/queryKeys";
 
@@ -120,10 +121,29 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
                     : `Nothing left for the agent to rebase, open it to see what the land reported.`,
         };
     }
+    // The app composed this turn, so it runs as the agent, not on whatever the composer in THIS window happens to hold:
+    // a tab minted from a history row or a second window carries the last pick made there, and a turn sent on it both
+    // spends against a model the user never chose for this agent and relabels the card with it afterwards.
+    wearAgentModel(conversation, agent);
     // Dispatched, not awaited: `enqueue` doesn't settle until the turn does, and awaiting it here would hold the
     // caller's busy flag across a multi-minute rebase.
     void conversation.enqueue(resolvePrompt(conflicts));
     return { sent: true };
+};
+
+// What the agent's own turns ran on, as the registry recorded them. Absent for an agent that has never run one, which
+// leaves the tab's picks alone — there is nothing better to put there.
+const wearAgentModel = (conversation: Conversation, agent: FleetAgent | undefined): void => {
+    if (agent?.model === undefined || agent.model === ``) {
+        return;
+    }
+    conversation.wearModel({
+        provider: agent.provider,
+        model: agent.model,
+        harness: agent.harness,
+        ...(agent.effort !== undefined ? { effort: agent.effort } : {}),
+        ...(agent.thinking !== undefined ? { thinking: agent.thinking } : {}),
+    });
 };
 
 // Discard: drop the worktrees, the agent/<id> branches, and the registry entry. Irreversible.

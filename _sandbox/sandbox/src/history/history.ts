@@ -51,7 +51,9 @@ export const repoGitDir = (historyRoot: string, name: string): string => join(hi
 
 // Secret/junk patterns every scope excludes; unanchored, appended after the carve-outs, so they always win.
 const COMMON_PRIVATE_FILES = new Set([".secrets.json", "claude.json"]);
-const COMMON_EXCLUDES = [".env*", "!.env.example", ...COMMON_PRIVATE_FILES, ...[...IGNORED_DIRS].map((dir) => `${dir}/`)];
+// Written without the trailing slash: a directory-only rule does not match a SYMLINK of that name, and an agent's
+// worktree mirrors these dirs in as symlinks. It also matches rootPathIsExcluded below, which has always gone by name.
+const COMMON_EXCLUDES = [".env*", "!.env.example", ...COMMON_PRIVATE_FILES, ...IGNORED_DIRS];
 
 // Executable form of rootExcludes, for a caller with a path rather than a gitignore engine (rejects an incoming tracked
 // path before checkout).

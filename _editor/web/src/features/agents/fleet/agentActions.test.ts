@@ -3,7 +3,15 @@ import { afterEach, expect, it, vi } from "vitest";
 
 // The chat tabs agentActions sends through, swappable per test; hoisted because the module factory below is.
 const chat = vi.hoisted(() => ({
-    conversations: { value: [] as { conversationId: string; isolated: { value: boolean }; enqueue: (prompt: string) => void }[] },
+    conversations: {
+        value: [] as {
+            conversationId: string;
+            isolated: { value: boolean };
+            enqueue: (prompt: string) => void;
+            // Only the errand path calls it, so the tabs the other tests build leave it off.
+            wearModel?: (pin: unknown) => void;
+        }[],
+    },
     // Every prompt that reached a conversation: the assertion for "a turn was actually spent".
     enqueued: [] as string[],
 }));
@@ -52,6 +60,8 @@ vi.mock("../../sandbox/client/sandboxSession", () => ({
 }));
 
 const { askAgentToResolve, landAgent, startAgent } = await import("./agentActions");
+// The board's own roster, which the errand reads the agent's settings off; written per test, cleared with the tabs.
+const { registry } = await import("./useAgents-registry");
 
 // Every request fetch was handed, as the Request the daemon would have received.
 const sent: Request[] = [];
@@ -69,6 +79,7 @@ afterEach(() => {
     sent.length = 0;
     chat.conversations.value = [];
     chat.enqueued.length = 0;
+    registry.value = [];
     vi.unstubAllGlobals();
 });
 
@@ -141,6 +152,33 @@ it("sends the composed prompt when the agent's own rebase could reach it, and fe
     expect(chat.enqueued[0]).toContain(`src/app.ts`);
     expect(chat.enqueued[0]).toContain(`logo.png`);
     expect(chat.enqueued[0]).toContain(`Leave these alone`);
+});
+
+// The app composed this turn, so it is not a pick: it must run on what this agent's own turns ran on. A tab minted from
+// a history row, or one in a second window, carries the last pick made THERE — and a turn sent on that both spends
+// against a model the user never chose for this agent and relabels the card with it, since the registry describes a
+// conversation by the model its last turn used.
+it("runs the errand on the agent's own model, not on the pick this window's tab happens to hold", async () => {
+    const worn: unknown[] = [];
+    chat.conversations.value = [{ ...tab(`a1`), wearModel: (pin: unknown) => worn.push(pin) }];
+    registry.value = [
+        {
+            id: `a1`,
+            status: `conflict`,
+            provider: `claude`,
+            harness: `native`,
+            model: `claude-opus-5`,
+            effort: `xhigh`,
+            thinking: true,
+            updatedAt: 0,
+            attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: true },
+        },
+    ];
+    stubConflicts([{ repo: `root`, clean: 0, paths: [{ path: `src/app.ts`, reason: `diverged` }] }]);
+
+    expect(await askAgentToResolve(`a1`)).toEqual({ sent: true });
+
+    expect(worn).toEqual([{ provider: `claude`, model: `claude-opus-5`, harness: `native`, effort: `xhigh`, thinking: true }]);
 });
 
 // "New agent" and a composed-task press are one action: a caller must not assemble the three steps itself, or an opened

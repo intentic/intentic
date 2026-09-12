@@ -65,8 +65,7 @@ const deps = async (repo: string, pkg: string): Promise<void> => {
 };
 
 // A repo with dependencies installed like a real one: ignore rule, tracked package dirs, node_modules outside git.
-// `rule` must match files, not just dirs, to hide a symlink from `add -A`; pkg/b stays uninstalled for a later
-// re-ensure.
+// `rule` is the repo's own, whatever shape it takes; pkg/b stays uninstalled for a later re-ensure.
 const install = async (repo: string, rule: string): Promise<void> => {
     await writeFile(join(repo, ".gitignore"), `${rule}\n`);
     for (const pkg of ["pkg/a", "pkg/b"]) {
@@ -156,16 +155,65 @@ test("the mirror stays out of git, so retire cannot commit it onto the branch", 
     expect(await sh(join(work, "intent"), "ls-tree", "-r", "--name-only", "agent/c1")).not.toContain("node_modules");
 });
 
-// `node_modules/` matches directories only; a symlink is not a directory, so mirroring it would stage a machine-local
-// absolute path onto the branch.
-test("a repo whose ignore rule is directory-only is left unmirrored", async () => {
+// `node_modules/` matches directories only, never the symlink a mirror is: the repo's own rule cannot keep one out of
+// `git add -A`, and a mirror committed onto the branch blocks every land afterwards with a conflict neither side can
+// clear. The exclude file git keeps beside the repo covers the symlink form, so the mirror is safe here too.
+test("a repo whose ignore rule is directory-only is mirrored, and the mirror still stays out of git", async () => {
     const { work, worktrees } = await setup();
     await install(join(work, "intent"), "node_modules/");
 
     const conversation = await worktrees.ensure("c1", []);
+    const worktree = join(conversation.cwd, "intent");
+
+    expect(lstatSync(join(worktree, "node_modules")).isSymbolicLink()).toBe(true);
+    expect(await readFile(join(worktree, "pkg", "a", "node_modules", "dep", "index.js"), "utf8")).toBe("dep of pkg/a\n");
+    expect(await sh(worktree, "status", "--porcelain")).toBe("");
+
+    await writeFile(join(worktree, "deploy.config.ts"), "agent edit\n");
+    await worktrees.retire("c1", conversation.repos, "t");
+
+    expect(await sh(join(work, "intent"), "ls-tree", "-r", "--name-only", "agent/c1")).not.toContain("node_modules");
+});
+
+// The sequence that stranded a real agent: a namespaced turn leaves an empty mount point where the mirror goes, and
+// `node_modules/` DOES match that directory. Reading the ignore answer off it said "safe to link", the link replaced it
+// with a symlink the same rule does not match, and the pre-turn `add -A` committed a machine-local path onto the
+// branch — which no land can ever apply over the user's own node_modules, by an agent or by hand.
+test("a mount point left by a namespaced turn does not make the symlink that replaces it stageable", async () => {
+    const { work, historyRoot, worktrees } = await setup();
+    await install(join(work, "intent"), "node_modules/");
+    const namespaced = createAgentWorktrees({
+        workspace: workspacePaths(work),
+        worktreesRoot: join(historyRoot, "worktrees"),
+        historyRoot,
+        isolation: { ...noIsolation(work, historyRoot), available: async () => true },
+        logger,
+        perf,
+    });
+    const created = await namespaced.ensure("c1", []);
+    const worktree = join(created.cwd, "intent");
+    expect(lstatSync(join(worktree, "node_modules")).isDirectory()).toBe(true);
+
+    // The next turn is cwd-only (Codex, ACP, Pi, Cursor): the mount point becomes a symlink.
+    await worktrees.ensure("c1", created.repos);
+
+    expect(lstatSync(join(worktree, "node_modules")).isSymbolicLink()).toBe(true);
+    expect(await sh(worktree, "status", "--porcelain")).toBe("");
+
+    await writeFile(join(worktree, "deploy.config.ts"), "agent edit\n");
+    await worktrees.retire("c1", created.repos, "t");
+
+    expect(await sh(join(work, "intent"), "ls-tree", "-r", "--name-only", "agent/c1")).not.toContain("node_modules");
+});
+
+// The repo itself un-ignores the path, and a tracked .gitignore outranks the exclude file, so no link may stand.
+test("a repo that un-ignores a mirror path is left unmirrored", async () => {
+    const { work, worktrees } = await setup();
+    await install(join(work, "intent"), "node_modules/\n!node_modules");
+
+    const conversation = await worktrees.ensure("c1", []);
 
     expect(existsSync(join(conversation.cwd, "intent", "node_modules"))).toBe(false);
-    expect(existsSync(join(conversation.cwd, "intent", "pkg", "a", "node_modules"))).toBe(false);
     expect(await sh(join(conversation.cwd, "intent"), "status", "--porcelain")).toBe("");
 });
 
