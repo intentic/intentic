@@ -11,6 +11,8 @@ const roster = vi.hoisted(() => ({ running: 0 }));
 // Pane state the edit pencil reads: mid-turn streaming and this message's own armed edit both hide it.
 const pane = vi.hoisted(() => ({ streaming: true, editing: undefined as ChatMessage | undefined }));
 const beginEdit = vi.hoisted(() => vi.fn());
+// Hoisted rather than fresh per call, so a card's answer can be read back from the one the pane actually holds.
+const answerQuestion = vi.hoisted(() => vi.fn());
 // What useMarkdown hands the row under test (prose runs, figures); empty unless the test is about the answer body.
 const markdown = vi.hoisted(() => ({
     parts: [] as { readonly kind: string; readonly html?: string; readonly figure?: { readonly kind: string } }[],
@@ -65,14 +67,11 @@ vi.mock("@intentic/ui", async () => {
                 return vue.h(`div`, { class: `figure-stub` }, String(this.figure[`kind`]));
             },
         }),
-        // Renders as `<i name>`, matching the global Icon registration ChatCard's own template expects, so `marks()`
-        // sees one shape for both.
-        Icon: vue.defineComponent({
-            props: { name: { type: String, required: true }, spin: Boolean },
-            render(): unknown {
-                return vue.h(`i`, { name: this.name });
-            },
-        }),
+        // The kit's own stub, not a copy of it: a card reaches Icon through this import OR through the app's global
+        // registration, and `marks()` has to read one shape either way.
+        Icon: (await import(`@intentic/ui/testing`)).IconStub,
+        // No layout under jsdom for a textarea to grow into; the card calls it on every keystroke regardless.
+        growTextarea: () => {},
         // Copy/clipboard behavior is the design system's own test; here only that a card holding a program still
         // mounts.
         CopyButton: vue.defineComponent({
@@ -140,7 +139,7 @@ vi.mock("../panel/useChat-view", async () => {
         usePaneView: () => ({
             conversation,
             decidePlan: vi.fn(),
-            answerQuestion: vi.fn(),
+            answerQuestion,
             cancelQuestion: vi.fn(),
             decidePermission: vi.fn(),
             streaming: computed(() => pane.streaming),
@@ -366,6 +365,73 @@ describe(`ChatMessageView question card`, () => {
         await nextTick();
 
         expect(marks(element)).toEqual([`circle`, `check-circle`, `circle`]);
+    });
+
+    // Every row of the card — live, settled, and the Other row — is drawn by the one rule that owns a card's column
+    // (`.chat-option` in chat.css). A call site that re-answers the geometry, or puts a rim back on an option, is the
+    // drift this pins: the options are a list on the card's own margin, not boxes floating inside it.
+    const optionRows = (element: HTMLElement): HTMLElement[] => [...element.querySelectorAll<HTMLElement>(`.chat-option`)];
+
+    it(`draws every option as a row of the card's own list, with no box of its own`, () => {
+        const element = mount(ask(true));
+        const rows = optionRows(element);
+        expect(rows).toHaveLength(3);
+        expect(rows.map((row) => row.tagName)).toEqual([`BUTTON`, `BUTTON`, `BUTTON`]);
+        expect(rows.filter((row) => /(?:^|\s)(?:border|rounded|bg-)/.test(row.className))).toEqual([]);
+    });
+
+    it(`shows the mock-up an option carries, and nothing where an option carries none`, () => {
+        // Built from the fixture's own first option, so the card under test differs from the others by the preview alone.
+        const card = ask(false).question!;
+        const asked = card.questions[0]!;
+        const previewed = {
+            ...card,
+            questions: [{ ...asked, options: [{ ...asked.options[0]!, preview: `[ Banner ]\n  body` }, ...asked.options.slice(1)] }],
+        };
+        const element = mount({ ...ask(false), question: previewed });
+        const previews = [...element.querySelectorAll(`.chat-option-preview`)];
+        expect(previews).toHaveLength(1);
+        expect(previews[0]?.textContent).toBe(`[ Banner ]\n  body`);
+        expect(previews[0]?.closest(`.chat-option`)?.textContent).toContain(`Chat`);
+    });
+
+    // The answer that leaves the card: picked labels in order, with the typed words standing in for the Other row.
+    it(`answers with the picked labels, and with the reader's own words where Other was picked`, async () => {
+        const element = mount(ask(true));
+        const rows = [...element.querySelectorAll<HTMLButtonElement>(`button[role="checkbox"]`)];
+        rows[0]?.click();
+        rows[2]?.click();
+        await nextTick();
+
+        const field = element.querySelector<HTMLTextAreaElement>(`textarea`);
+        expect(field, `picking Other opens the field it is the payload for`).not.toBeNull();
+        field!.value = `Only the release notes page`;
+        field?.dispatchEvent(new Event(`input`));
+        await nextTick();
+
+        const submit = [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(`Submit`));
+        submit?.click();
+        expect(answerQuestion).toHaveBeenCalledWith(expect.objectContaining({ id: 3 }), {
+            "Which surfaces should the banner appear on?": [`Chat`, `Only the release notes page`],
+        });
+    });
+
+    it(`freezes a settled card on its pick, keeping what it was chosen over`, () => {
+        const settled = mount({
+            ...ask(false),
+            question: {
+                ...ask(false).question!,
+                status: `answered`,
+                answers: { "Which surfaces should the banner appear on?": [`Agents`, `Only the release notes page`] },
+            },
+        });
+        expect(settled.querySelector(`button[role="radio"]`), `a decided card offers nothing to press`).toBeNull();
+
+        const rows = optionRows(settled);
+        expect(rows.map((row) => row.classList.contains(`chat-option-picked`))).toEqual([false, true, true]);
+        expect(rows[0]?.textContent).toContain(`The conversation panel.`);
+        expect(rows[2]?.textContent).toContain(`Only the release notes page`);
+        expect(settled.textContent).toContain(`Answered`);
     });
 });
 

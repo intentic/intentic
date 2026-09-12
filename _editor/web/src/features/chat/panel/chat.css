@@ -687,115 +687,122 @@
     color: var(--color-content);
     border-color: var(--color-line);
 }
-/* ── A DECISION CARD'S INNER SPACING ─────────────────────────────────────────────────────────────
-   ONE rule for all eight cards (ChatCard's callers in ChatMessageView), because this is the exact thing that
-   drifted before: every card wrote `px-3.5 py-3` by hand, so the band under the header was a caller's decision
-   eight times over and no two of them could be corrected together.
-
-   THREE NUMBERS, and each is a different question.
-
-   14px at the sides matches the header's own inset, so the title, the body and the answers sit on one margin.
-
-   8px on top, because the HEADER already contributes 8: the reader sees the sum, and 12+8 opened a band under
-   the title wide enough to read as a missing element — most visibly on the question card, where what follows
-   the header is a document's own name row and the empty strip above it had an edge to be measured against. The
-   same 8 is what .chat-card-doc-head spends, so the two stand off the header identically. 8+8 is
-   the same 16 the card spends above its title (8 padding, and the title's own leading), so the header now sits
-   in an even band rather than a top-heavy one.
-
-   10px at the bottom, not 8 and not 12: a card ends on TEXT, and a line box carries a couple of pixels of
-   leading below its glyphs that padding cannot see. 12 measured even and looked bottom-heavy; 10 plus that
-   slack is what the 8 above the title actually looks like. Where the body is followed by a document or the
-   answers row it is a gap between two blocks rather than the card's edge, and the same 10 reads correctly
-   there too.
-
-   Unlayered, like everything else in this file, so it outranks the Tailwind padding utilities the call sites
-   used to carry: a card that needs a different inside says so here, not in its own template. */
-.chat-card-body {
-    padding: 8px 14px 10px;
+/* ── A DECISION CARD ─────────────────────────────────────────────────────────────────────────────
+   Eight cards (ChatCard's callers in ChatMessageView), none of which carries a ground or a rim any more, so what
+   holds one together is a single text column: the inset it starts at, the box its leading mark sits in, and the
+   gap between the two. Stated once here because the header, the body, the options, the document and the answers
+   all have to agree on it; spelled at each call site, they drifted.
+   Unlayered, like everything else in this file, so it outranks the Tailwind padding utilities a card might carry:
+   a card that needs a different inside says so here, not in its own template. */
+.chat-card {
+    --chat-card-inset: 14px;
+    /* The header icon's own box, which every option mark below it then shares. Written as the icon's type tier
+       rather than as 14px, so the column follows the transcript when a popped-out panel lifts the scale. */
+    --chat-card-mark: var(--text-sm);
+    --chat-card-gap: 8px;
 }
-/* A card's own ROWS: the answers strip under the body (ChatCard), and the status lines and receipts the offer
-   cards add beside it. Same 14px inset as everything else on the card, and a shorter band top and bottom than
-   the body gets, because a row is one line of controls or one line of figures rather than a block of prose. */
+/* Icon, title, and the settled status when there is one: `grid-auto-flow` places that third item in an implicit
+   track, so a card without one spends no gap on it. */
+.chat-card-header {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-columns: var(--chat-card-mark) 1fr;
+    column-gap: var(--chat-card-gap);
+    padding: 8px var(--chat-card-inset);
+}
+/* 8 above and 10 below: the header already spends 8, and a card ends on TEXT, whose line box carries a couple of
+   pixels of leading under the glyphs that padding cannot see. */
+.chat-card-body {
+    padding: 8px var(--chat-card-inset) 10px;
+}
+/* A card's own ROWS: the answers strip under the body, and the status lines and receipts the offer cards add
+   beside it — one line of controls or figures, so a shorter band than the body's. */
 .chat-card-row {
-    padding: 10px 14px;
+    padding: 10px var(--chat-card-inset);
+}
+/* What is SAID, wherever it sits under the header: right of the mark column, so the ask, a sub-question and every
+   option label share one left edge. */
+.chat-card-column {
+    padding-left: calc(var(--chat-card-mark) + var(--chat-card-gap));
 }
 /* ── THE DOCUMENT A CARD IS ABOUT ────────────────────────────────────────────────────────────────
    (ChatDocumentBody in its `in-card` form: the plan being approved, the write-up a question is about.)
-
-   A SECTION OF THE CARD, NOT A BOX ON IT, and the change is the difference between reading the plan and
-   squinting at a quotation of it.
-
-   It used to be the transcript's boxed form — a rounded border and `bg-canvas` — dropped inside `.chat-card-body`
-   and inset 14px on each side. Three things went wrong at once, and every one of them is charged to the
-   longest-form thing in the panel:
-
-     TWO FRAMES. The card's 14px inset, the box's border and its own 12px padding is 27px a side of a docked
-     panel spent on chrome around the one block of text the card exists to show. At the column's body size that
-     is about four characters off every line of the document, on both sides, for the whole length of it.
-
-     AN INVERTED GROUND. `.chat-surface` is a light wash and `bg-canvas` is the panel's darkest surface, so the
-     document sat DARKER than the card containing it. Depth reads as recession: the plan the reader is being
-     asked to approve rendered as an attachment quoted inside the ask, which is exactly backwards.
-
-     A LETTERBOX. 22rem of a scrolling box, inside a scrolling transcript, is a plan read six lines at a time.
-
-   So: no border, no ground of its own, and the card's own 14px margin, which puts the summary above it, the
-   document, and the Approve button below it on ONE left edge. A hairline is the whole boundary — the same
-   statement the box was making, at 1px instead of a frame. The height cap is the call site's (see
-   ChatMessageView) and is viewport-relative now: a card's answers still have to be reachable under it, and how
-   much room that leaves is a fact about the window, not a number in a stylesheet.
-
-   Full-bleed rather than inset, which is what makes a hairline here a divider rather than a floating rule: it
-   spans the card, so it separates two bands of one surface instead of underlining a block sitting on it. */
-.chat-card-doc {
-    /* The card's own side inset, named once here and spent by both rows below, so the document's name row, its
-       prose, the body above it and the answers under it are provably on one margin — which is the entire claim
-       this redraw makes. The number is .chat-card-body's, and that block explains why it is 14. */
-    --chat-card-doc-inset: 14px;
+   A SECTION OF THE CARD, NOT A BOX ON IT. Boxed, it cost two frames around the one block of text the card exists
+   to show — about four characters off every line at the panel's width — and sat on `bg-canvas`, a darker ground
+   than the card, so the plan read as an attachment quoted inside the ask rather than the thing being approved.
+   A hairline is the whole boundary, and it is full-bleed so it divides two bands of one surface instead of
+   underlining a block sitting on it. The height cap is the call site's, and viewport-relative: how much room a
+   card's answers leave is a fact about the window, not a number in a stylesheet. */
+.chat-card-doc-head {
+    padding: 8px var(--chat-card-inset);
 }
-/* WHICH EDGES CARRY A HAIRLINE is the call site's, because it depends on what the document sits between.
-
-   THE BOTTOM EDGE IS THE ONE THAT MATTERS, and it is the one thing the box was genuinely doing: a document
-   longer than the cap is cut mid-sentence by the scroll, and with nothing under it but air, the plan reads as
-   having stopped there rather than as continuing past the fold. A rule says where the band ends; the scrollbar
-   inside it says there is more. Both cards take it.
-
-   The TOP edge is only ambiguous on the plan card, which runs summary → document → answers: prose under prose
-   on one ground, with no other tell, so it gets the line too. The question card runs question → document →
-   options, and its top edge is the card's own HEADER — ChatCard argues (with the reasoning) that a rule under a
-   card's title reads as a banner rather than as a boundary, and none is needed: the document's name row is 2xs,
-   muted and led by a chevron, already a different register from the sentence above it, and it stands off the
-   header by the same 16px the body does. */
+/* No top padding — the name row above already spent it — and the body's own 10 at the bottom.
+   `overscroll-behavior` because this scroller sits inside the transcript's: without it, reaching the end of the
+   document hands the wheel straight to the transcript and throws the card being read off the screen. */
+.chat-card-doc-body {
+    padding: 0 var(--chat-card-inset) 10px;
+    overscroll-behavior: contain;
+}
+/* WHICH EDGES CARRY A HAIRLINE is the call site's, since it depends on what the document sits between. The bottom
+   one always: a document longer than the cap is cut mid-sentence, and with nothing under it the plan reads as
+   having stopped there rather than as continuing past the fold. The top edge is ambiguous only on the plan card,
+   which runs summary → document → answers; the question card's top edge is the header, and a rule under a card's
+   title reads as a banner rather than a boundary. */
 .chat-card-doc-top-rule {
     border-top: 1px solid var(--color-line);
 }
 .chat-card-doc-bottom-rule {
     border-bottom: 1px solid var(--color-line);
 }
-/* The name row, at the same 8px the body spends under the header (see .chat-card-body for why that number and
-   not 12). Folded, this row IS the section and 8/8 reads even; open, the bottom 8 is the air between the
-   document's name and its first line. */
-.chat-card-doc-head {
-    padding: 8px var(--chat-card-doc-inset);
+/* ── THE QUESTION CARD'S OPTIONS ─────────────────────────────────────────────────────────────────
+   A LIST, NOT A STACK OF BOXES. Boxed, four rounded rims sat inside a card that had just lost its own, so the
+   options read as four cards afloat in the transcript and the ask above them as a caption. Full-bleed instead —
+   the negative margin is the body's inset handed back — which is what makes the wash read as a chosen LINE, the
+   same claim `.ui-row-select-on` makes in every other list in the app, rather than as a filled box. The mark
+   rides in the header icon's column, so an option's label starts exactly where the ask does. */
+.chat-option {
+    display: grid;
+    grid-template-columns: var(--chat-card-mark) 1fr;
+    column-gap: var(--chat-card-gap);
+    /* Stated, because a <button> sizes to its content however its display is set: a short option would otherwise
+       take a wash the width of its own words rather than the row's. */
+    width: calc(100% + 2 * var(--chat-card-inset));
+    margin-inline: calc(-1 * var(--chat-card-inset));
+    padding: 7px var(--chat-card-inset);
+    text-align: left;
 }
-/* The prose. No top padding — the row above already spent it — and the body's own 10px at the bottom, for the
-   line-box leading that padding cannot see.
-   `overscroll-behavior: contain` because this is a scroller inside the transcript's scroller: without it,
-   reaching the end of the plan hands the wheel straight to the transcript and throws the card being read off
-   the screen. */
-.chat-card-doc-body {
-    padding: 0 var(--chat-card-doc-inset) 10px;
-    overscroll-behavior: contain;
+/* A mark a tier under the text it leads sits high in its own line box; this is what puts it on the label's line. */
+.chat-option-mark {
+    margin-top: 2px;
 }
-
-/* The taken option on a DECIDED card. Quieter than the live `.ui-row-select-on` it replaces when the card
-   settles — a live selection is a state the user is still moving, this one is settled — and its border is what
-   separates it from the options it was chosen over, which carry none. No :hover pair on purpose: a decided
-   card responds to nothing, which is also why it is not a `.ui-row-select` at all. */
+/* The answer being typed, in the column the labels stand in. The field keeps its own rim: it is the one thing on
+   the card you put something INTO, and a frame is what says so. */
+.chat-option-field {
+    padding: 4px var(--chat-card-inset) 2px calc(var(--chat-card-inset) + var(--chat-card-mark) + var(--chat-card-gap));
+}
+/* Something to look at while deciding — a mock-up, a diff, a config. A wash rather than a plate for the same
+   reason the document above is not boxed: `bg-canvas` is darker than the card, so a sample drawn on it recedes
+   out of the option it belongs to. `pre` keeps an ASCII layout's own shape, and the mono tier runs one under the
+   sans it sits beside, where it reads at the same size. */
+.chat-option-preview {
+    margin-top: 4px;
+    max-height: 14rem;
+    overflow: auto;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-content) 7%, transparent);
+    padding: 6px 8px;
+    color: var(--color-muted);
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    line-height: 1.5;
+    white-space: pre;
+}
+/* The taken option on a DECIDED card: quieter than the live `.ui-row-select-on` it replaces, because a live
+   selection is a state the user is still moving and this one is settled. With no rim left anywhere on the card,
+   this wash is the whole of what separates it from the options it was chosen over. No :hover pair on purpose — a
+   decided card responds to nothing, which is also why it is not a `.ui-row-select` at all. */
 .chat-option-picked {
     background: color-mix(in srgb, var(--color-primary-500) 10%, transparent);
-    border-color: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
 }
 /* THE HELD COMMAND'S OWN COLOURS (ChatCommandBlock). Every Shiki surface in this app is coloured twice over:
    an inline `color` carrying the LIGHT theme's token, and a `--shiki-dark` custom property beside it carrying

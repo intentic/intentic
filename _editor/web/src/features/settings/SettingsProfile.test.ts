@@ -113,8 +113,9 @@ it(`sends the avatar without the name`, async () => {
 
 // The plan renders as a chip beside the name, never a link: Billing already has its own tab.
 // Selected by the pill's shape, not its text, so the word assertion isn't circular.
+// `ui-status-pill` is the badge's own geometry (utilities.css); `lowercase` is what tells it from any other pill.
 const chip = (el: HTMLElement): HTMLElement | undefined =>
-    [...el.querySelectorAll<HTMLElement>(`span.rounded-full`)].find((s) => s.className.includes(`lowercase`));
+    [...el.querySelectorAll<HTMLElement>(`span.ui-status-pill`)].find((s) => s.className.includes(`lowercase`));
 
 it(`states the plan beside the name, as a chip rather than a link`, () => {
     const el = mount();

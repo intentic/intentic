@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { type IconName, growTextarea, MarkdownFigure, useDevice, ui } from "@intentic/ui";
+import { MarkdownFigure, useDevice, ui } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
 import { basename } from "@intentic/ui/path";
 import { CAPABILITY_CATALOG } from "@intentic/capability-catalog";
-import { type AskQuestion, type CardDocument, planParts, type TranscriptPlan, type TranscriptTerminalHelp } from "@intentic/sandbox-contract";
-import { type ComponentPublicInstance, computed, nextTick, ref, watch } from "vue";
+import { type CardDocument, planParts, type TranscriptPlan, type TranscriptTerminalHelp } from "@intentic/sandbox-contract";
+import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import { attachmentPreview } from "../drafts/attachmentPreviews";
-import { clearQuestionDraft, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "../drafts/questionDraft";
 import { effectiveAutoLand, effectiveOutageResume, formatElapsed } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { errandOf } from "../run/errands";
@@ -28,12 +27,13 @@ import { useTerminalPanel } from "../../terminal/useTerminalPanel";
 import { useSandboxSession } from "../../sandbox/client/sandboxSession";
 import { useToolCalls } from "../tools/useToolCalls";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
-import ChatCard from "./ChatCard.vue";
+import ChatCard from "./cards/ChatCard.vue";
 import ChatCommandBlock from "../tools/ChatCommandBlock.vue";
-import ChatDecisionButton from "./ChatDecisionButton.vue";
-import ChatDocumentBody from "./ChatDocumentBody.vue";
-import { capabilityStatus, credentialLane, helpStatus, offerStatus, permissionStatus, planStatus, questionStatus } from "./cardStatus";
+import ChatDecisionButton from "./cards/ChatDecisionButton.vue";
+import ChatDocumentBody from "./cards/ChatDocumentBody.vue";
+import { capabilityStatus, credentialLane, helpStatus, offerStatus, permissionStatus, planStatus } from "./cards/cardStatus";
 import ChatFold from "./ChatFold.vue";
+import ChatQuestionCard from "./cards/ChatQuestionCard.vue";
 import ChatThinking from "./ChatThinking.vue";
 import ChatTodoList from "./ChatTodoList.vue";
 import ChatToolRows from "../tools/ChatToolRows.vue";
@@ -206,145 +206,6 @@ const pendingWait = computed(() => {
 
 // Clock for a pending notice wait only; stops once the wait ends.
 const now = useNow(() => pendingWait.value !== undefined);
-
-// Question card state, keyed by index, mirrored to localStorage per requestId (questionDraft). "Other" is a normal
-// option, not parallel state.
-const selections = ref<Record<number, string[]>>({});
-const otherTexts = ref<Record<number, string>>({});
-// One free-text field per row, indexed so picking a row can focus its caret.
-const otherInputs = ref<Record<number, HTMLTextAreaElement | undefined>>({});
-// Manual textarea auto-grow, as in the composer: reset to one line, then grow to content.
-const growOther = (el: HTMLTextAreaElement | undefined): void => {
-    growTextarea(el, 192);
-};
-// Also grows on attach, not just input, since a restored draft can arrive with text already in it.
-const setOtherInput = (index: number, el: Element | ComponentPublicInstance | null): void => {
-    const field = el instanceof HTMLTextAreaElement ? el : undefined;
-    otherInputs.value[index] = field;
-    void nextTick(() => growOther(field));
-};
-
-// Loads the draft when a pending card appears; clears it once the card settles (answered, dismissed, cancelled).
-watch(
-    () => [props.message.question?.requestId, props.message.question?.status] as const,
-    ([requestId, status]) => {
-        if (requestId === undefined) {
-            return;
-        }
-        if (status !== `pending`) {
-            clearQuestionDraft(requestId);
-            return;
-        }
-        // Normalizes the stored draft to picks the current card accepts (questionDraft.normalize).
-        const draft = readQuestionDraft(requestId, props.message.question?.questions ?? []);
-        selections.value = draft.selections;
-        otherTexts.value = draft.otherTexts;
-    },
-    { immediate: true },
-);
-
-// Both refs are replaced wholesale on every edit (see toggleOption/setOther), so a shallow watch sees them all.
-watch([selections, otherTexts], ([picks, texts]) => {
-    const question = props.message.question;
-    if (question?.status !== `pending`) {
-        return;
-    }
-    writeQuestionDraft(question.requestId, { selections: picks, otherTexts: texts });
-});
-
-const isSelected = (index: number, label: string): boolean => (selections.value[index] ?? []).includes(label);
-
-// Toggles a pick for any row including Other: single-select replaces, multi-select accumulates, re-click clears.
-const toggleOption = (question: AskQuestion, index: number, label: string): void => {
-    const current = selections.value[index] ?? [];
-    const next = question.multiSelect
-        ? current.includes(label)
-            ? current.filter((l) => l !== label)
-            : [...current, label]
-        : current.includes(label)
-          ? []
-          : [label];
-    selections.value = { ...selections.value, [index]: next };
-    // Focuses the Other field once it renders.
-    if (label === OTHER_LABEL && next.includes(OTHER_LABEL)) {
-        void nextTick(() => otherInputs.value[index]?.focus());
-    }
-};
-
-// Marker icon: square/checkbox for multi-select, circle/radio for single-select; shape, text, and ARIA role agree.
-const markFor = (question: AskQuestion, selected: boolean): IconName => {
-    if (question.multiSelect) {
-        return selected ? `check-square` : `square`;
-    }
-    return selected ? `check-circle` : `circle`;
-};
-
-// Backs the multi-select hint's running count.
-const pickedCount = (index: number): number => (selections.value[index] ?? []).length;
-
-const otherValue = (index: number): string => otherTexts.value[index] ?? ``;
-const setOther = (index: number, value: string): void => {
-    otherTexts.value = { ...otherTexts.value, [index]: value };
-};
-const onOtherInput = (index: number, event: Event): void => {
-    const el = event.target as HTMLTextAreaElement;
-    setOther(index, el.value);
-    growOther(el);
-};
-
-// Other picked but blank counts as unfinished, blocking Submit rather than being dropped silently.
-const otherPending = (index: number): boolean => isSelected(index, OTHER_LABEL) && otherValue(index).trim().length === 0;
-
-// Resolves picks to answer values, swapping the Other sentinel for its typed text.
-const picksFor = (index: number): string[] =>
-    (selections.value[index] ?? []).flatMap((label) => {
-        if (label !== OTHER_LABEL) {
-            return [label];
-        }
-        const typed = otherValue(index).trim();
-        return typed.length > 0 ? [typed] : [];
-    });
-
-const canSubmit = computed(() => props.message.question?.questions.every((_, index) => picksFor(index).length > 0 && !otherPending(index)) ?? false);
-
-// Returns the promise so Submit stays disabled until the answer settles.
-const submitAnswers = async (): Promise<void> => {
-    const question = props.message.question;
-    if (!question || !canSubmit.value) {
-        return;
-    }
-    const answers: Record<string, string[]> = {};
-    question.questions.forEach((q, index) => {
-        answers[q.question] = picksFor(index);
-    });
-    await answerQuestion(props.message, answers);
-};
-
-// Enter submits, Shift+Enter breaks the line; mobile Enter always inserts a newline.
-const otherKeydown = (event: KeyboardEvent): void => {
-    if (event.key !== `Enter` || event.isComposing || event.shiftKey || mobile.value) {
-        return;
-    }
-    event.preventDefault();
-    submitAnswers();
-};
-
-// A decided question keeps every option, marking which were picked; a typed answer joins as an option-less row.
-interface DecidedOption {
-    readonly label: string;
-    readonly description?: string;
-    readonly preview?: string;
-    readonly picked: boolean;
-}
-
-const decidedOptions = (question: AskQuestion): DecidedOption[] => {
-    const picks = props.message.question?.answers?.[question.question] ?? [];
-    const typed = picks.filter((pick) => !question.options.some((option) => option.label === pick));
-    return [
-        ...question.options.map((option) => ({ ...option, picked: picks.includes(option.label) })),
-        ...typed.map((label) => ({ label, picked: true })),
-    ];
-};
 
 // Edit pencil shows only for a user prompt with a rewindIndex, never mid-turn (agent/rewind.ts), and never while this
 // message's own edit is open.
@@ -745,154 +606,15 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </template>
             </ChatCard>
 
-            <!-- Question text wraps in full rather than truncating; a multi-question card uses a generic title (ChatCard's `prose` mode). -->
-            <ChatCard
+            <!-- Its own component: the ask, its options and the answer being composed are a card's worth of state (ChatQuestionCard). -->
+            <ChatQuestionCard
                 v-if="message.question"
-                icon="comments"
-                icon-class="text-link"
-                prose
-                :title="message.question.questions.length > 1 ? 'A few questions' : (message.question.questions[0]?.question ?? '')"
-                :status="questionStatus(message.question)"
-            >
-                <!-- The write-up this turn produced that the question's options refer to (agent.ts attaches it); folds once already drawn elsewhere. -->
-                <ChatDocumentBody
-                    v-if="message.question.document"
-                    :document="message.question.document"
-                    foldable
-                    in-card
-                    :open="!documentDrawn(message.question.document)"
-                    max-height="min(58dvh, 40rem)"
-                    class="chat-card-doc-bottom-rule"
-                />
-                <div class="chat-card-body flex flex-col gap-4">
-                    <div v-for="(question, index) in message.question.questions" :key="index" class="flex flex-col gap-2">
-                        <span v-if="message.question.questions.length > 1" class="chat-question-title text-xs font-medium text-content">{{
-                            question.question
-                        }}</span>
-
-                        <div v-if="message.question.status === 'pending'" class="flex flex-col gap-1.5">
-                            <!--
-                                States in words what the square marks already say by shape, shown only for multi-select; becomes a running count once
-                                picked.
-                            -->
-                            <span v-if="question.multiSelect" class="text-2xs text-subtle">{{
-                                pickedCount(index) > 0 ? `${pickedCount(index)} selected` : "Select all that apply"
-                            }}</span>
-                            <!--
-                                ARIA roles mirror the visual marks; the Other text field stays outside the group since it's that row's payload, not a
-                                separate option.
-                            -->
-                            <div class="flex flex-col gap-1.5" :role="question.multiSelect ? 'group' : 'radiogroup'" :aria-label="question.question">
-                                <button
-                                    v-for="option in question.options"
-                                    :key="option.label"
-                                    type="button"
-                                    :role="question.multiSelect ? 'checkbox' : 'radio'"
-                                    :aria-checked="isSelected(index, option.label)"
-                                    class="ui-row-select flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left"
-                                    :class="{ 'ui-row-select-on': isSelected(index, option.label) }"
-                                    @click="toggleOption(question, index, option.label)"
-                                >
-                                    <Icon
-                                        class="mt-0.5 text-2xs"
-                                        :name="markFor(question, isSelected(index, option.label))"
-                                        :class="isSelected(index, option.label) ? 'text-primary-500' : 'text-subtle'"
-                                    />
-                                    <!-- Muted, not subtle: the description is read before choosing, not glanced past. -->
-                                    <span class="flex min-w-0 flex-col gap-0.5">
-                                        <span class="text-xs font-medium text-content">{{ option.label }}</span>
-                                        <span class="text-2xs leading-snug text-muted">{{ option.description }}</span>
-                                        <!--
-                                            Preformatted mockup (ASCII layout, diff, config) so options are compared side by side, all visible at
-                                            once.
-                                        -->
-                                        <pre
-                                            v-if="option.preview"
-                                            class="scrollbar-thin mt-1 max-h-56 overflow-auto whitespace-pre rounded-md border border-line bg-canvas px-2 py-1.5 font-mono text-[0.65rem] leading-snug text-muted"
-                                            >{{ option.preview }}</pre>
-                                    </span>
-                                </button>
-                                <!--
-                                    "Other" is an ordinary option row, identical markup to the others; its field appears below once picked and keeps
-                                    its text when unpicked.
-                                -->
-                                <button
-                                    type="button"
-                                    :role="question.multiSelect ? 'checkbox' : 'radio'"
-                                    :aria-checked="isSelected(index, OTHER_LABEL)"
-                                    class="ui-row-select flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left"
-                                    :class="{ 'ui-row-select-on': isSelected(index, OTHER_LABEL) }"
-                                    @click="toggleOption(question, index, OTHER_LABEL)"
-                                >
-                                    <Icon
-                                        class="mt-0.5 text-2xs"
-                                        :name="markFor(question, isSelected(index, OTHER_LABEL))"
-                                        :class="isSelected(index, OTHER_LABEL) ? 'text-primary-500' : 'text-subtle'"
-                                    />
-                                    <span class="flex min-w-0 flex-col gap-0.5">
-                                        <span class="text-xs font-medium text-content">Other</span>
-                                        <span class="text-2xs leading-snug text-muted">{{
-                                            question.multiSelect ? "Add an answer in your own words." : "Answer in your own words."
-                                        }}</span>
-                                    </span>
-                                </button>
-                            </div>
-                            <div v-if="isSelected(index, OTHER_LABEL)" class="flex flex-col gap-1">
-                                <!--
-                                    Grows rather than a fixed one-line input, since answers here often run long. `text-base` below `md` avoids iOS's
-                                    auto-zoom-on-focus.
-                                -->
-                                <textarea
-                                    :ref="(el) => setOtherInput(index, el)"
-                                    rows="1"
-                                    :value="otherValue(index)"
-                                    @input="onOtherInput(index, $event)"
-                                    @keydown="otherKeydown"
-                                    placeholder="Type your answer…"
-                                    class="ui-field-box ui-field-sm scrollbar-thin max-h-48 resize-none overflow-y-auto leading-relaxed"
-                                ></textarea>
-                                <!-- Shown from the moment the row is picked, not as an error; explains the disabled Submit. -->
-                                <span v-if="otherPending(index)" class="text-2xs text-subtle">Write your answer to submit.</span>
-                            </div>
-                        </div>
-                        <!-- Frozen view of a decided question: no interactive affordances and no preview, since choosing is already done. -->
-                        <div v-else class="flex flex-col gap-1.5" role="list">
-                            <div
-                                v-for="option in decidedOptions(question)"
-                                :key="option.label"
-                                role="listitem"
-                                class="flex items-start gap-2 rounded-lg border border-transparent px-2.5 py-2"
-                                :class="{ 'chat-option-picked': option.picked }"
-                            >
-                                <span class="mt-0.5 flex w-3 shrink-0 justify-center">
-                                    <Icon v-if="option.picked" name="check" class="text-2xs text-primary-500" />
-                                </span>
-                                <span class="flex min-w-0 flex-col gap-0.5">
-                                    <span class="text-xs font-medium" :class="option.picked ? 'text-content' : 'text-muted'">
-                                        <span v-if="option.picked" class="sr-only">Chosen: </span>{{ option.label }}
-                                    </span>
-                                    <!-- Rejected options keep the live card's description color; only the label dims. -->
-                                    <span v-if="option.description" class="text-2xs leading-snug text-muted">{{ option.description }}</span>
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <!-- In the shared answer-actions row, like every other card, not floating under the last option. -->
-                <template v-if="message.question.status === 'pending'" #actions>
-                    <ChatDecisionButton tone="primary" icon="check" :disabled="!canSubmit || settling" @click="submitAnswers"
-                        >Submit</ChatDecisionButton
-                    >
-                    <!-- Dismiss ends the turn (Conversation.cancelQuestion); the tooltip says so before the click. -->
-                    <ChatDecisionButton
-                        tone="secondary"
-                        :disabled="settling"
-                        v-tooltip.bottom="'Also stops the turn'"
-                        @click="cancelQuestion(message)"
-                        >Dismiss</ChatDecisionButton
-                    >
-                </template>
-            </ChatCard>
+                :card="message.question"
+                :document-open="!documentDrawn(message.question.document)"
+                :settling="settling"
+                @answer="(answers) => answerQuestion(message, answers)"
+                @dismiss="cancelQuestion(message)"
+            />
 
             <!-- The safety judge's own verdict sentence on this program, never from the gated agent's own words; wraps in full. -->
             <ChatCard v-if="message.permission" icon="shield" prose :title="permissionTitle" :status="permissionStatus(message.permission)">

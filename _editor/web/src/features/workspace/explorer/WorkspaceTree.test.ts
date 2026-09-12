@@ -645,7 +645,7 @@ describe(`rows with a special role`, () => {
         const el = await mount({ tree: SPECIAL_TREE });
 
         const chipped = [...el.querySelectorAll(`[role="treeitem"]`)]
-            .filter((row) => row.querySelector(`span.rounded-full`) !== null)
+            .filter((row) => row.querySelector(`span.ui-status-pill`) !== null)
             .map((row) => row.textContent?.trim() ?? ``);
         expect(chipped).toEqual([`refsreference`, `publicpublic`, `AGENTS.mdmemory`]);
     });
@@ -654,7 +654,7 @@ describe(`rows with a special role`, () => {
         const el = await mount({ tree: SPECIAL_TREE });
 
         const memory = [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === `AGENTS.mdmemory`);
-        expect(memory?.querySelector(`span.rounded-full`)?.getAttribute(`data-tooltip`)).toContain(
+        expect(memory?.querySelector(`span.ui-status-pill`)?.getAttribute(`data-tooltip`)).toContain(
             `every turn that starts in this folder or deeper`,
         );
     });

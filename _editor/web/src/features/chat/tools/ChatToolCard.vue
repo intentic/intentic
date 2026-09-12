@@ -4,7 +4,7 @@ import { computed, ref } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { useChatSurface } from "./chatToolSurface";
 import ChatCodeBody from "../transcript/ChatCodeBody.vue";
-import ChatDocumentBody from "../transcript/ChatDocumentBody.vue";
+import ChatDocumentBody from "../transcript/cards/ChatDocumentBody.vue";
 import ChatToolDiff from "./ChatToolDiff.vue";
 import { present } from "./toolPresentation";
 

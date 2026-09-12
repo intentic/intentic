@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { type CardDocument, planParts } from "@intentic/sandbox-contract";
-import { MarkdownFigure } from "@intentic/ui";
+import { browserOwnsClick, MarkdownFigure } from "@intentic/ui";
 import { copyCodeFromEvent, renderMarkdownParts } from "@intentic/ui/markdown";
 import { computed, ref } from "vue";
-import { useChatSurface } from "../tools/chatToolSurface";
+import { useChatSurface } from "../../tools/chatToolSurface";
 
 // Renders a document a turn wrote: the Write card that produced it, and any question/plan card asking about it. No diff
 // view, since a Write carries no `oldText` (a diff of it would be every line as a plus). Uses the injected surface
@@ -43,8 +43,8 @@ const parts = computed(() => {
 // Bare file name for the header chip; the full path isn't useful at a glance.
 const fileName = computed(() => props.document.path.split(`/`).pop() ?? props.document.path);
 
-// In-card classes live in chat.css beside the host card's insets, so margins match its body and answers.
-const shellClass = computed(() => (props.inCard ? `chat-card-doc` : `overflow-hidden rounded border border-line bg-canvas`));
+// In a card the shell draws nothing: the rows below read the card's own inset, so the document sits on its margins.
+const shellClass = computed(() => (props.inCard ? `` : `overflow-hidden rounded border border-line bg-canvas`));
 const headClass = computed(() =>
     props.inCard ? `chat-card-doc-head` : [`border-b px-2 py-1`, shown.value ? `border-line` : `border-transparent`],
 );
@@ -53,19 +53,23 @@ const bodyClass = computed(() => (props.inCard ? `chat-card-doc-body` : `px-3 py
 // Delegated listener for the rendered prose's code-copy button and file links, since both live inside v-html with no
 // component of their own. Navigation goes through the surface, so on a published page (no opener) the click is simply
 // swallowed.
+// The line a file link points at, when it carries a usable one; lines are 1-based, so 0 and NaN are both "no line".
+const linkLine = (link: HTMLAnchorElement | undefined): number | undefined => {
+    const line = Number(link?.dataset[`line`]);
+    return Number.isInteger(line) && line > 0 ? line : undefined;
+};
 const onProseClick = (event: MouseEvent): void => {
     copyCodeFromEvent(event);
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    if (event.defaultPrevented || event.button !== 0 || browserOwnsClick(event)) {
         return;
     }
-    const link = (event.target as HTMLElement | null)?.closest<HTMLAnchorElement>(`a.md-file-link`);
+    const link = (event.target as HTMLElement | null)?.closest<HTMLAnchorElement>(`a.md-file-link`) ?? undefined;
     const path = link?.dataset[`file`];
     if (path === undefined || path === `` || openFile === undefined) {
         return;
     }
     event.preventDefault();
-    const line = Number(link?.dataset[`line`]);
-    openFile(path, Number.isInteger(line) && line > 0 ? line : undefined);
+    openFile(path, linkLine(link));
 };
 </script>
 
