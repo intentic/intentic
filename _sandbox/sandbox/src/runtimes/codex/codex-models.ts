@@ -46,5 +46,10 @@ export const parseCodexModelSuggestions = (message: string): string[] => suggest
 // Non-fatal advisory on the error channel (fallback metadata used); a muted notice, not an error.
 export const CODEX_ADVISORY = /defaulting to fallback metadata/i;
 
+// Codex's resume warning when the thread's last recorded model isn't the one now picked. Dropped rather than shown:
+// switching model mid-conversation is a first-class move here, the chat already prints its own "Switched to ..." line,
+// and Codex's advice to switch back argues with a deliberate pick.
+export const CODEX_MODEL_RESUMED_ELSEWHERE = /recorded with model.+but is resuming with/is;
+
 // 'model not found' must stay literal: the advisory also pairs those words without rejecting the model.
 export const CODEX_MODEL_INVALID = /model is not supported|\bmodel not found\b|does not exist|no such model|does not have access to|did you mean/i;

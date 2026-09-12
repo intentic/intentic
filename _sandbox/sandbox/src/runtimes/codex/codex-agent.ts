@@ -25,7 +25,7 @@ import {
 } from "./codex-app-server.js";
 import { persistCodexImageArtifact } from "./codex-image-artifacts.js";
 import { codexInstructionConfig } from "./codex-instructions.js";
-import { CODEX_ADVISORY, CODEX_MODEL_INVALID } from "./codex-models.js";
+import { CODEX_ADVISORY, CODEX_MODEL_INVALID, CODEX_MODEL_RESUMED_ELSEWHERE } from "./codex-models.js";
 
 // Codex provider adapter: same seam as agent.ts's runAgent (AgentRequest in, AgentEvent frames out), backed by the
 // Codex CLI's app-server instead of the Claude Agent SDK. App-server publishes whole item completions plus lifecycle,
@@ -238,6 +238,17 @@ const codexNotice = (message: string): AgentEvent | undefined => {
     }
     // An advisory isn't a failure: the turn still answers normally, so it must not mark the phase errored.
     return CODEX_ADVISORY.test(message) ? { kind: "error", code: "codex-advisory", message } : undefined;
+};
+
+// Codex's warning channel, which by construction carries advisories rather than failures: whatever it says, the turn
+// runs on. So nothing here may redden the turn or offer to pick it back up; the worst case is a muted line. Undefined
+// drops the warning entirely, for the one Codex raises about something this chat already did on purpose.
+const codexWarning = (message: string): AgentEvent | undefined => {
+    if (CODEX_MODEL_RESUMED_ELSEWHERE.test(message)) {
+        return undefined;
+    }
+    // Shapes with a frame of their own (stream retry, auto-compaction) keep it; the rest become the muted line.
+    return codexNotice(message) ?? { kind: "error", code: "codex-advisory", message };
 };
 
 // Wider than mentionsSpentAllowance since Codex's own retries are already spent by the time this matches.
@@ -516,6 +527,13 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
             }
             yield { kind: "error", message: event.message };
             capture.errored = true;
+        } else if (event.type === "warning") {
+            // Never sets `errored`: a warned turn still answers, and a plan phase that holds its message must still
+            // hand it over.
+            const notice = codexWarning(event.message);
+            if (notice !== undefined) {
+                yield notice;
+            }
         }
         // turn.started has no UI mapping and is dropped, like the Claude path's unmapped SDK messages.
     }

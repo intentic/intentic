@@ -338,7 +338,8 @@ test("normalizes app-server reasoning, command, MCP, search, plan, compaction, a
         { type: "item.completed", item: { id: "w1", type: "web_search", query: "crocodile" } },
         { type: "item.updated", item: { id: "plan-turn-1", type: "todo_list", items: [{ text: "draw", completed: true }] } },
         { type: "item.completed", item: { id: "compact-1", type: "context_compaction" } },
-        { type: "error", message: "fallback metadata" },
+        // Its own frame, not `error`: the turn carries on after a warning, so the agent must be free to mute or drop it.
+        { type: "warning", message: "fallback metadata" },
         { type: "turn.completed" },
     ]);
 });

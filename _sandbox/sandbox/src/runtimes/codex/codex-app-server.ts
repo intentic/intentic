@@ -138,6 +138,9 @@ export type CodexEvent =
     | { readonly type: "turn.completed"; readonly usage?: CodexUsage }
     | { readonly type: "turn.failed"; readonly error: { readonly message: string } }
     | { readonly type: "error"; readonly message: string }
+    // Codex's separate advisory channel: the turn carries on regardless, so this is never a failure. Kept apart from
+    // `error` because the two read alike but mean opposite things.
+    | { readonly type: "warning"; readonly message: string }
     // Rate limits pushed by app-server (account/rateLimits/updated), the same windows ChatGPT's usage endpoint answers
     // with. Passed through raw; usage/translator-usage.ts is the one place that parses the snapshot shape.
     | { readonly type: "rate_limits"; readonly snapshot: unknown };
@@ -848,7 +851,7 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                 if (notification.method === "warning") {
                     const params = object(notification.params, "warning params");
                     if (params["threadId"] === undefined || params["threadId"] === null || params["threadId"] === threadId) {
-                        yield { type: "error", message: string(params, "message", "warning params") };
+                        yield { type: "warning", message: string(params, "message", "warning params") };
                     }
                     continue;
                 }

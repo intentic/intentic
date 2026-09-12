@@ -341,6 +341,59 @@ test("a plan turn survives an advisory and still proposes its plan", async () =>
     expect(calls[1]!.options.sandboxMode).toBe("danger-full-access");
 });
 
+// Codex's resume warning, worded as codex-rs/core/src/session/mod.rs formats it when the thread's last recorded model
+// isn't the one now picked. It fires on every resume after a model switch, including the automatic one this sandbox
+// makes when a provider 503s.
+const RESUMED_ELSEWHERE =
+    "This session was recorded with model `gpt-5.6-sol` but is resuming with `gpt-6-astra`. " +
+    "Consider switching back to `gpt-5.6-sol` as it may affect Codex performance.";
+
+test("the resume model-mismatch warning is dropped, since switching model mid-thread is this chat's own move", async () => {
+    const { runner } = fakeCodexRunner([
+        { type: "thread.started", thread_id: "thr-15" },
+        { type: "warning", message: RESUMED_ELSEWHERE },
+        { type: "item.completed", item: { id: "m1", type: "agent_message", text: "ok" } },
+    ]);
+    // No frame at all, not even the muted line: the chat already prints its own "Switched to ..." notice, and Codex's
+    // advice to switch back argues with a model the reader picked on purpose.
+    expect(await collect(createTestAgent(runner), request)).toEqual([
+        { kind: "session", sessionId: "thr-15" },
+        { kind: "delta", text: "ok" },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+});
+
+test("an unrecognized warning is muted rather than reddening the turn, and a plan turn still proposes its plan", async () => {
+    // A warning that marked the phase errored would have plan-emulation abandon a turn the CLI only commented on.
+    const WARNING = "Something the CLI wanted to mention.";
+    const { runner, calls } = fakeCodexRunner(
+        [
+            { type: "thread.started", thread_id: "thr-16" },
+            { type: "warning", message: WARNING },
+            { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Plan: add the route." } },
+        ],
+        [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
+    );
+    const events = await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+
+    expect(events).toEqual([
+        { kind: "session", sessionId: "thr-16" },
+        // Coded, so the client renders it muted: the warning channel by construction carries advisories, never failures.
+        { kind: "error", code: "codex-advisory", message: WARNING },
+        { kind: "plan", requestId: expect.any(String) as string, text: "Plan: add the route." },
+        {
+            kind: "resolved",
+            requestId: expect.any(String) as string,
+            reply: { kind: "plan", requestId: expect.any(String) as string, approve: true },
+        },
+        { kind: "delta", text: "Done." },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+    expect(calls).toHaveLength(2);
+});
+
 // Codex's stream retry arrives as an error notification with retry counters and the reason in parens.
 const STREAM_RETRY = "Reconnecting... 1/5 (stream disconnected before completion: stream closed before response.completed)";
 const PROCESS_EXIT = "Codex app-server exited (1): connection closed";
