@@ -33,6 +33,7 @@ export const createTranslatorRoutes = (services: TranslatorRoutesDeps) => {
             return accounts;
         }),
         connect: i.connect.handler(({ input }) => upstream(services.cliProxy.connect(input.provider))),
+        status: i.status.handler(({ input }) => upstream(services.cliProxy.status(input.provider, input.state))),
         complete: i.complete.handler(async ({ input }) => {
             await upstream(services.cliProxy.complete(input));
             return { ok: true } as const;

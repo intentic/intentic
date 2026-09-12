@@ -105,6 +105,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+    vi.useRealTimers();
     vi.clearAllMocks();
     endpointProviders.value = [];
     endpointsLoaded.value = false;
@@ -117,6 +118,36 @@ afterEach(async () => {
 });
 
 describe(`useChat provider reconciliation`, () => {
+    it(`settles a repeated ChatGPT sign-in when the same account was replaced in place`, async () => {
+        vi.useFakeTimers();
+        resetChat();
+        const chat = useChat();
+        const existing = { codex: [{ name: `codex-user.json`, label: `user@example.com` }], grok: [], kimi: [], gemini: [] };
+        chat.translatorAccounts.value = existing;
+        sandboxJsonMock.mockImplementation((path: string, init?: RequestInit) => {
+            if (path === `/translator/codex/connect` && init?.method === `POST`) {
+                return Promise.resolve({
+                    url: `https://auth.openai.com/codex/device`,
+                    code: `ABCD-EFGH`,
+                    state: `codex-attempt-1`,
+                    flow: `device`,
+                });
+            }
+            if (path === `/translator/codex/connect?state=codex-attempt-1`) {
+                return Promise.resolve({ status: `ok` });
+            }
+            return Promise.resolve(path === `/translator/accounts` ? existing : { accounts: [] });
+        });
+
+        await chat.connectTranslator(`codex`);
+        expect(chat.translatorConnectFlow.value?.state).toBe(`codex-attempt-1`);
+        await vi.advanceTimersByTimeAsync(3_000);
+
+        expect(chat.translatorConnectFlow.value).toBeUndefined();
+        expect(chat.translatorAccounts.value.codex).toEqual(existing.codex);
+        expect(chat.error.value).toBeNull();
+    });
+
     it(`points a GPT-only user's chat at Codex (served by the translator subscription) instead of gating on Claude`, async () => {
         const chat = useChat();
         expect(chat.provider.value).toBe(`claude`);

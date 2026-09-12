@@ -16,6 +16,9 @@ const failing = (error: Error) => ({
     connect: async () => {
         throw error;
     },
+    status: async () => {
+        throw error;
+    },
     complete: async () => {
         throw error;
     },
@@ -46,6 +49,19 @@ test("a completion failure carries the reason CLIProxyAPI gave for rejecting the
     });
 
     expect(((await response.json()) as { message?: string }).message).toBe(reason);
+});
+
+test("reports the named connection attempt's status even when the account list is unchanged", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                cliProxy: { status: async (provider, state) => ({ status: provider === "codex" && state === "attempt-1" ? "ok" : "wait" }) },
+            }),
+        ),
+    );
+
+    await expect(client.translator.status({ provider: "codex", state: "attempt-1" })).resolves.toEqual({ status: "ok" });
 });
 
 test("a disconnect failure says what went wrong instead of Internal server error", async () => {

@@ -1,14 +1,18 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createBackoff } from "@intentic/base/async";
+import { errorMessage } from "@intentic/base/errors";
 import {
     cliProxyIdOf,
     type KeyedProvider,
     KeyedProviderSchema,
     type Model,
+    providerLabel,
     reportsPlanLimits,
     type TranslatorAccounts,
+    type TranslatorStatus,
 } from "@intentic/sandbox-contract";
 import type { Config } from "../../env.config.js";
 import type { Services } from "../../composition.js";
@@ -232,6 +236,7 @@ export interface CliProxyClient {
     // Takes every credential that can serve no turn out of the proxy's rotation, answering with the names it benched.
     readonly benchUnusable: () => Promise<string[]>;
     readonly connect: (provider: KeyedProvider) => Promise<TranslatorLogin>;
+    readonly status: (provider: KeyedProvider, state: string) => Promise<TranslatorStatus>;
     readonly complete: (input: { provider: KeyedProvider; redirectUrl: string; state: string }) => Promise<void>;
     readonly disconnect: (provider: KeyedProvider, name: string) => Promise<void>;
     readonly models: (provider: KeyedProvider) => Promise<Model[]>;
@@ -261,11 +266,13 @@ export const createCliProxyClient = (params: {
     usageStore: AccountUsageStore;
     fetchFn?: typeof fetch;
     binaryPresent?: () => Promise<boolean>;
+    spawnFn?: typeof spawn;
 }): CliProxyClient => {
     const { managementUrl, token, configPath, authDir, usageStore } = params;
     const fetchFn = params.fetchFn ?? fetch;
     // Counts as present: a core image bakes none, and an installed binary may be invisible to PATH.
     const binaryPresent = params.binaryPresent ?? (async () => (await engineBinary("translator", "cli-proxy-api")) !== undefined);
+    const spawnFn = params.spawnFn ?? spawn;
     const auth = { authorization: `Bearer ${token}` };
 
     // No binary in the image needs a rebuild; a binary that's present but not answering is mid-boot or mid-restart and
@@ -356,12 +363,18 @@ export const createCliProxyClient = (params: {
     // Codex's Management API login can't complete remotely (browser redirect), so this drives `--codex-device-login` as
     // a subprocess, parsing its URL and code. A new connect kills the prior child.
     let codexChild: ChildProcess | undefined;
+    let codexLogin: { state: string; status: TranslatorStatus } | undefined;
     const connectCodex = async (): Promise<TranslatorLogin> => {
         // Resolved before the executor so the login drives the same binary the supervised proxy does.
         const binary = (await engineBinary("translator", "cli-proxy-api")) ?? "cli-proxy-api";
         return new Promise((resolve, reject) => {
+            if (codexLogin?.status.status === "wait") {
+                codexLogin.status = { status: "error", error: "This sign-in was replaced by a newer attempt." };
+            }
             codexChild?.kill("SIGTERM");
-            const child = spawn(binary, ["--codex-device-login", "--no-browser", "--config", configPath], {
+            const login = { state: `codex-${randomUUID()}`, status: { status: "wait" } as TranslatorStatus };
+            codexLogin = login;
+            const child = spawnFn(binary, ["--codex-device-login", "--no-browser", "--config", configPath], {
                 stdio: ["ignore", "pipe", "pipe"],
                 env: { ...process.env, ...workloadStamp(DAEMON_OWNER) },
             });
@@ -377,12 +390,16 @@ export const createCliProxyClient = (params: {
                 if (!settled && url !== undefined && code !== undefined) {
                     settled = true;
                     // The subprocess polls to completion itself; no handshake is left for the UI to resume.
-                    resolve({ url, code, state: "", flow: "device" });
+                    resolve({ url, code, state: login.state, flow: "device" });
                 }
             };
             child.stdout?.on("data", onData);
             child.stderr?.on("data", onData);
             child.on("error", (error) => {
+                login.status = {
+                    status: "error",
+                    error: (error as NodeJS.ErrnoException).code === "ENOENT" ? TRANSLATOR_BINARY_MISSING : errorMessage(error),
+                };
                 if (!settled) {
                     settled = true;
                     // ENOENT means a core image with no cli-proxy-api; reported as the fixable, named error.
@@ -393,6 +410,12 @@ export const createCliProxyClient = (params: {
                 if (child === codexChild) {
                     codexChild = undefined;
                 }
+                if (login.status.status === "wait") {
+                    login.status =
+                        exitCode === 0
+                            ? { status: "ok" }
+                            : { status: "error", error: `ChatGPT sign-in ended before the account was connected (exit ${exitCode ?? "unknown"}).` };
+                }
                 // No code yet at exit: the flow failed. After: the poll finished; accounts has it.
                 if (!settled) {
                     settled = true;
@@ -402,10 +425,34 @@ export const createCliProxyClient = (params: {
         });
     };
 
+    const status = async (provider: KeyedProvider, state: string): Promise<TranslatorStatus> => {
+        if (provider === "codex") {
+            return codexLogin?.state === state
+                ? codexLogin.status
+                : { status: "error", error: "This ChatGPT sign-in attempt is unknown or expired." };
+        }
+        const response = await fetchFn(`${managementUrl}/get-auth-status?state=${encodeURIComponent(state)}`, { headers: auth }).catch(
+            async (err: unknown) => {
+                throw await unreachable(err);
+            },
+        );
+        if (!response.ok) {
+            throw new Error(`${providerLabel(provider)} sign-in status could not be read (${response.status})`);
+        }
+        const body = (await response.json()) as { status?: string; error?: string };
+        if (body.status === "ok" || body.status === "wait") {
+            return { status: body.status };
+        }
+        return { status: "error", error: body.error?.trim() || `${providerLabel(provider)} sign-in failed.` };
+    };
+
     // Drops one account; the provider check stops a stale or cross-provider name from deleting the wrong credential. A
     // pending Codex login dies with any Codex disconnect, and the account's snapshot is dropped with it.
     const disconnect = async (provider: KeyedProvider, name: string): Promise<void> => {
         if (provider === "codex") {
+            if (codexLogin?.status.status === "wait") {
+                codexLogin.status = { status: "error", error: "This ChatGPT sign-in was cancelled." };
+            }
             codexChild?.kill("SIGTERM");
             codexChild = undefined;
         }
@@ -519,6 +566,7 @@ export const createCliProxyClient = (params: {
         benchUnusable,
         connect: (provider) =>
             provider === "grok" || provider === "kimi" ? connectDevice(provider) : provider === "gemini" ? connectGemini() : connectCodex(),
+        status,
         complete,
         disconnect,
         models: async (provider) => {

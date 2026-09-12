@@ -1,7 +1,7 @@
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 import { TranslatorAccountsSchema } from "../schemas/plan-limits.js";
-import { TranslatorCompleteSchema, TranslatorStartSchema } from "../schemas/provider-oauth.js";
+import { TranslatorCompleteSchema, TranslatorStartSchema, TranslatorStatusSchema } from "../schemas/provider-oauth.js";
 import { KeyedProviderSchema } from "../schemas/provider-subscriptions.js";
 import { OkSchema } from "../schemas/shared.js";
 
@@ -11,7 +11,7 @@ import { OkSchema } from "../schemas/shared.js";
 // `accounts` lists what's connected per provider and `disconnect` clears ONE account by its auth-file `name`.
 //
 // Two login shapes ride one pair of routes. Codex, Grok and Kimi use device authorization: the translator polls
-// to completion in the background, so the UI only polls `accounts`. Google redirects the browser to a loopback
+// to completion in the background, so the UI polls the attempt. Google redirects the browser to a loopback
 // URL this sandbox can't receive, so `complete` hands the landing URL to the translator. `connect.flow` tells the
 // card which mechanic it received without inferring it from whether an optional device code happened to exist.
 export const translatorContract = {
@@ -34,6 +34,16 @@ export const translatorContract = {
         })
         .input(z.object({ provider: KeyedProviderSchema }))
         .output(TranslatorStartSchema),
+    status: oc
+        .route({
+            method: "GET",
+            path: "/translator/{provider}/connect",
+            summary: "Read a subscription connection attempt",
+            description:
+                "Reports whether this exact sign-in attempt is waiting, completed, or failed. Completion is tied to the attempt rather than a change in account count, because signing in to an existing account replaces its credential in place.",
+        })
+        .input(z.object({ provider: KeyedProviderSchema, state: z.string().min(1) }))
+        .output(TranslatorStatusSchema),
     complete: oc
         .route({
             method: "POST",

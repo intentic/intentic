@@ -1,3 +1,6 @@
+import type { ChildProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { type AccountUsage, TranslatorAccountsSchema, type UsageWindow } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { createCliProxyClient, renderConfig, TRANSLATOR_BINARY_MISSING } from "./translator.js";
@@ -62,6 +65,49 @@ test("starts Kimi Code's headless device login through CLIProxyAPI", async () =>
     expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8789/v0/management/kimi-auth-url", {
         headers: { authorization: "Bearer local" },
     });
+});
+
+test("reads a managed device login's own status instead of inferring it from account count", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ status: "wait" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = createCliProxyClient({
+        managementUrl: "http://127.0.0.1:8789/v0/management",
+        token: "local",
+        configPath: "/tmp/config.yaml",
+        authDir: "/tmp/does-not-exist-authdir",
+        usageStore: memoryStore().store,
+    });
+
+    await expect(client.status("kimi", "kmi-1")).resolves.toEqual({ status: "wait" });
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8789/v0/management/get-auth-status?state=kmi-1", {
+        headers: { authorization: "Bearer local" },
+    });
+});
+
+test("marks the exact ChatGPT device login complete when its helper exits successfully", async () => {
+    const stdout = new PassThrough();
+    const child = Object.assign(new EventEmitter(), {
+        stdout,
+        stderr: new PassThrough(),
+        kill: vi.fn(),
+    }) as unknown as ChildProcess;
+    const client = createCliProxyClient({
+        managementUrl: "http://127.0.0.1:8789/v0/management",
+        token: "local",
+        configPath: "/tmp/config.yaml",
+        authDir: "/tmp/does-not-exist-authdir",
+        usageStore: memoryStore().store,
+        spawnFn: (() => child) as typeof import("node:child_process").spawn,
+    });
+
+    const connecting = client.connect("codex");
+    stdout.write("Codex device URL: https://auth.openai.com/codex/device\nCodex device code: ABCD-EFGH\n");
+    const flow = await connecting;
+
+    expect(flow.state).toMatch(/^codex-/);
+    await expect(client.status("codex", flow.state)).resolves.toEqual({ status: "wait" });
+    child.emit("exit", 0, null);
+    await expect(client.status("codex", flow.state)).resolves.toEqual({ status: "ok" });
 });
 
 test("starts Google's redirect login through CLIProxyAPI Antigravity auth URL", async () => {

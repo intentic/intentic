@@ -51,24 +51,30 @@ export const AccountRenameSchema = z.object({
 });
 // One shape for every sign-in, whatever the vendor's mechanism; nothing redeemable rides on it, only the daemon ever
 // holds a secret. `flow` says how the attempt ends, which no other field can tell you:
-// device: finishes upstream; watch the account list.
+// device: finishes upstream; watch the attempt.
 // redirect: needs the landing address brought back.
 // paste: needs the code the page showed.
 export const LoginFlowSchema = z.enum(["device", "redirect", "paste"]);
 export type LoginFlow = z.infer<typeof LoginFlowSchema>;
 export const LoginStartSchema = z.object({
     url: z.string().describe("The page to open and sign in on."),
-    code: z.string().describe("The one-time code the page will ask for, where the vendor issues one. Blank when the page is already addressed to this attempt."),
+    code: z
+        .string()
+        .describe("The one-time code the page will ask for, where the vendor issues one. Blank when the page is already addressed to this attempt."),
     state: z
         .string()
-        .describe("For a redirect sign-in, the marker in the address the browser lands on, so a pasted URL can be recognised as this attempt's. Blank otherwise."),
+        .describe(
+            "For a redirect sign-in, the marker in the address the browser lands on, so a pasted URL can be recognised as this attempt's. Blank otherwise.",
+        ),
     flow: LoginFlowSchema.describe(
         "How this attempt ends. A device sign-in finishes by itself and you watch the account list; a redirect needs the address it landed on handed back; a paste needs the code the page showed.",
     ),
     variant: z.string().describe("Which of the provider's estates this attempt signs in to. Blank for a provider with one."),
     handshake: z
         .string()
-        .describe("This attempt's id, for finishing or abandoning it. Not a credential and not redeemable: the proof that completes the sign-in never leaves the sandbox."),
+        .describe(
+            "This attempt's id, for finishing or abandoning it. Not a credential and not redeemable: the proof that completes the sign-in never leaves the sandbox.",
+        ),
     expiresAt: z.number().describe("When this attempt stops being answerable, in milliseconds, so a card can stop waiting instead of spinning."),
 });
 export type LoginStart = z.infer<typeof LoginStartSchema>;
@@ -86,7 +92,9 @@ export const LoginCompleteSchema = z.object({
 });
 // Absent when the daemon still has minting to do; the row lands in the account list minutes later.
 export const LoginCompletedSchema = z.object({
-    account: OauthAccountSchema.optional().describe("The account it connected, where the sign-in ends here. Absent means keep watching the account list."),
+    account: OauthAccountSchema.optional().describe(
+        "The account it connected, where the sign-in ends here. Absent means keep watching the account list.",
+    ),
 });
 // Tidiness, not a security boundary: an unanswered attempt also times out on its own (`expiresAt`).
 export const LoginCancelSchema = z.object({ handshake: z.string().min(1).describe("Which attempt to stop waiting on.") });
@@ -95,13 +103,19 @@ export const LoginCancelSchema = z.object({ handshake: z.string().min(1).describ
 export const TranslatorStartSchema = z.object({
     url: z.string().describe("The page to open."),
     code: z.string().describe("The one-time code, where the provider uses one."),
-    state: z.string().describe("The handshake's id, which the finishing call sends back."),
+    state: z.string().min(1).describe("The handshake's id, which status reads and the finishing call sends back."),
     flow: z
         .enum(["device", "redirect"])
         .describe(
-            "Which shape this is. A device sign-in finishes by itself and you poll the account list; a redirect needs the address it landed on handed back. Said outright rather than guessed at from whether a code happens to exist.",
+            "Which shape this is. A device sign-in finishes by itself and you poll the attempt; a redirect needs the address it landed on handed back. Said outright rather than guessed at from whether a code happens to exist.",
         ),
 });
+export const TranslatorStatusSchema = z.discriminatedUnion("status", [
+    z.object({ status: z.literal("wait") }),
+    z.object({ status: z.literal("ok") }),
+    z.object({ status: z.literal("error"), error: z.string().min(1) }),
+]);
+export type TranslatorStatus = z.infer<typeof TranslatorStatusSchema>;
 // Grant rides in the URL as `?code=&state=`.
 export const TranslatorCompleteSchema = z.object({
     provider: KeyedProviderSchema.describe("Which provider."),

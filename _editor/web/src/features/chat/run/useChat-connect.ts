@@ -1,18 +1,34 @@
 import { errorMessage } from "@intentic/ui/async";
-import { type AgentProvider, type KeyedProvider, type LoginFlow, type LoginStart, type OauthAccount, providerLabel, providerSpec } from "@intentic/sandbox-contract";
+import {
+    type AgentProvider,
+    type KeyedProvider,
+    type LoginFlow,
+    type LoginStart,
+    type OauthAccount,
+    providerLabel,
+    providerSpec,
+    type TranslatorStatus,
+} from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
-import { translatorAccounts } from "../accounts/providerAccounts";
 import { hasSignIn } from "../session/access";
 import { active } from "../tabs/useChat-tabs";
 import { loadProviderModels } from "../models/useChat-catalog";
-import { accountBusy, addAccount, error, managedProvider, providerBase, refreshAccounts, refreshTranslatorAccounts } from "../accounts/useChat-accounts";
+import {
+    accountBusy,
+    addAccount,
+    error,
+    managedProvider,
+    providerBase,
+    refreshAccounts,
+    refreshTranslatorAccounts,
+} from "../accounts/useChat-accounts";
 import { sandboxError, sandboxJson, sandboxRequest } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 
-// In-flight subscription login; `baseline` is the account count at start, connected means growing past it.
+// In-flight subscription login, identified by the translator's own attempt state.
 export const translatorConnectFlow = ref<
-    { provider: KeyedProvider; url: string; code: string; state: string; flow: "device" | "redirect"; baseline: number } | undefined
+    { provider: KeyedProvider; url: string; code: string; state: string; flow: "device" | "redirect" } | undefined
 >(undefined);
 
 // Routed row key, namespaced away from the provider id: native and translator accounts of the same provider
@@ -23,8 +39,7 @@ let translatorPollTimer: ReturnType<typeof setTimeout> | undefined;
 // Provider's own account label for the sign-in-expired sentence, not a hardcoded default.
 const translatorProviderLabel = (target: KeyedProvider): string => providerSpec(target)?.accountLabel ?? target;
 
-// Polls the connection state until the provider flips connected, since CLIProxyAPI finishes every routed
-// login (device or redirect) in the background.
+// Polls this exact attempt: reconnecting an existing identity replaces its credential without increasing the account count.
 const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Promise<void> => {
     if (translatorConnectFlow.value?.provider !== target) {
         return;
@@ -34,15 +49,30 @@ const pollTranslatorOnce = async (target: KeyedProvider, deadline: number): Prom
         translatorConnectFlow.value = undefined;
         return;
     }
-    await refreshTranslatorAccounts();
     const flow = translatorConnectFlow.value;
     if (flow?.provider !== target) {
         return;
     }
-    if (translatorAccounts.value[target].length > flow.baseline) {
-        translatorConnectFlow.value = undefined;
-        error.value = null;
-        return;
+    try {
+        const result = await sandboxJson<TranslatorStatus>(`/translator/${target}/connect?state=${encodeURIComponent(flow.state)}`);
+        if (translatorConnectFlow.value !== flow) {
+            return;
+        }
+        if (result.status === "ok") {
+            await refreshTranslatorAccounts();
+            if (translatorConnectFlow.value === flow) {
+                translatorConnectFlow.value = undefined;
+                error.value = null;
+            }
+            return;
+        }
+        if (result.status === "error") {
+            translatorConnectFlow.value = undefined;
+            error.value = `The ${translatorProviderLabel(target)} sign-in failed: ${result.error}`;
+            return;
+        }
+    } catch {
+        // Transient (sandbox or translator blip); keep polling until the deadline.
     }
     translatorPollTimer = setTimeout(() => void pollTranslatorOnce(target, deadline), 3_000);
 };
@@ -59,7 +89,6 @@ export const connectTranslator = async (target: KeyedProvider): Promise<void> =>
     try {
         translatorConnectFlow.value = {
             provider: target,
-            baseline: translatorAccounts.value[target].length,
             ...(await sandboxJson<{ url: string; code: string; state: string; flow: "device" | "redirect" }>(`/translator/${target}/connect`, {
                 method: `POST`,
             })),
