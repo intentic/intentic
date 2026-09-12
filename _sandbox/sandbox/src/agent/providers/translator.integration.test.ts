@@ -47,7 +47,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 test("lists the subscriptions on disk when the management API cannot be reached", async () => {
     const authDir = authDirWith({
-        "antigravity-user.json": JSON.stringify({ type: "antigravity", email: "user@gmail.com" }),
+        "antigravity-user.json": JSON.stringify({ type: "antigravity", email: "user@gmail.com", project_id: "google-project" }),
         "codex-someone.json": JSON.stringify({ type: "codex", email: "someone@example.com" }),
         // Not credentials: a half-written login file, and JSON that isn't a credential shape.
         "half-written.json": "{",
@@ -63,11 +63,31 @@ test("lists the subscriptions on disk when the management API cannot be reached"
 });
 
 test("names the account by its file when the credential carries no email", async () => {
-    const authDir = authDirWith({ "antigravity-nameless.json": JSON.stringify({ type: "antigravity" }) });
+    const authDir = authDirWith({ "antigravity-nameless.json": JSON.stringify({ type: "antigravity", project_id: "google-project" }) });
 
-    expect(await clientOver(authDir).accounts().then((accounts) => accounts.gemini)).toEqual([
-        { name: "antigravity-nameless.json", label: "antigravity-nameless.json" },
-    ]);
+    expect(
+        await clientOver(authDir)
+            .accounts()
+            .then((accounts) => accounts.gemini),
+    ).toEqual([{ name: "antigravity-nameless.json", label: "antigravity-nameless.json" }]);
+});
+
+// The credential file is the only place the project can be read while the proxy is down, so the disk view carries it:
+// judging a Google account project-less because nothing answered would bench the whole fleet on a restart.
+test("reads a Google credential's project off disk, and benches only the one that has none", async () => {
+    const authDir = authDirWith({
+        "antigravity-onboarded.json": JSON.stringify({ type: "antigravity", email: "user@gmail.com", project_id: "google-project" }),
+        "antigravity-fresh.json": JSON.stringify({ type: "antigravity", email: "fresh@gmail.com" }),
+    });
+
+    const gemini = await clientOver(authDir)
+        .accounts()
+        .then((accounts) => accounts.gemini);
+
+    expect(gemini.find((account) => account.name === "antigravity-onboarded.json")).not.toHaveProperty("cooling");
+    expect(gemini.find((account) => account.name === "antigravity-fresh.json")).toMatchObject({
+        cooling: { reason: "no Antigravity project on this Google account" },
+    });
 });
 
 test("refuses to report a disconnect the unreachable proxy never performed", async () => {

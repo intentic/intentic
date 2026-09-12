@@ -141,6 +141,41 @@ test("completes Google's redirect login via oauth-callback", async () => {
     });
 });
 
+// CLIProxyAPI answers the callback OK for a Google account whose project discovery came back empty, files the
+// credential without `project_id`, and keeps handing it turns that die at "antigravity auth missing project_id". The
+// sign-in is only done when the credential it wrote can serve a turn.
+test("refuses a Google sign-in whose credential landed with no Antigravity project", async () => {
+    const calls: { url: string; method?: string; body?: Record<string, unknown> }[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : undefined;
+        calls.push({ url, ...(init?.method === undefined ? {} : { method: init.method }), ...(body === undefined ? {} : { body }) });
+        return url.endsWith("/auth-files")
+            ? Response.json({ files: [{ name: "google-a.json", provider: "antigravity", email: "fresh@example.com" }] })
+            : Response.json({ status: "ok" });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = createCliProxyClient({
+        managementUrl: "http://127.0.0.1:8789/v0/management",
+        token: "local",
+        configPath: "/tmp/config.yaml",
+        authDir: "/tmp/does-not-exist-authdir",
+        usageStore: memoryStore().store,
+    });
+
+    const failure = client.complete({ provider: "gemini", redirectUrl: "http://localhost:51121/oauth-callback?code=abc", state: "xyz" });
+
+    // Names the account and the one thing that fixes it, since only Google can hand that account a project.
+    await expect(failure).rejects.toThrow(/fresh@example\.com.*no Antigravity project/s);
+    await expect(failure).rejects.toThrow(/antigravity\.google\.com/);
+    // Benched in the proxy, which reads such a credential as healthy and would otherwise keep routing turns to it.
+    expect(calls.find((call) => call.url.endsWith("/auth-files/status"))).toEqual({
+        url: "http://127.0.0.1:8789/v0/management/auth-files/status",
+        method: "PATCH",
+        body: { name: "google-a.json", disabled: true },
+    });
+});
+
 test("reads Kimi's provider-scoped model definitions without owned_by inference", async () => {
     vi.stubGlobal(
         "fetch",
@@ -337,10 +372,18 @@ describe("translator subscription usage", () => {
     const GEMINI: Pick<UsageWindow, "label" | "gates"> = { label: "Gemini models", gates: { models: ["gemini"] } };
     const THIRD_PARTY: Pick<UsageWindow, "label" | "gates"> = { label: "Claude and GPT models", gates: { models: ["claude", "gpt"] } };
 
+    // Google rows carry a project: a Google credential without one serves no turn at all, which is a different test.
     const filesNamed = (provider: string, names: readonly string[]) =>
         (async (input: string | URL): Promise<Response> =>
             String(input).endsWith("/auth-files")
-                ? Response.json({ files: names.map((name) => ({ name, provider, auth_index: name })) })
+                ? Response.json({
+                      files: names.map((name) => ({
+                          name,
+                          provider,
+                          auth_index: name,
+                          ...(provider === "antigravity" ? { project_id: "google-project" } : {}),
+                      })),
+                  })
                 : Response.json({ status_code: 500 })) as typeof fetch;
 
     const clientOver = (store: ReturnType<typeof memoryStore>["store"], provider: string, names: readonly string[]) =>
@@ -401,9 +444,15 @@ describe("translator subscription usage", () => {
     test("reports headroom rather than a reset while any account can still serve the pool", async () => {
         const { store } = memoryStore();
         for (const name of ["spent-1.json", "spent-2.json"]) {
-            await store.record(`gemini:${name}`, { windows: [{ kind: "google:3p-weekly", ...THIRD_PARTY, utilization: 100, resetsAt: 2_000 }], measuredAt: 0 });
+            await store.record(`gemini:${name}`, {
+                windows: [{ kind: "google:3p-weekly", ...THIRD_PARTY, utilization: 100, resetsAt: 2_000 }],
+                measuredAt: 0,
+            });
         }
-        await store.record("gemini:has-room.json", { windows: [{ kind: "google:3p-weekly", ...THIRD_PARTY, utilization: 73, resetsAt: 9_000 }], measuredAt: 0 });
+        await store.record("gemini:has-room.json", {
+            windows: [{ kind: "google:3p-weekly", ...THIRD_PARTY, utilization: 73, resetsAt: 9_000 }],
+            measuredAt: 0,
+        });
         const client = clientOver(store, "antigravity", ["spent-1.json", "spent-2.json", "has-room.json"]);
 
         await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
@@ -417,7 +466,10 @@ describe("translator subscription usage", () => {
     // An unmeasured or renamed bucket counts as nothing, not another pool's reading.
     test("counts an account with no reading for this pool in neither tally", async () => {
         const { store } = memoryStore();
-        await store.record("gemini:unread.json", { windows: [{ kind: "google:gemini-weekly", ...GEMINI, utilization: 100, resetsAt: 1_000 }], measuredAt: 0 });
+        await store.record("gemini:unread.json", {
+            windows: [{ kind: "google:gemini-weekly", ...GEMINI, utilization: 100, resetsAt: 1_000 }],
+            measuredAt: 0,
+        });
         const client = clientOver(store, "antigravity", ["unread.json", "never-polled.json"]);
 
         await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({ spent: 0, withHeadroom: 0 });
@@ -435,6 +487,74 @@ describe("translator subscription usage", () => {
         const client = clientOver(store, "codex", ["one.json"]);
 
         await expect(client.turnLimit("codex", "gpt-5")).resolves.toEqual({ spent: 1, withHeadroom: 0, reopensAt: 1_000 });
+    });
+
+    // Runs at boot for the sandboxes that collected one before the sign-in guard existed: without it the user keeps
+    // losing one turn in every rotation and nothing says which account is eating them.
+    test("takes an already-stored Google credential with no project out of the proxy's rotation", async () => {
+        const calls: { url: string; method?: string; body?: Record<string, unknown> }[] = [];
+        const client = createCliProxyClient({
+            managementUrl: "http://cliproxy.test",
+            token: "management-secret",
+            configPath: "/tmp/config",
+            authDir: "/tmp/does-not-exist-authdir",
+            usageStore: memoryStore().store,
+            fetchFn: (async (input: string | URL, init?: RequestInit): Promise<Response> => {
+                const url = String(input);
+                const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : undefined;
+                calls.push({ url, ...(init?.method === undefined ? {} : { method: init.method }), ...(body === undefined ? {} : { body }) });
+                return url.endsWith("/auth-files")
+                    ? Response.json({
+                          files: [
+                              { name: "onboarded.json", provider: "antigravity", project_id: "google-project" },
+                              { name: "no-project.json", provider: "antigravity" },
+                              // Benched already: re-benching it would be a second call for no change.
+                              { name: "known-bad.json", provider: "antigravity", disabled: true },
+                              // Only Google's channel is billed to a project; no other provider is judged on one.
+                              { name: "kimi-a.json", provider: "kimi" },
+                          ],
+                      })
+                    : Response.json({ status: "ok" });
+            }) as typeof fetch,
+        });
+
+        await expect(client.benchUnusable()).resolves.toEqual(["no-project.json"]);
+        expect(calls.filter((call) => call.url.endsWith("/auth-files/status")).map((call) => call.body)).toEqual([
+            { name: "no-project.json", disabled: true },
+        ]);
+    });
+
+    // The proxy lists such a file as active and never benches it itself, so the row and the fleet tally have to.
+    test("counts a Google account with no project as serving nothing, however healthy the proxy calls it", async () => {
+        const { store } = memoryStore();
+        await store.record("gemini:no-project.json", {
+            windows: [{ kind: "google:3p-weekly", ...THIRD_PARTY, utilization: 4, resetsAt: 9_000 }],
+            measuredAt: 0,
+        });
+        const client = createCliProxyClient({
+            managementUrl: "http://cliproxy.test",
+            token: "management-secret",
+            configPath: "/tmp/config",
+            authDir: "/tmp/does-not-exist-authdir",
+            usageStore: store,
+            fetchFn: (async (input: string | URL): Promise<Response> =>
+                String(input).endsWith("/auth-files")
+                    ? Response.json({
+                          files: [
+                              { name: "no-project.json", provider: "antigravity", email: "fresh@example.com", auth_index: "i", status: "active" },
+                          ],
+                      })
+                    : Response.json({ status_code: 500 })) as typeof fetch,
+        });
+
+        const accounts = await client.accounts();
+
+        expect(() => TranslatorAccountsSchema.parse(accounts)).not.toThrow();
+        expect(accounts.gemini[0]).toMatchObject({ name: "no-project.json", cooling: { reason: "no Antigravity project on this Google account" } });
+        // No reopen instant: nothing about waiting gives that account a project.
+        expect(accounts.gemini[0]?.cooling).not.toHaveProperty("until");
+        // Spent despite the reading with room, so the fleet's headroom never counts an account that cannot answer.
+        await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({ spent: 1, withHeadroom: 0 });
     });
 
     test("asks the proxy to drop the account it is told to disconnect", async () => {

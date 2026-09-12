@@ -47,9 +47,9 @@ export const authFilesOnDisk = async (authDir: string): Promise<TranslatorAuthFi
             if (raw === undefined) {
                 return [];
             }
-            let parsed: { type?: unknown; email?: unknown };
+            let parsed: { type?: unknown; email?: unknown; project_id?: unknown };
             try {
-                parsed = JSON.parse(raw) as { type?: unknown; email?: unknown };
+                parsed = JSON.parse(raw) as { type?: unknown; email?: unknown; project_id?: unknown };
             } catch {
                 // A file half-written by a login still polling; it counts on the next read.
                 return [];
@@ -57,8 +57,17 @@ export const authFilesOnDisk = async (authDir: string): Promise<TranslatorAuthFi
             if (typeof parsed.type !== "string" || KEYED_PROVIDER[parsed.type] === undefined) {
                 return [];
             }
-            // Shaped like the Management API's row; `auth_index` is absent, only the proxy can supply it.
-            return [{ name, provider: parsed.type, ...(typeof parsed.email === "string" ? { email: parsed.email } : {}) }];
+            // Shaped like the Management API's row; `auth_index` is absent, only the proxy can supply it. `project_id`
+            // is carried because a Google credential is judged on it, and reading a file as project-less for the sole
+            // reason that the proxy is down would bench every Google account at once.
+            return [
+                {
+                    name,
+                    provider: parsed.type,
+                    ...(typeof parsed.email === "string" ? { email: parsed.email } : {}),
+                    ...(typeof parsed.project_id === "string" ? { project_id: parsed.project_id } : {}),
+                },
+            ];
         }),
     );
     return files.flat();
@@ -189,8 +198,17 @@ export const startTranslator = (services: Services): void => {
 
     void start().catch((error: unknown) => logger.warn({ err: error }, "translator: initial start failed"));
 
-    // Warms headroom once the proxy should be up, so the first tab after a restart isn't cold.
-    setTimeout(() => void services.headroom.refresh({ scope: { providers: KeyedProviderSchema.options }, maxAgeMs: 0 }), WARMUP_DELAY_MS).unref();
+    // Warms headroom once the proxy should be up, so the first tab after a restart isn't cold, and takes any credential
+    // that can serve nothing out of the rotation before it catches a turn.
+    setTimeout(() => {
+        void services.headroom.refresh({ scope: { providers: KeyedProviderSchema.options }, maxAgeMs: 0 });
+        void services.cliProxy
+            .benchUnusable()
+            .then((benched) =>
+                benched.length === 0 ? undefined : logger.warn({ accounts: benched }, "translator: benched credentials that can serve no turn"),
+            )
+            .catch((error: unknown) => logger.warn({ err: error }, "translator: could not bench unusable credentials"));
+    }, WARMUP_DELAY_MS).unref();
 };
 
 // Management API client and login orchestration for /translator routes and the routed-turn gate. Codex/Grok/Kimi are
@@ -211,6 +229,8 @@ export interface CliProxyClient {
     readonly sharedUsageKey: (provider: KeyedProvider) => Promise<string | undefined>;
     // What the recorded quota says about the pool this turn's model spends, across the provider's accounts.
     readonly turnLimit: (provider: KeyedProvider, model: string) => Promise<TurnLimit>;
+    // Takes every credential that can serve no turn out of the proxy's rotation, answering with the names it benched.
+    readonly benchUnusable: () => Promise<string[]>;
     readonly connect: (provider: KeyedProvider) => Promise<TranslatorLogin>;
     readonly complete: (input: { provider: KeyedProvider; redirectUrl: string; state: string }) => Promise<void>;
     readonly disconnect: (provider: KeyedProvider, name: string) => Promise<void>;
@@ -220,6 +240,18 @@ export interface CliProxyClient {
 // Namespaced by provider since the store is shared with native accounts and a file name is unique only within one.
 // Exported for translator.routes.ts, which forgets a disconnected account's snapshot.
 export const usageKey = (provider: KeyedProvider, name: string): string => `${provider}:${name}`;
+
+// Google's channel bills a Code Assist project the sign-in discovers. CLIProxyAPI's management login only warns when
+// that discovery comes back empty and files the credential anyway, and its selector reads such a credential as
+// healthy; every turn it then catches dies at "antigravity auth missing project_id". No project means dead, not slow.
+const projectless = (provider: KeyedProvider, file: TranslatorAuthFile): boolean => provider === "gemini" && (file.project_id ?? "").trim() === "";
+
+// The bench reason on the row, in the words of the thing that is missing.
+const NO_PROJECT_REASON = "no Antigravity project on this Google account";
+
+// Said when the sign-in itself produced one: the account is named, and the only fix is Google's own onboarding.
+const noProjectSignIn = (email: string | undefined): string =>
+    `Google signed in${email === undefined ? "" : ` as ${email}`}, but that account has no Antigravity project, so no turn can run on it. Open antigravity.google.com once with that account to finish Google's setup, then connect it here again.`;
 
 export const createCliProxyClient = (params: {
     managementUrl: string;
@@ -287,6 +319,16 @@ export const createCliProxyClient = (params: {
         return { url: body.url, code: "", state: body.state, flow: "redirect" };
     };
 
+    // Takes a credential out of the proxy's rotation and leaves it on the row to be seen; the switch persists into the
+    // credential file, so a restart keeps it benched. Best-effort: the caller's error is the report that matters.
+    const bench = async (name: string): Promise<void> => {
+        await fetchFn(`${managementUrl}/auth-files/status`, {
+            method: "PATCH",
+            headers: { ...auth, "content-type": "application/json" },
+            body: JSON.stringify({ name, disabled: true }),
+        }).catch(() => undefined);
+    };
+
     // Hands a pasted redirect URL to the proxy, which matches it to the pending login and resumes the exchange;
     // surfaces the proxy's own rejection message.
     const complete = async (input: { provider: KeyedProvider; redirectUrl: string; state: string }): Promise<void> => {
@@ -300,6 +342,14 @@ export const createCliProxyClient = (params: {
         if (!response.ok) {
             const reason = ((await response.json().catch(() => undefined)) as { error?: string } | undefined)?.error;
             throw new Error(reason ?? `Sign-in could not be completed (${response.status})`);
+        }
+        // The proxy answers this call OK for a credential it saved without a project, so the sign-in is only finished
+        // once the file it wrote can serve a turn. Benched rather than deleted: the row is how the user sees which
+        // account to fix, and a re-sign-in overwrites it.
+        const dead = providerFiles(await listFiles(), input.provider).filter((file) => projectless(input.provider, file));
+        if (dead.length > 0) {
+            await Promise.all(dead.map((file) => bench(file.name)));
+            throw new Error(noProjectSignIn(dead[0]?.email));
         }
     };
 
@@ -413,6 +463,23 @@ export const createCliProxyClient = (params: {
     const providerFiles = (files: readonly TranslatorAuthFile[], provider: KeyedProvider): (TranslatorAuthFile & { readonly name: string })[] =>
         files.flatMap((file) => (file.provider === CLIPROXY_PROVIDER[provider] && file.name !== undefined ? [{ ...file, name: file.name }] : []));
 
+    // Every credential the proxy would still hand a turn to that cannot answer one. Runs at boot, so a sandbox that
+    // collected one before the sign-in guard existed stops losing turns to it without the user hunting for which.
+    const benchUnusable = async (): Promise<string[]> => {
+        const files = await listFiles();
+        const dead = KeyedProviderSchema.options.flatMap((provider) =>
+            providerFiles(files, provider).filter((file) => projectless(provider, file) && file.disabled !== true),
+        );
+        await Promise.all(dead.map((file) => bench(file.name)));
+        return dead.map((file) => file.name);
+    };
+
+    // What keeps this credential from serving a turn, if anything. A missing project outranks the proxy's own verdict:
+    // the proxy reports such a file as active, and a bench with no instant is exactly what it is, since no wait fixes
+    // it. No `until`, so fleet-limit counts it spent forever rather than promising a reopen.
+    const benched = (provider: KeyedProvider, file: TranslatorAuthFile): { until?: number; reason?: string } | undefined =>
+        projectless(provider, file) ? { reason: NO_PROJECT_REASON } : authFileCooling(file);
+
     // Read from recorded snapshots, not the refusal itself, since CLIProxyAPI's 429 is only the fleet's last word,
     // naming no account or reset. Errs early: a snapshot can miss an account that has since hit its wall.
     const turnLimit = async (provider: KeyedProvider, model: string): Promise<TurnLimit> => {
@@ -421,7 +488,7 @@ export const createCliProxyClient = (params: {
             providerFiles(files, provider).map((file) => ({
                 account: file.name,
                 usage: stored[usageKey(provider, file.name)],
-                cooling: authFileCooling(file),
+                cooling: benched(provider, file),
             })),
             { id: model },
         );
@@ -433,7 +500,7 @@ export const createCliProxyClient = (params: {
             const of = (provider: KeyedProvider) =>
                 providerFiles(files, provider).map((file) => {
                     const usage = stored[usageKey(provider, file.name)];
-                    const cooling = authFileCooling(file);
+                    const cooling = benched(provider, file);
                     return {
                         name: file.name,
                         label: file.email ?? file.label ?? file.name,
@@ -449,6 +516,7 @@ export const createCliProxyClient = (params: {
             return files.length === 1 && files[0] !== undefined ? usageKey(provider, files[0].name) : undefined;
         },
         turnLimit,
+        benchUnusable,
         connect: (provider) =>
             provider === "grok" || provider === "kimi" ? connectDevice(provider) : provider === "gemini" ? connectGemini() : connectCodex(),
         complete,
