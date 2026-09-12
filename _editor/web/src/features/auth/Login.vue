@@ -27,8 +27,6 @@ useSiteFaces();
 // True in the desktop webview, where Google can't run; sign-in there hands off to the real browser instead.
 const desktop = computed(() => desktopVersion() !== undefined);
 
-const year = new Date().getFullYear();
-
 // Mirrors the site's 'Getting started' band, in order; the current step makes this a rail, not a list.
 // The third step must match `desktopInstaller()`, the same call the setup page uses, so the two screens agree.
 const install = desktopInstaller();
@@ -188,8 +186,6 @@ watch(
                 </ol>
             </section>
         </main>
-
-        <footer class="foot">© {{ year }} intentic. Engine MIT licensed.</footer>
     </div>
 </template>
 
@@ -202,7 +198,13 @@ watch(
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: clamp(1.5rem, 4vw, 3rem) 1.5rem;
+    padding: clamp(1.25rem, 3vw, 2.5rem) 1.5rem;
+}
+/* The desktop window has no platform chrome; min-height 100dvh plus the title strip is what overflowed. */
+:global([data-frameless]) .door {
+    min-height: auto;
+    padding-top: calc(var(--bar-height) + 1rem);
+    padding-bottom: 1.25rem;
 }
 
 /*
@@ -221,7 +223,7 @@ watch(
 
 .mark {
     font-size: 1.375rem;
-    margin-bottom: clamp(2rem, 7vh, 4rem);
+    margin-bottom: clamp(1.5rem, 5vh, 3rem);
 }
 
 /*
@@ -255,8 +257,8 @@ watch(
 .gate {
     width: 100%;
     max-width: 27rem;
-    margin-top: clamp(2.25rem, 6vh, 3.25rem);
-    padding: 2.5rem 2rem 1.5rem;
+    margin-top: clamp(1.75rem, 5vh, 2.75rem);
+    padding: 2.25rem 2rem 1.35rem;
 }
 
 .gate-error {
@@ -322,7 +324,7 @@ watch(
 /* Three stations on one hairline; ember marks the current step, quiet gold marks the ones ahead. */
 .rail {
     width: 100%;
-    margin-top: clamp(2.75rem, 8vh, 4.5rem);
+    margin-top: clamp(2rem, 6vh, 3.5rem);
 }
 .eyebrow-bare {
     color: var(--ink-subtle);
@@ -367,13 +369,6 @@ watch(
     line-height: 1.6;
     color: var(--ink-subtle);
     text-wrap: pretty;
-}
-
-.foot {
-    margin-top: clamp(2.5rem, 7vh, 4rem);
-    font-size: 0.6875rem;
-    letter-spacing: 0.04em;
-    color: #7c6d59;
 }
 
 @media (max-width: 40rem) {
