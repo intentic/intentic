@@ -253,12 +253,6 @@ const confirmRemove = async (): Promise<void> => {
 
 <template>
     <div>
-        <!-- One sentence; the rest (spans sites, names travel not logins) is shown by the surface itself. -->
-        <p class="mb-5 max-w-2xl text-sm text-muted">
-            A persona is who this sandbox is when it works: the accounts it speaks through, what it may do, and where in the workspace it works. Point
-            an automation at one and it runs inside those bounds.
-        </p>
-
         <!--
             The one setting on this page, above the list: two words, and no switch, since every switch on this page is a permission row inside a
             card's form and this one governs the page.
