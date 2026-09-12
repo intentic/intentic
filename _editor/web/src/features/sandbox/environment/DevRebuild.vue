@@ -1,14 +1,20 @@
 <script setup lang="ts">
-import { Button, Code, commandLang, ConfirmDialog, DeviceRunLog, Notice, type NoticeModel } from "@intentic/ui";
+import { Button, Code, commandLang, ConfirmDialog, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import ConnectDeviceHint from "../devices/ConnectDeviceHint.vue";
-import { manageDeviceSandbox, useHostRunning } from "../devices/useDevices";
+import { runDeviceCommand, useHostRunning } from "../devices/useDevices";
 
 // Rebuilding a sandbox whose base was compiled from a checkout, from that checkout. Not HostRecreate's flow: that one
 // swaps between images that already exist, and the image this asks for — the working tree as it is now — is not one of
 // them until something builds it. A button where the machine is reachable, the command to paste where it isn't; the
 // checkout's path is the sandbox's own record of where it came from, never a guess.
+//
+// It rides the named-command door (`dev-rebuild`, beside `dev-reload`) rather than a machine-side sandbox op, and that
+// is the load-bearing choice: the closed set of commands lives in the DAEMON and what crosses to the machine is a line
+// for `run_command`, a tool every released agent already has. A new op would instead have to reach a machine whose
+// agent is usually older than the sandbox asking — which is every dogfooding machine, and is what made the first
+// attempt answer "Input validation failed". Nothing streams back for the same reason: the build is detached out there.
 
 const props = defineProps<{
     slug: string;
@@ -20,8 +26,7 @@ const props = defineProps<{
 
 const hostId = useHostRunning(() => props.slug);
 
-const running = ref(false);
-const lines = ref<string[]>([]);
+const starting = ref(false);
 const failure = ref<NoticeModel | undefined>(undefined);
 const done = ref<string | undefined>(undefined);
 const confirming = ref(false);
@@ -33,22 +38,29 @@ const command = computed(() =>
     props.root === undefined ? `pnpm rebuild:sandbox ${props.slug}` : `cd ${props.root} && pnpm rebuild:sandbox ${props.slug}`,
 );
 
+// Where the detached build writes, so a rebuild that never comes back can still say why. Same folder ic logs its own
+// recreates into, and the daemon builds the same path when it forms the command (hosts/device-commands.ts).
+const logPath = computed(() => `~/.intentic/logs/dev-rebuild-${props.slug}.log`);
+
 const execute = async (): Promise<void> => {
     confirming.value = false;
     const id = hostId.value;
-    if (id === undefined || running.value) {
+    if (id === undefined || starting.value) {
         return;
     }
-    running.value = true;
+    starting.value = true;
     failure.value = undefined;
     done.value = undefined;
-    lines.value = [];
     try {
-        done.value = await manageDeviceSandbox(id, props.slug, `dev-rebuild`, { onLine: (line) => lines.value.push(line) });
+        // The machine's own sentence either way: a refusal (commands switched off, no checkout) is a value here, not a
+        // throw, and only an unreachable device throws.
+        const result = await runDeviceCommand(id, `dev-rebuild`);
+        done.value = result.ok ? result.message : undefined;
+        failure.value = result.ok ? undefined : { tone: `warning`, title: `That device didn't start the rebuild.`, detail: result.message };
     } catch (error) {
-        failure.value = noticeFrom(error, `Couldn't rebuild this sandbox from its checkout.`);
+        failure.value = noticeFrom(error, `Couldn't reach that device to rebuild this sandbox.`);
     } finally {
-        running.value = false;
+        starting.value = false;
     }
 };
 </script>
@@ -67,10 +79,10 @@ const execute = async (): Promise<void> => {
         <!-- The machine holding the checkout is reachable from here, so this is a button wherever you're reading it. -->
         <template v-if="hostId && root">
             <Button
-                :label="running ? `Rebuilding…` : `Rebuild from checkout`"
+                :label="starting ? `Starting…` : `Rebuild from checkout`"
                 size="small"
                 class="self-start"
-                :loading="running"
+                :loading="starting"
                 @click="confirming = true"
             >
                 <template #icon><Icon name="bolt" /></template>
@@ -78,15 +90,17 @@ const execute = async (): Promise<void> => {
             <p class="text-2xs text-subtle">
                 Runs <span class="font-mono">pnpm rebuild:sandbox</span> in {{ root }}, on the device hosting this sandbox. {{ cost }}
             </p>
-            <DeviceRunLog
-                v-if="running || lines.length > 0"
-                :lines="lines"
-                :running="running"
-                empty="Starting on that device…"
-                note="Running on that device: it keeps going even if you leave this page."
-            />
             <Notice v-if="failure" :of="failure" />
-            <p v-else-if="done" class="text-2xs text-muted">{{ done }}</p>
+            <!--
+                The build outlives this page: the sandbox coming back is its outcome, and the log is the only place a
+                build that never finishes can say why — so it is named here rather than only in the failure case.
+            -->
+            <template v-else-if="done">
+                <p class="text-2xs text-muted">{{ done }}</p>
+                <p class="text-2xs text-subtle">
+                    If it hasn't come back in a few minutes, <span class="font-mono">{{ logPath }}</span> on that device says how far it got.
+                </p>
+            </template>
 
             <ConfirmDialog
                 :open="confirming"
@@ -98,8 +112,8 @@ const execute = async (): Promise<void> => {
                 @confirm="execute"
             >
                 <p>
-                    The image is built from the working tree in {{ root }} — your sandbox keeps working through that — and then your sandbox restarts
-                    for about half a minute, after which this page reconnects on its own.
+                    The image is built from the working tree in {{ root }} — your sandbox keeps working through that, and it can take several minutes
+                    — and then your sandbox restarts for about half a minute, after which this page reconnects on its own.
                 </p>
                 <p class="mt-3 text-xs text-muted">
                     Only the sandbox restarts — nothing else on that device is touched. Your files (in /work) are kept.

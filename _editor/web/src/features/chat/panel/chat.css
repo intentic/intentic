@@ -220,10 +220,6 @@
     background: color-mix(in srgb, var(--color-overlay) 55%, transparent);
     border: 1px solid color-mix(in srgb, var(--color-primary-500) 22%, var(--color-line));
 }
-.chat-surface-assistant {
-    background: color-mix(in srgb, var(--color-overlay) 35%, transparent);
-    border: 1px solid var(--color-line);
-}
 /* The loading outline (ChatTranscriptSkeleton) fades out at its top edge. It stands in for the END of a
    conversation — the rest of which is above the viewport — so a hard first row would claim the transcript
    starts there, and the arriving content, which is scrolled to its own bottom, would contradict it. The fade

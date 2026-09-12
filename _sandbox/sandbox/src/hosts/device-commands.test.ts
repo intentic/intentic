@@ -116,6 +116,7 @@ test("implements every action the contract names", () => {
         "sync-unpair",
         "sync-install",
         "dev-reload",
+        "dev-rebuild",
     ];
     expect(Object.keys(DEVICE_COMMANDS).toSorted()).toEqual(commands.toSorted());
 });
@@ -124,7 +125,11 @@ test("implements every action the contract names", () => {
 // at another sandbox on that machine would restart somebody else's daemon.
 test("reloads THIS sandbox from the checkout the container records, not the caller's sandbox", () => {
     const line = DEVICE_COMMANDS["dev-reload"].line(facts({ devRoot: "/home/ada/intentic", sandboxId: "someone-else" }));
-    expect(line).toBe('sh "/home/ada/intentic"/_sandbox/sandbox/scripts/dev-reload.sh work-abc');
+    // Spelled in full, prefix included: both dev commands carry the toolchain with them, because the login shell the
+    // agent runs never reads the interactive rc pnpm's installer writes PNPM_HOME into.
+    expect(line).toBe(
+        'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"; sh "/home/ada/intentic"/_sandbox/sandbox/scripts/dev-reload.sh work-abc',
+    );
 });
 
 // No checkout recorded means every non-dev sandbox, where there is no script to run and no path to guess at.
@@ -136,12 +141,35 @@ test("refuses to reload a sandbox that has no checkout behind it", () => {
     expect(DEVICE_COMMANDS["dev-reload"].timeoutMs).toBeGreaterThan(60_000);
 });
 
+// The dev OUTER loop: the image rebuilt from the checkout. Detached with its output to a log, because the build can run
+// past any timeout this door has and the swap at the end kills the daemon that would have read the answer anyway.
+test("starts the checkout's rebuild in the background, logging where ic's own logs are", () => {
+    const line = DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "/home/ada/intentic", sandboxId: "someone-else" }));
+    expect(line).toBe(
+        'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"; mkdir -p "$HOME/.intentic/logs" && cd "/home/ada/intentic" && nohup pnpm rebuild:sandbox work-abc > "$HOME/.intentic/logs/dev-rebuild-work-abc.log" 2>&1 &',
+    );
+});
+
+// Same rule as the reload beside it: no checkout recorded, no line — a path on somebody's laptop is never guessed.
+test("refuses to rebuild a sandbox that has no checkout behind it", () => {
+    expect(DEVICE_COMMANDS["dev-rebuild"].line(facts())).toBeUndefined();
+    expect(DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "/home/ada/intentic", ownSlug: undefined }))).toBeUndefined();
+    expect(DEVICE_COMMANDS["dev-rebuild"].needs).toContain("dev-sandbox.sh");
+    // Detached, so the call itself is instant: a long timeout here would only describe a wait nobody does.
+    expect(DEVICE_COMMANDS["dev-rebuild"].timeoutMs).toBeUndefined();
+});
+
+// A leading `~` is the owner's home on that machine, expanded by the daemon rather than left for a quoted shell.
+test("writes a tilde checkout as $HOME, the one the shell will expand", () => {
+    expect(DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "~/intentic" }))).toContain('cd "$HOME/intentic"');
+});
+
 // The same enrollment the card's copyable one-liner carries — script, env and single-use token — spoken in the shell
 // the device actually runs.
 test("enrolls a connected device in its own shell's dialect", () => {
     const unix = DEVICE_COMMANDS["sync-install"].line(facts({ pairToken: "pair_abc", mode: "sync", localDir: "~/intentic/work" }));
     expect(unix).toBe(
-        'curl -fsSL https://intentic.dev/sync | env SANDBOX_URL=\'https://work-abc.intentic.dev\' PAIR_TOKEN=\'pair_abc\' SYNC_DIR="$HOME/intentic/work" sh',
+        "curl -fsSL https://intentic.dev/sync | env SANDBOX_URL='https://work-abc.intentic.dev' PAIR_TOKEN='pair_abc' SYNC_DIR=\"$HOME/intentic/work\" sh",
     );
     const windows = DEVICE_COMMANDS["sync-install"].line(
         facts({ platform: "windows", pairToken: "pair_abc", mode: "sync", localDir: "C:\\Users\\Ada\\work" }),

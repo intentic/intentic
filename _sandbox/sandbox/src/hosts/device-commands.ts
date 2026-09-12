@@ -57,6 +57,12 @@ const forSandbox = (base: string, sandboxId: string | undefined): string => (san
 // schema refuses a `$` from the caller, which makes this the only one in the line.
 const shellDir = (dir: string): string => `"${dir.replace(/^~(?=[\\/]|$)/, "$HOME")}"`;
 
+// BOTH DEV COMMANDS NEED pnpm, AND THE AGENT'S SHELL USUALLY HASN'T GOT IT. Its installer writes PNPM_HOME into the
+// INTERACTIVE rc (.zshrc/.bashrc); the agent runs a login shell, which never reads those, so a line that just says
+// `pnpm` dies with "command not found" on a machine where the owner's own terminal runs it fine. Prepended rather than
+// substituted: a PATH that already has pnpm keeps winning, and a machine that keeps it elsewhere is unaffected.
+const WITH_PNPM = 'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH";';
+
 // The install one-liner for this sandbox, in the dialect of the device's own shell — the same script, environment and
 // single-use token the card's copyable command carries, built from the same table (@intentic/constants).
 const installLine = (facts: DeviceCommandFacts): string | undefined => {
@@ -108,6 +114,20 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
         timeoutMs: LONG_COMMAND_TIMEOUT_MS,
         mints: true,
     },
+    /* The dev OUTER loop: rebuild the image itself from the checkout, for a sandbox whose base was compiled there
+     * (`pnpm rebuild:sandbox`, which builds intentic-sandbox:dev and swaps this container onto it). Detached, with its
+     * output to a log beside ic's own, for two reasons: a cold build can run past any timeout a device command may
+     * have, and the swap at the end kills the daemon awaiting the answer anyway. So the call returns as soon as the
+     * build is under way, the sandbox coming back is the outcome, and the log is where a build that never finishes
+     * says why. */
+    "dev-rebuild": {
+        done: "The rebuild is running on that device. Your sandbox restarts on the new image when it is built, and this page reconnects on its own.",
+        line: (facts) =>
+            facts.devRoot === undefined || facts.ownSlug === undefined
+                ? undefined
+                : `${WITH_PNPM} mkdir -p "$HOME/.intentic/logs" && cd ${shellDir(facts.devRoot)} && nohup pnpm rebuild:sandbox ${facts.ownSlug} > "$HOME/.intentic/logs/dev-rebuild-${facts.ownSlug}.log" 2>&1 &`,
+        needs: "only a dev sandbox launched by dev-sandbox.sh knows which checkout to rebuild from",
+    },
     // The dev inner loop, run where the checkout is: compile the daemon and restart this very container. The slug is
     // this sandbox's own, never the caller's, and the answer usually never arrives — the daemon carrying it is the one
     // being restarted, which the card treats as the expected ending.
@@ -116,7 +136,7 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
         line: (facts) =>
             facts.devRoot === undefined || facts.ownSlug === undefined
                 ? undefined
-                : `sh ${shellDir(facts.devRoot)}/_sandbox/sandbox/scripts/dev-reload.sh ${facts.ownSlug}`,
+                : `${WITH_PNPM} sh ${shellDir(facts.devRoot)}/_sandbox/sandbox/scripts/dev-reload.sh ${facts.ownSlug}`,
         needs: "only a dev sandbox launched by dev-sandbox.sh knows which checkout to reload from",
         timeoutMs: LONG_COMMAND_TIMEOUT_MS,
     },

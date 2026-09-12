@@ -53,8 +53,6 @@ export type DeviceSandbox = z.infer<typeof DeviceSandboxSchema>;
 // update without touching the container; `reshape` changes only its resources and privileges, not the image.
 // `runner-up`/`runner-remove` act on a runner (this sandbox's own container), not a person's sandbox; gated by the
 // `sandboxes` switch, not removal, since a runner holds no separate workspace to lose.
-// `dev-rebuild` is the only op that builds an image from SOURCE: a sandbox on a locally-built base is rebuilt from the
-// checkout it came from, because a registry `update` would move it off that base rather than refresh it.
 export const DeviceSandboxOpSchema = z.enum([
     "start",
     "stop",
@@ -62,7 +60,6 @@ export const DeviceSandboxOpSchema = z.enum([
     "prepare",
     "update",
     "rebuild",
-    "dev-rebuild",
     "rollback",
     "reshape",
     "remove",
@@ -79,9 +76,6 @@ export const DeviceSandboxFlowSchema = z.object({
     slug: z.string().min(1),
     // Approved overlay's sha256, required only by `rebuild`; only content matching it is ever built.
     hash: z.string().optional(),
-    // `dev-rebuild` only, daemon-filled: the checkout on that machine (SANDBOX_DEV_ROOT, replayed onto the container by
-    // whichever runner made it), never a path the caller names — the sandbox is the only side that knows it.
-    root: z.string().optional(),
     // What `reshape` should change, required by it and meaningless to the rest.
     resources: SandboxResourcesAskSchema.optional(),
     // `runner-up` only, daemon-filled, never by the caller: the browser never holds the pairing credential.
@@ -120,14 +114,25 @@ export type DeviceAgentFlowInput = z.infer<typeof DeviceAgentFlowInputSchema>;
 // command: the same socket carries `run_command`, which would grant a shell on the user's machine.
 // `sync-unpair` runs the machine's own `sync uninstall --sandbox` (terminates both Mutagen sessions, drops the pairing,
 // self-revokes enrollment); revoking from the sandbox side is a different route.
-// `dev-reload` and `sync-install` are the two whose argv the daemon fills from what only it knows — the dev checkout on
-// that machine, a freshly minted pairing token — which is also why neither takes a path or a token from the caller.
-export const DeviceCommandSchema = z.enum(["mirror-off", "mirror-on", "sync-pause", "sync-resume", "sync-unpair", "dev-reload", "sync-install"]);
+// `dev-reload`, `dev-rebuild` and `sync-install` are the three whose argv the daemon fills from what only it knows — the
+// dev checkout on that machine, a freshly minted pairing token — which is also why none takes a path or a token from the
+// caller. The two dev commands are also why a machine-side op is the wrong shape for them: this door carries a COMMAND
+// STRING to a tool every released agent already has, so a sandbox can drive a machine whose agent predates the feature.
+export const DeviceCommandSchema = z.enum([
+    "mirror-off",
+    "mirror-on",
+    "sync-pause",
+    "sync-resume",
+    "sync-unpair",
+    "dev-reload",
+    "dev-rebuild",
+    "sync-install",
+]);
 export type DeviceCommand = z.infer<typeof DeviceCommandSchema>;
 // The reversible sync switches: the subset a device's own row drives with a pair of buttons, as opposed to the two
 // commands a card elsewhere issues once. Its own type so those button tables stay total without carrying entries for
 // commands they can never send.
-export const DeviceSyncSwitchSchema = DeviceCommandSchema.exclude(["dev-reload", "sync-install"]);
+export const DeviceSyncSwitchSchema = DeviceCommandSchema.exclude(["dev-reload", "dev-rebuild", "sync-install"]);
 export type DeviceSyncSwitch = z.infer<typeof DeviceSyncSwitchSchema>;
 // Machine's sandbox id (absent = every paired sandbox); must start alphanumeric, else it parses as a CLI flag.
 export const DeviceSandboxIdSchema = z

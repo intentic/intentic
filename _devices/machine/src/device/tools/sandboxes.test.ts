@@ -2,9 +2,6 @@ import type { HostScopes } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { ScopeError } from "../policy.js";
 import {
-    devRebuildArgv,
-    devRebuildSandbox,
-    devRebuildUnsupported,
     icCandidates,
     icReconnectArgs,
     icRemoveArgs,
@@ -110,26 +107,6 @@ test("a rebuild without the approved digest is refused rather than built against
     // missing one has to stop the flow rather than fall through to an unpinned rebuild.
     expect(() => icSwapArgs("rebuild", "work", undefined)).toThrow(/hash.*required/i);
     expect(() => icSwapArgs("rebuild", "work", "")).toThrow(/approved/);
-});
-
-// The one flow that builds an image instead of swapping onto one. Everything asserted here is about what reaches a
-// shell on somebody's machine, since that is what separates it from every other op in this file.
-test("a rebuild from source sends the slug as a shell parameter, never as script", () => {
-    const { args } = devRebuildArgv("linux", `work"; rm -rf ~ #`);
-    expect(args).toEqual(["-lc", `pnpm rebuild:sandbox "$1"`, "intentic", `work"; rm -rf ~ #`]);
-});
-
-test("a rebuild from source is refused on Windows, where the checkout's scripts cannot run", () => {
-    expect(devRebuildUnsupported("win32", "work", "C:\\src\\intentic")).toContain("POSIX-only");
-    expect(devRebuildUnsupported("linux", "work", "/home/ada/intentic")).toBeUndefined();
-    expect(devRebuildUnsupported("darwin", "work", "/Users/ada/intentic")).toBeUndefined();
-});
-
-test("a rebuild from source is refused without a checkout to run in, and by the sandboxes switch", async () => {
-    // Both refusals land before docker is asked anything: an op that cannot run must not first cost a fleet read.
-    await expect(devRebuildSandbox("work", undefined, scopes(), () => undefined)).rejects.toThrow(/checkout/);
-    await expect(devRebuildSandbox("work", "", scopes(), () => undefined)).rejects.toThrow(/checkout/);
-    await expect(devRebuildSandbox("work", "/home/ada/intentic", scopes({ sandboxes: "off" }), () => undefined)).rejects.toBeInstanceOf(ScopeError);
 });
 
 // The reshape argv: every value is a flag with a word after it, never a bare flag, and `null` becomes ic's own

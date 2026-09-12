@@ -7,7 +7,6 @@ import type { HostScopes, DeviceSandbox, SandboxResources, SandboxResourcesAsk }
 import { HOST_RUNTIME_ENV, OVERLAY_RUNTIME_ENV } from "@intentic/sandbox-run";
 import { z } from "zod";
 import { assertScope } from "../policy.js";
-import { shellFor } from "./shell.js";
 
 // The Intentic sandboxes running on this machine. A sandbox can't see its siblings itself (its docker socket
 // isn't mounted), so this is the only place "what runs here, start that one back up" can be answered. Scopes
@@ -382,13 +381,11 @@ export const runnerFlow = async (
 
 // One long child process, narrated as it goes. Every line is handed to `onLine` the moment it arrives, and the same
 // lines are collected into the answer a caller reports at the end. Both streams go to one place: `ic` writes progress
-// to stdout and diagnostics to stderr, and so does a build script. `missing` is ENOENT alone — the program (or the cwd
-// it was pointed at) isn't there — which the caller answers for, since only it knows what was supposed to be at that
-// path.
+// to stdout and diagnostics to stderr. `missing` is ENOENT alone — the program isn't there — which the caller answers
+// for, since only it knows what was supposed to be at that path.
 const runStreamed = (
     binary: string,
     args: readonly string[],
-    cwd: string | undefined,
     onLine: (line: string) => void,
 ): Promise<{ code: number; output: string } | "missing"> => {
     const lines: string[] = [];
@@ -401,7 +398,7 @@ const runStreamed = (
         }
     };
     return new Promise((resolve) => {
-        const child = spawn(binary, [...args], { windowsHide: true, ...(cwd === undefined ? {} : { cwd }) });
+        const child = spawn(binary, [...args], { windowsHide: true });
         let missing = false;
         child.stdout.setEncoding("utf8").on("data", emit);
         child.stderr.setEncoding("utf8").on("data", emit);
@@ -422,7 +419,7 @@ const runStreamed = (
 export const runIc = async (args: readonly string[], onLine: (line: string) => void): Promise<{ code: number; output: string }> => {
     const candidates = icCandidates(process.platform, homedir());
     for (const [index, binary] of candidates.entries()) {
-        const attempt = await runStreamed(binary, args, undefined, onLine);
+        const attempt = await runStreamed(binary, args, onLine);
         if (attempt !== "missing") {
             return attempt;
         }
@@ -466,58 +463,6 @@ export const swapSandbox = async (
     }
     const verb = { update: "Updated", rebuild: "Rebuilt", rollback: "Rolled back" }[swap];
     return `${verb} sandbox "${slug}". Its files and its history were kept.`;
-};
-
-// The one flow that builds an image from SOURCE, for a sandbox whose base was built on this machine: the checkout's own
-// `rebuild:sandbox` script, which compiles the daemon, rebuilds `intentic-sandbox:dev` from the working tree and swaps
-// the container onto it. A registry `update` would move such a sandbox onto the published image instead, so the two are
-// not interchangeable. The slug rides as a shell PARAMETER, never spliced into the script text.
-const DEV_REBUILD_SCRIPT = `pnpm rebuild:sandbox "$1"`;
-
-// What runs it: the login shell, as `run_command` uses, because a detached agent's PATH has no pnpm without one. The
-// slug arrives as a shell PARAMETER and is never spliced into the script text, so no slug can become script. The
-// platform is an argument, like `icCandidates`', so the Windows answer is assertable from a Linux runner.
-export const devRebuildArgv = (platform: NodeJS.Platform, slug: string): { command: string; args: string[]; label: string } => {
-    const shell = shellFor(platform);
-    return { command: shell.command, args: [...shell.args(DEV_REBUILD_SCRIPT), "intentic", slug], label: shell.label };
-};
-
-// Windows has nothing to run this with: the checkout's rebuild is `sh` the whole way down (dev-sandbox.sh, recreate.sh).
-export const devRebuildUnsupported = (platform: NodeJS.Platform, slug: string, root: string): string | undefined =>
-    platform === "win32"
-        ? `Rebuilding from a checkout is POSIX-only. Run "pnpm rebuild:sandbox ${slug}" in ${root} yourself, from WSL or Git Bash.`
-        : undefined;
-
-export const devRebuildSandbox = async (
-    slug: string,
-    root: string | undefined,
-    scopes: HostScopes,
-    onLine: (line: string) => void,
-): Promise<string> => {
-    assertScope(scopes, "sandboxes");
-    if (root === undefined || root === "") {
-        throw new Error(`A rebuild from source needs the checkout that sandbox's image was built from, and none was sent.`);
-    }
-    const unsupported = devRebuildUnsupported(process.platform, slug, root);
-    if (unsupported !== undefined) {
-        throw new Error(unsupported);
-    }
-    await find(slug);
-    const { command, args, label } = devRebuildArgv(process.platform, slug);
-    icInFlight.add(slug);
-    let run: { code: number; output: string } | "missing";
-    try {
-        run = await runStreamed(command, args, root, onLine);
-    } finally {
-        icInFlight.delete(slug);
-    }
-    if (run === "missing") {
-        throw new Error(`Nothing to run the rebuild in: ${root} isn't a folder on this device any more, or ${label} isn't there.`);
-    }
-    if (run.code !== 0) {
-        throw new Error(`That rebuild failed on this device.\n\n${run.output}`);
-    }
-    return `Rebuilt sandbox "${slug}" from the checkout at ${root}. Its files and its history were kept.`;
 };
 
 // Change a sandbox's share of this machine, or its privileges, over the same `ic` door as the swaps. Rides

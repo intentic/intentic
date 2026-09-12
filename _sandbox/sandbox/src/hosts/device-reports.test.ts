@@ -393,21 +393,18 @@ test("a machine that refuses to answer at all reads as offline", async () => {
     expect((await devices(services))[0]).toMatchObject({ hostId: "dead-pc", gap: "offline" });
 });
 
-// Runner lifecycle and the rebuild from source: the ops the daemon fills in for.
+// Runner lifecycle: the two ops the daemon fills in for.
 
 // Fixture exposing both the flow sent to the machine and what this side minted, revoked or disconnected.
 const runnerServices = (
-    overrides: { publicUrl?: string; online?: boolean; approved?: string; settings?: Record<string, unknown>; devRoot?: string } = {},
+    overrides: { publicUrl?: string; online?: boolean; approved?: string; settings?: Record<string, unknown> } = {},
 ): { services: Services; sent: DeviceSandboxFlow[]; minted: string[]; revoked: string[]; disconnected: string[] } => {
     const sent: DeviceSandboxFlow[] = [];
     const minted: string[] = [];
     const revoked: string[] = [];
     const disconnected: string[] = [];
     const services = {
-        config: {
-            historyRoot: NO_HISTORY,
-            sandbox: { publicUrl: overrides.publicUrl ?? "https://sandbox-x.intentic.dev", devRoot: overrides.devRoot },
-        },
+        config: { historyRoot: NO_HISTORY, sandbox: { publicUrl: overrides.publicUrl ?? "https://sandbox-x.intentic.dev" } },
         // Backs runner-up's best-effort reads; empty here so nothing extra appears in the assertions below.
         workspace: { root: "/nowhere" },
         files: { read: async () => overrides.approved },
@@ -470,20 +467,6 @@ test("no other op grows a pairing", async () => {
     await drain(manageDeviceSandbox(services, "rog", { op: "update", slug: "work" }));
     expect(sent[0]).toEqual({ op: "update", slug: "work" });
     expect(minted).toEqual([]);
-});
-
-// The checkout is this side's own knowledge, like the pairing above: a caller names an op, never a path on somebody's
-// machine, so one arriving in the payload is replaced rather than honoured.
-test("a rebuild from source carries the checkout this sandbox records, not one the caller named", async () => {
-    const { services, sent } = runnerServices({ devRoot: "/home/ada/intentic" });
-    await drain(manageDeviceSandbox(services, "rog", { op: "dev-rebuild", slug: "work", root: "/tmp/somewhere-else" }));
-    expect(sent[0]).toEqual({ op: "dev-rebuild", slug: "work", root: "/home/ada/intentic" });
-});
-
-test("a sandbox with no checkout recorded refuses the rebuild instead of sending a machine a guess", async () => {
-    const { services, sent } = runnerServices();
-    await expect(drain(manageDeviceSandbox(services, "rog", { op: "dev-rebuild", slug: "work" }))).rejects.toThrow(/checkout/i);
-    expect(sent).toEqual([]);
 });
 
 // The approved overlay ships byte-exact with its sha256 (checked again on the machine); non-default settings ship as a

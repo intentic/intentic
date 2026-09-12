@@ -5,7 +5,6 @@ import { handleMcpMessage } from "./mcp.js";
 import { hostFacts } from "./tools/describe.js";
 import { runAgentOp } from "./tools/agent.js";
 import {
-    devRebuildSandbox,
     manageSandbox,
     reconnectSandbox,
     removeSandbox,
@@ -60,8 +59,7 @@ const swapFlowFor =
         swapSandbox(swap, slug, hash, scopes, onLine);
 
 // Which function each op is, total over the op enum so a new op cannot be added without one: start/stop/restart are a
-// docker call, `logs` is a read, `dev-rebuild` builds an image from a checkout, and the rest run `ic` and narrate
-// themselves for minutes.
+// docker call, `logs` is a read, and the rest run `ic` and narrate themselves for minutes.
 const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
     start:
         ({ slug }, scopes) =>
@@ -79,11 +77,6 @@ const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
     update: swapFlowFor("update"),
     rebuild: swapFlowFor("rebuild"),
     rollback: swapFlowFor("rollback"),
-    // The only op that builds an image from source: every other one swaps the sandbox between images that exist.
-    "dev-rebuild":
-        ({ slug, root }, scopes) =>
-        (onLine) =>
-            devRebuildSandbox(slug, root, scopes, onLine),
     // The same image with a different share of this machine: the one op with a payload of its own.
     reshape:
         ({ slug, resources }, scopes) =>

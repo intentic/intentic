@@ -337,19 +337,6 @@ export const heldHostDevices = async (services: Services): Promise<Device[]> =>
         })),
     );
 
-// The checkout a `dev-rebuild` runs in, refused here rather than on the machine: a sandbox handed a locally-built image
-// without recording where it came from cannot name one, and guessing a path on somebody's laptop is not a fallback.
-const devRebuildRoot = (services: Services): string => {
-    const root = services.config.sandbox.devRoot;
-    if (root === undefined) {
-        throw new ORPCError("CONFLICT", {
-            message:
-                "This sandbox doesn't know which checkout its image was built from. Recreate it once with dev-sandbox.sh on that machine — it records the checkout, and rebuilding becomes a button here.",
-        });
-    }
-    return root;
-};
-
 // One management action relayed to the machine and streamed back verbatim (some flows take minutes); the daemon adds no
 // judgement of its own, only drops the cached pull so the next poll reflects the result.
 export async function* manageDeviceSandbox(services: Services, id: string, input: DeviceSandboxFlow): AsyncGenerator<DeviceFlowLine> {
@@ -359,38 +346,34 @@ export async function* manageDeviceSandbox(services: Services, id: string, input
             message: `"${id}" is not connected right now, the device is asleep, offline, or its agent isn't running.`,
         });
     }
-    // Two augmented ops, both with a value only this side holds: runner-up adds a dial URL and a name-bound pairing
-    // (refused without a public URL), dev-rebuild the checkout out there its image is rebuilt from.
+    // runner-up is the only augmented op: adds a dial URL and a name-bound pairing; refused without a public URL.
     const flow: DeviceSandboxFlow =
-        input.op === "dev-rebuild"
-            ? { ...input, root: devRebuildRoot(services) }
-            : input.op === "runner-up"
-              ? await (async () => {
-                    const parentUrl = services.config.sandbox.publicUrl;
-                    if (parentUrl === "") {
-                        throw new ORPCError("CONFLICT", {
-                            message:
-                                "This sandbox has no public address yet, so a runner would have nothing to dial back to. Finish its setup first.",
-                        });
-                    }
-                    // Overlay ships as approved bytes plus sha256, re-checked on the machine; definition ships settings
-                    // only, best-effort.
-                    const definition = await Promise.resolve()
-                        .then(() => settingsDefinition(services))
-                        .then((settings) => (Object.keys(settings.settings).length === 0 ? undefined : emitDefinitionToml(settings)))
-                        .catch(() => undefined);
-                    const overlay = await Promise.resolve()
-                        .then(() => services.files.read(approvedPath(services)))
-                        .catch(() => undefined);
-                    return {
-                        ...input,
-                        parentUrl,
-                        pair: services.runners.mintPairing(input.slug, { host: id }).token,
-                        ...(definition !== undefined ? { definition } : {}),
-                        ...(overlay !== undefined && overlay !== "" ? { overlay, overlayHash: sha256Hex(overlay) } : {}),
-                    };
-                })()
-              : input;
+        input.op === "runner-up"
+            ? await (async () => {
+                  const parentUrl = services.config.sandbox.publicUrl;
+                  if (parentUrl === "") {
+                      throw new ORPCError("CONFLICT", {
+                          message: "This sandbox has no public address yet, so a runner would have nothing to dial back to. Finish its setup first.",
+                      });
+                  }
+                  // Overlay ships as approved bytes plus sha256, re-checked on the machine; definition ships settings
+                  // only, best-effort.
+                  const definition = await Promise.resolve()
+                      .then(() => settingsDefinition(services))
+                      .then((settings) => (Object.keys(settings.settings).length === 0 ? undefined : emitDefinitionToml(settings)))
+                      .catch(() => undefined);
+                  const overlay = await Promise.resolve()
+                      .then(() => services.files.read(approvedPath(services)))
+                      .catch(() => undefined);
+                  return {
+                      ...input,
+                      parentUrl,
+                      pair: services.runners.mintPairing(input.slug, { host: id }).token,
+                      ...(definition !== undefined ? { definition } : {}),
+                      ...(overlay !== undefined && overlay !== "" ? { overlay, overlayHash: sha256Hex(overlay) } : {}),
+                  };
+              })()
+            : input;
     try {
         // The machine bounds its own work; this ceiling only ever catches a socket that is gone but not closed.
         for await (const line of await client.runSandboxFlow(flow, { signal: AbortSignal.timeout(FLOW_TIMEOUT_MS) })) {
