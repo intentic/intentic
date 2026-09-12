@@ -502,7 +502,7 @@ const grab = (event: PointerEvent): void => {
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`keep`)"
                 >
-                    <Icon name="pin" class="text-2xs" />
+                    <Icon name="pin" class="text-sm" />
                 </button>
                 <button
                     v-if="localOnly"
@@ -512,7 +512,7 @@ const grab = (event: PointerEvent): void => {
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="edit.begin()"
                 >
-                    <Icon name="pencil" class="text-2xs" />
+                    <Icon name="pencil" class="text-sm" />
                 </button>
                 <button
                     v-if="archivable"
@@ -524,7 +524,7 @@ const grab = (event: PointerEvent): void => {
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`archive`)"
                 >
-                    <Icon name="box" class="text-2xs" />
+                    <Icon name="box" class="text-sm" />
                 </button>
                 <button
                     v-if="closable"
@@ -534,7 +534,7 @@ const grab = (event: PointerEvent): void => {
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`close`)"
                 >
-                    <Icon name="times" class="text-2xs" />
+                    <Icon name="times" class="text-sm" />
                 </button>
                 <button
                     v-if="agent.archivedAt !== undefined"
@@ -544,7 +544,7 @@ const grab = (event: PointerEvent): void => {
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`restore`)"
                 >
-                    <Icon name="undo" class="text-2xs" />
+                    <Icon name="undo" class="text-sm" />
                 </button>
                 <!--
                     An icon, not a spelled-out link, so it costs no space at rest; the words move to the tooltip.
@@ -559,7 +559,7 @@ const grab = (event: PointerEvent): void => {
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="reviewCard"
                 >
-                    <Icon name="arrow-right" class="text-2xs" />
+                    <Icon name="arrow-right" class="text-sm" />
                 </button>
             </template>
             <Icon v-if="pending !== undefined" name="spinner" spin class="shrink-0 text-xs text-link" />

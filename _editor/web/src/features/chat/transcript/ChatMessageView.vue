@@ -508,7 +508,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 line of its own and strand the mark above it and the clock below. The offers below stay siblings, since
                 wrapping is exactly what they want.
             -->
-            <span class="flex min-w-0 items-baseline gap-x-2">
+            <span class="flex min-w-0 items-center gap-x-2">
                 <!-- Spins and shows elapsed time while the notice's wait runs, then settles to a plain line (ChatMessage.noticeWait). -->
                 <Icon v-if="pendingWait" name="spinner" spin class="shrink-0 text-2xs text-info" />
                 <Icon v-else name="info-circle" class="shrink-0 text-2xs" />
