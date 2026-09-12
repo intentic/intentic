@@ -27,11 +27,12 @@ const toggle = (): void => {
 </script>
 
 <template>
-    <!-- Open, header and body are one object on one plate; shut, the header is a line of its own with nothing under it. -->
-    <div class="flex w-full flex-col overflow-hidden rounded-lg" :class="open && `border-l-2 border-line-strong bg-overlay/60`">
+    <!-- Open, header and body share one quiet plate; shut, the header is a line of its own with nothing under it. -->
+    <div class="flex w-full flex-col overflow-hidden rounded-lg transition-colors" :class="open ? `bg-overlay/35` : ``">
         <button
             type="button"
-            class="group/fold flex w-full items-center gap-2 px-2 py-1 text-left text-2xs text-subtle transition-colors hover:bg-overlay"
+            class="group/fold flex w-full items-center gap-2 px-2 py-1 text-left text-2xs text-subtle transition-colors"
+            :class="!open && `hover:bg-overlay`"
             :aria-expanded="open"
             @click="toggle"
         >
@@ -47,7 +48,7 @@ const toggle = (): void => {
         </button>
         <!-- Capped and scrolled, not clamped, so long material stays reachable without pushing the answer off screen.
              `px-2` is the header's own inset: header and body read as one object only if their text starts on one edge. -->
-        <div v-if="open" class="scrollbar-thin max-h-64 overflow-auto px-2 pt-0.5 pb-2 text-xs leading-relaxed text-muted">
+        <div v-if="open" class="scrollbar-thin max-h-64 overflow-auto border-t border-line/40 px-2 py-2 text-2xs leading-relaxed text-subtle">
             <slot />
         </div>
     </div>
