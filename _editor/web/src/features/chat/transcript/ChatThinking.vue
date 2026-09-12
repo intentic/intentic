@@ -19,7 +19,7 @@ const toggle = (): void => {
 </script>
 
 <template>
-    <div class="w-full overflow-hidden rounded-lg border-l-2 border-line-strong bg-overlay/60">
+    <div class="w-full overflow-hidden rounded-lg">
         <button type="button" class="flex w-full items-center gap-1.5 px-2 py-1 text-2xs uppercase tracking-wide text-subtle" @click="toggle">
             <Icon class="text-2xs" :name="open ? 'chevron-down' : 'chevron-right'" />
             <span>Thinking</span>

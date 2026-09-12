@@ -574,7 +574,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         <template v-if="errand">
             <button
                 type="button"
-                class="flex max-w-full items-center gap-2 self-start rounded-lg bg-overlay px-3 py-1.5 text-left text-2xs"
+                class="flex max-w-full items-center gap-2 self-start rounded-lg px-3 py-1.5 text-left text-2xs"
                 :aria-expanded="errandOpen"
                 @click="errandOpen = !errandOpen"
             >
@@ -1192,7 +1192,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
     <div v-if="message.notes?.length" class="chat-message chat-stack flex flex-col" :class="{ 'chat-doomed': doomed }">
         <button
             type="button"
-            class="flex max-w-full items-center gap-2 self-start rounded-lg bg-overlay px-3 py-1.5 text-left text-2xs"
+            class="flex max-w-full items-center gap-2 self-start rounded-lg px-3 py-1.5 text-left text-2xs"
             :aria-expanded="notesOpen"
             @click="notesOpen = !notesOpen"
         >

@@ -117,7 +117,7 @@ const toggleThinking = (index: number): void => {
                     </div>
 
                     <div v-else class="chat-stack flex w-full flex-col">
-                        <div v-if="message.thinking" class="w-full overflow-hidden rounded-lg border-l-2 border-line-strong bg-overlay/60">
+                        <div v-if="message.thinking" class="w-full overflow-hidden rounded-lg">
                             <button
                                 type="button"
                                 class="flex w-full items-center gap-1.5 px-2 py-1 text-2xs tracking-wide uppercase text-subtle"
