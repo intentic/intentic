@@ -98,7 +98,7 @@ const mount = (): HTMLElement => {
 const text = (el: HTMLElement): string => el.textContent ?? ``;
 const buttonLabelled = (el: HTMLElement, label: string): HTMLButtonElement | undefined =>
     [...el.querySelectorAll(`button`)].find((button) => (button.textContent ?? ``).includes(label));
-const nameField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLInputElement>(`input`)!;
+const nameField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLInputElement>(`input[aria-label="Name this persona"]`)!;
 const byAriaLabel = (el: HTMLElement, label: string): HTMLElement | undefined =>
     el.querySelector<HTMLElement>(`[aria-label="${label}"]`) ?? undefined;
 

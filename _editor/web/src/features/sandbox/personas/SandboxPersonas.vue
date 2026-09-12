@@ -10,13 +10,14 @@ import {
     Notice,
     type NoticeModel,
     PersonaFace,
+    Row,
     RowGroup,
     RowNote,
-    SegmentedControl,
     SkeletonRows,
     StatusBadge,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
+import ToggleSwitch from "primevue/toggleswitch";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
 import { createInlineRename } from "../../../lib/inlineRename";
@@ -231,13 +232,9 @@ const beginRename = (persona: Persona): void => {
 // persona-router.ts reads it). Lives here, not with the model lists, since a decision about it needs the cards it would
 // choose between.
 const { settings, patch } = useSandboxSettings();
-const ROUTING = [
-    { label: `Off`, value: `off` },
-    { label: `On`, value: `on` },
-] as const;
-const routing = computed(() => (settings.value?.personaRouting ?? true ? `on` : `off`));
-const setRouting = (value: string): void => {
-    patch({ personaRouting: value === `on` });
+const personaRouting = computed(() => settings.value?.personaRouting ?? true);
+const setPersonaRouting = (on: boolean): void => {
+    patch({ personaRouting: on });
 };
 
 // Removal.
@@ -253,23 +250,21 @@ const confirmRemove = async (): Promise<void> => {
 
 <template>
     <div>
-        <!--
-            The one setting on this page, above the list: two words, and no switch, since every switch on this page is a permission row inside a
-            card's form and this one governs the page.
-        -->
-        <div v-if="settings !== undefined && personas.length > 0" class="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <span class="flex min-w-0 flex-col">
-                <span class="flex items-center gap-2 text-sm text-content">
-                    <Icon name="users" class="w-4 shrink-0 text-center text-xs text-subtle" />
-                    Match new chats to a persona
-                </span>
-                <span class="text-xs text-subtle">
-                    <template v-if="routing === `on`">The first message is read when you send it, and the chat says which persona it landed on.</template>
-                    <template v-else>Nothing is read: a chat acts as the persona you pick, or as everyone.</template>
-                </span>
-            </span>
-            <SegmentedControl :model-value="routing" :options="ROUTING" aria-label="Match new chats to a persona" @update:model-value="setRouting" />
-        </div>
+        <RowGroup v-if="settings !== undefined && personas.length > 0" label="New chats" class="mb-5">
+            <Row
+                icon="users"
+                title="Match new chats to a persona"
+                :description="
+                    personaRouting
+                        ? `The first message is read when you send it, and the chat says which persona it landed on.`
+                        : `Nothing is read: a chat acts as the persona you pick, or as everyone.`
+                "
+            >
+                <template #control>
+                    <ToggleSwitch :model-value="personaRouting" @update:model-value="setPersonaRouting" />
+                </template>
+            </Row>
+        </RowGroup>
 
         <Notice v-if="listNotice" :of="listNotice" class="mb-4" />
         <!-- The real empty state must not show before we know whether personas exist; the list's shape stands in while loading. -->
