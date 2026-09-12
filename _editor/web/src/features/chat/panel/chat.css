@@ -250,7 +250,29 @@
    Labelled .composer-ghost buttons are chrome, not content: they take the meta tier wherever they
    appear (the composer's model/mode row, the picker's footer, the connect gate's provider tabs), so
    the controls framing the input never out-weigh the message being written in it.
-   Mono runs a tier below its sans context — it reads optically larger at the same nominal size. */
+   Mono runs a tier below its sans context — it reads optically larger at the same nominal size.
+
+   Popped out, the transcript alone moves one step up — read on its own, not beside the code, while the
+   tab rail and composer keep the docked scale. The capture lives on .chat-floating-root
+   (FloatingArea.vue) so .chat-turns can alias without reading its own overrides. */
+
+/* Snapshots the app tiers before the popped-out transcript redefines them on .chat-turns. */
+.chat-floating-root {
+    --chat-pop-meta: var(--text-2xs);
+    --chat-pop-meta-lh: var(--text-2xs--line-height);
+    --chat-pop-body: var(--text-xs);
+    --chat-pop-body-lh: var(--text-xs--line-height);
+    --chat-pop-title: var(--text-sm);
+    --chat-pop-title-lh: var(--text-sm--line-height);
+}
+.chat-floating-root .chat-turns {
+    --text-2xs: var(--chat-pop-body);
+    --text-2xs--line-height: var(--chat-pop-body-lh);
+    --text-xs: var(--chat-pop-title);
+    --text-xs--line-height: var(--chat-pop-title-lh);
+    --text-sm: var(--text-base);
+    --text-sm--line-height: var(--text-base--line-height);
+}
 
 /* The assistant's rendered answer. Everything about how markdown looks lives in prose.css, which the
    workspace file preview shares — this is only the chat's tuning of it. The preview is a document surface

@@ -97,7 +97,7 @@ onUnmounted(() => {
     -->
     <div
         v-if="panel === `chat`"
-        class="grid h-screen w-screen overflow-hidden"
+        class="chat-floating-root grid h-screen w-screen overflow-hidden"
         style="grid-template-areas: &quot;chat&quot;; grid-template-columns: 1fr; grid-template-rows: 1fr"
     >
         <div ref="slot" class="contents"></div>
