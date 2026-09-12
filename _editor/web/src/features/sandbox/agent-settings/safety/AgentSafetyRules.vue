@@ -23,16 +23,14 @@ const TIERS: Readonly<Record<CommandRuleTier, { label: string; badge: StatusVari
 // ONE MACHINE'S COLUMN, WRITTEN ONCE. Its head, its track, every verdict in it and the empty spacer that holds the
 // patterns out of it are the same column seen four times, so a column that changes width stays a column.
 const COLUMN = `w-24`;
+
+// Labels are lowercase in the contract so gate copy can say "would wipe a disk"; row titles here stand alone.
+const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(1);
 </script>
 
 <template>
     <!-- `@container`, not a viewport breakpoint: this panel's width is its containing pane, not the phone. -->
     <RowGroup class="@container" label="What gets stopped">
-        <RowNote>
-            A command is only ever looked at if it matches one of these. Everything else runs without a model reading it and without anything being
-            recorded.
-        </RowNote>
-
         <!--
             The heads, the rules and the two tracks behind the machine columns are ONE child of the group, so the
             group's hairlines fall around the table instead of boxing the heads into a band of their own.
@@ -69,7 +67,7 @@ const COLUMN = `w-24`;
             </div>
 
             <div class="relative divide-y divide-line-subtle">
-                <Row v-for="rule in COMMAND_RULE_CATALOG" :key="rule.commandClass" :title="rule.label">
+                <Row v-for="rule in COMMAND_RULE_CATALOG" :key="rule.commandClass" :title="rowTitle(rule.label)">
                     <!--
                         A pill per cell, centred on its track: an answer with an edge round it belongs to one row and one
                         machine, where a bare word in a shared field belonged to neither. #meta is already trailing, so

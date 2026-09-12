@@ -32,6 +32,9 @@ const occurrences = (haystack: string, needle: string): number => haystack.split
 
 const text = (host: HTMLElement): string => host.textContent ?? ``;
 
+// Row titles capitalize the contract label; gate copy keeps it lowercase.
+const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(1);
+
 test("lists every class from the contract, with nothing to open first", () => {
     const host = mount();
     // Heading text is the panel's own wording, not from the contract, so it's spelled out here rather than read off
@@ -40,7 +43,7 @@ test("lists every class from the contract, with nothing to open first", () => {
     // No tally beside the heading: the rows are the answer, and "7 kinds" only competed with the label for the eye.
     expect(text(host)).not.toContain(`${COMMAND_RULE_CATALOG.length} kinds`);
     for (const rule of COMMAND_RULE_CATALOG) {
-        expect(text(host), rule.commandClass).toContain(rule.label);
+        expect(text(host), rule.commandClass).toContain(rowTitle(rule.label));
     }
 });
 
@@ -48,7 +51,7 @@ test("lists every class from the contract, with nothing to open first", () => {
 test("names each class exactly once", () => {
     const host = mount();
     for (const rule of COMMAND_RULE_CATALOG) {
-        expect(occurrences(text(host), rule.label), rule.commandClass).toBe(1);
+        expect(occurrences(text(host), rowTitle(rule.label)), rule.commandClass).toBe(1);
     }
 });
 
