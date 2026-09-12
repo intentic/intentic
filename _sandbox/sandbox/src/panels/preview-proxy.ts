@@ -20,6 +20,7 @@ export const PREVIEW_PROBE_PATH = "/__intentic/preview-probe";
 export interface PreviewProxyDeps {
     readonly panelOf: PanelUpstreamResolver;
     readonly slotTargetOf: SlotResolver;
+    readonly frameAncestors: readonly string[];
     readonly sandboxId?: string | undefined;
     readonly outbox?: { readonly slot: string; readonly serve: PublicHandler } | undefined;
     // Daemon's own port; undefined means no daemon route here (the loopback lanes reach it directly).
@@ -35,6 +36,7 @@ type Resolved =
           readonly port: number;
           readonly scheme: "http" | "https";
           readonly headers: http.IncomingHttpHeaders;
+          readonly frameable: boolean;
       }
     | { readonly kind: "outbox" }
     | { readonly kind: "probe"; readonly body: ProbeBody }
@@ -73,7 +75,7 @@ const daemonUpstream = (req: http.IncomingMessage, deps: PreviewProxyDeps): Reso
     if (labelOf(req.headers.host) !== sandboxSubdomain(sandboxId)) {
         return undefined;
     }
-    return { kind: "proxy", dial: "127.0.0.1", port: daemonPort, scheme: "http", headers: req.headers };
+    return { kind: "proxy", dial: "127.0.0.1", port: daemonPort, scheme: "http", headers: req.headers, frameable: false };
 };
 
 // The only rule whose answer depends on something the user started; kept out of `resolveRequest` so that stays a plain
@@ -95,13 +97,14 @@ const panelUpstream = async (req: http.IncomingMessage, deps: PreviewProxyDeps, 
     }
     if (upstream.state === "serving") {
         return upstream.assigned
-            ? { kind: "proxy", dial: "127.0.0.1", port: upstream.port, scheme: "http", headers: req.headers }
+            ? { kind: "proxy", dial: "127.0.0.1", port: upstream.port, scheme: "http", headers: req.headers, frameable: true }
             : {
                   kind: "proxy",
                   dial: "127.0.0.1",
                   port: upstream.port,
                   scheme: "http",
                   headers: asLocalhost(req.headers, { port: upstream.port, host: "127.0.0.1", scheme: "http" }),
+                  frameable: true,
               };
     }
     if (upstream.state === "starting") {
@@ -154,7 +157,14 @@ const resolveRequest = async (req: http.IncomingMessage, deps: PreviewProxyDeps)
                 message: `nothing is forwarded here, re-open the preview from the Ports view or the terminal link`,
             };
         }
-        return { kind: "proxy", dial: target.host, port: target.port, scheme: target.scheme, headers: asLocalhost(req.headers, target) };
+        return {
+            kind: "proxy",
+            dial: target.host,
+            port: target.port,
+            scheme: target.scheme,
+            headers: asLocalhost(req.headers, target),
+            frameable: true,
+        };
     }
     // One salted outbox slot per sandbox; any other public- slot is a stray subdomain the wildcard caught.
     if (deps.outbox !== undefined && publicSlotFromHost(req.headers.host, deps.sandboxId) === deps.outbox.slot) {
@@ -174,6 +184,28 @@ const dialUpstream = (upstream: Extract<Resolved, { kind: "proxy" }>, req: http.
         headers: upstream.headers,
         ...(upstream.scheme === "https" ? { rejectUnauthorized: false } : {}),
     });
+
+const withFrameAncestors = (policy: string, sources: string): string => {
+    const directives = policy
+        .split(";")
+        .map((directive) => directive.trim())
+        .filter((directive) => directive !== "" && !/^frame-ancestors(?:\s|$)/iu.test(directive));
+    return [...directives, `frame-ancestors ${sources}`].join("; ");
+};
+
+// A preview may be framed only by the configured editor origins, regardless of the upstream app's own navigation policy.
+const frameableHeaders = (
+    headers: http.IncomingHttpHeaders,
+    policies: readonly string[] | undefined,
+    ancestors: readonly string[],
+): http.IncomingHttpHeaders => {
+    const rewritten = { ...headers };
+    delete rewritten["x-frame-options"];
+    const sources = ancestors.length === 0 ? `'none'` : ancestors.join(" ");
+    rewritten["content-security-policy"] =
+        policies === undefined ? `frame-ancestors ${sources}` : policies.map((entry) => withFrameAncestors(entry, sources));
+    return rewritten;
+};
 
 // The container's front door: the Host header's first DNS label picks the answer.
 // - `sandbox-<sandboxId>` → the daemon, Host untouched
@@ -208,7 +240,12 @@ export const createPreviewProxy = (deps: PreviewProxyDeps): http.Server => {
             }
             const proxyReq = dialUpstream(resolved, req);
             proxyReq.on("response", (proxyRes) => {
-                res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
+                res.writeHead(
+                    proxyRes.statusCode ?? 502,
+                    resolved.frameable
+                        ? frameableHeaders(proxyRes.headers, proxyRes.headersDistinct["content-security-policy"], deps.frameAncestors)
+                        : proxyRes.headers,
+                );
                 proxyRes.pipe(res);
             });
             proxyReq.on("error", () => {

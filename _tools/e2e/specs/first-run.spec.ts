@@ -12,6 +12,7 @@ test(`the first landing is the starter site, already running`, async ({ page }) 
     await expect(page).toHaveURL(/\/preview$/);
     await expect(page.getByLabel(`Which app to preview`)).toBeVisible();
     await expect(page.getByRole(`button`, { name: `Stop` })).toBeVisible();
+    await expect(page.frameLocator(`iframe`).locator(`body`)).toBeVisible();
 
     // One-time redirect: after the first landing, a reload keeps wherever the reader last navigated to.
     await page.goto(`/workspace`);

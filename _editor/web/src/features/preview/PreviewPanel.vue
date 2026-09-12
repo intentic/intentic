@@ -490,10 +490,7 @@ onUnmounted(stopStartingPoll);
                 <Icon name="spinner" spin class="text-2xl text-subtle" aria-hidden="true" />
             </div>
 
-            <!--
-                Real dev server through the tunnel; a server that forbids framing (X-Frame-Options) stays blank, with the new-tab link as the escape
-                hatch. Mounted only once the hostname probe succeeds, so no DNS error page ever appears.
-            -->
+            <!-- Sandbox preview responses admit this editor as a frame ancestor; mounting still waits for the hostname probe. -->
             <div v-else-if="previewSrc" class="flex min-h-0 flex-1 justify-center overflow-hidden">
                 <iframe
                     :key="`${previewEpoch}-${previewSrc}`"

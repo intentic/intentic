@@ -61,23 +61,38 @@ export interface StarterProbe {
     readonly answers: (port: number) => Promise<boolean>;
 }
 
-// Waits until the starter's dev server answers once, so its first-run dependency cache is written now instead of during
-// a claimed boot. False if nothing was started, the server died, or the deadline passed.
+export type StarterReadiness = "ready" | "not-running" | "timed-out";
+
+export const waitForStarter = async (
+    deps: StarterProbe & { readonly processes: Pick<ManagedProcesses, "portOf"> },
+    options: { readonly maxMs: number; readonly pollMs?: number },
+): Promise<StarterReadiness> => {
+    const deadline = Date.now() + options.maxMs;
+    while (Date.now() < deadline) {
+        const port = deps.processes.portOf(deps.starterKey);
+        if (port === undefined) {
+            return "not-running";
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- readiness requires observing sequential attempts
+        if (await deps.answers(port)) {
+            return "ready";
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- readiness requires observing sequential attempts
+        await sleep(options.pollMs ?? WARMUP_POLL_MS);
+    }
+    return "timed-out";
+};
+
+// Prewarm succeeds only after the starter has answered and written its first-run cache.
 export const warmUpStarter = async (deps: StarterProbe & { readonly processes: ManagedProcesses; readonly logger: Logger }): Promise<boolean> => {
     const { starterKey: key, logger } = deps;
-    const deadline = Date.now() + WARMUP_MAX_MS;
-    while (Date.now() < deadline) {
-        const port = deps.processes.portOf(key);
-        if (port === undefined) {
-            logger.info({ key }, "prewarm: the starter's dev server is not running, nothing to warm up");
-            return false;
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a poll is the shape of this wait
-        if (await deps.answers(port)) {
-            return true;
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop
-        await sleep(WARMUP_POLL_MS);
+    const readiness = await waitForStarter(deps, { maxMs: WARMUP_MAX_MS });
+    if (readiness === "not-running") {
+        logger.info({ key }, "prewarm: the starter's dev server is not running, nothing to warm up");
+        return false;
+    }
+    if (readiness === "ready") {
+        return true;
     }
     logger.warn({ key, waitedMs: WARMUP_MAX_MS }, "prewarm: the starter's dev server did not answer in time; its caches stay cold");
     return false;

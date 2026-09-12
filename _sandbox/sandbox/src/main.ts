@@ -82,7 +82,7 @@ import { seedSetupHost } from "./hosts/host-seed.js";
 import { runnerModeRequested, startRunnerMode } from "./runners/runner-mode.js";
 import { seedStarterSite } from "./scaffold/starter-site.js";
 import { runAutostart } from "./scaffold/autostart.js";
-import { arrivedPrewarmed, finishPrewarm } from "./platform/boot/prewarm.js";
+import { arrivedPrewarmed, finishPrewarm, waitForStarter, type StarterReadiness } from "./platform/boot/prewarm.js";
 import { answers } from "./ports/port-probe.js";
 import { appPanelKey } from "./workspace/layout/app-previews.js";
 import { readCpuThrottle } from "./platform/resources/cpu-throttle.js";
@@ -116,6 +116,7 @@ const BOOT_STEPS = [
     { key: "skills", label: "Converging agent skills" },
     { key: "baseline", label: "Taking the workspace baseline" },
     { key: "agentToken", label: "Writing the agent token" },
+    { key: "starterReady", label: "Opening your starter site" },
 ] as const;
 
 // Refuses to serve unauthenticated: an empty google.clientId is safe only when this daemon is unreachable. Reachable
@@ -327,6 +328,10 @@ const main = async (): Promise<void> => {
         : createPreviewProxy({
               panelOf: services.panelUpstreamOf,
               slotTargetOf: services.portForwards.targetOf,
+              frameAncestors: config.webOrigin
+                  .split(",")
+                  .map((origin) => origin.trim())
+                  .filter((origin) => origin !== ""),
               sandboxId: sandboxIdFromToken(config.connectToken),
               // Daemon's own address; makes this proxy the container's one front door.
               daemonPort: config.sandbox.port,
@@ -395,6 +400,7 @@ const main = async (): Promise<void> => {
     // Every awaited step below runs through this tracker: stamps state and elapsed time, logs slow ones, streams
     // progress to any watching browser. Narrowed to BOOT_STEPS' keys, so an undeclared step is a compile error.
     const boot: BootTracker<(typeof BOOT_STEPS)[number]["key"]> = services.boot;
+    let starterReadiness: Promise<StarterReadiness> | undefined;
 
     // ~/.ssh and ~/.claude are shared by every process in the container; only the daemon that owns it may converge them
     // onto its roots, or a second daemon here would repoint the live daemon's git keys and conversation state.
@@ -543,6 +549,13 @@ const main = async (): Promise<void> => {
         });
         if (outcome !== undefined && (outcome.started.length > 0 || outcome.skipped.length > 0)) {
             logger.info(outcome, "autostart: workspace apps");
+        }
+        const starterKey = appPanelKey(STARTER_REPO, STARTER_APP);
+        if (!prewarm && outcome?.started.includes(starterKey)) {
+            starterReadiness = waitForStarter(
+                { starterKey, processes: services.processes, answers: (port) => answers("http", port) },
+                { maxMs: 30_000 },
+            );
         }
     });
 
@@ -706,6 +719,16 @@ const main = async (): Promise<void> => {
             .catch((error: unknown) => logger.warn({ err: error }, "dependency coordinator: failure activity append failed"));
     });
     services.dependencies.watch(subscribeWorkspaceChanges);
+
+    await boot.step("starterReady", async () => {
+        const readiness = await starterReadiness;
+        if (readiness !== undefined && readiness !== "ready") {
+            logger.warn(
+                { key: appPanelKey(STARTER_REPO, STARTER_APP), readiness },
+                "autostart: starter did not answer before the readiness window closed",
+            );
+        }
+    });
 
     // Converged state opens the gate; everything below is background machinery no queued request depends on.
     boot.finish();

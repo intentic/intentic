@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, expect, test } from "vitest";
 import type { PortTarget } from "../ports/port-forwards.js";
 import type { PanelUpstream, PanelUpstreamResolver } from "./panel-upstream.js";
-import { createPreviewProxy, PREVIEW_PROBE_PATH, type SlotResolver } from "./preview-proxy.js";
+import { createPreviewProxy, PREVIEW_PROBE_PATH, type PreviewProxyDeps, type SlotResolver } from "./preview-proxy.js";
 
 const servers: (http.Server | https.Server)[] = [];
 afterAll(async () => {
@@ -18,6 +18,9 @@ const listen = async (server: http.Server | https.Server): Promise<number> => {
 };
 
 const noSlots: SlotResolver = () => undefined;
+const FRAME_ANCESTORS = ["https://app.intentic.dev", "https://*.webview.example.net"];
+const previewProxy = (deps: Omit<PreviewProxyDeps, "frameAncestors">): http.Server =>
+    createPreviewProxy({ ...deps, frameAncestors: FRAME_ANCESTORS });
 // Anything not in the table is a repo with nothing running.
 const panelsOf =
     (table: Record<string, PanelUpstream>): PanelUpstreamResolver =>
@@ -34,7 +37,7 @@ const setup = async (slots?: (appPort: number) => SlotResolver): Promise<{ proxy
         }),
     );
     const panelOf = panelsOf({ app: { state: "serving", port: appPort, assigned: true } });
-    const proxyPort = await listen(createPreviewProxy({ panelOf, slotTargetOf: slots === undefined ? noSlots : slots(appPort) }));
+    const proxyPort = await listen(previewProxy({ panelOf, slotTargetOf: slots === undefined ? noSlots : slots(appPort) }));
     return { proxyPort, appPort };
 };
 
@@ -73,6 +76,29 @@ test("strips the preview- prefix off the Host's first label to route, forwarding
     expect(response.body).toBe("hello from preview-app.example.com/about?x=1");
 });
 
+test("replaces an app's anti-framing headers with the configured editor origins", async () => {
+    const appPort = await listen(
+        http.createServer((_req, res) => {
+            res.writeHead(200, {
+                "content-type": "text/html",
+                "x-frame-options": "DENY",
+                "content-security-policy": "default-src 'self'; frame-ancestors 'none'; script-src 'self'",
+            });
+            res.end("<h1>framed</h1>");
+        }),
+    );
+    const proxyPort = await listen(
+        previewProxy({ panelOf: panelsOf({ app: { state: "serving", port: appPort, assigned: true } }), slotTargetOf: noSlots }),
+    );
+
+    const response = await raw(proxyPort, "preview-app.example.com", "/");
+
+    expect(response.headers["x-frame-options"]).toBeUndefined();
+    expect(response.headers["content-security-policy"]).toBe(
+        "default-src 'self'; script-src 'self'; frame-ancestors https://app.intentic.dev https://*.webview.example.net",
+    );
+});
+
 test("a Host without a preview-/port- prefix (a stray *.<zone> subdomain) is a 404", async () => {
     const { proxyPort } = await setup();
     const response = await get(proxyPort, "app.example.com");
@@ -102,7 +128,7 @@ test("a ::1-only upstream (a `localhost`-bound dev server) is dialed at ::1, not
     await new Promise<void>((resolve) => v6Server.listen(0, "::1", resolve));
     const v6Port = (v6Server.address() as AddressInfo).port;
     const proxyPort = await listen(
-        createPreviewProxy({
+        previewProxy({
             panelOf: noPanels,
             slotTargetOf: (slot) => (slot === "a" ? { port: v6Port, host: "::1", scheme: "http" } : undefined),
         }),
@@ -127,7 +153,7 @@ test("a port target rewrites Origin alongside Host", async () => {
         }),
     );
     const proxyPort = await listen(
-        createPreviewProxy({
+        previewProxy({
             panelOf: noPanels,
             slotTargetOf: (slot) => (slot === "a" ? { port: echoPort, host: "127.0.0.1", scheme: "http" } : undefined),
         }),
@@ -193,7 +219,7 @@ test("an https-scheme slot target is dialed over TLS with verification off (self
         }),
     );
     const target: PortTarget = { port: tlsPort, host: "127.0.0.1", scheme: "https" };
-    const proxyPort = await listen(createPreviewProxy({ panelOf: noPanels, slotTargetOf: (slot) => (slot === "a" ? target : undefined) }));
+    const proxyPort = await listen(previewProxy({ panelOf: noPanels, slotTargetOf: (slot) => (slot === "a" ? target : undefined) }));
     const response = await get(proxyPort, "port-a.example.com");
     expect(response.status).toBe(200);
     expect(response.body).toBe(`secure hello from localhost:${tlsPort}`);
@@ -211,7 +237,7 @@ const idSetup = async (): Promise<{ proxyPort: number; appPort: number }> => {
     );
     const panelOf = panelsOf({ app: { state: "serving", port: appPort, assigned: true } });
     const slotTargetOf: SlotResolver = (slot) => (slot === "a" ? { port: appPort, host: "127.0.0.1", scheme: "http" } : undefined);
-    return { proxyPort: await listen(createPreviewProxy({ panelOf, slotTargetOf, sandboxId: ID })), appPort };
+    return { proxyPort: await listen(previewProxy({ panelOf, slotTargetOf, sandboxId: ID })), appPort };
 };
 
 test("with a sandbox id, the -<id> suffix is stripped to route and Host is forwarded unchanged", async () => {
@@ -248,7 +274,7 @@ test("a panel serving on a port it pinned itself is dialed there, with Host rewr
     );
     // `assigned: false`: the app's own host check must see localhost, as with a forwarded port.
     const panelOf = panelsOf({ app: { state: "serving", port: appPort, assigned: false } });
-    const proxyPort = await listen(createPreviewProxy({ panelOf, slotTargetOf: noSlots }));
+    const proxyPort = await listen(previewProxy({ panelOf, slotTargetOf: noSlots }));
     const response = await get(proxyPort, "preview-app.example.com");
     expect(response.status).toBe(200);
     expect(response.body).toBe(`hello from localhost:${appPort}`);
@@ -264,7 +290,7 @@ test("a panel whose dev servers each pinned their own port is a 502 that names t
             ],
         },
     });
-    const proxyPort = await listen(createPreviewProxy({ panelOf, slotTargetOf: noSlots }));
+    const proxyPort = await listen(previewProxy({ panelOf, slotTargetOf: noSlots }));
     const response = await get(proxyPort, "preview-mono.example.com");
     expect(response.status).toBe(502);
     expect(response.body).toContain("_site/site:4321");
@@ -272,7 +298,7 @@ test("a panel whose dev servers each pinned their own port is a 502 that names t
 });
 
 test("a panel the daemon runs that hasn't opened a port yet reads as starting, not as missing", async () => {
-    const proxyPort = await listen(createPreviewProxy({ panelOf: panelsOf({ app: { state: "starting" } }), slotTargetOf: noSlots }));
+    const proxyPort = await listen(previewProxy({ panelOf: panelsOf({ app: { state: "starting" } }), slotTargetOf: noSlots }));
     const response = await get(proxyPort, "preview-app.example.com");
     expect(response.status).toBe(502);
     expect(response.body).toContain("hasn't opened a port yet");
@@ -292,7 +318,7 @@ test("the probe path answers with CORS open and the panel's live state, without 
 
 test("the probe reports a panel that isn't running, and the ports it is really serving when several", async () => {
     const panelOf = panelsOf({ mono: { state: "several", servers: [{ port: 4321, dir: "_site/site" }] } });
-    const proxyPort = await listen(createPreviewProxy({ panelOf, slotTargetOf: noSlots }));
+    const proxyPort = await listen(previewProxy({ panelOf, slotTargetOf: noSlots }));
     expect(JSON.parse((await raw(proxyPort, "preview-idle.example.com", PREVIEW_PROBE_PATH)).body)).toMatchObject({ state: "stopped" });
     expect(JSON.parse((await raw(proxyPort, "preview-mono.example.com", PREVIEW_PROBE_PATH)).body)).toMatchObject({
         state: "several",
@@ -326,29 +352,31 @@ test("the probe answers for an unforwarded slot too, which is a live address wit
 test("the sandbox's own hostname reaches the daemon, with its Host intact", async () => {
     const daemonPort = await listen(
         http.createServer((req, res) => {
-            res.writeHead(200, { "content-type": "text/plain" });
+            res.writeHead(200, { "content-type": "text/plain", "x-frame-options": "DENY", "content-security-policy": "frame-ancestors 'none'" });
             res.end(`daemon saw ${req.headers.host ?? "?"}${req.url ?? ""}`);
         }),
     );
-    const proxyPort = await listen(createPreviewProxy({ panelOf: noPanels, slotTargetOf: noSlots, sandboxId: "abcdef012345", daemonPort }));
+    const proxyPort = await listen(previewProxy({ panelOf: noPanels, slotTargetOf: noSlots, sandboxId: "abcdef012345", daemonPort }));
 
     const response = await raw(proxyPort, "sandbox-abcdef012345.sbx.example.test", "/health");
 
     expect(response.status).toBe(200);
     // Unlike a panel: the daemon derives its own origin from Host and gates on it.
     expect(response.body).toBe("daemon saw sandbox-abcdef012345.sbx.example.test/health");
+    expect(response.headers["x-frame-options"]).toBe("DENY");
+    expect(response.headers["content-security-policy"]).toBe("frame-ancestors 'none'");
 });
 
 test("another sandbox's daemon hostname is not this sandbox's to serve", async () => {
     const daemonPort = await listen(http.createServer((_req, res) => res.end("daemon")));
-    const proxyPort = await listen(createPreviewProxy({ panelOf: noPanels, slotTargetOf: noSlots, sandboxId: "abcdef012345", daemonPort }));
+    const proxyPort = await listen(previewProxy({ panelOf: noPanels, slotTargetOf: noSlots, sandboxId: "abcdef012345", daemonPort }));
 
     expect((await raw(proxyPort, "sandbox-0123456789ab.sbx.example.test", "/health")).status).toBe(404);
 });
 
 // Loopback lanes omit daemonPort; the browser reaches it directly, so this proxy only ever sees previews.
 test("with no daemon port there is no daemon route", async () => {
-    const proxyPort = await listen(createPreviewProxy({ panelOf: noPanels, slotTargetOf: noSlots, sandboxId: "abcdef012345" }));
+    const proxyPort = await listen(previewProxy({ panelOf: noPanels, slotTargetOf: noSlots, sandboxId: "abcdef012345" }));
 
     expect((await raw(proxyPort, "sandbox-abcdef012345.sbx.example.test", "/health")).status).toBe(404);
 });
