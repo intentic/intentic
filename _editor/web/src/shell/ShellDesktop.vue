@@ -739,7 +739,7 @@ useKeybindings();
     gap: var(--icon-rail-gap);
     padding-block: var(--icon-rail-padding);
     /* An inset shadow, not a background: layers over a skin's own background-image without a specificity fight. */
-    box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--color-brand-950) 8%, transparent);
+    box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--color-brand-950) 11%, transparent);
 }
 
 /* flex-shrink: 0 everywhere: with `height` (not min-height) tiles would otherwise compress instead of scrolling. */
