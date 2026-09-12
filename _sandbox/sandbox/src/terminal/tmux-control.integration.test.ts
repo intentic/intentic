@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { promisify } from "node:util";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, beforeAll, expect, test } from "vitest";
 import { attachControlTerminal, type ControlTerminal, spawnControlClient } from "./tmux-control.js";
 
 // @xterm/headless v6 ships as CommonJS; Node's ESM lexer can't detect its named exports.
@@ -38,6 +38,18 @@ const open = (argv: string[], cols = 80, rows = 24): Harness => {
     });
     return { terminal, text: () => Buffer.concat(chunks).toString("utf8"), exits };
 };
+
+// afterEach below leaves the server with no sessions, and tmux's `exit-empty` takes a server down the moment it is
+// empty — so the next test's `new-session` meets a server already on its way out and gets "server exited unexpectedly"
+// instead of a session. The window is one event-loop turn wide, which is nothing on an idle box and plenty on a loaded
+// CI one. Pinning holds the (fenced, private) server up for the whole file: fork it with a holder session, turn
+// `exit-empty` off, drop the holder. The daemon makes the same move at boot for its own reason — src/terminal/tmux-server.ts.
+const PIN_SESSION = `cm-pin-${String(process.pid)}`;
+beforeAll(async () => {
+    await execFileAsync("tmux", ["new-session", "-A", "-d", "-s", PIN_SESSION]);
+    await execFileAsync("tmux", ["set-option", "-g", "exit-empty", "off"]);
+    await execFileAsync("tmux", ["kill-session", "-t", `=${PIN_SESSION}`]).catch(() => undefined);
+});
 
 const opened: Harness[] = [];
 const sessions: string[] = [];
@@ -184,8 +196,8 @@ test("another session opening a window leaves this tab where it is", async () =>
 });
 
 test("attaching to a session that does not exist ends at once, with tmux's own words", async () => {
-    // Keeps a session alive on the server; tmux's exit-empty would otherwise take the server down before this attach
-    // runs.
+    // A session the server can offer, so the miss is about the NAME: tmux says "no sessions" to an attach on an empty
+    // server, which would pass a weaker assertion while proving nothing about the name that was asked for.
     const other = await fresh();
     await until(() => other.text().includes("\x1bc"), "the other session's replay");
 

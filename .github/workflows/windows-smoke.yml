@@ -1,8 +1,8 @@
 # The Windows desktop smoke tiers, as ONE definition called three times.
 #
 # WHAT THIS REPLACES. ci.yml's `desktop-verify-windows`, release.yml's `windows-verify` and nightly.yml's
-# `desktop-windows` were three copies of the same eleven steps — checkout, download the artifact, pnpm,
-# node, a subtree-filtered install, a subtree-filtered build, reconcile, doctor, install, run, teardown —
+# `desktop-windows` were three copies of the same eleven steps — checkout, pnpm, node, a subtree-filtered
+# install, a subtree-filtered build, reconcile, doctor, download the artifact, install, run, teardown —
 # differing in an artifact name, an installer path and how far up the tiers they go. Each copy carried its own
 # comments, and those comments pointed at each other ("for the reason ci.yml's desktop-verify-windows spells
 # out"), which is the shape of knowledge that only stays true while somebody keeps three files in step.
@@ -87,11 +87,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
-        with:
-          name: ${{ inputs.artifact-name }}
-          path: windows-artifacts
-
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: inputs.deep
         with:
@@ -116,7 +111,10 @@ jobs:
       # The tier reads window titles through @intentic/desktop-automation, so both packages are built rather than run from
       # source — the export condition that resolves a workspace package to its TypeScript is a vitest/tsgo
       # arrangement, not something plain node applies.
-      - run: pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
+      # `id`, because the teardown at the bottom runs on `always()` and the harness it runs is what this step
+      # produces: `dist/` is untracked, the checkout above deletes it, and nothing else puts it back.
+      - id: build
+        run: pnpm turbo run build --filter=@intentic/desktop-smoke-windows...
 
       # RECONCILE, THEN ASSERT. The teardown at the end runs after every tier, but "after" is exactly what a
       # cancelled job, a lost runner or a reboot mid-install does not get — and what it leaves behind is an
@@ -138,6 +136,16 @@ jobs:
         if: ${{ !inputs.deep }}
       - run: node _tools/desktop-smoke-windows/dist/main.js doctor --needs-docker
         if: inputs.deep
+
+      # AFTER the reconcile and the doctor, not before them. This runner talks to GitHub's artifact endpoint over
+      # someone's home connection, and a ListArtifacts that times out is a fact of the machine rather than a fact
+      # about the build. Downloading first made that timeout skip every step below it — including the reconcile
+      # whose whole job is to hand the next run a clean machine — so a flaky minute of network left the box dirty
+      # and the next run demanding a person. Nothing above this step reads the artifact.
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: windows-artifacts
 
       # TIER 1, the thing no other job in this repository can do: the shipped installer, executed on Windows.
       # Everything else the pipeline knows about it comes from reading it as an archive. This installs it
@@ -174,5 +182,11 @@ jobs:
 
       # Always, so a run that failed mid-tier hands the next one a clean machine rather than relying on the
       # reconcile above to notice — and because a deep run deliberately left the app installed.
+      #
+      # Always ONCE THE HARNESS EXISTS, though: `always()` alone also fires for a job that died before the build,
+      # and `node dist/main.js` then ends on a MODULE_NOT_FOUND that becomes the job's last error — so the log's
+      # final word is a missing file rather than whatever actually went wrong. There is nothing to clean in that
+      # case either: the job that never reached tier 1 installed nothing, and the reconcile at the top of the next
+      # run collects anything an older one left.
       - run: node _tools/desktop-smoke-windows/dist/main.js teardown
-        if: always()
+        if: ${{ always() && steps.build.outcome == 'success' }}
