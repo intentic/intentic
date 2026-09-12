@@ -13,7 +13,9 @@ defineProps<{
 </script>
 
 <template>
-    <ChatFold icon="sparkles" label="Thinking" :open-by-default="streaming" :busy="streaming">
+    <!-- The thought's opening words are the detail, so a shut thinking row names what it hides exactly as every other fold does.
+         It cannot flicker as the turn writes: `truncate` shows the START of the text, and the start stops changing at the first token. -->
+    <ChatFold icon="sparkles" label="Thinking" :detail="thinking" :open-by-default="streaming" :busy="streaming">
         <p class="whitespace-pre-wrap">{{ thinking }}</p>
     </ChatFold>
 </template>

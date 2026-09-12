@@ -45,8 +45,9 @@ const toggle = (): void => {
             <Icon v-if="busy" name="spinner" spin class="shrink-0 text-2xs" />
             <Icon :name="open ? `chevron-up` : `chevron-down`" class="shrink-0 text-2xs opacity-60 transition-opacity group-hover/fold:opacity-100" />
         </button>
-        <!-- Capped and scrolled, not clamped, so long material stays reachable without pushing the answer off screen. -->
-        <div v-if="open" class="scrollbar-thin max-h-64 overflow-auto px-3 pt-0.5 pb-2 text-xs leading-relaxed text-muted">
+        <!-- Capped and scrolled, not clamped, so long material stays reachable without pushing the answer off screen.
+             `px-2` is the header's own inset: header and body read as one object only if their text starts on one edge. -->
+        <div v-if="open" class="scrollbar-thin max-h-64 overflow-auto px-2 pt-0.5 pb-2 text-xs leading-relaxed text-muted">
             <slot />
         </div>
     </div>
