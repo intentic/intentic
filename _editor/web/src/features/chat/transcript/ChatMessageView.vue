@@ -33,6 +33,7 @@ import ChatCommandBlock from "../tools/ChatCommandBlock.vue";
 import ChatDecisionButton from "./ChatDecisionButton.vue";
 import ChatDocumentBody from "./ChatDocumentBody.vue";
 import { capabilityStatus, credentialLane, helpStatus, offerStatus, permissionStatus, planStatus, questionStatus } from "./cardStatus";
+import ChatFold from "./ChatFold.vue";
 import ChatThinking from "./ChatThinking.vue";
 import ChatTodoList from "./ChatTodoList.vue";
 import ChatToolRows from "../tools/ChatToolRows.vue";
@@ -387,11 +388,9 @@ const defers = computed(() => foldsIntoTurn(props.message));
 
 // An errand is a prompt the app sent on the user's behalf (errands.ts); shown as a label, exact text one click away.
 const errand = computed(() => errandOf(props.message));
-const errandOpen = ref(false);
 
-// Notes the daemon prepended to the user's text (rebase, stale deps, retrieved context); collapsed, opens to verbatim
-// text.
-const notesOpen = ref(false);
+// Notes the daemon prepended to the user's text (rebase, stale deps, retrieved context); named on the shut fold, so the
+// body never repeats them.
 const noteTitles = computed(() => (props.message.notes ?? []).map((note) => note.title).join(`, `));
 
 // Strips a leading markdown heading (first line only); the row's own label already names the note.
@@ -571,25 +570,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         @pointerdown="copyCodeFromEvent"
     >
         <!-- The errand row: one line naming what the app asked for, opening to the exact words it sent. -->
-        <template v-if="errand">
-            <button
-                type="button"
-                class="flex max-w-full items-center gap-2 self-start rounded-lg px-3 py-1.5 text-left text-2xs"
-                :aria-expanded="errandOpen"
-                @click="errandOpen = !errandOpen"
-            >
-                <Icon :name="errand.icon" class="shrink-0 text-2xs text-link" />
-                <span class="shrink-0 font-medium text-content">{{ errand.label }}</span>
-                <span class="truncate text-subtle">{{ errand.detail }}</span>
-                <Icon :name="errandOpen ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs text-subtle" />
-            </button>
-            <div
-                v-if="errandOpen"
-                class="scrollbar-thin max-h-64 w-full overflow-auto whitespace-pre-wrap rounded-lg bg-overlay/60 px-3 py-2 text-xs leading-relaxed text-muted"
-            >
-                {{ message.text }}
-            </div>
-        </template>
+        <ChatFold v-if="errand" :icon="errand.icon" :label="errand.label" :detail="errand.detail">
+            <p class="whitespace-pre-wrap">{{ message.text }}</p>
+        </ChatFold>
         <div v-else-if="message.role === 'user'" class="group relative flex max-w-[85%] flex-col items-end gap-1.5">
             <!-- Stacked attachment row above the prompt: used on narrow panels, during edit, or whenever attachmentsAside doesn't apply. -->
             <ChatAttachmentStrip
@@ -1186,26 +1169,17 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
     </div>
 
     <!--
-        One line naming each note the daemon prepended (see `notesOpen`), opening to the exact text. Its own row outside `.chat-prompt`, so it
-        doesn't ride the pinned band.
+        One line naming each note the daemon prepended, opening to the exact text. Its own row outside `.chat-prompt`, so it doesn't ride the pinned
+        band.
     -->
     <div v-if="message.notes?.length" class="chat-message chat-stack flex flex-col" :class="{ 'chat-doomed': doomed }">
-        <button
-            type="button"
-            class="flex max-w-full items-center gap-2 self-start rounded-lg px-3 py-1.5 text-left text-2xs"
-            :aria-expanded="notesOpen"
-            @click="notesOpen = !notesOpen"
-        >
-            <Icon name="info-circle" class="shrink-0 text-2xs text-link" />
-            <span class="shrink-0 font-medium text-content">Sent with your message</span>
-            <span class="truncate text-subtle">{{ noteTitles }}</span>
-            <Icon :name="notesOpen ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs text-subtle" />
-        </button>
-        <div v-if="notesOpen" class="scrollbar-thin flex max-h-80 w-full flex-col gap-3 overflow-auto rounded-lg bg-overlay/60 px-3 py-2">
-            <div v-for="note in message.notes" :key="note.title" class="flex flex-col gap-1">
-                <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ note.title }}</span>
-                <span class="whitespace-pre-wrap text-xs leading-relaxed text-muted">{{ noteBody(note.text) }}</span>
+        <ChatFold icon="info-circle" label="Sent with your message" :detail="noteTitles">
+            <div class="flex flex-col gap-3">
+                <div v-for="note in message.notes" :key="note.title" class="flex flex-col gap-1">
+                    <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ note.title }}</span>
+                    <span class="whitespace-pre-wrap">{{ noteBody(note.text) }}</span>
+                </div>
             </div>
-        </div>
+        </ChatFold>
     </div>
 </template>
