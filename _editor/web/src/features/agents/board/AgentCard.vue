@@ -777,12 +777,6 @@ const grab = (event: PointerEvent): void => {
                 -->
 
                 <!--
-                    Lifetime cost total, read-only here.
-                    The Usage tab breaks it down; a route change inside this chip row would cost more misfires than the
-                    shortcut saves.
-                -->
-                <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
-                <!--
                     Red and green only while the diff is a live signal. On a receipt the pair keeps its signs, its
                     monospace and its numbers and drops to the row's own ink: a lane of them was two saturated
                     numbers per row, repeated six times, saying nothing that the `+` and `−` don't already say.
@@ -791,6 +785,12 @@ const grab = (event: PointerEvent): void => {
                     <span :class="receipt ? '' : 'text-success'">+{{ agent.diff.insertions }}</span>
                     <span :class="receipt ? '' : 'text-danger'"> −{{ agent.diff.deletions }}</span>
                 </span>
+                <!--
+                    Lifetime cost total, read-only here.
+                    The Usage tab breaks it down; a route change inside this chip row would cost more misfires than the
+                    shortcut saves.
+                -->
+                <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
                 <!--
                     Counts this agent's own children, live-of-total while any are running and settling to the lifetime
                     total once none are.
