@@ -104,14 +104,16 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
                             -->
                             <div class="flex gap-4">
                                 <div class="flex min-w-0 flex-1 flex-col gap-2">
-                                    <!-- Chip and qualifier are one flex item so a wrap cannot strand the qualifier on its own line. -->
                                     <ul class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-                                        <li v-for="pattern in rule.patterns" :key="pattern.code" class="flex min-w-0 items-center gap-1.5">
+                                        <li v-for="pattern in rule.patterns" :key="pattern.code" class="min-w-0">
                                             <!-- Fill, no border: 40-odd outlined chips made the panel read as a grid of boxes. -->
-                                            <span class="inline-flex max-w-full items-center rounded bg-overlay px-1.5 py-0.5 text-2xs">
+                                            <span
+                                                v-tooltip.top="pattern.qualifier"
+                                                class="inline-flex max-w-full items-center rounded bg-overlay px-1.5 py-0.5 text-2xs"
+                                                :class="pattern.qualifier !== undefined ? `cursor-help` : undefined"
+                                            >
                                                 <RuleCommand :command="pattern.code" />
                                             </span>
-                                            <span v-if="pattern.qualifier !== undefined" class="text-2xs text-subtle">{{ pattern.qualifier }}</span>
                                         </li>
                                     </ul>
 

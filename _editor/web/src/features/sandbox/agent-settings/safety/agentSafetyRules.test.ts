@@ -17,7 +17,13 @@ const mount = (): HTMLElement => {
     app = createApp({ render: () => h(AgentSafetyRules) });
     app.use(PrimeVue);
     app.component(`Icon`, IconStub);
-    app.directive(`tooltip`, {});
+    app.directive(`tooltip`, {
+        mounted: (el: HTMLElement, binding: { value?: string }) => {
+            if (binding.value !== undefined) {
+                el.dataset[`tooltip`] = binding.value;
+            }
+        },
+    });
     app.mount(host);
     return host;
 };
@@ -78,13 +84,17 @@ test("names both machines, at the head and again on every row", () => {
     expect(text(host)).toContain(`This sandbox — Judged`);
 });
 
-test("draws every pattern fragment and its qualifier", () => {
+test("draws every pattern fragment; qualifiers live on the chip tooltip, not inline", () => {
     const host = mount();
     for (const rule of COMMAND_RULE_CATALOG) {
         for (const pattern of rule.patterns) {
             expect(text(host), `${rule.commandClass}: ${pattern.code}`).toContain(pattern.code);
             if (pattern.qualifier !== undefined) {
-                expect(text(host), `${rule.commandClass}: ${pattern.qualifier}`).toContain(pattern.qualifier);
+                expect(text(host), `${rule.commandClass}: ${pattern.qualifier}`).not.toContain(pattern.qualifier);
+                const chip = [...host.querySelectorAll(`code`)]
+                    .find((el) => el.textContent?.includes(pattern.code))
+                    ?.closest(`span[data-tooltip]`);
+                expect(chip?.dataset[`tooltip`], `${rule.commandClass}: ${pattern.code}`).toBe(pattern.qualifier);
             }
         }
     }
