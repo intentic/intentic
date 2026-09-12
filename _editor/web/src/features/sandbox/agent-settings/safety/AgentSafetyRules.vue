@@ -1,18 +1,16 @@
 <script setup lang="ts">
 import { COMMAND_RULE_CATALOG, type CommandLocus, type CommandRuleTier } from "@intentic/sandbox-contract";
-import { type IconName, Row, RowGroup, RowNote, StatusBadge, type StatusVariant } from "@intentic/ui";
+import { Row, RowGroup, RowNote, StatusBadge, type StatusVariant } from "@intentic/ui";
 import RuleCommand from "./RuleCommand.vue";
 
 // Read-only table of COMMAND_RULE_CATALOG (safety-policy.ts): one row per command class, one column per machine
 // (sandbox, device), the same catalog both gates enforce. No controls: change a pattern in the catalog or write a rule
 // in the policy below, not here.
 
-// Each machine carries its own mark, because the two columns are the thing a reader has to keep apart while their eye
-// travels down the table, and two words in small caps at the top were not enough to hold that apart on their own.
 const MACHINES = [
-    { locus: `sandbox`, label: `This sandbox`, icon: `box` },
-    { locus: `device`, label: `My devices`, icon: `desktop` },
-] as const satisfies readonly { locus: CommandLocus; label: string; icon: IconName }[];
+    { locus: `sandbox`, label: `This sandbox` },
+    { locus: `device`, label: `My devices` },
+] as const satisfies readonly { locus: CommandLocus; label: string }[];
 
 // ONE RECORD PER TIER, three views of it: the word, the pill it wears in a machine's column, and the tone it takes in
 // the narrow line, so a tier cannot end up spelled two ways. "Judged" and "Always asks" name the consequence, not the
@@ -61,10 +59,10 @@ const COLUMN = `w-24`;
                         <span
                             v-for="machine in MACHINES"
                             :key="machine.locus"
-                            class="flex items-center justify-center gap-1 whitespace-nowrap text-3xs font-medium uppercase tracking-wide"
+                            class="flex items-center justify-center whitespace-nowrap px-3 text-center text-3xs font-medium uppercase tracking-wide"
                             :class="COLUMN"
                         >
-                            <Icon :name="machine.icon" class="text-2xs" aria-hidden="true" />{{ machine.label }}
+                            {{ machine.label }}
                         </span>
                     </template>
                 </Row>
