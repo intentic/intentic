@@ -239,8 +239,24 @@ if [ "$ASSEMBLE" -eq 0 ]; then
 fi
 
 if [ "$WINDOWS_ONLY" -eq 0 ] && [ "$ASSEMBLE" -eq 0 ]; then
-    echo "==> building Linux bundles (deb, rpm, appimage)"
-    pnpm exec tauri build --config "$CONFIG" --bundles deb,rpm,appimage
+    echo "==> building Linux packages (deb, rpm)"
+    pnpm exec tauri build --config "$CONFIG" --bundles deb,rpm
+
+    echo "==> building Linux AppImage"
+    for attempt in 1 2 3; do
+        if pnpm exec tauri build --verbose --config "$CONFIG" --bundles appimage; then
+            break
+        fi
+        if [ "$attempt" -eq 3 ]; then
+            echo "error: AppImage bundling failed after 3 attempts" >&2
+            exit 1
+        fi
+        # A retry cannot reuse linuxdeploy's partial AppDir.
+        rm -rf "$LINUX_BUNDLES/appimage"
+        delay=$((attempt * 5))
+        echo "==> AppImage bundling failed (attempt $attempt/3) — retrying in ${delay}s" >&2
+        sleep "$delay"
+    done
 fi
 
 if [ "$LINUX_ONLY" -eq 0 ] && [ -z "$WINDOWS_PREBUILT" ]; then
