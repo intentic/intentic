@@ -3,6 +3,7 @@
 // which file this is (its ending, not just its beginning), how big, and what is actually in it.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h } from "vue";
+import { STATE_DIR } from "@intentic/constants";
 import { IconStub } from "@intentic/ui/testing";
 import { CHAT_SURFACE, type ChatSurface } from "../tools/chatToolSurface";
 import type { FilePeek } from "../drafts/filePeek";
@@ -27,7 +28,7 @@ const mount = (props: Record<string, unknown> = {}, surface: ChatSurface = { ima
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({
-        render: () => h(ChatFileChip, { name: `desktop-setup-20260912-212645.log`, path: `.intentic/x/desktop-setup-20260912-212645.log`, ...props }),
+        render: () => h(ChatFileChip, { name: `desktop-setup-20260912-212645.log`, path: `${STATE_DIR}/x/desktop-setup-20260912-212645.log`, ...props }),
     });
     app.provide(CHAT_SURFACE, surface);
     app.component(`Icon`, IconStub);
@@ -121,7 +122,7 @@ it("fades the drawn lines only where the file runs past them", () => {
 it("opens the real file in the workspace when pressed", () => {
     const element = mount({ peek: LOG });
     element.querySelector(`button`)?.click();
-    expect(openFile).toHaveBeenCalledWith(`.intentic/x/desktop-setup-20260912-212645.log`);
+    expect(openFile).toHaveBeenCalledWith(`${STATE_DIR}/x/desktop-setup-20260912-212645.log`);
 });
 
 // A published page has no workspace behind it: the chip still names the file, but nothing offers to open it.

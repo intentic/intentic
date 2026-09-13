@@ -600,7 +600,8 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
      *
      * The seeds are a reshape's whole payload to the image (contract.rs): the caps as given, and the edited
      * token list when a switch was touched. Every other mode seeds nothing and replays what is there. */
-    let carried_runtime = docker::container_env_value(&container, HOST_RUNTIME_ENV).unwrap_or_default();
+    let carried_runtime =
+        docker::container_env_value(&container, HOST_RUNTIME_ENV).unwrap_or_default();
     let (host_runtime, seeds) = match &mode {
         Mode::Reshape(ask) => reshape_seeds(ask, &carried_runtime),
         _ => (carried_runtime, Vec::new()),

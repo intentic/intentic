@@ -3,6 +3,7 @@
 // what they brought with it is not one — so nothing in this row may wear the prompt's own surface.
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, h } from "vue";
+import { STATE_DIR } from "@intentic/constants";
 import { IconStub } from "@intentic/ui/testing";
 import { CHAT_SURFACE } from "../tools/chatToolSurface";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
@@ -39,8 +40,8 @@ afterEach(() => {
 
 it("never paints an attachment with the prompt bubble's surface", () => {
     const element = mount([
-        { name: `shot.png`, path: `.intentic/x/shot.png`, previewUrl: `blob:shot` },
-        { name: `desktop-setup.log`, path: `.intentic/x/desktop-setup.log` },
+        { name: `shot.png`, path: `${STATE_DIR}/x/shot.png`, previewUrl: `blob:shot` },
+        { name: `desktop-setup.log`, path: `${STATE_DIR}/x/desktop-setup.log` },
     ]);
     expect(element.querySelector(`.chat-surface`)).toBeNull();
     expect(element.textContent).toContain(`desktop-setup.log`);

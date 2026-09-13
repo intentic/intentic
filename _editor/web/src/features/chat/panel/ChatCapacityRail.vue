@@ -219,7 +219,7 @@ const remeasureLabel = computed(() =>
                                     <span class="text-right text-2xs font-medium tabular-nums" :class="usageTone(lane.percent)">
                                         {{ formatUtilization(lane.percent, row.stale) }}
                                     </span>
-                                    <span v-if="laneReset(lane)" class="text-[10px] text-subtle font-normal whitespace-nowrap">
+                                    <span v-if="laneReset(lane)" class="text-3xs text-subtle font-normal whitespace-nowrap">
                                         ·&nbsp;{{ laneReset(lane) }}
                                     </span>
                                 </div>

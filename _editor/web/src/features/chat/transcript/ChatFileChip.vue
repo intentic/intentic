@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, explorerColorClass, iconForEntry, type Side } from "@intentic/ui";
+import { AnchoredOverlay, Button, explorerColorClass, iconForEntry, type Side } from "@intentic/ui";
 import { formatBytes } from "@intentic/ui/format";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { type FilePeek, peekLead, peekLines, peekOmitted } from "../drafts/filePeek";
@@ -310,15 +310,12 @@ onBeforeUnmount(() => clearTimeout(timer));
                         <pre v-if="peek?.tail" class="font-mono text-2xs leading-relaxed whitespace-pre text-muted">{{ peek.tail }}</pre>
                     </template>
                 </div>
-                <button
-                    v-if="openable"
-                    type="button"
-                    class="flex shrink-0 cursor-pointer items-center justify-center gap-1.5 border-t border-line px-3 py-2 text-2xs text-link transition-colors hover:bg-overlay/60"
-                    @click="open"
-                >
-                    <Icon name="external-link" class="text-2xs" />
-                    Open in the workspace
-                </button>
+                <div v-if="openable" class="shrink-0 border-t border-line px-3 py-1">
+                    <Button type="button" size="small" :text="true" class="w-full" @click="open">
+                        <Icon name="external-link" />
+                        Open in the workspace
+                    </Button>
+                </div>
             </div>
         </AnchoredOverlay>
     </div>
