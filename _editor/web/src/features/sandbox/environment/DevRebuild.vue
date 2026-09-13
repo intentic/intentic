@@ -33,6 +33,7 @@ const confirming = ref(false);
 
 // The two costs, side by side: the build interrupts nothing, the swap at the end of it is the restart.
 const cost = `Builds the image while you keep working (may take minutes), then restarts (~30s). /work is kept.`;
+const tooltip = computed(() => (props.root === undefined ? undefined : `Runs pnpm rebuild:sandbox in ${props.root} on the host. ${cost}`));
 
 const command = computed(() =>
     props.root === undefined ? `pnpm rebuild:sandbox ${props.slug}` : `cd ${props.root} && pnpm rebuild:sandbox ${props.slug}`,
@@ -78,13 +79,11 @@ const execute = async (): Promise<void> => {
                 size="small"
                 class="self-start"
                 :loading="starting"
+                v-tooltip.right="tooltip"
                 @click="confirming = true"
             >
                 <template #icon><Icon name="bolt" /></template>
             </Button>
-            <p class="text-2xs text-subtle">
-                Runs <span class="font-mono">pnpm rebuild:sandbox</span> in {{ root }} on the host. {{ cost }}
-            </p>
             <Notice v-if="failure" :of="failure" />
             <!--
                 The build outlives this page: the sandbox coming back is its outcome, and the log is the only place a
