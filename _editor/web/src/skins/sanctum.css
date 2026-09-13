@@ -331,8 +331,10 @@
     --role-fill-content: var(--color-surface-950);
 
     /* The terminal takes the ground's own value, or it sits in the wall as a rectangle of a different rock.
-     * Must stay a hex literal: xterm.js reads this through getComputedStyle and its parser rejects oklch(). */
-    --color-terminal: #100f0d;
+     * Must stay a hex literal: xterm.js reads this through getComputedStyle and its parser rejects oklch(). The
+     * role, not `--color-terminal` itself, so the skin overrides the scheme's value rather than the token that
+     * points at it. */
+    --role-terminal: #100f0d;
 
     /* ── TIER 2 · THE GEOMETRY ────────────────────────────────────────────────────────────────────────────
      * EVERY EDGE IS EASED, and this is the one place the skin declines to copy the site outright. The site is

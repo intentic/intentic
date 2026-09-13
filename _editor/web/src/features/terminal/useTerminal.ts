@@ -8,10 +8,13 @@ import {
     disposeTerminalSession,
     mountTerminalSession,
     parkTerminalSession,
+    retintTerminalSession,
     retypeTerminalSession,
     type TerminalSession,
 } from "./terminalSession";
 import { useTextSize } from "@intentic/ui/text-size";
+import { useTheme } from "@intentic/ui/theme";
+import { useSkin } from "../../skins/useSkin";
 
 // Multi-tab terminal state for the terminal panel: an instance per surface over one shared session cache. `kind` gates
 // restart and the background-process split: process sessions tab only as log views, agent/job only once revealed or
@@ -71,6 +74,14 @@ const epoch = ref(0);
 watch(useTextSize().scale, () => {
     for (const session of cache.values()) {
         retypeTerminalSession(session);
+    }
+});
+
+// The scheme and the skin are the two things that move `--color-terminal`; either one repaints every cached session,
+// on screen or parked, since xterm keeps colours as values rather than reading them from CSS.
+watch([useTheme().scheme, useSkin().skin], () => {
+    for (const session of cache.values()) {
+        retintTerminalSession(session);
     }
 });
 

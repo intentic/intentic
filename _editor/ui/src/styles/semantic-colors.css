@@ -72,9 +72,13 @@
     --color-info-700:    var(--color-blue-700);
     --color-info-800:    var(--color-blue-800);
 
-    /* Terminal surface — deliberately dark in BOTH modes. Must stay a hex literal: xterm.js reads it
-     * via getComputedStyle and its color parser rejects oklch(). */
-    --color-terminal: #0a0a0a;
+    /* Terminal ground — flips with the scheme like any other surface role. Every value behind it must stay a
+     * HEX LITERAL, in every scheme and every skin: xterm.js reads this through getComputedStyle and its color
+     * parser takes `#rgb[a]`/`#rrggbb[aa]` and `rgb()` only — oklch() and color-mix() come back as nothing, and
+     * a terminal with no ground paints black. That is also why this one surface ignores the accent picker while
+     * the paper around it follows it. The ink and the sixteen ANSI slots that sit on this are chosen from its
+     * lightness, in terminalTheme.ts. */
+    --color-terminal: var(--role-terminal);
 
     /* Role tokens — values resolve through the scheme scopes below. */
     --color-canvas:      var(--role-canvas);
@@ -303,6 +307,13 @@
      * whatever `currentColor` the caller set, so a band this file has never heard of still comes out pastel. */
     --ui-meter-fill: oklch(from currentColor 78% min(c, 0.115) h);
 
+    /* THE TERMINAL IS PAPER TOO. A near-black rectangle in a warm light interface is not a design choice here,
+     * it is the one panel that never got dressed — and it takes a third of the window when it is open. This sits
+     * a shade under the card (96.4% L against 98.4%), the same relation `overlay` has: a screen recessed into
+     * the desk rather than a plate lying on it. Warm, to the same degree the paper is; fixed rather than mixed,
+     * because xterm cannot read anything else (see `--color-terminal` above). */
+    --role-terminal:     #f7f4ef;
+
     --role-series-1:     var(--color-series-1-light);
     --role-series-2:     var(--color-series-2-light);
     --role-series-3:     var(--color-series-3-light);
@@ -374,6 +385,9 @@
      * alarm. There is nothing to soften, and softening it would only push these toward the card they sit on.
      * Stated as the plain keyword so the meters render exactly as they did before this token existed. */
     --ui-meter-fill: currentColor;
+
+    /* Below the canvas, so the terminal reads as a hole in the wall rather than a panel on it. */
+    --role-terminal:     #0a0a0a;
 
     --role-series-1:     var(--color-series-1-dark);
     --role-series-2:     var(--color-series-2-dark);

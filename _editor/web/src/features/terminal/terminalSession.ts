@@ -11,6 +11,7 @@ import { acquireStreamSlot } from "../sandbox/client/streamBudget";
 import { socketUrl as wsSocketUrl } from "../sandbox/client/wsTicket";
 import { registerFilePathLinks } from "./terminalFileLinks";
 import { registerUrlLinks } from "./terminalUrlLinks";
+import { terminalPaint } from "./terminalTheme";
 import { openLoopbackPreview } from "./portPreview";
 import "@xterm/xterm/css/xterm.css";
 
@@ -281,6 +282,14 @@ export const retypeTerminalSession = (s: TerminalSession): void => {
     scheduleResizeFrame(s);
 };
 
+// Repaints a live session after a scheme or skin change. xterm holds its palette as values, not as CSS, so a session
+// opened under one scheme keeps that scheme's ink until it is handed a new theme.
+export const retintTerminalSession = (s: TerminalSession): void => {
+    const paint = terminalPaint();
+    s.term.options.theme = paint.theme;
+    s.term.options.minimumContrastRatio = paint.minimumContrastRatio;
+};
+
 // Both clipboard verbs route through the terminal's own window: elsewhere this realm's document may be unfocused and
 // Chrome refuses the call. A denied read just leaves the terminal untouched; Ctrl+V (a real paste event) still works.
 export const copySelection = (s: TerminalSession): void => {
@@ -322,8 +331,9 @@ export const createTerminalSession = (name: string, onExit: (name: string) => vo
         scrollback: 30_000,
         // Right-click on a bare word selects it first, so the context menu's Copy has something to copy.
         rightClickSelectsWord: true,
-        // Snapshotted at creation; fine while --color-terminal is constant across themes.
-        theme: { background: getComputedStyle(document.documentElement).getPropertyValue(`--color-terminal`).trim() || `#0a0a0a` },
+        // Palette and contrast floor, snapshotted at creation; retintTerminalSession re-reads them on a scheme or
+        // skin change.
+        ...terminalPaint(),
     });
     // A bound shell command takes a chord before the pane; returning false stops xterm, not propagation.
     const isMac = isApplePlatform();
