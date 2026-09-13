@@ -36,7 +36,10 @@ const inspect = async (browser) => {
     });
 
     try {
-        await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: BUTTON_DEADLINE_MS });
+        const navigation = await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: BUTTON_DEADLINE_MS });
+        const csp = navigation?.headers()["content-security-policy"] ?? "";
+        const frameSources = /(?:^|;)\s*frame-src\s+([^;]*)/.exec(csp)?.[1].trim().split(/\s+/) ?? [];
+        const previewFramesAllowed = frameSources.includes("https:");
 
         // Checks size, not presence: a refused origin still renders the iframe, just stuck at 0×0.
         const pressable = await page
@@ -53,13 +56,14 @@ const inspect = async (browser) => {
 
         const refused = consoleErrors.filter((text) => ORIGIN_REFUSED.test(text));
         const fallback = await page.getByRole("button", { name: /Trouble signing in|Continue with Google/i }).count();
-        return { consoleErrors, fallback, loadError: undefined, pressable, refused };
+        return { consoleErrors, fallback, loadError: undefined, pressable, previewFramesAllowed, refused };
     } catch (error) {
         return {
             consoleErrors,
             fallback: 0,
             loadError: error instanceof Error ? error.message : String(error),
             pressable: false,
+            previewFramesAllowed: false,
             refused: [],
         };
     } finally {
@@ -84,6 +88,12 @@ try {
 
     if (result.loadError !== undefined) {
         fail(`the sign-in page did not load: ${result.loadError}`);
+    } else if (!result.previewFramesAllowed) {
+        fail("The editor's Content-Security-Policy refuses secure preview frames.", [
+            "",
+            "The frame-src directive must include https: so sandbox and user-selected preview origins can load.",
+            "Check _editor/web/nginx.conf and the response served by the deployed web image.",
+        ]);
     } else if (result.refused.length > 0) {
         fail("Google is refusing this origin for the sign-in client: the front door is shut.", [
             "",
@@ -124,7 +134,7 @@ try {
     }
 
     if (process.exitCode !== 1) {
-        console.log(`sign-in smoke OK: Google's button is live on ${loginUrl}, and the fallback control is there.`);
+        console.log(`sign-in smoke OK: Google's button is live on ${loginUrl}, secure previews are admitted, and the fallback control is there.`);
     }
 } finally {
     await browser.close();

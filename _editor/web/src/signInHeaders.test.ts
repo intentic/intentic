@@ -29,10 +29,10 @@ describe(`deployed web headers`, () => {
         expect(withholdsOrigin, `Referrer-Policy "${policy}" hides this app's origin from Google's button endpoint`).not.toContain(policy);
     });
 
-    it(`still lets Google's script and frame load at all`, () => {
+    it(`still lets Google's script and secure preview frames load at all`, () => {
         const csp = valueOf(`Content-Security-Policy`);
         const directive = (name: string): string => new RegExp(`${name} ([^;]*)`).exec(csp)?.[1] ?? ``;
         expect(directive(`script-src`)).toContain(`https://accounts.google.com`);
-        expect(directive(`frame-src`)).toContain(`https://accounts.google.com`);
+        expect(directive(`frame-src`).split(/\s+/)).toContain(`https:`);
     });
 });
