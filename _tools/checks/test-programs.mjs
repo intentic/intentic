@@ -17,8 +17,13 @@ import { byName, configFor, emitsDist, excludesOf, packages, root, sourceOf, TES
 const MACHINE_PRIMITIVES = /mkdtemp|node:child_process|simple-git|dockerode|testcontainers/;
 const FIXTURE_MODULE = /(^|[.-])testing\.[cm]?tsx?$/;
 const INTEGRATION_NAME = /\.(integration|e2e)\.(test|spec)\.[cm]?[jt]sx?$/;
-// Cuts `vi.mock` lines first: naming a module to replace it isn't reaching for it.
-const mocked = (source) => source.replace(/vi\.mock\([^)]*\)/g, "");
+// Cuts what names a module without running it: a `vi.mock` replacing it, and a type-only import or `typeof import()`
+// that erases before the suite runs.
+const runtimeText = (source) =>
+    source
+        .replace(/vi\.mock\([^)]*\)/g, "")
+        .replace(/\bimport\s+type\s[\s\S]*?from\s*["'][^"']+["'];?/g, "")
+        .replace(/\btypeof\s+import\(\s*["'][^"']+["']\s*\)/g, "");
 
 // Named bindings of each import this checkout can resolve, as `{ names, file }`.
 const IMPORTS = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g;
@@ -61,7 +66,7 @@ const closureOf = (declarations, names, seen) =>
 // Whether a suite does real work. `wanted` selects which helpers to read: every one for the suite itself, only the
 // imported ones for a fixture module; production modules aren't followed, or one daemon import would mark every suite.
 const reachesTheMachine = (file, wanted, seen = new Set()) => {
-    const source = mocked(readFileSync(file, "utf8"));
+    const source = runtimeText(readFileSync(file, "utf8"));
     const text = wanted === undefined ? source : closureOf(declarationsOf(source), wanted, seen).flat(Infinity).join("\n");
     if (MACHINE_PRIMITIVES.test(text)) {
         return true;
