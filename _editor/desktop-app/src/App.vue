@@ -40,6 +40,7 @@ import {
     onRun,
     onUpdate,
     readMarker,
+    parseCommandFailure,
     parseStep,
     restartForSetup,
     resumableSetup,
@@ -186,6 +187,7 @@ const setupLog = ref<string | undefined>(undefined);
 const stopping = ref(false);
 // Exit code of the last setup, to tell a designed stop from something going wrong.
 const setupExit = ref<number | null | undefined>(undefined);
+const setupCommandFailure = ref<string | undefined>(undefined);
 // A user-ended run is neither failure nor success; needs its own state or it shows nothing at all.
 const wasStopped = computed(() => stopping.value && setupExit.value !== undefined);
 
@@ -207,6 +209,29 @@ const openWorkspace = (path?: string): void => void workspaceOpen(path);
 
 const eventsOf = (run: string): RunEvent[] => runs.value[run] ?? [];
 const running = computed(() => activeRun.value !== undefined);
+
+const COMMAND_FAILURE_GRACE_MS = 2_000;
+let commandFailureTimer: ReturnType<typeof setTimeout> | undefined;
+const clearCommandFailureTimer = (): void => {
+    clearTimeout(commandFailureTimer);
+    commandFailureTimer = undefined;
+};
+
+// An explicit terminal failure cannot leave its enclosing setup alive indefinitely.
+const reportCommandFailure = (reason: string): void => {
+    setupCommandFailure.value = reason;
+    setupError.value = reason;
+    clearCommandFailureTimer();
+    commandFailureTimer = setTimeout(() => {
+        commandFailureTimer = undefined;
+        if (activeRun.value !== `setup` || setupCommandFailure.value !== reason) {
+            return;
+        }
+        void runStop(`setup`).catch((error: unknown) => {
+            setupError.value = `${reason}\nThe stuck installer could not be stopped: ${String(error)}`;
+        });
+    }, COMMAND_FAILURE_GRACE_MS);
+};
 
 // A designed stop (desktop.ts) isn't a failure; hoisted so both the bar and the card read the same fact.
 const awaitingConsent = computed(() => !running.value && requirements.value.length > 0 && expectedStop(setupExit.value ?? null));
@@ -398,6 +423,9 @@ const runSetup = async (): Promise<void> => {
     carried.value = requirements.value.length > 0;
     requirementState.value = {};
     setupExit.value = undefined;
+    setupError.value = undefined;
+    setupCommandFailure.value = undefined;
+    clearCommandFailureTimer();
     stopping.value = false;
     expired.value = false;
     // Plan reflects only what will actually run here; rebuilt fresh each run.
@@ -425,7 +453,7 @@ const settleSetup = async (args: SetupArgs, failure: string | undefined, started
     // A designed stop (desktop.ts) carries no error text, since the requirements list is the message; a stop nobody
     // asked for isn't a failure either. If the list itself failed to arrive, the raw failure shows instead of nothing.
     const deferredToTheList = expectedStop(setupExit.value ?? null) && requirements.value.length > 0;
-    setupError.value = ok || stopping.value || deferredToTheList ? undefined : failure;
+    setupError.value = ok || stopping.value || deferredToTheList ? undefined : (setupCommandFailure.value ?? failure);
     // Reports the funnel's last step from where it happens, since the SPA's own event fires from a page that may
     // already be closed.
     track(`desktop_install_finished`, {
@@ -878,6 +906,16 @@ onMounted(async () => {
             // reaches
             // the log pane. The transcript on disk (scripts.rs) still records every byte.
             const marker = event.run === `setup` && event.kind === `line` ? readMarker(event.text) : undefined;
+            const commandFailure = event.run === `setup` ? parseCommandFailure(event) : undefined;
+            if (commandFailure !== undefined) {
+                reportCommandFailure(commandFailure);
+            }
+            const phase = event.run === `setup` && event.kind === `line` ? parseStep(event.text)?.phase : undefined;
+            if (phase !== undefined && setupCommandFailure.value !== undefined) {
+                clearCommandFailureTimer();
+                setupCommandFailure.value = undefined;
+                setupError.value = undefined;
+            }
             if (marker === undefined) {
                 runs.value = { ...runs.value, [event.run]: [...eventsOf(event.run), event] };
             }
@@ -894,6 +932,7 @@ onMounted(async () => {
                 return;
             }
             if (event.kind === `exit`) {
+                clearCommandFailureTimer();
                 setupExit.value = event.code;
                 return;
             }
@@ -932,6 +971,7 @@ onMounted(async () => {
 onUnmounted(() => {
     window.removeEventListener(`keydown`, onKey);
     clearInterval(ticker);
+    clearCommandFailureTimer();
     stop.forEach((unlisten) => unlisten());
 });
 </script>

@@ -124,6 +124,16 @@ export const EXIT_NEEDS_RESTART = 4;
 /** Whether an exit code is one of the two designed stops rather than something going wrong. */
 export const expectedStop = (code: number | null): boolean => code === EXIT_NEEDS_CONSENT || code === EXIT_NEEDS_RESTART;
 
+const COMMAND_FAILURE = /^Command failed,\s+(.+)$/;
+
+/** A command's terminal error, only when stderr explicitly says the command failed. */
+export const parseCommandFailure = (event: RunEvent): string | undefined => {
+    if (event.kind !== `line` || event.stream !== `stderr`) {
+        return undefined;
+    }
+    return COMMAND_FAILURE.exec(event.text)?.[1]?.trim();
+};
+
 // Distinguishes four states: something happening (checking/downloading), nothing to do (current), ready to install
 // (one restart away), and `manual` — the only one needing the user, for installs with no release artifact or a
 // broken signature check.

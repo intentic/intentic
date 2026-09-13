@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { EXIT_NEEDS_CONSENT, EXIT_NEEDS_RESTART, expectedStop, parseRequirement, parseRequirementState, parseStep } from "./desktop";
+import {
+    EXIT_NEEDS_CONSENT,
+    EXIT_NEEDS_RESTART,
+    expectedStop,
+    parseCommandFailure,
+    parseRequirement,
+    parseRequirementState,
+    parseStep,
+} from "./desktop";
 
 // Fixtures are unedited output from a real failed Windows install (no WSL2, no Docker, no docker-users, no running
 // engine). A parser that stops matching them can no longer explain a failed install.
@@ -89,5 +97,21 @@ describe(`which non-zero exits are failures`, () => {
     it(`keeps the codes as they are, because a shim passes them through unread`, () => {
         // connect.ps1 does `exit $LASTEXITCODE`; codes are ic's (prepare/mod.rs), released separately.
         expect([EXIT_NEEDS_CONSENT, EXIT_NEEDS_RESTART]).toEqual([3, 4]);
+    });
+});
+
+describe(`a child command reporting terminal failure`, () => {
+    const reported = `Command failed, intentic-launch.exe did not answer within 10000ms. Details: C:\\Users\\radar\\.intentic\\machine\\machine.log`;
+
+    it(`reads the reason from the reported Windows failure`, () => {
+        expect(parseCommandFailure({ kind: `line`, run: `setup`, stream: `stderr`, text: reported })).toBe(
+            `intentic-launch.exe did not answer within 10000ms. Details: C:\\Users\\radar\\.intentic\\machine\\machine.log`,
+        );
+    });
+
+    it(`does not turn warnings, stdout, or an exit event into early failures`, () => {
+        expect(parseCommandFailure({ kind: `line`, run: `setup`, stream: `stderr`, text: `enrolling: retrying (1/5)` })).toBeUndefined();
+        expect(parseCommandFailure({ kind: `line`, run: `setup`, stream: `stdout`, text: reported })).toBeUndefined();
+        expect(parseCommandFailure({ kind: `exit`, run: `setup`, code: 1, ok: false })).toBeUndefined();
     });
 });
