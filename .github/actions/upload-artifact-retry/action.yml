@@ -1,0 +1,91 @@
+# THE UPLOAD THAT SURVIVES A RUNNER THAT BRIEFLY CANNOT REACH GITHUB, which actions/upload-artifact cannot:
+# the first call it makes to the artifact service is CreateArtifact, and a connection refused there ends the
+# step on the spot. The action's own retries cover the block uploads that follow, not the call that opens them.
+#
+# Run 34757382156 died on exactly that — `Failed to CreateArtifact: Unable to make request: ECONNREFUSED`,
+# fourteen minutes into `release / linux-build`, with the Linux bundles built, smoke-installed on a bare Debian
+# and verified, and the `publish` job that `needs` this one still ahead of it. Run 34748028047 lost ci.yml's
+# `desktop-windows-build` the same way on a different worker two days earlier. Neither failure is about this
+# repository, and a re-run fixed both — which is the argument for retrying here, the same one
+# .github/actions/ghcr-login makes about a registry that is slow rather than unwilling.
+#
+# RETRYING IS SAFE BECAUSE AN UPLOAD IS IDEMPOTENT BY NAME. Attempts after the first pass `overwrite: true`, so
+# an attempt that created the artifact before losing the connection is replaced rather than colliding with the
+# "an artifact with this name already exists" that would turn one flake into a permanent failure.
+#
+# A REAL FAILURE STILL FAILS, about a minute later than it would have. `if-no-files-found: error` with nothing
+# on disk is a build bug, and this repeats it twice before the last attempt reports it — the cost of not being
+# able to read the action's reason for failing from outside it. A minute against a job that has already spent
+# fourteen is the trade; telling the two shapes apart would mean reimplementing the action's own path matching
+# out here to guess at them.
+#
+# The artifact name reaches the log through `env:` and `printenv`, never spliced into the script with `${{ }}`:
+# a workflow-controlled string in a `run:` line is script, which is the template-injection shape zizmor fails
+# the checkout gate on.
+name: upload artifact
+description: Upload a build artifact, retrying the connection failures that leave a finished build unpublished.
+
+inputs:
+  name:
+    description: Artifact name.
+    required: true
+  path:
+    description: Paths to upload, one per line. Passed to actions/upload-artifact unchanged.
+    required: true
+  if-no-files-found:
+    description: warn | error | ignore, as the upstream action means it.
+    required: false
+    default: warn
+  retention-days:
+    description: Days to keep the artifact. Empty means the repository default.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - id: first
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      continue-on-error: true
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        if-no-files-found: ${{ inputs.if-no-files-found }}
+        retention-days: ${{ inputs.retention-days }}
+
+    # 15s, then 45s: the refused connection above took 22 seconds of the action's own attempts to report, so a
+    # delay shorter than that is another go at the same bad minute.
+    - if: steps.first.outcome == 'failure'
+      shell: bash
+      env:
+        ARTIFACT_NAME: ${{ inputs.name }}
+      run: |
+        echo "::warning::uploading $(printenv ARTIFACT_NAME) failed — retrying in 15s (attempt 2 of 3)"
+        sleep 15
+    - id: second
+      if: steps.first.outcome == 'failure'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      continue-on-error: true
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        if-no-files-found: ${{ inputs.if-no-files-found }}
+        retention-days: ${{ inputs.retention-days }}
+        overwrite: true
+
+    - if: steps.first.outcome == 'failure' && steps.second.outcome == 'failure'
+      shell: bash
+      env:
+        ARTIFACT_NAME: ${{ inputs.name }}
+      run: |
+        echo "::warning::uploading $(printenv ARTIFACT_NAME) failed again — retrying in 45s (attempt 3 of 3)"
+        sleep 45
+    # No `continue-on-error` on the last attempt: this is the step that fails the job.
+    - if: steps.first.outcome == 'failure' && steps.second.outcome == 'failure'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        if-no-files-found: ${{ inputs.if-no-files-found }}
+        retention-days: ${{ inputs.retention-days }}
+        overwrite: true

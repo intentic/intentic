@@ -811,7 +811,7 @@ jobs:
           . _tools/scripts/lib/desktop-artifacts.sh
           mkdir -p windows-artifacts
           cp "$(desktop_artifact _editor/desktop-app/dist-bin nsis)" _sandbox/ic/dist-bin/ic-windows-amd64.exe windows-artifacts/
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: ./.github/actions/upload-artifact-retry
         with:
           name: windows-desktop-artifacts
           path: windows-artifacts
@@ -877,7 +877,7 @@ jobs:
           clean: false
       - uses: ./.github/actions/pnpm-setup
       - run: pnpm e2e:hermetic
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: ./.github/actions/upload-artifact-retry
         if: failure()
         with:
           name: e2e-hermetic-logs
