@@ -2,8 +2,8 @@
 import { Button, DisclosureRow, Notice, RowGroup, StatusBadge } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { computed, ref } from "vue";
-import { useManifestProblems } from "../extensions/useManifestProblems";
-import { openWorkspaceRef } from "../../workspace/files/openFileRef";
+import { useManifestProblems } from "../../extensions/useManifestProblems";
+import { openWorkspaceRef } from "../../../workspace/files/openFileRef";
 import { type ManifestRepairAction, manifestNotices } from "./manifestNotice";
 
 // Reports problems in the sandbox's own state files (a value it couldn't read, an unknown key), unlike

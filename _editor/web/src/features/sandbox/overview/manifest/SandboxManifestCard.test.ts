@@ -9,12 +9,12 @@ import { IconStub } from "@intentic/ui/testing";
 
 const reports = ref<ManifestProblemReport[]>([]);
 const repair = vi.fn<(request: ManifestRepair) => Promise<void>>(async () => undefined);
-vi.mock(`../extensions/useManifestProblems`, () => ({
+vi.mock(`../../extensions/useManifestProblems`, () => ({
     useManifestProblems: () => ({ reports, hasProblems: computed(() => reports.value.length > 0), repair }),
 }));
 
 const opened = vi.fn();
-vi.mock(`../../workspace/files/openFileRef`, () => ({ openWorkspaceRef: (path: string) => opened(path) }));
+vi.mock(`../../../workspace/files/openFileRef`, () => ({ openWorkspaceRef: (path: string) => opened(path) }));
 
 const { default: SandboxManifestCard } = await import("./SandboxManifestCard.vue");
 

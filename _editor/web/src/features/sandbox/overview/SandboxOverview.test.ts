@@ -23,7 +23,7 @@ const planOffered = ref(false);
 vi.mock(`../../settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ machineStanding, offered: planOffered }) }));
 vi.mock(`./SandboxUpdateCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./SandboxBehindCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`./SandboxManifestCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+vi.mock(`./manifest/SandboxManifestCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // jsdom has no 2d canvas context; stubs the resize and asserts only which fit (`contain`) was requested.
 const fileToSquareDataUrl = vi.fn<(file: File, fit: `cover` | `contain`) => Promise<string>>().mockResolvedValue(`data:image/webp;base64,NEW`);
 vi.mock(`../../../lib/imageDataUrl`, () => ({ fileToSquareDataUrl }));

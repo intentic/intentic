@@ -11,7 +11,7 @@ import { sandboxAvailabilityVisual } from "./availability";
 import { useSandboxAvailability } from "./useSandboxAvailability";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import SandboxBehindCard from "./SandboxBehindCard.vue";
-import SandboxManifestCard from "./SandboxManifestCard.vue";
+import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
 import SandboxUpdateCard from "./SandboxUpdateCard.vue";
 
 // Overview tab: sandbox identity (name, logo), self-reported image/version/URL relayed live via /info, online
