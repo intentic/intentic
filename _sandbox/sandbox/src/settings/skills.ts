@@ -36,7 +36,7 @@ Notes: TypeScript/JavaScript only. Pass workspace paths.
 
 export const FILEQ_SKILL = `---
 name: fileq
-description: Read binary workspace files (docx, odt, xlsx, pptx, pdf, epub, ipynb, images, audio) as clean budgeted markdown with the \`fileq\` CLI, and read big text-shaped files (csv, json, logs, archives) without flooding your context. Use whenever a task needs the contents of a document, the text layer of a PDF, the metadata of an image or recording, or a look inside a file too large to cat — instead of guessing from the filename or shelling out to ad-hoc converters.
+description: Read binary workspace files (docx, odt, xlsx, pptx, pdf, epub, ipynb, images, audio, zip and tar archives) as clean budgeted markdown with the \`fileq\` CLI, and read big text-shaped files (csv, json, logs) without flooding your context. Use whenever a task needs the contents of a document, the text layer of a PDF, the metadata of an image or recording, what is inside an archive, or a look inside a file too large to cat — instead of guessing from the filename or shelling out to ad-hoc converters.
 ---
 
 # fileq: binary files as markdown
@@ -52,6 +52,10 @@ sidecar copy fresh so reading twice derives once.
   pdf (text layer; a scan is OCR'd when the image carries tesseract, and the note says the words are
   recognised, not exact), epub (chapters in reading order), ipynb (cells, fenced code, capped outputs),
   png/jpg/gif/webp (dimensions + EXIF), mp3/wav/flac/mp4/… (duration + tags), html.
+- Archives (zip, jar, whl, tar, tgz, and what tar can open: xz, bzip2, zstd) derive to a MEMBER LISTING —
+  paths and sizes, capped — never their contents: unpack one if you need what is inside. A single
+  compressed file (\`server.log.gz\`) is the exception and derives to its text, since there the archive is
+  the document. 7z and rar answer that nothing here opens them.
 
 ## Check the sidecar first
 A file may already have a shadow at \`.intentic/local/cache/derived/<path>.md\` — front matter says which

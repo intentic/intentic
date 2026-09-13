@@ -8,7 +8,7 @@ import { fileTypeFromFile } from "file-type";
 // Magic wins over a lying extension both ways: a renamed docx still derives, a fake .docx is refused rather than
 // mis-parsed.
 
-export type Format = "docx" | "xlsx" | "pptx" | "pdf" | "image" | "media" | "html" | "ipynb" | "odt" | "epub";
+export type Format = "docx" | "xlsx" | "pptx" | "pdf" | "image" | "media" | "html" | "ipynb" | "odt" | "epub" | "archive";
 
 // file-type's ext per container to its format; preferred over sniffing zip since it names OOXML/ODF/EPUB.
 const MAGIC_FORMAT: Record<string, Format> = {
@@ -18,6 +18,17 @@ const MAGIC_FORMAT: Record<string, Format> = {
     odt: "odt",
     epub: "epub",
     pdf: "pdf",
+    zip: "archive",
+    jar: "archive",
+    apk: "archive",
+    tar: "archive",
+    "tar.gz": "archive",
+    gz: "archive",
+    bz2: "archive",
+    xz: "archive",
+    zst: "archive",
+    "7z": "archive",
+    rar: "archive",
     png: "image",
     jpg: "image",
     gif: "image",
@@ -69,6 +80,20 @@ export const EXTENSION_FORMAT: Record<string, Format> = {
     ".mkv": "media",
     ".html": "html",
     ".htm": "html",
+    // Archives, including the three zip-underneath package formats (a jar, a war and a wheel are each a zip with a
+    // manifest); a double extension like `.tar.gz` is recognized by its last one, which is the compressor.
+    ".zip": "archive",
+    ".jar": "archive",
+    ".war": "archive",
+    ".whl": "archive",
+    ".tar": "archive",
+    ".tgz": "archive",
+    ".gz": "archive",
+    ".bz2": "archive",
+    ".xz": "archive",
+    ".zst": "archive",
+    ".7z": "archive",
+    ".rar": "archive",
 };
 
 /** Cheap pre-filter: could this path, by name alone, have a derivable format? Runs over every watcher batch. */
@@ -86,11 +111,9 @@ export const detectFormat = async (absPath: string): Promise<Format | undefined>
     const byExtension = EXTENSION_FORMAT[extname(absPath).toLowerCase()];
     const magic = await fileTypeFromFile(absPath).catch(() => undefined);
     if (magic !== undefined) {
-        const byMagic = MAGIC_FORMAT[magic.ext];
-        if (byMagic !== undefined) {
-            return byMagic;
-        }
-        return magic.ext === "zip" && byExtension !== undefined && ZIP_CONTAINERS.has(byExtension) ? byExtension : undefined;
+        // Checked before the magic table, where plain "zip" means an archive: a docx whose OOXML markers magic missed
+        // is still a document, and only its extension can say so.
+        return magic.ext === "zip" && byExtension !== undefined && ZIP_CONTAINERS.has(byExtension) ? byExtension : MAGIC_FORMAT[magic.ext];
     }
     return byExtension;
 };

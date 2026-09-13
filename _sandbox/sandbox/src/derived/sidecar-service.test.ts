@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 import { describe, expect, test, vi } from "vitest";
-import { startSidecarService, type ExecFn } from "./sidecar-service.js";
+import type { ExecFn } from "./fileq.js";
+import { startSidecarService } from "./sidecar-service.js";
 
 /* The trigger logic apart from any filesystem or child process: what gets a spawn, what gets a sweep, what
  * gets dropped. The exec seam records invocations; a manual subscribe stands in for the watcher. */

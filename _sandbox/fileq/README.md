@@ -1,6 +1,6 @@
 # @intentic/fileq
 
-Agent-native file reading: any binary workspace file — docx, odt, xlsx, pptx, pdf, epub, ipynb, images, audio — as clean, token-budgeted markdown, kept fresh as sidecars from the moment a file lands.
+Agent-native file reading: any binary workspace file — docx, odt, xlsx, pptx, pdf, epub, ipynb, images, audio, archives — as clean, token-budgeted markdown, kept fresh as sidecars from the moment a file lands.
 
 `fileq` is to workspace files what `webq` is to the web and `iq` is to code: the tool an agent reaches for
 when the answer is inside a format it cannot open as text. `fileq read` prints a capsule (name, format,
@@ -17,9 +17,17 @@ The interesting decisions:
 - **Freshness is content, not clocks.** A sidecar's front matter carries the source's sha256 and the
   deriver's version stamp; it is fresh exactly when both still match. Mtimes lie across git checkouts,
   hashes do not, and bumping a deriver's version is how a fixed bug reaches every existing shadow.
+- **A container's shadow is its manifest.** An archive is not a document: what a zip, a tar or a wheel *is*
+  is the list of what it holds, so those derive to a capped table of members and sizes and stop there,
+  saying in a note that the contents are not derived. The exception is a single compressed file
+  (`server.log.gz`), where the archive is only a wrapper and the text inside it is the document. Nested
+  archives are listed as members, never opened: one level is a fact about this file, two is a crawl.
 - **The deterministic tier, plus what the image happens to carry.** Everything here runs without a model
   and without money: office and OpenDocument formats, EPUB chapters, notebook cells and pdf text layers
-  become prose, images become dimensions + EXIF, audio becomes duration + tags. A scanned pdf is OCR'd
+  become prose, images become dimensions + EXIF, audio becomes duration + tags, archives become listings.
+  Zip, tar and gzip are read in process; xz, bzip2 and zstd are codecs the image carries as binaries but
+  node_modules cannot decompress, so GNU tar lists those when it is on PATH (the stamp says `archive+tar`)
+  and the sidecar says so plainly when it is not. A scanned pdf is OCR'd
   when `tesseract` and `pdftoppm` are on PATH (an extension's image layer puts them there; the core image
   does not), capped at twenty pages and labelled *recognised, not exact*; the pdf deriver's sidecar stamp
   names that capability (`pdf+ocr` vs `pdf`), so a shadow written before the layer arrived re-derives the
@@ -39,6 +47,7 @@ The interesting decisions:
 - [src/lib/derive.ts](src/lib/derive.ts) — `ensureSidecar`, the one pipeline both commands and the daemon run: place, recognize, route, converge.
 - [src/lib/sidecar.ts](src/lib/sidecar.ts) — the shadow tree: paths, front matter, content-hash freshness, and the single neutralized writer.
 - [src/lib/formats.ts](src/lib/formats.ts) — what is derivable and how it is recognized (magic bytes first); the daemon imports this as its cheap pre-filter.
+- [src/lib/archives.ts](src/lib/archives.ts) — an archive's index without unpacking it: zip's central directory, tar's header blocks, gzip's trailer, and GNU tar for the codecs node_modules cannot decompress.
 - [src/lib/derivers/deriver.ts](src/lib/derivers/deriver.ts) — the per-format contract, including the version stamp that re-derives stale shadows.
 - [src/lib/sweep.ts](src/lib/sweep.ts) — the whole-workspace pass: converge every candidate, prune orphaned shadows.
 - [src/cli.integration.test.ts](src/cli.integration.test.ts) — the whole surface driven in-process against a temp workspace.
@@ -52,6 +61,14 @@ subscriber on the workspace watcher that pre-filters batches through `@intentic/
 agent it serves. The `fileq` skill (settings/skills.ts, on by default) is what tells agents the binary
 exists; the `sidecars` setting (Settings → Agent, off by default) is what turns the eager background pass
 on. Deriving reuses webq's DOM→markdown writer (`@intentic/webq/markdown`) rather than growing a second one.
+
+People read these shadows too, which is the second consumer and the reason `./sidecar` is an export rather
+than a private module: the daemon's `src/derived/derived-text.ts` reads one back for the browser (`GET
+/workspace/derived`, and `POST /workspace/derive` for the file someone is looking at right now), comparing
+the source's hash against the front matter so a shadow of an older version is shown flagged instead of
+passing for current. In the workspace view a document, picture or recording gets a **Text** chip beside its
+own preview, and a format with no preview at all — an archive, an EPUB — opens on its derived text directly,
+since the alternative there is a download button and nothing else.
 
 Later tiers extend the same shape, not the same commit: transcripts (whisper-cli, already in the image's
 feature pack for voice) and captions (a vision model, costing real money) would each be a deriver whose

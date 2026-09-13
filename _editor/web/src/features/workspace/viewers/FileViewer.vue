@@ -16,6 +16,8 @@ import { scopeQuery, workspaceAgent } from "../health/workspaceScope";
 import { useScopeTitle } from "../health/scopeTitle";
 import BigTextView from "./BigTextView.vue";
 import CodeView from "./CodeView.vue";
+import DerivedTextView from "./DerivedTextView.vue";
+import { derivedIsOnlyView, mayHaveDerivedText } from "../files/derivedText";
 import FileBreadcrumb from "../explorer/FileBreadcrumb.vue";
 import FileLocked from "./FileLocked.vue";
 import FileUnsupported from "./FileUnsupported.vue";
@@ -46,6 +48,8 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 // Set when the file changed on disk with unsaved edits: buffer kept, Reload offered instead of overwriting.
 const staleOnDisk = ref(false);
+// The reader asked for this file's derived text instead of its own surface; reset on every open.
+const textWanted = ref(false);
 // Bumped by Reload to remount the editable surface (uncontrolled, seeded via :key) from disk text.
 const reloadNonce = ref(0);
 // Edit buffers: the read trigger's dirty-guard below reads this, so it must exist before the watch.
@@ -148,6 +152,7 @@ watch(
         const id = ++seq;
 
         staleOnDisk.value = false;
+        textWanted.value = false;
         text.value = null;
         viewerContent.value = undefined;
         viewerComponent.value = undefined;
@@ -265,6 +270,16 @@ const download = async (): Promise<void> => {
     }
 };
 
+// Derived text (fileq's shadow of a document, picture, recording or archive). Offered only in the shared tree: a
+// conversation's checkout is never shadowed, and the shared file's text under a scoped tab would describe another file.
+// For a format with no surface at all (an archive, a font) it IS the view, since the alternative is a download button
+// and nothing else; everywhere else it's a second reading the chip switches to.
+const derivedOnly = computed(() => workspaceAgent.value === undefined && derivedIsOnlyView(path, open.value.kind));
+const derivedOffered = computed(() => workspaceAgent.value === undefined && !derivedOnly.value && mayHaveDerivedText(path, open.value.kind));
+const showDerived = computed(() => derivedOnly.value || (textWanted.value && derivedOffered.value));
+// The file's own bytes are worth offering beside its text wherever they aren't already on screen as text.
+const derivedDownloadable = computed(() => open.value.kind !== `code` && open.value.kind !== `markdown` && open.value.kind !== `big-text`);
+
 // Inline editing (text only): read and edit share one Monaco surface (readOnly toggles), seeded from the live
 // buffer or disk text. Ctrl+S/Save persists via upload; the tree refetch then refreshes size and the read view.
 const { editMode, setEditMode, hideFileComments, toggleHideFileComments } = useLayout();
@@ -354,6 +369,23 @@ const onEditorSave = (value: string): void =>
                 <span class="max-md:hidden">Comments</span>
             </button>
             <!--
+                Second reading of the same file, one click away: what a pdf, a spreadsheet or a picture becomes as text.
+                A chip rather than evidence, so it costs nothing until asked; the surface behind it says whether there is
+                any text yet and offers to make it.
+            -->
+            <button
+                v-if="derivedOffered"
+                type="button"
+                class="ui-chip shrink-0 gap-1 rounded-md px-1.5 py-0.5 font-medium"
+                :class="textWanted ? `ui-chip-on` : ``"
+                :aria-pressed="textWanted"
+                @click="textWanted = !textWanted"
+                v-tooltip.bottom="textWanted ? 'Back to the file itself' : 'Read this file as text, the way an agent does'"
+            >
+                <Icon :name="textWanted ? 'file' : 'align-left'" class="text-2xs" />
+                <span class="max-md:hidden">Text</span>
+            </button>
+            <!--
                 Tab row's chip says the view shows an agent's copy; this says this file specifically came from the shared
                 workspace.
             -->
@@ -425,8 +457,13 @@ const onEditorSave = (value: string): void =>
         </div>
 
         <div class="relative min-h-0 flex-1">
+            <!--
+                Ahead of every other surface, including the editor's: this is the reader's own choice for formats that
+                have another view, and the only thing to show for formats that don't.
+            -->
+            <DerivedTextView v-if="showDerived" :path="path" :downloadable="derivedDownloadable" @download="download" />
             <CodeView
-                v-if="editingThis"
+                v-else-if="editingThis"
                 ref="editorView"
                 :key="`${path}:${reloadNonce}`"
                 editable

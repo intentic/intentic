@@ -1,22 +1,15 @@
-import { execFile } from "node:child_process";
 import type { Logger } from "pino";
 import { isCandidatePath } from "@intentic/fileq/formats";
 import { stateRelPath } from "../workspace/layout/state-paths.js";
+import { defaultExec, FILEQ_MAX_BUFFER, isMissingBinary, type ExecFn } from "./fileq.js";
 
 // Background half of fileq: converges markdown shadows of binary files so a reasoning-time read finds one ready, gated
 // by `sidecars`. A batch triggers `fileq derive` (handles deletion too); enabling or an oversized batch triggers a
 // sweep. One child at a time, isolated from the agent; a missing binary downgrades to a warning.
 
-export type ExecFn = (command: string, args: string[], options: { timeout: number; maxBuffer: number }) => Promise<{ stdout: string }>;
-const defaultExec: ExecFn = (command, args, options) =>
-    new Promise((resolve, reject) => {
-        execFile(command, args, options, (error, stdout) => (error === null ? resolve({ stdout }) : reject(error)));
-    });
-
 // Hang bounds, not latency expectations; a document-heavy tree can legitimately sweep for minutes.
 const SWEEP_TIMEOUT_MS = 15 * 60_000;
 const DERIVE_TIMEOUT_MS = 5 * 60_000;
-const MAX_BUFFER = 16 * 1024 * 1024;
 // Paths per derive spawn: enough for a big paste of documents, small enough that argv stays sane.
 const MAX_PATHS_PER_RUN = 100;
 
@@ -56,7 +49,7 @@ export const startSidecarService = (deps: SidecarServiceDeps, subscribe: (listen
             if (sweepWanted) {
                 sweepWanted = false;
                 pending.clear();
-                const { stdout } = await exec("fileq", ["sweep", "--json"], { timeout: SWEEP_TIMEOUT_MS, maxBuffer: MAX_BUFFER });
+                const { stdout } = await exec("fileq", ["sweep", "--json"], { timeout: SWEEP_TIMEOUT_MS, maxBuffer: FILEQ_MAX_BUFFER });
                 deps.logger.info({ result: stdout.trim() }, "sidecars: sweep");
                 return;
             }
@@ -65,13 +58,13 @@ export const startSidecarService = (deps: SidecarServiceDeps, subscribe: (listen
             if (batch.length === 0) {
                 return;
             }
-            await exec("fileq", ["derive", ...batch], { timeout: DERIVE_TIMEOUT_MS, maxBuffer: MAX_BUFFER });
+            await exec("fileq", ["derive", ...batch], { timeout: DERIVE_TIMEOUT_MS, maxBuffer: FILEQ_MAX_BUFFER });
             if (pending.size > 0) {
                 // A batch bigger than one argv is real remaining work, not leftovers for the next event to flush.
                 schedule();
             }
         } catch (error) {
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            if (isMissingBinary(error)) {
                 // Not an image (dev checkout without fileq on PATH): say so once and stand down.
                 broken = true;
                 deps.logger.warn("sidecars: fileq is not on PATH, background derivation is off until restart");

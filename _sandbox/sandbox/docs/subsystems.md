@@ -169,8 +169,14 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   terminal panel's busy dot lit for seconds after the command was done. The file feed has one more
   subscriber than the browser: [src/derived/sidecar-service.ts](../src/derived/sidecar-service.ts), which spawns
   the baked `fileq` CLI (`_sandbox/fileq`) to keep a markdown shadow of every binary workspace file (docx,
-  pdf, images, audio) converged under `.intentic/local/cache/derived/` — gated by the `sidecars` setting,
-  serialized to one child at a time, and sweeping the whole tree when the setting flips on.
+  pdf, images, audio, archives) converged under `.intentic/local/cache/derived/` — gated by the `sidecars`
+  setting, serialized to one child at a time, and sweeping the whole tree when the setting flips on.
+  [src/derived/derived-text.ts](../src/derived/derived-text.ts) is the same shadows read the other way, for a
+  person rather than an agent: `GET /workspace/derived` serves one with the provenance out of its front
+  matter and a hash comparison against the source (so an out-of-date rendering is shown flagged, never as
+  current), and `POST /workspace/derive` runs the CLI for one file on demand, which is how the workspace view
+  offers text for a format nobody has switched the background pass on for. Both spawn through
+  [src/derived/fileq.ts](../src/derived/fileq.ts), the one place the daemon runs that binary.
 - [src/peers](../src/peers), the substrate under everything of the user's that DIALS this sandbox and then serves
   a contract back over the socket it opened: their computer, their browser, one of this sandbox's own runners.
   Three doors, one shape, written once: the hub (which peers hold a socket right now, the typed client for

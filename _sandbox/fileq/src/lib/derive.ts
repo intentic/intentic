@@ -5,6 +5,7 @@ import { IGNORED_DIRS, isAgentWorktreePath, isReferencePath } from "@intentic/wo
 import { STATE_DIR } from "@intentic/constants";
 import { detectFormat, type Format } from "./formats.js";
 import { deriverStamp, neutralizeDoc, type DerivedDoc, type Deriver } from "./derivers/deriver.js";
+import { archiveDeriver } from "./derivers/archive.js";
 import { docxDeriver } from "./derivers/docx.js";
 import { epubDeriver } from "./derivers/epub.js";
 import { htmlDeriver } from "./derivers/html.js";
@@ -32,6 +33,7 @@ export const DERIVERS: Record<Format, Deriver> = {
     ipynb: ipynbDeriver,
     odt: odtDeriver,
     epub: epubDeriver,
+    archive: archiveDeriver,
 };
 
 // Above this, a derivation isn't background-cheap and the file is data to process, not shadow; skipped loudly.

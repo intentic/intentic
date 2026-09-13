@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { archiveDeriver } from "./lib/derivers/archive.js";
 import { docxDeriver } from "./lib/derivers/docx.js";
 import { epubDeriver } from "./lib/derivers/epub.js";
 import { htmlDeriver } from "./lib/derivers/html.js";
@@ -17,7 +18,7 @@ import { ocrAvailable, pdfDeriver } from "./lib/derivers/pdf.js";
 import { pptxDeriver } from "./lib/derivers/pptx.js";
 import { xlsxDeriver } from "./lib/derivers/xlsx.js";
 import { detectFormat } from "./lib/formats.js";
-import { docxBytes, epubBytes, ipynbText, odtBytes, pdfBytes, pngBytes, pptxBytes, wavBytes } from "./testing.js";
+import { docxBytes, epubBytes, gzipBytes, ipynbText, odtBytes, pdfBytes, pngBytes, pptxBytes, tarBytes, wavBytes, zipBytes } from "./testing.js";
 
 let root: string;
 const fixture = (name: string, bytes: Uint8Array | string): string => {
@@ -226,5 +227,63 @@ describe("html", () => {
         const doc = await htmlDeriver.derive(path);
         expect(doc.title).toBe("Local report");
         expect(doc.markdown).toContain("# Findings");
+    });
+});
+
+describe("archive", () => {
+    test("a zip's shadow is its manifest, and says the members' contents are not in it", async () => {
+        const path = fixture("bundle.zip", zipBytes({ "README.md": "# Bundle", "src/app.ts": "export const go = () => 1;\n".repeat(30) }));
+        const doc = await archiveDeriver.derive(path);
+        expect(doc.markdown).toContain("- Archive: zip");
+        expect(doc.markdown).toContain("- Members: 2 files");
+        expect(doc.markdown).toContain("| src/app.ts |");
+        expect(doc.markdown).not.toContain("export const go");
+        expect(doc.notes.join(" ")).toContain("member listing only");
+    });
+
+    test("magic routes a zip to the archive deriver while a docx stays a document", async () => {
+        expect(await detectFormat(fixture("bundle2.zip", zipBytes({ "a.txt": "a" })))).toBe("archive");
+        expect(await detectFormat(fixture("report.docx", docxBytes("T", ["x"])))).toBe("docx");
+    });
+
+    test("a renamed archive is recognized by its bytes, not its name", async () => {
+        expect(await detectFormat(fixture("mystery.bin", zipBytes({ "a.txt": "a" })))).toBe("archive");
+    });
+
+    test("a tar lists members in archive order", async () => {
+        const path = fixture("backup.tar", tarBytes({ "notes.txt": "hello", "data/rows.csv": "a,b\n1,2\n" }));
+        const doc = await archiveDeriver.derive(path);
+        expect(doc.markdown).toContain("- Archive: tar");
+        expect(doc.markdown.indexOf("notes.txt")).toBeLessThan(doc.markdown.indexOf("data/rows.csv"));
+    });
+
+    test("a gzipped tar is listed as the tar inside it", async () => {
+        const path = fixture("release.tgz", gzipBytes("release.tar", tarBytes({ "bin/tool": "#!/bin/sh\n" })));
+        const doc = await archiveDeriver.derive(path);
+        expect(doc.markdown).toContain("| bin/tool |");
+        expect(doc.notes.join(" ")).toContain("gzip-compressed tar");
+    });
+
+    test("a single compressed file carries its text, since there the archive is the document", async () => {
+        const path = fixture("server.log.gz", gzipBytes("server.log", "GET /健康 200\nGET /orders 500\n"));
+        const doc = await archiveDeriver.derive(path);
+        expect(doc.markdown).toContain("- Member: server.log");
+        expect(doc.markdown).toContain("GET /orders 500");
+    });
+
+    test("a compressed binary says so instead of printing bytes", async () => {
+        const path = fixture("pixel.png.gz", gzipBytes("pixel.png", pngBytes()));
+        const doc = await archiveDeriver.derive(path);
+        expect(doc.markdown).not.toContain("PNG");
+        expect(doc.notes.join(" ")).toContain("not text");
+    });
+
+    test("an empty archive says it holds nothing rather than reading as one", async () => {
+        const doc = await archiveDeriver.derive(fixture("empty.zip", zipBytes({})));
+        expect(doc.notes.join(" ")).toContain("holds nothing");
+    });
+
+    test("a file that is no archive at all fails loudly", async () => {
+        await expect(archiveDeriver.derive(fixture("notes.zip", "plain text wearing a zip extension"))).rejects.toThrow(/not an archive/);
     });
 });

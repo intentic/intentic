@@ -101,7 +101,11 @@ const mapReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.map
             Background pass that pre-renders binary files (docx, pdf, images, audio) as markdown as they land, so a
             later read is a file open, not a parse. Only gates background CPU spend; fileq itself is always available.
         -->
-        <Row icon="file" title="Document shadows" description="Keep documents, images and audio pre-rendered as text, updated as files change.">
+        <Row
+            icon="file"
+            title="Document shadows"
+            description="Keep documents, images, audio and archives pre-rendered as text, updated as files change. Open any of them in Workspace to read what an agent reads."
+        >
             <template #control>
                 <ToggleSwitch
                     :model-value="settings?.sidecars ?? false"

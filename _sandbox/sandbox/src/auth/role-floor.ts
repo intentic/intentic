@@ -29,6 +29,9 @@ const NAME_FLOORS: Readonly<Record<string, MemberRole>> = {
     "system.presence": "viewer",
     // Opening a media file in the workspace view is a read; the ticket is strictly narrower than the bearer.
     "workspace.mediaTicket": "viewer",
+    // Rendering one file as text is reading it, POST or not: what it writes is a cache entry under the state dir that
+    // the CLI regenerates on demand, and what it costs is one parse of a file the caller may already read whole.
+    "workspace.derive": "viewer",
     // Reporting your own page crashed sits below both defaults on purpose: a viewer's browser breaks as often as an
     // owner's, and they can't raise their own role to tell anyone.
     // Its blast radius is a capped append to its own file, a smaller grant than the reads above it.

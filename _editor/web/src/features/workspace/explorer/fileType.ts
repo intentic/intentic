@@ -36,7 +36,11 @@ const BINARY_EXTS = new Set([
     "rar",
     "7z",
     "bz2",
-    "xz", // archives
+    "xz",
+    "zst",
+    "jar",
+    "war",
+    "whl", // archives, the packaged-as-a-zip ones included
     "exe",
     "dll",
     "so",
@@ -49,7 +53,6 @@ const BINARY_EXTS = new Set([
     "wasm",
     "node", // binaries
     "class",
-    "jar",
     "pyc",
     "lockb", // compiled/lock
     "png",

@@ -154,6 +154,48 @@ export const WorkspaceFileAbsentSchema = z.object({
     path: z.string().describe("The path, as asked for."),
 });
 export const WorkspaceFileSchema = z.discriminatedUnion("present", [WorkspaceFilePresentSchema, WorkspaceFileAbsentSchema]);
+// A file's derived text: the markdown shadow fileq keeps beside every document, picture, recording and archive, which
+// is what an agent reads instead of the bytes. About the shared tree only, since a conversation's own checkout is never
+// shadowed; no scope field, for that reason.
+export const WorkspaceDerivedQuerySchema = z.object({
+    path: z
+        .string()
+        .min(1)
+        .describe("The file you want the text of, as a workspace path. The real file, not its shadow: where the text is kept is this route's business."),
+});
+export const WorkspaceDerivedPresentSchema = z.object({
+    present: z.literal(true).describe("There is derived text for that file."),
+    path: z.string().describe("The file it was derived from, as asked for."),
+    content: z.string().describe("The text itself, as markdown."),
+    deriver: z.string().describe("Which reader wrote it, and at which version, such as `pdf+ocr v1`. A file re-derives when this changes."),
+    derivedAt: z.string().optional().describe("When it was written, as an ISO timestamp. Absent only for a shadow whose front matter was edited by hand."),
+    title: z.string().optional().describe("The title the format carried, where it carried one."),
+    notes: z
+        .array(z.string())
+        .describe(
+            "Every cap and degradation the derivation hit: a sheet cut to 200 rows, a book cut at 2 MB, a scan recognised rather than read. Show these with the text, since text that was cut reading as complete is the one failure this whole feature cannot afford.",
+        ),
+    tokens: z.number().describe("Roughly what an agent spends reading it, by the same four-chars-a-token estimate every budget here uses."),
+    truncated: z.boolean().describe("Whether this is only the start of the shadow, cut to keep the response sendable. The file on disk holds the rest."),
+    stale: z
+        .boolean()
+        .describe(
+            "Whether the file has changed since this text was derived, compared by content rather than by clock. True means you are reading a rendering of an older version of the file, and deriving it again catches it up.",
+        ),
+});
+export const WorkspaceDerivedAbsentSchema = z.object({
+    present: z.literal(false).describe("There is no derived text for that file, which is the ordinary answer while background derivation is switched off."),
+    path: z.string().describe("The file, as asked for."),
+    derivable: z
+        .boolean()
+        .describe("Whether this format can be turned into text at all. True means asking for it to be derived is worth offering; false means nothing here reads this format."),
+    reason: z
+        .string()
+        .optional()
+        .describe("Why there is none, when deriving was just attempted and produced nothing: the file is too large, corrupt, or of a format no reader claims."),
+});
+export const WorkspaceDerivedSchema = z.discriminatedUnion("present", [WorkspaceDerivedPresentSchema, WorkspaceDerivedAbsentSchema]);
+export type WorkspaceDerived = z.infer<typeof WorkspaceDerivedSchema>;
 // Resolves a possibly-partial path reference (a model's mention, a compiler's path) to the real workspace path it
 // means, matched as a suffix.
 export const WorkspaceResolveQuerySchema = WorkspaceScopeSchema.extend({

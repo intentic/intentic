@@ -1,4 +1,4 @@
-import { strToU8, zipSync } from "fflate";
+import { gzipSync, strToU8, zipSync } from "fflate";
 
 // Fixture builders, one per binary format the suites derive, shared so deriver tests and CLI tests can't disagree on
 // what "a docx" means.
@@ -206,6 +206,66 @@ export const ipynbText = (title: string, code: string, outputLines: readonly str
         nbformat: 4,
         nbformat_minor: 5,
     });
+
+/** A zip holding one member per key, deflated the way any packing tool writes it. */
+export const zipBytes = (files: Readonly<Record<string, string>>): Uint8Array =>
+    zipSync(Object.fromEntries(Object.entries(files).map(([path, text]) => [path, strToU8(text)])));
+
+const TAR_BLOCK = 512;
+
+// One ustar header block. The checksum is summed with its own field read as spaces, which is the rule that makes a
+// header verifiable at all.
+const tarHeader = (path: string, size: number, type: string): Uint8Array => {
+    const block = new Uint8Array(TAR_BLOCK);
+    const put = (offset: number, value: string): void => block.set(strToU8(value), offset);
+    put(0, path.slice(0, 100));
+    put(100, "0000644\0");
+    put(108, "0000000\0");
+    put(116, "0000000\0");
+    put(124, `${size.toString(8).padStart(11, "0")}\0`);
+    put(136, "00000000000\0");
+    block.fill(0x20, 148, 156);
+    put(156, type);
+    put(257, "ustar\0");
+    put(263, "00");
+    const sum = block.reduce((total, byte) => total + byte, 0);
+    put(148, `${sum.toString(8).padStart(6, "0")}\0 `);
+    return block;
+};
+
+const padded = (bytes: Uint8Array): Uint8Array => {
+    const block = new Uint8Array(Math.ceil(bytes.length / TAR_BLOCK) * TAR_BLOCK);
+    block.set(bytes);
+    return block;
+};
+
+/**
+ * A tar holding one member per key, in the layout GNU tar writes: a header per member, data padded to the block,
+ * two zero blocks at the end. A path past the 100-byte name field gets an 'L' block in front of it, as GNU tar does.
+ */
+export const tarBytes = (files: Readonly<Record<string, string>>): Uint8Array => {
+    const parts: Uint8Array[] = [];
+    for (const [path, text] of Object.entries(files)) {
+        const data = strToU8(text);
+        if (path.length > 100) {
+            parts.push(tarHeader("././@LongLink", path.length + 1, "L"), padded(strToU8(`${path}\0`)));
+        }
+        parts.push(tarHeader(path, data.length, path.endsWith("/") ? "5" : "0"), padded(data));
+    }
+    parts.push(new Uint8Array(TAR_BLOCK * 2));
+    const total = parts.reduce((sum, part) => sum + part.length, 0);
+    const tar = new Uint8Array(total);
+    let offset = 0;
+    for (const part of parts) {
+        tar.set(part, offset);
+        offset += part.length;
+    }
+    return tar;
+};
+
+/** A gzip member carrying the original name in its header, the way `gzip <file>` writes one. */
+export const gzipBytes = (name: string, content: Uint8Array | string): Uint8Array =>
+    gzipSync(typeof content === "string" ? strToU8(content) : content, { filename: name });
 
 /** A 1×1 PNG (no EXIF — dimensions are what image derivation reads off it). */
 export const pngBytes = (): Uint8Array =>

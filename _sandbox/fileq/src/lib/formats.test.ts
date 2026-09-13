@@ -14,13 +14,18 @@ describe("the candidate pre-filter (what the daemon runs over every watcher batc
             "analysis.ipynb",
             "letter.odt",
             "book.EPUB",
+            "bundle.zip",
+            "release.tar.gz",
+            "server.log.gz",
+            "backup.TAR",
+            "tool.7z",
         ]) {
             expect(isCandidatePath(path), path).toBe(true);
         }
     });
 
     test("code and plain text never cost a spawn", () => {
-        for (const path of ["src/index.ts", "README.md", "data.csv", "notes.txt", "archive.zip", "legacy.doc"]) {
+        for (const path of ["src/index.ts", "README.md", "data.csv", "notes.txt", "legacy.doc", "font.woff2"]) {
             expect(isCandidatePath(path), path).toBe(false);
         }
     });

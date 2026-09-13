@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -759,6 +760,70 @@ test("GET /diff/raw serves a commit's before/after blobs and refuses a sha that 
         expect(new Uint8Array(await (await raw("before")).arrayBuffer())).toEqual(new Uint8Array(first));
         expect(new Uint8Array(await (await raw("after")).arrayBuffer())).toEqual(new Uint8Array(second));
         expect((await app.request(`/diff/raw?source=commit&repo=root&sha=HEAD~1&path=icon.png&which=after`)).status).toBe(400);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+// Real tmp tree, since a shadow is read off disk rather than through services.files; a fake would only test the fake.
+test("workspace.derived serves a file's shadow with its provenance, and distinguishes no-shadow-yet from no-reader", async () => {
+    const root = await mkdtemp(join(tmpdir(), "intentic-derived-"));
+    const shadow = join(root, STATE_DIR, "local/cache/derived/docs");
+    try {
+        await mkdir(join(root, "docs"), { recursive: true });
+        await mkdir(shadow, { recursive: true });
+        const bytes = "pretend document bytes";
+        await writeFile(join(root, "docs/spec.docx"), bytes);
+        await writeFile(
+            join(shadow, "spec.docx.md"),
+            [
+                "---",
+                "source: docs/spec.docx",
+                // The real hash of the bytes above: freshness here is content, never a timestamp.
+                `sha256: ${createHash("sha256").update(bytes).digest("hex")}`,
+                "deriver: docx v1",
+                "derived_at: 2026-09-01T10:00:00.000Z",
+                'title: "Quarterly plan"',
+                'note: "showing 200 of 4,000 rows"',
+                "---",
+                "",
+                "# Quarterly plan",
+                "",
+                "Ship the derivers.",
+                "",
+            ].join("\n"),
+        );
+        // A derivable file nobody has derived yet: the PNG signature, so magic rather than the name answers for it.
+        await writeFile(join(root, "docs/logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+        await writeFile(join(root, "docs/main.ts"), "export const go = 1;\n");
+        // Same shadow, but the file moved on underneath it: the one case a reader must not be left to assume about.
+        await writeFile(join(root, "docs/edited.docx"), "bytes that changed after the derivation");
+        await writeFile(join(shadow, "edited.docx.md"), "---\nsource: docs/edited.docx\nsha256: stale\nderiver: docx v1\n---\n\n# Old text\n");
+
+        const client = clientFor(createApp(services({ workspace: workspacePaths(root) })));
+        expect(await client.workspace.derived({ path: "docs/spec.docx" })).toEqual({
+            present: true,
+            path: "docs/spec.docx",
+            content: "# Quarterly plan\n\nShip the derivers.\n",
+            deriver: "docx v1",
+            derivedAt: "2026-09-01T10:00:00.000Z",
+            title: "Quarterly plan",
+            // The cap the derivation hit rides with the text, or text that was cut reads as the whole document.
+            notes: ["showing 200 of 4,000 rows"],
+            tokens: 10,
+            truncated: false,
+            stale: false,
+        });
+        // The file changed since it was rendered: the text still shows, flagged, rather than passing for current.
+        expect(await client.workspace.derived({ path: "docs/edited.docx" })).toMatchObject({ present: true, content: "# Old text\n", stale: true });
+        // No shadow yet, but a reader exists: the answer a viewer turns into an offer to derive it.
+        expect(await client.workspace.derived({ path: "docs/logo.png" })).toEqual({ present: false, path: "docs/logo.png", derivable: true });
+        // Source code needs no shadow at all, and a path with nothing behind it vouches for nothing.
+        expect(await client.workspace.derived({ path: "docs/main.ts" })).toEqual({ present: false, path: "docs/main.ts", derivable: false });
+        expect(await client.workspace.derived({ path: "docs/absent.pdf" })).toEqual({ present: false, path: "docs/absent.pdf", derivable: false });
+        // The same guards every file route answers to: an escape is a bad request, the control plane is not found.
+        expect(await errorCode(client.workspace.derived({ path: "../../etc/passwd" }))).toBe("BAD_REQUEST");
+        expect(await errorCode(client.workspace.derived({ path: `${STATE_DIR}/secrets/auth/claude/auth.json` }))).toBe("NOT_FOUND");
     } finally {
         await rm(root, { recursive: true, force: true });
     }

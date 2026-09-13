@@ -29,23 +29,47 @@ export const sha256OfFile = (absPath: string): Promise<string> =>
             .on("end", () => resolve(hash.digest("hex")));
     });
 
-export interface SidecarHead {
+export interface SidecarFront {
+    /** The workspace path this shadows; absent when the fence is missing or hand-mangled. */
+    readonly source: string | undefined;
     readonly sha256: string | undefined;
     readonly deriver: string | undefined;
+    readonly derivedAt: string | undefined;
+    readonly title: string | undefined;
+    /** Every cap and degradation the derivation hit, in the order it wrote them. */
+    readonly notes: readonly string[];
 }
 
-// The two front-matter fields freshness reads; a line scan, so an edited-by-hand sidecar simply reads as stale.
-export const parseSidecarHead = (content: string): SidecarHead => {
+const EMPTY_FRONT: SidecarFront = { source: undefined, sha256: undefined, deriver: undefined, derivedAt: undefined, title: undefined, notes: [] };
+
+// A line scan rather than a YAML parse, so an edited-by-hand sidecar simply reads as stale instead of throwing.
+// Title and notes are JSON-encoded on the way in (writeSidecar), so they decode back rather than splitting on a colon.
+export const parseSidecarFront = (content: string): SidecarFront => {
     if (!content.startsWith("---\n")) {
-        return { sha256: undefined, deriver: undefined };
+        return EMPTY_FRONT;
     }
     const end = content.indexOf("\n---\n", 4);
     const head = end === -1 ? "" : content.slice(4, end);
-    const field = (name: string): string | undefined => {
-        const match = new RegExp(`^${name}: (.+)$`, "m").exec(head);
-        return match?.[1];
+    const field = (name: string): string | undefined => new RegExp(`^${name}: (.+)$`, "m").exec(head)?.[1];
+    const decode = (raw: string | undefined): string | undefined => {
+        if (raw === undefined) {
+            return undefined;
+        }
+        try {
+            const value: unknown = JSON.parse(raw);
+            return typeof value === "string" ? value : raw;
+        } catch {
+            return raw;
+        }
     };
-    return { sha256: field("sha256"), deriver: field("deriver") };
+    return {
+        source: field("source"),
+        sha256: field("sha256"),
+        deriver: field("deriver"),
+        derivedAt: field("derived_at"),
+        title: decode(field("title")),
+        notes: [...head.matchAll(/^note: (.+)$/gm)].map((match) => decode(match[1]) ?? ""),
+    };
 };
 
 /** Body after the front matter fence — what `read` prints; content without a fence is all body. */
@@ -69,7 +93,7 @@ export const isFresh = (existing: string | undefined, sourceSha: string, deriver
     if (existing === undefined) {
         return false;
     }
-    const head = parseSidecarHead(existing);
+    const head = parseSidecarFront(existing);
     return head.sha256 === sourceSha && head.deriver === deriverStamp;
 };
 

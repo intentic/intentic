@@ -1,7 +1,7 @@
 {
     "name": "@intentic/fileq",
     "version": "0.0.0",
-    "description": "fileq, agent-native file reading: any binary workspace file (docx, xlsx, pptx, pdf, images, audio) as clean budgeted markdown, kept fresh as sidecars the moment files land",
+    "description": "fileq, agent-native file reading: any binary workspace file (docx, xlsx, pptx, pdf, images, audio, archives) as clean budgeted markdown, kept fresh as sidecars the moment files land",
     "license": "MIT",
     "type": "module",
     "repository": {
@@ -26,6 +26,17 @@
             "require": {
                 "@intentic/src": "./src/lib/formats.ts",
                 "default": "./dist/lib/formats.js"
+            }
+        },
+        "./sidecar": {
+            "types": "./dist/lib/sidecar.d.ts",
+            "import": {
+                "@intentic/src": "./src/lib/sidecar.ts",
+                "default": "./dist/lib/sidecar.js"
+            },
+            "require": {
+                "@intentic/src": "./src/lib/sidecar.ts",
+                "default": "./dist/lib/sidecar.js"
             }
         }
     },

@@ -21,6 +21,8 @@ import {
     WorkspaceChildrenQuerySchema,
     WorkspaceChildrenSchema,
     WorkspaceClassificationSchema,
+    WorkspaceDerivedQuerySchema,
+    WorkspaceDerivedSchema,
     WorkspaceDirSchema,
     WorkspaceFileQuerySchema,
     WorkspaceFileReadQuerySchema,
@@ -71,6 +73,28 @@ export const workspaceContract = {
         })
         .input(WorkspaceFileReadQuerySchema)
         .output(WorkspaceFileSchema),
+    // The markdown shadow fileq keeps of a binary file; the read is a plain file read, no derivation triggered.
+    derived: oc
+        .route({
+            method: "GET",
+            path: "/workspace/derived",
+            summary: "Read a file's derived text",
+            description:
+                "What a document, picture, recording or archive says, as text, from the shadow the sandbox keeps beside it. This is the same rendering an agent reads instead of the bytes, so it is also the way to check what one is working from. Nothing is derived here: a file with no shadow yet answers that it has none, and whether it could have one.",
+        })
+        .input(WorkspaceDerivedQuerySchema)
+        .output(WorkspaceDerivedSchema),
+    // The lazy path, on demand: same convergence the background sweep runs, for one file someone is looking at.
+    derive: oc
+        .route({
+            method: "POST",
+            path: "/workspace/derive",
+            summary: "Derive a file's text now",
+            description:
+                "Renders one file to text and answers with the result, for when its shadow is missing or you want it rebuilt. The same work the background pass does when that setting is on, so this is how a reader gets the text without turning it on for the whole workspace. Costs a parse of exactly one file; a format nothing can read says so rather than failing.",
+        })
+        .input(WorkspaceDerivedQuerySchema)
+        .output(WorkspaceDerivedSchema),
     // Mints the ticket GET /workspace/media (a plain Hono byte-range route, no oRPC shape) requires to stream.
     mediaTicket: oc
         .route({
