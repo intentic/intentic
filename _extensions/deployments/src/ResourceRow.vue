@@ -186,7 +186,7 @@ const logText = computed(() => {
                 </div>
             </div>
             <!-- Copy button plus a scroll viewport, so a long tail doesn't push the next row off screen. -->
-            <Code v-else-if="logText !== ``" :code="logText" lang="log" label="Container log" :scroll-lines="14" />
+            <Code v-else-if="logText !== ``" :code="logText" lang="log" label="Container log" :scroll-lines="14" scroll-bottom />
             <div v-else class="text-2xs text-subtle">No log output.</div>
         </template>
     </DisclosureRow>

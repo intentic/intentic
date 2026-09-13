@@ -3,7 +3,7 @@
     is in flight, and permanently for unsupported languages.
 -->
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { ui } from "../../lib/ui.js";
 import { useHighlighter } from "../../composables/useHighlighter.js";
 import type { ShikiLang } from "@intentic/code-read/langs";
@@ -17,6 +17,7 @@ const {
     wrap = false,
     clampLines,
     scrollLines,
+    scrollBottom = false,
 } = defineProps<{
     code: string;
     // Shiki language id (e.g. `bash`); omit to render plain text. Typed to the grammars we ship, so a typo fails to
@@ -30,6 +31,8 @@ const {
     clampLines?: number;
     // Same height budget as `clampLines`, but scrolls in place instead of expanding the page.
     scrollLines?: number;
+    // Starts scrolled to the bottom (and stays there across updates), for log tails.
+    scrollBottom?: boolean;
 }>();
 
 // Passed through from the built-in copy button, for a caller whose flow depends on the copy happening.
@@ -48,23 +51,50 @@ const overflowing = ref(false);
 // Stays visible once expanded, so the toggle doesn't disappear once the block reads "no more to show."
 const toggleable = computed(() => clampLines !== undefined && (expanded.value || overflowing.value));
 
+const scrollToBottom = (): void => {
+    if (!scrollBottom) {
+        return;
+    }
+    const pre = block.value?.querySelector(`pre`);
+    if (pre) {
+        pre.scrollTop = pre.scrollHeight;
+    }
+};
+
 const measure = (): void => {
     const pre = block.value?.querySelector(`pre`);
     overflowing.value = pre !== undefined && pre !== null && pre.scrollHeight > pre.clientHeight + 1;
 };
-// Only a clamped block is observed; unclamped blocks (there can be dozens, in a transcript) need no measuring.
+// Only a clamped or bottom-scrolled block is observed; unclamped blocks (there can be dozens, in a transcript) need no measuring.
 let observer: ResizeObserver | undefined;
 watch(block, (el, _old, onCleanup) => {
     observer?.disconnect();
-    if (clampLines === undefined || !el) {
+    if ((clampLines === undefined && !scrollBottom) || !el) {
         return;
     }
-    observer ??= new ResizeObserver(() => measure());
+    observer ??= new ResizeObserver(() => {
+        measure();
+        scrollToBottom();
+    });
     observer.observe(el);
     onCleanup(() => observer?.disconnect());
 });
 // The highlighted markup replaces the fallback <pre>, so measure again after the swap.
-watch(html, () => void nextTick(measure));
+watch(html, () => {
+    void nextTick(() => {
+        measure();
+        scrollToBottom();
+    });
+});
+watch(
+    () => code,
+    () => {
+        void nextTick(scrollToBottom);
+    },
+);
+onMounted(() => {
+    void nextTick(scrollToBottom);
+});
 onUnmounted(() => observer?.disconnect());
 
 // Safe: Shiki HTML-escapes the code, so the only markup is its own `<span style>` colour tokens.
