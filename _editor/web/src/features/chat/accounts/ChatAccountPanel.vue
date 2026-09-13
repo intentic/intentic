@@ -18,8 +18,17 @@ const view = usePaneView();
 const { connected, provider, harness } = view;
 // Cannot-send from a spent trial is not a missing connection; not this strip's to report.
 const trialSpent = computed(() => trialExhausted(provider.value));
-const { nativeConnectFlow, translatorConnectFlow, cancelConnect, cancelTranslatorConnect, setManagedProvider, startConnect, connectTranslator } =
-    useChat();
+const {
+    nativeConnectFlow,
+    translatorConnectFlow,
+    accountBusy,
+    translatorKey,
+    cancelConnect,
+    cancelTranslatorConnect,
+    setManagedProvider,
+    startConnect,
+    connectTranslator,
+} = useChat();
 
 // Read from the store, not remembered, so a handshake started elsewhere is still finishable here.
 const live = computed<{ kind: `native` | `routed`; provider: AgentProvider } | undefined>(() => {
@@ -32,6 +41,14 @@ const live = computed<{ kind: `native` | `routed`; provider: AgentProvider } | u
     return undefined;
 });
 const abandon = (): void => (live.value?.kind === `native` ? cancelConnect() : cancelTranslatorConnect());
+
+// What the user brought back is being redeemed: there is nothing left to abandon, and the strip's own panel
+// reports the wait.
+const finishing = computed(
+    () =>
+        live.value !== undefined &&
+        accountBusy.value === (live.value.kind === `native` ? live.value.provider : translatorKey(live.value.provider)),
+);
 
 // Named as what to connect, not the runtime; `pitch` is absent where there's no account to connect.
 const providerName = computed(() => PROVIDER_VENDOR[provider.value as keyof typeof PROVIDER_VENDOR] ?? providerDisplayLabel(provider.value));
@@ -65,7 +82,12 @@ const connect = async (): Promise<void> => {
         <div class="flex items-center gap-2">
             <ProviderLogo :provider="live.provider" class="shrink-0 text-link" />
             <span class="min-w-0 flex-1 truncate text-left text-xs font-medium text-body">Connecting {{ providerDisplayLabel(live.provider) }}</span>
-            <button type="button" :class="ui.linkButton(`shrink-0 text-2xs text-subtle hover:text-content hover:no-underline`)" @click="abandon">
+            <button
+                type="button"
+                :disabled="finishing"
+                :class="ui.linkButton(`shrink-0 text-2xs text-subtle hover:text-content hover:no-underline`)"
+                @click="abandon"
+            >
                 Cancel
             </button>
         </div>

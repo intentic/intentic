@@ -23,6 +23,7 @@ import {
     refreshAccounts,
     refreshTranslatorAccounts,
 } from "../accounts/useChat-accounts";
+import { translatorAccounts } from "../accounts/providerAccounts";
 import { sandboxError, sandboxJson, sandboxRequest } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 
@@ -35,6 +36,13 @@ export const translatorConnectFlow = ref<
 // are separate connections. `name` picks one subscription; omitted, the provider's sign-in.
 export const translatorKey = (target: AgentProvider, name?: string): string => `translator:${target}${name === undefined ? `` : `:${name}`}`;
 let translatorPollTimer: ReturnType<typeof setTimeout> | undefined;
+
+// Takes down a subscription sign-in and the poll behind it; the timer is cleared too, so a tick can't fire
+// against an attempt that is already finished or abandoned.
+const settleTranslator = (): void => {
+    clearTimeout(translatorPollTimer);
+    translatorConnectFlow.value = undefined;
+};
 
 // Provider's own account label for the sign-in-expired sentence, not a hardcoded default.
 const translatorProviderLabel = (target: KeyedProvider): string => providerSpec(target)?.accountLabel ?? target;
@@ -102,11 +110,12 @@ export const connectTranslator = async (target: KeyedProvider): Promise<void> =>
 };
 
 // Finishes a redirect login with the URL the provider sent the browser to (Google's loopback address isn't
-// reachable, so the user pastes it). Success only means keep polling; the row flips once the poll sees it.
-export const completeTranslator = async (redirectUrl: string): Promise<void> => {
+// reachable, so the user pastes it). A 2xx is the daemon's verdict that the credential it wrote can serve a turn,
+// so the sign-in comes down here rather than staying up until a poll tick notices. Answers whether it landed.
+export const completeTranslator = async (redirectUrl: string): Promise<boolean> => {
     const flow = translatorConnectFlow.value;
     if (flow === undefined || flow.flow !== `redirect`) {
-        return;
+        return false;
     }
     accountBusy.value = translatorKey(flow.provider);
     error.value = null;
@@ -116,8 +125,21 @@ export const completeTranslator = async (redirectUrl: string): Promise<void> => 
             jsonBody(`POST`, { provider: flow.provider, redirectUrl: redirectUrl.trim(), state: flow.state }),
         );
         await refreshTranslatorAccounts();
+        // The row is the proof the account landed: an account read that didn't answer (refreshTranslatorAccounts
+        // swallows its own failure) leaves the panel and its poll up rather than claiming a connection nothing shows.
+        if (translatorAccounts.value[flow.provider].length === 0) {
+            return false;
+        }
+        // Only if this is still the same attempt: a restarted sign-in owns the panel now.
+        if (translatorConnectFlow.value === flow) {
+            settleTranslator();
+        }
+        // Catalog is only discoverable with a credential, so load it now rather than at the next reselect.
+        void loadProviderModels(flow.provider);
+        return true;
     } catch (caught) {
         error.value = errorMessage(caught, `That sign-in link could not be completed: copy the whole URL and try again.`);
+        return false;
     } finally {
         accountBusy.value = undefined;
     }
@@ -129,8 +151,7 @@ export const disconnectTranslator = async (target: KeyedProvider, name: string):
     try {
         await sandboxRequest(`/translator/${target}/disconnect`, jsonBody(`POST`, { provider: target, name }));
         if (translatorConnectFlow.value?.provider === target) {
-            clearTimeout(translatorPollTimer);
-            translatorConnectFlow.value = undefined;
+            settleTranslator();
         }
         await refreshTranslatorAccounts();
     } finally {
@@ -138,11 +159,9 @@ export const disconnectTranslator = async (target: KeyedProvider, name: string):
     }
 };
 
-// Abandons an in-flight subscription login; clearing the flow alone would stop the poll, but the timer is
-// also cleared so a superseded tick can't fire.
+// Abandons an in-flight subscription login without connecting anything.
 export const cancelTranslatorConnect = (): void => {
-    clearTimeout(translatorPollTimer);
-    translatorConnectFlow.value = undefined;
+    settleTranslator();
 };
 
 // In-flight native sign-in, scoped to the provider that started it so tab-switching can't cross-contaminate
@@ -155,6 +174,9 @@ interface NativeConnectFlow {
     readonly flow: LoginFlow;
     readonly variant: string;
     readonly handshake: string;
+    // The grant came back and was accepted, but the credential behind it is still being minted: there is nothing
+    // left to ask the user for, and nothing to show yet either.
+    readonly redeemed: boolean;
 }
 export const nativeConnectFlow = ref<NativeConnectFlow | undefined>(undefined);
 // Display label typed for the account being connected; blank lets the daemon derive one.
@@ -198,7 +220,9 @@ const pollNativeOnce = async (target: AgentProvider, deadline: number): Promise<
     }
     try {
         const connectedAccounts = await refreshAccounts(target, false);
-        if (nativeConnectFlow.value !== flow) {
+        // By handshake, not object identity: redeeming a grant re-stamps the same attempt, and a tick that read that
+        // as a replacement would retire the very poll the credential has to land through.
+        if (nativeConnectFlow.value?.handshake !== flow.handshake) {
             return;
         }
         if (connectedAccounts.length > 0) {
@@ -211,7 +235,7 @@ const pollNativeOnce = async (target: AgentProvider, deadline: number): Promise<
     } catch {
         // Transient (sandbox blip); keep polling until the deadline.
     }
-    if (nativeConnectFlow.value !== flow) {
+    if (nativeConnectFlow.value?.handshake !== flow.handshake) {
         return;
     }
     nativePollTimer = setTimeout(() => void pollNativeOnce(target, deadline), 3000);
@@ -254,6 +278,7 @@ export const startConnect = async (variant?: string): Promise<void> => {
             flow: body.flow,
             variant: body.variant,
             handshake: body.handshake,
+            redeemed: false,
         };
         // Paste-back never polls; every other shape polls until the daemon's own `expiresAt`, not a local deadline,
         // since that's the attempt that actually expires.
@@ -316,7 +341,10 @@ export const completeConnect = async (pasted: string): Promise<boolean> => {
         }
         const { account } = (await response.json()) as { account?: OauthAccount };
         error.value = null;
+        // Accepted, with the credential still to be minted (every native redirect: the account lands through the
+        // poll, not this response). Marked on the attempt so the panel waits instead of asking for the address again.
         if (account === undefined) {
+            nativeConnectFlow.value = { ...flow, redeemed: true };
             return true;
         }
         addAccount(flow.provider, account);

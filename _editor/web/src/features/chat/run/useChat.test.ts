@@ -148,6 +148,102 @@ describe(`useChat provider reconciliation`, () => {
         expect(chat.error.value).toBeNull();
     });
 
+    it(`takes the Google sign-in down on the paste's own answer, not three seconds later on a poll tick`, async () => {
+        vi.useFakeTimers();
+        resetChat();
+        const chat = useChat();
+        const landed = { codex: [], grok: [], kimi: [], gemini: [{ name: `antigravity-user.json`, label: `user@example.com` }] };
+        let subscriptions: Subscriptions = { ...NO_SUBSCRIPTIONS };
+        sandboxJsonMock.mockImplementation((path: string, init?: RequestInit) => {
+            if (path === `/translator/gemini/connect` && init?.method === `POST`) {
+                return Promise.resolve({ url: `https://accounts.google.com/o/oauth2/v2/auth`, code: ``, state: `gemini-attempt-1`, flow: `redirect` });
+            }
+            if (path === `/translator/gemini/complete`) {
+                subscriptions = landed;
+                return Promise.resolve({});
+            }
+            return Promise.resolve(path === `/translator/accounts` ? subscriptions : { accounts: [] });
+        });
+
+        await chat.connectTranslator(`gemini`);
+        expect(chat.translatorConnectFlow.value?.state).toBe(`gemini-attempt-1`);
+
+        expect(await chat.completeTranslator(`http://localhost:8317/?code=4/0AX4&state=gemini-attempt-1`)).toBe(true);
+
+        // The panel comes down with the account, so the field it holds can't sit there asking for an address again.
+        expect(chat.translatorConnectFlow.value).toBeUndefined();
+        expect(chat.translatorAccounts.value.gemini).toEqual(landed.gemini);
+        expect(chat.error.value).toBeNull();
+        // And the poll armed for that attempt is retired with it, rather than reporting on a state already spent.
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(sandboxJsonMock.mock.calls.some(([path]) => String(path).startsWith(`/translator/gemini/connect?state=`))).toBe(false);
+    });
+
+    it(`marks a redirect grant redeemed, and keeps the poll its credential still has to land through`, async () => {
+        vi.useFakeTimers();
+        resetChat();
+        const chat = useChat();
+        chat.setManagedProvider(`zai`);
+        const minted = { id: `zai-1`, label: `Z.ai`, connectedAt: new Date().toISOString() };
+        let accounts: unknown[] = [];
+        const ok = (body: unknown): Response => ({ ok: true, status: 200, json: () => Promise.resolve(body) }) as Response;
+        sandboxRequestMock.mockImplementation((path: string) => {
+            if (path === `/accounts/zai/login/start`) {
+                return Promise.resolve(
+                    ok({
+                        url: `https://bigmodel.cn/login`,
+                        code: ``,
+                        state: `st-9`,
+                        flow: `redirect`,
+                        variant: `bigmodel`,
+                        handshake: `h4`,
+                        expiresAt: Date.now() + 900_000,
+                    }),
+                );
+            }
+            if (path === `/accounts/zai/login/complete`) {
+                // BigModel's door accepts the address and mints afterwards: an accepted grant carries no account.
+                accounts = [minted];
+                return Promise.resolve(ok({}));
+            }
+            return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response);
+        });
+        mockConnections({ accounts: (path) => (path === `/accounts/zai` ? accounts : []) });
+
+        await chat.startConnect(`bigmodel`);
+        expect(chat.nativeConnectFlow.value?.redeemed).toBe(false);
+
+        expect(await chat.completeConnect(`http://127.0.0.1:8317/callback?authCode=abc&state=st-9`)).toBe(true);
+        // Accepted, not connected: the panel has nothing left to ask for and the account has yet to appear.
+        expect(chat.nativeConnectFlow.value?.redeemed).toBe(true);
+
+        // Re-stamping the attempt must not retire its own poll, which is the only thing that can land the mint.
+        await vi.advanceTimersByTimeAsync(3_000);
+        expect(chat.nativeConnectFlow.value).toBeUndefined();
+        expect(chat.managedAccounts.value).toEqual([minted]);
+    });
+
+    it(`leaves the Google sign-in up when the account read that should show the new row didn't answer`, async () => {
+        vi.useFakeTimers();
+        resetChat();
+        const chat = useChat();
+        sandboxJsonMock.mockImplementation((path: string, init?: RequestInit) => {
+            if (path === `/translator/gemini/connect` && init?.method === `POST`) {
+                return Promise.resolve({ url: `https://accounts.google.com/o/oauth2/v2/auth`, code: ``, state: `gemini-attempt-2`, flow: `redirect` });
+            }
+            if (path === `/translator/gemini/complete`) {
+                return Promise.resolve({});
+            }
+            // The listing is what the row is drawn from; unreachable, it leaves nothing to show the account by.
+            return path === `/translator/accounts` ? Promise.reject(new Error(`sandbox offline`)) : Promise.resolve({ accounts: [] });
+        });
+
+        await chat.connectTranslator(`gemini`);
+        expect(await chat.completeTranslator(`http://localhost:8317/?code=4/0AX4&state=gemini-attempt-2`)).toBe(false);
+
+        expect(chat.translatorConnectFlow.value?.state).toBe(`gemini-attempt-2`);
+    });
+
     it(`points a GPT-only user's chat at Codex (served by the translator subscription) instead of gating on Claude`, async () => {
         const chat = useChat();
         expect(chat.provider.value).toBe(`claude`);

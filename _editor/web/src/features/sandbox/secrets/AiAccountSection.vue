@@ -114,6 +114,14 @@ const canConnectMore = computed(() => managedProvider.value !== `grok` || manage
 const nativeFlowLive = computed(() => nativeConnectFlow.value?.provider === managedProvider.value);
 const routedFlowLive = computed(() => routedProvider.value !== undefined && translatorConnectFlow.value?.provider === routedProvider.value);
 
+// The handshake is past the point of abandoning: what the user brought back is being redeemed, and cancelling
+// would take the panel down over a connection that lands anyway. Held disabled rather than swapped away, so the
+// row keeps its shape while the panel below reports the wait.
+const nativeFinishing = computed(() => nativeFlowLive.value && accountBusy.value === managedProvider.value);
+const routedFinishing = computed(
+    () => routedFlowLive.value && routedProvider.value !== undefined && accountBusy.value === translatorKey(routedProvider.value),
+);
+
 // No two rows may read the same; distinguished in order:
 //   1. identity the provider reports (shown beside the name)
 //   2. the name, renamable in place
@@ -400,7 +408,15 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :note-busy="nativeFlowLive"
                 >
                     <template #control>
-                        <Button v-if="nativeFlowLive" label="Cancel" size="small" severity="secondary" :text="true" @click="cancelConnect" />
+                        <Button
+                            v-if="nativeFlowLive"
+                            label="Cancel"
+                            size="small"
+                            severity="secondary"
+                            :text="true"
+                            :disabled="nativeFinishing"
+                            @click="cancelConnect"
+                        />
                         <!-- Filled: with no account at all, this is the one action the group wants. -->
                         <Button v-else label="Connect" size="small" :loading="accountBusy === managedProvider" @click="connectHere">
                             <template #icon><Icon name="link" /></template>
@@ -434,7 +450,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                     @click="!nativeFlowLive && connectHere()"
                 >
                     <template v-if="nativeFlowLive" #control>
-                        <Button label="Cancel" size="small" severity="secondary" :text="true" @click.stop="cancelConnect" />
+                        <Button label="Cancel" size="small" severity="secondary" :text="true" :disabled="nativeFinishing" @click.stop="cancelConnect" />
                     </template>
                     <template v-if="nativeFlowLive || estates.length > 0" #below>
                         <ConnectFlow v-if="nativeFlowLive" kind="native" :provider="managedProvider" />
@@ -496,6 +512,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                             size="small"
                             severity="secondary"
                             :text="true"
+                            :disabled="routedFinishing"
                             @click="cancelTranslatorConnect"
                         />
                         <!-- Filled only when this is the group's one connection; under Grok it stays secondary to the native row above. -->
@@ -523,7 +540,14 @@ onUnmounted(() => clearTimeout(ringTimer));
                     @click="!routedFlowLive && connectTranslator(routedProvider)"
                 >
                     <template v-if="routedFlowLive" #control>
-                        <Button label="Cancel" size="small" severity="secondary" :text="true" @click.stop="cancelTranslatorConnect" />
+                        <Button
+                            label="Cancel"
+                            size="small"
+                            severity="secondary"
+                            :text="true"
+                            :disabled="routedFinishing"
+                            @click.stop="cancelTranslatorConnect"
+                        />
                     </template>
                     <template v-if="routedFlowLive" #below><ConnectFlow kind="routed" :provider="routedProvider" /></template>
                 </ConnectionRow>

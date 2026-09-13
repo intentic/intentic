@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-// Pins that minted providers (meta, zai) render the same device/redirect shapes as every sign-in, asserted off
-// the handshake's own `flow` field. Covers two regressions: a paste field left under a self-finishing flow, and a
-// redirect grant not recognized off the clipboard.
+// What the sign-in panel shows at each point of a handshake, asserted off the handshake's own `flow` field rather
+// than the provider's name. Covers three regressions: a paste field left under a self-finishing flow, a redirect
+// grant not recognized off the clipboard, and a panel still asking for an address while redeeming the one it has.
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, ref } from "vue";
+import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 interface Flow {
@@ -13,21 +13,23 @@ interface Flow {
     state?: string;
     flow?: `device` | `redirect`;
     handshake?: string;
+    redeemed?: boolean;
 }
 
 const nativeConnectFlow = ref<Flow | undefined>(undefined);
+const translatorConnectFlow = ref<Flow | undefined>(undefined);
 const completeConnect = vi.fn(async () => true);
+const completeTranslator = vi.fn(async () => true);
 
 // The chat store is a module singleton the panel reads directly; this is the whole of what it needs from it.
 vi.mock(`../../chat/run/useChat`, () => ({
     useChat: () => ({
         nativeConnectFlow,
-        translatorConnectFlow: ref(undefined),
+        translatorConnectFlow,
         accountBusy: ref(undefined),
-        translatorKey: (provider: string) => `translator:${provider}`,
         connectLabel: ref(``),
         completeConnect,
-        completeTranslator: vi.fn(),
+        completeTranslator,
     }),
 }));
 // Stubbed, not imported, so assertions test the panel's own markup, not <Button>'s current rendering.
@@ -54,15 +56,17 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     nativeConnectFlow.value = undefined;
+    translatorConnectFlow.value = undefined;
     completeConnect.mockClear();
+    completeTranslator.mockClear();
 });
 
-const mount = async (flow: Flow): Promise<HTMLElement> => {
-    nativeConnectFlow.value = flow;
+const mount = async (flow: Flow, kind: `native` | `routed` = `native`): Promise<HTMLElement> => {
+    (kind === `native` ? nativeConnectFlow : translatorConnectFlow).value = flow;
     const { default: ConnectFlow } = await import(`./ConnectFlow.vue`);
     const host = document.createElement(`div`);
     document.body.append(host);
-    app = createApp(defineComponent({ render: () => h(ConnectFlow, { kind: `native`, provider: flow.provider }) }));
+    app = createApp(defineComponent({ render: () => h(ConnectFlow, { kind, provider: flow.provider }) }));
     // Icon is registered globally by the app shell; not under test here.
     app.component(`Icon`, IconStub);
     app.mount(host);
@@ -74,8 +78,8 @@ const paste = async (host: HTMLElement, text: string): Promise<void> => {
     field.value = text;
     field.dispatchEvent(new Event(`input`));
     // Awaits the watch that recognises the address, then the render it schedules.
-    await Promise.resolve();
-    await Promise.resolve();
+    await nextTick();
+    await nextTick();
 };
 
 it(`a minted device sign-in shows the vendor's code and asks for nothing back`, async () => {
@@ -110,4 +114,54 @@ it(`leaves an address carrying another attempt's state sitting in the field`, as
     const host = await mount({ provider: `zai`, url: `https://bigmodel.cn/login`, code: ``, state: `st-9`, flow: `redirect`, handshake: `h3` });
     await paste(host, `http://127.0.0.1:8317/?authCode=abc123&state=someone-elses`);
     expect(completeConnect).not.toHaveBeenCalled();
+});
+
+// Google's is the sign-in this was reported on: the address arrives by itself off the clipboard, so the panel
+// going quiet is the only thing that tells the user their paste was taken.
+const GOOGLE_FLOW = { provider: `gemini`, url: `https://accounts.google.com/o/oauth2/v2/auth`, code: ``, state: `st-g`, flow: `redirect` } as const;
+const GOOGLE_ADDRESS = `http://localhost:8317/?code=4/0AX4&state=st-g`;
+
+it(`says the address is being redeemed, and offers nothing to redo while it is`, async () => {
+    let land: ((connected: boolean) => void) | undefined;
+    completeTranslator.mockImplementationOnce(() => new Promise<boolean>((resolve) => (land = resolve)));
+    const host = await mount({ ...GOOGLE_FLOW }, `routed`);
+
+    await paste(host, GOOGLE_ADDRESS);
+
+    // Named after the provider spec's own `destination`, the same word the panel's open button uses.
+    expect(host.textContent).toContain(`Finishing sign-in with Google`);
+    expect(host.querySelector(`input[name="connectCode"]`), `asked for an address it was already redeeming`).toBeNull();
+    expect(host.querySelector(`a`), `offered another trip to the provider mid-exchange`).toBeNull();
+
+    land!(true);
+    await nextTick();
+    await nextTick();
+    // The panel's own teardown is the store clearing the flow; here it stays mounted, and the field comes back empty.
+    expect(host.querySelector<HTMLInputElement>(`input[name="connectCode"]`)?.value).toBe(``);
+});
+
+// A native redirect's account is minted after the grant is accepted and lands through the poll, so the panel
+// outlives the paste: without this it went back to asking for the address it had just taken.
+it(`waits out a redeemed grant rather than asking for the address a second time`, async () => {
+    const host = await mount({
+        provider: `zai`,
+        url: `https://bigmodel.cn/login`,
+        code: ``,
+        state: `st-9`,
+        flow: `redirect`,
+        handshake: `h4`,
+        redeemed: true,
+    });
+    expect(host.querySelector(`input[name="connectCode"]`), `asked again for an address it had already redeemed`).toBeNull();
+    expect(host.textContent).toContain(`Finishing sign-in with Z.ai`);
+});
+
+it(`keeps a refused address in the field, so the retry is a second press`, async () => {
+    completeTranslator.mockImplementationOnce(async () => false);
+    const host = await mount({ ...GOOGLE_FLOW }, `routed`);
+
+    await paste(host, GOOGLE_ADDRESS);
+
+    expect(completeTranslator).toHaveBeenCalledWith(GOOGLE_ADDRESS);
+    expect(host.querySelector<HTMLInputElement>(`input[name="connectCode"]`)?.value).toBe(GOOGLE_ADDRESS);
 });

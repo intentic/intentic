@@ -11,10 +11,11 @@ import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 
 const { kind, provider } = defineProps<{ kind: `native` | `routed`; provider: AgentProvider }>();
 
-const { nativeConnectFlow, translatorConnectFlow, accountBusy, translatorKey, connectLabel, completeConnect, completeTranslator } = useChat();
+const { nativeConnectFlow, translatorConnectFlow, accountBusy, connectLabel, completeConnect, completeTranslator } = useChat();
 
-// Own key in the busy ledger: a provider's native account and its subscription are separate connections.
-const busyKey = computed(() => (kind === `native` ? provider : translatorKey(provider)));
+// This panel's own exchange, not the shared busy ledger: what was brought back is being redeemed right now, and
+// it is the only thing the panel shows while it runs.
+const submitting = ref(false);
 
 // This row's own live handshake, or nothing; a sign-in started elsewhere never paints under the wrong row.
 const flow = computed(() =>
@@ -68,8 +69,20 @@ const deadEndAddress = computed(() =>
 // lands its account through a route that never sees the field; naming there happens as a rename afterward.
 const namesTheAccount = computed(() => kind === `native` && nativeConnectFlow.value?.provider === provider && nativeConnectFlow.value.flow === `paste`);
 
-// Waiting for something to be brought back; the only state the paste listener or clipboard read applies in.
-const awaitingPaste = computed(() => flow.value !== undefined && !deviceFlow.value);
+// The grant is spent and the daemon is still minting the credential behind it: a native redirect lands its
+// account through the poll rather than the response, so accepted is not yet connected.
+const redeemed = computed(() => kind === `native` && nativeConnectFlow.value?.provider === provider && nativeConnectFlow.value.redeemed);
+
+// Nothing here is the user's to do: what they brought back is being redeemed, or already has been.
+const redeeming = computed(() => submitting.value || redeemed.value);
+
+// Waiting for something to be brought back; the only state the paste listener or clipboard read applies in. A
+// grant already in hand is not waiting: a second arrival has nothing left to finish.
+const awaitingPaste = computed(() => flow.value !== undefined && !deviceFlow.value && !redeeming.value);
+
+// Said in place of everything else while it runs; naming the provider distinguishes this wait from the sign-in
+// that already happened in the other tab.
+const submitNote = computed(() => `Finishing sign-in with ${destination.value}…`);
 
 // The redirect dead-ends on a loopback address the page can never load; handled two ways: the picture below
 // (recognize it) and this section, which grabs the grant from a paste anywhere or the clipboard so most people never
@@ -83,20 +96,21 @@ const redirectState = computed(() => (kind === `routed` ? (translatorConnectFlow
 const isOurRedirect = (text: string): boolean =>
     (text.includes(`code=`) || text.includes(`authCode=`)) && (redirectState.value === `` || text.includes(redirectState.value));
 
-// Shared field for the paste flows: a code or a redirect URL, handed to whichever handshake is live.
+// Shared field for the paste flows: a code or a redirect URL, handed to whichever handshake is live. Cleared
+// only once redeemed, so a refused address stays put and the retry is a second press, not a second trip.
 const pasted = ref(``);
 const finish = async (): Promise<void> => {
     const value = pasted.value.trim();
-    if (value.length === 0 || accountBusy.value !== undefined) {
+    if (value.length === 0 || submitting.value || accountBusy.value !== undefined) {
         return;
     }
-    if (kind === `routed`) {
-        await completeTranslator(value);
-        pasted.value = ``;
-        return;
-    }
-    if (await completeConnect(value)) {
-        pasted.value = ``;
+    submitting.value = true;
+    try {
+        if (await (kind === `routed` ? completeTranslator(value) : completeConnect(value))) {
+            pasted.value = ``;
+        }
+    } finally {
+        submitting.value = false;
     }
 };
 
@@ -176,67 +190,75 @@ watch(flow, (live) => {
 
 <template>
     <div v-if="flow" class="flex flex-col gap-2.5">
-        <!-- `self-start`: without it the button stretches edge to edge, reading as a banner, not step one of three. -->
-        <Button as="a" class="self-start" size="small" :href="flow.url" target="_blank" rel="noopener" @click="wentToProvider = true">
-            <ProviderLogo :provider="provider" />Open {{ destination }}<Icon name="external-link" />
-        </Button>
-        <!-- Placed above what it describes: an instruction read after the fact is read too late. -->
-        <p v-if="hint" class="text-2xs text-subtle">{{ hint }}</p>
-        <!-- Device code is read, not typed: sized for a second screen, with copy as an icon, not a competing chip. -->
-        <div v-if="deviceFlow && flow.code" class="flex items-center justify-between gap-2 rounded-md border border-line bg-canvas px-3 py-1.5">
-            <span class="truncate font-mono text-base font-semibold tracking-[0.2em] text-content">{{ flow.code }}</span>
-            <CopyButton :text="flow.code" />
-        </div>
-        <p v-else-if="deviceFlow" class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="spinner" spin />Waiting for approval…</p>
+        <!--
+            The exchange takes the whole panel rather than spinning one button inside it: what was brought back is
+            already spent, so every control here (open the provider again, paste, name it) would be inviting a step
+            that is mid-flight. The panel unmounts itself the moment the account lands.
+        -->
+        <p v-if="redeeming" class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="spinner" spin />{{ submitNote }}</p>
         <template v-else>
-            <!--
-                Shows the dead-end page before they meet it, so they recognize rather than read about it once two tabs away.
-                Only for redirects that actually dead-end (Google, BigModel); Anthropic's paste-back needs none of this.
-            -->
-            <template v-if="redirectFlow">
-                <p class="text-2xs text-muted">
-                    After {{ destination }}, the <span class="font-semibold text-content">page won't load</span>. That's normal, it points back inside
-                    your sandbox.
-                </p>
-                <div class="overflow-hidden rounded-lg border border-line bg-canvas select-none" aria-hidden="true">
-                    <div class="flex items-center gap-2 border-b border-line-subtle px-2 py-1.5">
-                        <span class="flex shrink-0 gap-1">
-                            <span class="h-1.5 w-1.5 rounded-full bg-content/20"></span>
-                            <span class="h-1.5 w-1.5 rounded-full bg-content/20"></span>
-                            <span class="h-1.5 w-1.5 rounded-full bg-content/20"></span>
-                        </span>
-                        <span
-                            class="flex min-w-0 flex-1 items-center gap-1.5 rounded border border-primary-500 bg-overlay px-1.5 py-0.5 ring-2 ring-primary-500/25"
-                        >
-                            <Icon name="unlock" class="shrink-0 text-[0.6rem] text-subtle" />
-                            <span class="truncate font-mono text-[0.6rem] text-content">{{ deadEndAddress }}</span>
-                        </span>
-                    </div>
-                    <div class="flex flex-col items-center gap-1 px-3 py-3">
-                        <Icon name="globe" class="text-base text-content/20" />
-                        <span class="text-2xs text-subtle">This site can't be reached</span>
-                    </div>
-                </div>
-                <p class="flex items-center gap-1.5 text-2xs text-subtle">
-                    <Icon name="sparkles" class="shrink-0 text-link" />Copy the highlighted address: it lands here on its own.
-                </p>
-            </template>
-            <div class="flex gap-2">
-                <input
-                    v-model="pasted"
-                    name="connectCode"
-                    :placeholder="pastePlaceholder"
-                    :class="ui.inputSm(`min-w-0 flex-1`)"
-                    @keydown.enter="finish"
-                />
-                <Button label="Finish" size="small" :disabled="pasted.trim().length === 0" :loading="accountBusy === busyKey" @click="finish" />
+            <!-- `self-start`: without it the button stretches edge to edge, reading as a banner, not step one of three. -->
+            <Button as="a" class="self-start" size="small" :href="flow.url" target="_blank" rel="noopener" @click="wentToProvider = true">
+                <ProviderLogo :provider="provider" />Open {{ destination }}<Icon name="external-link" />
+            </Button>
+            <!-- Placed above what it describes: an instruction read after the fact is read too late. -->
+            <p v-if="hint" class="text-2xs text-subtle">{{ hint }}</p>
+            <!-- Device code is read, not typed: sized for a second screen, with copy as an icon, not a competing chip. -->
+            <div v-if="deviceFlow && flow.code" class="flex items-center justify-between gap-2 rounded-md border border-line bg-canvas px-3 py-1.5">
+                <span class="truncate font-mono text-base font-semibold tracking-[0.2em] text-content">{{ flow.code }}</span>
+                <CopyButton :text="flow.code" />
             </div>
-        </template>
-        <template v-if="namesTheAccount">
-            <button v-if="!namingAccount" type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="namingAccount = true">
-                Name this account…
-            </button>
-            <input v-else v-model="connectLabel" name="accountLabel" placeholder="Account name" :class="ui.inputSm(`min-w-0`)" />
+            <p v-else-if="deviceFlow" class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="spinner" spin />Waiting for approval…</p>
+            <template v-else>
+                <!--
+                    Shows the dead-end page before they meet it, so they recognize rather than read about it once two tabs away.
+                    Only for redirects that actually dead-end (Google, BigModel); Anthropic's paste-back needs none of this.
+                -->
+                <template v-if="redirectFlow">
+                    <p class="text-2xs text-muted">
+                        After {{ destination }}, the <span class="font-semibold text-content">page won't load</span>. That's normal, it points back
+                        inside your sandbox.
+                    </p>
+                    <div class="overflow-hidden rounded-lg border border-line bg-canvas select-none" aria-hidden="true">
+                        <div class="flex items-center gap-2 border-b border-line-subtle px-2 py-1.5">
+                            <span class="flex shrink-0 gap-1">
+                                <span class="h-1.5 w-1.5 rounded-full bg-content/20"></span>
+                                <span class="h-1.5 w-1.5 rounded-full bg-content/20"></span>
+                                <span class="h-1.5 w-1.5 rounded-full bg-content/20"></span>
+                            </span>
+                            <span
+                                class="flex min-w-0 flex-1 items-center gap-1.5 rounded border border-primary-500 bg-overlay px-1.5 py-0.5 ring-2 ring-primary-500/25"
+                            >
+                                <Icon name="unlock" class="shrink-0 text-[0.6rem] text-subtle" />
+                                <span class="truncate font-mono text-[0.6rem] text-content">{{ deadEndAddress }}</span>
+                            </span>
+                        </div>
+                        <div class="flex flex-col items-center gap-1 px-3 py-3">
+                            <Icon name="globe" class="text-base text-content/20" />
+                            <span class="text-2xs text-subtle">This site can't be reached</span>
+                        </div>
+                    </div>
+                    <p class="flex items-center gap-1.5 text-2xs text-subtle">
+                        <Icon name="sparkles" class="shrink-0 text-link" />Copy the highlighted address: it lands here on its own.
+                    </p>
+                </template>
+                <div class="flex gap-2">
+                    <input
+                        v-model="pasted"
+                        name="connectCode"
+                        :placeholder="pastePlaceholder"
+                        :class="ui.inputSm(`min-w-0 flex-1`)"
+                        @keydown.enter="finish"
+                    />
+                    <Button label="Finish" size="small" :disabled="pasted.trim().length === 0" @click="finish" />
+                </div>
+            </template>
+            <template v-if="namesTheAccount">
+                <button v-if="!namingAccount" type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="namingAccount = true">
+                    Name this account…
+                </button>
+                <input v-else v-model="connectLabel" name="accountLabel" placeholder="Account name" :class="ui.inputSm(`min-w-0`)" />
+            </template>
         </template>
     </div>
 </template>
