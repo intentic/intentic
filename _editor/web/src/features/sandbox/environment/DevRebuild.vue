@@ -102,10 +102,6 @@ const execute = async (): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-2">
-        <p class="text-2xs text-subtle">
-            Runs <span class="font-mono">{{ base }}</span> from your checkout, not a published release. Rebuild to pick up code you've written since.
-        </p>
-
         <!-- The machine holding the checkout is reachable from here, so this is a button wherever you're reading it. -->
         <template v-if="hostId && root">
             <div
@@ -128,16 +124,23 @@ const execute = async (): Promise<void> => {
 
             <AnchoredOverlay v-model="overlayOpen" :anchor="anchorRef" side="right" cross="start">
                 <div
-                    class="flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-2 p-3 text-left"
+                    class="flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-2.5 p-3 text-left"
                     @pointerenter="onCardEnter"
                     @pointerleave="onLeave"
                 >
-                    <div class="flex items-baseline justify-between gap-2">
-                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Host command</span>
-                        <span class="truncate font-mono text-2xs text-subtle">{{ root }}</span>
+                    <p class="text-2xs text-muted">
+                        Runs <span class="font-mono text-content">{{ base }}</span> from your checkout, not a published release. Rebuild to pick up code you've written since.
+                    </p>
+
+                    <div class="flex flex-col gap-1">
+                        <div class="flex items-baseline justify-between gap-2">
+                            <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Host command</span>
+                            <span class="truncate font-mono text-2xs text-subtle">{{ root }}</span>
+                        </div>
+                        <Code :code="command" :lang="commandLang(`unix`)" :wrap="true" />
                     </div>
-                    <Code :code="command" :lang="commandLang(`unix`)" :wrap="true" />
-                    <p class="text-2xs leading-relaxed text-muted">{{ cost }}</p>
+
+                    <p class="text-2xs leading-relaxed text-subtle">{{ cost }}</p>
                 </div>
             </AnchoredOverlay>
 
@@ -173,6 +176,9 @@ const execute = async (): Promise<void> => {
         </template>
 
         <template v-else>
+            <p class="text-2xs text-subtle">
+                Runs <span class="font-mono">{{ base }}</span> from your checkout, not a published release. Rebuild to pick up code you've written since.
+            </p>
             <!-- Two different gaps, one fallback: no checkout recorded, or nobody here can reach the machine holding it. -->
             <p v-if="root === undefined" class="text-2xs text-subtle">
                 This sandbox doesn't record which checkout its image came from, so it can't start the rebuild for you. Run it there, and recreating it

@@ -51,6 +51,7 @@ it(`renders button and reveals command overlay with cost on focus`, async () => 
     const button = el.querySelector(`button`);
 
     expect(button).not.toBeNull();
+    expect(el.textContent).not.toContain(`Runs intentic-sandbox:dev from your checkout`);
 
     const trigger = el.querySelector(`div.inline-flex`);
     expect(trigger).not.toBeNull();
@@ -60,7 +61,14 @@ it(`renders button and reveals command overlay with cost on focus`, async () => 
 
     const overlay = document.querySelector(`.ui-anchored-right`);
     expect(overlay).not.toBeNull();
+    expect(overlay?.textContent).toContain(`Runs intentic-sandbox:dev from your checkout, not a published release.`);
     expect(overlay?.textContent).toContain(`pnpm rebuild:sandbox demo`);
     expect(overlay?.textContent).toContain(root);
     expect(overlay?.textContent).toContain(`Builds the image while you keep working`);
+});
+
+it(`renders current state text in fallback when device or root is absent`, () => {
+    hostId.value = undefined;
+    const el = mount({ slug: `demo`, base: `intentic-sandbox:dev`, root: `/home/radarsu/intentic` });
+    expect(el.textContent).toContain(`Runs intentic-sandbox:dev from your checkout, not a published release.`);
 });
