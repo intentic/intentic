@@ -27,11 +27,6 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
 
 <template>
     <RowGroup label="Safety judge">
-        <RowNote>
-            Before a flagged command runs, a model reads your policy below and decides whether to allow it, ask you, or refuse it. This is whether
-            that happens.
-        </RowNote>
-
         <Row icon="shield" title="When to judge" description="Whether a verdict can stop a command.">
             <template #control>
                 <SegmentedControl
