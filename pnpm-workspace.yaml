@@ -37,7 +37,7 @@ syncInjectedDepsAfterScripts:
 # to do it for you.
 verifyDepsBeforeRun: false
 
-nodeVersion: 24.20.0
+nodeVersion: 24.21.0
 
 overrides:
   # The versioned UI patches route control icons to Icon and render diagram SVGs natively.

@@ -10,7 +10,7 @@ export const IMAGES = Object.freeze({
     // renovate: datasource=docker depName=data.forgejo.org/oci/node
     forgejoRunnerJob: "data.forgejo.org/oci/node:24-bookworm@sha256:fdddfb3e688158251943d52eba361de991548f6814007acba4917ae6b512d6be",
     // renovate: datasource=docker depName=cloudflare/cloudflared
-    cloudflared: "cloudflare/cloudflared:2026.8.3@sha256:51c9cefcb4569df44e1ad403ab1d3d8065aa8e84339bcfc6aee75502e1140339",
+    cloudflared: "cloudflare/cloudflared:2026.9.1@sha256:b269e8abd07a5bf6f3f4be65d5050b2174eca89c56a0241a8ff32a16aec454e4",
     // renovate: datasource=docker depName=ghcr.io/moghtech/komodo-core
     komodoCore: "ghcr.io/moghtech/komodo-core:2.1.0@sha256:4915d91b5c6e9de4e8fd59391eed5cad090ec84dcf6a1a9233d97edfdbbb88e7",
     // renovate: datasource=docker depName=ghcr.io/moghtech/komodo-periphery

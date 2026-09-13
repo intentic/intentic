@@ -52,7 +52,7 @@ $ProvidedTunnel = [bool]$HostSshTunnelToken -and [bool]$HostSshHostname
 # that mints the own-Cloudflare host tunnel. Both track the latest release like connect.ps1.
 $DindImage = if ($env:DIND_IMAGE) { $env:DIND_IMAGE } else { 'ghcr.io/intentic/dind-host:latest' }
 $SandboxImage = if ($env:SANDBOX_IMAGE) { $env:SANDBOX_IMAGE } else { 'ghcr.io/intentic/sandbox:stable' }
-$CloudflaredImage = if ($env:CLOUDFLARED_IMAGE) { $env:CLOUDFLARED_IMAGE } else { 'cloudflare/cloudflared:2026.8.3@sha256:51c9cefcb4569df44e1ad403ab1d3d8065aa8e84339bcfc6aee75502e1140339' }
+$CloudflaredImage = if ($env:CLOUDFLARED_IMAGE) { $env:CLOUDFLARED_IMAGE } else { 'cloudflare/cloudflared:2026.9.1@sha256:b269e8abd07a5bf6f3f4be65d5050b2174eca89c56a0241a8ff32a16aec454e4' }
 # The key is generated INSIDE the DinD (root-owned), so the sandbox always logs in as root - the user supplies none.
 $HostUser = 'root'
 $HostSshKey = ''

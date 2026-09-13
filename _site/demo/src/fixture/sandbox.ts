@@ -289,7 +289,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             tools: [
                 { name: `playwright`, version: `1.56.2` },
                 { name: `chromium`, version: `140.0.7339` },
-                { name: `node`, version: `24.20.0` },
+                { name: `node`, version: `24.21.0` },
                 { name: `xvfb-run` },
             ],
             extras: 34,
@@ -339,7 +339,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             name: `Node.js`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `node`, version: `24.20.0` }],
+            tools: [{ name: `node`, version: `24.21.0` }],
             purpose: `The runtime everything JavaScript in here runs on.`,
         },
         {
@@ -371,7 +371,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             name: `ripgrep`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `rg`, version: `14.1.1` }],
+            tools: [{ name: `rg`, version: `15.2.0` }],
             purpose: `Fast text search across the workspace, and the engine behind code search.`,
         },
         {
@@ -379,7 +379,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             name: `jq`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `jq`, version: `1.7` }],
+            tools: [{ name: `jq`, version: `1.8.2` }],
             purpose: `Reads and rewrites JSON on the command line.`,
         },
         {
@@ -395,7 +395,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             name: `cloudflared`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `cloudflared`, version: `2026.8.3` }],
+            tools: [{ name: `cloudflared`, version: `2026.9.1` }],
             purpose: `Puts a local port on a public URL.`,
         },
     ],

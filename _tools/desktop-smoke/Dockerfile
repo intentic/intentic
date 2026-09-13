@@ -14,7 +14,7 @@
 #
 # TRIXIE, AND IT TRACKS THE BUILD BASE. This host has to be at least as new as the image the binary is
 # LINKED in, because a glibc symbol is versioned: ci-desktop builds on ci-base, ci-base is
-# node:24.20.0-trixie-slim (glibc 2.41), and the binary that comes out asks for GLIBC_2.39. This host was
+# node:24.21.0-trixie-slim (glibc 2.41), and the binary that comes out asks for GLIBC_2.39. This host was
 # bookworm (glibc 2.36), so both tiers got as far as installing and then died in the loader —
 #
 #   intentic-desktop: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.39' not found

@@ -17,6 +17,11 @@ reports the profile.
 
 ## Responsibilities
 
+The image keeps Node on the repository's pinned LTS line. ripgrep and jq use checksum-verified upstream
+binaries for amd64 and arm64; cloudflared and yq also use pinned upstream releases. The remaining system
+tools use Debian stable packages so Python modules, native builds, SSH, and shared libraries stay on the
+same distribution. Tool upgrades take effect when the sandbox image is rebuilt and the sandbox recreated.
+
 - **Serve the daemon API** the browser drives directly over the sandbox's own tunnel — agent turns, the CLI,
   git, inventory, preview, health — each request authenticated by a session minted from a verified identity.
 - **Run every agent turn**: pick the runtime, build the prompt, stream the frames, hold the cards the person

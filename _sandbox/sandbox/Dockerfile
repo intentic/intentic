@@ -19,7 +19,7 @@
 # inject agent credentials (ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN) and mount the workspace volume at
 # /work — neither is baked into the image.
 
-FROM node:24.20.0-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0 AS runtime
+FROM node:24.21.0-trixie-slim@sha256:db3ae80f5d8df06e04dabdf7b44cbf008d32de168205fa0294444aabbc08c590 AS runtime
 # Links the GHCR package to the repo (inherits its visibility/permissions, shows under its Packages).
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 
@@ -72,7 +72,25 @@ RUN rm -f /etc/apt/apt.conf.d/docker-clean \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl jq openssh-server openssh-client sshpass rsync iproute2 python3 python3-pip python3-venv python-is-python3 python3-yaml python3-pil make g++ ripgrep
+    && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl openssh-server openssh-client sshpass rsync iproute2 python3 python3-pip python3-venv python-is-python3 python3-yaml python3-pil make g++
+# Standalone binaries must support both sandbox architectures without newer system libraries.
+ARG RIPGREP_VERSION=15.2.0
+ARG JQ_VERSION=1.8.2
+RUN set -eu; arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      amd64) target=x86_64-unknown-linux-musl; rg_sha=33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c; jq_sha=b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f ;; \
+      arm64) target=aarch64-unknown-linux-musl; rg_sha=800b1e7206afe799dfb5a6901f23147cfaabe0e52210538100f61e86e1740915; jq_sha=8b85c817833814ddca00a144c33705546355afccf0cf39b188f3cdb48b852309 ;; \
+      *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/BurntSushi/ripgrep/releases/download/${RIPGREP_VERSION}/ripgrep-${RIPGREP_VERSION}-${target}.tar.gz" -o /tmp/ripgrep.tar.gz; \
+    echo "$rg_sha  /tmp/ripgrep.tar.gz" | sha256sum -c -; \
+    tar -xzf /tmp/ripgrep.tar.gz -C /tmp; \
+    install -m 0755 "/tmp/ripgrep-${RIPGREP_VERSION}-${target}/rg" /usr/local/bin/rg; \
+    rm -rf /tmp/ripgrep.tar.gz "/tmp/ripgrep-${RIPGREP_VERSION}-${target}"; \
+    curl -fsSL "https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-linux-${arch}" -o /usr/local/bin/jq; \
+    echo "$jq_sha  /usr/local/bin/jq" | sha256sum -c -; \
+    chmod +x /usr/local/bin/jq; \
+    rg --version; jq --version
 # Docker Engine, Chromium, provider CLIs et al. are NOT here — each is a feature pack (packs/<name>.Dockerfile)
 # spliced at the markers below for the profiles that bake it, or riding the environment overlay on demand.
 # Every runner still mounts a named volume at /var/lib/docker (empty until the docker capability's privilege
@@ -230,7 +248,7 @@ RUN --mount=type=cache,target=/root/.npm \
 # fabric; that fabric is the platform's own edge now, which the daemon dials over an outbound WebSocket with
 # no binary to install (sandbox-contract/ingress-contract.ts). Placed HERE, before the tree COPYs below, so
 # the layer stays cache-stable across source changes.
-ARG CLOUDFLARED_VERSION=2026.8.3
+ARG CLOUDFLARED_VERSION=2026.9.1
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \
     && chmod +x /usr/local/bin/cloudflared \
