@@ -33,6 +33,6 @@ describe(`deployed web headers`, () => {
         const csp = valueOf(`Content-Security-Policy`);
         const directive = (name: string): string => new RegExp(`${name} ([^;]*)`).exec(csp)?.[1] ?? ``;
         expect(directive(`script-src`)).toContain(`https://accounts.google.com`);
-        expect(directive(`frame-src`).split(/\s+/)).toContain(`https:`);
+        expect(directive(`frame-src`)).toBe(`'self' https:`);
     });
 });
