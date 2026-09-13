@@ -111,9 +111,9 @@ export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon
 
 // A turn is in flight: running, unwinding after a Stop, or repairing itself after its daemon died. Every hands-off
 // guard (its worktree is a live turn's working state) and the live readouts (elapsed, activity line) key off this.
-// `starting` counts even though nothing is registered yet, elapsed should tick from the send. `dismissing` counts
-// for the guards only; its lane is decided separately (see laneOf) since it settles into Finished. `landing` counts
-// too: no turn runs, but the daemon holds the worktree exactly as a turn would, and every guard wants the same answer.
+// `starting` counts even though nothing is registered yet, elapsed should tick from the send. `dismissing` and
+// `landing` count for the guards only; both settle in Finished, so their lane is decided separately (see laneOf).
+// A land runs no turn, but the daemon holds the worktree exactly as a turn would, and every guard wants the same answer.
 // `awaiting` is deliberately excluded: it's live but parked, handled by `awaitingUser` instead.
 export const turnInFlight = (agent: AgentStanding): boolean =>
     agent.status === `running` ||
@@ -265,9 +265,10 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
     if (blocked(agent) || agent.status === `awaiting` || agent.status === `conflict`) {
         return `attention`;
     }
-    // A dismissal settles into Finished immediately from the press, ahead of the in-flight check below: unlike
-    // `stopping`, which rests in Attention, a waved-away turn is one the user is already done with.
-    if (agent.status === `dismissing`) {
+    // Settled from the press, ahead of the in-flight check below, rather than routed through Active: a waved-away turn
+    // is one the user is already done with (unlike `stopping`, which rests in Attention), and a land spends no model at
+    // all. Active means a turn in progress, so a land must end in the lane it was pressed in.
+    if (agent.status === `dismissing` || agent.status === `landing`) {
         return `finished`;
     }
     // `resuming` is why in-flight must outrank the settled readings below: without this order the card would drop

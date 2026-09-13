@@ -151,6 +151,18 @@ it(`answers the press on the button that was pressed, glyph and words`, () => {
     expect(button.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
 });
 
+// The daemon flips `ready` to `landing` the moment the lease is taken, from this press or another window's. The block
+// stays open on it: a button that vanishes under the click shortens the card mid-press and leaves nothing saying the
+// land is running. Disabled because the daemon refuses a second land outright.
+it(`holds the land open on the daemon's own landing status, spinning and pressed out`, () => {
+    const el = mount(ready(`landing`));
+    const button = landButton(el)!;
+    expect(button.textContent?.trim()).toBe(`Landing…`);
+    expect(button.disabled).toBe(true);
+    // A land spends no model: the running readout would date its clock from the turn before it.
+    expect(el.textContent).not.toContain(`Working…`);
+});
+
 // The card dims for any pending action (archiving included); `pending` carries which action, not just a flag.
 // Otherwise a Land button would spin through an archive, reporting a land nobody asked for.
 it(`leaves the land button alone while some other action holds the card`, () => {

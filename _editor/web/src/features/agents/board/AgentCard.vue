@@ -151,6 +151,9 @@ const away = computed(() => (props.agent.archivedAt === undefined ? landedAway(p
 // button.
 // Excluded in the archive, like `resolvable`: restore first.
 const landable = computed(() => props.agent.archivedAt === undefined && props.agent.status === `ready` && away.value === undefined);
+// The same block held open while the land it started runs: `ready` flips to `landing` on the press, and a button that
+// vanishes under the click takes the card's only account of the land with it and shortens the card mid-press.
+const shipping = computed(() => props.agent.archivedAt === undefined && props.agent.status === `landing` && away.value === undefined);
 // A RECEIPT: a finished card that asks nothing of anyone. It keeps every fact it had and spends none of the board's
 // colour on them — the success green, the diff's red/green, the context tint all flatten to the row's own ink.
 // Finished is the only lane that fills by itself, so on an ordinary board it is forty painted rows beside two lanes
@@ -160,8 +163,12 @@ const landable = computed(() => props.agent.archivedAt === undefined && props.ag
 // receipts, and a press that reads as quietly as a receipt is a press nobody makes.
 // In the ARCHIVE that exception lapses: every press is withheld there until the card is restored (see `landable`,
 // `away`, `resolvable`), so a `ready` card filed away has nothing to shout about and reads as the receipt it is.
+// A land under way is a press in progress, not a receipt: flattening it would grey out the one spinner saying so.
 const receipt = computed(
-    () => lane.value === `finished` && (props.agent.archivedAt !== undefined || (props.agent.status !== `ready` && away.value === undefined)),
+    () =>
+        lane.value === `finished` &&
+        (props.agent.archivedAt !== undefined ||
+            (props.agent.status !== `ready` && props.agent.status !== `landing` && away.value === undefined)),
 );
 // Statuses whose ink is already quiet (`idle`, `resumed`, `stopped`) keep it: flattening those to `muted` would make
 // a receipt LOUDER than it is today, which is the opposite of the errand.
@@ -175,9 +182,10 @@ const statusMeta = computed(() => (receipt.value && !QUIET_INK.has(meta.value.cl
 // Never in `dense` (the stacked, narrow board): there the lanes are stacked, so their order already says which is
 // which, and the extra padding costs a card per screen where cards per screen is the scarce thing.
 const live = computed(() => props.dense !== true && lane.value !== `finished`);
-// True only while this card's own land is pending; `pending` names the action so archiving doesn't leave Land spinning
-// too.
-const landing = computed(() => props.pending === `land`);
+// True while this card's own land is pending; `pending` names the action so archiving doesn't leave Land spinning too.
+// The daemon's own `landing` counts as well, so a land started in another window (or one whose request already answered
+// while the lease is still held) reads as busy here rather than as a press the daemon would refuse.
+const landing = computed(() => props.pending === `land` || props.agent.status === `landing`);
 // Maintainers get Land now; collaborators get Request land instead, since the daemon floors landing at maintainer;
 // viewers get neither.
 // The request is sent here rather than emitted, since the board is only one of this card's several hosts.
@@ -245,18 +253,21 @@ const tileHint = computed(() => {
 // Only a card with a daemon registry entry may claim "Completed": client-only standings have no such account of a turn.
 // A history-reopened chat sits in this lane too but says nothing here, since its own chip already states what it is.
 const completed = computed(() => lane.value === `finished` && !unregistered(props.agent.status));
+// A turn actually producing something, as the card's readouts mean it: `landing` is in flight for the hands-off guards
+// but spends no model, and its `startedAt` belongs to the turn before it, so the elapsed clock would be someone else's.
+const working = computed(() => turnInFlight(props.agent) && props.agent.status !== `landing`);
 // Whether the card can show a date at all: an untouched draft can't, and neither can a running turn, whose own elapsed
 // readout takes the same slot.
-const dated = computed(() => props.agent.archivedAt !== undefined || (!turnInFlight(props.agent) && props.agent.updatedAt > 0));
+const dated = computed(() => props.agent.archivedAt !== undefined || (!working.value && props.agent.updatedAt > 0));
 // Whether the closing line has anything to show: gated on everything it draws, so a card with nothing here opens no
 // empty strip.
 // One wrapping line (stats left, standing/time right) rather than two rows, so a lane fits more cards.
-const summary = computed(() => stats.value || review.value !== undefined || completed.value || dated.value || turnInFlight(props.agent));
+const summary = computed(() => stats.value || review.value !== undefined || completed.value || dated.value || working.value);
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
 // Recomputed against the ticking `now`, like the elapsed beside it, so the countdown moves without its own timer.
 // Suppressed while a turn is in flight: the running corner already answers "doing what, for how long", and reclaims it
 // the moment the turn ends.
-const watch = computed(() => (turnInFlight(props.agent) ? undefined : watchLine(props.agent, now.value)));
+const watch = computed(() => (working.value ? undefined : watchLine(props.agent, now.value)));
 // Shares the card's "when" corner with the running elapsed and the watch countdown; the chip already says what
 // happened, this says when.
 // Undefined once the window is open or the provider gave no instant; the corner then falls back to the ordinary date.
@@ -733,12 +744,13 @@ const grab = (event: PointerEvent): void => {
                 Carries no explanatory prose, unlike the resolve/request-land blocks: this button's mechanics are
                 routine to a user who already opted into auto-land-off.
             -->
-            <div v-if="landable && canShip" class="flex min-w-0 flex-col gap-1">
+            <div v-if="(landable || shipping) && canShip" class="flex min-w-0 flex-col gap-1">
                 <!-- The standing ask leads the button it's about, so a maintainer meets the reason before the press. -->
                 <p v-if="landAsk" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-warning">
                     <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{ landAsk }}</span>
                 </p>
-                <Button size="small" severity="success" class="self-start whitespace-nowrap" @click.stop="emit('land')">
+                <!-- Disabled while the land runs: the daemon refuses a second one outright (agents.routes CONFLICT). -->
+                <Button size="small" severity="success" :disabled="landing" class="self-start whitespace-nowrap" @click.stop="emit('land')">
                     <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? "Landing…" : "Land now" }}
                 </Button>
             </div>
@@ -870,7 +882,7 @@ const grab = (event: PointerEvent): void => {
                         <Icon name="clock" class="shrink-0 text-2xs" />
                         <span class="tabular-nums">back {{ limitBackAt }}</span>
                     </span>
-                    <span v-else-if="watch === undefined && !turnInFlight(agent) && agent.updatedAt > 0" class="shrink-0">{{
+                    <span v-else-if="watch === undefined && !working && agent.updatedAt > 0" class="shrink-0">{{
                         relativeTime(agent.updatedAt)
                     }}</span>
 
@@ -916,7 +928,7 @@ const grab = (event: PointerEvent): void => {
                         Shows "Working…" even with no activity frame yet, since dropping it would take the clock with
                         it, and a running card with no clock can't be triaged.
                     -->
-                    <span v-if="turnInFlight(agent)" class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link">
+                    <span v-if="working" class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link">
                         <!--
                             Glyph follows whichever fact leads: running children if any, else the tool the agent itself
                             is using.
