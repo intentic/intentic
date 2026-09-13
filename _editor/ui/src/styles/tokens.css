@@ -360,9 +360,9 @@
  * small wght delta stands in for it. The cost is that widths move — about a third of a percent, sub-pixel per
  * word, visible only as a hairline reflow if a long line is on screen while the theme is toggled. */
 html[data-mode="dark"] {
-    --font-weight-normal: 380;
-    --font-weight-medium: 470;
-    --font-weight-semibold: 565;
+    --font-weight-normal: 300;
+    --font-weight-medium: 400;
+    --font-weight-semibold: 500;
 }
 [data-text-size="large"] {
     font-size: 120%;
