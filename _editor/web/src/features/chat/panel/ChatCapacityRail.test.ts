@@ -190,3 +190,59 @@ it(`draws both the session and the week, each named by its own window`, () => {
     expect(lanes(el)).toEqual([`5h`, `wk`]);
     expect([...el.querySelectorAll(`[aria-hidden="true"] .tabular-nums`)].map((node) => node.textContent?.trim())).toEqual([`12%`, `87%`]);
 });
+
+it(`displays remaining minutes on 5h window and remaining time on weekly window when not exhausted`, () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const el = mount([
+        {
+            id: `a`,
+            label: `first@example.com`,
+            usage: {
+                measuredAt: MEASURED_AT,
+                windows: [
+                    { kind: `five_hour`, utilization: 87, resetsAt: nowSec + 45 * 60, gates: `all` },
+                    { kind: `seven_day`, utilization: 61, resetsAt: nowSec + 3 * 86_400, gates: `all` },
+                ],
+            },
+        },
+    ]);
+
+    expect(el.textContent).toContain(`in 45m`);
+    expect(el.textContent).toContain(`in 3d`);
+});
+
+it(`collapses unmeasured providers to title row and groups them together`, () => {
+    const el = mount([], {
+        ...NO_ROUTED,
+        grok: [{ name: `grok-1`, label: `grok` }],
+        kimi: [{ name: `kimi-1`, label: `kimi` }],
+    });
+
+    expect(drawn(el)).toContain(`Grok`);
+    expect(drawn(el)).toContain(`no published limits`);
+    expect(drawn(el)).toContain(`Kimi Code`);
+    expect(drawn(el)).toContain(`no reading yet`);
+    expect(el.textContent).not.toContain(`most room`);
+});
+
+it(`does not render 'most room' row for pooled providers`, () => {
+    const el = mount([], {
+        ...NO_ROUTED,
+        gemini: [
+            {
+                name: `gemini-1`,
+                label: `one@gmail.com`,
+                usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 40, gates: `all` }] },
+            },
+            {
+                name: `gemini-2`,
+                label: `two@gmail.com`,
+                usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 70, gates: `all` }] },
+            },
+        ],
+    });
+
+    expect(el.textContent).not.toContain(`most room`);
+    expect(barWidths(el)).toEqual([`40%`]);
+});
+

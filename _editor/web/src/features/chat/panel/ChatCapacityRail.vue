@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ui } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
+import { SPENT_UTILIZATION } from "@intentic/sandbox-contract";
 import { CAPACITY_RAIL_PX, type CapacityLane, type CapacityProvider, type CapacityRow, chatCapacity } from "./chatCapacity";
 import { accountsLoaded } from "../accounts/providerAccounts";
 import { formatAge, formatReset, formatUtilization, usageTone } from "../session/usageStatus";
@@ -8,19 +9,46 @@ import { refreshConnections } from "../accounts/useChat-accounts";
 import { uiLength } from "../../../shell/window/uiScale";
 import ProviderLogo from "../accounts/ProviderLogo.vue";
 
-// What you can run the next task on, in the chat window's spare width — a readout, not a control (only the age is
-// pressable, to re-measure). It doesn't average, rank models, or link the ledger; the full picture lives in
-// composables/chat/chatCapacity.ts and the Usage tab.
+// Headroom rail in chat pop-out: displays runnable provider capacity without full Usage tab reconciliation.
 
 // Refreshes on mount: pools are account-wide, shared across apps, so a stale window shows stale numbers.
 onMounted(() => void refreshConnections());
 
 const capacity = computed(() => chatCapacity());
 
-// A routed pool names its reading, not an address (no choice to make); a lone account is already named by its
-// heading; unmeasured names the kind of nothing. "most room" only appears where room was actually measured.
-const rowName = (row: CapacityRow, entry: CapacityProvider): string | undefined =>
-    row.label ?? (entry.pooled && row.percent !== undefined ? `most room` : row.lanes.length === 0 ? row.note : undefined);
+const measuredProviders = computed(() =>
+    capacity.value.providers.filter((entry) => entry.rows.some((row) => row.lanes.length > 0)),
+);
+
+const unmeasuredProviders = computed(() =>
+    capacity.value.providers.filter((entry) => entry.rows.every((row) => row.lanes.length === 0)),
+);
+
+// How long until an unexhausted allowance resets; undefined when unmeasured, spent, or in the past.
+const laneReset = (lane: CapacityLane, now: number = Date.now()): string | undefined => {
+    if (lane.resetsAt === undefined || lane.percent >= SPENT_UTILIZATION) {
+        return undefined;
+    }
+    const diffMs = lane.resetsAt * 1000 - now;
+    if (diffMs <= 0) {
+        return undefined;
+    }
+    const diffMinutes = Math.ceil(diffMs / 60_000);
+    if (diffMinutes < 60) {
+        return `in ${diffMinutes}m`;
+    }
+    const diffHours = Math.floor(diffMinutes / 60);
+    const remMinutes = diffMinutes % 60;
+    if (diffHours < 24) {
+        return remMinutes > 0 ? `in ${diffHours}h ${remMinutes}m` : `in ${diffHours}h`;
+    }
+    const diffDays = Math.floor(diffMinutes / (24 * 60));
+    const remHours = Math.floor((diffMinutes % (24 * 60)) / 60);
+    if (diffDays < 2 && remHours > 0) {
+        return `in 1d ${remHours}h`;
+    }
+    return `in ${diffDays}d`;
+};
 
 // Full row as one sentence (hover + screen reader): every lane in drawn order, reset in parentheses per lane.
 // Provider name omitted — already said by the heading above.
@@ -31,8 +59,6 @@ const rowDetail = (row: CapacityRow, entry: CapacityProvider): string =>
     [
         row.label,
         row.identity,
-        // Same rule as the drawn line: a comparison nothing was measured for must not appear in either medium.
-        entry.pooled && row.percent !== undefined ? `most room of ${entry.ready}` : undefined,
         ...(row.lanes.length === 0 ? [row.note] : row.lanes.map((lane) => laneDetail(lane, row))),
     ]
         .filter((part) => part !== undefined)
@@ -90,7 +116,6 @@ const remeasureLabel = computed(() =>
                 type="button"
                 :class="ui.textAction(`gap-1 text-2xs text-subtle`)"
                 :disabled="measuring"
-                v-tooltip.left="`Re-measure every account's plan limits now`"
                 :aria-label="remeasureLabel"
                 @click="remeasure"
             >
@@ -130,7 +155,7 @@ const remeasureLabel = computed(() =>
                     automatically). No card per provider — the column draws no surface, so a border would be the only
                     box on screen.
                 -->
-                <div v-for="entry in capacity.providers" :key="entry.provider" class="flex flex-col gap-2.5">
+                <div v-for="entry in measuredProviders" :key="entry.provider" class="flex flex-col gap-2.5">
                     <div class="flex items-center gap-1.5">
                         <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
                         <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
@@ -142,7 +167,6 @@ const remeasureLabel = computed(() =>
                         <span
                             v-if="entry.total > 1"
                             class="shrink-0 text-2xs tabular-nums text-subtle"
-                            v-tooltip.left="countDetail(entry)"
                             :aria-label="countDetail(entry)"
                             >{{ entry.ready }}/{{ entry.total }}</span
                         >
@@ -162,14 +186,13 @@ const remeasureLabel = computed(() =>
                         means nothing to a
                         screen reader, so the row is aria-hidden and the full sentence spoken once, not both halves.
                     -->
-                    <div v-for="row in entry.rows" :key="row.id" class="flex flex-col gap-1" v-tooltip.left="rowDetail(row, entry)">
-                        <div class="grid grid-cols-[auto_minmax(0,1fr)_2.25rem] items-center gap-x-2 gap-y-1" aria-hidden="true">
+                    <div v-for="row in entry.rows" :key="row.id" class="flex flex-col gap-1">
+                        <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1" aria-hidden="true">
                             <span
-                                v-if="rowName(row, entry) !== undefined"
-                                class="col-span-3 min-w-0 truncate text-2xs"
-                                :class="row.label === undefined ? `text-subtle` : `text-muted`"
+                                v-if="row.label !== undefined"
+                                class="col-span-3 min-w-0 truncate text-2xs text-muted"
                             >
-                                {{ rowName(row, entry) }}
+                                {{ row.label }}
                             </span>
 
                             <template v-for="lane in row.lanes" :key="lane.kind">
@@ -192,17 +215,17 @@ const remeasureLabel = computed(() =>
                                         :style="{ width: `${Math.max(lane.percent, 1)}%` }"
                                     />
                                 </span>
-                                <span class="text-right text-2xs font-medium tabular-nums" :class="usageTone(lane.percent)">
-                                    {{ formatUtilization(lane.percent, row.stale) }}
-                                </span>
+                                <div class="flex items-baseline justify-end gap-1 text-right">
+                                    <span class="text-right text-2xs font-medium tabular-nums" :class="usageTone(lane.percent)">
+                                        {{ formatUtilization(lane.percent, row.stale) }}
+                                    </span>
+                                    <span v-if="laneReset(lane)" class="text-[10px] text-subtle font-normal whitespace-nowrap">
+                                        ·&nbsp;{{ laneReset(lane) }}
+                                    </span>
+                                </div>
                             </template>
 
-                            <!--
-                                Shown only when the line above isn't already saying it (an unread account states "no
-                                reading yet" once, not
-                                twice).
-                            -->
-                            <span v-if="row.lanes.length === 0 && rowName(row, entry) !== row.note" class="col-span-3 text-2xs text-subtle">
+                            <span v-if="row.lanes.length === 0" class="col-span-3 text-2xs text-subtle">
                                 {{ row.note }}
                             </span>
                         </div>
@@ -211,6 +234,25 @@ const remeasureLabel = computed(() =>
 
                     <!-- Never a silent cap: a partial list still says how many more have room. -->
                     <span v-if="entry.hidden > 0" class="text-2xs text-subtle">+{{ entry.hidden }} more with room</span>
+                </div>
+
+                <!-- Unmeasured providers collapsed to title row and grouped together -->
+                <div v-if="unmeasuredProviders.length > 0" class="flex flex-col gap-1.5">
+                    <div v-for="entry in unmeasuredProviders" :key="entry.provider">
+                        <div class="flex items-center gap-1.5" aria-hidden="true">
+                            <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
+                            <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
+                            <span
+                                v-if="entry.total > 1"
+                                class="shrink-0 text-2xs tabular-nums text-subtle"
+                                :aria-label="countDetail(entry)"
+                                >{{ entry.ready }}/{{ entry.total }}</span
+                            >
+                            <span class="shrink-0 text-2xs text-subtle">{{ entry.rows[0]?.note }}</span>
+                        </div>
+                        <span class="sr-only">{{ entry.rows[0] ? rowDetail(entry.rows[0], entry) : entry.label }}</span>
+                        <span v-if="entry.hidden > 0" class="text-2xs text-subtle">+{{ entry.hidden }} more with room</span>
+                    </div>
                 </div>
 
                 <!--
@@ -222,7 +264,7 @@ const remeasureLabel = computed(() =>
                 -->
                 <div v-if="capacity.out.length > 0 || capacity.blocked.length > 0" class="flex flex-col gap-1 border-t border-line pt-3">
                     <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Unavailable</span>
-                    <div v-for="entry in capacity.out" :key="entry.provider" class="flex items-baseline gap-2" v-tooltip.left="entry.detail">
+                    <div v-for="entry in capacity.out" :key="entry.provider" class="flex items-baseline gap-2">
                         <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ entry.label }}</span>
                         <span class="shrink-0 text-2xs text-subtle">{{ outNote(entry) }}</span>
                     </div>
