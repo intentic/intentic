@@ -212,6 +212,7 @@ import { type RuntimeInstallsStore, fileRuntimeInstallsStore } from "./environme
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { liveCardRun } from "./agent/run/offer-card.js";
 import { onTurnSettled, turnRunOf } from "./agent/run/turn/turn-runs.js";
+import { turnActive } from "./agent/anchors/agent-steering.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
 import { type Announcer, createAnnouncer } from "./platform/boot/announce.js";
 import { type ReachReporter, createReachReporter } from "./platform/listeners/reach-report.js";
@@ -770,7 +771,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     );
     // Reaper keys to the same three facts as everything else: whose work, whether it's live, whether it's ours.
     const reaper = createResourceReaper({
-        ownerLive: (owner) => owner === DAEMON_OWNER || turnRunOf(owner)?.done === false,
+        ownerLive: (owner) => owner === DAEMON_OWNER || turnActive(owner) || turnRunOf(owner)?.done === false,
         ownerKnown: (owner) => agents.entry(owner) !== undefined,
         liveSessionNames: () =>
             new Set(

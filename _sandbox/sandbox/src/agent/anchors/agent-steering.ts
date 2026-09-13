@@ -84,6 +84,9 @@ export function registerTurn(conversationId: string, turn: ActiveTurn): () => vo
 // Turns in flight right now; the idle-stop verdict reads it, since a machine mid-turn is never idle.
 export const activeTurnCount = (): number => activeTurns.size;
 
+// A stamped workload is live while its conversation still owns the registered turn.
+export const turnActive = (conversationId: string): boolean => activeTurns.has(conversationId);
+
 // Deliver a steering message into the conversation's running turn; false when no steerable turn is live. Marked as
 // steered here rather than at the route, so a turn running on a runner is marked in the daemon its gates read from.
 export function steerTurn(conversationId: string, text: string): boolean {

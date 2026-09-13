@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { registerTurn, SteeringQueue, steerTurn, stopTurn, turnSteered } from "./agent-steering.js";
+import { registerTurn, SteeringQueue, steerTurn, stopTurn, turnActive, turnSteered } from "./agent-steering.js";
 
 const drain = async (queue: SteeringQueue): Promise<string[]> => {
     const out: string[] = [];
@@ -52,10 +52,12 @@ test("steer and stop reach the registered turn; unknown conversations report fal
 test("a turn without a steering queue can be stopped but not steered", () => {
     let aborted = false;
     const unregister = registerTurn("conv-native", { abort: () => (aborted = true) });
+    expect(turnActive("conv-native")).toBe(true);
     expect(steerTurn("conv-native", "text")).toBe(false);
     expect(stopTurn("conv-native")).toBe(true);
     expect(aborted).toBe(true);
     unregister();
+    expect(turnActive("conv-native")).toBe(false);
 });
 
 test("a stale entry's unregister cannot clobber its successor's registration", () => {
