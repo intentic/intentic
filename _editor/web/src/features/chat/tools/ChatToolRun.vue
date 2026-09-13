@@ -4,7 +4,7 @@ import type { TranscriptTool } from "@intentic/sandbox-contract";
 import ChatToolRows from "./ChatToolRows.vue";
 import { summarizeRun } from "./toolRun";
 
-// A hidden turn's tool calls: a fading rule leading to a mark with the count and the most notable call's icon.
+// A hidden turn's tool calls: a mark with the count and the most notable call's icon.
 // Quiet by design, since an aside must not compete with the narration beside it. Opened, it shows the exact
 // rows the shown mode draws (ChatToolRows); there's no third rendering of a tool call.
 
@@ -32,22 +32,16 @@ const hint = computed(() => {
     <div v-if="run" class="flex w-full flex-col">
         <!--
             The whole join is the hit target, not just the end mark, since a badge-sized area between paragraphs is easy
-            to miss. Layout relative to the line, and what happens when it opens, is chat.css's.
+            to miss. Layout, and what happens when it opens, is chat.css's.
         -->
         <button
             type="button"
-            class="chat-run-bar group/run relative flex w-full items-center gap-2"
+            class="chat-run-bar group/run relative flex w-full items-center justify-end"
             :class="expanded && 'chat-run-bar-open'"
             :aria-expanded="expanded"
             :aria-label="hint"
             @click="toggle"
         >
-            <!-- Gradient stops live in chat.css so the middle can stay visibly darker over a wide band. -->
-            <span class="chat-run-line h-px flex-1" :class="run.failed && 'chat-run-line-failed'"></span>
-            <!--
-                Ring is painted (box-shadow), not a border, since borders can't render below 1px and would outweigh the
-                hairline it sits on. Padding compensates for the pixel a border would have taken from layout.
-            -->
             <span
                 class="chat-run-mark flex shrink-0 items-center gap-1 rounded-full px-2.25 py-0.75 text-2xs tabular-nums ring-(length:--ring-hairline) transition-colors"
                 :class="[
