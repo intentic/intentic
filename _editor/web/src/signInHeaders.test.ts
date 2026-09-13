@@ -31,8 +31,8 @@ describe(`deployed web headers`, () => {
 
     it(`still lets Google's script and secure preview frames load at all`, () => {
         const csp = valueOf(`Content-Security-Policy`);
-        const directive = (name: string): string => new RegExp(`${name} ([^;]*)`).exec(csp)?.[1] ?? ``;
+        const directive = (name: string): string => new RegExp(`${name} [^;]*`).exec(csp)?.[0] ?? ``;
         expect(directive(`script-src`)).toContain(`https://accounts.google.com`);
-        expect(directive(`frame-src`)).toBe(`'self' https:`);
+        expect(directive(`frame-src`)).toBe(`frame-src 'self' https:`);
     });
 });
