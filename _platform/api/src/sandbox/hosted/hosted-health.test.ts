@@ -174,6 +174,34 @@ describe(`hosted health`, () => {
         expect(health?.healthy).toBe(false);
     });
 
+    /* THE STALE EDGE THE TWO CHECKS AROUND IT BOTH LET THROUGH. This one has the replay lane and uses it, so
+     * `replay: true` says nothing is wrong and every sandbox really is reachable — it is simply running an
+     * image older than the change that added a build stamp, because nothing rolled its machines. Production
+     * answered exactly this for days while the sweep logged a healthy lane every fifteen minutes. The absence
+     * of the key is the entire signal, which is why the fixture omits it rather than emptying it. */
+    it(`is unhealthy when the edge replays but carries no build stamp, so its machines never rolled`, async () => {
+        const { status, tunnels, replay } = EDGE_OK;
+        stubFly([`intentic-sbx-pool-1`], {}, { status, tunnels, replay });
+        const prisma = prismaWith([], [warm(`intentic-sbx-pool-1`)]);
+        const health = await sweepHostedHealth(prisma, config({ poolSize: 1, regionEu: `` }), logger);
+        expect(health?.edge?.replay).toBe(true);
+        expect(health?.edge?.stamped).toBe(false);
+        expect(health?.edge?.fault).toContain(`no build stamp`);
+        expect(health?.healthy).toBe(false);
+    });
+
+    // An image nobody released names itself with an empty string, which is a self-built edge rather than a
+    // stale one: the key is there, so nothing here is stale, and the lane stays healthy.
+    it(`leaves an unreleased edge alone, since carrying the key is the age test`, async () => {
+        stubFly([`intentic-sbx-pool-1`], {}, { ...EDGE_OK, build: `` });
+        const prisma = prismaWith([], [warm(`intentic-sbx-pool-1`)]);
+        const health = await sweepHostedHealth(prisma, config({ poolSize: 1, regionEu: `` }), logger);
+        expect(health?.edge?.stamped).toBe(true);
+        expect(health?.edge?.build).toBeUndefined();
+        expect(health?.edge?.fault).toBeUndefined();
+        expect(health?.healthy).toBe(true);
+    });
+
     // Told apart from the old build above because the remedy differs: one variable, not a deploy.
     it(`is unhealthy, and blames the prefix, when the edge runs with replay switched off`, async () => {
         stubFly([`intentic-sbx-pool-1`], {}, { ...EDGE_OK, replay: false });

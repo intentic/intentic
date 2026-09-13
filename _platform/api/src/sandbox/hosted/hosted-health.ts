@@ -30,8 +30,11 @@ const EDGE_TIMEOUT_MS = 10_000;
 
 // What the edge says about itself, which nothing else here asks.
 export interface EdgeReading {
-    // The build it reports; undefined from one older than that field, which is itself the fault below.
+    // The build it names; undefined both from an edge too old to carry the field and from an unreleased image,
+    // which `stamped` tells apart.
     readonly build: string | undefined;
+    // Whether the answer carried a `build` key AT ALL. False is an edge older than the stamp itself.
+    readonly stamped: boolean;
     // Whether it replays hosted sandboxes to their Fly apps; undefined from a build with no replay lane at all.
     readonly replay: boolean | undefined;
     // In the operator's words, already a diagnosis rather than a reading; undefined when the edge is fine.
@@ -55,14 +58,29 @@ export interface EdgeReading {
  * edge with the lane switched off — it is a build from before the lane existed, which will never route a
  * hosted sandbox no matter how long anyone waits or how many times they press start it over. Told apart from
  * `replay: false` because the remedies differ: one is a deploy, the other is one missing variable. */
-const edgeFault = (where: string, replay: boolean | undefined): string | undefined => {
+/* AND THE SAME ABSENCE ONE FIELD OVER, which is the one this check kept missing. `replay` catches an edge so
+ * old it predates the hosted lane; it says nothing about an edge merely older than the code, because a stale
+ * edge that HAS the lane answers `replay: true` and passes every reading here forever. The field that dates a
+ * build is `build`, deploy-ingress.sh refuses a deploy that does not serve the expected one, and its own error
+ * text spells out the rule this now enforces at runtime: an answer with no `build` field at all is an edge
+ * older than the change that added it, whose machines were never rolled. Production served exactly that for
+ * days with this sweep reporting the lane healthy every fifteen minutes. */
+const edgeFault = (where: string, replay: boolean | undefined, stamped: boolean): string | undefined => {
     if (replay === undefined) {
         return `${where} is an OLD BUILD: it does not report the hosted replay lane, so it predates it and cannot route a hosted sandbox at all. Its machines were never rolled onto the image CI pushed. Every hosted sandbox answers 502 at its own address until they are.`;
+    }
+    if (!stamped) {
+        return `${where} answers with no build stamp at all, so it is running an image from before the stamp existed: nothing has rolled its machines onto what CI has pushed since. It still replays, so sandboxes are reachable today and nobody is stuck right now — but no edge change has reached production either, and the next one that matters will not land on its own. Rolling it is deploy-ingress.sh's job, which skips silently whenever FLY_API_TOKEN is empty on the branch that deploys.`;
     }
     return replay
         ? undefined
         : `${where} is running with no HOSTED_APP_PREFIX, so it refuses every hosted sandbox's hostname instead of replaying it to that sandbox's Fly app. It must match the api's own prefix.`;
 };
+
+// Carrying the key is the age test; its VALUE is empty on an image nobody released, which is a legitimate
+// self-built edge and not a fault. Collapsing the two is what hid a stale edge behind a healthy reading.
+const buildStamp = (raw: unknown): { stamped: boolean; build: string | undefined } =>
+    typeof raw === `string` ? { stamped: true, build: raw === `` ? undefined : raw } : { stamped: false, build: undefined };
 
 const edgeReading = async (config: Config): Promise<EdgeReading | undefined> => {
     if (config.ingress.url === ``) {
@@ -73,19 +91,20 @@ const edgeReading = async (config: Config): Promise<EdgeReading | undefined> => 
     try {
         const response = await fetch(`${config.ingress.url}/health`, { signal: AbortSignal.timeout(EDGE_TIMEOUT_MS) });
         if (!response.ok) {
-            return { build: undefined, replay: undefined, fault: `${where} answered ${response.status} on its own /health.` };
+            return { build: undefined, stamped: false, replay: undefined, fault: `${where} answered ${response.status} on its own /health.` };
         }
         body = (await response.json()) as { replay?: unknown; build?: unknown };
     } catch {
         return {
             build: undefined,
+            stamped: false,
             replay: undefined,
             fault: `${where} could not be reached at all, so no sandbox is reachable on any lane — tunnel or hosted.`,
         };
     }
-    const build = typeof body?.build === `string` && body.build !== `` ? body.build : undefined;
+    const { stamped, build } = buildStamp(body?.build);
     const replay = typeof body?.replay === `boolean` ? body.replay : undefined;
-    return { build, replay, fault: edgeFault(where, replay) };
+    return { build, stamped, replay, fault: edgeFault(where, replay, stamped) };
 };
 
 /* THE READING THAT COMES FROM THE SANDBOXES THEMSELVES. Every other check here describes what this platform
@@ -268,6 +287,11 @@ const faultLine = (health: HostedHealth): string => {
         : `hosted health: the fleet and the database disagree`;
 };
 
+// What the healthy line says about the edge; an unstamped one never reaches it, since that is now a fault.
+// `(not asked)` used to stand for that case too, so the one reading that meant something — a deploy that never
+// landed — read on every tick as a check nobody had run.
+const edgeLine = (edge: EdgeReading | undefined): string => edge?.build ?? (edge === undefined ? `(not asked)` : `(unreleased build)`);
+
 // Short stock is ordinary weather and isn't mailed; a full fleet is, since no tick fixes it. An edge that
 // cannot serve the lane always is: no tick fixes that either, and while it stands nobody reaches anything.
 const worthMailing = (health: HostedHealth): boolean =>
@@ -296,7 +320,7 @@ export const sweepHostedHealth = async (
                 stock: health.stock,
                 litter: health.litter,
                 capacity: health.capacity,
-                edge: health.edge?.build ?? `(not asked)`,
+                edge: edgeLine(health.edge),
                 lane: health.lane,
             },
             `hosted health: fleet and database agree, and the edge serves the lane`,

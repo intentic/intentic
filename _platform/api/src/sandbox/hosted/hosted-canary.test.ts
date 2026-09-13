@@ -141,6 +141,24 @@ describe(`the provisioning canary`, () => {
         expect(calls.some((entry) => entry.method === `DELETE`)).toBe(true);
     });
 
+    /* A WARM CLAIM ADOPTS THE POOL MACHINE'S IDENTITY (hosted.ts claimPoolMachine): the row's token, digest and
+     * tunnel id all move, and the address the edge serves moves with them. This run probed the id it minted,
+     * which by then named nothing, so every warm run failed on a sandbox that was serving fine — and on a
+     * platform that keeps stock, every run is a warm one. */
+    it(`probes the address the row ends up with, not the one it was minted with`, async () => {
+        const adopted = `99887766aabb`;
+        const prisma = prismaWith(new Date());
+        (prisma.sandbox as unknown as { findUniqueOrThrow: ReturnType<typeof vi.fn> }).findUniqueOrThrow.mockResolvedValue({
+            id: `canary-sbx`,
+            ownerId: `canary-user`,
+            tunnelId: adopted,
+        });
+        const calls = stubProviders();
+        const result = await runHostedCanary(prisma, config(), logger, nap);
+        expect(result.ok).toBe(true);
+        expect(calls.some((entry) => entry.url.includes(adopted) && entry.url.includes(`/__intentic/preview-probe`))).toBe(true);
+    });
+
     it(`fails when the daemon checks in but the starter never serves`, async () => {
         stubProviders({ starter: () => json({ proxy: `intentic-preview`, target: `panel`, state: `starting` }) });
         const prisma = prismaWith(new Date());

@@ -48,7 +48,7 @@ import type { ComposeArgs } from "./setupCompose";
 import { type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, probeDaemon } from "./setupAttach";
 import { autoSandboxName } from "./setupName";
 import { setupReportView } from "./setupReport";
-import { hostedWaitView } from "./hostedWait";
+import { hostedWaitView, machineIsDown } from "./hostedWait";
 import AppBrand from "../../components/AppBrand.vue";
 import { useSiteFaces } from "../../shell/useSiteFaces";
 
@@ -241,9 +241,32 @@ const hostedHost = computed(() => {
 const hostedSince = ref<number | undefined>(undefined);
 // Machine power state, polled only while somebody waits; undefined or failed degrades to a plain spinner.
 const hostedMachine = ref<HostedStatus[`machine`] | undefined>(undefined);
+// When the provider first reported a machine that won't come up on its own, cleared by any other reading, so
+// only a state that survives several polls can ever be a verdict (hostedWait.ts machineIsDown).
+const machineDownSince = ref<number | undefined>(undefined);
 // Machine state is a rate-limited provider call; polled once every this many (cheap) registry polls instead.
 const MACHINE_EVERY = 4;
 let machineTick = 0;
+
+// The one place a machine reading is recorded, so the down clock can never drift from the state it times.
+const noteMachine = (reading: HostedStatus[`machine`] | undefined): void => {
+    hostedMachine.value = reading;
+    machineDownSince.value = machineIsDown(reading) ? (machineDownSince.value ?? Date.now()) : undefined;
+};
+
+// One throttled machine-state read, riding the registry poll. `action` is the hosted action it was asked
+// under: a reading that lands after a restart was issued describes the machine that restart replaced, and
+// keeping it would restart the down clock the restart just cleared.
+const readMachine = async (sandboxId: string, action: number): Promise<void> => {
+    if (machineTick++ % MACHINE_EVERY !== 0) {
+        return;
+    }
+    const reading = (await apiClient.sandbox.hostedStatus({ sandboxId }).catch(() => undefined))?.machine;
+    if (action === hostedAction && !releasingHosted.value) {
+        noteMachine(reading ?? hostedMachine.value);
+    }
+};
+
 // Boot report and any refused check-in, from the poll; null until either happens, as on any older sandbox.
 const bootReport = ref<SandboxSummary[`bootReport`]>(null);
 const announceRefusal = ref<SandboxSummary[`announceRefusal`]>(null);
@@ -429,6 +452,7 @@ const hostedWait = computed(() =>
         // Machine origin from the row's hosted stamp; decides which of the two boot-time promises the card makes.
         warm: hostedRow.value?.warm,
         waitedMs: hostedSince.value === undefined ? 0 : now.value - hostedSince.value,
+        downForMs: machineDownSince.value === undefined ? 0 : now.value - machineDownSince.value,
     }),
 );
 
@@ -613,9 +637,8 @@ const check = async (): Promise<void> => {
         announceRefusal.value = row?.announceRefusal ?? null;
         announced.value = (row?.lastSeenAt ?? null) !== null;
         // Machine state, asked only during a hosted wait, less often than the registry; failure keeps the last answer.
-        if (row !== undefined && (row.hosted ?? null) !== null && machineTick++ % MACHINE_EVERY === 0) {
-            hostedMachine.value =
-                (await apiClient.sandbox.hostedStatus({ sandboxId: pending.id }).catch(() => undefined))?.machine ?? hostedMachine.value;
+        if (row !== undefined && (row.hosted ?? null) !== null) {
+            await readMachine(pending.id, action);
         }
         const seen = row?.lastSeenAt ?? null;
         if (action !== hostedAction || releasingHosted.value) {
@@ -727,6 +750,16 @@ const restartHosted = async (): Promise<void> => {
     const action = ++hostedAction;
     hostedBusy.value = true;
     hostedError.value = undefined;
+    /* CLEARED BEFORE THE CALL, NOT AFTER IT. A restart stops the machine and then starts it, which took about
+     * six seconds against Fly in production while this page read the machine every twelve — so the old reset,
+     * which ran once the call had returned, left a whole poll free to read the stop this very button caused
+     * and report it as the restart having failed. Everything below describes the boot being replaced, so none
+     * of it is true from the moment the button is pressed. */
+    bootReport.value = null;
+    announceRefusal.value = null;
+    announced.value = false;
+    noteMachine(undefined);
+    hostedSince.value = Date.now();
     try {
         if (remake) {
             const updated = await sandbox.hostedRelease(row.id);
@@ -739,15 +772,6 @@ const restartHosted = async (): Promise<void> => {
         } else {
             await apiClient.sandbox.hostedRestart({ sandboxId: row.id });
         }
-        if (action !== hostedAction) {
-            return;
-        }
-        // Whatever the machine last said about itself describes the boot we just replaced.
-        bootReport.value = null;
-        announceRefusal.value = null;
-        announced.value = false;
-        hostedMachine.value = undefined;
-        hostedSince.value = Date.now();
     } catch (err) {
         if (action !== hostedAction) {
             return;
@@ -799,7 +823,7 @@ const chooseMachine = async (next: "hosted" | "mine"): Promise<void> => {
             bootReport.value = null;
             announceRefusal.value = null;
             announced.value = false;
-            hostedMachine.value = undefined;
+            noteMachine(undefined);
             claimedAt.value = null;
             report.value = null;
         } catch (err) {

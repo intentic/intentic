@@ -61,6 +61,9 @@ export interface HostedWaitInput {
     readonly warm: boolean | undefined;
     // Elapsed wait time; only escalates an otherwise-progressing wait, never invents a diagnosis on its own.
     readonly waitedMs: number;
+    // How long the CURRENT down reading has held, 0 whenever the machine last read as anything else. The page
+    // keeps this clock (Setup.vue), since a pure view of one poll cannot tell a stop from a transition.
+    readonly downForMs: number;
 }
 
 const MINUTE_MS = 60_000;
@@ -111,6 +114,24 @@ const noteFor = (input: HostedWaitInput): string => {
 // States meaning the machine won't come up on its own: `failed` outright, or sitting `stopped`/`destroyed`.
 const DEAD_MACHINE = new Set([`stopped`, `suspended`, `destroying`, `destroyed`, `failed`]);
 
+/* A DOWN READING IS A SNAPSHOT, AND EVERY BOOT PASSES THROUGH ONE. Claiming a warm machine starts from a
+ * `stopped` pool machine; a restart stops before it starts; a rebuild destroys the machine and makes another,
+ * so the provider answers `gone` for a stretch. Fly reports each of those honestly, and this card used to act
+ * on the first one it saw: within seconds of the platform issuing a stop, the page told the reader their
+ * machine was not running, and its one button — start it over — issued another stop and put them back through
+ * the same window. Measured in production: two presses three minutes apart against a machine that went on to
+ * bill twenty-five minutes of uptime, because nothing about it was ever wrong.
+ *
+ * So a down reading has to HOLD before it is a verdict. The page times how long the current one has (Setup.vue
+ * `downForMs`), and until it settles the wait reads as what it is — a machine being started. */
+export const machineIsDown = (machine: HostedStatus[`machine`] | undefined): boolean =>
+    machine === `gone` || (machine !== undefined && DEAD_MACHINE.has(machine));
+
+// How long a down reading must hold to be a verdict. The page reads the provider every 12s, so this is three
+// or four consecutive answers — long enough that no transition survives it, short enough that a machine that
+// really is off is named inside a minute.
+const DOWN_SETTLED_MS = 45_000;
+
 const at = (steps: readonly { key: WaitStep; label: string }[], active: WaitStep): WaitStepView[] => {
     const index = steps.findIndex((step) => step.key === active);
     return steps.map((step, position) => ({
@@ -137,6 +158,10 @@ const finalFailure = (input: HostedWaitInput): Stall | undefined => {
             },
         };
     }
+    // Both readings below are the provider's, and neither is final until it has settled: see machineIsDown.
+    if (!machineIsDown(input.machine) || input.downForMs < DOWN_SETTLED_MS) {
+        return undefined;
+    }
     // Machine gone entirely, as final as a refusal; starting over means a new, empty machine.
     if (input.machine === `gone`) {
         return {
@@ -150,18 +175,15 @@ const finalFailure = (input: HostedWaitInput): Stall | undefined => {
             },
         };
     }
-    // Not coming back on its own: Fly reports stopped or failed; nothing inside the box can fix that.
-    if (input.machine !== undefined && DEAD_MACHINE.has(input.machine)) {
-        return {
-            step: `machine`,
-            failure: {
-                problem: `The machine we started for you isn't running.`,
-                remedy: `Start it over below. If it stops again, that's ours to fix, nothing on your side causes this.`,
-                action: `reboot`,
-            },
-        };
-    }
-    return undefined;
+    // Settled stopped or failed, and not coming back on its own; nothing inside the box can fix that.
+    return {
+        step: `machine`,
+        failure: {
+            problem: `The machine we started for you isn't running.`,
+            remedy: `Start it over below. If it stops again, that's ours to fix, nothing on your side causes this.`,
+            action: `reboot`,
+        },
+    };
 };
 
 // Only a verdict once the daemon's window is spent; before that a tunnel is ordinarily still coming up.
@@ -203,8 +225,9 @@ const stalledFailure = (input: HostedWaitInput): Stall | undefined => {
     if (input.announced || input.boot !== null) {
         return undefined;
     }
-    // Long silence stated plainly, not as failure: it may still arrive, and the machine keeps trying.
-    if (input.waitedMs > SILENT_MS && input.machine !== `starting` && input.machine !== `created`) {
+    // Long silence stated plainly, not as failure: it may still arrive, and the machine keeps trying. Never said
+    // over a machine currently reading down, whose first four words would be untrue.
+    if (input.waitedMs > SILENT_MS && input.machine !== `starting` && input.machine !== `created` && !machineIsDown(input.machine)) {
         return {
             step: `booting`,
             failure: {

@@ -10,6 +10,9 @@ const wait = (over: Partial<HostedWaitInput> = {}): HostedWaitInput => ({
     announced: false,
     warm: undefined,
     waitedMs: 0,
+    // Settled by default, so the cases below stay about the reading rather than about the clock; the ones that
+    // are about the clock say so.
+    downForMs: 60_000,
     ...over,
 });
 
@@ -103,6 +106,33 @@ describe(`hostedWaitView`, () => {
     it(`names a machine that isn't running`, () => {
         expect(hostedWaitView(wait({ machine: `failed` })).failure?.problem).toContain(`isn't running`);
         expect(hostedWaitView(wait({ machine: `stopped` })).failure?.action).toBe(`reboot`);
+    });
+
+    /* THE LOOP THIS CARD USED TO PUT PEOPLE IN. Every lane passes through a stopped machine — a warm claim
+     * starts from one, and the card's own "start it over" stops the machine before starting it — so acting on
+     * the first such reading told people their machine was broken while the platform was starting it, and the
+     * only button offered issued another stop. It is a verdict only once it has held. */
+    it(`waits out a stopped machine before calling it one, since a boot passes through one`, () => {
+        const stopping = wait({ machine: `stopped`, downForMs: 6_000 });
+        expect(hostedWaitView(stopping).failure).toBeUndefined();
+        expect(active(stopping)).toBe(`machine`);
+        // Still nothing at half a minute; a restart's stop is seconds long, never this.
+        expect(hostedWaitView({ ...stopping, downForMs: 30_000 }).failure).toBeUndefined();
+        expect(hostedWaitView({ ...stopping, downForMs: 46_000 }).failure?.problem).toContain(`isn't running`);
+    });
+
+    // A rebuild destroys the machine and makes another, so `gone` is a transition too, and the sentence it
+    // would otherwise print tells somebody their files are lost while they are being restored.
+    it(`waits out a machine reported gone, and only then admits what starting over costs`, () => {
+        expect(hostedWaitView(wait({ machine: `gone`, downForMs: 10_000 })).failure).toBeUndefined();
+        expect(hostedWaitView(wait({ machine: `gone`, downForMs: 46_000 })).failure?.problem).toContain(`isn't there any more`);
+    });
+
+    // The clock that escalates a silent boot must not speak over a machine that is currently down: "the machine
+    // is running" would be false on its face.
+    it(`never says a down machine is running, however long the wait has been`, () => {
+        const flapping = wait({ machine: `stopped`, downForMs: 5_000, waitedMs: 4 * 60_000 });
+        expect(hostedWaitView(flapping).failure).toBeUndefined();
     });
 
     it(`says outright when the machine is gone, and admits what starting over costs`, () => {
