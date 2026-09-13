@@ -1334,8 +1334,8 @@ watch(
                                         :preview-url="attachmentPreview(a.path)"
                                         :progress="a.status === 'uploading' ? a.progress : undefined"
                                         :error="a.status === 'failed' ? (a.error ?? 'Upload failed') : undefined"
+                                        framed
                                         removable
-                                        :class="a.status === 'failed' ? '' : 'border border-line bg-card'"
                                         @remove="staging.remove(a)"
                                     />
                                 </div>

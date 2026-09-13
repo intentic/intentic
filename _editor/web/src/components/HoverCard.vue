@@ -212,18 +212,9 @@ defineExpose({ show, hide });
                 <p v-if="message.text" class="line-clamp-[8] shrink-0 break-words whitespace-pre-wrap text-xs leading-relaxed text-muted">
                     {{ message.text }}
                 </p>
-                <!-- Named with their scale and first lines, the same chip the transcript draws; inert, since nothing here takes a pointer. -->
-                <div v-if="message.files.length > 0" class="flex shrink-0 flex-wrap gap-1" :class="message.text || message.label ? 'mt-1.5' : ''">
-                    <ChatFileChip
-                        v-for="file in message.files"
-                        :key="file.path"
-                        :name="file.name"
-                        :path="file.path"
-                        :peek="file.peek"
-                        :lead="2"
-                        inert
-                        class="border border-line/60 bg-canvas/40"
-                    />
+                <!-- Named with their scale and first lines, the same tile the transcript draws; inert, since nothing here takes a pointer. -->
+                <div v-if="message.files.length > 0" class="flex shrink-0 flex-wrap gap-2" :class="message.text || message.label ? 'mt-1.5' : ''">
+                    <ChatFileChip v-for="file in message.files" :key="file.path" :name="file.name" :path="file.path" :peek="file.peek" :lead="2" inert />
                 </div>
                 <!--
                     Full-bleed, out through the card's own padding, since an inset picture in an already-narrow card is

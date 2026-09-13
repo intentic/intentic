@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { AnchoredOverlay, explorerColorClass, iconForEntry, type Side } from "@intentic/ui";
 import { formatBytes } from "@intentic/ui/format";
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { type FilePeek, peekLead, peekLines, peekOmitted } from "../drafts/filePeek";
 import ChatImageThumb from "./ChatImageThumb.vue";
 import { useChatSurface } from "../tools/chatToolSurface";
 
-/* One attached file, at three depths: the chip says what it is (glyph, name, size, its own first lines), hovering it
+/* One attached file, at three depths: the tile says what it is (glyph, name, size, its own first lines), hovering it
  * reads the head and the tail, and clicking it opens the real file in the workspace. Used by the composer, the sent
  * bubble and a session's hover card alike, so an attachment looks like one thing wherever it is named.
  *
+ * A bubble is speech; an attachment is an object, and is drawn like the screenshot beside it — the file's own text is
+ * framed, the naming around it is not. Only the composer asks for `framed`, where a chip has to read as a token you
+ * can take back out.
+ *
  * Presentational: the bytes arrive as `peek` (attachmentPeeks.ts) and the workspace comes from the injected surface
- * (chatToolSurface.ts), so a published page draws the same chip with nothing fetched and nothing to click. */
+ * (chatToolSurface.ts), so a published page draws the same tile with nothing fetched and nothing to click. */
 
 const {
     name,
@@ -21,6 +25,7 @@ const {
     lead = 0,
     progress,
     error,
+    framed = false,
     removable = false,
     inert = false,
 } = defineProps<{
@@ -31,11 +36,13 @@ const {
     peek?: FilePeek;
     // A picture's thumbnail, which stands in for the glyph and carries its own hover zoom.
     previewUrl?: string;
-    // How many of the file's first lines the chip draws itself. 0 in a tight row (the composer), 3 in a bubble.
+    // How many of the file's first lines the tile draws itself. 0 in a tight row (the composer), 3 in a transcript.
     lead?: number;
     // Upload in flight: 0..1. Undefined once the bytes are on disk.
     progress?: number;
     error?: string;
+    // Composer only: a bordered token, since chips in a row over the input have to read as discrete removable things.
+    framed?: boolean;
     removable?: boolean;
     // Drawn, never operated: a copy inside another hover card, which the pointer passes straight through.
     inert?: boolean;
@@ -59,6 +66,29 @@ const split = computed(() => (name.length > TAIL_CHARS + 6 ? TAIL_CHARS : 0));
 const nameHead = computed(() => (split.value === 0 ? name : name.slice(0, -split.value)));
 const nameTail = computed(() => (split.value === 0 ? `` : name.slice(-split.value)));
 
+// Whether the head is actually cut, which only the box can answer. `text-overflow: ellipsis` is not used to answer it:
+// it keeps the space the last fitting character could not use INSIDE the clipping box, and that space lands between
+// the mark and the ending — a word-sized gap in the middle of a filename. The mark rides on the ending instead.
+const nameBox = ref<HTMLElement>();
+const clipped = ref(false);
+watch(
+    nameBox,
+    (element, _previous, onCleanup) => {
+        clipped.value = false;
+        if (element === undefined) {
+            return;
+        }
+        const sync = (): void => {
+            clipped.value = Math.round(element.scrollWidth) > Math.round(element.clientWidth);
+        };
+        const observer = new ResizeObserver(sync);
+        observer.observe(element);
+        sync();
+        onCleanup(() => observer.disconnect());
+    },
+    { immediate: true, flush: `post` },
+);
+
 const extension = computed(() => {
     const dot = name.lastIndexOf(`.`);
     return dot > 0 ? name.slice(dot + 1).toUpperCase() : ``;
@@ -78,6 +108,16 @@ const meta = computed(() => {
 });
 
 const leadLines = computed(() => (lead === 0 || peek === undefined ? [] : peekLead(peek, lead)));
+
+// Whether the drawn lines stop short of the file, which is what the face's bottom fade claims. A file whose every line
+// fits ends on a hard edge instead, so the fade never says "there is more" of a file there is no more of.
+const truncated = computed(() => peek !== undefined && (peek.headBytes < peek.size || peekLead(peek, lead + 1).length > lead));
+
+// The composer's token wears its own border; everywhere else only the file's text is boxed, and the tile is bare. One
+// width for both: a name is what the reader matches against, and it is the first thing a narrower box eats.
+const frame = computed(() =>
+    framed ? `max-w-72 overflow-hidden rounded-lg border bg-card ${error === undefined ? `border-line` : `border-danger`}` : `max-w-72`,
+);
 
 // What the card says when there is no text for it to say anything with.
 const nothingToShow = computed(() => {
@@ -169,49 +209,70 @@ onBeforeUnmount(() => clearTimeout(timer));
 </script>
 
 <template>
-    <div
-        ref="root"
-        class="relative flex max-w-60 overflow-hidden rounded-lg"
-        :class="error === undefined ? `` : `border border-danger`"
-        @pointerenter="onEnter"
-        @pointerleave="onLeave"
-    >
+    <div ref="root" class="group relative flex" :class="frame" @pointerenter="onEnter" @pointerleave="onLeave">
+        <!--
+            The target, drawn only on approach. A bare tile has no resting box to press, so the wash stands in for one;
+            it sits behind the content rather than on the tile, which would inset the page from the bubble's own edge.
+        -->
+        <div
+            v-if="!framed && openable"
+            class="pointer-events-none absolute -inset-1.5 rounded-lg bg-overlay/50 opacity-0 transition-opacity group-hover:opacity-100"
+        ></div>
         <component
             :is="openable ? `button` : `div`"
             :type="openable ? `button` : undefined"
-            class="flex min-w-0 flex-1 items-start gap-2 px-2 py-1.5 text-left"
-            :class="openable ? `cursor-pointer transition-colors hover:bg-overlay/60` : ``"
+            class="relative flex min-w-0 flex-1 flex-col gap-1 text-left"
+            :class="[framed ? `px-2 py-1.5` : ``, openable ? `cursor-pointer` : ``]"
             :aria-label="openable ? `Open ${name} in the workspace` : undefined"
             @click="openable && open()"
             @focus="onFocus"
             @blur="onBlur"
         >
-            <!-- A picture stands in for its own glyph; everything else gets its category's. -->
-            <ChatImageThumb v-if="previewUrl" :src="previewUrl" :alt="name" size="h-9 w-9" />
-            <Icon v-else :name="icon" class="mt-px shrink-0 text-xs" :class="iconColor" />
-            <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-                <!-- Two spans, one truncating and one fixed: the name's ending survives a narrow chip. -->
-                <span class="flex min-w-0 items-center text-xs text-content">
-                    <!-- Tooltip only where the head is actually cut (`.overflow`), and carrying the whole name, not the part that survived. -->
-                    <span class="truncate" v-tooltip.top.overflow="name">{{ nameHead }}</span>
-                    <span v-if="nameTail" class="shrink-0">{{ nameTail }}</span>
-                </span>
-                <span v-if="meta" class="text-2xs text-subtle">{{ meta }}</span>
+            <!-- Caption, not a header bar: one line of naming that sits on the transcript the way the sent-time does. -->
+            <span class="flex min-w-0 items-center gap-1.5">
+                <!-- A picture stands in for its own glyph; everything else gets its category's. -->
+                <ChatImageThumb v-if="previewUrl" :src="previewUrl" :alt="name" size="h-8 w-8" />
+                <Icon v-else :name="icon" class="shrink-0 text-xs" :class="iconColor" />
                 <!--
-                    The text equivalent of a thumbnail: enough of the file's own first lines to tell which run, which
-                    config, which capture this is. Clipped, never wrapped — one long line would otherwise claim the
-                    whole chip.
+                    Two spans, one clipping and one fixed: the name's ending survives a narrow tile, and it is the
+                    ending — a timestamp, a hash — that says WHICH capture this is. No tooltip on either: the peek card
+                    this tile opens already carries the whole name and its path, and a label under an opening card is
+                    the two-boxes-at-once case (see tooltip.ts).
                 -->
-                <span v-if="leadLines.length" class="mt-1 flex flex-col rounded border border-line/50 bg-canvas/50 px-1.5 py-1">
+                <span class="flex min-w-0 items-center text-xs text-content">
+                    <!-- Softened at the cut, so a half-drawn glyph reads as the name running into its mark. -->
+                    <span
+                        ref="nameBox"
+                        class="overflow-hidden whitespace-nowrap"
+                        :class="clipped ? `[mask-image:linear-gradient(to_right,#000_calc(100%_-_0.6em),transparent)]` : ``"
+                        >{{ nameHead }}</span
+                    >
+                    <span v-if="nameTail" class="shrink-0">{{ clipped ? `…` : `` }}{{ nameTail }}</span>
+                </span>
+                <span v-if="meta" class="shrink-0 text-2xs whitespace-nowrap text-subtle">· {{ meta }}</span>
+                <Icon v-if="progress !== undefined" name="spinner" spin class="shrink-0 text-2xs text-link" />
+                <Icon v-else-if="error !== undefined" name="exclamation-circle" class="shrink-0 text-2xs text-danger" v-tooltip.top="error" />
+            </span>
+            <!--
+                The text equivalent of a thumbnail, and framed for the same reason the screenshot is: this is the file
+                itself, not a label for it. Clipped, never wrapped — one long line would otherwise claim the whole tile.
+            -->
+            <span v-if="leadLines.length" class="block overflow-hidden rounded-md border border-line bg-canvas/40 px-2 py-1">
+                <!-- The fade masks the LINES, never the box: masking the box would dissolve its border mid-curve. -->
+                <span class="flex flex-col" :class="truncated ? `mask-b-from-70%` : ``">
                     <span v-for="(line, index) in leadLines" :key="index" class="truncate font-mono text-2xs leading-snug text-subtle">{{
                         line
                     }}</span>
                 </span>
             </span>
-            <Icon v-if="progress !== undefined" name="spinner" spin class="mt-0.5 shrink-0 text-2xs text-link" />
-            <Icon v-else-if="error !== undefined" name="exclamation-circle" class="mt-0.5 shrink-0 text-2xs text-danger" v-tooltip.top="error" />
         </component>
-        <button v-if="removable" type="button" class="composer-ghost m-1 h-5 w-5 shrink-0" aria-label="Remove attachment" @click="emit(`remove`)">
+        <button
+            v-if="removable"
+            type="button"
+            class="composer-ghost relative m-1 h-5 w-5 shrink-0 self-start"
+            aria-label="Remove attachment"
+            @click="emit(`remove`)"
+        >
             <Icon name="times" class="text-2xs" />
         </button>
         <!-- Upload progress: the one thing drawn here that is about the transfer rather than the file. -->

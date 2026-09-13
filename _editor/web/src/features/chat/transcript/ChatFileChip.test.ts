@@ -63,8 +63,11 @@ afterEach(() => {
 it("keeps the end of the name, which is what tells two attachments apart", () => {
     const text = mount({ peek: LOG }).textContent ?? ``;
     expect(text).toContain(`desktop-setup-20260912-212645.log`);
-    // Split across two spans so the head truncates and the ending rides along at fixed width.
-    expect(document.querySelector(`.truncate`)?.textContent).toBe(`desktop-setup-20260912-2`);
+    // Two runs: the first is what a narrow tile clips, the second is the ending, which is never given up.
+    const drawn = [...document.querySelectorAll(`span`)].find((span) => span.textContent === `desktop-setup-20260912-212645.log`);
+    expect(drawn?.children).toHaveLength(2);
+    expect(drawn?.children[0]?.textContent).toBe(`desktop-setup-20260912-2`);
+    expect(drawn?.children[1]?.textContent).toBe(`12645.log`);
 });
 
 it("states the kind and the scale a filename withholds", () => {
@@ -85,6 +88,34 @@ it("draws the file's own first lines, the text equivalent of a thumbnail", () =>
     const text = mount({ peek: LOG, lead: 2 }).textContent ?? ``;
     expect(text).toContain(`21:26:45 INFO  starting setup`);
     expect(text).toContain(`21:26:46 WARN  folder sync retry 1/5`);
+});
+
+// The screenshot beside it is a bare picture in a hairline: its own pixels framed, no chrome around them. A file gets
+// the same deal — the box belongs to the file's text, and the naming sits outside it on the transcript.
+it("frames the file's text and nothing else", () => {
+    const boxes = mount({ peek: LOG, lead: 2 }).querySelectorAll(`.border-line`);
+    expect(boxes).toHaveLength(1);
+    expect(boxes[0]?.textContent).toContain(`21:26:45 INFO  starting setup`);
+    expect(boxes[0]?.textContent).not.toContain(`desktop-setup`);
+});
+
+// One row of them over the input is the one place a border earns itself: each has to read as a separate thing you can
+// take back out, which a bare caption next to another bare caption does not.
+it("keeps a border in the composer, where a chip is a token", () => {
+    const element = mount({ peek: LOG, framed: true });
+    expect(element.firstElementChild?.className).toContain(`border-line`);
+    expect(element.querySelectorAll(`.border-line`)).toHaveLength(1);
+});
+
+// The face is three lines of a file that has thousands; ending them on a hard edge would claim that is the file.
+it("fades the drawn lines only where the file runs past them", () => {
+    expect(mount({ peek: LOG, lead: 2 }).querySelector(`[class*="mask-b"]`)).not.toBeNull();
+
+    app?.unmount();
+    document.body.innerHTML = ``;
+    // Head window reached the end, and every line it holds is drawn: there is no more of this file to promise.
+    const whole = mount({ peek: { ...LOG, size: 64, headBytes: 64, tail: undefined, tailBytes: 0 }, lead: 3 });
+    expect(whole.querySelector(`[class*="mask-b"]`)).toBeNull();
 });
 
 it("opens the real file in the workspace when pressed", () => {
