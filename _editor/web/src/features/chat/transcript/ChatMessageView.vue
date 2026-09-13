@@ -6,7 +6,7 @@ import { copyCodeFromEvent } from "@intentic/ui/markdown";
 import { basename } from "@intentic/ui/path";
 import { CAPABILITY_CATALOG } from "@intentic/capability-catalog";
 import { type CardDocument, planParts, type TranscriptPlan, type TranscriptTerminalHelp } from "@intentic/sandbox-contract";
-import { computed, ref, watch } from "vue";
+import { computed, ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import { attachmentPreview } from "../drafts/attachmentPreviews";
@@ -222,13 +222,13 @@ const startEdit = (): void => {
 };
 
 // Clamp overflow (.chat-prompt-text) depends on wrap width, so it's measured via ResizeObserver, not guessed from text.
-const bubble = ref<HTMLElement>();
+const bubble = useTemplateRef<HTMLElement>(`bubble`);
 const overflowing = ref(false);
 const expanded = ref(false);
 watch(
     bubble,
     (element, _previous, onCleanup) => {
-        if (element === undefined) {
+        if (element === null) {
             overflowing.value = false;
             return;
         }
@@ -276,14 +276,14 @@ const { showToolCalls } = useToolCalls();
 // Pinned state (.chat-prompt-pinned).
 // Whether the prompt is actually stuck (CSS can't ask): compares the row's top to the scroller's edge on scroll and on
 // either box resizing; the IntersectionObserver only toggles that listener.
-const row = ref<HTMLElement>();
+const row = useTemplateRef<HTMLElement>(`row`);
 const pinned = ref(false);
 
 watch(
     row,
     (element, _previous, onCleanup) => {
         pinned.value = false;
-        if (element === undefined || props.message.role !== `user` || defers.value) {
+        if (element === null || props.message.role !== `user` || defers.value) {
             return;
         }
         // The row's only valid pin anchor is `.chat-scroller`.
@@ -356,7 +356,7 @@ const onBubbleScroll = (): void => {
     if (expanded.value) {
         return;
     }
-    if (bubble.value !== undefined && bubble.value.scrollTop > 0) {
+    if (bubble.value !== null && bubble.value.scrollTop > 0) {
         expanded.value = true;
         bubble.value.scrollTop = 0;
     }
@@ -377,7 +377,7 @@ const toggleExpanded = (): void => {
     expanded.value = !expanded.value;
     // Reset scroll before the clamp reapplies, or the leftover offset re-triggers onBubbleScroll's find-in-page
     // detection.
-    if (!expanded.value && bubble.value !== undefined) {
+    if (!expanded.value && bubble.value !== null) {
         bubble.value.scrollTop = 0;
     }
 };

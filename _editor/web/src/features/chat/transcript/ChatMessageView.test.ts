@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type App, createApp, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick, reactive } from "vue";
 import { ERRANDS, errandPrompt } from "../run/errands";
 import type { ChatMessage } from "./transcript";
 import { IconStub } from "@intentic/ui/testing";
@@ -37,10 +37,15 @@ vi.hoisted(() => {
             resizers.push({ targets: this.targets, fire: () => callback([], this as unknown as ResizeObserver) });
         }
         observe(target: Element): void {
+            if (!(target instanceof Element)) {
+                throw new TypeError(`ResizeObserver requires an Element`);
+            }
             this.targets.push(target);
         }
         unobserve(): void {}
-        disconnect(): void {}
+        disconnect(): void {
+            this.targets.length = 0;
+        }
     } as unknown as typeof globalThis.ResizeObserver;
 });
 
@@ -204,6 +209,29 @@ afterEach(() => {
     app = undefined;
     document.body.innerHTML = ``;
     vi.useRealTimers();
+});
+
+it(`releases a removed prompt element and observes its replacement`, async () => {
+    const subject = reactive<ChatMessage>({ id: 12, role: `user`, text: `first prompt` });
+    const element = mount(subject);
+    const errors = vi.fn();
+    app!.config.errorHandler = errors;
+    await nextTick();
+    const first = element.querySelector(`.chat-prompt-text`)!;
+    expect(resizers.filter((resizer) => resizer.targets.includes(first))).toHaveLength(1);
+
+    subject.text = ``;
+    await nextTick();
+    expect(element.querySelector(`.chat-prompt-text`)).toBeNull();
+    expect(resizers.filter((resizer) => resizer.targets.includes(first))).toHaveLength(0);
+    expect(errors).not.toHaveBeenCalled();
+
+    subject.text = `replacement prompt`;
+    await nextTick();
+    const replacement = element.querySelector(`.chat-prompt-text`)!;
+    expect(replacement.textContent?.trim()).toBe(`replacement prompt`);
+    expect(resizers.filter((resizer) => resizer.targets.includes(replacement))).toHaveLength(1);
+    expect(errors).not.toHaveBeenCalled();
 });
 
 describe(`ChatMessageView loader`, () => {
