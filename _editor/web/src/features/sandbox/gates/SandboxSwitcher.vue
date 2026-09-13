@@ -8,7 +8,6 @@ import {
     Code,
     commandLang,
     ConfirmDialog,
-    type IconName,
     Notice,
     OS_OPTIONS,
     SegmentedControl,
@@ -18,7 +17,7 @@ import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { commandShortcut, registerCommand } from "../../../shell/commands/useCommands";
-import { badgeClass, badgeText } from "../../../core-views/viewBadge";
+import ViewBadgeChip from "../../../core-views/ViewBadgeChip.vue";
 import { type SandboxAttentionItem, useSandboxAttention } from "../overview/sandboxAttention";
 import { sandboxIdFromToken } from "../client/sandboxIdFromToken";
 import { sandboxAvailabilityVisual } from "../overview/availability";
@@ -242,15 +241,7 @@ const confirmRemove = async (): Promise<void> => {
             <Icon name="server" v-else class="text-lg" />
         </button>
         <!-- One corner badge: a count when the amount is the message, a glyph otherwise; aria-hidden as redundant. -->
-        <span
-            v-if="attentionBadge"
-            class="pointer-events-none absolute -right-1 -top-1 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
-            :class="badgeClass(attentionBadge)"
-            aria-hidden="true"
-        >
-            <Icon v-if="attentionBadge.mark !== undefined" :name="attentionBadge.mark as IconName" />
-            <template v-else>{{ badgeText(attentionBadge) }}</template>
-        </span>
+        <ViewBadgeChip :badge="attentionBadge" class="pointer-events-none absolute -right-1 -top-1 text-[0.6rem]" aria-hidden="true" />
         <span
             class="pointer-events-none absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card"
             :class="connectionDotClass"
@@ -335,9 +326,7 @@ const confirmRemove = async (): Promise<void> => {
                     aria-label="Not answering"
                     >&ndash;</span
                 >
-                <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle"
-                    >Shared</span
-                >
+                <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle">Shared</span>
                 <!-- Which digit this row is, the only place the chord can be learned; fades under the trash icon's hover. -->
                 <kbd
                     v-if="slotChord(at)"
@@ -437,8 +426,8 @@ const confirmRemove = async (): Promise<void> => {
                     <!-- Same plain box the extension cards use; the kit has no checkbox component, on purpose. -->
                     <input v-model="alsoDeleteThere" type="checkbox" :disabled="deletingThere" class="mt-0.5" />
                     <span>
-                        Also delete it from <span class="font-medium text-content">{{ cleanupHost }}</span> — the container, its files and its
-                        history there are gone for good.
+                        Also delete it from <span class="font-medium text-content">{{ cleanupHost }}</span> — the container, its files and its history
+                        there are gone for good.
                     </span>
                 </label>
                 <Notice v-if="thereFailed" tone="danger" class="mt-2 text-2xs">{{ thereFailed }}</Notice>

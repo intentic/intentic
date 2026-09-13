@@ -3,7 +3,7 @@ import type { IconName } from "@intentic/ui";
 import type { ViewBadge } from "@intentic/extension-api";
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
-import { badgeChip, badgeClass, badgeText } from "../core-views/viewBadge";
+import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
 import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTile";
 import { useApprovalsTile } from "./mobileTabs";
 import RailIcon from "./rail/RailIcon.vue";
@@ -109,15 +109,7 @@ const isNavActive = (tab: Tab): boolean => {
             <!-- mark replaces the count when the amount isn't what you act on; aria-hidden, the label already says it. -->
             <span class="relative">
                 <RailIcon :area="tab.id" class="text-xl" />
-                <span
-                    v-if="tab.badge && badgeChip(tab.badge)"
-                    class="absolute -right-2.5 -top-1 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
-                    :class="badgeClass(tab.badge)"
-                    aria-hidden="true"
-                >
-                    <Icon v-if="tab.badge.mark !== undefined" :name="tab.badge.mark as IconName" />
-                    <template v-else>{{ badgeText(tab.badge) }}</template>
-                </span>
+                <ViewBadgeChip :badge="tab.badge" class="absolute -right-2.5 -top-1 text-[0.6rem]" aria-hidden="true" />
                 <!-- Work in flight, in the corner the badge and note both leave free; same mark as the desktop rail. -->
                 <RunningMark v-if="tab.badge?.running !== undefined" class="absolute -bottom-1 -right-2" />
                 <!-- Sits in the corner the badge doesn't use; aria-hidden like the badge, since the label already carries it. -->

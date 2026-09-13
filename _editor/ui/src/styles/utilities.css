@@ -457,3 +457,104 @@
         opacity: 1;
     }
 }
+
+/* ── THE CORNER BADGE ARRIVING AND LEAVING ───────────────────────────────────────────────────────────
+ * The count chip on a rail tile, a phone tab, the sandbox avatar and a hub row. It used to cut: a poll
+ * returned, `v-if` flipped, and a red plate was simply THERE — which on a rail carrying eight tiles is
+ * the one event most likely to be missed, because nothing about the frame it appeared in said it was new.
+ *
+ * The motion is transitions.dev's `notification-badge`, kept at its published numbers: a short diagonal
+ * slide in from down-and-left under `ease-smooth-out`, while the chip itself springs from nothing on a
+ * longer overshooting curve and unblurs. The two run at different lengths on purpose — the slide is over
+ * at 260ms while the pop is still settling at 500ms — which is what makes it read as a thing thrown into
+ * the corner rather than a box being resized. Leaving is one short move (180ms, no overshoot): arriving is
+ * news and earns the flourish, going away is bookkeeping and must not hold the eye.
+ *
+ * TRANSITIONS, NOT @keyframes, AND THAT IS NOT A STYLE PREFERENCE. A badge is the definition of
+ * request-driven — it appears because a poll answered — and starting a CSS Animation from request state
+ * makes Chrome DevTools rebuild an open Styles editor every time (reducedMotion.test.ts). The snippet as
+ * published uses an `animation` for the slide, because a keyframe is the only way to run `translate` and
+ * `scale` at two different durations when both live in one `transform`. Spelling them as the separate
+ * `translate` and `scale` properties buys the same two clocks from a plain transition, and then the whole
+ * thing is one element with no wrapper and no animation lifecycle to notify anybody about.
+ *
+ * The offsets are the snippet's -8.2px/12.4px rounded to the spacing scale. No `filter` at rest: on 9.6px
+ * bold text a permanent `blur(0)` is enough to drop subpixel antialiasing, so the chip would sit there
+ * very slightly softer than the label beside it forever, to buy nothing. `none` interpolates against a
+ * blur as the identity, so the fade still blurs.
+ *
+ * `will-change` lives on the two active classes rather than on `.ui-badge`, so the layer exists for the
+ * 500ms the chip is moving instead of for as long as the rail is on screen — eight permanently promoted
+ * layers is what the hint costs when it is written at rest. */
+@layer components {
+    .ui-badge {
+        --ui-badge-slide-dur: 260ms;
+        --ui-badge-pop-dur: 500ms;
+        --ui-badge-fade-dur: 400ms;
+        --ui-badge-close-dur: 180ms;
+        --ui-badge-offset-x: -0.5rem;
+        --ui-badge-offset-y: 0.75rem;
+        --ui-badge-blur: 2px;
+        --ui-badge-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+        --ui-badge-pop-ease: cubic-bezier(0.34, 1.36, 0.64, 1);
+        --ui-badge-close-ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+        translate: 0 0;
+        scale: 1;
+        opacity: 1;
+    }
+
+    .ui-badge-enter-active {
+        transition:
+            translate var(--ui-badge-slide-dur) var(--ui-badge-slide-ease),
+            scale var(--ui-badge-pop-dur) var(--ui-badge-pop-ease),
+            opacity var(--ui-badge-fade-dur) var(--ui-badge-pop-ease),
+            filter var(--ui-badge-pop-dur) var(--ui-badge-pop-ease);
+        will-change: translate, scale, opacity, filter;
+    }
+
+    /* No slide out: the chip leaves from where it is. A badge that retraced its entry would claim the
+       corner for another 260ms after it stopped having anything to say. */
+    .ui-badge-leave-active {
+        transition:
+            scale var(--ui-badge-close-dur) var(--ui-badge-close-ease),
+            opacity var(--ui-badge-close-dur) var(--ui-badge-close-ease),
+            filter var(--ui-badge-close-dur) var(--ui-badge-close-ease);
+        will-change: scale, opacity, filter;
+    }
+
+    /* After `.ui-badge`, which states the resting values at the same specificity: source order is the
+       only thing deciding this, so these two rules can never move above it. */
+    .ui-badge-enter-from {
+        translate: var(--ui-badge-offset-x) var(--ui-badge-offset-y);
+        scale: 0;
+        opacity: 0;
+        filter: blur(var(--ui-badge-blur));
+    }
+
+    .ui-badge-leave-to {
+        scale: 0;
+        opacity: 0;
+        filter: blur(var(--ui-badge-blur));
+    }
+
+    /* The central answer, here rather than as a `motion-reduce:` at four call sites. Dropping the
+       transition is enough on its own: Vue measures the leave off this element's computed style, reads
+       no duration, and unmounts on the next frame — so the chip goes back to appearing and vanishing
+       outright, which is exactly the behaviour being asked for. The from-states are neutralised too, or
+       a reader who suppresses motion would get the offset and the blur as a permanent first frame. */
+    @media (prefers-reduced-motion: reduce) {
+        .ui-badge-enter-active,
+        .ui-badge-leave-active {
+            transition: none;
+            will-change: auto;
+        }
+
+        .ui-badge-enter-from,
+        .ui-badge-leave-to {
+            translate: 0 0;
+            scale: 1;
+            filter: none;
+        }
+    }
+}

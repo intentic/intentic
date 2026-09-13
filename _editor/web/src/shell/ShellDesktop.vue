@@ -25,7 +25,7 @@ import {
     seatPolicy,
     seatedOnlyByVisit,
 } from "../core-views/registry";
-import { badgeChip, badgeClass, badgeText } from "../core-views/viewBadge";
+import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
 import { chatOnRail, lastAreaPath, toggleChatFloating, toggleChatHome } from "../features/chat/panel/chatPanelLayout";
 import { useChatFloating } from "../features/chat/panel/chatFloating";
 import { useShellCommands } from "./commands/useShellCommands";
@@ -513,19 +513,13 @@ useKeybindings();
                             @contextmenu="onTileContextMenu(tile, $event)"
                         >
                             <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-[1.375rem]" />
-                            <!-- One badge for every tile, core or extension: see AreaTile.badge. A `mark` replaces
-                                 the number outright rather than sitting beside it: the chip is four pixels of
-                                 glance, and a glyph AND a digit in it would be two claims competing for the same
-                                 read. No tooltip of its own either: it would nest inside the tile's and open a
-                                 second box on top of it: its sentence rides the tile instead (see tileLabel). -->
-                            <span
-                                v-if="tile.badge && badgeChip(tile.badge)"
-                                class="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
-                                :class="badgeClass(tile.badge)"
-                            >
-                                <Icon v-if="tile.badge.mark !== undefined" :name="tile.badge.mark as IconName" />
-                                <template v-else>{{ badgeText(tile.badge) }}</template>
-                            </span>
+                            <!-- One badge for every tile, core or extension: see AreaTile.badge. The badge goes in
+                                 whole, undefined included, because ViewBadgeChip owns the test for whether there is
+                                 a chip AND the motion of it arriving: testing out here would unmount the plate in
+                                 the same tick the count cleared, with nothing left to animate away. No tooltip of
+                                 its own either: it would nest inside the tile's and open a second box on top of
+                                 it: its sentence rides the tile instead (see tileLabel). -->
+                            <ViewBadgeChip :badge="tile.badge" class="absolute right-0.5 top-0.5 text-[0.6rem]" />
                             <!--
                                 Work in flight behind this tile (ViewBadge.running): its own corner, never the chip, so a
                                 branch that is red AND re-running says both at once instead of one evicting the other.
@@ -647,14 +641,7 @@ useKeybindings();
             >
                 <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-[1.375rem]" />
                 <!-- No tooltip on the badge, for the same reason as the navigation tiles above. -->
-                <span
-                    v-if="tile.badge && badgeChip(tile.badge)"
-                    class="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-center text-[0.6rem] font-semibold leading-4"
-                    :class="badgeClass(tile.badge)"
-                >
-                    <Icon v-if="tile.badge.mark !== undefined" :name="tile.badge.mark as IconName" />
-                    <template v-else>{{ badgeText(tile.badge) }}</template>
-                </span>
+                <ViewBadgeChip :badge="tile.badge" class="absolute right-0.5 top-0.5 text-[0.6rem]" />
                 <!-- Same running mark as a navigation tile, so live work reads identically in both clusters. -->
                 <RunningMark v-if="tile.badge?.running !== undefined" class="absolute bottom-0.5 right-0.5" />
             </RouterLink>

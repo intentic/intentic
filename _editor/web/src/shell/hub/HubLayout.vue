@@ -7,7 +7,8 @@ import { type IconName, type NavGroup, NavRail, Row, SegmentedControl, SplitView
 import { areaIcon } from "@intentic/ui/icons";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { badgeChip, badgeClass, badgeText } from "../../core-views/viewBadge";
+import { badgeChip } from "../../core-views/viewBadge";
+import ViewBadgeChip from "../../core-views/ViewBadgeChip.vue";
 import type { HubTab } from "./hubNav";
 
 const {
@@ -106,11 +107,12 @@ watch(
                                  rail's tiles wear, same tone table: a count here and a count there are the
                                  same claim and should not be two shades apart. -->
                             <!-- Chip only: a hub row is a section of one view, so it never speaks for a run in flight. -->
+                            <!-- The test stays out here, unlike the corner badges, because `#meta` is a slot Row only
+                                 draws when it is filled: an unconditional one would put an empty cluster and a `gap-4`
+                                 minimum into every hub row that has nothing to report. So this chip mounts rather than
+                                 toggles, and `appear` inside ViewBadgeChip is what animates it. -->
                             <template v-if="tab.badge !== undefined && badgeChip(tab.badge)" #meta>
-                                <span class="min-w-4 rounded-full px-1 text-center text-2xs font-semibold leading-4" :class="badgeClass(tab.badge)">
-                                    <Icon v-if="tab.badge.mark !== undefined" :name="tab.badge.mark as IconName" />
-                                    <template v-else>{{ badgeText(tab.badge) }}</template>
-                                </span>
+                                <ViewBadgeChip :badge="tab.badge" class="text-2xs" />
                             </template>
                         </Row>
                     </RouterLink>
