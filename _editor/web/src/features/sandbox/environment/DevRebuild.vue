@@ -32,7 +32,7 @@ const done = ref<string | undefined>(undefined);
 const confirming = ref(false);
 
 // The two costs, side by side: the build interrupts nothing, the swap at the end of it is the restart.
-const cost = `It compiles the image first — your sandbox keeps working through that, and it can take several minutes — then restarts your sandbox for about half a minute. Your files (in /work) are kept.`;
+const cost = `Builds the image while you keep working (may take minutes), then restarts (~30s). /work is kept.`;
 
 const command = computed(() =>
     props.root === undefined ? `pnpm rebuild:sandbox ${props.slug}` : `cd ${props.root} && pnpm rebuild:sandbox ${props.slug}`,
@@ -71,9 +71,7 @@ const execute = async (): Promise<void> => {
              the first reads as its own thing rather than as more explanation of it. -->
         <p class="text-xs font-medium text-content">Rebuild it from your checkout:</p>
         <p class="text-2xs text-subtle">
-            This sandbox runs <span class="font-mono">{{ base }}</span
-            >, an image built from your checkout rather than a published release. Rebuilding from that checkout is how it picks up code you have
-            written since.
+            Runs <span class="font-mono">{{ base }}</span> from your checkout, not a published release. Rebuild to pick up code you've written since.
         </p>
 
         <!-- The machine holding the checkout is reachable from here, so this is a button wherever you're reading it. -->
@@ -88,7 +86,7 @@ const execute = async (): Promise<void> => {
                 <template #icon><Icon name="bolt" /></template>
             </Button>
             <p class="text-2xs text-subtle">
-                Runs <span class="font-mono">pnpm rebuild:sandbox</span> in {{ root }}, on the device hosting this sandbox. {{ cost }}
+                Runs <span class="font-mono">pnpm rebuild:sandbox</span> in {{ root }} on the host. {{ cost }}
             </p>
             <Notice v-if="failure" :of="failure" />
             <!--
