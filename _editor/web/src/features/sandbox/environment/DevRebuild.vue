@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Button, Code, commandLang, ConfirmDialog, Notice, type NoticeModel } from "@intentic/ui";
+import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import ConnectDeviceHint from "../devices/ConnectDeviceHint.vue";
 import { runDeviceCommand, useHostRunning } from "../devices/useDevices";
 
@@ -31,13 +31,47 @@ const failure = ref<NoticeModel | undefined>(undefined);
 const done = ref<string | undefined>(undefined);
 const confirming = ref(false);
 
+const overlayOpen = ref(false);
+const anchorRef = ref<HTMLElement>();
+
 // The two costs, side by side: the build interrupts nothing, the swap at the end of it is the restart.
 const cost = `Builds the image while you keep working (may take minutes), then restarts (~30s). /work is kept.`;
-const tooltip = computed(() => (props.root === undefined ? undefined : `Runs pnpm rebuild:sandbox in ${props.root} on the host. ${cost}`));
 
 const command = computed(() =>
     props.root === undefined ? `pnpm rebuild:sandbox ${props.slug}` : `cd ${props.root} && pnpm rebuild:sandbox ${props.slug}`,
 );
+
+const OPEN_DELAY_MS = 150;
+const CLOSE_DELAY_MS = 150;
+let timer: ReturnType<typeof setTimeout> | undefined;
+
+const settle = (open: boolean, delay: number): void => {
+    clearTimeout(timer);
+    if (delay === 0) {
+        overlayOpen.value = open;
+        return;
+    }
+    timer = setTimeout(() => {
+        overlayOpen.value = open;
+    }, delay);
+};
+
+const onEnter = (event: PointerEvent): void => {
+    if (event.pointerType === `mouse`) {
+        settle(true, OPEN_DELAY_MS);
+    }
+};
+const onLeave = (): void => settle(false, CLOSE_DELAY_MS);
+const onCardEnter = (): void => clearTimeout(timer);
+const onFocus = (): void => settle(true, 0);
+const onBlur = (): void => settle(false, 0);
+
+const onButtonClick = (): void => {
+    settle(false, 0);
+    confirming.value = true;
+};
+
+onBeforeUnmount(() => clearTimeout(timer));
 
 // Where the detached build writes, so a rebuild that never comes back can still say why. Same folder ic logs its own
 // recreates into, and the daemon builds the same path when it forms the command (hosts/device-commands.ts).
@@ -74,16 +108,39 @@ const execute = async (): Promise<void> => {
 
         <!-- The machine holding the checkout is reachable from here, so this is a button wherever you're reading it. -->
         <template v-if="hostId && root">
-            <Button
-                :label="starting ? `Starting…` : `Rebuild from checkout`"
-                size="small"
-                class="self-start"
-                :loading="starting"
-                v-tooltip.right="tooltip"
-                @click="confirming = true"
+            <div
+                ref="anchorRef"
+                class="inline-flex self-start"
+                @pointerenter="onEnter"
+                @pointerleave="onLeave"
+                @focusin="onFocus"
+                @focusout="onBlur"
             >
-                <template #icon><Icon name="bolt" /></template>
-            </Button>
+                <Button
+                    :label="starting ? `Starting…` : `Rebuild from checkout`"
+                    size="small"
+                    :loading="starting"
+                    @click="onButtonClick"
+                >
+                    <template #icon><Icon name="bolt" /></template>
+                </Button>
+            </div>
+
+            <AnchoredOverlay v-model="overlayOpen" :anchor="anchorRef" side="right" cross="start">
+                <div
+                    class="flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-2 p-3 text-left"
+                    @pointerenter="onCardEnter"
+                    @pointerleave="onLeave"
+                >
+                    <div class="flex items-baseline justify-between gap-2">
+                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Host command</span>
+                        <span class="truncate font-mono text-2xs text-subtle">{{ root }}</span>
+                    </div>
+                    <Code :code="command" :lang="commandLang(`unix`)" :wrap="true" />
+                    <p class="text-2xs leading-relaxed text-muted">{{ cost }}</p>
+                </div>
+            </AnchoredOverlay>
+
             <Notice v-if="failure" :of="failure" />
             <!--
                 The build outlives this page: the sandbox coming back is its outcome, and the log is the only place a
