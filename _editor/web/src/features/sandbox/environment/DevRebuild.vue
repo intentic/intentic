@@ -67,9 +67,6 @@ const execute = async (): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-2">
-        <!-- Leads like every other offer on these cards ("To finish, rebuild your sandbox:"), so a second offer under
-             the first reads as its own thing rather than as more explanation of it. -->
-        <p class="text-xs font-medium text-content">Rebuild it from your checkout:</p>
         <p class="text-2xs text-subtle">
             Runs <span class="font-mono">{{ base }}</span> from your checkout, not a published release. Rebuild to pick up code you've written since.
         </p>
