@@ -27,12 +27,10 @@ const toggle = (): void => {
 </script>
 
 <template>
-    <!-- Open, header and body share one quiet plate; shut, the header is a line of its own with nothing under it. -->
-    <div class="flex w-full flex-col overflow-hidden rounded-lg transition-colors" :class="open ? `bg-overlay/35` : ``">
+    <div class="flex w-full flex-col overflow-hidden transition-colors">
         <button
             type="button"
-            class="group/fold flex w-full items-center gap-2 px-2 py-1 text-left text-2xs leading-none text-subtle transition-colors"
-            :class="!open && `hover:bg-overlay`"
+            class="group/fold flex w-full items-center gap-2 py-1 text-left text-2xs leading-none text-subtle transition-colors"
             :aria-expanded="open"
             @click="toggle"
         >
@@ -47,8 +45,8 @@ const toggle = (): void => {
             <Icon :name="open ? `chevron-up` : `chevron-down`" class="shrink-0 text-2xs opacity-60 transition-opacity group-hover/fold:opacity-100" />
         </button>
         <!-- Capped and scrolled, not clamped, so long material stays reachable without pushing the answer off screen.
-             `px-2` is the header's own inset: header and body read as one object only if their text starts on one edge. -->
-        <div v-if="open" class="scrollbar-thin max-h-64 overflow-auto border-t border-line/40 px-2 py-2 text-2xs leading-relaxed text-subtle">
+             Aligns with the header text column through pl-5 (icon width + gap). -->
+        <div v-if="open" class="scrollbar-thin max-h-64 overflow-auto pt-1 pb-1.5 pl-5 text-2xs leading-relaxed text-subtle">
             <slot />
         </div>
     </div>

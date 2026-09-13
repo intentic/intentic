@@ -897,8 +897,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
     <div v-if="message.notes?.length" class="chat-message chat-stack flex flex-col" :class="{ 'chat-doomed': doomed }">
         <!-- `align-left`, not `file` or `paperclip`: what's hidden is words the app added, not a file the user attached (those carry `file`). -->
         <ChatFold icon="align-left" label="Sent with your message" :detail="noteTitles">
-            <div class="flex flex-col gap-2.5">
-                <div v-for="(note, index) in message.notes" :key="note.title" class="flex flex-col gap-0.5" :class="index > 0 && `border-t border-line/30 pt-2.5`">
+            <div class="flex flex-col gap-2">
+                <div v-for="note in message.notes" :key="note.title" class="flex flex-col gap-0.5">
                     <span class="font-medium text-muted">{{ note.title }}</span>
                     <span class="whitespace-pre-wrap">{{ noteBody(note.text) }}</span>
                 </div>
