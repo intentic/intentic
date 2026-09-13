@@ -170,9 +170,8 @@ jobs:
         with:
           node-version-file: package.json
           cache: pnpm
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: ./.github/actions/ghcr-login
         with:
-          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       # The same iq-models cache the images + publish jobs share — the models are arch-neutral bytes.
@@ -224,9 +223,8 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: ./.github/actions/ghcr-login
         with:
-          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       # The same iq-models cache the ci.yml image jobs share — the models are arch-neutral bytes.
@@ -444,9 +442,8 @@ jobs:
         with:
           name: linux-release-artifacts
           path: ${{ github.workspace }}
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: ./.github/actions/ghcr-login
         with:
-          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       # THE RELEASE, AND WHETHER IT HAPPENED — which are two different facts, and everything below this step

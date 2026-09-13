@@ -428,9 +428,8 @@ jobs:
           # the next one a cold install. The build context is _tools/ci-base, whose tracked files checkout
           # force-updates either way.
           clean: false
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: ./.github/actions/ghcr-login
         with:
-          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: docker build -t ghcr.io/intentic/ci-base:latest _tools/ci-base
@@ -488,9 +487,8 @@ jobs:
           persist-credentials: false
           # As in ci-base: nothing here reads node_modules, but cleaning the workspace costs the next job.
           clean: false
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: ./.github/actions/ghcr-login
         with:
-          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: docker build -t ghcr.io/intentic/ci-desktop:latest _tools/ci-desktop
@@ -935,9 +933,8 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: ./.github/actions/ghcr-login
         with:
-          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -1014,9 +1011,8 @@ jobs:
         with:
           node-version-file: package.json
           cache: pnpm
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: ./.github/actions/ghcr-login
         with:
-          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -1065,9 +1061,8 @@ jobs:
         with:
           persist-credentials: false
           clean: false
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: ./.github/actions/ghcr-login
         with:
-          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: bash _tools/scripts/image/merge-image-manifests.sh sandbox latest "sha-${GITHUB_SHA::8}" core-latest "core-sha-${GITHUB_SHA::8}"
@@ -1126,9 +1121,8 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: ./.github/actions/ghcr-login
         with:
-          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: pnpm turbo run docker:release --filter=@intentic/api --filter=@intentic/web --filter=@intentic/ingress

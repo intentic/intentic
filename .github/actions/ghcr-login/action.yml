@@ -1,0 +1,68 @@
+# THE LOGIN THAT SURVIVES A SLOW GHCR, which docker/login-action cannot: it shells out to `docker login`
+# once and fails the job on whatever the daemon says. The daemon's reach for https://ghcr.io/v2/ carries its
+# own deadline, and when the registry is slow to answer it returns `context deadline exceeded` — a timeout,
+# not a rejection. Run 34720158026 died on exactly that, 15s into the `publish` job's login, AFTER the two
+# release artifacts (300 MB) had already been downloaded and with every publish step still ahead of it.
+#
+# Nothing about that failure is about this repository, so a re-run would have fixed it — which is the whole
+# argument for retrying here instead: a transient network timeout should cost seconds, not a human noticing a
+# red release an hour later and pressing the button.
+#
+# A CREDENTIAL REJECTION MUST STILL FAIL FAST, so the retry is not blind. `docker login` answers a bad token
+# with `unauthorized`/`denied` and a good one that cannot be reached with a timeout or a 5xx, and only the
+# second shape is worth repeating. Anything else exits on the first attempt with the daemon's own message.
+#
+# Credentials arrive as `env:` and are read with `printenv`, never spliced into the script with `${{ }}`:
+# `github.actor` is a repository-controlled string that the expansion would hand to bash as SCRIPT, which is
+# the template-injection shape zizmor fails the checkout gate on.
+name: ghcr login
+description: Log in to ghcr.io, retrying the timeouts that a slow registry answers a correct credential with.
+
+inputs:
+  username:
+    description: Registry user. The workflow passes github.actor.
+    required: true
+  password:
+    description: Registry token. The workflow passes secrets.GITHUB_TOKEN.
+    required: true
+  docker-host:
+    description: DOCKER_HOST for the login, when the job runs its own daemon. Empty means the default socket.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Log in to ghcr.io
+      shell: bash
+      env:
+        GHCR_USER: ${{ inputs.username }}
+        GHCR_TOKEN: ${{ inputs.password }}
+        GHCR_DOCKER_HOST: ${{ inputs.docker-host }}
+      run: |
+        set -uo pipefail
+        if [ -n "$GHCR_DOCKER_HOST" ]; then
+          export DOCKER_HOST="$GHCR_DOCKER_HOST"
+        fi
+        # 2s, 4s, 8s, 16s between five attempts: ~30s of waiting against a registry hiccup that has been
+        # measured in seconds, and well inside the shortest timeout-minutes on the fleet.
+        delay=2
+        for attempt in 1 2 3 4 5; do
+          if output=$(printenv GHCR_TOKEN | docker login ghcr.io --username "$GHCR_USER" --password-stdin 2>&1); then
+            echo "$output"
+            exit 0
+          fi
+          echo "$output" >&2
+          # Anything the registry ANSWERED with is final — only an unreachable registry is worth another go.
+          if ! grep -qiE 'deadline exceeded|timeout|timed out|temporary failure|connection reset|connection refused|EOF|no such host|500 Internal|502 Bad Gateway|503 Service|504 Gateway' <<<"$output"; then
+            echo "ghcr.io refused the credential — not a timeout, so not retrying." >&2
+            exit 1
+          fi
+          if [ "$attempt" -eq 5 ]; then
+            echo "ghcr.io unreachable after 5 attempts." >&2
+            exit 1
+          fi
+          echo "attempt $attempt could not reach ghcr.io — retrying in ${delay}s" >&2
+          sleep "$delay"
+          delay=$((delay * 2))
+        done

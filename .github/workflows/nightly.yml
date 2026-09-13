@@ -106,9 +106,8 @@ jobs:
       # Whatever these tiers still PULL from a private package — the CLI lane's dind-host, or an image a
       # debugging run points SANDBOX_E2E_IMAGE at — authenticates client-side, because the host daemon behind
       # the mounted socket holds no registry credential. The daemon under test is built below, not pulled.
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: ./.github/actions/ghcr-login
         with:
-          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: ./.github/actions/pnpm-setup
@@ -337,26 +336,15 @@ jobs:
       # The sandbox image is a private package and the daemon started above holds no registry credential —
       # pulls authenticate client-side, so this login is what the box's pull presents.
       #
-      # Hand-rolled rather than docker/login-action, and that is not a preference: `docker login` is a
-      # client-side write to ~/.docker/config.json, so it belongs in a shell that can name its own DOCKER_HOST.
-      # An action cannot — its only channel is a step-level `env:`, which is the job environment this job must
-      # keep clean. One fewer JavaScript action in a container job is the second reason: each one costs the
-      # runner a `docker exec` probe of the container before it runs.
-      #
-      # BOTH halves of the credential arrive as `env:`, never as `${{ }}` inside the script. The token because a
-      # secret written into a run block is a secret written into the shell's command line; the actor because
-      # `github.actor` is a repository-controlled string that the expansion would splice in as SCRIPT rather than
-      # data — the template-injection shape zizmor fails the checkout gate on, and the reason this file carries no
-      # `${{ }}` in any `run:`.
+      # `docker login` is a client-side write to ~/.docker/config.json, so it has to name THIS job's daemon
+      # rather than the runner's — which is what `docker-host` carries into the action's own step `env:`,
+      # leaving the job environment clean.
       - name: Log in to ghcr.io for the box's image pull
-        shell: bash
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_USER: ${{ github.actor }}
-        run: |
-          set -euo pipefail
-          export DOCKER_HOST="$JOB_DOCKER_HOST"
-          printenv GHCR_TOKEN | docker login ghcr.io --username "$GHCR_USER" --password-stdin
+        uses: ./.github/actions/ghcr-login
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          docker-host: ${{ env.JOB_DOCKER_HOST }}
       - uses: ./.github/actions/pnpm-setup
       - run: npx playwright install --with-deps chromium
         working-directory: _tools/onboarding
@@ -423,9 +411,8 @@ jobs:
       - uses: ./.github/actions/prepare-workspace
       # dind-host and the sandbox image are private packages; the docker CLI sends this login to the host
       # daemon with each pull.
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: ./.github/actions/ghcr-login
         with:
-          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: ./.github/actions/pnpm-setup
@@ -708,9 +695,8 @@ jobs:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/prepare-workspace
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - uses: ./.github/actions/ghcr-login
         with:
-          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: bash _tools/scripts/image/verify-update-survival.sh
