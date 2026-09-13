@@ -36,6 +36,7 @@ import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { usePersonaRoute } from "../personas/personaRoute";
 import { roleSources } from "../accounts/roleModel";
 import { useRole } from "../../sandbox/secrets/useRole";
+import { attachmentPeek } from "../drafts/attachmentPeeks";
 import { attachmentPreview } from "../drafts/attachmentPreviews";
 import { useChatAttachments } from "../drafts/useChatAttachments";
 import { useComposerVoice } from "../composer/useComposerVoice";
@@ -49,7 +50,7 @@ import { inputHistoryFor, recallStep } from "../drafts/inputHistory";
 import { insertMention, mentionQueryAt } from "../composer/useMentions";
 import ChatCommandPopover from "../composer/ChatCommandPopover.vue";
 import ChatContinueStrip from "./ChatContinueStrip.vue";
-import ChatImageThumb from "../transcript/ChatImageThumb.vue";
+import ChatFileChip from "../transcript/ChatFileChip.vue";
 import ChatMentionPopover from "../composer/ChatMentionPopover.vue";
 import ChatForkCut from "../transcript/ChatForkCut.vue";
 import ChatForkLine from "../transcript/ChatForkLine.vue";
@@ -1319,51 +1320,24 @@ watch(
                                         <Icon name="code" class="shrink-0 text-2xs" />
                                         <span class="max-w-36 truncate">{{ editorChipLabel }}</span>
                                     </button>
-                                    <div
+                                    <!--
+                                        The same chip the sent bubble draws, by path: staging a file keys its thumbnail and its text peek to its
+                                        path, so what you see before sending is what the transcript keeps afterwards. `lead` is 0 here — the
+                                        composer is a tight row, and the file's lines are one hover away.
+                                    -->
+                                    <ChatFileChip
                                         v-for="a in attachments"
                                         :key="a.id"
-                                        class="relative flex items-center gap-2 overflow-hidden rounded-lg border py-1.5 pl-2 pr-1 text-xs"
-                                        :class="a.status === 'failed' ? 'border-danger' : 'border-line bg-card'"
-                                    >
-                                        <!--
-                                            By path, like every other thumb: staging a file keys its object URL to its path, so this chip and the
-                                            sent
-                                            bubble read the same one.
-                                        -->
-                                        <ChatImageThumb
-                                            v-if="attachmentPreview(a.path)"
-                                            :src="attachmentPreview(a.path) ?? ''"
-                                            :alt="a.name"
-                                            size="h-9 w-9"
-                                        />
-                                        <Icon name="file" v-else class="text-sm text-subtle" />
-                                        <span class="max-w-36 truncate text-content" v-tooltip.top="a.error ?? a.name">{{ a.name }}</span>
-                                        <!--
-                                            The chip's own state in a glyph — the progress hairline is invisible once full, so an uploading chip
-                                            wouldn't
-                                            otherwise say why Send is disabled.
-                                        -->
-                                        <Icon v-if="a.status === 'uploading'" name="spinner" spin class="shrink-0 text-2xs text-link" />
-                                        <Icon
-                                            v-else-if="a.status === 'failed'"
-                                            name="exclamation-circle"
-                                            class="shrink-0 text-2xs text-danger"
-                                            v-tooltip.top="a.error ?? 'Upload failed'"
-                                        />
-                                        <button
-                                            type="button"
-                                            class="composer-ghost h-5 w-5 shrink-0"
-                                            @click="staging.remove(a)"
-                                            aria-label="Remove attachment"
-                                        >
-                                            <Icon name="times" class="text-2xs" />
-                                        </button>
-                                        <div
-                                            v-if="a.status === 'uploading'"
-                                            class="absolute inset-x-0 bottom-0 h-0.5 bg-primary-500"
-                                            :style="{ width: `${Math.round(a.progress * 100)}%` }"
-                                        ></div>
-                                    </div>
+                                        :name="a.name"
+                                        :path="a.path"
+                                        :peek="attachmentPeek(a.path)"
+                                        :preview-url="attachmentPreview(a.path)"
+                                        :progress="a.status === 'uploading' ? a.progress : undefined"
+                                        :error="a.status === 'failed' ? (a.error ?? 'Upload failed') : undefined"
+                                        removable
+                                        :class="a.status === 'failed' ? '' : 'border border-line bg-card'"
+                                        @remove="staging.remove(a)"
+                                    />
                                 </div>
                                 <!--
                                     Body tier on desktop: what you type reads at the size it lands in the transcript; text-base below md, since

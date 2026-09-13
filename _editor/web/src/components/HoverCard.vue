@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
 import { basename } from "@intentic/ui/path";
+import { attachmentPeek } from "../features/chat/drafts/attachmentPeeks";
 import { attachmentPreview } from "../features/chat/drafts/attachmentPreviews";
+import { isImagePath } from "../features/chat/drafts/filePeek";
+import ChatFileChip from "../features/chat/transcript/ChatFileChip.vue";
 
 // Floating card for a truncated session name on hover (the chat tab strip, the Changes panel's origin chips): the
 // derived title (sandbox-contract's deriveTitle) is truncated a second time by its column, so this reveals the
@@ -141,7 +144,8 @@ onBeforeUnmount(hide);
 // Messages with something left to say, pictures resolved from the same source pair the sent bubble uses (a
 // send-time object URL, or workspace bytes for a restored transcript), so the hover and the chat show the same
 // picture. A message whose words merely repeat the title drops just its text; a picture it also carried still
-// shows. Non-images resolve to nothing and aren't drawn.
+// shows. Everything that isn't a picture is drawn as the chat's own file chip — a log or a dump is half of what
+// a prompt was, and leaving it out made this card under-report what was asked.
 const messages = computed(() => {
     const content = placement.value?.content;
     if (content === undefined) {
@@ -151,15 +155,20 @@ const messages = computed(() => {
     return (content.messages ?? [])
         .map((message) => {
             const text = message.text?.trim();
+            const attachments = message.attachments ?? [];
             return {
                 label: message.label,
                 text: text === undefined || text === `` || text === title ? undefined : text,
-                images: (message.attachments ?? [])
+                images: attachments
+                    .filter((path) => isImagePath(path))
                     .map((path) => ({ src: attachmentPreview(path), alt: basename(path) }))
                     .filter((image): image is { src: string; alt: string } => image.src !== undefined),
+                files: attachments
+                    .filter((path) => !isImagePath(path))
+                    .map((path) => ({ name: basename(path), path, peek: attachmentPeek(path) })),
             };
         })
-        .filter((message) => message.text !== undefined || message.images.length > 0);
+        .filter((message) => message.text !== undefined || message.images.length > 0 || message.files.length > 0);
 });
 
 defineExpose({ show, hide });
@@ -203,6 +212,19 @@ defineExpose({ show, hide });
                 <p v-if="message.text" class="line-clamp-[8] shrink-0 break-words whitespace-pre-wrap text-xs leading-relaxed text-muted">
                     {{ message.text }}
                 </p>
+                <!-- Named with their scale and first lines, the same chip the transcript draws; inert, since nothing here takes a pointer. -->
+                <div v-if="message.files.length > 0" class="flex shrink-0 flex-wrap gap-1" :class="message.text || message.label ? 'mt-1.5' : ''">
+                    <ChatFileChip
+                        v-for="file in message.files"
+                        :key="file.path"
+                        :name="file.name"
+                        :path="file.path"
+                        :peek="file.peek"
+                        :lead="2"
+                        inert
+                        class="border border-line/60 bg-canvas/40"
+                    />
+                </div>
                 <!--
                     Full-bleed, out through the card's own padding, since an inset picture in an already-narrow card is
                     a thumbnail
