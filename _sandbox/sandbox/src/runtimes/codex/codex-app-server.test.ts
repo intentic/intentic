@@ -558,6 +558,76 @@ test("a question raised on another turn is answered empty instead of reaching a 
     expect(appServer.answered).toEqual([{ answers: {} }]);
 });
 
+// Codex asks before every MCP tool that isn't annotated read-only, which is most of the browser's. Answering anything
+// but accept (a method-not-found included) reaches the model as "user rejected MCP tool call".
+test("grants an MCP tool call's approval and takes the session-wide yes when it is offered", async () => {
+    const appServer = fakeAppServer([
+        {
+            request: "mcpServer/elicitation/request",
+            params: {
+                threadId: "thr-new",
+                turnId: "turn-1",
+                serverName: "browser",
+                mode: "form",
+                _meta: { codex_approval_kind: "mcp_tool_call", persist: ["session", "always"], tool_title: "Navigate to a URL" },
+                message: 'Allow the browser MCP server to run tool "browser_navigate"?',
+                requestedSchema: { type: "object", properties: {} },
+            },
+        },
+        { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed", error: null } } },
+    ]);
+
+    expect(await collect(createCodexAppServerRunner(appServer.connector)(turn()))).toEqual([
+        { type: "thread.started", thread_id: "thr-new" },
+        { type: "turn.completed" },
+    ]);
+    expect(appServer.answered).toEqual([{ action: "accept", content: null, _meta: { persist: "session" } }]);
+});
+
+// `always` alone would amend the owner's config from inside a turn, so the reply carries no persistence at all.
+test("grants an MCP tool call's approval once when no session-wide yes is offered", async () => {
+    const appServer = fakeAppServer([
+        {
+            request: "mcpServer/elicitation/request",
+            params: {
+                threadId: "thr-new",
+                turnId: "turn-1",
+                serverName: "browser",
+                mode: "form",
+                _meta: { codex_approval_kind: "mcp_tool_call", persist: "always" },
+                message: 'Allow the browser MCP server to run tool "browser_click"?',
+                requestedSchema: { type: "object", properties: {} },
+            },
+        },
+        { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed", error: null } } },
+    ]);
+
+    await collect(createCodexAppServerRunner(appServer.connector)(turn()));
+    expect(appServer.answered).toEqual([{ action: "accept", content: null, _meta: null }]);
+});
+
+test("declines an elicitation that is a server's own question, since nothing here can render one", async () => {
+    const appServer = fakeAppServer([
+        {
+            request: "mcpServer/elicitation/request",
+            params: {
+                threadId: "thr-new",
+                turnId: null,
+                serverName: "github",
+                mode: "url",
+                _meta: null,
+                message: "Finish signing in",
+                url: "https://github.com/login/device",
+                elicitationId: "github-auth-123",
+            },
+        },
+        { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed", error: null } } },
+    ]);
+
+    await collect(createCodexAppServerRunner(appServer.connector)(turn()));
+    expect(appServer.answered).toEqual([{ action: "decline", content: null, _meta: null }]);
+});
+
 test("rejects malformed fields on a known app-server item", async () => {
     const appServer = fakeAppServer([
         {

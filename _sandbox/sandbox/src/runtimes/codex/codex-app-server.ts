@@ -156,6 +156,10 @@ const object = (value: unknown, what: string): JsonObject => {
     return value as JsonObject;
 };
 
+// The tolerant twin of `object`, for a payload whose shape must not throw the turn.
+const maybeObject = (value: unknown): JsonObject | undefined =>
+    typeof value === "object" && value !== null && !Array.isArray(value) ? (value as JsonObject) : undefined;
+
 const string = (record: JsonObject, key: string, what: string): string => {
     const value = record[key];
     if (typeof value !== "string") {
@@ -324,11 +328,13 @@ export interface CodexAppServerConnection {
 const COMMAND_APPROVAL_REQUEST = "item/commandExecution/requestApproval";
 const FILE_CHANGE_APPROVAL_REQUEST = "item/fileChange/requestApproval";
 const PERMISSIONS_APPROVAL_REQUEST = "item/permissions/requestApproval";
+const ELICITATION_REQUEST = "mcpServer/elicitation/request";
 const HANDLED_REQUESTS = new Set([
     "item/tool/requestUserInput",
     COMMAND_APPROVAL_REQUEST,
     FILE_CHANGE_APPROVAL_REQUEST,
     PERMISSIONS_APPROVAL_REQUEST,
+    ELICITATION_REQUEST,
 ]);
 
 export type CodexAppServerConnector = (turn: CodexTurn) => Promise<CodexAppServerConnection>;
@@ -618,10 +624,10 @@ const skillInput = (prompt: string, skills: readonly CodexSkill[]): { readonly s
 // Command on an item/commandExecution/requestApproval, or undefined for another turn's request or one with no command
 // text. Tolerant of anything else in the payload, since a shape surprise here must not throw the turn.
 const commandApprovalFrom = (raw: unknown, turnIds: ReadonlySet<string>): { readonly command: string; readonly reason?: string } | undefined => {
-    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    const params = maybeObject(raw);
+    if (params === undefined) {
         return undefined;
     }
-    const params = raw as JsonObject;
     const turnId = params["turnId"];
     if (typeof turnId !== "string" || !turnIds.has(turnId)) {
         return undefined;
@@ -652,6 +658,29 @@ async function* commandApprovalFrames(
         respond: (allow) => notification.respond({ decision: allow ? "accept" : "decline" }),
     };
 }
+
+// Codex asks for an MCP tool call's approval as a form elicitation carrying this kind; `persist` advertises which
+// remembered answers the client may return, and `session` is the only one that doesn't amend the owner's config.
+const MCP_TOOL_CALL_APPROVAL = "mcp_tool_call";
+const PERSIST_SESSION = "session";
+// All three keys ride every reply: the schema's `content` and `_meta` are nullable, not optional.
+const DECLINED = { action: "decline", content: null, _meta: null } as const;
+
+// Answers one elicitation. An MCP tool call's approval is granted — the container is the isolation boundary and the
+// command gate already judges the turn, so refusing here only disables every browser tool that writes. Anything else
+// is a server asking the owner something Intentic has no surface for, which the protocol wants declined, not errored;
+// a shape surprise takes the same path, since answering an unread question yes is worse than declining it.
+const elicitationAnswer = (raw: unknown): JsonValue => {
+    const meta = maybeObject(maybeObject(raw)?.["_meta"]);
+    if (meta?.["codex_approval_kind"] !== MCP_TOOL_CALL_APPROVAL) {
+        return DECLINED;
+    }
+    // Remembering it for the thread spares a round trip per call; `always` is withheld, since it would write the
+    // owner's config from inside a turn.
+    const persist = meta["persist"];
+    const session = persist === PERSIST_SESSION || (Array.isArray(persist) && persist.includes(PERSIST_SESSION));
+    return { action: "accept", content: null, _meta: session ? { persist: PERSIST_SESSION } : null };
+};
 
 const questionsFrom = (raw: unknown, turnIds: ReadonlySet<string>): readonly CodexQuestion[] | undefined => {
     const params = object(raw, "item/tool/requestUserInput params");
@@ -780,6 +809,10 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                     }
                     if (notification.method === FILE_CHANGE_APPROVAL_REQUEST) {
                         notification.respond({ decision: "accept" });
+                        continue;
+                    }
+                    if (notification.method === ELICITATION_REQUEST) {
+                        notification.respond(elicitationAnswer(notification.params));
                         continue;
                     }
                     if (notification.method === PERMISSIONS_APPROVAL_REQUEST) {
