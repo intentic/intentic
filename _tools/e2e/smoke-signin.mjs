@@ -1,9 +1,6 @@
 #!/usr/bin/env node
-// The only check that signs in against Google for real: everything else runs seeded or mocked, so the pipeline can stay
-// green while the button is dead. A curl to the button endpoint answers 200 where a real browser gets 400, so this must
-// run inside one. Asserts:
-// 1. Google's button reaches a real size; a refused button stays 0×0 in the DOM.
-// 2. The fallback sign-in link is present, for failures invisible to the button itself.
+// This browser smoke is the only gate that exercises Google's real origin check instead of seeded or mocked auth.
+// A valid page needs both a sized Google iframe and an independent redirect control.
 
 import { chromium } from "@playwright/test";
 
@@ -12,9 +9,13 @@ const loginUrl = `${origin}/login`;
 
 // Generous: this runs seconds after deploy, before the container, Google's script and its frame have warmed up.
 const BUTTON_DEADLINE_MS = 30_000;
+const RETRY_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 5_000;
 
 // Exact string Google Identity Services logs when the OAuth client refuses this page's origin.
 const ORIGIN_REFUSED = /origin is not allowed for the given client/i;
+const TRANSIENT_NETWORK =
+    /ERR_(?:CONNECTION_(?:CLOSED|REFUSED|RESET|TIMED_OUT)|INTERNET_DISCONNECTED|NAME_NOT_RESOLVED|NETWORK_CHANGED|TIMED_OUT)|failed to fetch|network\s*error/i;
 
 const fail = (message, detail) => {
     console.error(`\nsign-in smoke FAILED against ${loginUrl}`);
@@ -25,38 +26,68 @@ const fail = (message, detail) => {
     process.exitCode = 1;
 };
 
-// Full chromium, not the headless shell: must be the browser a real visitor gets.
-const browser = await chromium.launch({ channel: "chromium" });
-const page = await browser.newPage();
-const consoleErrors = [];
-page.on("console", (message) => {
-    if (message.type() === "error") {
-        consoleErrors.push(message.text());
+const inspect = async (browser) => {
+    const page = await browser.newPage();
+    const consoleErrors = [];
+    page.on("console", (message) => {
+        if (message.type() === "error") {
+            consoleErrors.push(message.text());
+        }
+    });
+
+    try {
+        await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: BUTTON_DEADLINE_MS });
+
+        // Checks size, not presence: a refused origin still renders the iframe, just stuck at 0×0.
+        const pressable = await page
+            .waitForFunction(
+                () => {
+                    const frame = document.querySelector('iframe[src*="gsi/button"]');
+                    return frame instanceof HTMLElement && frame.clientWidth > 0 && frame.clientHeight > 0;
+                },
+                undefined,
+                { timeout: BUTTON_DEADLINE_MS },
+            )
+            .then(() => true)
+            .catch(() => false);
+
+        const refused = consoleErrors.filter((text) => ORIGIN_REFUSED.test(text));
+        const fallback = await page.getByRole("button", { name: /Trouble signing in|Continue with Google/i }).count();
+        return { consoleErrors, fallback, loadError: undefined, pressable, refused };
+    } catch (error) {
+        return {
+            consoleErrors,
+            fallback: 0,
+            loadError: error instanceof Error ? error.message : String(error),
+            pressable: false,
+            refused: [],
+        };
+    } finally {
+        await page.close();
     }
-});
+};
+
+// Full chromium, not the headless shell: the smoke must use the browser a visitor gets.
+const browser = await chromium.launch({ channel: "chromium" });
 
 try {
-    await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: BUTTON_DEADLINE_MS });
+    let result;
+    for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt += 1) {
+        result = await inspect(browser);
+        const transportErrors = [...result.consoleErrors, result.loadError ?? ``].filter((text) => TRANSIENT_NETWORK.test(text));
+        if (result.refused.length > 0 || result.pressable || transportErrors.length === 0 || attempt === RETRY_ATTEMPTS) {
+            break;
+        }
+        console.warn(`sign-in smoke attempt ${attempt}/${RETRY_ATTEMPTS} hit a transport failure; retrying in ${RETRY_DELAY_MS / 1000}s.`);
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    }
 
-    // Checks size, not presence: a refused origin still renders the iframe, just stuck at 0×0.
-    const pressable = await page
-        .waitForFunction(
-            () => {
-                const frame = document.querySelector('iframe[src*="gsi/button"]');
-                return frame instanceof HTMLElement && frame.clientWidth > 0 && frame.clientHeight > 0;
-            },
-            undefined,
-            { timeout: BUTTON_DEADLINE_MS },
-        )
-        .then(() => true)
-        .catch(() => false);
-
-    const refused = consoleErrors.filter((text) => ORIGIN_REFUSED.test(text));
-
-    if (refused.length > 0) {
+    if (result.loadError !== undefined) {
+        fail(`the sign-in page did not load: ${result.loadError}`);
+    } else if (result.refused.length > 0) {
         fail("Google is refusing this origin for the sign-in client: the front door is shut.", [
             "",
-            `Google said: ${refused[0]}`,
+            `Google said: ${result.refused[0]}`,
             "",
             "Google names the console, but there are TWO causes and the message cannot tell them apart,",
             "because both reach Google as an origin it cannot match. Check the cheap one first:",
@@ -72,30 +103,29 @@ try {
             `     deployment uses and make sure this exact origin is listed under Authorized JavaScript`,
             `     origins: ${origin}. It can take Google minutes to hours to apply a change there.`,
         ]);
-    } else if (!pressable) {
+    } else if (!result.pressable) {
         fail("Google's sign-in button never became pressable (it stayed zero-sized).", [
             "",
             "Nothing named a cause, so the usual suspects are: the Identity Services script never",
             "loaded, or the page rendered it into a container that is hidden.",
-            ...(consoleErrors.length > 0 ? ["", "Console errors seen:", ...consoleErrors.slice(0, 5).map((text) => `  - ${text}`)] : []),
+            ...(result.consoleErrors.length > 0
+                ? ["", "Console errors seen:", ...result.consoleErrors.slice(0, 5).map((text) => `  - ${text}`)]
+                : []),
         ]);
     }
 
-    // Must never go missing: some ways the Google button fails are invisible to the page itself.
-    const escape = await page.getByText(/Google's own page/i).count();
-    if (escape === 0) {
+    // The page must expose either its escape link or the primary redirect button without Google's iframe.
+    if (result.loadError === undefined && result.fallback === 0) {
         fail("The sign-in page offers no fallback way in.", [
             "",
-            "Some ways Google's button can fail are invisible to the page, so the link that",
-            "bypasses it has to be there unconditionally (see Login.vue).",
+            "Some Google failures are invisible to the page, so a redirect control that",
+            "bypasses the embedded button has to remain available (see Login.vue).",
         ]);
     }
 
     if (process.exitCode !== 1) {
-        console.log(`sign-in smoke OK: Google's button is live on ${loginUrl}, and the fallback link is there.`);
+        console.log(`sign-in smoke OK: Google's button is live on ${loginUrl}, and the fallback control is there.`);
     }
-} catch (error) {
-    fail(`the sign-in page did not load: ${error instanceof Error ? error.message : String(error)}`);
 } finally {
     await browser.close();
 }
