@@ -90,6 +90,37 @@ test("reads a Google credential's project off disk, and benches only the one tha
     });
 });
 
+// CLIProxyAPI writes the credential file, answers the callback, and lists it a beat later. A sign-in judged on the
+// listing alone therefore reported success for a file it could already read as dead on disk, and that credential stayed
+// in the rotation until something else swept it — long enough to kill the turns it was connected for.
+test("judges the credential a sign-in just wrote, before the proxy's listing catches up with it", async () => {
+    const authDir = authDirWith({ "antigravity-fresh.json": JSON.stringify({ type: "antigravity", email: "fresh@gmail.com" }) });
+    const patched: unknown[] = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL, init?: RequestInit) => {
+            const url = String(input);
+            if (url.endsWith("/auth-files/status")) {
+                patched.push(JSON.parse(String(init?.body)));
+            }
+            // The proxy has the file on disk and not yet in the list it answers with.
+            return url.endsWith("/auth-files") ? Response.json({ files: [] }) : Response.json({ status: "ok" });
+        }),
+    );
+    const client = createCliProxyClient({
+        managementUrl: "http://127.0.0.1:8789/v0/management",
+        token: "local",
+        configPath: "/tmp/config.yaml",
+        authDir,
+        usageStore: memoryStore(),
+    });
+
+    const failure = client.complete({ provider: "gemini", redirectUrl: "http://localhost:51121/oauth-callback?code=abc", state: "xyz" });
+
+    await expect(failure).rejects.toThrow(/fresh@gmail\.com.*no Antigravity project/s);
+    expect(patched).toEqual([{ name: "antigravity-fresh.json", disabled: true }]);
+});
+
 test("refuses to report a disconnect the unreachable proxy never performed", async () => {
     const authDir = authDirWith({ "antigravity-user.json": JSON.stringify({ type: "antigravity", email: "user@gmail.com" }) });
 

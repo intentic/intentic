@@ -78,6 +78,28 @@ it(`draws one bar for a pool nobody picks among, and never a row per sign-in`, (
     expect(el.textContent).toContain(`5/6`);
 });
 
+// A credential nothing can run on used to reach this column as neither an offer nor an absence: it sank below every
+// measured row, was never drawn, and only showed up in the bottom half of the ratio. Connecting two such accounts to
+// a spent fleet therefore changed one digit on screen and nothing else.
+it(`names a credential that can serve nothing, and leaves it out of the ratio`, () => {
+    const el = mount([], {
+        ...NO_ROUTED,
+        gemini: [
+            { name: `g-1`, label: `one@gmail.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 41, gates: `all` }] } },
+            { name: `g-2`, label: `two@gmail.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 100, gates: `all` }] } },
+            // The daemon's own words for a Google account with no Antigravity project, benched with no instant to reopen.
+            { name: `g-3`, label: `three@gmail.com`, cooling: { reason: `no Antigravity project on this Google account` } },
+        ],
+    });
+
+    // Counted where the fix is, in the words of what is missing.
+    expect(el.textContent).toContain(`1 can't serve`);
+    expect(el.textContent).toContain(`no Antigravity project on this Google account`);
+    expect(el.textContent).toContain(`reconnect on the Agent tab`);
+    // One of the two accounts that could have room does; the third is not part of that question.
+    expect(el.textContent).toContain(`1/2`);
+});
+
 // "Most room" names a comparison; a plan that publishes no limits has had none made, so it must not appear beside
 // "no published limits".
 it(`does not claim a pool has the most room when nothing in it was measured`, () => {

@@ -24,9 +24,9 @@ const claudeAccount = (over: Partial<OauthAccount>): OauthAccount => ({
 
 let app: App | undefined;
 
-const mount = (accounts: OauthAccount[]): HTMLElement => {
+const mount = (accounts: OauthAccount[], routed: TranslatorAccounts = NO_ROUTED): HTMLElement => {
     providerAccounts.value = { claude: accounts };
-    translatorAccounts.value = NO_ROUTED;
+    translatorAccounts.value = routed;
     accountsLoaded.value = true;
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -73,13 +73,13 @@ it(`does not print an identity twice for an account already named by its email`,
     expect(el.textContent?.match(/first@example\.com/g)?.length).toBe(1);
 });
 
-// the alarm, pins what this screen may shout about: an unrefreshable credential, never a merely spent pool (the
+// the alarm, pins what this screen may shout about: a credential no turn can run on, never a merely spent pool (the
 // ordinary state of a fleet, already counted in capacity).
 
 const spent: AccountUsage = { measuredAt: Date.now(), windows: [{ kind: `five_hour`, utilization: 96, gates: `all` }] };
 
 const alarm = (el: HTMLElement): HTMLElement | undefined =>
-    [...el.querySelectorAll(`span`)].find((span) => span.textContent?.trim().startsWith(`Sign-in expired`) === true);
+    [...el.querySelectorAll(`span`)].find((span) => span.textContent?.trim().startsWith(`Can't serve a turn`) === true);
 
 it(`stays silent about a fleet that is merely spent: the pools reopen on their own`, () => {
     const el = mount([1, 2, 3, 4, 5].map((n) => claudeAccount({ id: `acc-${n}`, label: `account-${n}@example.com`, usage: spent })));
@@ -96,12 +96,35 @@ it(`states the fix once and spends the rest of the section on names`, () => {
         claudeAccount({ id: `acc-3`, label: `third@example.com`, usage: spent }),
     ]);
 
-    expect(alarm(el)?.textContent?.trim()).toBe(`Sign-in expired · 2`);
+    expect(alarm(el)?.textContent?.trim()).toBe(`Can't serve a turn · 2`);
     expect(el.textContent?.match(/reconnect them on the Agent tab/g)?.length).toBe(1);
-    // The spent (not expired) account is excluded from the named list.
+    // The condition itself is named once, above the accounts it holds.
     const section = alarm(el)?.closest(`div.flex.flex-col`);
+    expect(section?.textContent).toContain(`sign-in expired`);
     expect(section?.textContent).toContain(`first@example.com`);
+    // The spent (not expired) account is excluded from the named list.
     expect(section?.textContent).not.toContain(`third@example.com`);
+});
+
+// A Google credential with no Antigravity project reads as neither spent nor unread: its weekly allowance is
+// untouched and no turn can spend it. Counting it as capacity is what let a fleet read 100% with room in it.
+it(`names a routed credential benched for good, and keeps it out of the capacity count`, () => {
+    const el = mount(
+        [claudeAccount({ id: `acc-1`, label: `first@example.com`, usage: spent })],
+        {
+            ...NO_ROUTED,
+            gemini: [
+                { name: `g-1`, label: `new@gmail.com`, cooling: { reason: `no Antigravity project on this Google account` } },
+                { name: `g-2`, label: `busy@gmail.com`, usage: spent, cooling: { until: 1_700_003_600, reason: `Individual quota reached` } },
+            ],
+        },
+    );
+
+    expect(alarm(el)?.textContent?.trim()).toBe(`Can't serve a turn · 1`);
+    expect(alarm(el)?.closest(`div.flex.flex-col`)?.textContent).toContain(`no Antigravity project on this Google account`);
+    // Two accounts are a question about room; the third is not one of them, and says so in the legend instead.
+    expect(el.textContent).toContain(`0 of 2 accounts have room`);
+    expect(el.textContent).toContain(`can't serve`);
 });
 
 it(`caps the names rather than growing a column again, and says how many it held back`, async () => {
@@ -113,7 +136,7 @@ it(`caps the names rather than growing a column again, and says how many it held
         }),
     );
 
-    expect(alarm(el)?.textContent?.trim()).toBe(`Sign-in expired · 15`);
+    expect(alarm(el)?.textContent?.trim()).toBe(`Can't serve a turn · 15`);
     const more = [...el.querySelectorAll(`button`)].find((button) => /\+3 more/.test(button.textContent ?? ``));
     expect(el.textContent).not.toContain(`account-14@example.com`);
 

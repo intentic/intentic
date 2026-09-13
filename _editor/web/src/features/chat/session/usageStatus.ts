@@ -331,6 +331,17 @@ export interface PlanLimitRow {
     readonly cooling: { readonly until?: number | undefined; readonly reason?: string | undefined } | undefined;
 }
 
+// What stops this credential serving any turn at all, in the words of what is missing; undefined when only its meters
+// stand in the way. Never a full pool (it reopens on its own) and never a timed bench (the translator lifts it):
+// only the states a person has to act on, which is why a fleet can read 100% while an account with an untouched
+// allowance sits in it unusable.
+export const blockedReason = (row: Pick<PlanLimitRow, `needsReauth` | `cooling`>): string | undefined => {
+    if (row.needsReauth) {
+        return `sign-in expired`;
+    }
+    return row.cooling !== undefined && row.cooling.until === undefined ? (row.cooling.reason ?? `benched by the translator`) : undefined;
+};
+
 // Common shape a row is built from: the daemon's account key, its label/identity, and the reading attached.
 // Named fields, not positionals — label and identity are both strings and easy to swap by accident.
 interface PlanLimitSource {
@@ -407,13 +418,15 @@ export const planLimitRows = (native: Record<string, readonly OauthAccount[]>, r
 // Aggregated by provider: rows don't scale to dozens of accounts, so capacity is a band count, not an average.
 
 // Worst-first order, shared by the bar, legend and sentence so none disagree about which end is bad.
-export const PLAN_LIMIT_BANDS = [`spent`, `tight`, `room`, `unread`, `none`] as const;
+export const PLAN_LIMIT_BANDS = [`blocked`, `spent`, `tight`, `room`, `unread`, `none`] as const;
 export type PlanLimitBand = (typeof PLAN_LIMIT_BANDS)[number];
 
-// `none` isn't a fullness level, it's a plan that publishes no limits at all — kept out of the capacity bar
-// since unknowable headroom isn't headroom. Takes just the two fields it needs so a picker can band rings it
-// already has.
-export const planLimitBand = (row: Pick<PlanLimitRow, `percent` | `readable`>): PlanLimitBand => {
+// `blocked` and `none` aren't fullness levels — one can serve nothing whatever its meters say, the other publishes
+// no meters at all — so both are counted beside the capacity bar rather than inside it.
+export const planLimitBand = (row: Pick<PlanLimitRow, `percent` | `readable` | `needsReauth` | `cooling`>): PlanLimitBand => {
+    if (blockedReason(row) !== undefined) {
+        return `blocked`;
+    }
     if (row.percent === undefined) {
         return row.readable ? `unread` : `none`;
     }
@@ -422,6 +435,7 @@ export const planLimitBand = (row: Pick<PlanLimitRow, `percent` | `readable`>): 
 
 // Sentence fragments, not headings — read as "3 with room · 1 tight".
 export const PLAN_LIMIT_BAND_LABEL: Record<PlanLimitBand, string> = {
+    blocked: `can't serve`,
     spent: `spent`,
     tight: `tight`,
     room: `with room`,
@@ -432,12 +446,12 @@ export const PLAN_LIMIT_BAND_LABEL: Record<PlanLimitBand, string> = {
 // Same three tones a percentage uses everywhere, so the bar and its meters agree. `unread`/`none` are
 // achromatic on purpose: absence of a reading, not a severity.
 export const planLimitBandTone = (band: PlanLimitBand): string =>
-    band === `spent` ? `text-danger` : band === `tight` ? `text-warning` : band === `room` ? `text-link` : `text-muted`;
+    band === `spent` || band === `blocked` ? `text-danger` : band === `tight` ? `text-warning` : band === `room` ? `text-link` : `text-muted`;
 
 export type PlanLimitCounts = Record<PlanLimitBand, number>;
 
 const countBands = (rows: readonly PlanLimitRow[]): PlanLimitCounts => {
-    const counts: PlanLimitCounts = { spent: 0, tight: 0, room: 0, unread: 0, none: 0 };
+    const counts: PlanLimitCounts = { blocked: 0, spent: 0, tight: 0, room: 0, unread: 0, none: 0 };
     for (const row of rows) {
         counts[planLimitBand(row)] += 1;
     }
@@ -604,17 +618,40 @@ const limitStandsFor = (provider: AgentProvider, account: string, reading: Accou
     return refusalAnswer(refusal, readings) === undefined;
 };
 
+// Accounts held back by one missing thing. Grouped, since the fix belongs to the reason and not to each name: thirty
+// expired sign-ins are one instruction, not thirty.
+export interface PlanLimitAttention {
+    readonly reason: string;
+    readonly rows: readonly PlanLimitRow[];
+}
+
+// Most accounts first, so the condition holding the most of the fleet back leads.
+export const attentionGroups = (rows: readonly PlanLimitRow[]): PlanLimitAttention[] => {
+    const byReason = new Map<string, PlanLimitRow[]>();
+    for (const row of rows) {
+        const reason = blockedReason(row);
+        if (reason !== undefined) {
+            const grouped = byReason.get(reason) ?? [];
+            grouped.push(row);
+            byReason.set(reason, grouped);
+        }
+    }
+    return [...byReason]
+        .map(([reason, grouped]): PlanLimitAttention => ({ reason, rows: grouped }))
+        .toSorted((left, right) => right.rows.length - left.rows.length || left.reason.localeCompare(right.reason));
+};
+
 export interface PlanLimitSummary {
     readonly accounts: number;
     readonly counts: PlanLimitCounts;
     readonly nextResetAt: number | undefined;
     // Accounts needing manual action only; a spent pool isn't broken, it already refills on its own schedule.
-    readonly attention: readonly PlanLimitRow[];
+    readonly attention: readonly PlanLimitAttention[];
 }
 
 export const planLimitSummary = (rows: readonly PlanLimitRow[], now: number = Date.now()): PlanLimitSummary => ({
     accounts: rows.length,
     counts: countBands(rows),
     nextResetAt: nextReset(rows, now),
-    attention: rows.filter((row) => row.needsReauth),
+    attention: attentionGroups(rows),
 });

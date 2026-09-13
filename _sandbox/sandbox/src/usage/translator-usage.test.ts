@@ -190,3 +190,18 @@ test("reads the translator's bench of a credential, and nothing for one it is ro
     expect(authFileCooling({ name: "a.json", unavailable: false, status: "active" })).toBeUndefined();
     expect(authFileCooling({ name: "a.json" })).toBeUndefined();
 });
+
+// What the proxy actually stamps on a rate-limited Google credential: the upstream 429 body, pretty-printed, ~700
+// characters of it. It is a bench either way, and the row that prints the reason has to be left with nothing rather
+// than with that.
+test("keeps the proxy's words only where they are a sentence, never a pasted upstream body", () => {
+    const body = JSON.stringify({ error: { code: 429, message: "Individual quota reached. Please try again later." } }, undefined, 2);
+    expect(authFileCooling({ name: "a.json", unavailable: true, status_message: body, next_retry_after: "2027-01-15T08:10:00Z" })).toEqual({
+        until: Date.parse("2027-01-15T08:10:00Z") / 1000,
+    });
+    // A one-line sentence survives; a benched file with nothing printable still says it was the operator's switch.
+    expect(authFileCooling({ name: "a.json", disabled: true, status_message: body })).toEqual({ reason: "disabled in the translator" });
+    expect(authFileCooling({ name: "a.json", unavailable: true, status_message: " quota exceeded \nstack trace" })).toEqual({
+        reason: "quota exceeded",
+    });
+});

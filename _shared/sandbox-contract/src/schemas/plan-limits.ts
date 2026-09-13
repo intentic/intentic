@@ -97,9 +97,12 @@ export const TranslatorAccountSchema = z.object({
     // (quota, expired token) and routes around it until `until`. Absent means the proxy is routing to it.
     cooling: z
         .object({
-            // Epoch seconds, like every reset on this wire; absent when the proxy named no retry instant.
+            // Epoch seconds, like every reset on this wire. Absent means no wait lifts this one, which is what
+            // separates a rate-limited credential from one a person has to fix (a Google account with no Antigravity
+            // project); every headroom surface reads it that way.
             until: z.number().optional(),
-            // The proxy's own sentence, when it gave one.
+            // Why, in the words of what is missing: the proxy's own sentence where it gave one short enough to print,
+            // else this sandbox's. Never a pasted upstream body.
             reason: z.string().optional(),
         })
         .optional(),

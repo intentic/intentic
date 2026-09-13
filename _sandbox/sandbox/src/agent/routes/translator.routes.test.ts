@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { createApp } from "../../app.js";
 import { clientFor, postJson } from "../../harness/route-client.testing.js";
 import { services, withTranslator } from "../../harness/route-services.testing.js";
@@ -71,6 +71,30 @@ test("a disconnect failure says what went wrong instead of Internal server error
     const response = await postJson(app, "/translator/gemini/disconnect", { provider: "gemini", name: "antigravity-user.json" });
 
     expect(((await response.json()) as { message?: string }).message).toBe(reason);
+});
+
+// A Google credential the proxy filed without a project is read as healthy by its own selector, so it keeps catching
+// turns that die on it. The account list is the surface it appears on the moment it is connected, which makes it the
+// last place it can be caught before a turn finds it.
+test("takes a credential that can serve no turn out of the rotation when the account list is read", async () => {
+    let benched = 0;
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                cliProxy: {
+                    benchUnusable: async () => {
+                        benched += 1;
+                        return ["antigravity-new@example.com.json"];
+                    },
+                },
+            }),
+        ),
+    );
+
+    await expect(client.translator.accounts()).resolves.toEqual({ codex: [], grok: [], kimi: [], gemini: [] });
+    // Fired alongside the read, not awaited by it: the list must not wait on a PATCH to the proxy.
+    await vi.waitFor(() => expect(benched).toBe(1));
 });
 
 test("a listing failure says so rather than claiming the sandbox has no subscriptions", async () => {

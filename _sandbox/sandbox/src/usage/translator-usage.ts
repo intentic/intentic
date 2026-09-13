@@ -24,14 +24,25 @@ export interface TranslatorAuthFile {
     readonly next_retry_after?: string;
 }
 
+// Longest the proxy's own words can be and still be a row's reason. Past it, `status_message` is a pasted upstream
+// body — a 429's JSON, several hundred characters of it — which a column that prints the reason cannot use and a
+// reader cannot act on.
+const REASON_MAX_CHARS = 120;
+
+// The proxy's sentence where it gave one worth printing: first line only, never a pasted payload.
+const coolingReason = (message: string | undefined): string | undefined => {
+    const line = message?.trim().split("\n")[0]?.trim();
+    return line === undefined || line === "" || line.length > REASON_MAX_CHARS || line.startsWith("{") ? undefined : line;
+};
+
 // Whether the proxy is currently routing around this file (TranslatorAccount.cooling); a bench with no retry instant is
-// still a bench.
+// still a bench, and the one a wait will not lift.
 export const authFileCooling = (file: TranslatorAuthFile): { until?: number; reason?: string } | undefined => {
     if (file.unavailable !== true && file.disabled !== true) {
         return undefined;
     }
     const until = resetFromIso(file.next_retry_after);
-    const reason = asString(file.status_message) ?? (file.disabled === true ? "disabled in the translator" : undefined);
+    const reason = coolingReason(asString(file.status_message)) ?? (file.disabled === true ? "disabled in the translator" : undefined);
     return { ...(until === undefined ? {} : { until }), ...(reason === undefined ? {} : { reason }) };
 };
 

@@ -8,6 +8,9 @@ import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount 
 
 const NOW = 1_700_000_000_000;
 const NO_ROUTED: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };
+// The daemon's own bench sentence for a Google credential with no Antigravity project (translator.ts), carried
+// verbatim on the wire as `cooling.reason` with no `until`, since no wait fixes it.
+const NO_PROJECT = `no Antigravity project on this Google account`;
 
 // Always a fresh reading; staleness is usageStatus's concern, not this helper's.
 const usage = (percent: number, resetsAt = 1_700_003_600): AccountUsage => ({
@@ -237,7 +240,35 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `expired`, usage: usage(3), needsReauth: true })] };
         const capacity = chatCapacity(NOW);
         expect(capacity.providers).toEqual([]);
-        expect([capacity.needsReauth, capacity.out[0]?.reason]).toEqual([1, `sign-in expired`]);
+        expect(capacity.blocked).toEqual([{ reason: `sign-in expired`, count: 1 }]);
+        expect(capacity.out[0]?.reason).toBe(`sign-in expired`);
+    });
+
+    // What a 33-account Google fleet did to a reader: two accounts with untouched allowances were connected, no
+    // percentage moved, and the only thing that changed was the bottom half of "1/33". A credential no turn can run
+    // on is not a spent one.
+    it(`keeps a credential nothing can run on out of the ratio, and names what it is missing`, () => {
+        translatorAccounts.value = {
+            ...NO_ROUTED,
+            gemini: [google(1, 4), google(2, 100), { name: `gemini-3`, label: `new@gmail.com`, cooling: { reason: NO_PROJECT } }],
+        };
+
+        const capacity = chatCapacity(NOW);
+        const [entry] = capacity.providers;
+        expect([entry?.ready, entry?.total, entry?.blocked]).toEqual([1, 2, 1]);
+        expect(capacity.blocked).toEqual([{ reason: NO_PROJECT, count: 1 }]);
+    });
+
+    // "Cooling down" promises a wait that fixes it; nothing about a missing project is waiting for anything.
+    it(`says what a provider is missing when nothing it holds can serve, and still dates a bench that will lift`, () => {
+        translatorAccounts.value = { ...NO_ROUTED, gemini: [{ name: `gemini-1`, label: `new@gmail.com`, cooling: { reason: NO_PROJECT } }] };
+        expect(chatCapacity(NOW).out[0]).toMatchObject({ reason: NO_PROJECT, reopensAt: undefined });
+
+        translatorAccounts.value = {
+            ...NO_ROUTED,
+            gemini: [{ name: `gemini-1`, label: `busy@gmail.com`, cooling: { until: 1_700_003_600, reason: `Individual quota reached` } }],
+        };
+        expect(chatCapacity(NOW).out[0]).toMatchObject({ reason: `cooling down`, reopensAt: 1_700_003_600 });
     });
 });
 

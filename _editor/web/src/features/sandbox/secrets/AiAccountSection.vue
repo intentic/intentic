@@ -18,7 +18,7 @@ import { relativeTime } from "../../chat/models/catalog";
 import { providerTabs } from "../../chat/accounts/providerCatalog";
 import { useChat } from "../../chat/run/useChat";
 import { refreshConnections, subscriptionOnly } from "../../chat/accounts/useChat-accounts";
-import { isSpent, liveUsage, type PlanHeadroom, planHeadroom } from "../../chat/session/usageStatus";
+import { blockedReason, isSpent, liveUsage, type PlanHeadroom, planHeadroom } from "../../chat/session/usageStatus";
 import { useSandbox } from "../client/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
 import ConnectionRow from "./ConnectionRow.vue";
@@ -194,8 +194,23 @@ const accountRows = computed<readonly AccountRow<OauthAccount>[]>(() =>
     rowsOf(managedProvider.value, managedAccounts.value, (account) => account.id),
 );
 
-const translatorRows = computed<readonly AccountRow<TranslatorAccount>[]>(() =>
-    routedProvider.value === undefined ? [] : rowsOf(routedProvider.value, translatorAccounts.value[routedProvider.value], (account) => account.name),
+// What to do about a benched credential, where there is anything to do: only Google's own onboarding can give an
+// account the project its channel bills every turn to, so that one names the door. Any other bench is the proxy's own
+// and says all it can in the reason.
+const blockedFix = (provider: KeyedProvider, reason: string): string =>
+    provider === `gemini`
+        ? `${reason}. Disconnect it, open antigravity.google.com with that account to finish Google's setup, then connect it again.`
+        : reason;
+
+const translatorRows = computed(() =>
+    routedProvider.value === undefined
+        ? []
+        : rowsOf(routedProvider.value, translatorAccounts.value[routedProvider.value], (account) => account.name).map((row) => ({
+              ...row,
+              // The translator's own verdict on the credential, which no reading of its pools can contradict: this is
+              // the tab a reader is sent to when one can serve nothing, so it has to say which row that was.
+              blocked: blockedReason({ needsReauth: false, cooling: row.account.cooling }),
+          })),
 );
 
 // Collapses beyond COLLAPSE_THRESHOLD total rows (native + routed combined, not either list alone) to keep the
@@ -473,11 +488,13 @@ onUnmounted(() => clearTimeout(ringTimer));
             -->
             <template v-if="routedProvider">
                 <ConnectionRow
-                    v-for="{ account, headroom, exhausted } in translatorRows.slice(0, visibleRoutedLimit)"
+                    v-for="{ account, headroom, exhausted, blocked } in translatorRows.slice(0, visibleRoutedLimit)"
                     :key="account.name"
                     :title="ROUTED_ROW[routedProvider].title"
-                    state="connected"
+                    :state="blocked === undefined ? `connected` : `reauth`"
+                    :tone="blocked === undefined ? `default` : `warning`"
                     :note="account.label"
+                    :description="blocked === undefined ? undefined : blockedFix(routedProvider, blocked)"
                     :headroom="headroom"
                     :exhausted="exhausted"
                 >

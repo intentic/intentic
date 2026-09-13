@@ -672,15 +672,28 @@ describe(`plan-limit aggregates`, () => {
             at(undefined, { id: `broken`, needsReauth: true }),
             at(undefined, { id: `unread` }),
         ]);
-        expect(summary.attention.map((row) => row.id)).toEqual([`broken`]);
-        // Every account is still banded, so what the alarm dropped the capacity strip keeps.
-        expect(summary.counts).toEqual({ spent: 1, tight: 0, room: 1, unread: 2, none: 0 });
+        expect(summary.attention).toEqual([{ reason: `sign-in expired`, rows: [expect.objectContaining({ id: `broken` })] }]);
+        // Every account is still banded, so what the alarm dropped the capacity strip keeps; the dead one bands as
+        // blocked rather than as one more account waiting on a reading.
+        expect(summary.counts).toEqual({ blocked: 1, spent: 1, tight: 0, room: 1, unread: 1, none: 0 });
         expect(summary.accounts).toBe(4);
     });
 
     // Even a spent account whose credential is dead belongs here: on the reauth, not on the spend.
     it(`raises a dead credential whatever its pools say`, () => {
         const summary = planLimitSummary([at(99, { id: `both`, needsReauth: true }), at(99, { id: `justSpent` })]);
-        expect(summary.attention.map((row) => row.id)).toEqual([`both`]);
+        expect(summary.attention.flatMap((group) => group.rows.map((row) => row.id))).toEqual([`both`]);
+    });
+
+    // The state that made a 33-account Google fleet read 100% with two untouched allowances sitting in it: a
+    // credential the translator has taken out of rotation for good reads as neither spent nor unread.
+    it(`raises a credential benched for good, and leaves one benched until an instant to reopen on its own`, () => {
+        const benched = at(undefined, { id: `no-project`, routed: true, cooling: { reason: `no Antigravity project on this Google account` } });
+        const cooling = at(undefined, { id: `cooling`, routed: true, cooling: { until: 9_000, reason: `Individual quota reached` } });
+        const summary = planLimitSummary([benched, cooling]);
+        expect(summary.attention).toEqual([
+            { reason: `no Antigravity project on this Google account`, rows: [expect.objectContaining({ id: `no-project` })] },
+        ]);
+        expect([planLimitBand(benched), planLimitBand(cooling)]).toEqual([`blocked`, `unread`]);
     });
 });

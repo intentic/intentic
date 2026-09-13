@@ -20,6 +20,7 @@ import {
     type PlanLimitBand,
     planLimitBand,
     planLimitBandTone,
+    type PlanLimitRow,
     refusalFor,
 } from "../session/usageStatus";
 import { accountsOf, refreshConnections, subscriptionOnly } from "./useChat-accounts";
@@ -43,12 +44,13 @@ export interface CapacityCount {
 
 export const capacityCounts = (
     provider: AgentProvider,
-    rows: readonly { readonly headroom: PlanHeadroom | undefined }[],
+    // Credential state rides along with the ring: an account nothing can run on is not a degree of fullness.
+    rows: readonly { readonly headroom: PlanHeadroom | undefined; readonly needsReauth?: boolean; readonly cooling?: PlanLimitRow[`cooling`] }[],
 ): readonly CapacityCount[] => {
     const readable = reportsPlanLimits(provider);
     const counts = new Map<PlanLimitBand, number>();
     for (const row of rows) {
-        const band = planLimitBand({ percent: row.headroom?.percent, readable });
+        const band = planLimitBand({ percent: row.headroom?.percent, readable, needsReauth: row.needsReauth === true, cooling: row.cooling });
         counts.set(band, (counts.get(band) ?? 0) + 1);
     }
     // Worst first; `none` is dropped, since unpublished limits aren't a fullness reading.
@@ -98,6 +100,8 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
                   name: entry.name,
                   label: entry.label,
                   headroom: planHeadroom(liveUsage(provider.value, entry.name, entry.usage, modelRef.value), modelRef.value),
+                  // The proxy's own verdict on the credential, which no reading of its pools can contradict.
+                  cooling: entry.cooling,
               })),
     );
 

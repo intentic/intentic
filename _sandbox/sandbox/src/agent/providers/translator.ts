@@ -51,9 +51,9 @@ export const authFilesOnDisk = async (authDir: string): Promise<TranslatorAuthFi
             if (raw === undefined) {
                 return [];
             }
-            let parsed: { type?: unknown; email?: unknown; project_id?: unknown };
+            let parsed: { type?: unknown; email?: unknown; project_id?: unknown; disabled?: unknown };
             try {
-                parsed = JSON.parse(raw) as { type?: unknown; email?: unknown; project_id?: unknown };
+                parsed = JSON.parse(raw) as { type?: unknown; email?: unknown; project_id?: unknown; disabled?: unknown };
             } catch {
                 // A file half-written by a login still polling; it counts on the next read.
                 return [];
@@ -63,13 +63,15 @@ export const authFilesOnDisk = async (authDir: string): Promise<TranslatorAuthFi
             }
             // Shaped like the Management API's row; `auth_index` is absent, only the proxy can supply it. `project_id`
             // is carried because a Google credential is judged on it, and reading a file as project-less for the sole
-            // reason that the proxy is down would bench every Google account at once.
+            // reason that the proxy is down would bench every Google account at once. `disabled` persists into the
+            // file, so a credential already taken out of the rotation still reads as benched here.
             return [
                 {
                     name,
                     provider: parsed.type,
                     ...(typeof parsed.email === "string" ? { email: parsed.email } : {}),
                     ...(typeof parsed.project_id === "string" ? { project_id: parsed.project_id } : {}),
+                    ...(parsed.disabled === true ? { disabled: true } : {}),
                 },
             ];
         }),
@@ -336,6 +338,20 @@ export const createCliProxyClient = (params: {
         }).catch(() => undefined);
     };
 
+    // The proxy's listing plus any credential in the auth dir it has not picked up yet. A sign-in has to judge the file
+    // it just wrote, and the listing can lag that write by a beat — long enough for the credential to be filed, read as
+    // healthy, and start catching turns before anything has looked at it.
+    const listedAndOnDisk = async (): Promise<TranslatorAuthFile[]> => {
+        const listed = await listFiles();
+        const known = new Set(listed.flatMap((file) => (file.name === undefined ? [] : [file.name])));
+        return [...listed, ...(await authFilesOnDisk(authDir)).filter((file) => file.name !== undefined && !known.has(file.name))];
+    };
+
+    // Credentials the proxy would still hand a turn to that can answer none. One already benched is excluded: it is not
+    // news about this sign-in, and naming it would report the wrong account.
+    const deadFiles = (files: readonly TranslatorAuthFile[], provider: KeyedProvider): (TranslatorAuthFile & { readonly name: string })[] =>
+        providerFiles(files, provider).filter((file) => projectless(provider, file) && file.disabled !== true);
+
     // Hands a pasted redirect URL to the proxy, which matches it to the pending login and resumes the exchange;
     // surfaces the proxy's own rejection message.
     const complete = async (input: { provider: KeyedProvider; redirectUrl: string; state: string }): Promise<void> => {
@@ -353,7 +369,7 @@ export const createCliProxyClient = (params: {
         // The proxy answers this call OK for a credential it saved without a project, so the sign-in is only finished
         // once the file it wrote can serve a turn. Benched rather than deleted: the row is how the user sees which
         // account to fix, and a re-sign-in overwrites it.
-        const dead = providerFiles(await listFiles(), input.provider).filter((file) => projectless(input.provider, file));
+        const dead = deadFiles(await listedAndOnDisk(), input.provider);
         if (dead.length > 0) {
             await Promise.all(dead.map((file) => bench(file.name)));
             throw new Error(noProjectSignIn(dead[0]?.email));
@@ -510,13 +526,12 @@ export const createCliProxyClient = (params: {
     const providerFiles = (files: readonly TranslatorAuthFile[], provider: KeyedProvider): (TranslatorAuthFile & { readonly name: string })[] =>
         files.flatMap((file) => (file.provider === CLIPROXY_PROVIDER[provider] && file.name !== undefined ? [{ ...file, name: file.name }] : []));
 
-    // Every credential the proxy would still hand a turn to that cannot answer one. Runs at boot, so a sandbox that
-    // collected one before the sign-in guard existed stops losing turns to it without the user hunting for which.
+    // Every credential the proxy would still hand a turn to that cannot answer one. Runs at boot and on every read of
+    // the account list, so one that got past its own sign-in (a listing that lagged the write, a bench the proxy had
+    // not loaded yet) is out of the rotation by the time anyone looks at the list it appeared on.
     const benchUnusable = async (): Promise<string[]> => {
         const files = await listFiles();
-        const dead = KeyedProviderSchema.options.flatMap((provider) =>
-            providerFiles(files, provider).filter((file) => projectless(provider, file) && file.disabled !== true),
-        );
+        const dead = KeyedProviderSchema.options.flatMap((provider) => deadFiles(files, provider));
         await Promise.all(dead.map((file) => bench(file.name)));
         return dead.map((file) => file.name);
     };

@@ -289,6 +289,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             headroom: { targets: async () => [] },
             sharedUsageKey: async () => undefined,
             turnLimit: async () => ({ spent: 0, withHeadroom: 0 }),
+            // Nothing connected, so nothing to take out of the rotation; the account list calls this on every read.
+            benchUnusable: async () => [],
             ...cliProxy,
         }),
         codexHome: `${WORKSPACE_ROOT}/${stateRelPath(".intentic/secrets/auth/", "codex")}`,

@@ -222,6 +222,44 @@ test("refuses a Google sign-in whose credential landed with no Antigravity proje
     });
 });
 
+// A fleet collects these: one account is signed in, benched for having no project, and left on the roster to be fixed.
+// Judging every project-less file again on the next sign-in reported that old account as the failure, and told the user
+// to go and fix an address they had not touched.
+test("names the account this sign-in wrote, not one benched for the same thing long ago", async () => {
+    const calls: { url: string; body?: Record<string, unknown> }[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : undefined;
+        calls.push({ url, ...(body === undefined ? {} : { body }) });
+        return url.endsWith("/auth-files")
+            ? Response.json({
+                  files: [
+                      // Signed in weeks ago, judged then, and out of the rotation ever since.
+                      { name: "old.json", provider: "antigravity", email: "old@example.com", disabled: true },
+                      { name: "new.json", provider: "antigravity", email: "new@example.com" },
+                  ],
+              })
+            : Response.json({ status: "ok" });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = createCliProxyClient({
+        managementUrl: "http://127.0.0.1:8789/v0/management",
+        token: "local",
+        configPath: "/tmp/config.yaml",
+        authDir: "/tmp/does-not-exist-authdir",
+        usageStore: memoryStore().store,
+    });
+
+    const failure = client.complete({ provider: "gemini", redirectUrl: "http://localhost:51121/oauth-callback?code=abc", state: "xyz" });
+
+    await expect(failure).rejects.toThrow(/new@example\.com/);
+    await expect(failure).rejects.not.toThrow(/old@example\.com/);
+    // And benches only it: the other is already out, and a second PATCH would say nothing new.
+    expect(calls.filter((call) => call.url.endsWith("/auth-files/status")).map((call) => call.body)).toEqual([
+        { name: "new.json", disabled: true },
+    ]);
+});
+
 test("reads Kimi's provider-scoped model definitions without owned_by inference", async () => {
     vi.stubGlobal(
         "fetch",

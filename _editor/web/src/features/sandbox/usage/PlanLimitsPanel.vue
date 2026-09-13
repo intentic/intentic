@@ -7,10 +7,12 @@ import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat
 import { refreshConnections } from "../../chat/accounts/useChat-accounts";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import {
+    blockedReason,
     formatAge,
     formatReset,
     formatUtilization,
     PLAN_LIMIT_BAND_LABEL,
+    type PlanLimitBand,
     PLAN_LIMIT_BANDS,
     type PlanLimitGroup,
     planLimitBandTone,
@@ -45,8 +47,10 @@ const summary = computed(() => planLimitSummary(rows.value));
 
 // capacity
 
-// Excludes unpublished-limit accounts (not a degree of fullness); shown as a count, not an achromatic segment.
-const CAPACITY_BANDS = PLAN_LIMIT_BANDS.filter((band) => band !== `none`);
+// Excludes the two bands that aren't degrees of fullness — a plan that publishes no limits, and a credential no turn
+// can run on — since counting either as capacity is what lets a fleet of dead accounts read as a fuller one.
+const OFF_BAR_BANDS: ReadonlySet<PlanLimitBand> = new Set([`none`, `blocked`]);
+const CAPACITY_BANDS = PLAN_LIMIT_BANDS.filter((band) => !OFF_BAR_BANDS.has(band));
 const capacityTotal = computed(() => CAPACITY_BANDS.reduce((sum, band) => sum + summary.value.counts[band], 0));
 const capacity = computed(() =>
     CAPACITY_BANDS.filter((band) => summary.value.counts[band] > 0).map((band) => ({
@@ -97,11 +101,18 @@ const barTooltip = (row: PlanLimitRow): string =>
 
 // attention
 
-// Caps a fleet-wide expiry (real: a slept laptop, a mass revoke) from reverting this to a long column.
+// Caps a fleet-wide expiry (real: a slept laptop, a mass revoke) from reverting this to a long column. Per condition,
+// so thirty expired sign-ins can't push the two accounts missing something else off the panel.
 const ATTENTION_SHOWN = 12;
 const attentionExpanded = ref(false);
-const attentionShown = computed(() => (attentionExpanded.value ? summary.value.attention : summary.value.attention.slice(0, ATTENTION_SHOWN)));
-const attentionHidden = computed(() => summary.value.attention.length - attentionShown.value.length);
+const attentionTotal = computed(() => summary.value.attention.reduce((count, group) => count + group.rows.length, 0));
+const attentionShown = computed(() =>
+    summary.value.attention.map((group) => ({
+        reason: group.reason,
+        rows: attentionExpanded.value ? group.rows : group.rows.slice(0, ATTENTION_SHOWN),
+        hidden: attentionExpanded.value ? 0 : Math.max(0, group.rows.length - ATTENTION_SHOWN),
+    })),
+);
 
 // the roster
 
@@ -117,11 +128,15 @@ const openRoster = (provider: string): void => {
 
 const roster = computed(() => {
     const query = rosterQuery.value.trim().toLowerCase();
-    return rows.value.filter(
-        (row) =>
-            (rosterProvider.value === undefined || row.provider === rosterProvider.value) &&
-            (query === `` || row.label.toLowerCase().includes(query) || providerLabel(row.provider).toLowerCase().includes(query)),
-    );
+    return rows.value
+        .filter(
+            (row) =>
+                (rosterProvider.value === undefined || row.provider === rosterProvider.value) &&
+                (query === `` || row.label.toLowerCase().includes(query) || providerLabel(row.provider).toLowerCase().includes(query)),
+        )
+        // Reconciling one account is what this table is for, and "why is this one doing nothing" is a question its
+        // meter columns answer with a dash.
+        .map((row) => ({ row, blocked: blockedReason(row) }));
 });
 </script>
 
@@ -133,8 +148,12 @@ const roster = computed(() => {
             <div class="flex flex-col gap-2">
                 <!-- Answers "can I start work, and if not, when", not a connection count (the roster already does that). -->
                 <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <!--
+                        Counted against the accounts that could have room, never the whole roster: a credential no turn
+                        can run on belongs to the legend below, or connecting one reads as capacity that shrank.
+                    -->
                     <span class="text-sm text-content">
-                        {{ summary.counts.room }} of {{ summary.accounts }} accounts {{ summary.counts.room === 1 ? `has` : `have` }} room
+                        {{ summary.counts.room }} of {{ capacityTotal }} accounts {{ summary.counts.room === 1 ? `has` : `have` }} room
                     </span>
                     <span v-if="summary.nextResetAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle">
                         next pool reopens {{ formatReset(summary.nextResetAt) }}
@@ -159,6 +178,9 @@ const roster = computed(() => {
                         <span class="ui-meter-fill size-2 shrink-0 rounded-2xs" :class="planLimitBandTone(segment.band)" />
                         <span class="tabular-nums text-content">{{ segment.count }}</span>
                         {{ segment.label }}
+                    </span>
+                    <span v-if="summary.counts.blocked > 0" class="text-danger">
+                        · {{ summary.counts.blocked }} {{ PLAN_LIMIT_BAND_LABEL.blocked }}
                     </span>
                     <span v-if="summary.counts.none > 0" class="text-subtle"> · {{ summary.counts.none }} {{ PLAN_LIMIT_BAND_LABEL.none }} </span>
                 </div>
@@ -304,28 +326,40 @@ const roster = computed(() => {
             </div>
         </RowNote>
 
-        <!-- 3. ATTENTION: one condition, stated once in the heading; the fix stays there too, so rows hold nothing but names. -->
+        <!--
+            3. ATTENTION: what a percentage cannot say — the accounts no turn can run on until a person acts. The
+            heading counts them and states the fix once; each condition then names itself above the accounts it holds,
+            since "no Antigravity project" and "sign-in expired" are the same instruction but not the same news.
+        -->
         <RowNote v-if="summary.attention.length > 0" variant="block">
             <div class="flex flex-col gap-2">
                 <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                    <span class="text-2xs font-medium text-danger">Sign-in expired · {{ summary.attention.length }}</span>
-                    <span class="text-2xs text-subtle"> reconnect {{ summary.attention.length === 1 ? `it` : `them` }} on the Agent tab </span>
+                    <span class="text-2xs font-medium text-danger">Can't serve a turn · {{ attentionTotal }}</span>
+                    <span class="text-2xs text-subtle"> reconnect {{ attentionTotal === 1 ? `it` : `them` }} on the Agent tab </span>
                 </div>
-                <!-- Wraps as a set, not a column: names are short, unordered, and scanned for the one you recognise. -->
-                <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-                    <span v-for="row in attentionShown" :key="row.id" v-tooltip.top="row.identity" class="flex min-w-0 items-center gap-1.5 text-2xs">
-                        <ProviderLogo :provider="row.provider" class="shrink-0 text-muted" />
-                        <span class="min-w-0 truncate text-muted">{{ row.label }}</span>
-                    </span>
-                    <!-- Never a silent cap, and never a dead end: the rest are one click away, in place. -->
-                    <button
-                        v-if="attentionHidden > 0"
-                        type="button"
-                        class="cursor-pointer text-2xs text-link hover:underline"
-                        @click="attentionExpanded = true"
-                    >
-                        +{{ attentionHidden }} more
-                    </button>
+                <div v-for="group in attentionShown" :key="group.reason" class="flex flex-col gap-1">
+                    <span class="text-2xs text-muted">{{ group.reason }}</span>
+                    <!-- Wraps as a set, not a column: names are short, unordered, and scanned for the one you recognise. -->
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <span
+                            v-for="row in group.rows"
+                            :key="row.id"
+                            v-tooltip.top="row.identity"
+                            class="flex min-w-0 items-center gap-1.5 text-2xs"
+                        >
+                            <ProviderLogo :provider="row.provider" class="shrink-0 text-muted" />
+                            <span class="min-w-0 truncate text-muted">{{ row.label }}</span>
+                        </span>
+                        <!-- Never a silent cap, and never a dead end: the rest are one click away, in place. -->
+                        <button
+                            v-if="group.hidden > 0"
+                            type="button"
+                            class="cursor-pointer text-2xs text-link hover:underline"
+                            @click="attentionExpanded = true"
+                        >
+                            +{{ group.hidden }} more
+                        </button>
+                    </div>
                 </div>
             </div>
         </RowNote>
@@ -366,11 +400,12 @@ const roster = computed(() => {
                             </tr>
                         </thead>
                         <tbody class="text-muted">
-                            <tr v-for="row in roster" :key="row.id" class="border-b border-line/50">
+                            <tr v-for="{ row, blocked } in roster" :key="row.id" class="border-b border-line/50">
                                 <!-- Name over sign-in identity: reconciling an unplaceable name is exactly why a reader opens this table. -->
                                 <td class="max-w-56 py-1.5 pr-3">
                                     <span class="block truncate text-content">{{ row.label }}</span>
                                     <span v-if="row.identity !== undefined" class="block truncate text-subtle">{{ row.identity }}</span>
+                                    <span v-if="blocked !== undefined" class="block truncate text-danger">{{ blocked }}</span>
                                 </td>
                                 <td class="py-1.5 pr-3">{{ providerLabel(row.provider) }}</td>
                                 <td class="py-1.5 pr-3">{{ row.binding?.label ?? (row.readable ? `—` : `no published limits`) }}</td>

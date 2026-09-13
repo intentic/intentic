@@ -1,7 +1,17 @@
 import { type AgentProvider, SPENT_UTILIZATION } from "@intentic/sandbox-contract";
 import { providerAccounts, providerRefusals, translatorAccounts } from "../accounts/providerAccounts";
 import { providerDisplayLabel } from "../accounts/providerCatalog";
-import { type PlanLimitGroup, planLimitGroups, type PlanLimitPool, type PlanLimitRow, planLimitRows, poolPeriod, poolScope } from "../session/usageStatus";
+import {
+    attentionGroups,
+    blockedReason,
+    type PlanLimitGroup,
+    planLimitGroups,
+    type PlanLimitPool,
+    type PlanLimitRow,
+    planLimitRows,
+    poolPeriod,
+    poolScope,
+} from "../session/usageStatus";
 
 // Projection behind ChatCapacityRail.vue for the popped-out chat: not the Usage tab's full reconciliation, but what has
 // room to start the next task right now. Reads module state, not the current conversation's provider.
@@ -47,9 +57,12 @@ export interface CapacityProvider {
     readonly provider: AgentProvider;
     readonly label: string;
     readonly rows: readonly CapacityRow[];
-    // Accounts that can serve now, and how many the provider holds in total; equal-and-one prints no count.
+    // Accounts that can serve now, and how many the provider holds that could ever; equal-and-one prints no count.
     readonly ready: number;
     readonly total: number;
+    // Held out of `total`, since a credential no turn can run on is not a spent one that fills the ratio's bottom
+    // half: connecting more accounts must move this number, not silently grow the denominator.
+    readonly blocked: number;
     // Accounts with room that were not drawn a row; never a silent cap.
     readonly hidden: number;
     // True when the translator spreads turns across these accounts itself, so the rows are one, not a choice.
@@ -73,8 +86,10 @@ export interface ChatCapacity {
     readonly providers: readonly CapacityProvider[];
     // Lets a reader tell a spent provider from one they never connected.
     readonly out: readonly CapacityOut[];
-    // Credentials needing a person; counted, not listed, since the fix lives on the Agent tab.
-    readonly needsReauth: number;
+    // Credentials needing a person, grouped by what is missing; counted, not listed, since the fix lives on the
+    // Agent tab. Without this a connected-but-unusable account is invisible: absent from every offer, and silently
+    // part of no count.
+    readonly blocked: readonly { readonly reason: string; readonly count: number }[];
     // Oldest reading on screen, not the freshest, since it qualifies every bar shown under it.
     readonly measuredAt: number | undefined;
 }
@@ -189,26 +204,31 @@ const capacityProvider = (group: PlanLimitGroup, ready: readonly PlanLimitRow[])
     const shown = pooled ? ready.slice(0, 1) : ready.slice(0, ROWS_PER_PROVIDER);
     const named = !pooled && group.rows.length > 1;
     const ambiguous = ambiguousLabels(group.rows);
+    const blocked = group.rows.filter((row) => blockedReason(row) !== undefined).length;
     return {
         provider: group.provider,
         label: providerDisplayLabel(group.provider),
         rows: shown.map((row) => capacityRow(row, named ? displayName(row, ambiguous) : undefined)),
         ready: ready.length,
-        total: group.rows.length,
+        total: group.rows.length - blocked,
+        blocked,
         hidden: pooled ? 0 : ready.length - shown.length,
         pooled,
     };
 };
 
-// Order a reader can act on; spend comes first since naming it also gives the reopen instant. A dead credential is
-// reported separately via `needsReauth`.
+// Order a reader can act on; a condition a person has to fix comes first, then spend, since naming that gives the
+// reopen instant with it.
 const outReason = (group: PlanLimitGroup, refused: Refused): string => {
+    // Only when it covers the whole provider, and in the words of what is missing: a fleet nothing can run on is not
+    // waiting for a pool, and must not be dated as though it were.
+    const blocked = attentionGroups(group.rows);
+    if (blocked.length > 0 && blocked.reduce((count, entry) => count + entry.rows.length, 0) === group.rows.length) {
+        return blocked.length === 1 ? (blocked[0]?.reason ?? `nothing available`) : `nothing that can serve`;
+    }
     // Same exhaustion test as the row list; a slice that never gated anything can't read a provider as spent.
     if (group.rows.some(spentOutright)) {
         return `spent`;
-    }
-    if (group.rows.every((row) => row.needsReauth)) {
-        return `sign-in expired`;
     }
     if (group.rows.every((row) => row.cooling !== undefined)) {
         return `cooling down`;
@@ -257,7 +277,7 @@ export const chatCapacity = (now: number = Date.now()): ChatCapacity => {
                       },
                   ],
         ),
-        needsReauth: rows.filter((row) => row.needsReauth).length,
+        blocked: attentionGroups(rows).map((entry) => ({ reason: entry.reason, count: entry.rows.length })),
         measuredAt: measured.length === 0 ? undefined : Math.min(...measured),
     };
 };

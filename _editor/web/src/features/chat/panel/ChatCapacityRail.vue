@@ -43,8 +43,13 @@ const rowDetail = (row: CapacityRow, entry: CapacityProvider): string =>
 const outNote = (entry: { readonly reason: string; readonly reopensAt: number | undefined }): string =>
     entry.reopensAt === undefined ? entry.reason : `${entry.reason} · ${formatReset(entry.reopensAt)}`;
 
+// Says what the ratio counts, which is the only place a credential held out of it is accounted for on this line.
 const countDetail = (entry: CapacityProvider): string =>
-    `${entry.ready} of ${entry.total} accounts have room${entry.pooled ? `, and turns are spread across them automatically` : ``}`;
+    [
+        `${entry.ready} of ${entry.total} accounts have room`,
+        ...(entry.blocked === 0 ? [] : [`${entry.blocked} more can't serve a turn at all`]),
+        ...(entry.pooled ? [`turns are spread across them automatically`] : []),
+    ].join(` · `);
 
 // One control for age and re-measure: the age itself is the pressable label, so watching it reset is the
 // confirmation. Forced past the daemon's one-minute cache, since pressing this means asking about right now.
@@ -215,26 +220,28 @@ const remeasureLabel = computed(() =>
                     bottom, since
                     this rail is opened to find what IS available.
                 -->
-                <div v-if="capacity.out.length > 0 || capacity.needsReauth > 0" class="flex flex-col gap-1 border-t border-line pt-3">
+                <div v-if="capacity.out.length > 0 || capacity.blocked.length > 0" class="flex flex-col gap-1 border-t border-line pt-3">
                     <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Unavailable</span>
                     <div v-for="entry in capacity.out" :key="entry.provider" class="flex items-baseline gap-2" v-tooltip.left="entry.detail">
                         <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ entry.label }}</span>
                         <span class="shrink-0 text-2xs text-subtle">{{ outNote(entry) }}</span>
                     </div>
                     <!--
-                        Counted, not listed: a dead credential is the one state that stays broken until a person acts,
-                        so it earns its
-                        own line.
+                        Counted, not listed, one line per condition: a credential that stays broken until a person acts
+                        is the one thing a fleet's percentages cannot say, and connecting another account is exactly
+                        when a reader needs to see it.
                     -->
                     <!--
                         The condition is the alarm; the instruction stays quiet beside it (as in the Usage tab's
                         attention block), so
                         the sentence doesn't shout twice.
                     -->
-                    <p v-if="capacity.needsReauth > 0" class="text-2xs">
-                        <span class="text-warning">{{ capacity.needsReauth }} sign-in{{ capacity.needsReauth === 1 ? `` : `s` }} expired</span>
-                        <span class="text-subtle"> · reconnect on the Agent tab</span>
+                    <p v-for="entry in capacity.blocked" :key="entry.reason" class="text-2xs">
+                        <span class="text-warning">{{ entry.count }} can't serve</span>
+                        <span class="text-subtle"> · {{ entry.reason }}</span>
                     </p>
+                    <!-- Said once for every condition above it: the fix is the same door whatever the credential is missing. -->
+                    <p v-if="capacity.blocked.length > 0" class="text-2xs text-subtle">reconnect on the Agent tab</p>
                 </div>
             </div>
         </template>
