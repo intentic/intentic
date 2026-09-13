@@ -235,7 +235,7 @@ watch(
     font-family: var(--face-display);
     font-size: clamp(1.75rem, 7.2vw, 3.4rem);
     line-height: 1.24;
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
 }
 /* Splits on the sentence, not just wraps, so each ember stop lands at the end of a thought. */
 .beat {
@@ -357,7 +357,7 @@ watch(
 .step h2 {
     font-family: var(--face-mark);
     font-size: 0.9375rem;
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
     color: var(--ink);
 }
 .step[aria-current="step"] h2 {

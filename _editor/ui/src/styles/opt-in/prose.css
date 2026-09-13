@@ -81,7 +81,7 @@
 .md-prose h3,
 .md-prose h4 {
     margin: 1.8em 0 0.6em;
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
     line-height: 1.3;
     color: var(--color-content);
     /* A long identifier in a heading must wrap rather than widen the column. */
@@ -161,9 +161,10 @@
    constantly (a term per bullet, a lead-in per paragraph), so at 600 every one of those read as loud as the
    section header above it and a bullet list turned into a field of shouting fragments. 500 still lifts a term
    out of its sentence — that is all emphasis has to do — while leaving the heading ladder legible.
-   The available rungs are 400·500·600·700 (index.html's font loads); anything between rounds up. */
+   Named rather than numbered so this rung rides the scheme: Inter loads as a variable range, and the dark
+   scheme resolves every weight token ~30 units lighter to cancel halation (tokens.css). */
 .md-prose strong {
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
 }
 
 .md-prose blockquote {
@@ -285,7 +286,7 @@
     border-bottom: 1px solid var(--color-line);
 }
 .md-prose th {
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
     color: var(--color-content);
     border-bottom-color: var(--color-line-strong);
 }
@@ -338,7 +339,7 @@
 .md-code-lang {
     padding-left: 0.2rem;
     font-size: var(--text-2xs);
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
     letter-spacing: 0.02em;
     color: var(--color-muted);
 }

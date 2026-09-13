@@ -862,7 +862,7 @@
          * letter on visibly cut stone reads as cut without the letter itself having to argue for it. Material
          * first, then type — spending the relief budget on the ground rather than on 13px glyphs. */
         color: #1d160e;
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
         text-shadow: 0 1px 0 rgba(255, 250, 238, 0.26);
         /* THE FACE COMES DOWN EIGHT LIGHTNESS POINTS, from a bone that read as ivory or as warm plastic to a
          * limestone the wall could plausibly have been quarried from. What is lost is nothing: a pale plaque
@@ -1056,7 +1056,7 @@
      * glyph in the label's colour is part of the inscription, not a badge stuck to it. */
     [data-skin="sanctum"] .p-button.p-button-success:where(:not(.p-button-text, .p-button-outlined, .p-button-link)) {
         color: #142118;
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
         text-shadow: 0 1px 0 rgba(255, 250, 238, 0.24);
         background-color: #a4b89e;
         background-image:
@@ -1235,7 +1235,7 @@
     [data-skin="sanctum"] .p-button.ui-button-loud:enabled:hover,
     [data-skin="sanctum"] .p-button.ui-button-loud:enabled:active {
         color: #21140a;
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
         letter-spacing: 0.015em;
         text-shadow: 0 1px 0 rgba(255, 248, 232, 0.42);
         background-color: #d9b169;
@@ -1396,7 +1396,7 @@
      * put `mb-*` on this heading — that would cancel the takeback and open a gap. */
     [data-skin="sanctum"] h1.text-4xl {
         font-family: var(--sanctum-display);
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
         --display-descender: 0.2em;
         padding-block-end: var(--display-descender);
         margin-block-end: calc(-1 * var(--display-descender));

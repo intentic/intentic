@@ -62,7 +62,7 @@ withDefaults(
 .brand-word {
     font-family: "Baloo 2", ui-rounded, var(--font-sans);
     font-size: 1.5em;
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
     line-height: 1;
     letter-spacing: 0.005em;
 }

@@ -319,7 +319,14 @@
     --role-line:        color-mix(in srgb, var(--color-content) 6%, var(--color-surface-900));
     --role-line-strong: var(--color-surface-800);
     --role-line-subtle: color-mix(in srgb, var(--role-line) 45%, var(--role-card));
-    --role-content:     var(--color-surface-50);
+    /* 94% L rather than the ramp's 98%, because CONTRAST IS WHAT FEEDS THE HALATION. Light ink on a dark ground
+     * bleeds outward on the retina and on the panel, so the same stem reads heavier than its mirror image does;
+     * the two schemes were within half a point of each other measured (15.95:1 dark, 16.46:1 light) and nowhere
+     * near each other read. Four lightness points buy an 11% cut in the thing driving it and cost nothing that
+     * matters: 14.17:1 on the card, 11.44:1 on the overlay — the worst surface here is still double AAA.
+     * Weight is the other half of the same correction and lives in tokens.css.
+     * `muted` and `subtle` stay on the ramp: at 71% and 58% L there is no bloom to cut, only legibility to lose. */
+    --role-content:     color-mix(in oklab, var(--color-surface-100) 50%, var(--color-surface-200));
     --role-muted:       var(--color-surface-400);
     --role-subtle:      var(--color-surface-500);
     --role-link:        var(--color-primary-400);

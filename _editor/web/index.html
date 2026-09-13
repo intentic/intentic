@@ -78,6 +78,12 @@
         <!-- The app's two faces: Inter for --font-sans, JetBrains Mono for --font-mono. display=swap keeps it
              non-blocking. (Space Grotesk and DM Sans were loaded here for two of the brand themes; the accent
              picker that replaced them changes colour, never type.)
+             INTER IS ASKED FOR AS A RANGE, AND THAT IS LOAD-BEARING. `wght@100..900` is what keeps the weight
+             axis live, which is what lets the dark scheme write ~30 units lighter than the light one
+             (tokens.css). Listing weights instead — `wght@400;500;600;700` — pins each @font-face to a single
+             value, and every fractional weight in that block silently snaps to the nearest static instance
+             with nothing failing. It is also not a saving: Google serves the identical variable file either
+             way, so the discrete form downloads the same 48KB once per weight, per subset.
              Baloo 2 is here for the WORDMARK alone, at one weight: the brand's own face, which the marketing
              pages set the name in, so the logo on this app's entry screens is the same object as the logo on
              the page the visitor arrived from. One family added to a request that was already being made
@@ -85,7 +91,7 @@
              not typed. (The sanctum skin asks for the same family plus Playfair through its own link; a
              duplicate family costs nothing, the browser serves the second from cache.) -->
         <link
-            href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500&family=Inter:wght@100..900&family=JetBrains+Mono:wght@400;500;600&display=swap"
             rel="stylesheet"
         />
     </head>

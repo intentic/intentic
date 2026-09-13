@@ -2136,7 +2136,7 @@ const warmSandboxCredential = async (): Promise<void> => {
     /* Sized between the door's headline and a page hero, since this one shares its screen with a decision. */
     font-family: var(--face-display);
     font-size: clamp(1.75rem, 4.6vw, 2.75rem);
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
     line-height: 1.24;
     text-wrap: balance;
 }
@@ -2167,7 +2167,7 @@ const warmSandboxCredential = async (): Promise<void> => {
 /* Field name on the address row; small, spaced, gold, so it reads as a label, not a sentence on carved stone. */
 .fact-label {
     font-size: 0.6875rem;
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--gold);
@@ -2239,7 +2239,7 @@ const warmSandboxCredential = async (): Promise<void> => {
     margin-top: 0.35rem;
     font-family: var(--face-mark);
     font-size: 1rem;
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
     line-height: 1.2;
     color: var(--ink);
 }

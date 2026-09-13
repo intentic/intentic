@@ -28,8 +28,16 @@
         margin: 0;
         background: var(--color-canvas);
         color: var(--color-content);
-        -webkit-font-smoothing: antialiased;
         text-rendering: optimizeLegibility;
+    }
+
+    /* Greyscale AA belongs only where the halation is. On `body` it also thinned the light scheme, which is the
+     * one place the fuller rendering is wanted, so it could never close a gap BETWEEN the two. macOS-only in
+     * every engine — Chrome and Firefox ignore it on Windows and Linux — so it is the smallest of the three
+     * dark-weight levers and never the one carrying the correction; see tokens.css. */
+    [data-mode="dark"] body {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
     }
 
     img,

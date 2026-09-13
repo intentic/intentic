@@ -42,7 +42,7 @@
     color: var(--color-subtle);
     font-family: var(--font-mono);
     font-size: 0.85em;
-    font-weight: 400;
+    font-weight: var(--font-weight-normal);
     white-space: pre;
 }
 

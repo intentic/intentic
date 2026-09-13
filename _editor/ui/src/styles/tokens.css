@@ -336,6 +336,34 @@
     font-size: 110%;
     --ui-scale: 1.1;
 }
+
+/* ── WEIGHT, PER SCHEME ────────────────────────────────────────────────────────────────────────────────────
+ * Dark writes ~30 units lighter than light does, and the two then LOOK like the same weight. Light glyphs on a
+ * dark ground bleed outward — halation — so identical stems read heavier; it is an effect in the eye and the
+ * panel, which is why no rendering flag fixes it and why `-webkit-font-smoothing` (base.css) cannot: that one
+ * is macOS-only and does nothing on Windows or Linux. A weight delta works in every engine on every platform.
+ *
+ * THIS IS THREE DECLARATIONS BECAUSE TAILWIND v4 COMPILES `font-medium` TO `font-weight: var(--font-weight-medium)`.
+ * Redefining the three tokens re-weights all ~625 weight utilities in the app at once; there is no component to
+ * edit, and adding a fourth weight to the app means adding it here too or it will not flip.
+ *
+ * IT REQUIRES THE VARIABLE FACE, AND THAT IS A CROSS-FILE CONTRACT. index.html must request Inter as a RANGE
+ * (`wght@100..900`). A discrete request (`wght@400;500;600;700`) pins each @font-face to one weight, and every
+ * value below then snaps to the nearest static instance — 470 renders as 500 — so this file goes silently inert
+ * with nothing failing. The range costs no bytes: Google serves one variable file either way, and the discrete
+ * form downloads that same file once per weight.
+ *
+ * `data-mode="dark"` covers the sanctum skin too, since turning a skin on forces the dark scheme (useSkin.ts).
+ * Qualified with `html` so it beats Tailwind's `:root` theme output on specificity rather than on import order.
+ *
+ * The axis built for this job is GRAD, which regrades without touching advance widths; Inter has no GRAD, so a
+ * small wght delta stands in for it. The cost is that widths move — about a third of a percent, sub-pixel per
+ * word, visible only as a hairline reflow if a long line is on screen while the theme is toggled. */
+html[data-mode="dark"] {
+    --font-weight-normal: 380;
+    --font-weight-medium: 470;
+    --font-weight-semibold: 565;
+}
 [data-text-size="large"] {
     font-size: 120%;
     --ui-scale: 1.2;

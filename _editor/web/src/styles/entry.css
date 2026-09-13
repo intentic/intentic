@@ -238,7 +238,7 @@
     align-items: center;
     gap: 0.7rem;
     font-size: 0.6875rem;
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
     letter-spacing: 0.22em;
     text-transform: uppercase;
     color: var(--gold);
@@ -268,7 +268,7 @@
  * it holds at any leading. The pair must stay together — never set a bottom margin on a `.entry-display`. */
 .entry-display {
     font-family: var(--face-display);
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
     letter-spacing: 0.02em;
     line-height: 1.24;
     --descender: 0.2em;
@@ -425,7 +425,7 @@
         padding: 0.7rem 1.5rem;
         font-family: var(--face-read);
         font-size: 0.9375rem;
-        font-weight: 500;
+        font-weight: var(--font-weight-medium);
         letter-spacing: 0.015em;
         line-height: 1.35;
         border: 1px solid transparent;
@@ -512,7 +512,7 @@
        letter, 11:1 on the metal — and it does not lighten on hover, because metal that brightens does not turn
        its engraving pale. */
     .entry .p-button:where(:not(.p-button-secondary, .p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)) {
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
         color: #21140a;
         text-shadow: 0 1px 0 rgba(255, 248, 232, 0.42);
         background-color: #d9b169;

@@ -202,7 +202,7 @@
         background: var(--ui-button-tone);
         border-color: var(--ui-button-tone);
         color: var(--color-fill-content);
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
     }
 
     .p-button.ui-button-loud:enabled:hover,
@@ -605,7 +605,7 @@
 
     .ui-field-label {
         font-size: var(--text-sm);
-        font-weight: 500;
+        font-weight: var(--font-weight-medium);
         color: var(--color-muted);
     }
 
