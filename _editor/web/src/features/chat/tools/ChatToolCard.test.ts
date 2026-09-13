@@ -51,18 +51,18 @@ describe(`ChatToolCard`, () => {
             ],
         });
 
-        // `.border-l` is the child's own card; its presence proves the recursive reference resolved.
-        const nested = element.querySelector(`.border-l`);
-        expect(nested).not.toBeNull();
-        expect(nested?.textContent).toContain(`Bash`);
-        expect(nested?.textContent).toContain(`ls -la`);
+        const names = [...element.querySelectorAll(`span.font-medium`)].map((node) => node.textContent);
+        expect(names).toContain(`Agent`);
+        expect(names).toContain(`Bash`);
+        expect(element.textContent).toContain(`ls -la`);
         // The sub-agent's thinking rides on the card, not the parent turn.
         expect(element.textContent).toContain(thinking);
     });
 
     it(`shows no nested transcript for an ordinary tool call`, () => {
         const element = mount({ id: `t1`, name: `Read`, category: `read`, status: `completed`, target: `a.ts` });
-        expect(element.querySelector(`.border-l`)).toBeNull();
+        expect(element.textContent).toContain(`a.ts`);
+        expect(element.textContent).not.toContain(`Agent`);
     });
 
     it(`keeps an output-less tool name on one line beside a long, elastic target`, () => {

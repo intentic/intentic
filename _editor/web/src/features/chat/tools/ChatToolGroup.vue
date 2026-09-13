@@ -9,7 +9,7 @@ import { present } from "./toolPresentation";
 
 /* A collapsed run of consecutive same-name+same-target tool calls. The header reads like a single ChatToolCard
  * row (same icon, same target chip, same right-aligned summary) with a count badge and aggregated stats.
- * Expanding reveals the individual cards, indented under a left border like a sub-agent's nested transcript. */
+ * Expanding reveals the individual cards, indented like a sub-agent's nested transcript. */
 
 const props = defineProps<{
     group: ToolGroup;
@@ -70,7 +70,7 @@ const location = computed(() => props.group.tools[0]?.locations?.[0]);
                 <span class="ui-status-pill bg-overlay text-subtle">×{{ group.tools.length }}</span>
             </span>
         </div>
-        <div v-if="expanded" class="ml-4 flex flex-col gap-1 border-l border-line pl-2">
+        <div v-if="expanded" class="ml-4 flex flex-col gap-1">
             <ChatToolCard v-for="tool in group.tools" :key="tool.id" :tool="tool as TranscriptTool" :live="live" />
         </div>
     </div>

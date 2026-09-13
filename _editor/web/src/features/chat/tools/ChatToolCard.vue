@@ -254,7 +254,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 A sub-agent's nested transcript, indented under the delegation so the whole run reads as one unit; recursive,
                 since a delegating sub-agent nests one level deeper.
             -->
-            <div v-if="tool.children?.length" class="ml-4 flex flex-col gap-1 border-l border-line pl-2">
+            <div v-if="tool.children?.length" class="ml-4 flex flex-col gap-1">
                 <ChatToolCard v-for="child in tool.children" :key="child.id" :tool="child" :live="live" />
             </div>
             <!--
