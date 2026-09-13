@@ -219,16 +219,43 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
             return c.text(`error: this sandbox announces at ${expected}`, 409);
         }
         // Cleared here since a stored refusal must describe a live disagreement; firstAnnouncedAt is written once.
+        // The removal tombstone goes with it, and for the same reason: this sandbox is plainly here, whatever was
+        // deleted on some machine before. A box set up again on the same token heals its own record.
         const announced = await prisma.sandbox.updateMany({
             where: { id: sandbox.id, tokenDigest: sha256Hex(token) },
             data: {
                 daemonUrl,
                 lastSeenAt: new Date(),
                 announceRefusal: Prisma.DbNull,
+                removedAt: null,
+                removedBy: null,
                 ...(sandbox.firstAnnouncedAt === null ? { firstAnnouncedAt: new Date() } : {}),
             },
         });
         return announced.count === 0 ? c.text(`error: unknown sandbox`, 404) : c.json({ ok: true });
+    });
+
+    /* THE ONE THING ABSENCE CANNOT TELL US, posted by whoever is about to delete the container (`ic sandbox
+     * remove`, the device tool that shells out to it) while the connect token is still readable from the box.
+     *
+     * Without it the editor is left inferring from silence, and silence is the same shape for a closed laptop, a
+     * stopped container and a deleted one — so it either spins forever (what it does) or accuses the user of
+     * having deleted a sandbox that is merely asleep (worse). One POST turns the worst case into the certain one.
+     *
+     * Same sessionless door and same credential as announce above: the caller is the machine, not a browser. The
+     * row is NOT deleted — that is the owner's press, on a screen that can now tell them what happened. */
+    app.post(`/sandbox/farewell`, async (c) => {
+        const token = c.req.header(`x-intentic-connect`);
+        if (token === undefined || token === ``) {
+            return c.text(`error: missing token`, 400);
+        }
+        const body = (await c.req.json().catch(() => undefined)) as { removedBy?: unknown } | undefined;
+        const claimed = typeof body?.removedBy === `string` ? body.removedBy.trim().slice(0, 120) : ``;
+        const removed = await prisma.sandbox.updateMany({
+            where: { tokenDigest: sha256Hex(token) },
+            data: { removedAt: new Date(), removedBy: claimed === `` ? null : claimed, daemonUrl: null },
+        });
+        return removed.count === 0 ? c.text(`error: unknown sandbox`, 404) : c.json({ ok: true });
     });
 
     /* HOW A SANDBOX PRESENTS ITSELF, read by the sandbox itself. Same sessionless door as announce above and the

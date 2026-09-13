@@ -20,6 +20,9 @@ export const DEMO_SANDBOX: SandboxSummary = {
     setupReport: null,
     bootReport: null,
     announceRefusal: null,
+    // Null: nothing has ever removed this sandbox's container, so there is no removal to report.
+    removedAt: null,
+    removedBy: null,
     token: `demo-connect-token`,
     role: `owner`,
     providedAddress: false,

@@ -620,6 +620,11 @@ export const SandboxSummarySchema = z.object({
     bootReport: BootReportSchema.nullable(),
     // The last check-in refused, and why; null in the common case, cleared once an announce succeeds.
     announceRefusal: AnnounceRefusalSchema.nullable(),
+    /* WHEN THE CONTAINER WAS DELETED, and by which machine — reported by the removal itself, null for every
+     * sandbox that was not removed. The only fact that separates a box that is gone for good from one that is
+     * merely off, which silence at the edge cannot do. Cleared the moment the sandbox announces again. */
+    removedAt: z.string().nullable(),
+    removedBy: z.string().nullable(),
     /* THE CONNECT TOKEN, on the OWNER's row only; null on a member's. The browser spends it on exactly one
      * daemon-side act, the first-bind that seeds ownership, which is the owner's act by definition: a member
      * reaches a daemon that is already bound, and the daemon never reads the header again. On the platform the

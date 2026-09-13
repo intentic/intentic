@@ -30,6 +30,9 @@ const notice = computed(() =>
         // Whether the platform refused the last wake for spent hours; addressed to the owner, who can buy the plan.
         hoursSpent: activeWakeRefused.value !== undefined,
         owner: active.value?.role === `owner`,
+        // The machine that deleted this sandbox's container reported it on the way out; nothing else can establish this.
+        removed: (active.value?.removedAt ?? null) !== null,
+        removedBy: active.value?.removedBy ?? null,
     }),
 );
 
@@ -45,7 +48,9 @@ const signIn = async (): Promise<void> => {
 </script>
 
 <template>
-    <GateCard icon="box" :title="notice.title" :spinner="notice.action === undefined">
+    <!-- The spinner follows what the notice says is still expected, not whether there's a button: a sandbox that was
+         deleted has nothing to press AND nothing to wait for. -->
+    <GateCard icon="box" :title="notice.title" :spinner="notice.waiting">
         <p class="text-sm text-muted">{{ notice.body }}</p>
         <template #actions>
             <Button

@@ -333,6 +333,16 @@ pub fn container_exists(name: &str) -> bool {
     ok(&["inspect", name])
 }
 
+/// One value out of a container's env, empty read as absent. Works on a stopped container, like the framed read
+/// above — and on a doomed one, which is what lets a removal speak for the sandbox before deleting it.
+pub fn container_env_value(container: &str, name: &str) -> Option<String> {
+    let env = container_env_nul(container).ok()?;
+    let text = String::from_utf8_lossy(&env);
+    text.split('\0')
+        .find_map(|pair| pair.strip_prefix(&format!("{name}=")).map(str::to_string))
+        .filter(|value| !value.is_empty())
+}
+
 /// `docker ps [-a]` names matching a name filter.
 pub fn ps_names(all: bool, name_filter: &str) -> Vec<String> {
     let filter = format!("name={name_filter}");

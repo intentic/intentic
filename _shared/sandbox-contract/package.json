@@ -95,6 +95,17 @@
                 "default": "./dist/ids/tunnel-ids.js"
             }
         },
+        "./edge-verdict": {
+            "types": "./dist/protocol/edge-verdict.d.ts",
+            "import": {
+                "@intentic/src": "./src/protocol/edge-verdict.ts",
+                "default": "./dist/protocol/edge-verdict.js"
+            },
+            "require": {
+                "@intentic/src": "./src/protocol/edge-verdict.ts",
+                "default": "./dist/protocol/edge-verdict.js"
+            }
+        },
         "./ingress-contract": {
             "types": "./dist/protocol/ingress-contract.d.ts",
             "import": {

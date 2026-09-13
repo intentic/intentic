@@ -99,5 +99,6 @@ export type StartIngressTunnel = (options: IngressTunnelOptions) => IngressTunne
 //   and cache the answer, failing open if the platform doesn't respond. A 404 refuses the tunnel.
 // - Displacement: a new tunnel for an id closes the old session (code 4001) and takes the registration.
 // - Liveness: WebSocket ping every 15s; a peer silent for 45s is unregistered.
-// - Routing: host maps via hostOwnerId to a registered tunnel; no tunnel answers 502 naming the sandbox label.
+// - Routing: host maps via hostOwnerId to a registered tunnel; no tunnel answers 502 naming the sandbox label, with
+//   the verdict header and CORS of edge-verdict.ts, and admits the preflight of the request it is about to refuse.
 // - The tunnel door and any host without a sandbox id are served directly by the ingress, never routed.

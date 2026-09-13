@@ -124,10 +124,26 @@ pub fn run(args: Args) -> Result<()> {
     Ok(())
 }
 
+/// Tells the platform this sandbox is being deleted, BEFORE anything is deleted — the container's env is where
+/// its connect token lives, and a removed container answers no questions. Silent on every failure: a sandbox
+/// that was never connected to a platform, a machine that is offline, an old container missing either value.
+/// The browser's fallback is the wait it already does, so nothing here is worth a word in a removal's output.
+fn announce_removal(slug: &str) {
+    let container = format!("{CONTAINER_PREFIX}{slug}");
+    let (Some(token), Some(platform)) = (
+        docker::container_env_value(&container, "CONNECT_TOKEN"),
+        docker::container_env_value(&container, "PLATFORM_URL"),
+    ) else {
+        return;
+    };
+    crate::platform::farewell(&platform, &token, &crate::sandbox::connect::machine_label());
+}
+
 /// One sandbox by slug: its 3 containers, 4 named volumes, and network. Idempotent (missing = no-op). The
 /// dind pair is the Windows self-host deploy target connect.ps1 stands up beside the sandbox.
 pub fn remove_slug(slug: &str) {
     println!("intentic: removing sandbox '{slug}' (containers + named volumes + network)…");
+    announce_removal(slug);
     for container in [
         format!("{CONTAINER_PREFIX}{slug}"),
         format!("{TUNNEL_PREFIX}{slug}"),
@@ -149,6 +165,11 @@ pub fn remove_slug(slug: &str) {
 /// EVERY sandbox by name prefix — also sweeps orphaned volumes/networks a per-slug pass would miss. The
 /// prefixes never overlap the platform's intentic-app-* resources.
 fn remove_all() {
+    // Before the sweep, not inside it: `ps_names` matches the tunnel containers too, and each sandbox's token is
+    // read from its primary container, which the first `rm -f` of the loop below would already have taken.
+    for slug in list_slugs() {
+        announce_removal(&slug);
+    }
     println!("intentic: removing sandbox containers…");
     for filter in [CONTAINER_PREFIX, DIND_PREFIX] {
         for name in docker::ps_names(true, filter) {

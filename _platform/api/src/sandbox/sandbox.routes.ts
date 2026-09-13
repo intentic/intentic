@@ -149,6 +149,9 @@ const assertHostedAllowance = async (context: OrpcContext, userId: string): Prom
 const connectTokenFor = (config: Config, encryptedToken: string, role: MemberRole): string | null =>
     role === `owner` ? decryptSecret(config, encryptedToken) : null;
 
+// Every timestamp on the wire is ISO or null; one spelling, so the summary below reads as a list of fields.
+const isoOrNull = (at: Date | null): string | null => (at === null ? null : at.toISOString());
+
 // Shape a sandbox row for the browser. `role` is the caller's relationship, owner rows drive management, member
 // rows are access-only. daemonUrl is what the browser needs to reach the daemon directly (plus, for the owner,
 // the connect token above); daemonUrl + lastSeenAt come from the daemon's announce.
@@ -168,6 +171,8 @@ const toSummary = (
         setupReport: unknown;
         bootReport: unknown;
         announceRefusal: unknown;
+        removedAt: Date | null;
+        removedBy: string | null;
         // Hosted machine relation; optional so a caller that skipped the include reads as not-hosted, never crashes.
         hosted?: { region: string; warm: boolean } | null;
         token: string;
@@ -187,11 +192,14 @@ const toSummary = (
         name: sandbox.name,
         image: sandbox.image,
         daemonUrl: sandbox.daemonUrl,
-        lastSeenAt: sandbox.lastSeenAt === null ? null : sandbox.lastSeenAt.toISOString(),
-        setupCodeClaimedAt: sandbox.setupCodeClaimedAt === null ? null : sandbox.setupCodeClaimedAt.toISOString(),
+        lastSeenAt: isoOrNull(sandbox.lastSeenAt),
+        setupCodeClaimedAt: isoOrNull(sandbox.setupCodeClaimedAt),
         setupReport: report.success ? report.data : null,
         bootReport: boot.success ? boot.data : null,
         announceRefusal: refusal.success ? refusal.data : null,
+        // The removal's own word, and the only thing that lets the browser say "gone" instead of waiting forever.
+        removedAt: isoOrNull(sandbox.removedAt),
+        removedBy: sandbox.removedBy,
         hosted: sandbox.hosted === null || sandbox.hosted === undefined ? null : { region: sandbox.hosted.region, warm: sandbox.hosted.warm },
         token: connectTokenFor(context.config, sandbox.token, role),
         role,
@@ -593,7 +601,9 @@ export const sandboxRoutes = {
         await requireOwnedSandbox(context, input.sandboxId);
         const sandbox = await context.prisma.sandbox.update({
             where: { id: input.sandboxId },
-            data: { daemonUrl: input.daemonUrl, lastSeenAt: new Date() },
+            // Clears the removal tombstone for the same reason an announce does: the browser has just reached a daemon
+            // at this address, which is a live contradiction of "its container was deleted".
+            data: { daemonUrl: input.daemonUrl, lastSeenAt: new Date(), removedAt: null, removedBy: null },
             include: { hosted: true },
         });
         return toSummary(sandbox, `owner`, context);

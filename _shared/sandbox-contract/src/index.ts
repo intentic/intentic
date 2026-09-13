@@ -65,6 +65,7 @@ export { inventoryContract } from "./contracts/inventory.contract.js";
 export { issuesContract } from "./contracts/issues.contract.js";
 export { logsContract } from "./contracts/logs.contract.js";
 export { REQUEST_ID_EVIDENCE_ROUTE, REQUEST_ID_HEADER } from "./protocol/request-id.js";
+export * from "./protocol/edge-verdict.js";
 export { loopsContract } from "./contracts/loops.contract.js";
 export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";

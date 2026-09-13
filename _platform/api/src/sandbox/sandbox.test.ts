@@ -17,6 +17,8 @@ const sandboxRow = {
     daemonUrl: null,
     lastSeenAt: null,
     setupCodeClaimedAt: null,
+    removedAt: null,
+    removedBy: null,
     tunnelId: sandboxIdFromToken(`tok`)!,
 };
 
@@ -88,7 +90,12 @@ describe(`sandbox routes`, () => {
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
 
         const summary = await call(sandboxRoutes.attach, { sandboxId: `s1`, daemonUrl }, { context: context({ prisma }) });
-        expect(update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { daemonUrl, lastSeenAt: expect.any(Date) }, include: { hosted: true } });
+        expect(update).toHaveBeenCalledWith({
+            // The tombstone clears here too: a daemon the browser just reached is not a deleted one.
+            where: { id: `s1` },
+            data: { daemonUrl, lastSeenAt: expect.any(Date), removedAt: null, removedBy: null },
+            include: { hosted: true },
+        });
         expect(summary).toMatchObject({ id: `s1`, daemonUrl, lastSeenAt: `2026-07-26T10:00:00.000Z` });
     });
 
@@ -110,7 +117,7 @@ describe(`sandbox routes`, () => {
         );
         expect(update).toHaveBeenCalledWith({
             where: { id: `s1` },
-            data: { daemonUrl: `https://sandbox.example.com`, lastSeenAt: expect.any(Date) },
+            data: { daemonUrl: `https://sandbox.example.com`, lastSeenAt: expect.any(Date), removedAt: null, removedBy: null },
             include: { hosted: true },
         });
     });

@@ -37,13 +37,30 @@ describe(`classifyFailure`, () => {
         expect(classifyFailure({ closed: true, message: `stream ended` }).kind).toBe(`closed`);
     });
 
-    it(`classifies only forbidden and unaddressed as blocked`, () => {
+    it(`classifies forbidden, unaddressed and gone as blocked`, () => {
         expect(isBlocked(forbidden())).toBe(true);
         expect(isBlocked(classifyFailure({ unaddressed: true, message: `no address` }))).toBe(true);
+        expect(isBlocked(classifyFailure({ edge: `unknown-sandbox`, message: `no such sandbox` }))).toBe(true);
         expect(isBlocked(network())).toBe(false);
         expect(isBlocked(watchdog())).toBe(false);
+        // A detached box is expected back the moment its container starts; waiting IS the repair.
+        expect(isBlocked(classifyFailure({ edge: `no-tunnel`, message: `not connected` }))).toBe(false);
         // 401 stays transient, since a stale Google token is refreshed on the next attempt.
         expect(isBlocked(classifyFailure({ status: 401, message: `unauthorized` }))).toBe(false);
+    });
+
+    it(`takes the edge's word over anything it could infer from the break`, () => {
+        // Every one of these looks like a plain network failure from the browser; the edge is what saw the request
+        // arrive and find no tunnel, so its verdict outranks the local guess.
+        expect(classifyFailure({ edge: `no-tunnel`, message: `not connected` }).kind).toBe(`detached`);
+        expect(classifyFailure({ edge: `dropped`, watchdog: true, message: `silent` }).kind).toBe(`detached`);
+        expect(classifyFailure({ edge: `no-tunnel`, closed: true, message: `stream ended` }).kind).toBe(`detached`);
+        expect(classifyFailure({ edge: `unknown-sandbox`, message: `no such sandbox` }).kind).toBe(`gone`);
+    });
+
+    it(`keeps a missing address ahead of the edge's verdict`, () => {
+        // Nothing was dialled, so whatever the edge last said describes some earlier attempt, not this one.
+        expect(classifyFailure({ unaddressed: true, edge: `no-tunnel`, message: `no address` }).kind).toBe(`unaddressed`);
     });
 });
 

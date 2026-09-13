@@ -1,3 +1,4 @@
+import { EDGE_VERDICT_HEADER } from "@intentic/sandbox-contract/edge-verdict";
 import { INGRESS_GRANT_HEADER, mintReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { serveIngressSession, type IngressSessionServer } from "@intentic/sandbox-contract/ingress-protocol";
 import { generateKeyPairSync } from "node:crypto";
@@ -22,14 +23,25 @@ const publicKey = keys.publicKey.export({ type: `spki`, format: `pem` }).toStrin
 
 const portOf = (server: Server): number => (server.address() as AddressInfo).port;
 
+interface Answer {
+    readonly status: number;
+    readonly body: string;
+    readonly headers: Record<string, string | string[] | undefined>;
+}
+
 // Sends one request with a chosen Host, since fetch won't allow spoofing it; Host is the only routing input.
-const get = (port: number, host: string, path = `/`): Promise<{ status: number; body: string }> =>
+const get = (port: number, host: string, path = `/`, options?: { method?: string; headers?: Record<string, string> }): Promise<Answer> =>
     new Promise((resolve, reject) => {
-        const request = h1Request({ host: `127.0.0.1`, port, path, headers: { host } }, (response) => {
-            const chunks: Buffer[] = [];
-            response.on(`data`, (chunk: Buffer) => chunks.push(chunk));
-            response.on(`end`, () => resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString(`utf8`) }));
-        });
+        const request = h1Request(
+            { host: `127.0.0.1`, port, path, method: options?.method ?? `GET`, headers: { host, ...options?.headers } },
+            (response) => {
+                const chunks: Buffer[] = [];
+                response.on(`data`, (chunk: Buffer) => chunks.push(chunk));
+                response.on(`end`, () =>
+                    resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString(`utf8`), headers: response.headers }),
+                );
+            },
+        );
         request.on(`error`, reject);
         request.end();
     });
@@ -78,6 +90,33 @@ describe(`the ingress edge`, () => {
         const answer = await get(portOf(ingress.server), `sandbox-${SANDBOX_ID}.${ZONE}`);
         expect(answer.status).toBe(502);
         expect(answer.body).toContain(`sandbox-${SANDBOX_ID}`);
+    });
+
+    // The refusal is the only place a browser can learn that its own network is fine and the box is simply not here.
+    // Unreadable, it is indistinguishable from a DNS failure and the workspace spins forever.
+    test(`lets a browser read the refusal: the verdict is exposed and any origin may see it`, async () => {
+        const answer = await get(portOf(ingress.server), `sandbox-${SANDBOX_ID}.${ZONE}`, `/`, { headers: { origin: `https://app.example.test` } });
+        expect(answer.headers[EDGE_VERDICT_HEADER]).toBe(`no-tunnel`);
+        expect(answer.headers[`access-control-allow-origin`]).toBe(`*`);
+        expect(answer.headers[`access-control-expose-headers`]).toBe(EDGE_VERDICT_HEADER);
+    });
+
+    // A browser drops a non-2xx preflight and never sends the request behind it, so refusing the preflight would hide
+    // the verdict above behind a bare network error.
+    test(`admits the preflight of a request it is about to refuse`, async () => {
+        const answer = await get(portOf(ingress.server), `sandbox-${SANDBOX_ID}.${ZONE}`, `/events`, {
+            method: `OPTIONS`,
+            headers: { origin: `https://app.example.test`, "access-control-request-method": `GET`, "access-control-request-headers": `authorization` },
+        });
+        expect(answer.status).toBe(204);
+        expect(answer.headers[`access-control-allow-origin`]).toBe(`*`);
+        expect(answer.headers[`access-control-allow-headers`]).toBe(`*`);
+    });
+
+    // An OPTIONS that is not a preflight is an ordinary request for a sandbox that isn't there.
+    test(`still refuses a bare OPTIONS that no preflight sent`, async () => {
+        const answer = await get(portOf(ingress.server), `sandbox-${SANDBOX_ID}.${ZONE}`, `/`, { method: `OPTIONS` });
+        expect(answer.status).toBe(502);
     });
 
     test(`refuses a tunnel that presents no grant`, async () => {
@@ -213,6 +252,13 @@ describe(`the ingress edge replaying hosted sandboxes`, () => {
         const answer = await head(`sandbox-${GONE_ID}.${ZONE}`);
         expect(answer.status).toBe(502);
         expect(answer.headers[`fly-replay`]).toBeUndefined();
+    });
+
+    // Deleted and merely-off are the same 502 on the wire; only this header separates "wait" from "it is never coming
+    // back", and the browser decides whether to keep a spinner up on exactly that.
+    test(`names a deleted sandbox as unknown, and an off one as untunnelled`, async () => {
+        expect((await head(`sandbox-${GONE_ID}.${ZONE}`)).headers[EDGE_VERDICT_HEADER]).toBe(`unknown-sandbox`);
+        expect((await head(`sandbox-${SANDBOX_ID}.${ZONE}`)).headers[EDGE_VERDICT_HEADER]).toBe(`no-tunnel`);
     });
 
     // Replayed by not upgrading: Fly requires the app sending replay headers not negotiate the WebSocket itself.

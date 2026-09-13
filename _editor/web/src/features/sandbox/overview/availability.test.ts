@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { applyConnectionSignal, classifyFailure, initialConnection, type ConnectionSignal, type ConnectionState } from "../live/connection";
-import { SANDBOX_BUSY_AFTER_MS, sandboxAvailability, sandboxRequiresGate } from "./availability";
+import { DETACHED_AFTER_MS, SANDBOX_BUSY_AFTER_MS, sandboxAvailability, sandboxRequiresGate } from "./availability";
 
 const drive = (...signals: readonly ConnectionSignal[]): ConnectionState => signals.reduce(applyConnectionSignal, initialConnection);
 const failed = (at: number): ConnectionSignal => ({ kind: "failed", failure: classifyFailure({ message: "tunnel down" }), at });
+// The same break, but with the edge's word on it: nothing is dialled in for this sandbox.
+const detached = (at: number): ConnectionSignal => ({ kind: "failed", failure: classifyFailure({ edge: "no-tunnel", message: "not connected" }), at });
 
 describe(`sandboxAvailability`, () => {
     it(`keeps an established workspace quietly stale through transient retries`, () => {
@@ -40,6 +42,25 @@ describe(`sandboxAvailability`, () => {
         expect(state.unavailableSince).toBeUndefined();
         expect(sandboxAvailability(state, true, true, 1_000 + SANDBOX_BUSY_AFTER_MS)).toBe("live");
     });
+
+    // A sandbox that never painted and is not dialled in used to read "starting" for as long as the tab stayed open.
+    it(`calls an unconnected sandbox detached rather than perpetually starting`, () => {
+        const state = drive({ kind: "connect" }, detached(1_000));
+        expect(sandboxAvailability(state, true, false, 1_000 + DETACHED_AFTER_MS - 1)).toBe("starting");
+        expect(sandboxAvailability(state, true, false, 1_000 + DETACHED_AFTER_MS)).toBe("detached");
+    });
+
+    it(`says detached over busy for a workspace that had painted before`, () => {
+        const state = drive({ kind: "frame", at: 0 }, detached(1_000));
+        expect(sandboxAvailability(state, true, true, 1_000 + SANDBOX_BUSY_AFTER_MS)).toBe("detached");
+    });
+
+    it(`reads a reported removal, and the platform's own 404, as removed`, () => {
+        const state = drive({ kind: "connect" }, failed(1_000));
+        expect(sandboxAvailability(state, true, false, 2_000, true)).toBe("removed");
+        const gone = drive({ kind: "failed", failure: classifyFailure({ edge: "unknown-sandbox", message: "no such sandbox" }), at: 1_000 });
+        expect(sandboxAvailability(gone, true, true, 2_000)).toBe("removed");
+    });
 });
 
 describe(`sandboxRequiresGate`, () => {
@@ -52,6 +73,16 @@ describe(`sandboxRequiresGate`, () => {
     it(`gates a first connection and every blocked cause`, () => {
         expect(sandboxRequiresGate(false, false, "starting")).toBe(true);
         expect(sandboxRequiresGate(false, true, "blocked")).toBe(true);
+    });
+
+    it(`takes down a workspace painted for a sandbox that has since been removed`, () => {
+        // Files that no longer exist must not stay on screen as though they could still be opened.
+        expect(sandboxRequiresGate(false, true, "removed")).toBe(true);
+    });
+
+    // A detached box is expected back, so an established view keeps its place and the pill says what is happening.
+    it(`keeps an established workspace mounted while its sandbox is detached`, () => {
+        expect(sandboxRequiresGate(false, true, "detached")).toBe(false);
     });
 
     it(`lets a reachable first view own its ordinary data-loading state`, () => {

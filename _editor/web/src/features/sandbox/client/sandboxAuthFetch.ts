@@ -1,3 +1,4 @@
+import { noteEdgeVerdict } from "./edgeVerdict";
 import { type SandboxBearer, useSandboxSession } from "./sandboxSession";
 import { currentSandboxTarget, type SandboxTarget } from "./sandboxTarget";
 import { useEndpoint } from "../secrets/useEndpoint";
@@ -86,7 +87,11 @@ export const sandboxAuthenticatedFetch = async (
     const retrySource = request.clone();
     const send = async (outgoing: Request, token: string): Promise<Response> => {
         try {
-            return await globalThis.fetch(new Request(authenticated(outgoing, target, token), { signal }));
+            const answer = await globalThis.fetch(new Request(authenticated(outgoing, target, token), { signal }));
+            // The one place every daemon call passes through, and the only place the edge's own verdict is still a
+            // response rather than an oRPC error. Noted here so the connection machine can read it.
+            noteEdgeVerdict(target.sandboxId, answer);
+            return answer;
         } catch (error: unknown) {
             // Only our own deadline is translated to a timeout; the caller's abort keeps its original identity.
             throw expiry?.aborted === true && request.signal.aborted !== true ? timedOut() : error;

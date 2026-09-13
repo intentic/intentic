@@ -11,6 +11,8 @@ const sandbox = (overrides: Partial<SandboxSummary> & Pick<SandboxSummary, "id">
     setupReport: null,
     bootReport: null,
     announceRefusal: null,
+    removedAt: null,
+    removedBy: null,
     hosted: null,
     token: `token-${overrides.id}`,
     role: `owner`,

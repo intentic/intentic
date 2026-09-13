@@ -6,6 +6,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { presenceStreamOpened, resetPresence } from "../../../shell/presence/usePresence";
 import { markWorkspaceChanged } from "../../workspace/changes/useWorkspaceLive";
 import { classifyFailure, type ConnectionFailure, watchdogRecoveryDelay } from "../live/connection";
+import { forgetEdgeVerdict, lastEdgeVerdict } from "../client/edgeVerdict";
 import { daemonErrorMessage, daemonErrorStatus, sandboxRpc, SandboxUnaddressedError } from "../client/sandboxRpc";
 import { useSandboxSession } from "../client/sandboxSession";
 import { acquireStreamSlot } from "../client/streamBudget";
@@ -72,10 +73,13 @@ const failureOf = (error: unknown): ConnectionFailure => {
     if (error instanceof SandboxUnaddressedError) {
         return classifyFailure({ unaddressed: true, message: error.message });
     }
+    // Read for every arm below, not just the last: a watchdog trip on a box whose tunnel the edge says is gone is a
+    // detached sandbox, not a slow one.
+    const edge = lastEdgeVerdict(activeSandboxId.value);
     if (watchdogTripped) {
-        return classifyFailure({ watchdog: true, message: `The sandbox stopped responding.` });
+        return classifyFailure({ watchdog: true, edge, message: `The sandbox stopped responding.` });
     }
-    return classifyFailure({ status: daemonErrorStatus(error), message: daemonErrorMessage(error) });
+    return classifyFailure({ status: daemonErrorStatus(error), edge, message: daemonErrorMessage(error) });
 };
 
 // Whether the active sandbox changed mid-attempt; its abort must not be attributed to the sandbox just switched to.
@@ -174,7 +178,7 @@ const attempt = async (): Promise<void> => {
         // hot-looping.
         signalConnection({
             kind: `failed`,
-            failure: classifyFailure({ closed: true, message: `The sandbox closed the connection.` }),
+            failure: classifyFailure({ closed: true, edge: lastEdgeVerdict(sandboxId), message: `The sandbox closed the connection.` }),
             at: Date.now(),
         });
     } catch (error) {
@@ -256,6 +260,8 @@ watch(activeSandboxId, (id, previous) => {
     if (id !== undefined) {
         resetEndpoint(id);
     }
+    // The outgoing box's verdict must never be read as the incoming one's.
+    forgetEdgeVerdict();
     signalConnection({ kind: `switched`, lastKnownOnline: id !== undefined && (lastKnown.get(id) ?? false) });
     // Another sandbox is another image on its own clock; attributing the outgoing daemon's routes or boot state to it
     // would gate the wrong daemon's reads. Both re-report on the next hello.

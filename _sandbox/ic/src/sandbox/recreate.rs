@@ -244,8 +244,8 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
      * differ, which is precisely the case rollback exists for. A stock container's base is the container's
      * own image (inspect .Image — exact even on a shared daemon); an overlay container's is its base tag's
      * local resolution, still un-moved this side of the pull. */
-    let current_base = container_env(&container, "SANDBOX_BASE_IMAGE");
-    let sandbox_image = container_env(&container, "SANDBOX_IMAGE");
+    let current_base = docker::container_env_value(&container, "SANDBOX_BASE_IMAGE");
+    let sandbox_image = docker::container_env_value(&container, "SANDBOX_IMAGE");
 
     /* AN UNATTENDED PREPARE ONLY TRACKS THE OFFICIAL REGISTRY. A sandbox on a locally-built image, a pinned
      * build, or a rollback pin left the channel on purpose, and staging `:{channel}` for it would light the
@@ -401,7 +401,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
              * built with rides through unchanged, so the daemon inside keeps reporting its environment as
              * Applied rather than waking up to a rebuild it does not need. */
             stage_overlay(&container, &overlay_path)?;
-            env_hash = container_env(&container, "SANDBOX_ENVIRONMENT_HASH");
+            env_hash = docker::container_env_value(&container, "SANDBOX_ENVIRONMENT_HASH");
         }
         Mode::Dev => {
             if !docker::image_exists(DEV_TAG) {
@@ -600,7 +600,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
      *
      * The seeds are a reshape's whole payload to the image (contract.rs): the caps as given, and the edited
      * token list when a switch was touched. Every other mode seeds nothing and replays what is there. */
-    let carried_runtime = container_env(&container, HOST_RUNTIME_ENV).unwrap_or_default();
+    let carried_runtime = docker::container_env_value(&container, HOST_RUNTIME_ENV).unwrap_or_default();
     let (host_runtime, seeds) = match &mode {
         Mode::Reshape(ask) => reshape_seeds(ask, &carried_runtime),
         _ => (carried_runtime, Vec::new()),
@@ -994,7 +994,7 @@ fn overlay_outcome(copied: bool, has_one: bool) -> Overlay {
  * with nothing, so the ordinary swap spends no extra round-trip on the daemon. */
 fn overlay_exists(container: &str) -> bool {
     docker::exec_ok(container, &["test", "-f", APPROVED_FILE])
-        || container_env(container, "SANDBOX_ENVIRONMENT_HASH").is_some()
+        || docker::container_env_value(container, "SANDBOX_ENVIRONMENT_HASH").is_some()
 }
 
 /// Stage the sandbox's approved overlay at `dest` for the flow to build from. True when there is one; false
@@ -1170,14 +1170,6 @@ fn follows_registry(current_base: Option<&str>, sandbox_image: Option<&str>) -> 
             .strip_prefix(&format!("{DEFAULT_REGISTRY}:"))
             .is_some_and(|tag| !tag.is_empty())
     })
-}
-
-fn container_env(container: &str, name: &str) -> Option<String> {
-    let env = docker::container_env_nul(container).ok()?;
-    let text = String::from_utf8_lossy(&env);
-    text.split('\0')
-        .find_map(|pair| pair.strip_prefix(&format!("{name}=")).map(str::to_string))
-        .filter(|value| !value.is_empty())
 }
 
 #[cfg(test)]

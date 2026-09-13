@@ -181,6 +181,18 @@ model Sandbox {
     // refusal, cleared by an accepted announce, so a value here is always a live disagreement. Was a log line
     // only, which is what made a mis-addressed sandbox look identical to one that never started.
     announceRefusal    Json?
+    /* WHEN THIS SANDBOX'S CONTAINER WAS DELETED, as reported by whatever deleted it (`ic sandbox remove`, over
+     * the connect token, just before docker rm). Absence of a tunnel cannot answer this: an off machine, a
+     * stopped container and a deleted one are one silence at the edge, and only the remover knows which it
+     * was. Null for every sandbox that was never removed, which is nearly all of them.
+     *
+     * NOT a deletion of the row: the row is the identity (token, hostname, members, hours), the files are what
+     * went. Deleting the sandbox stays the owner's press. Cleared by the next accepted announce, so a box set
+     * up again on the same token stops being described as removed the moment it says otherwise. */
+    removedAt          DateTime?
+    // Who said so, for the sentence the editor shows: the machine's own label ("radarsu-rog"), or null when
+    // the remover could not name itself.
+    removedBy          String?
     // The KEY=value map /setup/claim returns alongside CONNECT_TOKEN (= token above): {SANDBOX_GRANT,
     // INGRESS_URL, SANDBOX_HOSTNAME, OWNER_EMAIL}. Its presence is also the row's record that this platform
     // handed the sandbox a reachability grant, which is what the announce check reads (api app.ts).

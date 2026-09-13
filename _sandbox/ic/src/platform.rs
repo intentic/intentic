@@ -103,6 +103,37 @@ pub fn claim(platform_url: &str, code: &str) -> Result<Claim> {
     })
 }
 
+/* THE REMOVAL NOBODY ELSE CAN WITNESS.
+ *
+ * When this container goes, it stops holding its tunnel — and so does a container that is merely stopped, and so
+ * does one whose machine went to sleep. At the edge all three are the same silence, so a browser waiting on this
+ * sandbox can only spin, or guess, and guessing "your sandbox was deleted" at a closed laptop lid is worse than
+ * spinning. The one moment the truth is known is this one, here, on the machine doing the deleting, while the
+ * container's connect token can still be read out of it.
+ *
+ * Best-effort in the same sense as the reporter below: its own short timeout, every error swallowed. A platform
+ * that cannot be reached leaves the old behaviour (a patient wait), never a failed removal.
+ */
+pub fn farewell(platform_url: &str, connect_token: &str, removed_by: &str) -> bool {
+    // The container's own PLATFORM_URL is spelled from INSIDE it; on a dev box that is host.docker.internal,
+    // which resolves nowhere out here.
+    let from_host = platform_url.replace("//host.docker.internal", "//localhost");
+    let agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(5)))
+        .tls_config(
+            ureq::tls::TlsConfig::builder()
+                .disable_verification(is_local(&from_host))
+                .build(),
+        )
+        .build()
+        .new_agent();
+    agent
+        .post(format!("{from_host}/sandbox/farewell"))
+        .header("x-intentic-connect", connect_token)
+        .send_json(serde_json::json!({ "removedBy": removed_by }))
+        .is_ok()
+}
+
 /* SETUP TELEMETRY FOR THE WIZARD — the terminal is not where the user is looking.
  *
  * The setup wizard sits in a browser watching the registry while this flow runs in a terminal the user may

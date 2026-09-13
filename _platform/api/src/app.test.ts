@@ -185,6 +185,40 @@ const announce = (prisma: PrismaClient, token: string | undefined, daemonUrl: un
         body: JSON.stringify({ daemonUrl }),
     });
 
+const farewell = (prisma: PrismaClient, token: string | undefined, removedBy?: unknown) =>
+    createApp(config, prisma, logger).app.request(`/sandbox/farewell`, {
+        method: `POST`,
+        headers: { "content-type": `application/json`, ...(token === undefined ? {} : { "x-intentic-connect": token }) },
+        body: JSON.stringify({ removedBy }),
+    });
+
+describe(`POST /sandbox/farewell`, () => {
+    it(`stamps the removal on the row the token digests to, and drops the address`, async () => {
+        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+        const res = await farewell(fakePrisma({ sandbox: { updateMany } }), `tok`, `radarsu-rog`);
+        expect(res.status).toBe(200);
+        expect(updateMany).toHaveBeenCalledExactlyOnceWith({
+            where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
+            // The address goes because it now serves nothing; the row stays, because deleting it is the owner's press.
+            data: { removedAt: expect.any(Date), removedBy: `radarsu-rog`, daemonUrl: null },
+        });
+    });
+
+    it(`accepts a removal that cannot name its machine`, async () => {
+        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+        await farewell(fakePrisma({ sandbox: { updateMany } }), `tok`);
+        expect(updateMany).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ data: expect.objectContaining({ removedBy: null }) }));
+    });
+
+    it(`refuses a missing token before touching the database, and 404s an unknown one with no oracle`, async () => {
+        const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+        const prisma = fakePrisma({ sandbox: { updateMany } });
+        expect((await farewell(prisma, undefined)).status).toBe(400);
+        expect(updateMany).not.toHaveBeenCalled();
+        expect((await farewell(prisma, `nope`)).status).toBe(404);
+    });
+});
+
 describe(`POST /sandbox/announce`, () => {
     it(`refuses an announcement whose token was revoked after its lookup`, async () => {
         const updateMany = vi.fn().mockResolvedValue({ count: 0 });
@@ -209,8 +243,15 @@ describe(`POST /sandbox/announce`, () => {
         });
         expect(updateMany).toHaveBeenCalledWith({
             where: { id: `s1`, tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
-            // The refusal record clears here: a sandbox just accepted at its proper address no longer has one.
-            data: { daemonUrl: `https://sandbox-abc.intentic.dev`, lastSeenAt: expect.any(Date), announceRefusal: Prisma.DbNull },
+            // The refusal record clears here: a sandbox just accepted at its proper address no longer has one. So does
+            // the removal tombstone: a box announcing is a box that is here, whatever was deleted before it.
+            data: {
+                daemonUrl: `https://sandbox-abc.intentic.dev`,
+                lastSeenAt: expect.any(Date),
+                announceRefusal: Prisma.DbNull,
+                removedAt: null,
+                removedBy: null,
+            },
         });
     });
 

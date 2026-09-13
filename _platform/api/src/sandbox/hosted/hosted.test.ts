@@ -859,6 +859,8 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         lastSeenAt: null,
         setupCodeClaimedAt: null,
         setupReport: null,
+        removedAt: null,
+        removedBy: null,
     };
 
     it(`hostedProvision refuses over-quota before touching any provider`, async () => {

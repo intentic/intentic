@@ -76,7 +76,11 @@ once, here, in Rust: a single static binary with no runtime to ship.
 - [src/record.rs](src/record.rs), the host-side channel record: what this sandbox follows, what it can roll
   back to, and what is built and waiting for it. Host-side is the point: it is outside every volume the agent
   can write, which is why the fast update path is allowed to trust it.
-- [src/sandbox/remove.rs](src/sandbox/remove.rs): removal; keep in lockstep with cleanup.sh (below).
+- [src/sandbox/remove.rs](src/sandbox/remove.rs): removal; keep in lockstep with cleanup.sh (below). It **posts a
+  farewell to the platform before deleting anything** (`/sandbox/farewell`, over the CONNECT_TOKEN read out of the
+  container's own env): a removed container answers no questions, and at the edge a deleted sandbox, a stopped one and
+  a sleeping laptop are one silence — so the browser either waits forever or accuses the wrong one. Best-effort and
+  silent; a platform that cannot be reached costs the old behaviour, never the removal.
 - [src/selfhost.rs](src/selfhost.rs): the root-side machine mutations connect's SELF_HOST and machine
   enrolment share.
 

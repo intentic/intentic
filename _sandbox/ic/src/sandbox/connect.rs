@@ -885,7 +885,7 @@ fn host_platform() -> &'static str {
 /// Read without a crate for it, because every source here is already one line and a dependency in this binary is
 /// a dependency in every setup that runs it. `COMPUTERNAME` is always set on Windows, `/etc/hostname` is the
 /// standard file everywhere else, and the command is the fallback for a system that has neither.
-fn machine_label() -> String {
+pub fn machine_label() -> String {
     let named = |value: String| Some(value).filter(|name| !name.trim().is_empty());
     std::env::var("HOST_LABEL")
         .ok()

@@ -1,3 +1,4 @@
+import { edgeErrorHeaders, type EdgeVerdict, isCorsPreflight } from "@intentic/sandbox-contract/edge-verdict";
 import { INGRESS_GRANT_HEADER, INGRESS_TUNNEL_PATH, hostOwnerId, verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { openIngressSession, webSocketDuplex, type IngressSession } from "@intentic/sandbox-contract/ingress-protocol";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -70,6 +71,11 @@ const answer = (socket: Duplex, status: number, reason: string, headers: Readonl
 
 const refuse = (socket: Duplex, status: number, reason: string, body: string): void => answer(socket, status, reason, {}, body);
 
+// A refused upgrade, carrying the same verdict the request path writes. A browser cannot read a failed WebSocket
+// handshake, so this is for the next plain request and for whoever is holding a terminal open against the box.
+const refuseEdge = (socket: Duplex, verdict: EdgeVerdict, body: string): void =>
+    answer(socket, 502, `Bad Gateway`, edgeErrorHeaders(verdict), body);
+
 // The replay.
 
 // How long Fly's proxy reuses the replay decision per hostname before asking again; Fly's floor is ten seconds.
@@ -84,16 +90,33 @@ export const replayHeaders = (host: string, app: string): Readonly<Record<string
     "fly-replay-cache-ttl-secs": String(REPLAY_CACHE_TTL_SECS),
 });
 
-// 502, not 404: the browser's availability flow reads any 5xx as unreachable and wakes it, while 404 stops it.
-// Names the label in the body, since this is the one edge error a person actually meets.
-const unreachable = (response: ServerResponse, host: string): void => {
+// The sentence per verdict; this is the one edge error a person actually meets, in a terminal as often as in a browser.
+const edgeBody = (verdict: EdgeVerdict, label: string): string =>
+    verdict === `unknown-sandbox` ? `${label} no longer exists.` : `${label} is not connected right now.`;
+
+// 502, not 404: the browser's availability flow reads any 5xx as unreachable and wakes it, while 404 stops it. Which
+// KIND of unreachable rides the verdict header instead, so the status keeps its old meaning while the browser learns
+// the distinction the edge is the only party able to draw.
+const unreachable = (response: ServerResponse, host: string, verdict: EdgeVerdict): void => {
     if (response.headersSent) {
         response.destroy();
         return;
     }
     const label = labelOf(host);
-    response.writeHead(502, { "content-type": `text/plain; charset=utf-8`, "cache-control": `no-store` });
-    response.end(`${label} is not connected right now.\n`);
+    response.writeHead(502, { "content-type": `text/plain; charset=utf-8`, "cache-control": `no-store`, ...edgeErrorHeaders(verdict) });
+    response.end(`${edgeBody(verdict, label)}\n`);
+};
+
+// A preflight for a sandbox with no tunnel is answered 204 rather than refused: a browser drops a non-2xx preflight and
+// never sends the request behind it, which is the request that would carry the verdict to JavaScript. Saying yes to a
+// preflight promises nothing — the answer it unlocks is still the 502 above.
+const preflight = (response: ServerResponse, verdict: EdgeVerdict): void => {
+    if (response.headersSent) {
+        response.destroy();
+        return;
+    }
+    response.writeHead(204, { ...edgeErrorHeaders(verdict), "content-length": `0` });
+    response.end();
 };
 
 export const createIngressServer = (options: IngressServerOptions): IngressServer => {
@@ -153,18 +176,35 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
         }
     };
 
-    // Looks up which Fly app to replay to: `tunnel`, or an already-forwarded request, replays nowhere; `hosted` replays
-    // to the named or implied app; an unknown lane fails open to a replay.
-    // A hop-marked request is never replayed, since the peer that forwarded it already believed the tunnel was here.
-    const replayTarget = async (sandboxId: string, request: IncomingMessage): Promise<string | undefined> => {
-        if (options.hostedAppPrefix === undefined || request.headers[HOP_HEADER] !== undefined) {
-            return undefined;
+    /* Where a miss goes, and what to say when it goes nowhere: `tunnel`, or an already-forwarded request, replays
+     * nowhere; `hosted` replays to the named or implied app; an unknown lane fails open to a replay. A hop-marked
+     * request is never replayed, since the peer that forwarded it already believed the tunnel was here.
+     *
+     * The lookup now runs even where no replay is possible (no hosted prefix configured), because the platform's 404 is
+     * the only thing that can tell a sandbox that is merely OFF from one that no longer exists — a distinction the
+     * reader is owed and the edge cannot make alone. It costs nothing on the hot path: this is the miss path, the
+     * answer is cached for a minute, and a platform that does not respond fails open to "it exists". */
+    const reachFor = async (sandboxId: string, request: IncomingMessage): Promise<{ readonly app?: string; readonly verdict: EdgeVerdict }> => {
+        if (request.headers[HOP_HEADER] !== undefined) {
+            return { verdict: `no-tunnel` };
         }
         const reachability = await options.revocation.lookup(sandboxId);
-        if (!reachability.exists || reachability.lane === `tunnel`) {
-            return undefined;
+        if (!reachability.exists) {
+            return { verdict: `unknown-sandbox` };
         }
-        return reachability.app ?? `${options.hostedAppPrefix}-${sandboxId}`;
+        if (options.hostedAppPrefix === undefined || reachability.lane === `tunnel`) {
+            return { verdict: `no-tunnel` };
+        }
+        return { app: reachability.app ?? `${options.hostedAppPrefix}-${sandboxId}`, verdict: `no-tunnel` };
+    };
+
+    // A miss the browser must be able to read: its preflight is admitted so the real request can be refused out loud.
+    const refuseRequest = (request: IncomingMessage, response: ServerResponse, host: string, verdict: EdgeVerdict): void => {
+        if (isCorsPreflight(request.method, request.headers[`access-control-request-method`])) {
+            preflight(response, verdict);
+            return;
+        }
+        unreachable(response, host, verdict);
     };
 
     const onRequest = (request: IncomingMessage, response: ServerResponse): void => {
@@ -180,14 +220,15 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
             // `headersSent` is what a rejection means: unset owes the browser an answer still, set means only a reset
             // is left.
             // `unreachable` reads the same flag, so both cases share one call.
-            void session.forwardRequest(request, response).catch(() => unreachable(response, host));
+            // `dropped`, not `no-tunnel`: a tunnel WAS held, and it went away between being routed to and answering.
+            void session.forwardRequest(request, response).catch(() => unreachable(response, host, `dropped`));
             return;
         }
         const peer = holderFor(sandboxId, request);
         if (peer === undefined) {
-            void replayTarget(sandboxId, request).then((app) => {
+            void reachFor(sandboxId, request).then(({ app, verdict }) => {
                 if (app === undefined) {
-                    unreachable(response, host);
+                    refuseRequest(request, response, host, verdict);
                     return;
                 }
                 // The head is the whole answer: Fly's proxy replays the request it holds; nothing here reaches the
@@ -201,7 +242,7 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
         // Same contract as a session's: a rejection before headers is our 502, after them a reset.
         void forwardRequest(peer, request, response).catch((error: Error) => {
             forgetIfGone(sandboxId, error);
-            unreachable(response, host);
+            unreachable(response, host, `no-tunnel`);
         });
     };
 
@@ -224,14 +265,14 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
             // Nothing is written until the far end accepts, so a rejection can still be answered, not just reset.
             void session
                 .forwardUpgrade(request, socket, head)
-                .catch(() => refuse(socket, 502, `Bad Gateway`, `${labelOf(host)} dropped the connection.`));
+                .catch(() => refuseEdge(socket, `dropped`, `${labelOf(host)} dropped the connection.`));
             return;
         }
         const peer = holderFor(sandboxId, request);
         if (peer === undefined) {
-            void replayTarget(sandboxId, request).then((app) => {
+            void reachFor(sandboxId, request).then(({ app, verdict }) => {
                 if (app === undefined) {
-                    refuse(socket, 502, `Bad Gateway`, `${labelOf(host)} is not connected right now.`);
+                    refuseEdge(socket, verdict, edgeBody(verdict, labelOf(host)));
                     return;
                 }
                 // Replayed by not upgrading: the app answering with replay headers must not negotiate the WebSocket
@@ -244,7 +285,7 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
         }
         void forwardUpgrade(peer, request, socket, head).catch((error: Error) => {
             forgetIfGone(sandboxId, error);
-            refuse(socket, 502, `Bad Gateway`, `${labelOf(host)} is not connected right now.`);
+            refuseEdge(socket, `no-tunnel`, `${labelOf(host)} is not connected right now.`);
         });
     };
 

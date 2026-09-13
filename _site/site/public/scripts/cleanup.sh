@@ -81,10 +81,27 @@ confirm() {
 # The Nth word (1-based) of the remaining args: `nth 2 a b c` -> b.
 nth() { _n="$1"; shift; while [ "$_n" -gt 1 ]; do shift; _n=$((_n - 1)); done; printf '%s' "$1"; }
 
+# Tell the platform this sandbox is going, BEFORE it goes — its connect token lives in the container's own env, and a
+# removed container answers no questions. Without this the owner's browser cannot tell a deleted sandbox from a sleeping
+# laptop, and waits forever on one that is never coming back. Best-effort to the point of silence: no curl, no platform,
+# no network, old container missing either value — all are simply nothing, and none may cost the removal.
+announce_removal() {
+    command -v curl >/dev/null 2>&1 || return 0
+    env_of() { docker inspect -f "{{range .Config.Env}}{{println .}}{{end}}" "intentic-sandbox-$1" 2>/dev/null | sed -n "s/^$2=//p" | head -1; }
+    tok="$(env_of "$1" CONNECT_TOKEN)"
+    plat="$(env_of "$1" PLATFORM_URL)"
+    [ -n "$tok" ] && [ -n "$plat" ] || return 0
+    # The container's spelling of "this machine" resolves nowhere out here.
+    plat="$(printf '%s' "$plat" | sed 's#//host.docker.internal#//localhost#')"
+    curl -fsS -m 5 -X POST "$plat/sandbox/farewell" -H "x-intentic-connect: $tok" -H 'content-type: application/json' \
+        -d "{\"removedBy\":\"$(hostname 2>/dev/null || echo '')\"}" >/dev/null 2>&1 || true
+}
+
 # Remove one sandbox by slug: its 3 containers, 4 named volumes, and network. Idempotent (missing = no-op).
 remove_slug() {
     s="$1"
     echo "intentic: removing sandbox '$s' (containers + named volumes + network)…"
+    announce_removal "$s"
     for c in "intentic-sandbox-$s" "intentic-sandbox-tunnel-$s" "intentic-dind-host-$s"; do
         docker rm -f "$c" >/dev/null 2>&1 || true
     done
@@ -97,6 +114,8 @@ remove_slug() {
 # Remove EVERY sandbox by name prefix (also sweeps orphaned volumes/networks a per-slug pass would miss). Prefixes
 # never overlap the platform's intentic-app-* resources.
 remove_all() {
+    # Before the sweep: each token is read from its own container, which the first `rm -f` below would already have taken.
+    for s in $(list_sandboxes); do announce_removal "$s"; done
     echo "intentic: removing sandbox containers…"
     for c in $(docker ps -aq --filter 'name=intentic-sandbox-'; docker ps -aq --filter 'name=intentic-dind-host-'); do
         docker rm -f "$c" >/dev/null 2>&1 || true

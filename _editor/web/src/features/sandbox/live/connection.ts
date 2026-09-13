@@ -1,3 +1,5 @@
+import type { EdgeVerdict } from "@intentic/sandbox-contract";
+
 // The active sandbox connection as a pure state machine, testable without a network, timer, or Vue instance;
 // failure is a tagged value rather than a boolean triple sniffed from a message. Transient failures retry fast;
 // blocked ones (403, no address) back off to the ceiling at once.
@@ -21,10 +23,18 @@ export type ConnectionFailure =
     // 403: a verified identity that is neither the owner nor a member. Retrying is pointless.
     | { readonly kind: "forbidden"; readonly message: string }
     // No daemon URL to dial: setup is unfinished, or the daemon has never announced itself.
-    | { readonly kind: "unaddressed"; readonly message: string };
+    | { readonly kind: "unaddressed"; readonly message: string }
+    /* Intentic's edge answered, and it holds no tunnel for this sandbox: the container is not running, or the machine
+     * it runs on is off. Distinct from `network` in exactly the way that matters to a reader — the browser's own
+     * connection is proven fine, because the edge is what answered. Still retried: a box that comes back redials
+     * within seconds. */
+    | { readonly kind: "detached"; readonly message: string }
+    // The platform has no such sandbox. Nothing the reader waits for can change that.
+    | { readonly kind: "gone"; readonly message: string };
 
 // True when only a person or the platform can change the outcome; drives the gate and the backoff.
-export const isBlocked = (failure: ConnectionFailure): boolean => failure.kind === `forbidden` || failure.kind === `unaddressed`;
+export const isBlocked = (failure: ConnectionFailure): boolean =>
+    failure.kind === `forbidden` || failure.kind === `unaddressed` || failure.kind === `gone`;
 
 export type ConnectionPhase =
     // Nothing is being attempted, before the shell starts the loop, and after it stops.
@@ -162,10 +172,21 @@ export const classifyFailure = (observation: {
     readonly unaddressed?: boolean;
     // The stream ended cleanly instead of erroring.
     readonly closed?: boolean;
+    // Intentic's edge's own last word on this sandbox (edgeVerdict.ts); absent for a loopback shortcut, a self-hosted
+    // address, and anything that never reached the edge.
+    readonly edge?: EdgeVerdict;
     readonly message: string;
 }): ConnectionFailure => {
     if (observation.unaddressed === true) {
         return { kind: `unaddressed`, message: observation.message };
+    }
+    // The edge outranks everything we could infer below it: a watchdog trip, a clean close and a refused connect all
+    // look the same from here, and the edge is the only party that watched the request arrive and find nothing.
+    if (observation.edge === `unknown-sandbox`) {
+        return { kind: `gone`, message: observation.message };
+    }
+    if (observation.edge !== undefined) {
+        return { kind: `detached`, message: observation.message };
     }
     if (observation.closed === true) {
         return { kind: `closed`, message: observation.message };
