@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { createCredentialGrants } from "../../secrets/credential-grants.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentTurn, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type AgentTurn, type Persona, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
@@ -158,6 +158,30 @@ test("an isolated turn is mapped against its own tree, not the shared checkout",
 
     expect(prompt).toContain(`The ${branchMarker} billing area`);
     expect(prompt).not.toContain(`The ${sharedMarker} billing area`);
+});
+
+// The fifth gate, and the only per-card one: the sandbox switch says yes and the card still says no. Its conversation
+// leaves the experiment rather than joining the control group, since an arm on a conversation that was never going to
+// be sent a map would read as a measured nothing.
+test("a persona that drops the map gets none of it, however the sandbox is set", async () => {
+    const root = await projectAt("wsmap-card-", "shared");
+    const lean: Persona = { id: "lean", capabilities: [], briefing: { omit: ["map"] } };
+    const services = servicesIn(
+        root,
+        { workspaceMap: true, workspaceMapHoldout: 0.5 },
+        {
+            personas: unstubbed<Services["personas"]>("personas", { list: async () => [lean] }),
+            agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+        },
+    );
+    const turn = { prompt: "do the thing", actsAs: "lean", conversationId: "conv-lean" } as AgentTurn;
+
+    const plan = await planTurn(services, turn, contextIn(root));
+
+    expect(plan).toMatchObject({ ok: true });
+    const request = (plan as { request: AgentRequest }).request;
+    expect(composeWirePrompt(request.notes ?? [], request.prompt)).toBe("do the thing");
+    expect(plan).not.toHaveProperty("mapArm");
 });
 
 // Round-trips through the same registry dispatch uses (turn-preamble.ts INJECTED); this is what catches a note shipped

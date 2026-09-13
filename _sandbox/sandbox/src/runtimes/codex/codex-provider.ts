@@ -7,7 +7,7 @@ import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, health
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
 import { connectedTranslatorProviders } from "../../agent/providers/translator.js";
-import type { TurnContext, TurnPlan } from "../../agent/run/turn/turn-plan.js";
+import type { TurnContext, TurnArmPlan } from "../../agent/run/turn/turn-plan.js";
 import type { Services } from "../../composition.js";
 import { turnPersona } from "../../personas/personas.js";
 import { onPath } from "../../platform/boot/on-path.js";
@@ -48,7 +48,7 @@ export const planCodexTurn = async (
     input: AgentTurn,
     context: TurnContext,
     granted: readonly Capability[],
-): Promise<TurnPlan> => {
+): Promise<TurnArmPlan> => {
     // The subscription via the translator is the credential; the container OPENAI_API_KEY is the only fallback.
     const translatorReady = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex.length > 0;
     if (!translatorReady && services.config.openaiApiKey === "") {

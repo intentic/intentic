@@ -1,6 +1,6 @@
 import type { AgentProvider, AgentCapabilities, AgentTurn } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
-import type { TurnContext, TurnPlan } from "../run/turn/turn-plan.js";
+import type { TurnContext, TurnArmPlan } from "../run/turn/turn-plan.js";
 
 // The seam every agent runtime sits behind. `preflight` gates the credential, resolves a model, and assembles the
 // request, or refuses. `holdsSession` asks the store whether a resume can happen; `health` probes cheaply, off the turn
@@ -44,7 +44,7 @@ export interface AgentAdapter<R extends AgentCapabilities["runtime"] = AgentCapa
         input: AgentTurn,
         context: TurnContext,
         granted: Awaited<ReturnType<Services["capabilities"]["list"]>>,
-    ) => Promise<TurnPlan>;
+    ) => Promise<TurnArmPlan>;
     // Cheap and cached; never on the turn's path.
     readonly health: (services: Services) => Promise<AdapterHealth>;
     // Whether this runtime still holds `sessionId` under `cwd`, from the store rather than the id's existence: a

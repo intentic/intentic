@@ -2,7 +2,7 @@ import { access } from "node:fs/promises";
 import { type AgentTurn, type Capability, PI_PROVIDER } from "@intentic/sandbox-contract";
 import { type AgentAdapter, attemptProbe, healthUnavailable, healthUnknown, healthReady } from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
-import type { TurnContext, TurnPlan } from "../../agent/run/turn/turn-plan.js";
+import type { TurnContext, TurnArmPlan } from "../../agent/run/turn/turn-plan.js";
 import type { Services } from "../../composition.js";
 import { onPath } from "../../platform/boot/on-path.js";
 
@@ -12,7 +12,12 @@ import { onPath } from "../../platform/boot/on-path.js";
 
 // Spawned and driven over Pi's own RPC; harness doesn't apply (Pi is its own loop). Unlike the ACP floor it takes
 // steering (real mid-turn injection) and effort (set_thinking_level); no MCP seam, so no tools.
-export const planPiTurn = async (services: Services, _input: AgentTurn, context: TurnContext, granted: readonly Capability[]): Promise<TurnPlan> => {
+export const planPiTurn = async (
+    services: Services,
+    _input: AgentTurn,
+    context: TurnContext,
+    granted: readonly Capability[],
+): Promise<TurnArmPlan> => {
     const capability = granted.find((entry) => entry.kind === "agent" && entry.id === PI_PROVIDER);
     if (capability === undefined || capability.kind !== "agent") {
         return { ok: false, message: "Pi is not installed, add the Pi Agent capability first." };

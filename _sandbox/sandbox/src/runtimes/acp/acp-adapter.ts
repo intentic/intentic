@@ -1,7 +1,7 @@
 import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
 import { type AgentAdapter, attemptProbe, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
-import type { TurnContext, TurnPlan } from "../../agent/run/turn/turn-plan.js";
+import type { TurnContext, TurnArmPlan } from "../../agent/run/turn/turn-plan.js";
 import { peerToolsOf } from "../../peers/peer-tools.js";
 import { mcpToolsOf } from "../../capabilities/mcp-tools.js";
 import type { Services } from "../../composition.js";
@@ -18,7 +18,7 @@ export const planAcpTurn = async (
     context: TurnContext,
     granted: readonly Capability[],
     provider: string,
-): Promise<TurnPlan> => {
+): Promise<TurnArmPlan> => {
     const capability = granted.find((entry) => entry.kind === "agent" && entry.id === provider);
     if (capability === undefined || capability.kind !== "agent") {
         return { ok: false, message: `Unknown agent provider "${provider}", add it as an Agent capability first.` };

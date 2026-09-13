@@ -122,13 +122,21 @@ const bounds = computed(() => {
 });
 
 // Fields this panel never asks about but must not drop when rewriting an existing card: what it's for, its
-// prompt mode, its repos, its models — each would otherwise vanish on the first folder change.
-const carriedOver = (existing: Persona | undefined): Pick<Persona, "brief" | "systemPromptMode" | "context" | "models"> => ({
-    ...(existing?.brief !== undefined ? { brief: existing.brief } : {}),
-    ...(existing?.systemPromptMode !== undefined ? { systemPromptMode: existing.systemPromptMode } : {}),
-    ...(existing?.context !== undefined ? { context: existing.context } : {}),
-    ...(existing?.models !== undefined ? { models: existing.models } : {}),
-});
+// prompt mode, its repos, its models, what it is told before each message — each would otherwise vanish on the
+// first folder change.
+const carriedOver = (existing: Persona | undefined): Pick<Persona, "brief" | "systemPromptMode" | "context" | "models" | "briefing"> => {
+    if (existing === undefined) {
+        return {};
+    }
+    const { brief, systemPromptMode, context, models, briefing } = existing;
+    return {
+        ...(brief !== undefined ? { brief } : {}),
+        ...(systemPromptMode !== undefined ? { systemPromptMode } : {}),
+        ...(context !== undefined ? { context } : {}),
+        ...(models !== undefined ? { models } : {}),
+        ...(briefing !== undefined ? { briefing } : {}),
+    };
+};
 
 // The whole card about to be written, or undefined until the form describes one. Built here so the two modes'
 // shapes sit side by side: moving a card touches one field, writing one spells out every field it owns.

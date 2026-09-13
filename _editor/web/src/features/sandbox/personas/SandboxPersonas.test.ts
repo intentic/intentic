@@ -2,7 +2,7 @@
 // Pins two wordings that cost something if wrong: marking a persona whose accounts are all signed out, and saving both
 // accounts on a persona that spans sites. jsdom: renders and reads the mounted DOM.
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import type { Persona } from "@intentic/sandbox-contract";
+import { type Persona, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract";
 import type { BrowserAccount } from "../../extensions/useBrowserAccounts";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
@@ -564,4 +564,52 @@ it(`adds a persona's own skill through the same row and the same editor as the s
     expect(rendered).toContain(`When to use it`);
     expect(rendered).toContain(`What it should do`);
     expect(rendered).toContain(`Add skill`);
+});
+
+// The checklist that lets a card starve a small-context model of everything it does not need. Named with the exact
+// titles the chat's own "Sent with your message" fold shows, so the two surfaces stay one vocabulary.
+it(`drops a preamble note by the name the transcript gives it`, async () => {
+    const dropped = TURN_BRIEFING_NOTES[0]!;
+    personas.value = [{ id: `work`, capabilities: [] }];
+    const el = mount();
+    await openCard(el, `work`);
+    await openTab(el, `What it is told`);
+
+    expect(text(el)).toContain(dropped.when);
+    toggleSwitch(el, dropped.label);
+
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    expect(save.mock.calls[0]![0].briefing).toEqual({ omit: [dropped.id] });
+    // The consequence replaces the "when" line only once turning it off is the choice that was made.
+    expect(text(el)).toContain(dropped.cost);
+});
+
+it(`opens a stored card on what it drops, and stores nothing once it drops none of it`, async () => {
+    const dropped = TURN_BRIEFING_NOTES[0]!;
+    personas.value = [{ id: `work`, capabilities: [`reddit-work`], briefing: { omit: [dropped.id] } }];
+    const el = mount();
+    await openCard(el, `work`);
+    await openTab(el, `What it is told`);
+
+    expect(text(el)).toContain(dropped.cost);
+    // Switched back on, so the card ends up dropping nothing: the file must then say nothing rather than an empty list.
+    toggleSwitch(el, dropped.label);
+
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    expect(save.mock.calls[0]![0].briefing).toBeUndefined();
+});
+
+it(`names the notes no card may drop, so the checklist reads as complete`, async () => {
+    personas.value = [{ id: `work`, capabilities: [] }];
+    const el = mount();
+    await openCard(el, `work`);
+    await openTab(el, `What it is told`);
+
+    const fixture = TURN_BRIEFING_FIXTURES[0]!;
+    expect(text(el)).not.toContain(fixture.why);
+    buttonLabelled(el, `always sent`)!.click();
+    await nextTick();
+
+    expect(text(el)).toContain(fixture.label);
+    expect(text(el)).toContain(fixture.why);
 });

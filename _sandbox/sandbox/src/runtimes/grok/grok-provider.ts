@@ -2,7 +2,7 @@ import type { AgentTurn } from "@intentic/sandbox-contract";
 import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
-import type { TurnContext, TurnPlan } from "../../agent/run/turn/turn-plan.js";
+import type { TurnContext, TurnArmPlan } from "../../agent/run/turn/turn-plan.js";
 import type { Services } from "../../composition.js";
 import { createGrokAgent, createGrokRunner } from "./grok-agent.js";
 import { engineBinary } from "../../engines/engine-resolve.js";
@@ -23,7 +23,7 @@ export const createGrokSlice = (openCode: OpenCodeService): GrokSlice => ({
 
 // Grok rides OpenCode with xAI subscription OAuth; gated on OpenCode's own connection view. Claude-only fields
 // (plugins, MCP tools, thinking) don't apply.
-export const planGrokTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
+export const planGrokTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnArmPlan> => {
     if (!(await services.openCode.connected("xai"))) {
         return {
             ok: false,

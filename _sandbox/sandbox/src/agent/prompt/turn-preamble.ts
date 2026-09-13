@@ -33,7 +33,7 @@ export const LITERAL_SLASH_NOTE: TurnNote = {
 // path lands in the SHARED checkout — this note is the only guard. Said in full once per session; later turns get only
 // the short reminder.
 const WORKTREE_NOTE_HEADER = "## Where this turn's files live";
-const WORKTREE_NOTE_TITLE = "Where this turn's files live";
+export const WORKTREE_NOTE_TITLE = "Where this turn's files live";
 
 export const worktreeNote = (worktree: string, root: string): TurnNote => ({
     title: WORKTREE_NOTE_TITLE,

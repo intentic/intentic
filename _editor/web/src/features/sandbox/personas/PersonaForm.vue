@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ModelPin, SystemPromptMode } from "@intentic/sandbox-contract";
+import type { ModelPin, SystemPromptMode, TurnBriefingNoteId } from "@intentic/sandbox-contract";
 import { BrandMark, ui, Notice, type NoticeModel, SearchBar, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, shallowRef } from "vue";
@@ -8,6 +8,7 @@ import { pinKnobSummary, pinnedList } from "../agent-settings/models/modelPinLis
 import ModelPinList from "../agent-settings/models/ModelPinList.vue";
 import ModelPinPicker from "../agent-settings/models/ModelPinPicker.vue";
 import FolderPicker from "../devices/FolderPicker.vue";
+import PersonaBriefingFields from "./PersonaBriefingFields.vue";
 import PersonaKitFields from "./PersonaKitFields.vue";
 import PersonaPowersFields from "./PersonaPowersFields.vue";
 import type { BrowserAccount } from "../../extensions/useBrowserAccounts";
@@ -39,6 +40,9 @@ export interface PersonaDraft extends PersonaPowersDraft {
     // Which models its conversations run on, in order; empty is stored as absent, so the chat's or job's own pick
     // answers.
     models: ModelPin[];
+    // Which of the notes the sandbox prepends to each message this card does without (Persona.briefing.omit). Empty is
+    // stored as absent: a card that dropped nothing says nothing.
+    omitNotes: TurnBriefingNoteId[];
 }
 
 const { draft, accounts, connected, grantables, error } = defineProps<{
@@ -369,12 +373,15 @@ const configure = (pin: ModelPin): void => {
             />
         </template>
 
-        <PersonaKitFields
-            v-else
-            :persona-id="draft.original"
-            :mode="draft.systemPromptMode"
-            @update:mode="(next: SystemPromptMode | undefined) => (draft.systemPromptMode = next)"
-        />
+        <!-- One question, three answers: the prompt it runs on, the skills only it can reach, and what the sandbox says before the user does. -->
+        <template v-else>
+            <PersonaKitFields
+                :persona-id="draft.original"
+                :mode="draft.systemPromptMode"
+                @update:mode="(next: SystemPromptMode | undefined) => (draft.systemPromptMode = next)"
+            />
+            <PersonaBriefingFields :omitted="draft.omitNotes" />
+        </template>
 
         <Notice v-if="error !== undefined" :of="error" />
     </div>

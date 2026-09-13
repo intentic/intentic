@@ -5,6 +5,7 @@ import { type ModelSource, readyChain } from "../models/model-pins.js";
 import { type ModelPin, ModelPinSchema } from "./agent.js";
 import { entryId } from "./internal.js";
 import { SkillDraftSchema, SkillNameSchema, SystemPromptModeSchema } from "./settings.js";
+import { TurnBriefingNoteIdSchema } from "./turn-briefing.js";
 // A named face the sandbox shows outward: who it speaks as, what it may do, where it works, what it's told, what it
 // runs on. No credential lives on the card; accounts stay private, per-sandbox. Not a security boundary for a watched
 // chat — a real fence only for an unattended turn, whose resolver defaults to nothing.
@@ -65,6 +66,18 @@ export const PersonaContextSchema = z.object({
         ),
 });
 export type PersonaContext = z.infer<typeof PersonaContextSchema>;
+// What the sandbox tells a turn before the user's own words (schemas/turn-briefing.ts). A deny list, not a pick list:
+// an id absent from `omit` is sent, so a note added later rides every card that never said otherwise. An object, like
+// `context`, for future sibling fields.
+export const PersonaBriefingSchema = z.object({
+    omit: z
+        .array(TurnBriefingNoteIdSchema)
+        .max(20)
+        .describe(
+            "Which of the notes the sandbox prepends to each message a conversation wearing this card does NOT get. Everything not named here is sent as usual; the notes that keep a turn inside its own branch or explain a missing account cannot be named at all.",
+        ),
+});
+export type PersonaBriefing = z.infer<typeof PersonaBriefingSchema>;
 export const PersonaSchema = z.object({
     id: entryId.describe("The persona's id."),
     label: z.string().max(60).optional().describe("What to call it on screen. Absent falls back to the id, which somebody chose anyway."),
@@ -87,6 +100,10 @@ export const PersonaSchema = z.object({
     workspace: PersonaWorkspaceSchema.optional().describe("Where it works. Absent means the whole workspace."),
     context: PersonaContextSchema.optional().describe(
         "Which part of the workspace a conversation wearing it carries: the repositories its checkout holds. Absent means every repository.",
+    ),
+    // Sits beside `context` on purpose: one says what the tree holds, the other what the turn is handed about it.
+    briefing: PersonaBriefingSchema.optional().describe(
+        "Which of the notes the sandbox prepends to every message this card's conversations do without. Absent means all of them, which is what a card written before this existed keeps.",
     ),
     // Ladder shape (a single pin is a single point of failure); picking the card moves the composer's model pill to its
     // head, and it fills an unattended turn's silence before the run role's list.

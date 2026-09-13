@@ -1,4 +1,4 @@
-import type { Persona, PersonaPowers } from "@intentic/sandbox-contract";
+import type { Persona, PersonaPowers, TurnBriefingNoteId } from "@intentic/sandbox-contract";
 
 // Rules shared by both persona-card surfaces (the full editor and the workspace tree's quick panel): the id a name
 // becomes, the default "everything on" powers, what is worth committing, and folder membership. Pure functions,
@@ -70,6 +70,10 @@ export const powersDraftOf = (persona: Persona): PersonaPowersDraft => ({
     devices: persona.powers?.devices === undefined ? undefined : [...persona.powers.devices],
     mcp: persona.powers?.mcp === undefined ? undefined : [...persona.powers.mcp],
 });
+
+// Which preamble notes a card drops, as a list the form can splice; empty covers both "drops none" and a card written
+// before the question existed.
+export const omittedNotesOf = (persona: Persona): TurnBriefingNoteId[] => [...(persona.briefing?.omit ?? [])];
 
 // A fully-granted card stores no `powers` block at all; `undefined` here means omit it from the card.
 export const storedPowers = (draft: PersonaPowersDraft): PersonaPowers | undefined => {

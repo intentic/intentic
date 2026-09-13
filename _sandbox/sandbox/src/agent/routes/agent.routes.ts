@@ -1029,7 +1029,9 @@ async function* runTurn(
     }
     // What the message grew before reaching the model, said aloud from the same serialized list.
     // The hand-off's measured state goes last, beside the envelope and the words it describes.
-    const notes = [...(request.notes ?? []), ...(handoffNote === undefined ? [] : [handoffNote])];
+    // Through the card's briefing once more: these two are composed after planning, so they missed the filter there,
+    // and the disclosure frame below must name exactly what was sent rather than what was assembled.
+    const notes = plan.briefing.keep([...(request.notes ?? []), ...(handoffNote === undefined ? [] : [handoffNote])]);
     if (notes.length > 0) {
         yield { kind: "preamble", notes: [...notes] };
     }

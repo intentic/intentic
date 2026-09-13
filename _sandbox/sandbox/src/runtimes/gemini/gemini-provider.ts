@@ -3,7 +3,7 @@ import { type AgentTurn, PROVIDER_ACCESS } from "@intentic/sandbox-contract";
 import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
-import type { TurnContext, TurnPlan } from "../../agent/run/turn/turn-plan.js";
+import type { TurnContext, TurnArmPlan } from "../../agent/run/turn/turn-plan.js";
 import type { Services } from "../../composition.js";
 import type { Config } from "../../env.config.js";
 import { createGrokAgent, createGrokRunner } from "../grok/grok-agent.js";
@@ -37,7 +37,7 @@ export const createGeminiSlice = (input: {
 // Gemini on the same OpenCode loop Grok runs on, pointed at the translator instead of xAI; OpenCode holds no
 // credential, CLIProxyAPI does, the same as a routed turn. Exists because the Claude Code loop's baked-in identity line
 // gets every Google account refused as a false quota error.
-export const planGeminiTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
+export const planGeminiTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnArmPlan> => {
     if (services.config.translator.url === "") {
         return {
             ok: false,

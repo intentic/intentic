@@ -23,7 +23,7 @@ import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
 import { createInlineRename } from "../../../lib/inlineRename";
 import { useBrowserAccounts } from "../../extensions/useBrowserAccounts";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
-import { grantablesFrom, type PersonaGrantable, personaSlug, powersDraftOf, storedPowers } from "./personaCard";
+import { grantablesFrom, omittedNotesOf, type PersonaGrantable, personaSlug, powersDraftOf, storedPowers } from "./personaCard";
 import { usePersonas } from "./usePersonas";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
@@ -73,6 +73,7 @@ const draftOf = (persona: Persona): PersonaDraft => ({
     // Absent context means every repository; a list, even empty, is the card deciding.
     carries: persona.context === undefined ? undefined : [...persona.context.repos],
     models: [...(persona.models ?? [])],
+    omitNotes: omittedNotesOf(persona),
 });
 
 // Marks a draft change as not-an-edit (opening a card, or writing back a committed rename), so the autosave watcher
@@ -145,11 +146,13 @@ const cardFrom = (state: PersonaDraft): Persona => {
     };
 };
 
-// The fifth question's half of the card, same rule: an unset brief, full-carry, or empty ladder each store nothing.
-const runsOn = (state: PersonaDraft): Pick<Persona, "brief" | "context" | "models"> => ({
+// The fifth question's half of the card, same rule: an unset brief, full-carry, empty ladder, or a card that drops no
+// preamble note each store nothing.
+const runsOn = (state: PersonaDraft): Pick<Persona, "brief" | "context" | "models" | "briefing"> => ({
     ...(state.brief.trim() !== `` ? { brief: state.brief.trim() } : {}),
     ...(state.carries !== undefined ? { context: { repos: [...state.carries] } } : {}),
     ...(state.models.length > 0 ? { models: [...state.models] } : {}),
+    ...(state.omitNotes.length > 0 ? { briefing: { omit: [...state.omitNotes] } } : {}),
 });
 
 // Writes the card with just its name and an empty account list; every other field is a default the schema already

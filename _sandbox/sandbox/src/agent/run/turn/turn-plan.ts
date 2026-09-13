@@ -81,6 +81,7 @@ import type { WatcherTurnSeed } from "../../verification/watchers.js";
 import { seedFields } from "./turn-seed.js";
 import { resolveHarnessCredentials } from "../../providers/harness-credentials.js";
 import { turnPromptPlacement } from "../../prompt/system-prompt.js";
+import { type TurnBriefing, briefingOf } from "../../prompt/turn-briefing.js";
 import { composeWirePrompt, LITERAL_SLASH_NOTE, worktreeNote, worktreeReminder } from "../../prompt/turn-preamble.js";
 import { WORKSPACE_MAP_NOTE_TITLE, workspaceMapNote } from "../../prompt/workspace-map.js";
 import { workspaceMemoryNote } from "../../prompt/workspace-memory.js";
@@ -105,7 +106,9 @@ export type TurnRefusal = {
     readonly message: string;
 };
 
-export type TurnPlan =
+// What one runtime's arm answers: refuse, or hand back the loop and the request it is to be called with. Nothing about
+// experiments or the preamble, which no adapter should have to know exists.
+export type TurnArmPlan =
     | TurnRefusal
     | {
           readonly ok: true;
@@ -113,6 +116,13 @@ export type TurnPlan =
           // The provider account serving this turn, stamped onto usage/rate-limit frames and the activity log;
           // undefined for a container-env credential or an untracked translator subscription.
           readonly account?: string;
+          readonly request: AgentRequest;
+      };
+
+// What planTurn answers: the arm's own plan plus the facts only planning holds.
+export type TurnPlan =
+    | TurnRefusal
+    | (Extract<TurnArmPlan, { readonly ok: true }> & {
           // The iq-search experiment's conversation-level arm; fixed once a skill enters a provider session, since a
           // later turn can't un-contaminate it.
           readonly searchArm?: boolean;
@@ -125,8 +135,10 @@ export type TurnPlan =
           // The map note's cost in characters, present only on the turn that actually sent one; read off the composed
           // request, not predicted.
           readonly mapChars?: number;
-          readonly request: AgentRequest;
-      };
+          // Which preamble notes this turn's card still wants. Carried out of planning because two of them (the repo
+          // sync advisory, the hand-off state) only exist after it, in the route.
+          readonly briefing: TurnBriefing;
+      });
 
 // What the route has already resolved before a provider can be picked: the request every arm builds on, the turn's two
 // cwds (see runTurn), and the seams only some arms use.
@@ -251,6 +263,12 @@ export const ruleCommandIn = (command: string, anchor: IsolationAnchor | undefin
 const underRepoChecks = (settings: SandboxSettings, declared: readonly Rule[]): SandboxSettings =>
     declared.length === 0 ? settings : { ...settings, rules: withRepoChecks(settings.rules, declared) };
 
+// The map rides a conversation's opening (non-fork) message and nothing else: it stays in the transcript, and the
+// layout hasn't moved by the second turn. Four conditions, in the order they can rule it out — the card first, since a
+// card that dropped the map is never in the experiment `arm` measures.
+const mapDue = (briefing: TurnBriefing, settings: SandboxSettings, arm: boolean | undefined, input: AgentTurn, conversationTurns: number): boolean =>
+    briefing.sends("map") && (arm ?? settings.workspaceMap) && input.forkOf === undefined && conversationTurns === 0;
+
 export const planTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
     // Checked before anything else and above the dispatch, so a box out of memory refuses every provider arm alike, and
     // a refused turn costs no settings read, capability list, dependency probe or persona load. Uncapped sandboxes and
@@ -309,6 +327,9 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         // still reads as if it had everything.
         services.logger.warn({ actsAs: input.actsAs }, "persona: no such card, this turn reaches no account and no tools");
     }
+    // Which of the sandbox's own preamble notes this card still wants. Read off the same resolved card as the shelves,
+    // so a turn wearing nobody's card, or a card that said nothing, gets every note exactly as before.
+    const briefing = briefingOf(persona.persona);
     // The manifest narrowed once and handed to every arm, so a shelf means the same thing on every runtime and a
     // capability kind added later isn't silently denied everywhere.
     const personaGranted = personaCapabilities(installed, persona);
@@ -372,11 +393,14 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         ...(teaching !== undefined ? { iqSearchCohort: teaching.cohort } : {}),
         ...(spawnNoteText !== undefined ? { spawnNote: spawnNoteText } : {}),
     };
-    // The map is sent once, on a conversation's opening (non-fork) message, since it's in the transcript and the layout
-    // hasn't moved by the second turn. Unattended wakes still get it; a holdout control conversation never does,
-    // stamped per conversation since the map stays in the transcript once sent.
-    const mapArm = holdoutArm("workspace-map", settings.workspaceMap, settings.workspaceMapHoldout, input.conversationId);
-    const workspaceMapEligible = (mapArm ?? settings.workspaceMap) && input.forkOf === undefined && conversationTurns === 0;
+    // Unattended wakes still get the map; a holdout control conversation never does, stamped per conversation since the
+    // map stays in the transcript once sent. A card that dropped it takes its conversation out of the experiment rather
+    // than into the control group: an arm stamped on a conversation that was never going to be sent one would read as a
+    // measured nothing.
+    const mapArm = briefing.sends("map")
+        ? holdoutArm("workspace-map", settings.workspaceMap, settings.workspaceMapHoldout, input.conversationId)
+        : undefined;
+    const workspaceMapEligible = mapDue(briefing, settings, mapArm, input, conversationTurns);
     // The turn-ending note is sent once, on the opening (non-fork) message, and again after a compaction: by the second
     // turn it's already in the session history, but a compaction summarizes that history away. `>=` rather than `===`
     // since a compaction is filed under the turn it happened in, and the following turn is the one that owes the note.
@@ -396,6 +420,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
                 turnEnding: turnEndingEligible,
             },
             { gates, withheld: gatedMounts.withheld },
+            briefing,
         ),
         persona,
     };
@@ -424,6 +449,8 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     }
     return {
         ...plan,
+        // Travels past the arms so the route can hold the two notes it adds after planning to the same card.
+        briefing,
         ...experimentStamps(
             input.conversationId === undefined ? undefined : conversationTurns,
             { arm: searchArm, cohort: teaching?.cohort },
@@ -453,6 +480,9 @@ const honoured = (
     // The owner's credential gates: `gates` builds the environment's withholding here, `withheld` covers what the mount
     // filter already took upstream.
     gating: { readonly gates: readonly CredentialGate[]; readonly withheld: readonly CredentialGate[] },
+    // Applied to the assembled list rather than to each branch above it, so a note this card dropped cannot survive by
+    // being added on a path nobody remembered to guard.
+    briefing: TurnBriefing,
 ): AgentRequest => {
     const { permissionMode, effort, fast, cliEnv, disallowedTools, ...rest } = context.base;
     // An isolated conversation's worktree is not the workspace root; a main-tree turn has nothing to say here.
@@ -497,7 +527,7 @@ const honoured = (
         personaEnv === undefined
             ? undefined
             : gatedCliEnv(personaEnv, installed, gating.gates, services.credentialGrants, context.base.conversationId, envSuffix);
-    const notes: TurnNote[] = [
+    const notes: TurnNote[] = briefing.keep([
         // First of the preamble, when there is one: who the turn is acting as belongs ahead of anything about files or
         // tools.
         ...(placement.userNotes ?? []),
@@ -530,7 +560,7 @@ const honoured = (
         // Every runtime gets the check now: the Claude Code loop runs the command rules at its Stop, the daemon runs them
         // for the rest once the frames end (agent.routes.ts daemonStopFindings), so the promise holds either way.
         ...(send.turnEnding ? [turnEndingNote(settings.rules)].filter((note) => note !== undefined) : []),
-    ];
+    ]);
     // Ungranted connectors are removed from the shell environment outright, not merely left with an instruction to
     // ignore them.
     const shellEnv = gatedEnv?.cliEnv;
@@ -612,7 +642,7 @@ export const planHarnessTurn = async (
     input: AgentTurn,
     context: TurnContext,
     granted: readonly Capability[],
-): Promise<TurnPlan> => {
+): Promise<TurnArmPlan> => {
     // Credential resolution and the settings read run together rather than chained, so a turn later refused for its
     // credential doesn't also pay for an unused settings read first.
     const [resolved, settings, safetyPolicy] = await Promise.all([
@@ -943,7 +973,10 @@ export const planHarnessTurn = async (
                               // In the repository the rule named, as at every other moment; the file itself travels as
                               // an absolute path, so where the command runs changes without what it is given changing.
                               run: (command, timeoutMs, repo) =>
-                                  spawnEditCommand(repoCwd(context.localCwd, repo))(ruleCommandIn(command, context.base.isolation?.anchor, repo), timeoutMs),
+                                  spawnEditCommand(repoCwd(context.localCwd, repo))(
+                                      ruleCommandIn(command, context.base.isolation?.anchor, repo),
+                                      timeoutMs,
+                                  ),
                               repos: () => discoverRepos(context.localCwd),
                               roots: [context.localCwd, context.base.isolation?.plan?.root, services.workspace.root].filter(
                                   (root): root is string => root !== undefined,
