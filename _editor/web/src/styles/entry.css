@@ -256,10 +256,9 @@
 }
 
 /* ── CARVED STONE, NOT POLISHED METAL ───────────────────────────────────────────────────────────────────
- * …and the difference is texture rather than colour. Three layers are clipped to the glyphs at once: a coarse
- * fractal cloud for the blotching a weathered surface has, a fine one for grain, and a narrow warm ramp under
- * both. They composite with `overlay` and `soft-light`, so the noise moves the ramp's own colour lighter and
- * darker rather than laying grey over it — a stone is one material lit unevenly, not two materials stacked.
+ * …and the difference is texture rather than colour. A dual-scale arithmetic composite inside one SVG filter
+ * modulates fine mineral grain by a slow macro cloud, so some zones feel smoother and others more tactile —
+ * stone is one material lit unevenly, not two materials stacked.
  *
  * DESCENDERS ARE STRUCTURAL HERE. The letters are painted as a background clipped to their shape, and a
  * background stops at the padding box, so anything a glyph reaches below it is simply not painted and the tail
@@ -275,14 +274,12 @@
     padding-block-end: var(--descender);
     margin-block-end: calc(-1 * var(--descender));
     background-image:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='70' height='70'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.78' intercept='0.11'/%3E%3CfeFuncG type='linear' slope='0.78' intercept='0.11'/%3E%3CfeFuncB type='linear' slope='0.78' intercept='0.11'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='70' height='70' filter='url(%23g)'/%3E%3C/svg%3E"),
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='s' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.04' numOctaves='5' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.55' intercept='0.225'/%3E%3CfeFuncG type='linear' slope='0.55' intercept='0.225'/%3E%3CfeFuncB type='linear' slope='0.55' intercept='0.225'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23s)'/%3E%3C/svg%3E"),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480'%3E%3Cfilter id='d' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008' numOctaves='4' seed='11' stitchTiles='stitch' result='macro'/%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' seed='5' stitchTiles='stitch' result='fine'/%3E%3CfeComposite in='fine' in2='macro' operator='arithmetic' k1='0.4' k2='0.6' k3='0' k4='-0.04' result='grain'/%3E%3CfeColorMatrix in='grain' type='matrix' values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.72' intercept='0.14'/%3E%3CfeFuncG type='linear' slope='0.72' intercept='0.14'/%3E%3CfeFuncB type='linear' slope='0.72' intercept='0.14'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='480' height='480' filter='url(%23d)'/%3E%3C/svg%3E"),
         linear-gradient(176deg, #cbb08d 0%, #bda07d 24%, #ab8c6c 52%, #97795c 78%, #86694f 100%);
     background-size:
-        70px 70px,
-        200px 200px,
+        480px 480px,
         100% 100%;
-    background-blend-mode: soft-light, overlay, normal;
+    background-blend-mode: soft-light, normal;
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
