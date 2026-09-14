@@ -9,18 +9,28 @@ import type { WorkspaceDerived } from "@intentic/sandbox-contract";
 
 // A stopped background pass, which is what the daemon reports when nothing is rendering.
 const STOPPED = { enabled: false, queued: 0, deriving: [], sweeping: false, broken: false };
-// The daemon seam, stubbed: `read` is what opening the file answers, `derive` what the button asks for.
-const answers: { read: WorkspaceDerived; derive?: WorkspaceDerived } = {
+// The daemon seam, stubbed: `read` is what opening the file answers, `derive` what the button asks for, `remembered`
+// what this tab already held from an earlier open. `hold` keeps a call unanswered, which is the only way to assert
+// what the pane shows while it waits.
+const answers: { read: WorkspaceDerived; derive?: WorkspaceDerived; remembered?: WorkspaceDerived; hold?: boolean } = {
     read: { present: false, path: `bundle.zip`, derivable: true, state: `off`, queue: STOPPED },
 };
 const derived = vi.fn();
+let release: ((value: WorkspaceDerived) => void) | undefined;
+const answer = (value: WorkspaceDerived): Promise<WorkspaceDerived> =>
+    answers.hold === true
+        ? new Promise<WorkspaceDerived>((resolve) => {
+              release = resolve;
+          })
+        : Promise.resolve(value);
 vi.mock("../files/derivedText", () => ({
-    readDerivedText: () => Promise.resolve(answers.read),
+    readDerivedText: () => answer(answers.read),
     deriveText: (path: string) => {
         derived(path);
-        return Promise.resolve(answers.derive ?? answers.read);
+        return answer(answers.derive ?? answers.read);
     },
 }));
+vi.mock("../files/derivedCache", () => ({ rememberedDerivedText: () => answers.remembered }));
 // Live epochs: stores in the app, locals here. `changeEpochOf` is constant, so that watch fires once per mount;
 // `derivedEpoch` is a real ref, since a plain field would not re-trigger the watch and the test would pass on a
 // component that never re-reads — which is the bug being covered.
@@ -81,6 +91,9 @@ beforeEach(() => {
     derivedEpoch.value = 0;
     answers.read = nothing();
     answers.derive = undefined;
+    answers.remembered = undefined;
+    answers.hold = false;
+    release = undefined;
 });
 afterEach(() => {
     app?.unmount();
@@ -97,6 +110,39 @@ describe(`DerivedTextView`, () => {
         expect(element.textContent).toContain(`docx v1`);
         expect(element.textContent).toContain(`Quarterly plan`);
         expect(element.textContent).toContain(`Ship the derivers.`);
+    });
+
+    // Reopening a file whose text exists used to blank the pane and spin until the daemon answered, which reads as the
+    // file being derived all over again. It is not: a shadow is keyed by the source's content hash and reused.
+    it(`paints the text this tab already read before the daemon answers again`, async () => {
+        answers.remembered = shadow();
+        answers.hold = true;
+        const element = mount({ path: `docs/spec.docx` });
+        await settle();
+        expect(element.textContent).toContain(`Quarterly plan`);
+        expect(element.querySelector(`[data-icon="spinner"]`)).toBeNull();
+        // The read still lands, and still wins: a file that did change corrects itself behind the text it painted.
+        release?.(shadow({ content: `# Quarterly plan\n\nShip the viewers.`, stale: true }));
+        await settle();
+        expect(element.textContent).toContain(`Ship the viewers.`);
+        expect(element.textContent).toContain(`changed after its text was made`);
+    });
+
+    // A wait with no words on it is read as a failure, and this one can legitimately run for a minute on a scan.
+    it(`says what a derivation is doing, and how long it has been doing it`, async () => {
+        const element = mount({ path: `scans/contract.pdf` });
+        await settle();
+        answers.hold = true;
+        const button = [...element.querySelectorAll(`button`)].find((node) => node.textContent?.includes(`Render as text`));
+        button?.click();
+        await settle();
+        expect(element.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
+        expect(element.textContent).toContain(`Reading this file and writing its text`);
+        expect(element.textContent).toContain(`scanned PDF is recognised a page at a time`);
+        expect(element.textContent).toContain(`0s`);
+        release?.(shadow({ path: `scans/contract.pdf`, content: `# Contract` }));
+        await settle();
+        expect(element.textContent).toContain(`Contract`);
     });
 
     it(`shows every cap the derivation hit, so cut text cannot read as the whole document`, async () => {

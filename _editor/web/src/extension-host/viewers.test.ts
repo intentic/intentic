@@ -26,7 +26,7 @@ describe(`ext-viewers`, () => {
         const ids = activateAndCaptureViewers()
             .map((viewer) => viewer.id)
             .toSorted();
-        expect(ids).toEqual([`docx`, `image`, `media`, `pdf`, `svg`, `xlsx`]);
+        expect(ids).toEqual([`docx`, `image`, `media`, `pdf`, `pptx`, `svg`, `xlsx`]);
     });
 
     it(`declares each viewer in the manifest with its file extensions and fetch kind`, () => {
@@ -41,6 +41,7 @@ describe(`ext-viewers`, () => {
         expect(declared.get(`pdf`)).toEqual({ id: `pdf`, extensions: [`pdf`], fetch: `blob` });
         expect(declared.get(`docx`)).toEqual({ id: `docx`, extensions: [`docx`], fetch: `blob` });
         expect(declared.get(`xlsx`)).toEqual({ id: `xlsx`, extensions: [`xlsx`], fetch: `blob` });
+        expect(declared.get(`pptx`)).toEqual({ id: `pptx`, extensions: [`pptx`], fetch: `blob` });
     });
 
     // Media is the only `url` viewer: a blob fetch would download the whole file before the first frame and hit the

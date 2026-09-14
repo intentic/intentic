@@ -3,6 +3,7 @@ import { reactive, ref } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
 import { WORKSPACE_MODULES, WORKSPACE_TREE } from "../../../lib/queryKeys";
+import { forgetDerivedText } from "../files/derivedCache";
 
 // Live workspace-change state fed from the daemon's SSE stream; consumed by the tree, the review lists' module
 // grouping, the file viewer, and the tree's row flash — the only thing that keeps the view fresh since an
@@ -110,4 +111,5 @@ export const resetWorkspaceLive = (): void => {
     derivedEpochs.clear();
     sweepEpoch.value = 0;
     sidecarQueue.value = undefined;
+    forgetDerivedText();
 };

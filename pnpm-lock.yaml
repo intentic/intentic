@@ -2278,6 +2278,9 @@ importers:
       docx-preview:
         specifier: 'catalog:'
         version: 0.3.7
+      fflate:
+        specifier: 'catalog:'
+        version: 0.8.3
       read-excel-file:
         specifier: 'catalog:'
         version: 9.3.10

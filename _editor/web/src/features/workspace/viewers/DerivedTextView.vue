@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { Button, CopyButton, formatTokens, Markdown, timeAgo } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import { computed, ref, watch } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
+import { formatElapsed } from "../../agents/fleet/agentStatus";
 import { changeEpochOf, derivedEpochOf, sidecarQueue } from "../changes/useWorkspaceLive";
+import { rememberedDerivedText } from "../files/derivedCache";
 import { deriveText, readDerivedText, type WorkspaceDerived } from "../files/derivedText";
 
 /* Derived text is the agent-readable rendering of a file. */
@@ -17,6 +19,41 @@ const loading = ref(false);
 const deriving = ref(false);
 const error = ref<string | null>(null);
 
+/* HOW LONG THIS HAS BEEN GOING. A derivation runs in a child process this pane cannot see into, so there is no
+   progress to report — only elapsed time, which is the one thing that distinguishes working from hung. */
+
+// Ticks only while something is in flight, so an idle pane holds no timer.
+const busySince = ref(0);
+const now = ref(0);
+let ticker: ReturnType<typeof setInterval> | undefined;
+
+const startClock = (): void => {
+    busySince.value = Date.now();
+    now.value = busySince.value;
+    ticker ??= setInterval(() => (now.value = Date.now()), 250);
+};
+const clearTicker = (): void => {
+    clearInterval(ticker);
+    ticker = undefined;
+};
+// Called when either the read or the derivation lands, so it has to check the other: a re-read finishing under a
+// running derivation must not freeze the count the reader is watching.
+const stopClock = (): void => {
+    if (!loading.value && !deriving.value) {
+        clearTicker();
+    }
+};
+// Unconditional, unlike the above: a pane closed mid-derivation would otherwise leave its timer running for the tab.
+onUnmounted(clearTicker);
+
+const waitedMs = computed(() => (busySince.value === 0 ? 0 : now.value - busySince.value));
+const waited = computed(() => (busySince.value === 0 ? `` : formatElapsed(busySince.value, now.value)));
+// Reading an existing shadow is a round trip, usually a few frames: labelling it instantly would flash a sentence at
+// a reader who never waited for anything.
+const slowRead = computed(() => waitedMs.value >= 400);
+// Past this, the wait is long enough that a reader wants to know they are allowed to walk away from it.
+const longDerive = computed(() => waitedMs.value >= 20_000);
+
 // Reads are cheap and idempotent; a stale one landing after a newer one is the only hazard, so the sequence wins.
 let seq = 0;
 const settle = (id: number, result: WorkspaceDerived): void => {
@@ -29,17 +66,23 @@ const settle = (id: number, result: WorkspaceDerived): void => {
 
 const load = (target: string): void => {
     const id = ++seq;
+    // What this path answered last, painted before the read that confirms it. A file whose text exists is not being
+    // read again — the daemon keys shadows by content hash — and a spinner over it says otherwise.
+    shadow.value = rememberedDerivedText(target);
     loading.value = true;
+    startClock();
     readDerivedText(target).then(
         (result) => {
             settle(id, result);
             loading.value = false;
+            stopClock();
         },
         (err: unknown) => {
             if (id !== seq) {
                 return;
             }
             loading.value = false;
+            stopClock();
             error.value = errorMessage(err, `Could not read this file's text.`);
         },
     );
@@ -99,16 +142,19 @@ const emptyMessage = computed(() => {
 const derive = (): void => {
     const id = ++seq;
     deriving.value = true;
+    startClock();
     deriveText(path).then(
         (result) => {
             settle(id, result);
             deriving.value = false;
+            stopClock();
         },
         (err: unknown) => {
             if (id !== seq) {
                 return;
             }
             deriving.value = false;
+            stopClock();
             error.value = errorMessage(err, `Could not render this file as text.`);
         },
     );
@@ -128,6 +174,8 @@ const derive = (): void => {
                 <span class="shrink-0 text-subtle">{{ formatTokens(shadow.tokens) }} tokens</span>
                 <span v-if="shadow.derivedAt !== undefined" class="shrink-0 text-subtle">{{ timeAgo(Date.parse(shadow.derivedAt), { days: true }) }}</span>
                 <span class="flex-1"></span>
+                <!-- The text below is the previous reading while this runs; without the count it looks like nothing is. -->
+                <span v-if="deriving" class="shrink-0 text-subtle">Reading it again… {{ waited }}</span>
                 <CopyButton :text="shadow.content" aria-label="Copy derived text" v-tooltip.bottom="'Copy this text'" />
                 <Button
                     size="small"
@@ -171,9 +219,23 @@ const derive = (): void => {
             </div>
         </template>
 
-        <div v-else-if="loading || deriving" class="flex h-full flex-col items-center justify-center gap-2 text-muted">
+        <!-- A bare spinner over a wait that can legitimately run for a minute is indistinguishable from a failure, so
+             this says what is running, why it takes what it takes, and how long it has been going. -->
+        <div v-else-if="loading || deriving" class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-muted">
             <Icon name="spinner" class="text-xl" spin />
-            <p v-if="deriving" class="text-2xs">Reading the file…</p>
+            <template v-if="deriving">
+                <p class="text-sm">Reading this file and writing its text…</p>
+                <p class="max-w-sm text-2xs text-subtle">
+                    A document or a spreadsheet takes a moment. A scanned PDF is recognised a page at a time and a recording is transcribed, which can run to a
+                    minute or two.
+                </p>
+                <p class="text-2xs tabular-nums text-subtle">{{ waited }}</p>
+                <p v-if="longDerive" class="max-w-sm text-2xs text-subtle">
+                    Still going — nothing has failed. The text is written to disk when it lands, so you can leave this file or come back to it and it will be
+                    here.
+                </p>
+            </template>
+            <p v-else-if="slowRead" class="text-2xs text-subtle">Looking for this file's text…</p>
         </div>
 
         <div v-else-if="error" class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">

@@ -1,19 +1,20 @@
 import type { WorkspaceDerived } from "@intentic/sandbox-contract";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import type { OpenFile } from "../viewers/openFile";
+import { rememberDerived } from "./derivedCache";
 
 // A file's derived text: the markdown shadow the sandbox keeps of a document, picture, recording or archive, and the
 // same rendering an agent reads instead of the bytes.
 // Two calls, deliberately split: reading never derives, so opening a file costs nothing, and deriving is something a
-// reader asks for.
+// reader asks for. Both answers are kept (derivedCache.ts), so reopening a file paints before the daemon answers.
 
 export type { WorkspaceDerived };
 
 /** The shadow as it stands. `present: false` is the ordinary answer while background derivation is switched off. */
-export const readDerivedText = (path: string): Promise<WorkspaceDerived> => sandboxRpc.workspace.derived({ path });
+export const readDerivedText = async (path: string): Promise<WorkspaceDerived> => rememberDerived(path, await sandboxRpc.workspace.derived({ path }));
 
 /** Renders this one file now, however the `sidecars` setting stands, and answers with what came out. */
-export const deriveText = (path: string): Promise<WorkspaceDerived> => sandboxRpc.workspace.derive({ path });
+export const deriveText = async (path: string): Promise<WorkspaceDerived> => rememberDerived(path, await sandboxRpc.workspace.derive({ path }));
 
 // JSON on disk: text by every rule this viewer has, and unreadable by any person. The one text-shaped format whose
 // shadow is worth more than its own bytes.

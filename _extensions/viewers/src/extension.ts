@@ -10,5 +10,6 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
         api.viewers.register({ id: `media`, component: async () => (await import(`./MediaViewer.vue`)).default }),
         api.viewers.register({ id: `docx`, component: async () => (await import(`./DocxViewer.vue`)).default }),
         api.viewers.register({ id: `xlsx`, component: async () => (await import(`./SheetViewer.vue`)).default }),
+        api.viewers.register({ id: `pptx`, component: async () => (await import(`./PptxViewer.vue`)).default }),
     );
 };

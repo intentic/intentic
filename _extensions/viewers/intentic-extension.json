@@ -36,7 +36,8 @@
                 "fetch": "url"
             },
             { "id": "docx", "extensions": ["docx"], "fetch": "blob" },
-            { "id": "xlsx", "extensions": ["xlsx"], "fetch": "blob" }
+            { "id": "xlsx", "extensions": ["xlsx"], "fetch": "blob" },
+            { "id": "pptx", "extensions": ["pptx"], "fetch": "blob" }
         ]
     }
 }
