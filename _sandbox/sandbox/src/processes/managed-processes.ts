@@ -35,6 +35,9 @@ export type PanelLaunch = "launching" | "installing" | "starting" | "exited";
 const installFinished = (cwd: string): boolean =>
     existsSync(join(cwd, "node_modules", ".pnpm", "lock.yaml")) || existsSync(join(cwd, "node_modules", ".package-lock.json"));
 export const panelSession = (key: string): string => `${PANEL_SESSION_PREFIX}${key}`;
+// Inverse of panelSession; undefined for a name that isn't a panel session at all.
+export const panelKeyOf = (session: string): string | undefined =>
+    session.startsWith(PANEL_SESSION_PREFIX) ? session.slice(PANEL_SESSION_PREFIX.length) : undefined;
 
 // The tmux side of the manager, injectable so tests need no tmux binary. `states` reports every pane's foreground
 // command in one call; absence means dead.
@@ -182,6 +185,9 @@ export interface ManagedProcesses {
     // Kills the session (including a finished oneShot's lingering shell).
     readonly stop: (repo: string) => void | Promise<void>;
     readonly running: (repo: string) => boolean;
+    // A one-shot run's state, the only thing that tells an install or a check from a dev server once its shell is back
+    // at a prompt; undefined for a dev-server panel and for a key this manager never ran.
+    readonly runOf: (repo: string) => { readonly running: boolean; readonly finishedAt?: number } | undefined;
     // The assigned port, undefined when not running; the preview proxy's forward target.
     readonly portOf: (repo: string) => number | undefined;
     // Start progress for a dev-server panel (PanelLaunch); undefined when not running or for a one-shot job.
@@ -208,6 +214,10 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
             lastCommand: string | undefined;
         }
     >();
+    // When each one-shot run completed, keyed like `current`: a finished run's shell sits at a prompt, so tmux alone
+    // cannot tell it from a dev server nobody typed in. Bounded by the number of distinct one-shot keys a workspace
+    // has (one per project per check), and a re-run replaces its own entry.
+    const finishedRuns = new Map<string, number>();
     let timer: NodeJS.Timeout | undefined;
     let unwatchPrompts: (() => void) | undefined;
 
@@ -215,8 +225,14 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
     const ONE_SHOT_GRACE_MS = 10_000;
 
     // Untracks a key and publishes the change, since /panels and the terminals list both read `running` from here. A
-    // died dev server and a finished oneShot are the two ways a panel stops without a Stop click.
-    const untrack = (key: string): void => {
+    // died dev server and a finished oneShot are the two ways a panel stops without a Stop click. `completed` is false
+    // for a Stop, which takes the session with it and so leaves nothing to remember.
+    const untrack = (key: string, completed: boolean): void => {
+        if (completed && current.get(key)?.oneShot !== undefined) {
+            finishedRuns.set(key, Date.now());
+        } else {
+            finishedRuns.delete(key);
+        }
         current.delete(key);
         publishRuntimeChange("panels", "terminals");
     };
@@ -240,7 +256,8 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
         for (const [key, entry] of current) {
             const command = states.get(panelSession(key));
             if (command === undefined) {
-                untrack(key);
+                // Session gone: a one-shot whose shell exited outright finished too, it just left nothing behind.
+                untrack(key, true);
                 continue;
             }
             // First non-shell sighting is the command starting; a later shell sighting is it exiting. Published on
@@ -266,7 +283,7 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
             entry.promptStreak += 1;
             const graceOk = Date.now() - entry.startedAt > ONE_SHOT_GRACE_MS;
             if ((fromPrompt && entry.sawJob && entry.promptStreak >= 1) || (entry.promptStreak >= 2 && (entry.sawJob || graceOk))) {
-                untrack(key);
+                untrack(key, true);
             }
         }
         if (current.size === 0) {
@@ -279,6 +296,8 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
             if (current.has(key)) {
                 return;
             }
+            // A re-run of the same key is not the old run any more; its completion stops being a fact about now.
+            finishedRuns.delete(key);
             const port = await freePort();
             // A concurrent start of the same key won the race during the port await; leave it be.
             if (current.has(key)) {
@@ -324,13 +343,21 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
         },
         stop: async (key) => {
             const stopped = runner.kill(panelSession(key));
-            untrack(key);
+            untrack(key, false);
             if (current.size === 0) {
                 stopWatching();
             }
             await stopped;
         },
         running: (key) => current.has(key),
+        runOf: (key) => {
+            const entry = current.get(key);
+            if (entry !== undefined) {
+                return entry.oneShot === undefined ? undefined : { running: true };
+            }
+            const finishedAt = finishedRuns.get(key);
+            return finishedAt === undefined ? undefined : { running: false, finishedAt };
+        },
         portOf: (key) => current.get(key)?.port,
         launchOf: (key) => {
             const entry = current.get(key);
@@ -351,6 +378,7 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
             }
             const stopped = current.size > 0;
             current.clear();
+            finishedRuns.clear();
             if (stopped) {
                 publishRuntimeChange("panels", "terminals");
             }

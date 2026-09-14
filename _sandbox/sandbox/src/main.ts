@@ -56,7 +56,7 @@ import { applyTmuxLogHooks, logsRoot, pruneLogFiles, terminalLogsDir } from "./l
 import { applyEventsPath, applyRunLive } from "./intentic/apply-events.js";
 import { checkEventsDir } from "./intentic/check-run.js";
 import { INFRA_APPLY_KEY } from "./intentic/infra-apply.js";
-import { killStaleManagedSessions, panelSession } from "./processes/managed-processes.js";
+import { killStaleManagedSessions, panelKeyOf, panelSession } from "./processes/managed-processes.js";
 import { killOrphanServiceProcesses } from "./processes/service-processes.js";
 import { createPreviewProxy } from "./panels/preview-proxy.js";
 import { publicRoot } from "./public/public-files.js";
@@ -896,13 +896,20 @@ const main = async (): Promise<void> => {
     const logsSweep = role.roots ? setInterval(() => void pruneLogFiles(logsRoot(config.historyRoot)), 3_600_000) : undefined;
     shutdown.push(() => clearInterval(logsSweep));
 
-    // Reaps abandoned web-* shells and finished job-* sessions, at boot and hourly. `keep` makes this safe unattended:
-    // a job still queued has only dead panes but isn't finished. agent-* belongs to the reaper below.
-    const stillWorking = (session: string): boolean => services.terminalRun.running(session);
+    // Reaps abandoned web-* shells, finished job-* sessions and the shells one-shot runs leave at a prompt, at boot and
+    // hourly. `keep` makes this safe unattended: a job still queued has only dead panes but isn't finished. agent-*
+    // belongs to the reaper below.
+    const reapPolicy = {
+        keep: (session: string): boolean => services.terminalRun.running(session),
+        finishedRunAt: (session: string): number | undefined => {
+            const key = panelKeyOf(session);
+            return key === undefined ? undefined : services.processes.runOf(key)?.finishedAt;
+        },
+    };
     if (role.container) {
-        void reapFinishedSessions(stillWorking);
+        void reapFinishedSessions(reapPolicy);
     }
-    const sessionSweep = role.container ? setInterval(() => void reapFinishedSessions(stillWorking), 3_600_000) : undefined;
+    const sessionSweep = role.container ? setInterval(() => void reapFinishedSessions(reapPolicy), 3_600_000) : undefined;
     shutdown.push(() => clearInterval(sessionSweep));
 
     // Reclaims everything a stopped conversation still holds: its provider CLI tree, MCP servers and browsers, its

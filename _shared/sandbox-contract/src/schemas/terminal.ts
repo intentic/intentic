@@ -4,7 +4,9 @@ import { z } from "zod";
 // shell: a session the user opened.
 // panel: a repo's dev-server session, started via Start; running:false means untracked.
 // agent: the agent's Bash commands; running:false once every pane is a finished command's dead one.
-// job: the daemon's terminal runner executing a user-triggered flow (capability add, infra check).
+// job: work the sandbox runs to completion rather than keeps, so it stops being a tab once it ends: the terminal
+// runner's flows (capability add, infra check) and the process manager's one-shot runs (install, a project's checks,
+// a scaffold), whose lingering shell is what the `panel` kind above would otherwise read as an idle dev server.
 // process: a managed background process, shown read-only, never as a killable tab.
 export const TerminalSessionSchema = z.object({
     name: z.string().describe("Its id, and what the close route takes."),

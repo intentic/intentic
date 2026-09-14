@@ -56,6 +56,8 @@ export const fakeProcesses = (
             portOf: (repo) => ports[repo],
             // A stubbed panel is never mid-start; routes drop the field, which is also the common case.
             launchOf: () => undefined,
+            // Nor is it a one-shot run: a test that wants a finished install or check says so by replacing this.
+            runOf: () => undefined,
             stopAll: () => {},
         }),
         { started, stopped },

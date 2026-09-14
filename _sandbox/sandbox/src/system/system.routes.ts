@@ -19,7 +19,7 @@ import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.handler.
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { extensionProcessIndex } from "../extensions/extension-processes.js";
-import { PANEL_SESSION_PREFIX } from "../processes/managed-processes.js";
+import { type ManagedProcesses, PANEL_SESSION_PREFIX } from "../processes/managed-processes.js";
 import { SERVICE_SESSION_PREFIX, serviceSession } from "../processes/service-processes.js";
 import { foreground, PANE_FORMAT, paneStates, SHELL } from "../terminal/pane-state.js";
 import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
@@ -177,6 +177,23 @@ async function* systemEvents(
     }
 }
 
+// What a `panel-*` session actually is. Three things share the prefix: a watched background service (dockerd, a local
+// model), a one-shot run that ends (an install, a project's checks, a scaffold), and a repo's dev server. Once a run's
+// shell is back at a prompt tmux cannot tell it from an idle server, so the process manager is asked instead; a run is
+// listed as a job so it retires from the tab strip the way every other job does.
+export const panelState = (
+    processes: Pick<ManagedProcesses, "running" | "runOf">,
+    key: string,
+    command: string | undefined,
+): { kind: "process" | "job" | "panel"; running: boolean } => {
+    // dockerd and local-model servers outlive a restart, adopted at boot; extension processes are listed apart.
+    if (key === DOCKER_PANEL_KEY || key.startsWith(LOCAL_MODEL_PREFIX)) {
+        return { kind: "process", running: processes.running(key) && command !== SHELL };
+    }
+    const run = processes.runOf(key);
+    return run === undefined ? { kind: "panel", running: processes.running(key) } : { kind: "job", running: run.running };
+};
+
 export const createSystemRoutes = (services: Services) => {
     const i = implement(systemContract).$context<OrpcContext>();
     return {
@@ -284,7 +301,8 @@ export const createSystemRoutes = (services: Services) => {
         }),
         // Every attachable session behind the terminal panel.
         // - web-*: the user's own shells
-        // - panel-*: dev servers, labeled by panel key; dockerd and local-model panels read as kind "process" instead
+        // - panel-*: dev servers, labeled by panel key; dockerd and local-model panels read as kind "process", and a
+        //   one-shot run (install, checks, a scaffold) as kind "job", since it is work that ends rather than a server
         // - agent-*: the agent's own Bash terminals, running while a turn is in flight or any pane is alive
         // - job-*: the terminal runner's user-triggered flows
         // Anything else stays hidden; no tmux server yet reads as an empty list, not an error.
@@ -323,20 +341,7 @@ export const createSystemRoutes = (services: Services) => {
                     }
                     if (name.startsWith(PANEL_SESSION_PREFIX)) {
                         const key = name.slice(PANEL_SESSION_PREFIX.length);
-                        // dockerd and local-model servers outlive a restart, adopted at boot; extension processes are
-                        // listed apart.
-                        if (key === DOCKER_PANEL_KEY || key.startsWith(LOCAL_MODEL_PREFIX)) {
-                            return [
-                                {
-                                    name,
-                                    label: key,
-                                    kind: "process" as const,
-                                    running: services.processes.running(key) && command !== SHELL,
-                                    ...seen,
-                                },
-                            ];
-                        }
-                        return [{ name, label: key, kind: "panel" as const, running: services.processes.running(key), ...seen }];
+                        return [{ name, label: key, ...panelState(services.processes, key, command), ...seen }];
                     }
                     if (name.startsWith(AGENT_SESSION_PREFIX)) {
                         // `help` isn't tmux's own state: the agent is parked on a prompt; rides this list since the

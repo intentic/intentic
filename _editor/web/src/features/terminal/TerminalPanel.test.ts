@@ -50,7 +50,8 @@ type Listed = { name: string; kind: "shell" | "panel" | "process"; running: bool
 const minutesAgo = (minutes: number): number => Date.now() - minutes * 60_000;
 const idle = (name: string, quietMinutes = 0): Listed => ({ name, kind: `shell`, running: true, activityAt: minutesAgo(quietMinutes) });
 const busy = (name: string, command: string): Listed => ({ name, kind: `shell`, running: true, command, activityAt: minutesAgo(0) });
-// A pane whose last window has exited: a stopped dev server, a one-shot job's leftover shell.
+// A pane whose last window has exited: a dev server that stopped. (A finished one-shot run lists as a job and leaves
+// the strip on its own, so the sweep never meets one.)
 const finished = (name: string): Listed => ({ name, kind: `panel`, label: name, running: false, activityAt: 0 });
 
 const mounted: { app: App; host: HTMLElement }[] = [];

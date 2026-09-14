@@ -4,8 +4,9 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { beforeEach, expect, test, vi } from "vitest";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 
-// Pins two halves of hiding work by default: the popover lists running work only, named by owning conversation, newest
-// first; the rail badge stops counting what the strip stopped tabbing.
+// Pins two halves of hiding work by default: the popover lists live work named by owning conversation, newest first,
+// and under it the jobs that just ended, since their pane is the only copy of what they printed; the rail badge stops
+// counting what the strip stopped tabbing.
 
 const store = new Map<string, string>();
 vi.stubGlobal(`localStorage`, {
@@ -84,7 +85,7 @@ test("the popover lists the agent's shells AND the daemon's jobs, named after th
     expect(rows.value.map((row) => row.name)).toContain(`Redesign the chat rail`);
 });
 
-test("work that has exited is not listed, whether it succeeded or failed", async () => {
+test("work that has exited leaves the running list, whether it succeeded or failed", async () => {
     const now = Date.now();
     daemonLists(
         agent(`aaaa1111`, false, { exitCode: 0, activityAt: now - 10 * 60_000 }),
@@ -94,6 +95,32 @@ test("work that has exited is not listed, whether it succeeded or failed", async
 
     const { rows } = mounted(() => useWorkTerminals());
     await vi.waitFor(() => expect(rows.value.map((row) => row.session)).toEqual([`job-capability-demo`]));
+});
+
+/* What a finished job leaves behind IS its pane: a red check's output is in the terminal it ran in and nowhere
+ * else, so it stays one click away here rather than holding a tab on the strip. A finished agent shell is not
+ * here, because its conversation already wrote down everything it did. */
+test("a job that has ended is offered back; a finished agent shell is not", async () => {
+    const now = Date.now();
+    daemonLists(
+        agent(`aaaa1111`, false, { exitCode: 0, activityAt: now - 60_000 }),
+        job(`root--verify`, false, { exitCode: 1, activityAt: now - 2 * 60_000 }),
+        job(`capability-demo`, true),
+    );
+
+    const { finished } = mounted(() => useWorkTerminals());
+    await vi.waitFor(() => expect(finished.value.map((row) => row.session)).toEqual([`job-root--verify`]));
+});
+
+test("only the last handful of finished jobs is offered: older than that, the answer is in the activity, not a pane", async () => {
+    const now = Date.now();
+    // Eleven checks deep, as a morning of landings leaves behind; each one minute older than the last.
+    daemonLists(...Array.from({ length: 11 }, (_, index) => job(`check-${index}`, false, { activityAt: now - index * 60_000 })));
+
+    const { finished } = mounted(() => useWorkTerminals());
+    await vi.waitFor(() => expect(finished.value).toHaveLength(6));
+
+    expect(finished.value.map((row) => row.name)).toEqual([`check-0`, `check-1`, `check-2`, `check-3`, `check-4`, `check-5`]);
 });
 
 test("whatever spoke last is on top: the only ordering that says anything once every row is alive", async () => {

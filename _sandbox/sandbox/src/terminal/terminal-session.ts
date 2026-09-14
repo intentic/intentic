@@ -47,17 +47,25 @@ export const captureScrollback = async (session: string, lines: number): Promise
     return { text, lines: captured, truncated: captured >= lines };
 };
 
-// web-* shells age out only when abandoned; job-* sessions age out sooner since the browser drops them once finished.
-// agent-* sessions belong to the conversation reaper (platform/reaper.ts), not this sweep.
+// web-* shells age out only when abandoned; job-* sessions and finished one-shot runs age out sooner since the browser
+// drops them once finished. agent-* sessions belong to the conversation reaper (platform/reaper.ts), not this sweep.
 const REAP_IDLE_MS = 48 * 3_600_000;
 const REAP_FINISHED_MS = 2 * 3_600_000;
 
 // One list-panes line per pane: session attach state, activity stamp, and the pane's own liveness.
 const SWEEP_FORMAT = "#{session_name} #{session_attached} #{session_activity} #{pane_dead}";
 
+export interface ReapPolicy {
+    // Spares work the panes can't see, e.g. a job whose runner still has commands queued for it.
+    readonly keep: (session: string) => boolean;
+    // When a one-shot run completed, undefined for anything else. Its shell survives its command, so the pane's own
+    // liveness would keep a finished install or check alive for the life of the sandbox.
+    readonly finishedRunAt: (session: string) => number | undefined;
+}
+
 // Pure so the reap policy is testable without a tmux server; an unparseable activity stamp reads as now, so the session
 // is kept.
-export const reapableSessions = (stdout: string, now: number, keep: (session: string) => boolean): string[] => {
+export const reapableSessions = (stdout: string, now: number, policy: ReapPolicy): string[] => {
     const states = new Map<string, { attached: boolean; live: boolean; activityAt: number }>();
     for (const line of stdout.split("\n")) {
         const [name, attached, activity, dead] = line.split(" ");
@@ -73,7 +81,7 @@ export const reapableSessions = (stdout: string, now: number, keep: (session: st
     }
     return [...states]
         .filter(([name, { attached, live, activityAt }]) => {
-            if (attached || keep(name)) {
+            if (attached || policy.keep(name)) {
                 return false;
             }
             if (name.startsWith(WEB_SESSION_PREFIX)) {
@@ -82,7 +90,13 @@ export const reapableSessions = (stdout: string, now: number, keep: (session: st
             if (name.startsWith(JOB_SESSION_PREFIX)) {
                 return !live && activityAt <= now - REAP_FINISHED_MS;
             }
-            // agent-* sessions are reaped by platform/reaper.ts; panel-* sessions stop explicitly, neither ages out
+            // A run that ended: its shell is alive at a prompt, so `live` says nothing and the manager's own stamp is
+            // the clock.
+            const finishedAt = policy.finishedRunAt(name);
+            if (finishedAt !== undefined) {
+                return finishedAt <= now - REAP_FINISHED_MS;
+            }
+            // agent-* sessions are reaped by platform/reaper.ts; a dev-server panel stops explicitly, neither ages out
             // here.
             return false;
         })
@@ -114,7 +128,7 @@ export const panePids = async (): Promise<Map<number, string>> => {
     }
 };
 
-export const reapFinishedSessions = async (keep: (session: string) => boolean): Promise<void> => {
+export const reapFinishedSessions = async (policy: ReapPolicy): Promise<void> => {
     let stdout: string;
     try {
         ({ stdout } = await execFileAsync("tmux", ["list-panes", "-a", "-F", SWEEP_FORMAT]));
@@ -123,6 +137,6 @@ export const reapFinishedSessions = async (keep: (session: string) => boolean): 
         return;
     }
     await Promise.all(
-        reapableSessions(stdout, Date.now(), keep).map((name) => execFileAsync("tmux", ["kill-session", "-t", `=${name}`]).catch(() => undefined)),
+        reapableSessions(stdout, Date.now(), policy).map((name) => execFileAsync("tmux", ["kill-session", "-t", `=${name}`]).catch(() => undefined)),
     );
 };

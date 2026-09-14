@@ -155,6 +155,63 @@ test("a oneShot job completes after two consecutive prompt sightings on the poll
     expect(killed).toEqual([]);
 });
 
+/* `runOf` is what separates a finished run from an idle dev server once both are a shell at a prompt: the terminals
+ * list reads it to say "job" instead of "panel" (so the finished run leaves the tab strip) and the session sweep
+ * reads its stamp to age the leftover shell out. */
+// The two poll ticks a completion takes: one that sees the command running, then the pair of prompt sightings.
+const untilComplete = async (cmd: Map<string, string>, session: string): Promise<void> => {
+    await vi.advanceTimersByTimeAsync(2100);
+    cmd.set(session, "zsh");
+    await vi.advanceTimersByTimeAsync(4000);
+};
+
+test("a finished oneShot is remembered as a run that ended; a dev server is no run at all", async () => {
+    vi.useFakeTimers();
+    const startedAt = Date.now();
+    const { runner, cmd } = fakeRunner();
+    const panels = createManagedProcesses(runner);
+    await panels.start("job", { ...SPEC, oneShot: true });
+    await panels.start("app", SPEC);
+
+    expect(panels.runOf("job")).toEqual({ running: true });
+    expect(panels.runOf("app")).toBeUndefined();
+    expect(panels.runOf("never-started")).toBeUndefined();
+
+    await untilComplete(cmd, "panel-job");
+
+    // Stamped when the sweep saw the prompt (the third tick), not when this is read: the sweep's clock runs from the
+    // end of the run.
+    expect(panels.runOf("job")).toEqual({ running: false, finishedAt: startedAt + 6000 });
+    // The dev server never left the foreground and is still not a run.
+    expect(panels.runOf("app")).toBeUndefined();
+    panels.stopAll();
+});
+
+test("re-running a oneShot key drops the completion of the run before it", async () => {
+    vi.useFakeTimers();
+    const { runner, cmd } = fakeRunner();
+    const panels = createManagedProcesses(runner);
+    await panels.start("job", { ...SPEC, oneShot: true });
+    await untilComplete(cmd, "panel-job");
+    expect(panels.runOf("job")?.running).toBe(false);
+
+    await panels.start("job", { ...SPEC, oneShot: true });
+
+    expect(panels.runOf("job")).toEqual({ running: true });
+    panels.stopAll();
+});
+
+// Stop takes the session with it, so there is no leftover shell to list or to age out afterwards.
+test("stopping a oneShot leaves no finished run behind", async () => {
+    const { runner } = fakeRunner();
+    const panels = createManagedProcesses(runner);
+    await panels.start("job", { ...SPEC, oneShot: true });
+
+    await panels.stop("job");
+
+    expect(panels.runOf("job")).toBeUndefined();
+});
+
 test("a single prompt sighting between chained commands does not complete a oneShot job", async () => {
     vi.useFakeTimers();
     const { runner, cmd } = fakeRunner();

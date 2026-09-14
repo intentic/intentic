@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { jobSessionLabel, panePidSessions, reapableSessions } from "./terminal-session.js";
+import { jobSessionLabel, panePidSessions, type ReapPolicy, reapableSessions } from "./terminal-session.js";
 
 /* The retention sweep's policy. What it must never do is take something someone is using or something still
  * working: everything else it takes costs nothing, because the pane's bytes are already in the terminal logs.
@@ -13,8 +13,10 @@ type Pane = [session: string, attached: 0 | 1, agoMs: number, dead: 0 | 1];
 const listPanes = (...panes: Pane[]): string =>
     panes.map(([session, attached, agoMs, dead]) => `${session} ${attached} ${at(agoMs)} ${dead}`).join("\n");
 
-const nothingWorking = (): boolean => false;
-const reap = (stdout: string, keep: (session: string) => boolean = nothingWorking): string[] => reapableSessions(stdout, NOW, keep);
+// Neither half of the policy knows anything unless a case says so: nothing is still working, nothing was a one-shot
+// run.
+const idlePolicy: ReapPolicy = { keep: () => false, finishedRunAt: () => undefined };
+const reap = (stdout: string, policy: Partial<ReapPolicy> = {}): string[] => reapableSessions(stdout, NOW, { ...idlePolicy, ...policy });
 
 test("finished job sessions age out; the ones that just finished stay", () => {
     const stdout = listPanes(["job-capability-demo", 0, 5 * HOUR, 1], ["job-recent", 0, 10 * 60_000, 1]);
@@ -37,7 +39,7 @@ test("an attached session is never reaped: a browser is looking at it right now"
 
 test("`keep` spares work the panes can't see: a job whose runner has more queued", () => {
     const stdout = listPanes(["job-slow", 0, 3 * HOUR, 1], ["job-infra-check", 0, 3 * HOUR, 1]);
-    expect(reap(stdout, (session) => session === "job-slow")).toEqual(["job-infra-check"]);
+    expect(reap(stdout, { keep: (session) => session === "job-slow" })).toEqual(["job-infra-check"]);
 });
 
 test("web-* shells keep their own, far longer clock: they are the user's own places, not records", () => {
@@ -47,6 +49,16 @@ test("web-* shells keep their own, far longer clock: they are the user's own pla
 
 test("panel-* dev servers are never aged out: they are started and stopped explicitly", () => {
     expect(reap(listPanes(["panel-app", 0, 200 * HOUR, 1], ["panel-docker", 0, 200 * HOUR, 1]))).toEqual([]);
+});
+
+/* A one-shot run (an install, a project's checks) leaves its shell sitting at a prompt, so its pane is alive and
+ * its session looks exactly like a dev server nobody has typed in. Only the process manager knows it ended, which
+ * is why the sweep asks rather than reads it off tmux. */
+test("a finished one-shot run ages out on the manager's stamp, though its shell is alive at a prompt", () => {
+    const stdout = listPanes(["panel-root--verify", 0, 0, 0], ["panel-web--install", 0, 0, 0]);
+    const finishedRunAt = (session: string): number | undefined => (session === "panel-root--verify" ? NOW - 5 * HOUR : NOW - 10 * 60_000);
+
+    expect(reap(stdout, { finishedRunAt })).toEqual(["panel-root--verify"]);
 });
 
 test("an unreadable activity stamp reads as just-now, so the sweep leaves it alone", () => {
