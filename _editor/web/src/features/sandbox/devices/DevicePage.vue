@@ -21,6 +21,7 @@ import { computed, ref } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
 import DeviceRunners from "./DeviceRunners.vue";
 import { boardRoute } from "./deviceLinks";
+import { deviceAgentPanel } from "./deviceAgent";
 import { type DeviceCardFix, deviceAttention } from "./deviceAttention";
 import { commandable, type DeviceRow, deviceState, deviceSwitches, deviceTone, fixable, manageable, pausable, selfGroup } from "./deviceRows";
 import { useDeviceOps } from "./deviceOps";
@@ -62,7 +63,11 @@ const block = computed(() => manageBlock(device.value, scopes.value));
 // member's), so the same answer decides whether Reconnect is offered at all.
 const { isOwner } = useRole();
 
-const concerns = computed(() => deviceAttention(row, { block: block.value, latest, readAt, canPair: isOwner.value }));
+const concerns = computed(() => deviceAttention(row, { block: block.value, readAt, canPair: isOwner.value }));
+
+// The agent as its own object rather than a version printed under the name: what it serves, what it wants,
+// and the two verbs that change either. Undefined only on a machine with no version and no command door.
+const agent = computed(() => deviceAgentPanel(row, latest));
 
 const cardRoute = (fix: DeviceCardFix): RouteLocationRaw => {
     const card = { name: `capabilities`, params: { card: fix.card } };
@@ -179,16 +184,6 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                     >
                         <template #icon><Icon name="arrow-up-right" /></template>
                     </Button>
-                    <Button
-                        v-else-if="concern.fix?.kind === `agent`"
-                        size="small"
-                        severity="secondary"
-                        :label="concern.fix.label"
-                        :loading="ops.agentRunning(concern.fix.op)"
-                        :disabled="ops.working.value"
-                        v-tooltip.top="concern.fix.hint"
-                        @click="void ops.runAgent(concern.fix.op)"
-                    />
                     <!--
                         Not gated on `ops.working`, unlike every button above: this one runs nothing on the machine,
                         it only asks this sandbox for a command to carry there.
@@ -205,50 +200,79 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                     </Button>
                 </span>
             </Notice>
+        </div>
+
+        <!--
+            The agent, as an object with verbs rather than a version printed under the machine's name. Above the
+            two lists because it is what makes their buttons work, and because updating it used to mean walking to
+            the machine: the controls are standing ones, offered on a healthy agent too, since "behind" is a
+            comparison this sandbox can only make when it knows what has been published.
+        -->
+        <RowGroup v-if="agent" label="Agent on this device">
+            <Row icon="desktop" :title="agent.version === undefined ? `Agent` : `Agent ${agent.version}`">
+                <template #description>
+                    The one process this sandbox reaches {{ device.label }} through — its folders, its ports, and every button below.
+                </template>
+                <template #meta>
+                    <span v-for="fact in agent.facts" :key="fact" class="font-mono">{{ fact }}</span>
+                    <StatusBadge :variant="agent.state.variant" size="xs" :dot="true" :label="agent.state.word" />
+                </template>
+                <!-- Both ops run on that device over its own socket, so both spin the whole page's one-op-at-a-time lock. -->
+                <template v-if="agent.actions.length > 0" #control>
+                    <Button
+                        v-for="action in agent.actions"
+                        :key="action.op"
+                        size="small"
+                        severity="secondary"
+                        :label="action.label"
+                        :loading="ops.agentRunning(action.op)"
+                        :disabled="ops.working.value"
+                        v-tooltip.top="action.hint"
+                        @click="void ops.runAgent(action.op)"
+                    />
+                </template>
+            </Row>
+
+            <!-- What this agent wants, or what has been published; the settled case still gets its one quiet line. -->
+            <RowNote variant="block">
+                <div class="flex flex-col gap-2">
+                    <template v-for="note in agent.notes" :key="note.text">
+                        <Notice v-if="note.tone" :tone="note.tone">{{ note.text }}</Notice>
+                        <p v-else class="text-xs text-muted">{{ note.text }}</p>
+                    </template>
+                    <!-- Said where the buttons would have been, rather than leaving their absence to be guessed. -->
+                    <p v-if="agent.blocked" class="text-xs text-muted">{{ agent.blocked }}</p>
+                </div>
+            </RowNote>
 
             <!--
-                The agent's resting facts only: running is the state that needs no words, and its two failures are
-                sentences in the strip above rather than a badge repeated here.
+                Both ops take their own connection down (the loop being restarted carries the request), so the
+                stream always stops mid-sentence with no outcome to report.
             -->
-            <div v-if="row.agent || ops.agentWaiting.value || ops.agentBusy.value" class="flex min-w-0 flex-col gap-2">
-                <!--
-                    Separated, not merely spaced: without them a stalled agent (whose state word is the strip's, not
-                    this line's) reads as three unrelated tokens rather than one machine's facts.
-                -->
-                <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-2xs text-subtle">
-                    <span class="font-medium text-muted">Agent</span>
-                    <template v-if="row.agent?.running === true && !row.agent.stalled">
-                        <span aria-hidden="true">·</span>
-                        <span class="inline-flex items-center gap-1.5">
-                            <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
-                            running
-                        </span>
-                    </template>
-                    <template v-if="row.chip">
-                        <span aria-hidden="true">·</span>
-                        <span class="font-mono">{{ row.chip.version }}</span>
-                    </template>
-                    <template v-if="row.agent?.pid !== undefined">
-                        <span aria-hidden="true">·</span>
-                        <span class="font-mono">pid {{ row.agent.pid }}</span>
-                    </template>
-                </p>
-                <!--
-                    Both ops take their own connection down (the loop being restarted carries the request), so the
-                    stream always stops mid-sentence with no outcome to report.
-                -->
-                <p v-if="ops.agentWaiting.value" class="text-xs text-muted">{{ ops.agentWaiting.value }}</p>
-                <DeviceRunLog
-                    v-if="ops.agentBusy.value || ops.agentLines.value.length > 0"
-                    :lines="ops.agentLines.value"
-                    :running="ops.agentBusy.value"
-                    empty="Starting on that device…"
-                    note="Running on that device. It keeps going even if you leave this page, and it survives the connection dropping."
-                />
-                <Notice v-if="ops.failure.value?.key === ops.agentKey.value" :of="ops.failure.value.notice" />
-                <p v-else-if="ops.outcome.value?.key === ops.agentKey.value" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
-            </div>
-        </div>
+            <RowNote
+                v-if="
+                    ops.agentWaiting.value ||
+                    ops.agentBusy.value ||
+                    ops.agentLines.value.length > 0 ||
+                    ops.failure.value?.key === ops.agentKey.value ||
+                    ops.outcome.value?.key === ops.agentKey.value
+                "
+                variant="block"
+            >
+                <div class="flex min-w-0 flex-col gap-2">
+                    <p v-if="ops.agentWaiting.value" class="text-xs text-muted">{{ ops.agentWaiting.value }}</p>
+                    <DeviceRunLog
+                        v-if="ops.agentBusy.value || ops.agentLines.value.length > 0"
+                        :lines="ops.agentLines.value"
+                        :running="ops.agentBusy.value"
+                        empty="Starting on that device…"
+                        note="Running on that device. It keeps going even if you leave this page, and it survives the connection dropping."
+                    />
+                    <Notice v-if="ops.failure.value?.key === ops.agentKey.value" :of="ops.failure.value.notice" />
+                    <p v-else-if="ops.outcome.value?.key === ops.agentKey.value" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
+                </div>
+            </RowNote>
+        </RowGroup>
 
         <!--
             One row per sandbox, the page's only disclosure: a row is a summary and its folder, ports, image and

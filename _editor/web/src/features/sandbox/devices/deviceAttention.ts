@@ -1,28 +1,23 @@
-import type { Device, DeviceAgentOp } from "@intentic/sandbox-contract";
+import type { Device } from "@intentic/sandbox-contract";
 import type { NoticeTone } from "@intentic/ui/notice";
 import { timeAgo } from "@intentic/ui/format";
-import { agentBehind, deviceQuiet, type ManageBlock } from "./deviceFacts";
+import { deviceQuiet, type ManageBlock } from "./deviceFacts";
 import type { DeviceRow } from "./deviceRows";
 
 // Everything a device wants from the reader, as one ordered list: the gap that stops it answering, the age
-// of the reading, its agent, and the switch standing between its sandboxes and their buttons. A healthy
-// machine yields none of it, which is nearly all of them.
+// of the reading, and the switch standing between its sandboxes and their buttons. A healthy machine yields
+// none of it, which is nearly all of them.
 
-// A capability card to open, or an op to run on the machine from this page. Kept as data rather than a
-// route so this module stays free of the router.
+// The agent is deliberately absent: its state and its two verbs are one object with one home (deviceAgent.ts),
+// rather than a sentence here and a version strip further down the page.
+
+// A capability card to open. Kept as data rather than a route so this module stays free of the router.
 export interface DeviceCardFix {
     readonly kind: `card`;
     readonly label: string;
     readonly card: string;
     /** Present to edit an existing connection's own form; absent to open the card that adds one. */
     readonly connection?: string;
-}
-
-export interface DeviceAgentFix {
-    readonly kind: `agent`;
-    readonly label: string;
-    readonly op: DeviceAgentOp;
-    readonly hint: string;
 }
 
 // Mints this machine a fresh pairing command, the same one its capability card hands out: the only remedy left
@@ -33,7 +28,7 @@ export interface DeviceConnectFix {
     readonly hint: string;
 }
 
-export type DeviceFix = DeviceCardFix | DeviceAgentFix | DeviceConnectFix;
+export type DeviceFix = DeviceCardFix | DeviceConnectFix;
 
 export interface DeviceConcern {
     readonly key: string;
@@ -118,61 +113,6 @@ const blockFix = (block: ManageBlock, reconnectable: boolean): DeviceFix | undef
     };
 };
 
-const RESTART: DeviceAgentFix = {
-    kind: `agent`,
-    label: `Restart agent`,
-    op: `restart`,
-    hint: `Stop and start this device's agent loop. Nothing is downloaded, and the build already installed there is the one that comes up.`,
-};
-
-const UPGRADE: DeviceAgentFix = {
-    kind: `agent`,
-    label: `Update agent`,
-    op: `upgrade`,
-    hint: `Download and install the current agent on this device, then restart its loop. Its folders, pairings and mirrored ports are untouched.`,
-};
-
-// Every button here travels over the device's own outbound socket, so a machine that isn't holding one gets
-// the sentence without the control.
-const reachable = (device: Device): boolean => device.hostId !== undefined && device.online === true && device.gap === undefined;
-
-// One restart concern at most, naming the worst of the three reasons: two sentences each carrying the same
-// button would ask twice for one click.
-const restartConcern = (row: DeviceRow): DeviceConcern | undefined => {
-    const agent = row.agent;
-    if (agent === undefined) {
-        return undefined;
-    }
-    const text = !agent.running
-        ? `Its agent isn't running, so nothing is reaching this device's folders or ports.`
-        : agent.stalled
-          ? `Its agent is alive but has stopped making rounds, so the folders and ports below may be out of date.`
-          : agent.staleBuild === undefined
-            ? undefined
-            : agent.staleBuild.running === undefined
-              ? `It is serving a build older than the ${agent.staleBuild.installed} installed here: a loop keeps the build it started with until it restarts.`
-              : `It is serving agent ${agent.staleBuild.running} while ${agent.staleBuild.installed} is installed here: a loop keeps the build it started with until it restarts.`;
-    if (text === undefined) {
-        return undefined;
-    }
-    return { key: `agent-restart`, tone: `warning`, text, ...(reachable(row.device) ? { fix: RESTART } : {}) };
-};
-
-// Judged on the installed build, since that's what an update downloads over; a device whose only problem is
-// a stale loop is restartConcern's, not this one's.
-const updateConcern = (row: DeviceRow, latest: string | undefined): DeviceConcern | undefined => {
-    if (!agentBehind(row.device, latest) || latest === undefined) {
-        return undefined;
-    }
-    const held = row.device.report?.agent.installed ?? row.chip?.version;
-    return {
-        key: `agent-update`,
-        tone: `info`,
-        text: held === undefined ? `Agent ${latest} has been published.` : `Agent ${latest} has been published; this device has ${held}.`,
-        ...(reachable(row.device) ? { fix: UPGRADE } : {}),
-    };
-};
-
 // Why the machine isn't answering, and the two ways back: the command for a machine whose loop alone is down,
 // and the pairing for one whose agent is gone. Only `offline` carries either — every other gap is a machine that
 // answers, whose own sentence already names its errand.
@@ -208,12 +148,10 @@ export const deviceAttention = (
     row: DeviceRow,
     {
         block,
-        latest,
         readAt,
         canPair,
     }: {
         block: ManageBlock | undefined;
-        latest: string | undefined;
         readAt: number;
         /** Whether this reader may mint this machine a pairing: the daemon's own floor for it is the owner. */
         canPair: boolean;
@@ -239,16 +177,6 @@ export const deviceAttention = (
             // `deviceQuiet` is false without a report, so the timestamp is there whenever this line is.
             text: `Last heard from ${timeAgo(device.report?.capturedAt ?? readAt, { now: readAt })}. What follows is what it looked like then.`,
         });
-    }
-    const restart = restartConcern(row);
-    if (restart !== undefined) {
-        concerns.push(restart);
-    }
-    // Both can be true at once (replaced but not restarted, and something newer published), so neither
-    // hides the other.
-    const update = updateConcern(row, latest);
-    if (update !== undefined) {
-        concerns.push(update);
     }
     // Last, and quietest: nothing here is broken, it only explains an absence of buttons.
     if (block !== undefined) {

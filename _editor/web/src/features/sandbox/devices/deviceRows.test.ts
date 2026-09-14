@@ -255,7 +255,7 @@ const concernsOf = (
     canPair = true,
 ) => {
     const entry = row(overrides, held, latest);
-    return deviceAttention(entry, { block: manageBlock(entry.device, scopes), latest, readAt: NOW, canPair });
+    return deviceAttention(entry, { block: manageBlock(entry.device, scopes), readAt: NOW, canPair });
 };
 
 test(`says nothing at all about a healthy, fully-permitted machine`, () => {
@@ -269,37 +269,14 @@ test(`leads with whether the machine answers, then how old the reading is`, () =
     expect(concerns[1]?.text).toContain(`What follows is what it looked like then.`);
 });
 
-test(`asks for one restart, naming the worst reason, rather than one sentence per symptom`, () => {
-    const concerns = concernsOf({}, { agent: { running: false, build: `1.1.0`, installed: `1.2.0` } });
-    const restarts = concerns.filter((concern) => concern.key === `agent-restart`);
-    expect(restarts).toHaveLength(1);
-    expect(restarts[0]?.text).toContain(`isn't running`);
-    expect(restarts[0]?.fix).toMatchObject({ kind: `agent`, op: `restart`, label: `Restart agent` });
-});
-
-test(`asks for a restart, not a download, when only the loop is behind the installed build`, () => {
-    const concerns = concernsOf({}, { agent: { running: true, lastTickAt: NOW, build: `1.1.0`, installed: `1.2.0` } }, `1.2.0`, GRANTED);
-    expect(concerns.map((concern) => concern.key)).toEqual([`agent-restart`]);
-    expect(concerns[0]?.text).toContain(`serving agent 1.1.0 while 1.2.0 is installed here`);
-});
-
-test(`offers the update when something newer than the installed build has been published`, () => {
-    const concerns = concernsOf({}, { agent: { running: true, lastTickAt: NOW, build: `1.1.0`, installed: `1.1.0` } }, `1.2.0`, GRANTED);
-    expect(concerns.map((concern) => concern.key)).toEqual([`agent-update`]);
-    expect(concerns[0]?.text).toBe(`Agent 1.2.0 has been published; this device has 1.1.0.`);
-    expect(concerns[0]?.fix).toMatchObject({ kind: `agent`, op: `upgrade` });
-});
-
-test(`makes no claim about the agent when this sandbox doesn't know the latest release`, () => {
-    const concerns = concernsOf({}, { agent: { running: true, lastTickAt: NOW, build: `1.1.0`, installed: `1.1.0` } }, undefined);
-    expect(concerns.filter((concern) => concern.key === `agent-update`)).toEqual([]);
-});
-
-test(`keeps the sentence and drops the button on a machine no button could reach`, () => {
-    const concerns = concernsOf({ online: false }, { agent: { running: false } });
-    const restart = concerns.find((concern) => concern.key === `agent-restart`);
-    expect(restart?.text).toContain(`isn't running`);
-    expect(restart?.fix).toBeUndefined();
+// The agent is an object with a home of its own now (deviceAgent.ts), so nothing about its state, its build
+// or its two verbs may reappear here: a sentence in this strip and controls further down the page is the
+// split that sent people to the machine to type `intentic-machine upgrade`.
+test(`says nothing about the agent itself, whatever state it is in`, () => {
+    const dead = concernsOf({}, { agent: { running: false, build: `1.1.0`, installed: `1.2.0` } }, `1.3.0`, GRANTED);
+    expect(dead).toEqual([]);
+    const stale = concernsOf({}, { agent: { running: true, lastTickAt: NOW, build: `1.1.0`, installed: `1.2.0` } }, `1.2.0`, GRANTED);
+    expect(stale).toEqual([]);
 });
 
 test(`names the switch a connected machine is missing, and where to flip it`, () => {

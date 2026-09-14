@@ -769,10 +769,10 @@ it(`says nothing about updating a device that is already current`, () => {
 });
 
 // A different errand from an old binary: the file on disk is current but the running loop isn't, since
-// replacing a file doesn't touch a running process.
-it(`offers a restart, not an update, when the loop is behind the installed build`, () => {
+// replacing a file doesn't touch a running process. The sentence is what tells the two apart — both verbs
+// are standing controls, so which buttons are drawn is no longer evidence of either.
+it(`names the loop, not a download, when only the running build is behind the installed one`, () => {
     const row = behind();
-    // A restart travels over the device connection; a sync-only row states the skew and offers nothing.
     const el = mount([
         {
             ...row,
@@ -782,21 +782,48 @@ it(`offers a restart, not an update, when the loop is behind the installed build
         },
     ]);
     const text = el.textContent ?? ``;
-    expect(text).toContain(`0.1.0`);
-    expect(text).toContain(`1.183.0`);
+    expect(text).toContain(`serving agent 0.1.0 while 1.183.0 is installed there`);
+    expect(text).not.toContain(`has been published`);
     expect(labels(el)).toContain(`Restart agent`);
-    expect(labels(el)).not.toContain(`Update agent`);
     expect(text).not.toContain(`intentic-machine run --stop`);
 });
 
-it(`says nothing about restarting a device whose loop is on the installed build`, () => {
+// The whole point of giving the agent its own group: an update this sandbox has to sanction first is no
+// update at all on a dev build, or on a release published since it last looked at the registry.
+it(`offers the update on a connected device whose agent needs nothing`, () => {
+    const row = behind();
+    const current = {
+        ...row,
+        hostId: `host-1`,
+        online: true,
+        report: { ...row.report!, agent: { running: true, pid: 4242, build: `1.183.0`, installed: `1.183.0` } },
+    };
+    const el = mount([current]);
+    expect(el.textContent ?? ``).toContain(`This is the newest agent this sandbox knows of.`);
+    expect(labels(el)).toContain(`Update agent`);
+    expect(labels(el)).toContain(`Restart agent`);
+});
+
+it(`offers the update even when this sandbox cannot say what is newest, and says why`, () => {
+    latest.value = undefined;
     const row = behind();
     const el = mount([
         {
             ...row,
+            hostId: `host-1`,
+            online: true,
             report: { ...row.report!, agent: { running: true, pid: 4242, build: `1.183.0`, installed: `1.183.0` } },
         },
     ]);
+    expect(el.textContent ?? ``).toContain(`doesn't know which agent release is newest`);
+    expect(labels(el)).toContain(`Update agent`);
+});
+
+// Every verb here travels over the device's own socket, which a sync-only enrollment has never held.
+it(`drops both verbs on a sync-only device and names the door it is missing`, () => {
+    const row = behind();
+    const el = mount([{ ...row, report: { ...row.report!, agent: { running: true, pid: 4242, build: `1.183.0`, installed: `1.183.0` } } }]);
+    expect(el.textContent ?? ``).toContain(`enrolled for syncing only`);
     expect(labels(el)).not.toContain(`Restart agent`);
     expect(labels(el)).not.toContain(`Update agent`);
 });
@@ -870,21 +897,30 @@ it(`shows the runners section and add control on a machine that has none`, async
     expect(text).toContain(`Add runner`);
 });
 
+// Scoped to the runner's own row: the agent group above carries a standing "Update agent", so a search of
+// the whole page can no longer say whose update button it found.
+const runnerRow = (el: HTMLElement, id: string): HTMLElement => {
+    const found = [...el.querySelectorAll(`li`)].find((line) => (line.textContent ?? ``).includes(id));
+    expect(found).toBeInstanceOf(HTMLElement);
+    return found as HTMLElement;
+};
+
 it(`marks a runner whose build has drifted from this sandbox, and offers the update`, async () => {
     runnersList.value = [{ id: `rig`, host: `host-1`, online: true, parity: `outdated` }];
     const el = mount([managed(true)]);
     await nextTick();
-    const text = el.textContent ?? ``;
-    expect(text).toContain(`outdated`);
-    expect(text).toContain(`Update`);
+    const line = runnerRow(el, `rig`);
+    expect(line.textContent ?? ``).toContain(`outdated`);
+    expect(labels(line)).toContain(`Update`);
 });
 
 it(`says nothing about the build of a runner that matches`, async () => {
     runnersList.value = [{ id: `rig`, host: `host-1`, online: true, parity: `current` }];
     const el = mount([managed(true)]);
     await nextTick();
-    expect(el.textContent ?? ``).not.toContain(`outdated`);
-    expect(el.textContent ?? ``).not.toContain(`Update`);
+    const line = runnerRow(el, `rig`);
+    expect(line.textContent ?? ``).not.toContain(`outdated`);
+    expect(labels(line)).not.toContain(`Update`);
 });
 
 // A sandbox's dev server can take a port on the user's own desk; the switch lives on the machine (it must hold
