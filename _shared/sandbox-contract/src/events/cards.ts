@@ -157,6 +157,15 @@ export type TodoItem = z.infer<typeof TodoItemSchema>;
 export const ContextUsageSchema = z.object({
     tokens: z.number().describe("How much the latest request sent, all told."),
     contextWindow: z.number().describe("How much the model can hold. The gap between these two is how close the conversation is to being compacted."),
+    // Both absent unless the turn's last request actually used the prompt cache; a provider whose TTL we cannot ground
+    // reports neither rather than a guessed pair.
+    cachedAt: z
+        .number()
+        .optional()
+        .describe(
+            "When that request last touched the provider's prompt cache, in milliseconds. The cache's clock runs from here, since a read refreshes it as a write does.",
+        ),
+    cacheTtlMs: z.number().optional().describe("How long that cache entry lives from `cachedAt`, in milliseconds."),
 });
 export type ContextUsage = z.infer<typeof ContextUsageSchema>;
 

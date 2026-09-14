@@ -250,6 +250,18 @@ export const AgentSummarySchema = z.object({
     outputTokens: z.number().optional().describe("Tokens received."),
     contextTokens: z.number().optional().describe("How much of the window the conversation currently fills."),
     contextWindow: z.number().optional().describe("How large that window is."),
+    // The pair travels whole or not at all: an instant with no lifetime, or a lifetime with no instant, names no
+    // deadline. Absent for every provider whose prompt-cache TTL the daemon cannot ground in a measurement or a
+    // documented rule (prompt-cache.ts), which is most of them.
+    promptCache: z
+        .object({
+            at: z.number().describe("When its last request touched the provider's prompt cache, in milliseconds."),
+            ttlMs: z.number().describe("How long that entry lives from `at`, in milliseconds."),
+        })
+        .optional()
+        .describe(
+            "When this conversation's prompt cache was last kept alive and how long it lasts, which together say when picking the conversation up stops being cheap. Absent when the provider publishes nothing to ground it on.",
+        ),
     activity: AgentActivitySchema.optional().describe("What it is doing at this moment."),
     // The whole drafting story (which models, how long, what refused), replacing a boolean that hid all of it;
     // runtime-only, forgotten on restart like the draft itself.

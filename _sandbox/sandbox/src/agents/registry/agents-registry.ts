@@ -94,6 +94,9 @@ interface RuntimeState {
     activity: { tool?: string; target?: string; todo?: string } | undefined;
     contextTokens: number | undefined;
     contextWindow: number | undefined;
+    // Outlives the turn that set it, like the context fill beside it: the entry it names goes on expiring whether or
+    // not this conversation is running, and the next turn's own requests overwrite it.
+    promptCache: { at: number; ttlMs: number } | undefined;
     startedAt: number | undefined;
     lastAt: number | undefined;
     // This turn's prompt, held until a session id exists to file it under; cleared once filed.
@@ -131,6 +134,7 @@ const freshRuntime = (): RuntimeState => ({
     activity: undefined,
     contextTokens: undefined,
     contextWindow: undefined,
+    promptCache: undefined,
     startedAt: undefined,
     lastAt: undefined,
     pendingPrompt: undefined,
@@ -143,6 +147,22 @@ const freshRuntime = (): RuntimeState => ({
     checklist: undefined,
     check: undefined,
 });
+
+// The three readings of what a follow-up would carry: how full the window is, how large it is, and how long what is
+// already cached stays cheap to re-send. One clause on the summary, since no reader wants one without the others.
+const contextFill = (state: RuntimeState | undefined): Pick<AgentSummary, "contextTokens" | "contextWindow" | "promptCache"> => ({
+    ...(state?.contextTokens !== undefined ? { contextTokens: state.contextTokens } : {}),
+    ...(state?.contextWindow !== undefined ? { contextWindow: state.contextWindow } : {}),
+    ...(state?.promptCache !== undefined ? { promptCache: state.promptCache } : {}),
+});
+
+// Half a pair names no deadline, so the frame is read only whole; one carrying neither leaves the last deadline
+// standing, since a silent frame never said the entry died.
+const promptCacheOf = (
+    event: Extract<AgentEvent, { kind: "context_usage" }>,
+    last: RuntimeState["promptCache"],
+): RuntimeState["promptCache"] =>
+    event.cachedAt !== undefined && event.cacheTtlMs !== undefined ? { at: event.cachedAt, ttlMs: event.cacheTtlMs } : last;
 
 // The frame's own verdict decides, not the code, except a rate limit: its reopening can be hours away, so treating it
 // as work in progress would hide the one fact, when, that matters. Recorded as a failure instead.
@@ -528,8 +548,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(costUsd > 0 ? { costUsd } : {}),
             ...(inputTokens > 0 ? { inputTokens } : {}),
             ...(outputTokens > 0 ? { outputTokens } : {}),
-            ...(state?.contextTokens !== undefined ? { contextTokens: state.contextTokens } : {}),
-            ...(state?.contextWindow !== undefined ? { contextWindow: state.contextWindow } : {}),
+            ...contextFill(state),
             ...(state?.activity !== undefined ? { activity: state.activity } : {}),
             // Live account of the commit message being drafted; kept until the next land replaces it.
             ...(messageDrafts.has(entry.id) ? { landedMessageDraft: messageDrafts.get(entry.id) } : {}),
@@ -1047,6 +1066,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 case "context_usage":
                     state.contextTokens = event.tokens;
                     state.contextWindow = event.contextWindow;
+                    state.promptCache = promptCacheOf(event, state.promptCache);
                     break;
                 case "plan":
                 case "question":

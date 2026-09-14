@@ -13,6 +13,7 @@ import { errorFrame, modelUnavailableFrame, rateLimitFrame, retryStormFrame, tri
 import { probeRoutedEndpoint, type RoutedEndpoint } from "../providers/routed-refusal.js";
 import type { TurnAllowance } from "../providers/harness-credentials.js";
 import { opt } from "./opt.js";
+import { type CacheCreationBuckets, ttlFromCacheCreation } from "./turn/prompt-cache.js";
 import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "../subagents/subagents.js";
 import { TaskChecklist } from "./task-checklist.js";
 import type { ChecklistSeed } from "./task-store.js";
@@ -213,6 +214,15 @@ interface ToolUseBlock {
     readonly input?: unknown;
 }
 
+// One request's accounting, as `message_start` reports it: the Messages API usage object, of which the SDK's own types
+// name only the totals. `cache_creation` is the per-TTL split of `cache_creation_input_tokens`.
+interface RequestUsage {
+    readonly input_tokens?: number;
+    readonly cache_read_input_tokens?: number | null;
+    readonly cache_creation_input_tokens?: number | null;
+    readonly cache_creation?: CacheCreationBuckets | null;
+}
+
 const toolUseOf = (block: { type: string; id?: string; name?: string; input?: unknown }): ToolUseBlock | undefined =>
     block.type === "tool_use" && typeof block.name === "string" && block.id !== undefined
         ? { id: block.id, name: block.name, input: block.input }
@@ -257,6 +267,10 @@ class TurnFold {
     // Context fill: message_start reports input size, the result reports the model's window; paired at result.
     private contextTokens: number | undefined;
     private contextModel: string | undefined;
+    // The prompt cache's clock: when the last main-thread request touched it, and the TTL that request's write went in
+    // under. The TTL outlives a read-only request, which refreshes the entry without saying how long it now lives.
+    private cachedAt: number | undefined;
+    private cacheTtlMs: number | undefined;
     // A block's stop always precedes its assistant frame, so introduced tool calls render after it, not before.
     private readonly textBlocks = new Map<string, number>();
     // Live permission mode, folded and de-duplicated across `init`, `status`, and the tool-call-only EnterPlanMode.
@@ -338,7 +352,7 @@ class TurnFold {
             delta?: { type: string; text?: string; thinking?: string };
             message?: {
                 model?: string;
-                usage?: { input_tokens?: number; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null };
+                usage?: RequestUsage;
             };
         };
         if (event.type === "content_block_delta" && event.delta?.type === "text_delta" && typeof event.delta.text === "string") {
@@ -357,7 +371,19 @@ class TurnFold {
             const usage = event.message.usage;
             this.contextTokens = (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
             this.contextModel = event.message.model;
+            this.notePromptCache(usage, parent);
         }
+    }
+
+    // The main thread's cache only: a subagent works a prefix of its own, whose entry expiring costs this conversation
+    // nothing. A request that neither read nor wrote cache moves no clock, so a turn running with caching switched off
+    // publishes no deadline rather than one nothing is keeping.
+    private notePromptCache(usage: RequestUsage, parent: string | undefined): void {
+        if (parent !== undefined || ((usage.cache_read_input_tokens ?? 0) === 0 && (usage.cache_creation_input_tokens ?? 0) === 0)) {
+            return;
+        }
+        this.cachedAt = Date.now();
+        this.cacheTtlMs = ttlFromCacheCreation(usage.cache_creation ?? undefined) ?? this.cacheTtlMs;
     }
 
     // Text and thinking already streamed as deltas above; here only tool calls surface (including checklist verbs,
@@ -711,7 +737,16 @@ class TurnFold {
                 (this.contextModel !== undefined ? message.modelUsage[this.contextModel]?.contextWindow : undefined) ??
                 Object.values(message.modelUsage)[0]?.contextWindow;
             if (window !== undefined && window > 0) {
-                yield { kind: "context_usage", tokens: this.contextTokens, contextWindow: window };
+                // The cache instant rides this frame rather than one of its own: both answer "what would the next
+                // request cost", and a turn that reported one reported the other. A `cachedAt` with no TTL beside it is
+                // for the route to finish from the credential, which is where the harness's own rule is known.
+                yield {
+                    kind: "context_usage",
+                    tokens: this.contextTokens,
+                    contextWindow: window,
+                    ...opt("cachedAt", this.cachedAt),
+                    ...opt("cacheTtlMs", this.cacheTtlMs),
+                };
             }
         }
         // The settled answer on speed: usually a no-op, but catches cooldown mid-turn or an init `pending`.

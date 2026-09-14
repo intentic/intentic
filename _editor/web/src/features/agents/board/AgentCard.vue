@@ -35,6 +35,7 @@ import {
     watching,
     watchLine,
 } from "../fleet/agentStatus";
+import { cacheCooling, cacheWarm } from "../fleet/promptCache";
 import { type MatchSnippet, providerLabel } from "@intentic/sandbox-contract";
 import { sessionCategory } from "../../../app/sessionCategory";
 import IdentityTile from "../../capabilities/connect/IdentityTile.vue";
@@ -74,7 +75,7 @@ const props = defineProps<{
     matchCase?: boolean;
 }>();
 // Ticks only while needed (turn, watch, limit countdown); settled cards share the clock without re-ticking.
-const now = useNow(() => turnInFlight(props.agent) || watching(props.agent) || limitClosed(props.agent));
+const now = useNow(() => turnInFlight(props.agent) || watching(props.agent) || limitClosed(props.agent) || cacheWarm(props.agent));
 const emit = defineEmits<{
     // The click that opened it, if any; a modified click asks for a pane instead of focus.
     open: [event?: MouseEvent];
@@ -278,6 +279,11 @@ const watch = computed(() => (working.value ? undefined : watchLine(props.agent,
 // happened, this says when.
 // Undefined once the window is open or the provider gave no instant; the corner then falls back to the ordinary date.
 const limitBackAt = computed(() => limitCountdown(props.agent, now.value));
+// Shares that same corner, and yields it: a reset clock and a watch are each a firmer promise about the card than a
+// cache that only makes answering cheaper, so this speaks when the corner is otherwise free.
+const cooling = computed(() =>
+    watch.value !== undefined || limitBackAt.value !== undefined ? undefined : cacheCooling(props.agent, now.value),
+);
 // Re-runs the exact held turn (useAgents.resumeHeldTurn), not a new message; a local flag, since `pending` names drop
 // actions and this is neither.
 // Cleared in `finally`, not only on success, since a roster frame is about to replace the card either way.
@@ -706,6 +712,16 @@ const grab = (event: PointerEvent): void => {
                     >
                         <Icon name="clock" class="shrink-0 text-2xs" />
                         <span class="tabular-nums">back {{ limitBackAt }}</span>
+                    </span>
+<!-- Borrows the date's slot for the last fifth of the cache's life: for that minute or twelve, "answering now is cheap" is worth more than "4m ago", and it hands the slot straight back. -->
+                    <span
+                        v-else-if="cooling !== undefined"
+                        class="inline-flex shrink-0 items-center gap-1"
+                        :class="cooling.near ? 'font-medium text-link' : 'text-muted'"
+                        v-tooltip.top="cooling.hint"
+                    >
+                        <Icon name="bolt" class="shrink-0 text-2xs" />
+                        {{ cooling.text }}<span class="tabular-nums">{{ cooling.countdown }}</span>
                     </span>
                     <span v-else-if="watch === undefined && !working && agent.updatedAt > 0" class="shrink-0">{{
                         relativeTime(agent.updatedAt)

@@ -1541,4 +1541,29 @@ describe("agents registry", () => {
         });
         expect(registry.entry("c1")?.repos[0]?.absorbed).toBeUndefined();
     });
+
+    // The whole point of carrying the deadline: it has to outlive the turn that set it, since the entry it names goes
+    // on expiring whether or not this conversation is running, and the card is read long after the turn ends.
+    it("keeps the prompt-cache deadline past the end of the turn that measured it", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "context_usage", tokens: 142_000, contextWindow: 200_000, cachedAt: 1_500, cacheTtlMs: 3_600_000 });
+        await registry.finish("c1", 2_000);
+        expect(registry.list()[0]?.promptCache).toEqual({ at: 1_500, ttlMs: 3_600_000 });
+    });
+
+    // Half a pair names no deadline, and a frame that carries neither is a turn that used no cache this time, not one
+    // that killed the entry: neither may quietly replace a deadline already standing.
+    it("takes a prompt-cache deadline only whole, and never unsets one", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "context_usage", tokens: 10, contextWindow: 200_000, cachedAt: 1_500 });
+        expect(registry.list()[0]?.promptCache).toBeUndefined();
+
+        registry.observe("c1", { kind: "context_usage", tokens: 20, contextWindow: 200_000, cachedAt: 1_500, cacheTtlMs: 300_000 });
+        registry.observe("c1", { kind: "context_usage", tokens: 30, contextWindow: 200_000 });
+        expect(registry.list()[0]?.promptCache).toEqual({ at: 1_500, ttlMs: 300_000 });
+    });
 });

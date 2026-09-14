@@ -1263,6 +1263,7 @@ test("a failed usage read cannot fail the turn it was measuring", async () => {
 });
 
 test("a message_start and result surface context-window fill (input + both cache buckets) over the model's window", async () => {
+    const before = Date.now();
     const events = await collect(
         request,
         fakeQuery(
@@ -1280,6 +1281,96 @@ test("a message_start and result surface context-window fill (input + both cache
             { type: "result", subtype: "success", modelUsage: { "claude-opus-4-8": { contextWindow: 200_000 } } },
         ),
     );
+    // The request read 100k from cache, so it also moved the cache's clock; the instant is wall-clock and is asserted
+    // against the window the call ran in rather than matched loosely.
+    const [session, context, done] = events;
+    const { cachedAt, ...fill } = context as { cachedAt?: number };
+    expect([session, fill, done]).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "context_usage", tokens: 142_000, contextWindow: 200_000 },
+        { kind: "done" },
+    ]);
+    expect(cachedAt).toBeGreaterThanOrEqual(before);
+    expect(cachedAt).toBeLessThanOrEqual(Date.now());
+});
+
+// The TTL is measured, never assumed: Anthropic splits a cache write by the lifetime it went in under, so a non-zero
+// 1-hour bucket says the harness asked for an hour without this daemon knowing what it asked.
+test("the cache instant rides the context frame, carrying the TTL the write's own bucket names", async () => {
+    const events = await collect(
+        request,
+        fakeQuery(
+            {
+                type: "stream_event",
+                session_id: "s",
+                event: {
+                    type: "message_start",
+                    message: {
+                        model: "claude-opus-4-8",
+                        usage: {
+                            input_tokens: 10,
+                            cache_read_input_tokens: 100_000,
+                            cache_creation_input_tokens: 2000,
+                            cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 2000 },
+                        },
+                    },
+                },
+            },
+            { type: "result", subtype: "success", modelUsage: { "claude-opus-4-8": { contextWindow: 200_000 } } },
+        ),
+    );
+    expect(events[1]).toMatchObject({ kind: "context_usage", cacheTtlMs: 60 * 60 * 1000 });
+});
+
+// Caching switched off (DISABLE_PROMPT_CACHING) reads as a request that touched no cache: there is no entry to expire,
+// so publishing an instant would start a countdown on nothing.
+test("a request that touched no cache moves no clock", async () => {
+    const events = await collect(
+        request,
+        fakeQuery(
+            {
+                type: "stream_event",
+                session_id: "s",
+                event: {
+                    type: "message_start",
+                    message: {
+                        model: "claude-opus-4-8",
+                        usage: { input_tokens: 142_000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+                    },
+                },
+            },
+            { type: "result", subtype: "success", modelUsage: { "claude-opus-4-8": { contextWindow: 200_000 } } },
+        ),
+    );
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "context_usage", tokens: 142_000, contextWindow: 200_000 },
+        { kind: "done" },
+    ]);
+});
+
+// A subagent works a prefix of its own: its entry expiring costs this conversation nothing, and letting it set the
+// clock would start a countdown the main thread's own cache does not answer to.
+test("a subagent's request is not this conversation's cache", async () => {
+    const events = await collect(
+        request,
+        fakeQuery(
+            {
+                type: "stream_event",
+                session_id: "s",
+                parent_tool_use_id: "toolu_child",
+                event: {
+                    type: "message_start",
+                    message: {
+                        model: "claude-opus-4-8",
+                        usage: { input_tokens: 40_000, cache_read_input_tokens: 100_000, cache_creation_input_tokens: 2000 },
+                    },
+                },
+            },
+            { type: "result", subtype: "success", modelUsage: { "claude-opus-4-8": { contextWindow: 200_000 } } },
+        ),
+    );
+    // The fill itself is still the subagent's own request, as before; only the cache clock is withheld.
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
         { kind: "context_usage", tokens: 142_000, contextWindow: 200_000 },

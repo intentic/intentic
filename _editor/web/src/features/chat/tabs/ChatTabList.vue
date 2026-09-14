@@ -22,6 +22,7 @@ import { useAgentFilter } from "../../agents/board/useAgentFilter";
 import { boxNameOf } from "../../agents/fleet/fleetScope";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { FINISHED_WINDOW, type FleetAgent, windowFinished } from "../../agents/fleet/useAgents-fleet";
+import { type CacheCooling, cacheCooling } from "../../agents/fleet/promptCache";
 import HoverCard from "../../../components/HoverCard.vue";
 import OriginMark from "../../../components/OriginMark.vue";
 import RailCard from "../../../components/RailCard.vue";
@@ -249,6 +250,10 @@ const statusOf = (entry: OpenChat): { name: IconName; spin?: boolean; class: str
 // rim rather than a guess.
 const contextOf = (entry: OpenChat): number | undefined =>
     entry.agent === undefined ? undefined : contextPct(entry.agent.contextTokens, entry.agent.contextWindow);
+
+// The board's cooling chip at rail width: the glyph and its sentence, without the countdown, since a second clock
+// beside the title would read as the turn's own. Absent for a conversation the roster has not filed, like the rim above.
+const coolingOf = (agent: FleetAgent | undefined): CacheCooling | undefined => (agent === undefined ? undefined : cacheCooling(agent, now.value));
 
 // Prefers the fleet agent, falls back to the conversation: an unresolved agent (archived, unregistered) still
 // has a conversation with real facts. Omits spend, diff and turn count on purpose; those belong to the board.
@@ -707,6 +712,14 @@ const keepTab = (event: Event, id: string): void => {
                                 >
                                 <!-- Attention and unread chips share the trailing metadata group. -->
                                 <UnsentMark v-if="c.unsent.value" :preview="draftPreview(c.draft.value)" :at="c.draftAt.value" :now="now" />
+<!-- One glyph, no countdown: the rail says which chat is about to stop being cheap to answer, the board says for how long. -->
+                                <Icon
+                                    v-if="coolingOf(agent) !== undefined"
+                                    name="bolt"
+                                    class="shrink-0 text-2xs"
+                                    :class="coolingOf(agent)!.near ? 'text-link' : 'text-muted'"
+                                    v-tooltip.top="coolingOf(agent)!.hint"
+                                />
                                 <!-- Provenance marks (external origin, workflow), same as the board's OriginMark in the card body. -->
                                 <OriginMark :origin="originOf(c)" compact />
                                 <WorkflowMark :workflow="agent?.workflow" compact />

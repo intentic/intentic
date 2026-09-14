@@ -84,6 +84,7 @@ import { createTurnMetrics } from "../run/turn/turn-metrics.js";
 import { planTurn } from "../run/turn/turn-plan.js";
 import { turnTier } from "../run/turn/turn-tier.js";
 import { sumUsage, type UsageFrame } from "../run/turn/turn-usage.js";
+import { withCacheTtl } from "../run/turn/prompt-cache.js";
 
 // Folds the opt-in editor-context chip into the prompt: the open file, and any selected lines, so deictic prompts ('fix
 // this') ground without an @-mention. Four-backtick fence so a selection containing ``` doesn't break out.
@@ -1186,10 +1187,15 @@ async function* runTurn(
                 checklist = event.items;
             } else if (event.kind === "compact") {
                 compactions += 1;
-            } else if (event.kind === "context_usage") {
-                context = event;
             }
-            if (event.kind === "session") {
+            if (event.kind === "context_usage") {
+                // The stream can only measure a TTL from a request that wrote cache; here is where the credential's own
+                // rule finishes a frame carrying just the instant, so every reader downstream sees the same deadline.
+                const frame = withCacheTtl(event, provider, request.oauthToken !== undefined);
+                context = frame;
+                yield frame;
+                continue;
+            } else if (event.kind === "session") {
                 sessionId = event.sessionId;
                 // Whose credential this session is on; an unnamed pick may go to whichever had headroom.
                 yield { ...event, ...attribution };
