@@ -6,6 +6,9 @@ import type { Requirement, RequirementAction, RequirementProgress } from "../des
 // Requirements render as actionable rows — what's missing, what will happen, one button — not a raw error box.
 // The install's first pass changes nothing and only reports; rows this app can't fix (like firmware
 // virtualization) show the installer's own walkthrough instead.
+//
+// Nothing here is said twice: a single row is its own heading, its badge only earns its place while several rows
+// are being scanned, and the remedy is only printed for rows no button below does for you.
 
 const props = defineProps<{ requirements: Requirement[]; busy: boolean; progress?: Record<string, RequirementProgress> }>();
 const emit = defineEmits<{ install: []; restart: []; signout: []; recheck: []; elsewhere: [] }>();
@@ -51,6 +54,9 @@ const STATE_BADGE: Record<string, string | undefined> = {
     failed: `didn't work`,
 };
 
+// The actions a button below already performs, whose remedy sentence would only restate that button.
+const PRESSED_HERE = new Set<RequirementAction>([`fix`, `fixElevated`, `restart`, `signOut`]);
+
 const ourCount = computed(
     () => props.requirements.filter((requirement) => requirement.action === `fix` || requirement.action === `fixElevated`).length,
 );
@@ -65,11 +71,18 @@ const signingOut = computed(() => props.requirements.some((requirement) => requi
 // None of these rows are fixable here, so the only honest control left is Check again.
 const stuck = computed(() => !ours.value && !restarting.value && !signingOut.value);
 const needsAdmin = computed(() => props.requirements.some((requirement) => requirement.action === `fixElevated`));
+// A single row states the problem in its own title; a list of them needs saying what the list is.
+const many = computed(() => props.requirements.length > 1);
+
+const badgeOf = (requirement: Requirement): string | undefined =>
+    STATE_BADGE[stateOf(requirement.id)?.state ?? `pending`] ?? (many.value ? BADGE[requirement.action] : undefined);
+
+const remedyOf = (requirement: Requirement): string | undefined => (PRESSED_HERE.has(requirement.action) ? undefined : requirement.remedy);
 </script>
 
 <template>
     <div class="flex flex-col gap-3">
-        <p class="text-2xs text-content">
+        <p v-if="stuck || many" class="text-2xs text-content">
             {{ stuck ? `This device can't run a sandbox yet:` : `Before your sandbox can run here:` }}
         </p>
 
@@ -91,18 +104,16 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
                                   : 'text-warning'
                         "
                     />
-                    <div class="min-w-0 flex-1">
+                    <div class="flex min-w-0 flex-1 flex-col gap-0.5">
                         <div class="flex flex-wrap items-baseline gap-x-2">
-                            <span class="text-2xs font-medium text-content">{{ requirement.title }}</span>
-                            <!-- Badge retires once the row has a live state, so it never contradicts it. -->
-                            <span class="text-2xs text-subtle">{{
-                                STATE_BADGE[stateOf(requirement.id)?.state ?? `pending`] ?? BADGE[requirement.action]
-                            }}</span>
+                            <!-- The heading of whatever is in the way, and the loudest text on the card while it is up. -->
+                            <span class="text-xs font-medium text-content">{{ requirement.title }}</span>
+                            <span v-if="badgeOf(requirement)" class="text-2xs text-subtle">{{ badgeOf(requirement) }}</span>
                         </div>
                         <p class="text-2xs text-muted">{{ requirement.problem }}</p>
                         <!-- Live detail replaces the static remedy once the row is running. -->
                         <p v-if="stateOf(requirement.id)?.detail" class="text-2xs text-subtle">{{ stateOf(requirement.id)?.detail }}</p>
-                        <p v-else-if="requirement.remedy" class="text-2xs text-subtle">{{ requirement.remedy }}</p>
+                        <p v-else-if="remedyOf(requirement)" class="text-2xs text-subtle">{{ remedyOf(requirement) }}</p>
                         <button v-if="requirement.detail" type="button" :class="ui.linkButton(`mt-1 text-2xs`)" @click="toggle(requirement.id)">
                             {{ opened[requirement.id] ? `Hide the steps` : `Show me how` }}
                         </button>
@@ -120,8 +131,9 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
         <!-- Hidden once busy: the prompt has already happened or is happening by then. -->
         <p v-if="needsAdmin && ours && !busy" class="text-2xs text-subtle">Windows will ask for permission once.</p>
 
-        <!-- Buttons hide once busy: progress lives in the rows below, not in a disabled button beside them. -->
-        <div v-if="!busy" class="flex flex-wrap items-center gap-2">
+        <!-- Buttons hide once busy: progress lives in the rows above, not in a disabled button beside them. -->
+        <!-- The hosted alternative rides the same row, right-aligned: it is the other answer to this question, not a footnote under it. -->
+        <div v-if="!busy" class="flex flex-wrap items-center gap-x-3 gap-y-2">
             <Button v-if="ours" :label="doLabel" @click="emit(`install`)">
                 <template #icon><Icon name="bolt" /></template>
             </Button>
@@ -134,13 +146,12 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
             <Button severity="secondary" :text="true" label="Check again" @click="emit(`recheck`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
+            <!-- The one escape hatch: run in a hosted browser instead, when this device can't meet the requirements. -->
+            <button type="button" :class="ui.textAction(`ml-auto text-2xs`)" @click="emit(`elsewhere`)">
+                <Icon name="server" class="shrink-0" />
+                <span>Run it on a machine we host</span>
+            </button>
         </div>
         <p v-if="restarting || signingOut" class="text-2xs text-subtle">Your setup is saved: this window picks it up again once you're back.</p>
-
-        <!-- The one escape hatch: run in a hosted browser instead, when this device can't meet the requirements. -->
-        <button v-if="!busy" type="button" :class="ui.textAction(`text-2xs`)" @click="emit(`elsewhere`)">
-            <Icon name="server" class="shrink-0" />
-            <span>Not on this device? Run it on a machine we host</span>
-        </button>
     </div>
 </template>

@@ -96,8 +96,12 @@ The report of that was exact — "a standard Windows window with a large header 
 a lot of extra empty space, looks unprofessional" — and it was the frame that was wrong, not the count.
 
 So the face is sized like what is on it. `launcher` builds it **without decorations**: the page draws its
-own header row (`App.vue`), which is the drag region (`data-tauri-drag-region`, with `start-dragging` in the
-capability) and carries a small × of its own. It has a **fixed width** (`LAUNCHER_WIDTH`) and a **height that
+own header row (`App.vue`), which moves the window and carries a small × of its own. Every press on that row
+that did not land on a control is a drag (`dragWindow.ts` → `start_dragging`, the capability's
+`start-dragging`). Tauri's own `data-tauri-drag-region` was what this used to be, and it drags only when the
+press lands on the element wearing the attribute: a header whose words live in child elements drags from the
+gaps between them and nowhere else, which is a window that reads as stuck to anyone who grabs it by its title.
+A double click does nothing, the card having nothing to maximise into. It has a **fixed width** (`LAUNCHER_WIDTH`) and a **height that
 follows its content**: the page watches its own content box and reports every change (`fitWindow.ts` →
 `fit_to_content`), so a requirements list arriving above ten plan rows makes the window exactly that tall,
 and a two-line manager is not a screenful of nothing. The fit is clamped to the work area of the screen the
@@ -386,6 +390,12 @@ and how long, were both unanswerable. `setupPlan.ts` answers them:
   shape people read as a hang, arriving at the one point where they are readiest to believe the install had
   finished and something afterwards had broken. It is 75 now, sized against `pulling-image` by what each
   actually transfers.
+- **The plan folds when something else needs answering.** Drawn up front is right for a run nobody has to
+  interrupt. It is wrong under a requirements card: the one thing on the screen to act on, with ten rows of
+  grey future work beneath it taking three quarters of the window's height and saying nothing that is not
+  also in the line above them. Blocked, stopped, or waiting for consent, the plan becomes its own first line
+  — the step it is on, the bar, and *All 11 steps* — and `stepsOpen` is the reader overriding that in either
+  direction for the rest of the run.
 - **Only what the reader is meant to read reaches the log pane.** The `intentic-requirement:` and
   `intentic-requirement-state:` markers are protocol — the requirement rows *are* their rendering — and they
   used to be parsed *and* appended, so the pane showed raw JSON running off its right edge, inside the one
@@ -426,8 +436,10 @@ separate causes and all five are closed here, because any one of them alone repr
   that most needs reading carefully. That case takes focus, since the window being read is the one stepping
   aside; every other case stays a show and a hint.
 - **Every run writes a transcript to `~/.intentic/logs/desktop-<id>-<stamp>.log`**, whether or not anyone
-  asks, with **Copy log** and **Open log folder** on the card. Before this, a run existed only as events in
-  one webview: closing the card destroyed the only evidence there was.
+  asks, with **Show log**, **Copy log** and **Open log folder** together in the card's one action row — the
+  path itself is that last button's tooltip, not a line of monospace across the card, being the longest thing
+  on the screen and the least read. Before this, a run existed only as events in one webview: closing the
+  card destroyed the only evidence there was.
 
 Two more things the screen gained at the same time:
 
@@ -447,6 +459,12 @@ Two more things the screen gained at the same time:
   live progress read as a card that had not noticed), and `requirementsSettled` retires the whole card once
   every row reports `done`.
 
+- **Nothing on the card is said twice.** One requirement is its own heading, so *Before your sandbox can run
+  here:* above a single row is gone, and so is the *needs a restart* badge beside a title that already says
+  restart — the badge is a scanning aid for a list, so it returns the moment there are two rows, and a live
+  state (*working on it*, *done*, *didn't work*) always outranks it. The remedy sentence is printed only for
+  rows no button below does for you: *restart this PC, then run the setup again* under a **Restart now**
+  button is the instruction and the control arguing about whose job it is.
 - **The button says what will actually happen.** It read *Install and continue* for every list, including the
   commonest one on a developer's machine — Docker Desktop installed and merely not running, where nothing is
   installed and the entire job is to start it. It is *Do this and continue* / *Do these and continue* now,

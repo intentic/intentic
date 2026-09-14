@@ -22,6 +22,7 @@ import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 import { initAnalytics, track, trackBeforeExit } from "./analytics";
 import Requirements from "./components/Requirements.vue";
 import SetupProgress from "./components/SetupProgress.vue";
+import { dragWindow } from "./dragWindow";
 import { useFitToContent } from "./fitWindow";
 import { advance, type PlanStep, progressView, setupPlan, startProgress, tick, type Progress } from "./setupPlan";
 import {
@@ -135,6 +136,8 @@ const requirementState = ref<Record<string, RequirementProgress>>({});
 
 // Where the running (or last) setup wrote its transcript, and whether a stop has been asked for.
 const setupLog = ref<string | undefined>(undefined);
+// Held here, not in the card, so every verb about the transcript sits in one row (SetupProgress opens it on failure).
+const setupLogOpen = ref(false);
 const stopping = ref(false);
 // Exit code of the last setup, to tell a designed stop from something going wrong.
 const setupExit = ref<number | null | undefined>(undefined);
@@ -193,6 +196,9 @@ const requirementsSettled = computed(
 );
 // A handed-over setup owns the window until it hands back, including while failed.
 const setupMode = computed(() => setupOpen.value || activeRun.value === `setup`);
+
+// The one thing on screen to act on, while it is up: the plan behind it goes quiet rather than competing with it.
+const requirementsShown = computed(() => requirements.value.length > 0 && !expired.value && !requirementsSettled.value);
 
 // True once a handed-over setup has been looked for; gates the title so it can't flash before that lands.
 const faceKnown = ref(false);
@@ -907,15 +913,12 @@ onUnmounted(() => {
         <div ref="content" class="flex w-full flex-col gap-3 p-4">
 <!-- SETUP: a SCREEN of this window, in the middle of the frame the workspace was filling (windows.rs), not a second window standing in front of it. -->
             <template v-if="setupMode">
-<!-- THE HEADER IS THE TITLE BAR. -->
-                <header data-tauri-drag-region class="flex items-start gap-2.5 select-none">
-                    <Icon name="bolt" class="pointer-events-none mt-0.5 text-primary-400" />
-                    <div class="pointer-events-none min-w-0 flex-1">
+<!-- THE HEADER IS THE TITLE BAR: every press on it that isn't the × moves the window (dragWindow.ts). -->
+                <header class="flex items-start gap-2.5 select-none" @mousedown="dragWindow">
+                    <Icon name="bolt" class="mt-0.5 text-primary-400" />
+                    <div class="min-w-0 flex-1">
                         <h1 class="font-semibold leading-tight">Setting up {{ pending?.name ?? `your sandbox` }} on this device</h1>
-                        <p class="text-2xs text-subtle">
-                            Running exactly what the install command runs: starts your sandbox in Docker, connects its tunnel, and opens your
-                            workspace once it answers.
-                        </p>
+                        <p class="text-2xs text-subtle">Exactly what the install command does: your sandbox in Docker, then your workspace.</p>
                     </div>
 <!-- SAYS WHERE IT GOES, in its label, because a bare × on a screen that fills its window reads as "close Intentic", which is the one thing it does not do. -->
                     <button
@@ -948,7 +951,7 @@ onUnmounted(() => {
 
 <!-- Leads above the progress bar, since it's the only thing here to act on and the machines that produce it have the most rows to scroll past. -->
                 <Requirements
-                    v-if="requirements.length > 0 && !expired && !requirementsSettled"
+                    v-if="requirementsShown"
                     :requirements="requirements"
                     :busy="running"
                     :progress="requirementState"
@@ -973,6 +976,8 @@ onUnmounted(() => {
                     :view="progressShown"
                     :running="activeRun === `setup`"
                     :awaiting="awaitingConsent"
+                    :blocked="requirementsShown"
+                    v-model:open="setupLogOpen"
                 />
 
                 <!-- Only on failure: the way out otherwise is the header's, not a repeated button here. -->
@@ -983,23 +988,28 @@ onUnmounted(() => {
                 </div>
 
 <!-- Stop and Copy log: a run that goes wrong can now be ended, not just abandoned. -->
+<!-- Every verb about the transcript in one row, and its path in the tooltip of the button that opens it: printed, it is the longest thing on this screen and the least read. -->
                 <div v-if="!expired" class="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-2 text-2xs">
                     <button v-if="running" type="button" class="text-link hover:underline" :disabled="stopping" v-action="stopSetup">
                         {{ stopping ? `Stopping…` : `Stop` }}
                     </button>
+                    <button v-if="progressShown" type="button" class="text-link hover:underline" @click="setupLogOpen = !setupLogOpen">
+                        {{ setupLogOpen ? `Hide log` : `Show log` }}
+                    </button>
                     <button type="button" class="text-link hover:underline" v-action="copyLog">
                         {{ logCopied ? `Copied` : `Copy log` }}
                     </button>
-                    <button v-if="setupLog" type="button" class="text-link hover:underline" v-action="openLogFolder">Open log folder</button>
-                    <span v-if="setupLog" class="ml-auto truncate font-mono text-subtle">{{ setupLog }}</span>
+                    <button v-if="setupLog" type="button" class="text-link hover:underline" v-tooltip.top="setupLog" v-action="openLogFolder">
+                        Open log folder
+                    </button>
                 </div>
             </template>
 
 <!-- THE MANAGER: what this machine is running, once nothing is being handed over. -->
             <template v-else>
-                <header data-tauri-drag-region class="flex items-center gap-3 select-none">
-                    <h1 class="pointer-events-none flex-1 text-base font-semibold">This device</h1>
-                    <span v-if="info" class="pointer-events-none font-mono text-2xs text-subtle">v{{ info.version }}</span>
+                <header class="flex items-center gap-3 select-none" @mousedown="dragWindow">
+                    <h1 class="flex-1 text-base font-semibold">This device</h1>
+                    <span v-if="info" class="font-mono text-2xs text-subtle">v{{ info.version }}</span>
                     <Button size="small" severity="secondary" :text="true" label="Refresh" :disabled="running" @click="refresh">
                         <template #icon><Icon name="refresh" /></template>
                     </Button>

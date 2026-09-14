@@ -4,6 +4,7 @@ import { ui, vAction } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { onMounted, onUnmounted, ref } from "vue";
 import { closeWorkspace, type CloseAction } from "./desktop";
+import { dragWindow } from "./dragWindow";
 import { useFitToContent } from "./fitWindow";
 
 /* WHAT THE × DOES: asked before it does it. */
@@ -37,9 +38,9 @@ onUnmounted(() => window.removeEventListener(`keydown`, onKey));
 <template>
     <div class="h-dvh overflow-auto bg-canvas text-content">
         <div ref="content" class="flex flex-col gap-4 p-5">
-            <!-- The header is the title bar, while its text cannot intercept row clicks. -->
-            <header data-tauri-drag-region class="flex items-start gap-3 select-none">
-                <div class="pointer-events-none flex min-w-0 flex-1 flex-col gap-1">
+            <!-- The header is the title bar: every press on it that isn't the × moves the window (dragWindow.ts). -->
+            <header class="flex items-start gap-3 select-none" @mousedown="dragWindow">
+                <div class="flex min-w-0 flex-1 flex-col gap-1">
                     <h1 class="text-base font-semibold">Close Intentic?</h1>
                     <p class="text-2xs text-muted">Your sandboxes keep running either way: they live in Docker, not in this window.</p>
                 </div>
