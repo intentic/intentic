@@ -1,0 +1,17 @@
+---
+// Our own Front Desk: the chat bubble on intentic.dev, answered by the agent in whichever sandbox these two values
+// point at. The snippet is the same one the docs tell customers to paste, because it is the same feature.
+//
+// Both values are read at build time, so moving the desk to a different sandbox is an environment change on the
+// Cloudflare project and a redeploy, never an edit here. Either one unset emits nothing at all, which is what keeps a
+// dev server and a preview build from carrying a tag pointed at a machine that is not theirs.
+//
+// While that sandbox is off the script 404s and no bubble appears — deliberate, and the reason the tag names the
+// sandbox directly rather than a CDN copy that would outlive it.
+
+const origin = import.meta.env.PUBLIC_FRONT_DESK_ORIGIN?.replace(/\/$/, "");
+const automation = import.meta.env.PUBLIC_FRONT_DESK_AUTOMATION;
+const configured = typeof origin === "string" && origin !== "" && typeof automation === "string" && automation !== "";
+---
+
+{configured && <script is:inline defer src={`${origin}/webchat/widget.js`} data-automation={automation} />}

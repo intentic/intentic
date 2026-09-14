@@ -61,6 +61,9 @@ The public website at intentic.dev: an Astro build, all copy imported rather tha
 - [src/components/DownloadCta.astro](src/components/DownloadCta.astro): the download button, which names the
   reader's own platform. It renders the general case and narrows it in the browser; see the file for why that
   order matters.
+- [src/components/FrontDesk.astro](src/components/FrontDesk.astro): our own Front Desk, the chat bubble in the
+  corner of every page. The same one-line snippet the docs hand a customer, pointed at whichever sandbox
+  answers for us.
 - [astro.config.mjs](astro.config.mjs): where the build-time integrations are wired in.
 
 ## How it fits
@@ -92,6 +95,14 @@ This package is layout and routing; a wording change should not need to touch it
   matched by what they are (`a.btn` pointing at the app, `a[data-download-cta]`) rather than by a `data-`
   attribute somebody has to remember to add. A failed fetch or a malformed document leaves the page untouched.
   Nothing is ever injected as HTML — see `withLiveContent` in [worker.ts](worker.ts).
+- **The Front Desk is two environment variables, not a code change.** `PUBLIC_FRONT_DESK_ORIGIN` (the
+  sandbox's own public HTTPS origin, no trailing slash) and `PUBLIC_FRONT_DESK_AUTOMATION` (the automation id)
+  are read at build time on the Cloudflare project; with either unset the tag is not emitted, which is why a
+  dev server and a preview build carry no bubble. Moving the desk to a different sandbox is a variable and a
+  redeploy. Two things the sandbox side must be true for: the origin has to be **https**, because the widget's
+  proof-of-work check needs `crypto.subtle` and a plain-http page has none; and `https://intentic.dev` has to
+  be on that automation's allowed-origins list, or every call is refused. While the sandbox is off the script
+  404s and no bubble appears, which is the intended behaviour, not a failure to paper over.
 - **Some paths are the worker's, not Astro's**: `/desktop/*`, `/connect` and the other vanity routes are
   answered by `worker.ts`, which does not run under `astro dev`. `/desktop/*` is stood in for by a dev-only
   middleware reading the worker's own table, so download links work locally; the script routes are not, and a

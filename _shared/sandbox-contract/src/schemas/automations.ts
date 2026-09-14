@@ -202,6 +202,16 @@ export const WebchatMessageSchema = z.object({
         .optional(),
 });
 export type WebchatMessage = z.infer<typeof WebchatMessageSchema>;
+// What GET /webchat/<id>/messages answers: replies queued after the visitor's stream closed, which is every reply an
+// approval-gated desk produces and every one a human writes as the agent. Public by construction, like the config:
+// reaching it needs nothing but an allowed origin and the conversation id already in that browser.
+export const WebchatPendingSchema = z.object({
+    // Oldest first, so appending them to the log preserves the order they were written in.
+    replies: z.array(z.object({ seq: z.number(), at: z.number(), text: z.string() })),
+    // Send back as `after` next time. Can jump past the last reply returned, when older ones were trimmed away.
+    cursor: z.number(),
+});
+export type WebchatPending = z.infer<typeof WebchatPendingSchema>;
 export const AutomationSchema = z.object({
     id: entryId.describe("The automation's id."),
     trigger: TriggerSchema.describe("What sets it off: a schedule, an event in the workspace, a message arriving from outside, or a webhook."),

@@ -183,6 +183,21 @@ button {
 .launcher:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .launcher svg { width: 1.5rem; height: 1.5rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
+/* A reply arrived while the panel was shut. Painted in the panel's own surface colour, not the accent: the launcher is
+   already accent, and a dot the same colour would not read as a mark on it. Grid-placed over the icon, so adding it
+   cannot move the glyph off centre. */
+.unread {
+    grid-area: 1 / 1;
+    place-self: start end;
+    width: 0.65rem;
+    height: 0.65rem;
+    margin: -0.1rem -0.1rem 0 0;
+    border-radius: 999px;
+    background: var(--surface);
+    box-shadow: 0 0 0 2px var(--accent);
+}
+.unread[hidden] { display: none; }
+
 .panel {
     position: fixed;
     ${PANEL_ANCHOR[config.position]}

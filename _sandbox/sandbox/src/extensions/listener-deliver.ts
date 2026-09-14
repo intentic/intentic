@@ -1,9 +1,12 @@
+import type { AgentOrigin } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
+import { outboxKeyOf } from "../webchat/webchat-outbox.js";
 import { extensionProcessKey } from "./extension-processes.js";
 import { enabledExtensions } from "./installed-extensions.js";
 
-// Daemon's outbound leg of "speak as the agent": delivers to its Discord/Slack/Telegram/WhatsApp origin.
-// Goes over loopback /deliver since the gateway holds the provider connection, not the daemon.
+// Daemon's outbound leg of "speak as the agent": delivers to the origin the conversation came from.
+// A Front Desk is answered in the daemon itself (the visitor's browser polls for it); every other provider goes over
+// loopback /deliver, since the gateway holds the provider connection and the daemon does not.
 // "no-gateway" is valid (no listener extension); a broken or stopped one throws instead of silently dropping it.
 
 // One loopback hop plus a provider API call (more for a chunked send); slower than this and the gateway is wedged.
@@ -11,7 +14,22 @@ const DELIVER_TIMEOUT_MS = 30_000;
 
 export type ListenerDeliverOutcome = "delivered" | "no-gateway";
 
-export const deliverToListenerChannel = async (services: Services, provider: string, channelId: string, text: string): Promise<ListenerDeliverOutcome> => {
+export const deliverToListenerChannel = async (services: Services, origin: AgentOrigin, text: string): Promise<ListenerDeliverOutcome> => {
+    if (origin.channelId === undefined) {
+        return "no-gateway";
+    }
+    // Checked before the extension walk: a Front Desk has no gateway and never will, so falling through to one would
+    // report "nothing is listening" about the one provider the daemon answers itself.
+    const outbox = outboxKeyOf(origin);
+    if (outbox !== undefined) {
+        await services.webchatOutbox.append(outbox, text, Date.now());
+        return "delivered";
+    }
+    return viaGateway(services, origin.provider, origin.channelId, text);
+};
+
+// The extension half: the first enabled extension listening to this provider, asked over its own loopback port.
+const viaGateway = async (services: Services, provider: string, channelId: string, text: string): Promise<ListenerDeliverOutcome> => {
     for (const extension of await enabledExtensions(services)) {
         if (extension.manifest.contributes?.listener?.provider !== provider) {
             continue;

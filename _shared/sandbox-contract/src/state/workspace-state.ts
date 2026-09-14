@@ -228,6 +228,12 @@ const STATE_FILES = [
         portability: "carry",
     },
     {
+        path: ".intentic/records/webchat-outbox.json",
+        invalidates: [],
+        why: "Front Desk replies a visitor has not collected yet, written when an approved wake answers or a human writes as the agent. The only reader is a stranger's browser polling the public /webchat door, which no query key in this app addresses; the owner's own view of the same words is the conversation's transcript, which the agent registry already pushes.",
+        portability: "carry",
+    },
+    {
         path: ".intentic/records/thread-sessions.json",
         invalidates: [],
         why: "Thread bookkeeping (an inbound thread, a Front Desk visitor, a Discord or Slack channel, → sandbox conversation + provider session), written on EVERY inbound message. Nothing in the browser reads it: what a thread produces is a conversation, and the fleet board already learns about that from the agent registry's own push. Naming a key here would bill every connected browser a refetch per inbound message, the request storm this table's own note warns about, to refresh nothing it can see.",

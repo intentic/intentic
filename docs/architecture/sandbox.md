@@ -72,9 +72,9 @@ survive reconnects. Its subsystems:
 - **Front Desk**: a chat bubble a customer embeds on their own website, talking to a `webchat` listener
   automation ([webchat/](../../_sandbox/sandbox/src/webchat/), widget in
   [\_sandbox/webchat-widget](../../_sandbox/webchat-widget)). It is the inbound-HTTP mirror of the gateway-process pattern:
-  no extension holds a connection, because the connection is a `<script>` tag on someone else's page. Four
+  no extension holds a connection, because the connection is a `<script>` tag on someone else's page. Five
   routes are exempt from the bearer middleware: `widget.js`, and per-automation `config` / `challenge` /
-  `message`: and that set, written as **one predicate** in [app.ts](../../_sandbox/sandbox/src/app.ts), is the whole of
+  `message` / `messages`: and that set, written as **one predicate** in [app.ts](../../_sandbox/sandbox/src/app.ts), is the whole of
   what an anonymous internet user can reach on a daemon. The visitor holds no credential in any mode: even
   with Google sign-in on, the ID token is verified daemon-side against the *site's own* client id (intentic's
   cannot list every customer domain) and becomes a claim in the prompt, never a grant. Admission is the
@@ -82,7 +82,14 @@ survive reconnects. Its subsystems:
   Turnstile, or a built-in proof of work for sites with no Cloudflare account, spent once per visitor thread.
   Each thread maps to ONE sandbox conversation, resumed by session id
   ([webchat.routes.ts](../../_sandbox/sandbox/src/webchat/webchat.routes.ts)), so a five-message support chat is one
-  fleet card the owner can watch live and take over: not five worktrees with amnesia. And because an
+  fleet card the owner can watch live and take over: not five worktrees with amnesia. Taking it over is what the
+  fifth route exists for. A live turn streams its reply down the open SSE, but an approval-gated one closes that
+  stream on a `pending` notice, and a human answering hours later with `place` ("write as agent") never had one:
+  both write into a per-thread **outbox**
+  ([webchat-outbox.ts](../../_sandbox/sandbox/src/webchat/webchat-outbox.ts)) that the widget collects against a
+  cursor. That is also why `place` reaches a Front Desk visitor at all: `deliverToListenerChannel` walks
+  *extensions*, and webchat is core, so the outbox is checked first rather than the walk reporting that nothing
+  is listening. And because an
   automation turn runs `bypassPermissions` by default, a Front Desk's real boundary is `Automation.allowedTools`,
   carried into the SDK's own allowlist: prompt wording is advice, an empty toolbox is not. The config fetch
   doubles as the **install probe** ([store/installs.ts](../../_sandbox/sandbox/src/store/installs.ts)):

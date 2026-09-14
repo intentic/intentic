@@ -1,4 +1,4 @@
-import { WEBCHAT_DAILY_MAX_DEFAULT, type WebchatConfig, WebchatMessageSchema } from "@intentic/sandbox-contract";
+import { WEBCHAT_DAILY_MAX_DEFAULT, type WebchatConfig, WebchatMessageSchema, type WebchatPending } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { z } from "zod";
@@ -10,6 +10,7 @@ import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { type ThreadSession, WEBCHAT_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
 import type { InstallsStore } from "../store/installs.js";
+import { rateWindow } from "../store/rate-window.js";
 import { statePath } from "../workspace/layout/state-paths.js";
 import { createSseStream } from "./sse-stream.js";
 import { publicConfig, usableAntiBot } from "./webchat-config.js";
@@ -138,10 +139,38 @@ const overCeiling = (
     return undefined;
 };
 
+// The poll's own window, separate from the message route's: collecting a reply spends a file read, not an agent turn,
+// so a visitor watching for an answer must not eat the budget that lets them ask the next question.
+const POLL_WINDOW_MS = 60_000;
+const POLL_MAX = 60;
+
 export const createWebchatRoutes = (services: Services, wake: WakeFn = streamAgent, installs?: InstallsStore) => {
     const door = createPublicDoor(services, WEBCHAT_DOOR, installs);
+    const polls = rateWindow(POLL_WINDOW_MS);
     return {
         ...door.routes,
+        // Replies queued since the visitor's `after` cursor: what an approval-gated desk answers with, and where a
+        // human writing as the agent lands. Origin-gated like every other webchat route; no anti-bot check, since it
+        // starts nothing and a thread nobody wrote to is empty.
+        messages: async (c: Context<AppEnv, "/webchat/:id/messages">): Promise<Response> => {
+            const resolved = await door.resolve(c.req.param("id"), c.req.header("origin"));
+            if ("status" in resolved) {
+                return c.json({ error: resolved.error }, resolved.status);
+            }
+            const conversationId = c.req.query("conversation");
+            if (conversationId === undefined || conversationId === "") {
+                return c.json({ error: "conversation required" }, 400);
+            }
+            const now = Date.now();
+            if (polls.limited(`${resolved.automation.id}:${conversationId}`, POLL_MAX, now)) {
+                return c.json({ error: "rate limited" }, 429);
+            }
+            // A non-numeric or negative cursor reads as the start of the thread, which over-delivers at worst.
+            const after = Math.max(0, Number(c.req.query("after") ?? 0) || 0);
+            const thread = door.thread(resolved.automation.id, conversationId);
+            const pending: WebchatPending = await services.webchatOutbox.since(thread.key, after, now);
+            return c.json(pending);
+        },
         message: async (c: Context<AppEnv, "/webchat/:id/message">): Promise<Response> => {
             const now = Date.now();
             const read = await parsed(c);

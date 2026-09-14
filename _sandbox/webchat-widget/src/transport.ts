@@ -1,4 +1,4 @@
-import type { WebchatMessage, WebchatPublicConfig } from "@intentic/sandbox-contract";
+import type { WebchatMessage, WebchatPending, WebchatPublicConfig } from "@intentic/sandbox-contract";
 import { embedFailure, type EmbedEndpoint, embedUrl, fetchEmbedChallenge, fetchEmbedJson, type PowChallenge } from "@intentic/sandbox-contract/embed";
 
 // Widget's half of the wire: three calls against the daemon's public /webchat door, all subject to its origin
@@ -45,6 +45,11 @@ export const fetchConfig = (endpoint: EmbedEndpoint): Promise<WebchatPublicConfi
 // Challenge is minted for one thread: the daemon signs the conversation id into the salt, so a solution can't move to
 // another.
 export const fetchChallenge = (endpoint: EmbedEndpoint, conversationId: string): Promise<PowChallenge> => fetchEmbedChallenge(endpoint, SLUG, "conversation", conversationId);
+
+// Replies queued since `after`: what an approval-gated desk answers with, and where a human writing as the agent lands.
+// Spends no challenge and starts no turn, so it is safe to call on a page the visitor is only reading.
+export const fetchPending = (endpoint: EmbedEndpoint, conversationId: string, after: number): Promise<WebchatPending> =>
+    fetchEmbedJson<WebchatPending>(`${embedUrl(endpoint, SLUG, "messages")}?conversation=${encodeURIComponent(conversationId)}&after=${after}`);
 
 export interface ReplySink {
     // One chunk of the agent's answer, as it is written.

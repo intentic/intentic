@@ -13,11 +13,12 @@ import { Hono } from "hono";
 import { expect, test, vi } from "vitest";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
-import type { WakeFn } from "../automations/scheduler.js";
+import { runHeldWake, type WakeFn } from "../automations/scheduler.js";
 import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import type { Services } from "../composition.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
+import { fileWebchatOutbox } from "./webchat-outbox.js";
 import { createWebchatRoutes } from "./webchat.routes.js";
 
 const ORIGIN = "https://site.example";
@@ -27,6 +28,7 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
+        webchatOutbox: fileWebchatOutbox(join(root, "webchat-outbox.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async (e) => void appends.push(e as ActivityEvent), list: async () => [] },
@@ -64,8 +66,12 @@ const appFor = (services: Services, wake: WakeFn): Hono => {
         .get("/webchat/:id/config", routes.config)
         .get("/webchat/:id/challenge", routes.challenge)
         .post("/webchat/:id/message", routes.message)
+        .get("/webchat/:id/messages", routes.messages)
         .get("/webchat/:id/installs", routes.installs);
 };
+
+const collect = (app: Hono, id: string, conversation: string, after = 0, headers: Record<string, string> = { origin: ORIGIN }) =>
+    app.request(`/webchat/${id}/messages?conversation=${conversation}&after=${after}`, { headers });
 
 const post = (app: Hono, id: string, body: unknown, headers: Record<string, string> = { origin: ORIGIN }) =>
     app.request(`/webchat/${id}/message`, {
@@ -128,6 +134,52 @@ test("a held Front Desk wake snapshots the conversation the visitor's thread alr
     expect(held?.conversationId).toBe("wc-wc-thread-visitor-7");
     const thread = await services.threadSessions.get("webchat:wc-thread:visitor-7", 60_000, Date.now());
     expect(held?.conversationId).toBe(thread?.conversationId);
+});
+
+// Collecting a reply written after the stream closed: the half that makes an approval-gated desk answerable at all.
+
+test("an approved wake's reply reaches the visitor's next poll, not just the fleet", async () => {
+    const { services } = await setup(webchat("wc-approved", { requireApproval: true }));
+    const app = appFor(services, fakeWake([], [{ kind: "delta", text: "we had a look: " }, { kind: "delta", text: "it is fixed" }, { kind: "done" }]));
+    await (await post(app, "wc-approved", { conversationId: "visitor-9", content: "is this broken?" })).text();
+
+    // Nothing is owed yet: the wake is held, and the visitor was told a human would look.
+    expect(await (await collect(app, "wc-approved", "visitor-9")).json()).toMatchObject({ replies: [], cursor: 0 });
+
+    const [held] = await services.heldWakes.list();
+    const automation = await services.automations.get("wc-approved");
+    await runHeldWake(services, automation as NonNullable<typeof automation>, held as NonNullable<typeof held>, fakeWake([], [{ kind: "delta", text: "we had a look: " }, { kind: "delta", text: "it is fixed" }, { kind: "done" }]));
+
+    const collected = (await (await collect(app, "wc-approved", "visitor-9")).json()) as { replies: { seq: number; text: string }[]; cursor: number };
+    expect(collected.replies).toMatchObject([{ text: "we had a look: it is fixed" }]);
+    // Polling again with what that handed back shows the answer once, not on every page load afterwards.
+    expect(await (await collect(app, "wc-approved", "visitor-9", collected.cursor)).json()).toMatchObject({ replies: [] });
+});
+
+test("the poll is gated by the same origin allowlist as everything else on the door", async () => {
+    const { services } = await setup(webchat("wc-poll-origin"));
+    const app = appFor(services, fakeWake([]));
+    expect((await collect(app, "wc-poll-origin", "visitor-1", 0, { origin: "https://evil.example" })).status).toBe(403);
+    expect((await collect(app, "wc-poll-origin", "visitor-1", 0, {})).status).toBe(403);
+    expect((await collect(app, "missing", "visitor-1")).status).toBe(404);
+});
+
+test("the poll names the conversation it is for, rather than reading the automation's whole traffic", async () => {
+    const { services } = await setup(webchat("wc-poll-scope"));
+    const app = appFor(services, fakeWake([]));
+    await services.webchatOutbox.append("webchat:wc-poll-scope:visitor-1", "for the first visitor", Date.now());
+
+    expect((await app.request(`/webchat/wc-poll-scope/messages`, { headers: { origin: ORIGIN } })).status).toBe(400);
+    expect(await (await collect(app, "wc-poll-scope", "visitor-2")).json()).toMatchObject({ replies: [] });
+    expect(await (await collect(app, "wc-poll-scope", "visitor-1")).json()).toMatchObject({ replies: [{ text: "for the first visitor" }] });
+});
+
+test("a live reply is streamed and not also queued, so a reload does not repeat it", async () => {
+    const { services } = await setup(webchat("wc-live"));
+    const app = appFor(services, fakeWake([], [{ kind: "delta", text: "answered live" }, { kind: "done" }]));
+    const body = await (await post(app, "wc-live", { conversationId: "visitor-1", content: "hi" })).text();
+    expect(body).toContain("event: delta\ndata: answered live");
+    expect(await (await collect(app, "wc-live", "visitor-1")).json()).toMatchObject({ replies: [] });
 });
 
 test("a wake that errors tells the visitor so, without leaking the owner's reason", async () => {

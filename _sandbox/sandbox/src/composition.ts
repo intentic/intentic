@@ -192,6 +192,7 @@ import {
 } from "./sessions/sessions.js";
 import { readSessionLines, spokenLinesOf, transcriptSearchMetrics } from "./sessions/transcript-search.js";
 import { fileThreadSessionsStore, type ThreadSessionsStore } from "./sessions/thread-sessions.js";
+import { fileWebchatOutbox, type WebchatOutbox } from "./webchat/webchat-outbox.js";
 import { openSearchIndex, type SearchIndex } from "./sessions/search-index.js";
 import { backfillSearchIndex, type BackfillSource } from "./sessions/search-backfill.js";
 import {
@@ -394,6 +395,9 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly heldWakes: HeldWakesStore;
     // Which conversation each inbound thread owns; lets a message stream remember instead of starting fresh.
     readonly threadSessions: ThreadSessionsStore;
+    // Front Desk replies written after the visitor's stream closed (an approved wake, a human writing as the agent);
+    // the widget's poll drains them on the next page load.
+    readonly webchatOutbox: WebchatOutbox;
     // Things the agent prepared and may not do unasked; /approvals is the owner's approve/reject side.
     readonly approvals: ApprovalsStore;
     // Bug reports from /intake, triaged from /issues; one instance so per-fingerprint writes don't race.
@@ -1071,6 +1075,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         probeRunner: createProbeRunner({ workspace, chores, agents, logger }),
         heldWakes: fileHeldWakesStore(statePath(workspace.root, ".intentic/records/approvals/")),
         threadSessions: fileThreadSessionsStore(statePath(workspace.root, ".intentic/records/thread-sessions.json")),
+        webchatOutbox: fileWebchatOutbox(statePath(workspace.root, ".intentic/records/webchat-outbox.json")),
         approvals: fileApprovalsStore(statePath(workspace.root, ".intentic/config/approvals/")),
         issues: fileIssuesStore(statePath(workspace.root, ".intentic/records/issues/")),
         issueInstalls: fileInstallsStore(statePath(workspace.root, ".intentic/records/issue-installs.json")),

@@ -1,6 +1,10 @@
 import type { WebchatConfig, WebchatPublicConfig } from "@intentic/sandbox-contract";
 import type { AutomationRecord } from "../automations/automations-store.js";
 
+// The listener provider a Front Desk automation names, and the key space its threads live in. Declared here rather
+// than on the door so the outbox can recognize an origin without importing the routes that write to it.
+export const WEBCHAT_PROVIDER = "webchat";
+
 // Decides what an unset Front Desk setting means, and which settings a stranger's browser may see.
 // `publicConfig` names every field it emits, so a secret added to WebchatConfig stays invisible until listed here.
 // Defaults resolve daemon-side, so the widget carries no fallback logic of its own.

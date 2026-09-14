@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 import type { WebchatMessage } from "@intentic/sandbox-contract";
 import { EmbedError } from "@intentic/sandbox-contract/embed";
-import { parseSseBlock, sendMessage, splitSseBlocks } from "./transport.js";
+import { fetchPending, parseSseBlock, sendMessage, splitSseBlocks } from "./transport.js";
 
 const ENDPOINT = { base: "https://sandbox-abc.example", automationId: "support" };
 const MESSAGE: WebchatMessage = { conversationId: "v-1", content: "hello" };
@@ -115,4 +115,30 @@ test(`the message posts to the automation's own path`, async () => {
     );
     await sendMessage(ENDPOINT, MESSAGE, { delta: () => {}, pending: () => {}, failed: () => {} });
     expect(urls).toEqual([`https://sandbox-abc.example/webchat/support/message`]);
+});
+
+test(`the poll names the visitor's thread and its cursor, so one browser never collects another's replies`, async () => {
+    const urls: string[] = [];
+    vi.stubGlobal(
+        `fetch`,
+        vi.fn(async (url: string) => {
+            urls.push(url);
+            return new Response(JSON.stringify({ replies: [{ seq: 3, at: 1, text: `a person wrote back` }], cursor: 3 }), { status: 200 });
+        }),
+    );
+    const pending = await fetchPending(ENDPOINT, `v 1/2`, 2);
+    expect(pending.replies).toEqual([{ seq: 3, at: 1, text: `a person wrote back` }]);
+    expect(pending.cursor).toBe(3);
+    // The conversation id is a stored value, not a literal: an unescaped one would address a different thread.
+    expect(urls).toEqual([`https://sandbox-abc.example/webchat/support/messages?conversation=v%201%2F2&after=2`]);
+});
+
+test(`a refused poll carries the server's own sentence, so a misconfigured origin is legible`, async () => {
+    vi.stubGlobal(
+        `fetch`,
+        vi.fn(async () => new Response(JSON.stringify({ error: `origin not allowed` }), { status: 403 })),
+    );
+    const error = await fetchPending(ENDPOINT, `v-1`, 0).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(EmbedError);
+    expect((error as EmbedError).message).toBe(`origin not allowed`);
 });

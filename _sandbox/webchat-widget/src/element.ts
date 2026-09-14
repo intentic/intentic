@@ -1,9 +1,19 @@
 import type { WebchatMessage, WebchatPublicConfig } from "@intentic/sandbox-contract";
 import { type EmbedEndpoint, EmbedError, solveProofOfWork } from "@intentic/sandbox-contract/embed";
 import { solveTurnstile } from "./challenge.js";
-import { renderGoogleSignIn, resetConversation, storeDisplayName, storedDisplayName, visitorConversationId } from "./identity.js";
+import {
+    renderGoogleSignIn,
+    resetConversation,
+    storeCursor,
+    storeDisplayName,
+    storeSpoke,
+    storedCursor,
+    storedDisplayName,
+    storedSpoke,
+    visitorConversationId,
+} from "./identity.js";
 import { styles } from "./styles.js";
-import { fetchChallenge, sendMessage } from "./transport.js";
+import { fetchChallenge, fetchPending, sendMessage } from "./transport.js";
 
 // <intentic-front-desk>: a launcher and a panel, rendered into a shadow root so host and widget CSS can't cross. The
 // gate area (Google sign-in, Turnstile) is the one exception, created in the light DOM and projected via <slot>.
@@ -15,6 +25,15 @@ const SEND_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 
 
 // Client-held transcript on a thread's first message only; matters after the daemon has expired the thread.
 const HISTORY_MAX = 20;
+
+// How often the widget collects replies written after its stream closed: an approval-gated answer, or a human's. Slower
+// with the panel shut, since nobody is watching for it to land; both are gated on the thread having spoken at all.
+const POLL_OPEN_MS = 20_000;
+const POLL_CLOSED_MS = 90_000;
+// Each consecutive failure doubles the wait, to here. A sandbox that is off is the ordinary reason a poll fails, so the
+// widget must get quiet rather than hammer an address that is not answering.
+const POLL_CEILING_MS = 10 * 60_000;
+const POLL_BACKOFF_MAX = 5;
 
 // Target of the "powered by" link; often the only Intentic surface a visitor sees.
 const INTENTIC_URL = "https://intentic.dev";
@@ -39,9 +58,16 @@ export class FrontDeskElement extends HTMLElement {
     private gateNote!: HTMLParagraphElement;
     // Light-DOM host for third-party frames, slotted into `gate`.
     private gateSlotTarget!: HTMLElement;
+    private unreadDot!: HTMLElement;
 
     private turns: Turn[] = [];
     private conversationId = "";
+    // How far this browser has collected the thread's queued replies, and whether the thread has ever spoken; both
+    // survive a reload, which is the whole point of an answer that arrives hours later.
+    private cursor = 0;
+    private spoke = false;
+    private pollTimer: number | undefined;
+    private pollFailures = 0;
     private displayName: string | undefined;
     private idToken: string | undefined;
     // The anti-bot answer, held until the first message spends it.
@@ -57,9 +83,17 @@ export class FrontDeskElement extends HTMLElement {
     connectedCallback(): void {
         this.conversationId = visitorConversationId(this.config.automationId);
         this.displayName = storedDisplayName(this.config.automationId);
+        this.cursor = storedCursor(this.config.automationId);
+        this.spoke = storedSpoke(this.config.automationId);
         this.root = this.attachShadow({ mode: "open" });
         this.root.innerHTML = this.template();
         this.bind();
+        // Before anything is opened: a reply written while this visitor was away is what the dot is for.
+        void this.collect();
+    }
+
+    disconnectedCallback(): void {
+        window.clearTimeout(this.pollTimer);
     }
 
     private template(): string {
@@ -67,6 +101,7 @@ export class FrontDeskElement extends HTMLElement {
 <style>${styles(this.config)}</style>
 <button class="launcher" part="launcher" aria-haspopup="dialog" aria-expanded="false" aria-label="${escapeAttribute(`Open ${this.config.title}`)}">
     ${LAUNCHER_ICON}
+    <span class="unread" part="unread" hidden></span>
 </button>
 <div class="panel" role="dialog" aria-modal="false" aria-label="${escapeAttribute(this.config.title)}" hidden>
     <div class="header">
@@ -99,6 +134,7 @@ export class FrontDeskElement extends HTMLElement {
         this.sendButton = query<HTMLButtonElement>(".send");
         this.gate = query<HTMLElement>(".gate");
         this.gateNote = query<HTMLParagraphElement>(".gate-note");
+        this.unreadDot = query<HTMLElement>(".unread");
 
         this.gateSlotTarget = document.createElement("div");
         this.gateSlotTarget.slot = "gate";
@@ -132,13 +168,64 @@ export class FrontDeskElement extends HTMLElement {
         this.panel.hidden = !next;
         this.launcher.setAttribute("aria-expanded", String(next));
         if (!next) {
+            // Back to the idle cadence; nobody is watching the log for the next one to land.
+            this.schedulePoll();
             return;
         }
+        this.markUnread(false);
+        this.primeGreeting();
+        void this.openGates();
+        void this.collect();
+        this.composer.focus();
+    }
+
+    // The opening line, before anything else is in the log. Shared by opening the panel and by a queued reply arriving
+    // first, so a returning visitor never meets a bare answer with no chat around it.
+    private primeGreeting(): void {
         if (this.turns.length === 0 && this.config.greeting !== "") {
             this.appendTurn("agent", this.config.greeting);
         }
-        void this.openGates();
-        this.composer.focus();
+    }
+
+    // Collects replies written after this thread's stream closed, then schedules the next pass. Never throws and never
+    // shows a failure: an unreachable sandbox is this widget's ordinary weather, not something to tell a visitor about.
+    private async collect(): Promise<void> {
+        // A live reply owns the log while it streams; splicing a queued one in would cut its bubble in half.
+        if (this.spoke && !this.sending) {
+            try {
+                const pending = await fetchPending(this.endpoint, this.conversationId, this.cursor);
+                this.pollFailures = 0;
+                this.cursor = pending.cursor;
+                storeCursor(this.config.automationId, pending.cursor);
+                if (pending.replies.length > 0) {
+                    this.primeGreeting();
+                    for (const reply of pending.replies) {
+                        this.appendTurn("agent", reply.text);
+                    }
+                    if (!this.open) {
+                        this.markUnread(true);
+                    }
+                }
+            } catch {
+                this.pollFailures = Math.min(this.pollFailures + 1, POLL_BACKOFF_MAX);
+            }
+        }
+        this.schedulePoll();
+    }
+
+    private schedulePoll(): void {
+        window.clearTimeout(this.pollTimer);
+        // Nothing can be queued for a thread that never wrote, so a visitor who is only reading the page never polls.
+        if (!this.spoke) {
+            return;
+        }
+        const base = this.open ? POLL_OPEN_MS : POLL_CLOSED_MS;
+        this.pollTimer = window.setTimeout(() => void this.collect(), Math.min(base * 2 ** this.pollFailures, POLL_CEILING_MS));
+    }
+
+    private markUnread(next: boolean): void {
+        this.unreadDot.hidden = !next;
+        this.launcher.setAttribute("aria-label", next ? `${this.config.title}: a new reply is waiting` : `Open ${this.config.title}`);
     }
 
     // Sign-in, then the bot check, in that order; each renders into the slotted light-DOM container and hands back a
@@ -201,9 +288,13 @@ export class FrontDeskElement extends HTMLElement {
         this.conversationId = resetConversation(this.config.automationId);
         this.turns = [];
         this.log.replaceChildren();
-        if (this.config.greeting !== "") {
-            this.appendTurn("agent", this.config.greeting);
-        }
+        // A fresh thread is owed nothing: the old thread's queued replies belong to a conversation this visitor left.
+        this.cursor = 0;
+        this.spoke = false;
+        this.pollFailures = 0;
+        this.markUnread(false);
+        this.schedulePoll();
+        this.primeGreeting();
         this.composer.focus();
     }
 
@@ -307,6 +398,11 @@ export class FrontDeskElement extends HTMLElement {
                     this.notice(notice, "failed");
                 },
             });
+            // Accepted, however it was answered: from here the thread can be owed a reply written after this stream
+            // closed, which is what earns it a poll.
+            this.spoke = true;
+            storeSpoke(this.config.automationId);
+            this.schedulePoll();
             if (reply.text === "") {
                 bubble.remove();
             } else {

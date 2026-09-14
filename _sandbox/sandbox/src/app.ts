@@ -79,7 +79,7 @@ const eventFirePath = /^\/automations\/[^/]+\/fire$/;
 // allowlist, rate limit and bot check instead.
 // One predicate for the whole set, not a constant per route, so the boundary can't be widened by touching just one
 // name.
-const webchatPublicPath = (path: string): boolean => path === "/webchat/widget.js" || /^\/webchat\/[^/]+\/(message|config|challenge)$/.test(path);
+const webchatPublicPath = (path: string): boolean => path === "/webchat/widget.js" || /^\/webchat\/[^/]+\/(message|messages|config|challenge)$/.test(path);
 
 // The bug intake's public surface, the daemon's other anonymous door; gated by the automation's origin allowlist or
 // ingest key, rate window and daily ceiling.
@@ -389,8 +389,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // The only route in the daemon that holds a request open for the work it started.
     app.post("/workflows/:id/gate", createGateRoute(services));
 
-    // The Front Desk: widget bundle, per-automation config, bot challenge, and the message ingest streaming its reply
-    // as SSE.
+    // The Front Desk: widget bundle, per-automation config, bot challenge, the message ingest streaming its reply as
+    // SSE, and the poll that collects a reply written after that stream closed.
     // All exempt from bearer auth, gated by origin allowlist, rate limit and bot check instead; `widget.js` is declared
     // first so the :id routes can't shadow it.
     const webchat = createWebchatRoutes(services);
@@ -398,6 +398,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.get("/webchat/:id/config", webchat.config);
     app.get("/webchat/:id/challenge", webchat.challenge);
     app.post("/webchat/:id/message", webchat.message);
+    // Replies written after the visitor's stream closed: an approved wake's, or a human's, written as the agent.
+    app.get("/webchat/:id/messages", webchat.messages);
     // Not public: which sites loaded this widget is the owner's diagnostic, so it takes ordinary bearer auth.
     app.get("/webchat/:id/installs", webchat.installs);
 

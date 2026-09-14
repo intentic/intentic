@@ -202,8 +202,8 @@ export const createAgentsRoutes = (services: Services) => {
         // agent-facing).
         // - clears the session so the next turn reseeds from the record instead of stale runtime memory
         // - runs under the rewind lease, not notRunning, so a resuming turn cannot race the clear
-        // - a channel-origin conversation delivers to the provider's gateway before appending; a failed delivery
-        //   refuses the whole place
+        // - a channel-origin conversation delivers outward before appending (a Front Desk into the visitor's outbox,
+        //   every other provider to its gateway); a failed delivery refuses the whole place
         place: i.place.handler(async ({ input }) => {
             const agent = entryOf(input.id);
             const origin = agent.origin;
@@ -211,7 +211,7 @@ export const createAgentsRoutes = (services: Services) => {
                 if (origin?.channelId !== undefined) {
                     let delivered: "delivered" | "no-gateway";
                     try {
-                        delivered = await deliverToListenerChannel(services, origin.provider, origin.channelId, input.text);
+                        delivered = await deliverToListenerChannel(services, origin, input.text);
                     } catch (error) {
                         throw new ORPCError("BAD_GATEWAY", { message: errorMessage(error) });
                     }

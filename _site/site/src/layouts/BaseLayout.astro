@@ -7,6 +7,7 @@ import { buildPageGraph } from "@intentic/site-content/structured-data";
 import { lastModForUrl } from "@intentic/astro-integrations";
 // Use the package's pure path-math subpath to avoid bundling native image dependencies.
 import { getImagePath } from "astro-opengraph-images/util.js";
+import FrontDesk from "../components/FrontDesk.astro";
 import LiveNotice from "../components/LiveNotice.astro";
 import PageBackdrop from "../components/PageBackdrop.astro";
 
@@ -164,5 +165,8 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
                 reveals.forEach((element) => element.classList.add("visible"));
             }
         </script>
+
+        {/* Last in the body: a chat bubble a visitor may never use must not delay anything they came for. */}
+        <FrontDesk />
     </body>
 </html>

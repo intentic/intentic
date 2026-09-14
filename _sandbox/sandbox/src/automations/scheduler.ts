@@ -15,6 +15,7 @@ import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { automationPending } from "../push/notifications.js";
 import { threadKey } from "../sessions/thread-sessions.js";
 import { pinnedRunModel } from "../agent/models/run-role-model.js";
+import { type OutboxSink, outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { type AutomationRecord, consecutiveFailures } from "./automations-store.js";
 
 const execFileAsync = promisify(execFile);
@@ -494,17 +495,28 @@ export interface AutomationsScheduler {
     readonly tick: (now?: number) => Promise<void>;
 }
 
+// The snapshot as fire options: each field absent rather than undefined, so replaying a hold cannot set one the
+// original fire did not carry.
+const heldWakeOptions = (held: AutomationApproval, sink: OutboxSink | undefined): FireOptions => ({
+    cleared: "both",
+    ...(held.payload !== undefined ? { payload: held.payload } : {}),
+    ...(held.origin !== undefined ? { origin: held.origin } : {}),
+    ...(held.title !== undefined ? { title: held.title } : {}),
+    ...(held.conversationId !== undefined ? { conversationId: held.conversationId } : {}),
+    ...(held.sessionId !== undefined ? { sessionId: held.sessionId } : {}),
+    ...(sink !== undefined ? { stream: sink.stream } : {}),
+});
+
 // Runs a held wake with its snapshot (`cleared: "both"`, guard already ran), then settles its thread so the next
 // message resumes it. Shared by both releases, the approve route and the countdown scan.
 export const runHeldWake = async (services: Services, automation: AutomationRecord, held: AutomationApproval, wake: WakeFn): Promise<void> => {
-    const settled = await fireAutomation(services, automation, wake, {
-        cleared: "both",
-        ...(held.payload !== undefined ? { payload: held.payload } : {}),
-        ...(held.origin !== undefined ? { origin: held.origin } : {}),
-        ...(held.title !== undefined ? { title: held.title } : {}),
-        ...(held.conversationId !== undefined ? { conversationId: held.conversationId } : {}),
-        ...(held.sessionId !== undefined ? { sessionId: held.sessionId } : {}),
-    });
+    // The visitor's own stream closed when the wake was held, so a Front Desk answer has nowhere live to go; queue it
+    // where their next page load will collect it. Undefined for every other origin, which answers through its gateway.
+    const sink = outboxStreamFor(services, held.origin);
+    const settled = await fireAutomation(services, automation, wake, heldWakeOptions(held, sink));
+    // Before the release is over: the approve route answers its caller here, and the visitor polling a moment later
+    // must find the answer rather than an empty thread.
+    await sink?.settled();
     const origin = held.origin;
     if (origin?.channelId === undefined || settled.sessionId === undefined) {
         return;

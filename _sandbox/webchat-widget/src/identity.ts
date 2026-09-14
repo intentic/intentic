@@ -14,10 +14,23 @@ export const visitorConversationId = (automationId: string): string => storedId(
 export const storedDisplayName = (automationId: string): string | undefined => readStored(key(automationId, "name"));
 export const storeDisplayName = (automationId: string, name: string): void => writeStored(key(automationId, "name"), name);
 
-// New chat: drops only the conversation id. A typed name and Google session belong to the person, not the thread.
+// How far this browser has collected the thread's queued replies. Per automation, not per conversation, since starting
+// a new chat rewinds it to zero anyway.
+export const storedCursor = (automationId: string): number => Math.max(0, Number(readStored(key(automationId, "cursor")) ?? 0) || 0);
+export const storeCursor = (automationId: string, cursor: number): void => writeStored(key(automationId, "cursor"), String(cursor));
+
+// Whether this browser has ever written to this desk. Nothing can be queued for a thread that never spoke, so this is
+// what keeps a visitor who only ever reads the page from polling for replies that cannot exist.
+export const storedSpoke = (automationId: string): boolean => readStored(key(automationId, "spoke")) === "1";
+export const storeSpoke = (automationId: string): void => writeStored(key(automationId, "spoke"), "1");
+
+// New chat: drops the thread and everything measured against it. A typed name and Google session belong to the person,
+// not the thread.
 export const resetConversation = (automationId: string): string => {
     const minted = crypto.randomUUID();
     writeStored(key(automationId, "conversation"), minted);
+    writeStored(key(automationId, "cursor"), "0");
+    writeStored(key(automationId, "spoke"), "0");
     return minted;
 };
 
