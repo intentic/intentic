@@ -100,9 +100,8 @@ const remeasureLabel = computed(() =>
         :style="{ width: uiLength(CAPACITY_RAIL_PX), right: `var(--chat-scrollbar)` }"
         aria-label="Plan headroom"
     >
-<!-- The header names the question this column answers, not the data ("Plan limits" is the Usage tab's heading); age sits beside it. -->
-        <div class="flex shrink-0 items-center gap-2 px-3 py-2">
-            <span class="min-w-0 flex-1 truncate text-2xs font-medium uppercase tracking-wide text-muted">Ready to run</span>
+<!-- The refresh control stays at the edge because the rail has no heading text. -->
+        <div class="flex shrink-0 items-center justify-end gap-2 px-3 py-2">
             <button
                 type="button"
                 :class="ui.textAction(`gap-1 text-2xs text-subtle`)"
