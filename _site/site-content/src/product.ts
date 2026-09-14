@@ -1,8 +1,8 @@
 import type { ShotImage } from "./landing";
 
-// Feature pages: one page per verb (Run, Connect, Automate, Review, Host), not per surface. Slug is the label
-// lowercased, so the menu word and the URL agree. Every `src` is a real screenshot from `_tools/e2e/shots/capture.mts`;
-// a diagram appears only where no honest screenshot exists.
+// Feature pages: one per slug (run, connect, automate, review, host); the nav label is a separate, value-first
+// string, decoupled from the slug and the URL on purpose. Every `src` is a real screenshot from
+// `_tools/e2e/shots/capture.mts`; a diagram appears only where no honest screenshot exists.
 
 /** How a shot is framed on the page: a browser window, a phone, or the bare image. */
 export type ShotFrame = "browser" | "phone" | "bare";
@@ -41,7 +41,7 @@ export interface ProductFact {
 
 export interface ProductPage {
     slug: string;
-    /** Menu label and page eyebrow: the verb. */
+    /** Menu label and page eyebrow; value-first, independent of the slug. */
     navLabel: string;
     /** The one line of scent under the label in the mega-menu: kept to a few words. */
     menuBlurb: string;
@@ -49,7 +49,7 @@ export interface ProductPage {
     icon: string;
     heading: string;
     sub: string;
-    /** Exactly one of `hero`/`heroFigure` is set per page; Automate is the only diagram-led one. */
+    /** Exactly one of `hero`/`heroFigure` is set per page; Automations is the only diagram-led one. */
     hero?: ProductShot;
     heroFigure?: ProductFigure;
     // Dedicated capture for the mega-menu's 16:10 preview box, when the page's `hero` crops badly there.
@@ -68,7 +68,7 @@ const PUBLISHED = "2026-08-09";
 export const productPages: ProductPage[] = [
     {
         slug: "run",
-        navLabel: "Run",
+        navLabel: "Agent Workspace",
         menuBlurb: "Many agents, one board",
         icon: "play",
         heading: "Run many agents. See which one needs you.",
@@ -122,7 +122,7 @@ export const productPages: ProductPage[] = [
     },
     {
         slug: "connect",
-        navLabel: "Connect",
+        navLabel: "Integrations",
         menuBlurb: "Wire in outside systems",
         icon: "link",
         heading: "Connect agents to the systems they need.",
@@ -189,7 +189,7 @@ export const productPages: ProductPage[] = [
     },
     {
         slug: "automate",
-        navLabel: "Automate",
+        navLabel: "Automations",
         menuBlurb: "On a pipeline, issue or schedule",
         icon: "zap",
         heading: "Start an agent automatically.",
@@ -255,7 +255,7 @@ export const productPages: ProductPage[] = [
     },
     {
         slug: "review",
-        navLabel: "Review",
+        navLabel: "Approvals",
         menuBlurb: "Approve every change first",
         icon: "circle-check",
         heading: "It proposes. You approve. Nothing is merged until you read the diff.",
@@ -324,7 +324,7 @@ export const productPages: ProductPage[] = [
     },
     {
         slug: "host",
-        navLabel: "Host",
+        navLabel: "Self-hosting",
         menuBlurb: "Self-hosted",
         icon: "server",
         heading: "Host the work. Keep control.",

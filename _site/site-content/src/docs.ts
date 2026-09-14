@@ -8,7 +8,7 @@ export const docsBook: Book = {
     label: "Docs",
     sections: [
         {
-            label: "Understand",
+            label: "Learn",
             tagline: "What this is",
             icon: "book-open",
             entry: "",
@@ -211,7 +211,7 @@ export const docsBook: Book = {
             ],
         },
         {
-            label: "Drive agents",
+            label: "Agent Orchestration",
             tagline: "The everyday work",
             icon: "workflow",
             entry: "parallel-agents",

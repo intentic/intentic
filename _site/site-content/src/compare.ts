@@ -1051,7 +1051,7 @@ export const familyPages = (id: string): ComparePage[] => comparePages.filter((p
 
 // The hub's own copy: leads with the taxonomy (which of these you are) before the pitch.
 export const compareIndex = {
-    eyebrow: "Compare",
+    eyebrow: "Comparisons",
     heading: "See where intentic fits.",
     sub: "Some tools run inside intentic, others work alongside it, and a few replace part of what it does.",
     axes: {

@@ -12,7 +12,7 @@ import Nav from "../../components/Nav.astro";
 const pageByName = new Map(comparePages.map((page) => [page.name, page]));
 ---
 
-<BaseLayout breadcrumbs={[{ name: "Compare", path: compareHref("") }]}>
+<BaseLayout breadcrumbs={[{ name: "Comparisons", path: compareHref("") }]}>
     <Nav />
     <main class="flex-1">
         <!-- Hero + the jump strip: find your tool without reading anything -->

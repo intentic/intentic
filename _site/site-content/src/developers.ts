@@ -1,15 +1,15 @@
 import { type Book, bookDestinations, bookHref, bookPages } from "./book";
 
 // /developers is written for an author building on intentic, not the installer (/docs). Named for this book, not the
-// old /api path: /api is now reference.ts's generated route reference. Two shelves are two jobs: Build is the code
-// (format, APIs, reference); Ship is the publishing process (registry, trust, staying listed).
+// old /api path: /api is now reference.ts's generated route reference. One shelf, three groups: write the extension,
+// look up its reference, then publish and maintain it.
 export const developersBook: Book = {
     id: "developers",
     label: "Developers",
     sections: [
         {
-            label: "Build",
-            tagline: "One format, every surface",
+            label: "Extension development",
+            tagline: "Write it, publish it, keep it listed",
             icon: "code",
             entry: "",
             groups: [
@@ -66,16 +66,9 @@ export const developersBook: Book = {
                         },
                     ],
                 },
-            ],
-        },
-        {
-            // Named for the flow, not the noun: rows under it are ordered, not a category to browse.
-            label: "Ship",
-            tagline: "Get listed, stay listed",
-            icon: "rocket",
-            entry: "publish",
-            groups: [
                 {
+                    // Named for the flow, not the noun: rows under it are ordered, not a category to browse.
+                    label: "Publishing",
                     items: [
                         {
                             id: "publish",

@@ -43,8 +43,8 @@ export type NavEntry =
       }
     | { type: "link"; label: string; href: string; prefix: string; external?: boolean };
 
-// Feature pages as menu rows, one column, no group labels; each label is its page's slug. Every row carries a shot
-// (even Automate's diagram), so the preview rail never falls back to the row above's picture.
+// Feature pages as menu rows, one column, no group labels; each row's label is its page's navLabel, not its slug.
+// Every row carries a shot (even Automations' diagram), so the preview rail never falls back to the row above's picture.
 const productItems = (): MenuItem[] =>
     productPages.map((page) => {
         // Falls back to the page hero when there's no menuShot; a hero fits a page column, not the rail's 16:10 box.
@@ -99,7 +99,7 @@ export const navEntries: NavEntry[] = [
                         icon: "newspaper",
                     },
                     {
-                        label: "Compare",
+                        label: "Comparisons",
                         href: compareHref(""),
                         description: "Cursor, Claude Code, Conductor, cloud agents",
                         icon: "git-compare",

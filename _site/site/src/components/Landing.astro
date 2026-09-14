@@ -172,7 +172,7 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- Verbs render as one screenful per showcase stage. -->
+            <!-- Rows render as one screenful per showcase stage. -->
             <section class="band" id="verbs">
                 <div class="wall" aria-hidden="true"></div>
 
@@ -188,7 +188,7 @@ const machineStep = content.connect.steps.at(-1)!;
                                 <div class="stage-head">
                                     <h3 class="stage-verb">
                                         <Bullet size="md" />
-                                        {item.verb}
+                                        {item.label}
                                     </h3>
                                     <p class="stage-line">{item.line}</p>
                                     <a href={item.href} class="link see">See it →</a>

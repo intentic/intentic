@@ -43,9 +43,9 @@ export interface HeroDemo {
     note: string;
 }
 
-/** One verb in the tour, one per Features-menu page: a line plus a proof (`shot`, or `figure` for Automate, which has no honest screen to capture). */
+/** One row in the tour, one per Features-menu page: a line plus a proof (`shot`, or `figure` for Automations, which has no honest screen to capture). */
 export interface VerbTourItem {
-    verb: string;
+    label: string;
     href: string;
     line: string;
     shot?: { name: string; alt: string; label: string };
@@ -68,7 +68,7 @@ export interface LandingContent {
         screens: HeroScreens;
         demo: HeroDemo;
     };
-    // Same five verbs as the Features menu; no `sub` (showcase). Its old branch claim now closes `workspace`.
+    // Same five rows as the Features menu; no `sub` (showcase). Its old branch claim now closes `workspace`.
     verbs: Omit<LandingSectionIntro, "sub" | "heading"> & { heading?: string; items: VerbTourItem[]; cta: string };
     workspace: LandingSectionIntro & { comparison: WorkspaceComparison };
     economics: LandingSectionIntro & { accounts: { name: string; logo: ProviderBrand; detail: string }[]; points: string[] };
@@ -84,7 +84,7 @@ export interface LandingContent {
     };
 }
 
-// One claim shown once: agents keep running, resumable anywhere; verbs show it, bands answer objections.
+// One claim shown once: agents keep running, resumable anywhere; the tour shows it, bands answer objections.
 export const landingContent: LandingContent = {
     meta: {
         // Title ≤60 chars, description ≤160 (search truncates past that); title spends its room on the filter word.
@@ -127,13 +127,13 @@ export const landingContent: LandingContent = {
             note: "The real app on a recorded workspace. Approve a plan, answer an agent, read a diff.",
         },
     },
-    // Five verbs, one screenful each, order matches the Features menu; Automate draws a diagram, not a screenshot.
+    // Five rows, one screenful each, order matches the Features menu; Automations draws a diagram, not a screenshot.
     verbs: {
         eyebrow: "What you do",
         // One eyebrow ("Why a workspace" style); no heading below, the verbs and screenshots carry it.
         items: [
             {
-                verb: "Run",
+                label: "Agent Workspace",
                 href: productHref("run"),
                 line: "One board shows every agent you have running, and puts the one that needs you first.",
                 shot: {
@@ -143,7 +143,7 @@ export const landingContent: LandingContent = {
                 },
             },
             {
-                verb: "Connect",
+                label: "Integrations",
                 href: productHref("connect"),
                 line: "Connect an agent to GitHub, Postgres, Stripe, Discord or any MCP server. Your keys stay on your machine.",
                 shot: {
@@ -153,7 +153,7 @@ export const landingContent: LandingContent = {
                 },
             },
             {
-                verb: "Automate",
+                label: "Automations",
                 href: productHref("automate"),
                 // Two real jobs before the mechanism: the drawing beside this line is already abstract.
                 line: "Start an agent on a failing pipeline, a new issue or a schedule. Every run opens on your board.",
@@ -162,7 +162,7 @@ export const landingContent: LandingContent = {
                 figure: "automate",
             },
             {
-                verb: "Review",
+                label: "Approvals",
                 href: productHref("review"),
                 line: "The agent writes a plan and waits for your yes. Finished work sits on its branch until you read the diff.",
                 shot: {
@@ -172,7 +172,7 @@ export const landingContent: LandingContent = {
                 },
             },
             {
-                verb: "Host",
+                label: "Self-hosting",
                 href: productHref("host"),
                 line: "Move the workspace to a server so it runs without your laptop, and invite your team into the same one.",
                 shot: {
