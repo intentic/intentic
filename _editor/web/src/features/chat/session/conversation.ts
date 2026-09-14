@@ -205,6 +205,19 @@ export class Conversation {
     // can't un-register it. Persisted with the tab.
     readonly registered = ref(false);
 
+    // Where the next agent runs: this sandbox (neither), one of its runners, or another box. The two axes are one
+    // choice, so each pick clears the other: a runner belongs to the sandbox that paired it, and "that runner in another
+    // box" names nothing there. Refused once the board has seen the conversation, since placement latches with the
+    // branch then. Returns whether the pick took.
+    placeAt(at: { readonly box?: string | undefined; readonly runner?: string | undefined }): boolean {
+        if (this.registered.value) {
+            return false;
+        }
+        this.box.value = at.box;
+        this.runner.value = at.runner;
+        return true;
+    }
+
     // A tab opened for a glance (fleet card, history row); swept once focus leaves unless `keep()` promotes it.
     readonly peek = ref(false);
 

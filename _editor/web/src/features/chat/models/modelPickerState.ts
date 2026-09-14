@@ -42,8 +42,9 @@ export const pickerEntries = computed<readonly PickerEntry[]>(() => [
     ...acpProviders.value.map((agent) => entryFor(agent.id, { label: agent.label, value: `` })),
 ]);
 
-// Lowercase and strip separators, so "gpt5" matches "GPT-5" and "45" matches "4.5".
-const normalize = (text: string): string => text.toLowerCase().replace(/[\s.\-_]/g, ``);
+// Lowercase and strip separators, so "gpt5" matches "GPT-5" and "45" matches "4.5". Shared with the composer's `@`
+// picker so a persona or runner matches the way a model does.
+export const normalize = (text: string): string => text.toLowerCase().replace(/[\s.\-_]/g, ``);
 
 const haystackFor = (entry: PickerEntry): string =>
     normalize(`${entry.label} ${entry.value} ${providerLabel(entry.provider)} ${(entry.badges ?? []).join(` `)}`);

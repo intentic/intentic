@@ -47,7 +47,12 @@ import { useTranscriptWarmup } from "../transcript/useTranscriptWarmup";
 import { isBlocked } from "../../sandbox/live/connection";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { inputHistoryFor, recallStep } from "../drafts/inputHistory";
-import { insertMention, mentionQueryAt } from "../composer/useMentions";
+import { drillMention, fileMention, mentionQueryAt, replaceMention } from "../composer/useMentions";
+import type { QuickPick, QuickPickSources } from "../composer/composerQuickPick";
+import { pickerEntries } from "../models/modelPickerState";
+import { effortsFor } from "../models/effortScale";
+import { providerReady } from "../session/access";
+import { otherBoxes } from "../../sandbox/live/fleetAcross";
 import ChatCommandPopover from "../composer/ChatCommandPopover.vue";
 import ChatContinueStrip from "./ChatContinueStrip.vue";
 import ChatFileChip from "../transcript/ChatFileChip.vue";
@@ -768,11 +773,15 @@ const composerHint = computed(() => {
     if (continueOffer.value) {
         return `Enter to continue`;
     }
-    return recallable.value ? `↑ for previous message` : `Shift+Enter for new line`;
+    if (recallable.value) {
+        return `↑ for previous message`;
+    }
+    // An empty box has no line to break; the key worth teaching there is the picker's.
+    return draft.value === `` ? `@ for files and settings` : `Shift+Enter for new line`;
 });
 
-// Mentions and commands: an @-token at the caret opens the file picker; a leading `/` with the caret still in the
-// first token opens the command list. Escape dismisses until the token changes.
+// Mentions and commands: an @-token at the caret opens the picker over files and the four turn settings; a leading
+// `/` with the caret still in the first token opens the command list. Escape dismisses until the token changes.
 const caret = ref(0);
 const syncCaret = (): void => {
     caret.value = input.value?.selectionStart ?? draft.value.length;
@@ -805,9 +814,42 @@ const commandMatches = computed<readonly AgentCommand[]>(() => {
 });
 const mentionPopover = ref<InstanceType<typeof ChatMentionPopover>>();
 const commandPopover = ref<InstanceType<typeof ChatCommandPopover>>();
-// Not for a conversation in another box: the mention popover completes against this workspace's file tree, and a
-// path it offers may not exist on the daemon being written to. Typing `@` there is just an ordinary character.
-const mentionOpen = computed(() => activeMention.value !== undefined && !popoverDismissed.value && !remote.value);
+
+// What the `@` picker may change, mirroring the pill row control for control: a kind the row refuses (greyed under a
+// workflow badge, absent on a remote conversation, placement latched) is withheld here too, as `undefined`.
+// Files complete against this workspace's tree, so a conversation in another box is offered none.
+const filesOffered = computed(() => !remote.value);
+const quickSources = computed<QuickPickSources>(() => {
+    const steered = pickedWorkflow.value !== undefined;
+    const conversation = props.conversation;
+    return {
+        persona: steered || remote.value ? undefined : { cards: personaCards.value, picked: conversation.actsAs.value },
+        sandbox:
+            !placementShown.value || conversation.registered.value
+                ? undefined
+                : {
+                      runners: pairedRunners.value.filter((runner) => runner.online),
+                      boxes: otherBoxes.value.filter((box) => box.state === `ready`).map((box) => ({ id: box.sandbox.id, name: box.sandbox.name })),
+                      box: conversation.box.value,
+                      runner: conversation.runner.value,
+                  },
+        model: steered
+            ? undefined
+            : {
+                  // Mid-stream only a same-provider swap is allowed (Conversation.selectModel), so the rest aren't listed.
+                  entries: streaming.value ? pickerEntries.value.filter((entry) => entry.provider === provider.value) : pickerEntries.value,
+                  provider: provider.value,
+                  model: model.value,
+                  isReady: providerReady,
+              },
+        effort:
+            steered || !conversation.capabilities.value.effort
+                ? undefined
+                : { options: effortsFor(provider.value, model.value, conversation.thinking.value), picked: conversation.effort.value },
+    };
+});
+const quickOffered = computed(() => filesOffered.value || Object.values(quickSources.value).some((source) => source !== undefined));
+const mentionOpen = computed(() => activeMention.value !== undefined && !popoverDismissed.value && quickOffered.value);
 const commandOpen = computed(() => !mentionOpen.value && commandMatches.value.length > 0 && !popoverDismissed.value);
 
 // Asks for the command list only when this composer has none (ensureProviderCommands is a no-op once known),
@@ -837,13 +879,61 @@ const applyDraftEdit = (text: string, nextCaret: number): void => {
     });
 };
 
-const pickMention = (path: string): void => {
+// The pill whose value an `@` pick just changed, for one pulse (.composer-flash): the token vanishes from the text, so
+// the eye is sent to where the setting now lives.
+type FlashedControl = `persona` | `placement` | `model` | `effort`;
+const flashed = ref<FlashedControl>();
+const FLASH_MS = 700;
+const flash = (control: FlashedControl): void => {
+    flashed.value = control;
+    setTimeout(() => {
+        if (flashed.value === control) {
+            flashed.value = undefined;
+        }
+    }, FLASH_MS);
+};
+
+// A setting pick goes through the same setter its pill uses, then leaves no text behind; a file becomes `@path `,
+// the wire form; a summary row rewrites the token into that kind's drill.
+const applyQuickPick = (pick: QuickPick): FlashedControl | undefined => {
+    switch (pick.kind) {
+        case `persona`:
+            pickPersona(pick.id);
+            return `persona`;
+        case `sandbox`:
+            props.conversation.placeAt({ box: pick.box, runner: pick.runner });
+            return `placement`;
+        case `model`:
+            props.conversation.selectModel(pick.entry);
+            return `model`;
+        case `effort`:
+            props.conversation.setEffort(pick.value);
+            return `effort`;
+        default:
+            return undefined;
+    }
+};
+const pickMention = (pick: QuickPick): void => {
     const mention = activeMention.value;
     if (mention === undefined) {
         return;
     }
-    const result = insertMention(draft.value, mention, caret.value, path);
+    if (pick.kind === `file`) {
+        const result = replaceMention(draft.value, mention, caret.value, fileMention(pick.path));
+        applyDraftEdit(result.text, result.caret);
+        return;
+    }
+    if (pick.kind === `drill`) {
+        const result = replaceMention(draft.value, mention, caret.value, drillMention(pick.into));
+        applyDraftEdit(result.text, result.caret);
+        return;
+    }
+    const control = applyQuickPick(pick);
+    const result = replaceMention(draft.value, mention, caret.value, ``);
     applyDraftEdit(result.text, result.caret);
+    if (control !== undefined) {
+        flash(control);
+    }
 };
 
 const pickCommand = (name: string): void => {
@@ -1215,7 +1305,14 @@ watch(
                                 :class="{ 'composer-voice': voiceAgent }"
                                 @submit.prevent="submit"
                             >
-                                <ChatMentionPopover v-if="mentionOpen" ref="mentionPopover" :query="activeMention?.query ?? ''" @pick="pickMention" />
+                                <ChatMentionPopover
+                                    v-if="mentionOpen"
+                                    ref="mentionPopover"
+                                    :query="activeMention?.query ?? ''"
+                                    :sources="quickSources"
+                                    :files-offered="filesOffered"
+                                    @pick="pickMention"
+                                />
                                 <ChatCommandPopover v-if="commandOpen" ref="commandPopover" :commands="commandMatches" @pick="pickCommand" />
                                 <div v-if="attachments.length > 0 || editorChip" class="flex flex-wrap gap-2 px-3 pt-3">
                                     <!-- The editor-context chip attaches the open file or selection when enabled. -->
@@ -1271,7 +1368,7 @@ watch(
                                         <ComposerModelPill
                                             ref="modelPill"
                                             :conversation="conversation"
-                                            :class="{ 'composer-steered': pickedWorkflow !== undefined }"
+                                            :class="{ 'composer-steered': pickedWorkflow !== undefined, 'composer-flash': flashed === 'model' }"
                                             :disabled="pickedWorkflow !== undefined"
                                             :expanded="modelOpen"
                                             :aria-label="`Provider and model: ${providerName} · ${modelLabelText}`"
@@ -1281,7 +1378,7 @@ watch(
 
                                         <ComposerEffort
                                             :conversation="conversation"
-                                            :class="{ 'composer-steered': pickedWorkflow !== undefined }"
+                                            :class="{ 'composer-steered': pickedWorkflow !== undefined, 'composer-flash': flashed === 'effort' }"
                                             :disabled="pickedWorkflow !== undefined"
                                             label-class="@max-lg:hidden"
                                         />
@@ -1315,6 +1412,7 @@ watch(
                                             ref="placementPill"
                                             type="button"
                                             class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                            :class="{ 'composer-flash': flashed === 'placement' }"
                                             @click="placementOpen = !placementOpen"
                                             :aria-expanded="placementOpen"
                                             aria-label="Where this runs"
@@ -1333,6 +1431,7 @@ watch(
                                             :class="{
                                                 'composer-active': pickedWorkflow === undefined,
                                                 'composer-steered': pickedWorkflow !== undefined,
+                                                'composer-flash': flashed === 'persona',
                                             }"
                                             :disabled="pickedWorkflow !== undefined"
                                             @click="personaOpen = !personaOpen"

@@ -475,6 +475,24 @@
 .composer-toggle.composer-active {
     border-color: color-mix(in srgb, var(--color-primary-500) 32%, transparent);
 }
+/* The pill whose value an `@` pick just changed (ChatPane's flashed): one ring, since the token that changed it left the text. */
+.composer-flash {
+    animation: composer-flash 0.7s ease-out;
+}
+@keyframes composer-flash {
+    from {
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary-500) 50%, transparent);
+    }
+    to {
+        box-shadow: 0 0 0 0 transparent;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .composer-flash {
+        animation: none;
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary-500) 50%, transparent);
+    }
+}
 /* The composer wearing the AGENT's voice (ChatPane's voiceAgent): the whole box changes standing, not just a pill. */
 .composer-voice {
     border-color: var(--color-primary-500);

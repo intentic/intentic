@@ -59,14 +59,9 @@ const placedAt = computed(() => {
 });
 
 const place = (at: { box?: string; runner?: string }): void => {
-    if (settled.value) {
-        return;
+    if (conversation.placeAt(at)) {
+        emit(`selected`);
     }
-    // The two axes are one choice, so each pick clears the other: a runner belongs to the sandbox that paired it, and
-    // "that runner in another box" names nothing there.
-    conversation.box.value = at.box;
-    conversation.runner.value = at.runner;
-    emit(`selected`);
 };
 </script>
 
