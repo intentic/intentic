@@ -1,3 +1,4 @@
+import type { SidecarStatus } from "@intentic/sandbox-contract";
 import { reactive, ref } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
@@ -72,6 +73,30 @@ export const markWorkspaceChanged = (paths: readonly string[]): void => {
 export const changeEpochOf = (path: string): number => epochs.get(path) ?? 0;
 export const isRecentlyChanged = (path: string): boolean => recentlyChanged.has(path);
 
+/* A FILE'S TEXT LANDING, which no workspace change can stand in for: shadows are written under the state directory
+   the watcher ignores, so `derivedChanged` is the only signal that a shadow was rewritten. Separate epochs from the
+   ones above, since the two move independently — a file changing makes its text stale, its text landing does not
+   change the file. */
+const derivedEpochs = reactive(new Map<string, number>());
+// A sweep rewrites what it found and does not report which; this bumps for every path at once without enumerating one.
+const sweepEpoch = ref(0);
+// Last reported state of the background pass, for anything explaining a wait rather than just waiting.
+export const sidecarQueue = ref<SidecarStatus | undefined>(undefined);
+
+export const markDerivedChanged = (paths: readonly string[], queue: SidecarStatus): void => {
+    sidecarQueue.value = queue;
+    if (paths.length === 0) {
+        sweepEpoch.value += 1;
+        return;
+    }
+    for (const path of paths) {
+        derivedEpochs.set(path, ++epoch);
+    }
+};
+
+/** Bumps when this file's derived text was rewritten, or when a sweep rewrote an unnamed set that may include it. */
+export const derivedEpochOf = (path: string): number => (derivedEpochs.get(path) ?? 0) + sweepEpoch.value;
+
 // Drops all per-path live state on switching sandboxes — paths collide across sandboxes, so a stale epoch would
 // wrongly skip a re-read, and a stale `lastWorkspaceChangeAt` would drop buffers on the new one's first commit.
 export const resetWorkspaceLive = (): void => {
@@ -82,4 +107,7 @@ export const resetWorkspaceLive = (): void => {
     epochs.clear();
     recentlyChanged.clear();
     lastWorkspaceChangeAt.value = 0;
+    derivedEpochs.clear();
+    sweepEpoch.value = 0;
+    sidecarQueue.value = undefined;
 };

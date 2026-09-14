@@ -11,7 +11,7 @@ import { AGENT_DIFF, GIT_CHANGES, HISTORY_SNAPSHOTS, PANELS } from "../../../lib
 import { queryClient } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
 import { setPresenceUsers } from "../../../shell/presence/usePresence";
-import { markWorkspaceChanged, worktreeMovedRecently } from "../../workspace/changes/useWorkspaceLive";
+import { markDerivedChanged, markWorkspaceChanged, worktreeMovedRecently } from "../../workspace/changes/useWorkspaceLive";
 import { emitRuntimeChanged } from "./runtimeEvents";
 import { resetWorkspaceScopedState } from "../client/sandboxScope";
 import { daemonRebuilt, dropSandboxLocalState, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
@@ -36,53 +36,53 @@ const refreshChanges = throttleTrailing(() => {
 // Used only to scope the storage sweep to the sandbox in view; the sweep itself runs for any sandbox's frame.
 const { activeSandboxId } = useSandbox();
 
+// A (re)connection, which is the one frame that reconciles rather than invalidates: everything pushed-only has to be
+// refetched here, since frames that landed while this browser was away are simply gone.
+const applyHello = (event: Extract<SystemEvent, { kind: `hello` }>, sandboxId: string): void => {
+    // A new connection may restart the daemon's revision counter; reset here so a lower revision isn't dropped as stale.
+    desyncAgents();
+    // Wakes held for approval arrive only via GET /agents, never the stream, so refetch them explicitly on every hello.
+    void refreshAgents();
+    // Route surface gates features for the rest of this connection; shapes ride the same frame.
+    setDaemonRoutes(event.routes, event.shapes);
+    // Daemon boot state, needed before other daemon queries are allowed to fire this tick.
+    setDaemonBoot(event.boot);
+    // Workspace replaced (recreated under the same id) or daemon rebuilt into a differently-shaped one; either makes the
+    // cached workspace state stale.
+    const replaced = workspaceReplaced(sandboxId, event.workspaceId);
+    const rebuilt = daemonRebuilt(sandboxId, event.build);
+    if (replaced || rebuilt) {
+        // Reset, not remove, so active observers refetch rather than render empty.
+        void queryClient.resetQueries({ predicate: sandboxQueryPredicate(sandboxId) });
+    }
+    // A replaced workspace also clears remembered tabs/folders/drafts and re-scopes the live view; a rebuild leaves
+    // them, since `/work` is unchanged.
+    if (replaced) {
+        dropSandboxLocalState(sandboxId);
+        if (activeSandboxId.value === sandboxId) {
+            resetWorkspaceScopedState();
+        }
+    }
+    // File-bound views are pushed-only, so refetch each key once on (re)connect to catch frames missed while
+    // disconnected.
+    for (const key of fileBoundQueryKeys(contributedFileBindings())) {
+        void queryClient.invalidateQueries({ queryKey: [key] });
+    }
+    // Catches views an invalidation can't reach (nothing mounted); an empty batch is this channel's "something changed,
+    // unspecified" (fileEvents.ts).
+    emitFilesChanged([]);
+    // Runtime-bound views are also pushed-only with no poll to fall back on, so refetch them on reconnect too.
+    for (const key of runtimeBoundQueryKeys()) {
+        void queryClient.invalidateQueries({ queryKey: key });
+    }
+};
+
 /** Routes one typed `/events` frame to whatever it makes stale. */
 export const applySystemEvent = (event: SystemEvent, sandboxId: string): void => {
     switch (event.kind) {
-        case `hello`: {
-            // A new connection may restart the daemon's revision counter; reset here so a lower revision isn't dropped
-            // as stale.
-            desyncAgents();
-            // Wakes held for approval arrive only via GET /agents, never the stream, so refetch them explicitly on
-            // every hello.
-            void refreshAgents();
-            // Route surface gates features for the rest of this connection; shapes ride the same frame.
-            setDaemonRoutes(event.routes, event.shapes);
-            // Daemon boot state, needed before other daemon queries are allowed to fire this tick.
-            setDaemonBoot(event.boot);
-            // Workspace replaced (recreated under the same id) or daemon rebuilt into a differently-shaped one; either
-            // makes the
-            // cached workspace state stale.
-            const replaced = workspaceReplaced(sandboxId, event.workspaceId);
-            const rebuilt = daemonRebuilt(sandboxId, event.build);
-            if (replaced || rebuilt) {
-                // Reset, not remove, so active observers refetch rather than render empty.
-                void queryClient.resetQueries({ predicate: sandboxQueryPredicate(sandboxId) });
-            }
-            // A replaced workspace also clears remembered tabs/folders/drafts and re-scopes the live view; a rebuild
-            // leaves them,
-            // since `/work` is unchanged.
-            if (replaced) {
-                dropSandboxLocalState(sandboxId);
-                if (activeSandboxId.value === sandboxId) {
-                    resetWorkspaceScopedState();
-                }
-            }
-            // File-bound views are pushed-only, so refetch each key once on (re)connect to catch frames missed while
-            // disconnected.
-            for (const key of fileBoundQueryKeys(contributedFileBindings())) {
-                void queryClient.invalidateQueries({ queryKey: [key] });
-            }
-            // Catches views an invalidation can't reach (nothing mounted); an empty batch is this channel's "something
-            // changed,
-            // unspecified" (fileEvents.ts).
-            emitFilesChanged([]);
-            // Runtime-bound views are also pushed-only with no poll to fall back on, so refetch them on reconnect too.
-            for (const key of runtimeBoundQueryKeys()) {
-                void queryClient.invalidateQueries({ queryKey: key });
-            }
+        case `hello`:
+            applyHello(event, sandboxId);
             return;
-        }
         case `heartbeat`:
             // A heartbeat means this connection has nothing queued, so the roster reconciles itself against this
             // revision
@@ -141,6 +141,11 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             emitRefsChanged(event.repos);
             return;
         }
+        case `derivedChanged`:
+            // Only the derived-text surfaces care, and they hold a ref rather than a query: a shadow is read by path on
+            // demand, never cached per file, so there is no key to invalidate here.
+            markDerivedChanged(event.paths, event.queue);
+            return;
         case `workspaceChanged`: {
             markWorkspaceChanged(event.paths);
             // Keys are core's table unioned with what activated extensions declare; an inactive extension contributes

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { AgentSummarySchema } from "../schemas/agents.js";
 import { AccountUsageSchema, ProviderRefusalSchema } from "../schemas/plan-limits.js";
 import { MemberRoleSchema } from "../schemas/shared.js";
+import { SidecarStatusSchema } from "../schemas/workspace/workspace-tree.js";
 
 // Frames about the sandbox rather than a turn: liveness, boot progress, what moved (repos, refs, running processes,
 // presence, the fleet), and account headroom. One stream carries them all.
@@ -65,6 +66,12 @@ export type ReposChanged = z.infer<typeof ReposChangedSchema>;
 export const WorkspaceChangedSchema = z.object({ kind: z.literal("workspaceChanged"), paths: z.array(z.string()) });
 export type WorkspaceChanged = z.infer<typeof WorkspaceChangedSchema>;
 
+// Files whose markdown shadow was just rewritten, plus where the background pass stands. Shadows live under the state
+// directory the watcher ignores on purpose — a sidecar write must never re-trigger the derivation that wrote it — so
+// `workspaceChanged` structurally cannot carry this, and without it a reader watching a file sees its text land never.
+export const DerivedChangedSchema = z.object({ kind: z.literal("derivedChanged"), paths: z.array(z.string()), queue: SidecarStatusSchema });
+export type DerivedChanged = z.infer<typeof DerivedChangedSchema>;
+
 // Repos whose refs moved (commit, checkout, branch, rebase); a repo's git dir lives outside /work and the watcher
 // ignores `.git`, so no workspace path can say this. Diff, not snapshot: an absent repo didn't move, it didn't vanish.
 export const RefsChangedSchema = z.object({ kind: z.literal("refsChanged"), repos: z.array(z.string()) });
@@ -121,13 +128,14 @@ export type AccountUsageChanged = z.infer<typeof AccountUsageChangedSchema>;
 export const ProviderRefusalChangedSchema = z.object({ kind: z.literal("providerRefusal"), provider: z.string(), refusal: ProviderRefusalSchema.optional() });
 export type ProviderRefusalChanged = z.infer<typeof ProviderRefusalChangedSchema>;
 
-// The /events stream union: hello, heartbeats, boot progress, workspace/repo/ref/runtime changes, presence and fleet
-// rosters, account headroom and refusal changes. oRPC validates every frame against this.
+// The /events stream union: hello, heartbeats, boot progress, workspace/repo/ref/runtime/shadow changes, presence and
+// fleet rosters, account headroom and refusal changes. oRPC validates every frame against this.
 export const SystemEventSchema = z.discriminatedUnion("kind", [
     HelloSchema,
     HeartbeatSchema,
     BootSchema,
     WorkspaceChangedSchema,
+    DerivedChangedSchema,
     ReposChangedSchema,
     RefsChangedSchema,
     RuntimeChangedSchema,

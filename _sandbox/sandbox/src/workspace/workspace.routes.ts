@@ -79,6 +79,8 @@ export const createWorkspaceRoutes = (services: Services) => {
         derived: i.derived.handler(async ({ input }) => services.derived.read(services.workspace.root, await derivedRel(input.path))),
         // The same convergence the background pass runs, for the one file someone is looking at.
         derive: i.derive.handler(async ({ input }) => services.derived.derive(services.workspace.root, await derivedRel(input.path))),
+        // In-memory state of a running service, not a disk read: no path to contain, nothing to scope.
+        derivedStatus: i.derivedStatus.handler(() => services.derived.status()),
         // Mints the ticket presented to GET /workspace/media, guarded like a read so it can only name a file already
         // readable. Binds the resolved file, not its shared-tree namesake.
         mediaTicket: i.mediaTicket.handler(async ({ input }) => {

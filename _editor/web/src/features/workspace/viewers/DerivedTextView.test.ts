@@ -3,13 +3,15 @@
 // reader made it, what it had to cut, and whether the file has moved on since. Asserted in the DOM, since "shown
 // with the text" rather than "carried in the response" is the whole point of this surface.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type App, createApp, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import type { WorkspaceDerived } from "@intentic/sandbox-contract";
 
+// A stopped background pass, which is what the daemon reports when nothing is rendering.
+const STOPPED = { enabled: false, queued: 0, deriving: [], sweeping: false, broken: false };
 // The daemon seam, stubbed: `read` is what opening the file answers, `derive` what the button asks for.
 const answers: { read: WorkspaceDerived; derive?: WorkspaceDerived } = {
-    read: { present: false, path: `bundle.zip`, derivable: true },
+    read: { present: false, path: `bundle.zip`, derivable: true, state: `off`, queue: STOPPED },
 };
 const derived = vi.fn();
 vi.mock("../files/derivedText", () => ({
@@ -19,8 +21,15 @@ vi.mock("../files/derivedText", () => ({
         return Promise.resolve(answers.derive ?? answers.read);
     },
 }));
-// Live-change epoch: a store in the app, a constant here, so the watch fires once per mount.
-vi.mock("../changes/useWorkspaceLive", () => ({ changeEpochOf: () => 0 }));
+// Live epochs: stores in the app, locals here. `changeEpochOf` is constant, so that watch fires once per mount;
+// `derivedEpoch` is a real ref, since a plain field would not re-trigger the watch and the test would pass on a
+// component that never re-reads — which is the bug being covered.
+const derivedEpoch = ref(0);
+vi.mock("../changes/useWorkspaceLive", () => ({
+    changeEpochOf: () => 0,
+    derivedEpochOf: () => derivedEpoch.value,
+    sidecarQueue: { value: undefined },
+}));
 
 const { default: DerivedTextView } = await import("./DerivedTextView.vue");
 
@@ -34,6 +43,18 @@ const shadow = (over: Partial<Extract<WorkspaceDerived, { present: true }>> = {}
     tokens: 1200,
     truncated: false,
     stale: false,
+    state: `idle`,
+    queue: STOPPED,
+    ...over,
+});
+
+// A file with no text yet, at whichever point of the queue the test is about.
+const nothing = (over: Partial<Extract<WorkspaceDerived, { present: false }>> = {}): WorkspaceDerived => ({
+    present: false,
+    path: `bundle.zip`,
+    derivable: true,
+    state: `off`,
+    queue: STOPPED,
     ...over,
 });
 
@@ -57,7 +78,8 @@ const settle = async (): Promise<void> => {
 
 beforeEach(() => {
     derived.mockClear();
-    answers.read = { present: false, path: `bundle.zip`, derivable: true };
+    derivedEpoch.value = 0;
+    answers.read = nothing();
     answers.derive = undefined;
 });
 afterEach(() => {
@@ -103,8 +125,57 @@ describe(`DerivedTextView`, () => {
         expect(element.textContent).toContain(`Archive: zip`);
     });
 
+    it(`picks up text that landed in the background, without the file itself having changed`, async () => {
+        const element = mount({ path: `bundle.zip` });
+        await settle();
+        expect(element.textContent).toContain(`Nothing has read this file yet`);
+        // What a `derivedChanged` frame does: the shadow is rewritten where the watcher does not look, so the source
+        // file's own epoch never moves. Before this trigger existed, the pane sat on the empty state indefinitely.
+        answers.read = shadow({ path: `bundle.zip`, content: `- Archive: zip`, deriver: `archive+tar v1` });
+        derivedEpoch.value = 1;
+        await settle();
+        expect(element.textContent).toContain(`Archive: zip`);
+        expect(derived).not.toHaveBeenCalled();
+    });
+
+    it(`says a queued file is waiting, and does not tell the reader to switch on what is already on`, async () => {
+        answers.read = nothing({
+            path: `docs/spec.docx`,
+            state: `queued`,
+            queue: { enabled: true, queued: 3, deriving: [`other.pdf`], sweeping: false, broken: false },
+        });
+        const element = mount({ path: `docs/spec.docx` });
+        await settle();
+        expect(element.textContent).toContain(`in line to be read`);
+        expect(element.textContent).toContain(`2 other files ahead`);
+        // The old copy pointed at Settings whatever the setting said, which is what made it misleading.
+        expect(element.textContent).not.toContain(`Settings → Agent`);
+        expect(element.textContent).not.toContain(`Nothing has read this file yet`);
+    });
+
+    it(`points at the setting only where turning it on is the answer`, async () => {
+        answers.read = nothing({ path: `docs/spec.docx`, state: `off` });
+        const element = mount({ path: `docs/spec.docx` });
+        await settle();
+        expect(element.textContent).toContain(`Settings → Agent`);
+    });
+
+    it(`blames the sandbox, not the file, when the renderer is missing, and offers nothing that would fail`, async () => {
+        answers.read = nothing({
+            path: `docs/spec.docx`,
+            derivable: false,
+            state: `broken`,
+            queue: { enabled: true, queued: 0, deriving: [], sweeping: false, broken: true },
+        });
+        const element = mount({ path: `docs/spec.docx`, downloadable: true });
+        await settle();
+        expect(element.textContent).toContain(`no renderer installed`);
+        const labels = [...element.querySelectorAll(`button`)].map((node) => node.textContent?.trim());
+        expect(labels.some((label) => label?.includes(`Render as text`))).toBe(false);
+    });
+
     it(`offers the bytes, and no rendering, for a format nothing can read`, async () => {
-        answers.read = { present: false, path: `tool.exe`, derivable: false };
+        answers.read = nothing({ path: `tool.exe`, derivable: false, state: `undeliverable` });
         const element = mount({ path: `tool.exe`, downloadable: true });
         await settle();
         const labels = [...element.querySelectorAll(`button`)].map((node) => node.textContent?.trim());

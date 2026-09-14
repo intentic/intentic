@@ -1,16 +1,17 @@
 import type { Logger } from "pino";
 import { describe, expect, test, vi } from "vitest";
 import type { ExecFn } from "./fileq.js";
-import { startSidecarService } from "./sidecar-service.js";
+import { startSidecarService, type SidecarService } from "./sidecar-service.js";
 
 /* The trigger logic apart from any filesystem or child process: what gets a spawn, what gets a sweep, what gets dropped. */
 
-const logger = { info: () => {}, warn: () => {}, error: () => {} } as unknown as Logger;
+const logger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as unknown as Logger;
 
 interface Harness {
     readonly emit: (paths: string[]) => void;
     readonly calls: string[][];
     readonly settle: () => Promise<void>;
+    readonly service: SidecarService;
     readonly stop: () => void;
 }
 
@@ -23,7 +24,7 @@ const harness = (options: { enabled?: () => Promise<boolean>; exec?: ExecFn } = 
             return { stdout: "{}" };
         });
     let listener: ((paths: string[]) => void) | undefined;
-    const stop = startSidecarService(
+    const service = startSidecarService(
         { enabled: options.enabled ?? (async () => true), logger, exec },
         (l) => {
             listener = l;
@@ -40,7 +41,8 @@ const harness = (options: { enabled?: () => Promise<boolean>; exec?: ExecFn } = 
             await new Promise((resolve) => setImmediate(resolve));
             await new Promise((resolve) => setImmediate(resolve));
         },
-        stop,
+        service,
+        stop: service.stop,
     };
 };
 
@@ -100,10 +102,10 @@ describe("the sidecar trigger", () => {
         h.stop();
         const calls: string[][] = [];
         let listener: ((paths: string[]) => void) | undefined;
-        const stop = startSidecarService(
+        const service = startSidecarService(
             {
                 enabled: async () => true,
-                logger: { info: () => {}, warn, error: () => {} } as unknown as Logger,
+                logger: { info: () => {}, warn, error: () => {}, debug: () => {} } as unknown as Logger,
                 exec: async (command, args, options) => {
                     calls.push(args);
                     return failing(command, args, options);
@@ -121,6 +123,74 @@ describe("the sidecar trigger", () => {
         await h.settle();
         expect(calls).toHaveLength(1); // the boot sweep died on ENOENT; nothing after it spawned
         expect(warn).toHaveBeenCalledTimes(1);
-        stop();
+        expect(service.status().broken).toBe(true);
+        service.stop();
+    });
+});
+
+describe("what the service says about itself", () => {
+    test("names the paths whose text it just wrote, so a reader watching one learns it landed", async () => {
+        const h = harness();
+        await h.settle(); // boot sweep out of the way
+        const landed: string[][] = [];
+        h.service.onDerived((paths) => landed.push(paths));
+        h.emit(["docs/plan.docx", "src/index.ts"]);
+        await h.settle();
+        // Only the candidates: a code edit never reached the queue, so nothing claims its shadow was rewritten.
+        expect(landed).toEqual([["docs/plan.docx"]]);
+        h.stop();
+    });
+
+    test("a sweep announces an unnamed set, since it rewrites what it found and does not report which", async () => {
+        const h = harness();
+        const landed: string[][] = [];
+        h.service.onDerived((paths) => landed.push(paths));
+        await h.settle();
+        expect(landed).toEqual([[]]);
+        h.stop();
+    });
+
+    test("counts the shadows a sweep left behind, which is the pair that exists afterwards", async () => {
+        const h = harness({ exec: async () => ({ stdout: `{"derived":3,"fresh":84,"removed":0,"skipped":0,"pruned":0}` }) });
+        await h.settle();
+        expect(h.service.status().shadows).toBe(87);
+        expect(h.service.status().sweptAt).toEqual(expect.any(String));
+        h.stop();
+    });
+
+    test("a file waiting is not a file nobody has read: the queue holds it until its batch runs", async () => {
+        let release = (): void => {};
+        const held = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        let first = true;
+        const h = harness({
+            exec: async () => {
+                if (first) {
+                    first = false;
+                    return { stdout: "{}" }; // the boot sweep
+                }
+                await held;
+                return { stdout: "{}" };
+            },
+        });
+        await h.settle();
+        h.emit(["a.docx", "b.pdf"]);
+        await h.settle();
+        // Both left `pending` for the one batch in flight, which is what makes "being read" a different answer.
+        expect(h.service.status().deriving).toEqual(["a.docx", "b.pdf"]);
+        expect(h.service.status().queued).toBe(0);
+        release();
+        await h.settle();
+        expect(h.service.status().deriving).toEqual([]);
+        h.stop();
+    });
+
+    test("switched off reports itself off rather than idle, which is a different thing to tell a reader", async () => {
+        const h = harness({ enabled: async () => false });
+        await h.settle();
+        expect(h.service.status().enabled).toBe(false);
+        expect(h.service.status().sweeping).toBe(false);
+        h.stop();
     });
 });

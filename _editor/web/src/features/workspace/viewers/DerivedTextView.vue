@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Button, CopyButton, formatTokens, Markdown, timeAgo } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import { ref, watch } from "vue";
-import { changeEpochOf } from "../changes/useWorkspaceLive";
+import { computed, ref, watch } from "vue";
+import { changeEpochOf, derivedEpochOf, sidecarQueue } from "../changes/useWorkspaceLive";
 import { deriveText, readDerivedText, type WorkspaceDerived } from "../files/derivedText";
 
 /* Derived text is the agent-readable rendering of a file. */
@@ -45,12 +45,56 @@ const load = (target: string): void => {
     );
 };
 
-// Re-read when the file itself changes: whether the text still matches is the one fact this surface cannot cache.
+// Two triggers, because the file and its text move independently: the file changing makes this text stale, and the
+// text landing is what a reader staring at an empty pane is waiting for. The second is not a workspace change —
+// shadows are written where the watcher deliberately does not look — so without it this pane never learns.
 watch(
-    () => [path, changeEpochOf(path)] as const,
+    () => [path, changeEpochOf(path), derivedEpochOf(path)] as const,
     ([target]) => load(target),
     { immediate: true },
 );
+
+// The live count beats the one this response was built with: frames keep arriving while a reader looks at a wait.
+const queue = computed(() => sidecarQueue.value ?? shadow.value?.queue);
+// Whether this file is waiting on the background pass rather than on someone pressing a button.
+const waiting = computed(() => shadow.value?.state === `queued` || shadow.value?.state === `deriving`);
+const waitLabel = computed(() => {
+    if (shadow.value?.state === `deriving`) {
+        return `Being read now…`;
+    }
+    const ahead = queue.value?.queued ?? 0;
+    if (queue.value?.sweeping === true) {
+        return `Waiting: every file is being checked`;
+    }
+    return ahead > 1 ? `Waiting, with ${ahead - 1} other ${ahead === 2 ? `file` : `files`} ahead` : `Waiting its turn`;
+});
+
+// A format nothing reads cannot be rendered by asking harder, and a sandbox with no renderer would fail the same way
+// for every file; everything else is worth offering, including a file whose turn simply has not come.
+const canDerive = computed(() => shadow.value !== undefined && shadow.value.state !== `undeliverable` && shadow.value.state !== `broken`);
+
+const emptyIcon = computed(() => {
+    if (waiting.value) {
+        return `spinner`;
+    }
+    return shadow.value?.state === `undeliverable` || shadow.value?.state === `broken` ? `box` : `align-left`;
+});
+
+const emptyMessage = computed(() => {
+    switch (shadow.value?.state) {
+        case `deriving`:
+        case `queued`:
+            return `This file is in line to be read. Its text will appear here on its own.`;
+        case `broken`:
+            return `This sandbox has no renderer installed, so nothing can be turned into text here.`;
+        case `undeliverable`:
+            return `Nothing here can turn this file into text.`;
+        default:
+            // `off` and `idle` both leave the reader holding the same question; what differs is whether a switch would
+            // answer it, and that is what the Settings line below says or withholds.
+            return `Nothing has read this file yet. Rendering it gives you its text — and gives an agent the same.`;
+    }
+});
 
 const derive = (): void => {
     const id = ++seq;
@@ -100,10 +144,14 @@ const derive = (): void => {
                     <Icon name="download" class="text-[0.7rem]" /> Download
                 </Button>
             </div>
-            <!-- The file moved on under its text. Said plainly, since everything below is then about an older file. -->
+            <!-- The file moved on under its text. Said plainly, since everything below is then about an older file, and
+                 saying whether a fix is already on its way is the difference between a warning and a chore. -->
             <div v-if="shadow.stale" class="flex shrink-0 items-center gap-2 border-b border-warning/40 bg-warning/10 px-3 py-1.5 text-2xs text-warning">
-                <Icon name="exclamation-triangle" class="shrink-0 text-[0.7rem]" />
-                <span>This file changed after its text was made, so this is a reading of an older version.</span>
+                <Icon :name="waiting ? `spinner` : `exclamation-triangle`" :spin="waiting" class="shrink-0 text-[0.7rem]" />
+                <span>
+                    This file changed after its text was made, so this is a reading of an older version.
+                    <template v-if="waiting">{{ waitLabel }}</template>
+                </span>
             </div>
 <!-- Every cap and degradation the derivation hit, shown rather than stored. -->
             <ul v-if="shadow.notes.length > 0" class="shrink-0 space-y-0.5 border-b border-line bg-overlay px-3 py-1.5 text-2xs text-muted">
@@ -133,28 +181,26 @@ const derive = (): void => {
             <p class="text-sm text-danger">{{ error }}</p>
         </div>
 
-        <!-- No text yet. Which of the two reasons decides whether there is anything to offer. -->
+        <!-- No text yet, which is five different situations. Saying "nothing has read this" over a file already in the
+             queue is the failure this pane used to have: the reader is told to act when waiting was the right answer. -->
         <div v-else class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <Icon :name="shadow?.derivable === true ? `align-left` : `box`" class="text-4xl text-subtle" />
-            <p class="max-w-sm text-sm text-muted">
-                {{
-                    shadow?.derivable === true
-                        ? `Nothing has read this file yet. Rendering it gives you its text — and gives an agent the same.`
-                        : `Nothing here can turn this file into text.`
-                }}
-            </p>
+            <Icon :name="emptyIcon" :spin="waiting" class="text-4xl text-subtle" />
+            <p class="max-w-sm text-sm text-muted">{{ emptyMessage }}</p>
+            <p v-if="waiting" class="max-w-sm text-2xs text-subtle">{{ waitLabel }}</p>
             <p v-if="shadow?.reason !== undefined" class="max-w-sm text-2xs text-subtle">{{ shadow.reason }}</p>
             <div class="mt-1 flex items-center gap-2">
-                <Button v-if="shadow?.derivable === true" severity="secondary" @click="derive">
+                <!-- Offered even while queued: this is the way to jump the queue for the file in front of you. -->
+                <Button v-if="canDerive" severity="secondary" :disabled="deriving" @click="derive">
                     <Icon name="align-left" class="text-xs" />
-                    Render as text
+                    {{ waiting ? `Read it now` : `Render as text` }}
                 </Button>
                 <Button v-if="downloadable" severity="secondary" @click="emit(`download`)">
                     <Icon name="download" class="text-xs" />
                     Download
                 </Button>
             </div>
-            <p v-if="shadow?.derivable === true" class="max-w-sm text-2xs text-subtle">
+            <!-- Only where it is actually actionable: pointing at a switch that is already on is how this misled before. -->
+            <p v-if="shadow?.state === `off`" class="max-w-sm text-2xs text-subtle">
                 Settings → Agent → Document shadows keeps every document, picture, recording and archive rendered as files change.
             </p>
         </div>

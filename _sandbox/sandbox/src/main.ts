@@ -1031,7 +1031,7 @@ const main = async (): Promise<void> => {
     });
     // Re-derives a binary file's markdown shadow (docx/pdf/image/audio) via a spawned `fileq` whenever it lands or
     // changes. Gated by the `sidecars` setting, read fresh each pass so the switch works without a restart.
-    shutdown.push(startSidecarService({ enabled: async () => (await services.sandboxSettings.get()).sidecars, logger }, subscribeWorkspaceChanges));
+    shutdown.push(startSidecarService({ enabled: async () => (await services.sandboxSettings.get()).sidecars, logger }, subscribeWorkspaceChanges).stop);
     // Reframes the discovered repo list on /events when a repo is cloned or deleted under /work (the file watcher
     // itself ignores .git).
     startRepoWatch(services.workspace.root, logger);

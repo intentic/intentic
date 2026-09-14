@@ -60,7 +60,9 @@ subscriber on the workspace watcher that pre-filters batches through `@intentic/
 `fileq derive`/`fileq sweep` — serialized, one process at a time, because derivation shares the box with the
 agent it serves. The `fileq` skill (settings/skills.ts, on by default) is what tells agents the binary
 exists; the `sidecars` setting (Settings → Agent, off by default) is what turns the eager background pass
-on. Deriving reuses webq's DOM→markdown writer (`@intentic/webq/markdown`) rather than growing a second one.
+on, and that row reports what the pass is doing — how many shadows the last sweep counted, how many files
+are waiting — since this is work with no request of its own to hang a progress indicator on.
+Deriving reuses webq's DOM→markdown writer (`@intentic/webq/markdown`) rather than growing a second one.
 
 People read these shadows too, which is the second consumer and the reason `./sidecar` is an export rather
 than a private module: the daemon's `src/derived/derived-text.ts` reads one back for the browser (`GET
@@ -69,6 +71,16 @@ the source's hash against the front matter so a shadow of an older version is sh
 passing for current. In the workspace view a document, picture or recording gets a **Text** chip beside its
 own preview, and a format with no preview at all — an archive, an EPUB — opens on its derived text directly,
 since the alternative there is a download button and nothing else.
+
+That reader needs two things the files themselves cannot tell them, and both come from the running service
+rather than from disk. **A shadow landing is its own event.** Sidecars are written under the state directory
+the watcher ignores on purpose, so no workspace-change frame can ever carry one — the service announces the
+paths it just wrote (`subscribeDerived`, pushed as `derivedChanged`) and the open pane re-reads on that
+alone. Without it a reader watching a file waits for text that already arrived. **And a wait is reported as
+a wait**: every answer carries `state` (`off`, `queued`, `deriving`, `idle`, `broken`, `undeliverable`) and
+the pass's own `queue`, also served bare at `GET /workspace/derived-status` for the setting's row, so an
+unrendered file and a file thirty deep in the queue stop looking identical. The empty state points at
+Settings → Agent only where `state` is `off`; pointing at a switch that is already on is what it used to do.
 
 Later tiers extend the same shape, not the same commit: transcripts (whisper-cli, already in the image's
 feature pack for voice) and captions (a vision model, costing real money) would each be a deriver whose

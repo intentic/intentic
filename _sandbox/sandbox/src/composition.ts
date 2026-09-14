@@ -19,6 +19,7 @@ import type {
     IntenticLine,
     NativeProvider,
     TranscriptRow,
+    SidecarStatus,
     StashEntry,
     WorkspaceChildren,
     WorkspaceDerived,
@@ -86,6 +87,7 @@ import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismis
 import { filePersonasStore, type PersonasStore } from "./personas/personas-store.js";
 import { fileHeavyCommandsStore, type HeavyCommandsStore } from "./platform/resources/heavy-commands.js";
 import { deriveText, readDerivedText } from "./derived/derived-text.js";
+import { sidecarStatus } from "./derived/sidecar-service.js";
 import { type CiStore, fileCiStore } from "./ci/ci-store.js";
 import { fileVerifyStore, type VerifyStore } from "./workspace/deps/verify-store.js";
 import { type CiHookReconciler, createCiHookReconciler } from "./ci/hooks.js";
@@ -585,6 +587,8 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly derived: {
         readonly read: (root: string, relPath: string) => Promise<WorkspaceDerived>;
         readonly derive: (root: string, relPath: string) => Promise<WorkspaceDerived>;
+        // How the background pass is doing; the one derived answer no file on disk carries.
+        readonly status: () => SidecarStatus;
     };
     readonly workspaceTree: (root: string) => Promise<WorkspaceTree>;
     readonly workspaceChildren: (root: string, relPath: string, options?: { depth?: number }) => Promise<WorkspaceChildren>;
@@ -1247,6 +1251,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         derived: {
             read: readDerivedText,
             derive: deriveText,
+            status: sidecarStatus,
         },
         workspaceTree: walkWorkspaceTree,
         workspaceChildren: listWorkspaceChildren,

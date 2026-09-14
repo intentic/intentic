@@ -100,6 +100,9 @@ export const SAFETY_LOG = family(`safety-log`);
 export const SANDBOX_INFO = family(`info`);
 export const SANDBOX_SETTINGS = family(`settings`);
 export const SANDBOX_SAVINGS = family(`settings-savings`);
+// Seeds the background-rendering status; `derivedChanged` frames keep it current afterwards, so it is fetched once
+// rather than polled.
+export const DERIVED_STATUS = family(`derived-status`);
 export const SECRETS = family(`secrets`);
 export const SECRETS_INVENTORY = family(`secrets`, `inventory`);
 // Which credentials need approval, and who may grant it; its own key so the gate editor refetches without re-running

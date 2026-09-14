@@ -765,6 +765,10 @@ test("GET /diff/raw serves a commit's before/after blobs and refuses a sha that 
     }
 });
 
+// No sidecar service runs under the route harness, so the pass reports itself stopped; that is the honest answer and
+// the one a reader is shown, which is why every case below asserts it rather than eliding it.
+const STOPPED_PASS = { enabled: false, queued: 0, deriving: [], sweeping: false, broken: false };
+
 // Real tmp tree, since a shadow is read off disk rather than through services.files; a fake would only test the fake.
 test("workspace.derived serves a file's shadow with its provenance, and distinguishes no-shadow-yet from no-reader", async () => {
     const root = await mkdtemp(join(tmpdir(), "intentic-derived-"));
@@ -813,14 +817,38 @@ test("workspace.derived serves a file's shadow with its provenance, and distingu
             tokens: 10,
             truncated: false,
             stale: false,
+            // Fresh, so settled: it reports its own standing rather than whatever else the pass has queued.
+            state: "idle",
+            queue: STOPPED_PASS,
         });
         // The file changed since it was rendered: the text still shows, flagged, rather than passing for current.
         expect(await client.workspace.derived({ path: "docs/edited.docx" })).toMatchObject({ present: true, content: "# Old text\n", stale: true });
-        // No shadow yet, but a reader exists: the answer a viewer turns into an offer to derive it.
-        expect(await client.workspace.derived({ path: "docs/logo.png" })).toEqual({ present: false, path: "docs/logo.png", derivable: true });
+        // No shadow yet, but a reader exists: the answer a viewer turns into an offer to derive it. No pass is running
+        // in this test, so `off` — the state that earns the pointer at the setting, and the only one that does.
+        expect(await client.workspace.derived({ path: "docs/logo.png" })).toEqual({
+            present: false,
+            path: "docs/logo.png",
+            derivable: true,
+            state: "off",
+            queue: STOPPED_PASS,
+        });
         // Source code needs no shadow at all, and a path with nothing behind it vouches for nothing.
-        expect(await client.workspace.derived({ path: "docs/main.ts" })).toEqual({ present: false, path: "docs/main.ts", derivable: false });
-        expect(await client.workspace.derived({ path: "docs/absent.pdf" })).toEqual({ present: false, path: "docs/absent.pdf", derivable: false });
+        expect(await client.workspace.derived({ path: "docs/main.ts" })).toEqual({
+            present: false,
+            path: "docs/main.ts",
+            derivable: false,
+            state: "undeliverable",
+            queue: STOPPED_PASS,
+        });
+        expect(await client.workspace.derived({ path: "docs/absent.pdf" })).toEqual({
+            present: false,
+            path: "docs/absent.pdf",
+            derivable: false,
+            state: "undeliverable",
+            queue: STOPPED_PASS,
+        });
+        // The pass reports itself so a reader can tell "nothing reads this" from "its turn has not come".
+        expect(await client.workspace.derivedStatus()).toEqual(STOPPED_PASS);
         // The same guards every file route answers to: an escape is a bad request, the control plane is not found.
         expect(await errorCode(client.workspace.derived({ path: "../../etc/passwd" }))).toBe("BAD_REQUEST");
         expect(await errorCode(client.workspace.derived({ path: `${STATE_DIR}/secrets/auth/claude/auth.json` }))).toBe("NOT_FOUND");

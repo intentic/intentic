@@ -25,6 +25,7 @@ import { foreground, PANE_FORMAT, paneStates, SHELL } from "../terminal/pane-sta
 import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { subscribeRefChanges } from "../git/remote/ref-watch.js";
 import { subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
+import { subscribeDerived } from "../derived/sidecar-service.js";
 import { publishRuntimeChange, subscribeRuntimeChanges } from "./runtime-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
 import { captureScrollback, isValidSessionName, jobSessionLabel } from "../terminal/terminal-session.js";
@@ -103,6 +104,12 @@ async function* systemEvents(
         enqueue({ kind: "workspaceChanged", paths });
         onWake();
     });
+    // Shadows land under the state directory the watcher ignores on purpose, so no workspaceChanged batch can ever
+    // carry them; without this frame a reader watching a file waits for text that already arrived.
+    const unsubscribeDerived = subscribeDerived((paths) => {
+        enqueue({ kind: "derivedChanged", paths, queue: services.derived.status() });
+        onWake();
+    });
     // Repo-set snapshots: a clone, scaffold, or delete under /work re-frames the discovered list.
     const unsubscribeRepos = subscribeRepoChanges((repos) => {
         enqueue({ kind: "reposChanged", repos });
@@ -163,6 +170,7 @@ async function* systemEvents(
     } finally {
         abort.removeEventListener("abort", onWake);
         unsubscribe();
+        unsubscribeDerived();
         unsubscribeRepos();
         unsubscribeRefs();
         unsubscribeRuntime();

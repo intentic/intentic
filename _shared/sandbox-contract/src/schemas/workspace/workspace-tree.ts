@@ -163,7 +163,32 @@ export const WorkspaceDerivedQuerySchema = z.object({
         .min(1)
         .describe("The file you want the text of, as a workspace path. The real file, not its shadow: where the text is kept is this route's business."),
 });
+// Where the background pass stands, workspace-wide. Nothing about a file on disk can say this, and without it an
+// unrendered file and a file queued behind forty others look identical to a reader.
+export const SidecarStatusSchema = z.object({
+    enabled: z.boolean().describe("Whether the background pass is on (the `sidecars` setting). Off means a shadow exists only where someone asked for one."),
+    queued: z.number().describe("Files waiting for a shadow, not counting the batch being rendered right now."),
+    deriving: z
+        .array(z.string())
+        .describe("The files being rendered at this moment, as workspace paths. One batch at a time, because derivation shares the box with the agent it serves."),
+    sweeping: z.boolean().describe("Whether a whole-tree pass is running, which is what a freshly enabled setting or an unlistably large batch triggers."),
+    broken: z.boolean().describe("Whether the `fileq` binary is missing, in which case nothing renders in the background until this sandbox restarts."),
+    shadows: z.number().optional().describe("How many shadows the last whole-tree pass counted. Absent until one has run in this daemon's lifetime."),
+    sweptAt: z.string().optional().describe("When that pass finished, as an ISO timestamp."),
+});
+export type SidecarStatus = z.infer<typeof SidecarStatusSchema>;
+// Where one file stands with that pass, which is the question a reader looking at a missing or stale shadow is
+// actually asking. `idle` means the pass is on and this file is not waiting for anything: what it has is what it gets.
+export const DerivedStateSchema = z.enum(["off", "queued", "deriving", "idle", "broken", "undeliverable"]);
+export type DerivedState = z.infer<typeof DerivedStateSchema>;
+const DerivedStandingShape = {
+    state: DerivedStateSchema.describe(
+        "Where this file stands with the background pass: switched off, waiting its turn, being read right now, settled, or unreachable because the renderer is missing. `undeliverable` is a format nothing here reads.",
+    ),
+    queue: SidecarStatusSchema.describe("How the background pass as a whole is doing, so a wait can be reported as a queue rather than as nothing happening."),
+};
 export const WorkspaceDerivedPresentSchema = z.object({
+    ...DerivedStandingShape,
     present: z.literal(true).describe("There is derived text for that file."),
     path: z.string().describe("The file it was derived from, as asked for."),
     content: z.string().describe("The text itself, as markdown."),
@@ -184,7 +209,8 @@ export const WorkspaceDerivedPresentSchema = z.object({
         ),
 });
 export const WorkspaceDerivedAbsentSchema = z.object({
-    present: z.literal(false).describe("There is no derived text for that file, which is the ordinary answer while background derivation is switched off."),
+    ...DerivedStandingShape,
+    present: z.literal(false).describe("There is no derived text for that file. Read `state` before saying so to anyone: absent and queued are different answers."),
     path: z.string().describe("The file, as asked for."),
     derivable: z
         .boolean()

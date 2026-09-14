@@ -6,6 +6,7 @@ import { parseSidecarFront, sha256OfFile, sidecarBody, sidecarPathFor } from "@i
 import type { WorkspaceDerived } from "@intentic/sandbox-contract";
 import { readWorkspaceFileWindow } from "../workspace/files/workspace-files.js";
 import { defaultExec, FILEQ_MAX_BUFFER, isMissingBinary, stdoutOf, type ExecFn } from "./fileq.js";
+import { sidecarStateOf, sidecarStatus } from "./sidecar-service.js";
 
 // Reading a file's shadow for a person rather than an agent: the same markdown `fileq read` serves, plus the front
 // matter's provenance, so a reader can see what was derived, by which reader, and what it had to cut.
@@ -31,8 +32,19 @@ const isDerivable = async (absPath: string): Promise<boolean> => {
 export const readDerivedText = async (root: string, relPath: string, reason?: string): Promise<WorkspaceDerived> => {
     const source = join(root, relPath);
     const window = await readWorkspaceFileWindow(sidecarPathFor(root, relPath), 0, MAX_DERIVED_BYTES);
+    // Where the background pass stands is read alongside the shadow, never inferred from its absence: a file nothing
+    // has rendered yet and a file waiting its turn are the same bytes on disk and different answers to a reader.
+    const queue = sidecarStatus();
     if (window === undefined) {
-        return { present: false, path: relPath, derivable: await isDerivable(source), ...(reason === undefined ? {} : { reason }) };
+        const derivable = await isDerivable(source);
+        return {
+            present: false,
+            path: relPath,
+            derivable,
+            state: sidecarStateOf(relPath, derivable),
+            queue,
+            ...(reason === undefined ? {} : { reason }),
+        };
     }
     const front = parseSidecarFront(window.content);
     const body = sidecarBody(window.content);
@@ -40,10 +52,15 @@ export const readDerivedText = async (root: string, relPath: string, reason?: st
     // the file with an older timestamp still reads as changed. A source that has since vanished leaves its shadow the
     // last honest thing said about it, rather than marking it stale against nothing.
     const sha = await sha256OfFile(source).catch(() => undefined);
+    const stale = sha !== undefined && sha !== front.sha256;
     return {
         present: true,
         path: relPath,
         content: body,
+        // A shadow that exists can still be waiting: the file moved on under it and its re-derivation is in the queue.
+        // A fresh one is settled whatever the queue is doing, so it says `idle` rather than reporting someone else's wait.
+        state: stale ? sidecarStateOf(relPath, true) : "idle",
+        queue,
         // A shadow whose front matter was hand-edited has no stamp left to name; it is still the text that was derived.
         deriver: front.deriver ?? "unknown",
         ...(front.derivedAt === undefined ? {} : { derivedAt: front.derivedAt }),
@@ -51,7 +68,7 @@ export const readDerivedText = async (root: string, relPath: string, reason?: st
         notes: [...front.notes],
         tokens: estimateTokens(body),
         truncated: window.bytes < window.size,
-        stale: sha !== undefined && sha !== front.sha256,
+        stale,
     };
 };
 
@@ -80,7 +97,15 @@ export const deriveText = async (root: string, relPath: string, exec: ExecFn = d
         return await readDerivedText(root, relPath);
     } catch (error) {
         if (isMissingBinary(error)) {
-            return { present: false, path: relPath, derivable: false, reason: "this sandbox has no fileq binary, so nothing can be rendered as text here" };
+            // `broken`, not `undeliverable`: the format may well be readable, this sandbox just has nothing to read it.
+            return {
+                present: false,
+                path: relPath,
+                derivable: false,
+                state: "broken",
+                queue: sidecarStatus(),
+                reason: "this sandbox has no fileq binary, so nothing can be rendered as text here",
+            };
         }
         // Exit 1 is fileq's "nothing derivable here", and the line it printed says which of its reasons applied.
         return await readDerivedText(root, relPath, skipReason(stdoutOf(error)));

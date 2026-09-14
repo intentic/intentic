@@ -5,6 +5,7 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useSavings } from "../../usage/useSavings";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { useSidecarStatus } from "../../../workspace/files/useSidecarStatus";
 import { asPercent } from "../models/numberInputs";
 import { verdictsOf } from "../../usage/savingsChart";
 import CodeSearchInfo from "./CodeSearchInfo.vue";
@@ -37,6 +38,26 @@ const searchReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.
 // Same holdout behaviour as the search teaching above: flips whole conversations, read on their opening turn.
 const mapHoldoutPercent = computed<number>(() => asPercent(settings.value?.workspaceMapHoldout));
 const mapReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.map));
+
+// The background pass reports itself, since nothing else can: it makes no request and owns no page.
+const { status: shadowStatus } = useSidecarStatus();
+const shadowBusy = computed(() => shadowStatus.value !== undefined && (shadowStatus.value.sweeping || shadowStatus.value.deriving.length > 0));
+const shadowSummary = computed<string>(() => {
+    const status = shadowStatus.value;
+    if (status === undefined) {
+        return ``;
+    }
+    if (status.broken) {
+        return `The renderer is missing from this sandbox, so nothing is being rendered until it restarts.`;
+    }
+    const rendered = status.shadows === undefined ? `` : `${status.shadows} rendered`;
+    if (status.sweeping) {
+        return `Checking every file…`;
+    }
+    const waiting = status.deriving.length + status.queued;
+    const queued = waiting === 0 ? `nothing waiting` : `${waiting} waiting`;
+    return rendered === `` ? `Up to date, ${queued}.` : `${rendered}, ${queued}.`;
+});
 </script>
 
 <template>
@@ -100,6 +121,15 @@ const mapReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.map
                     :disabled="settings === undefined"
                     @update:model-value="(value: boolean) => patch({ sidecars: value })"
                 />
+            </template>
+            <!-- Work with no request behind it and no page of its own; without this line the only way to know whether it
+                 is keeping up is to open a file and find out. -->
+            <template v-if="settings?.sidecars === true && shadowStatus !== undefined" #below>
+                <p class="flex items-center gap-2 text-2xs text-subtle">
+                    <Icon v-if="shadowBusy" name="spinner" spin class="text-[0.7rem]" />
+                    <Icon v-else-if="shadowStatus.broken" name="exclamation-triangle" class="text-[0.7rem] text-warning" />
+                    <span :class="shadowStatus.broken ? `text-warning` : undefined">{{ shadowSummary }}</span>
+                </p>
             </template>
         </Row>
     </RowGroup>
