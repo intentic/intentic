@@ -87,7 +87,7 @@ const ribbon = (arm: Arm): string => {
         near.push(`${n(ax)} ${n(ay)}`);
         far.push(`${n(bx)} ${n(by)}`);
     }
-    return `M${near.join("L")}L${far.reverse().join("L")}Z`;
+    return `M${near.join("L")}L${far.toReversed().join("L")}Z`;
 };
 
 /** The arm's own brain, carved as a volute: drawn from the centre out, the direction a chisel cuts one. */
@@ -233,9 +233,9 @@ const pct = (v: number, of: number): string => `${n((v / of) * 100)}%`;
    lit at once is the one state that makes the drawing say nothing. */
 const HOT = `:is(:hover, :focus-visible, :focus-within)`;
 const lit = (id: string, tail: string, body: string): string =>
-    [`.oc:has(.oc-t[data-part="${id}"]${HOT})`, `.oc:not(:has(.oc-t${HOT})):has(.oc-t[data-part="${id}"]:target)`]
+    `${[`.oc:has(.oc-t[data-part="${id}"]${HOT})`, `.oc:not(:has(.oc-t${HOT})):has(.oc-t[data-part="${id}"]:target)`]
         .map((scope) => `${scope} ${tail}`)
-        .join(",") + `{${body}}`;
+        .join(",")}{${body}}`;
 
 const highlightCss = [
     `.oc:has(.oc-t:is(:hover, :focus-visible, :focus-within, :target)) .oc-art{--ink:var(--color-line-bright);--face:url(#oc-quiet)}`,
