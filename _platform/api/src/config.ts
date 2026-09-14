@@ -37,6 +37,12 @@ export const configSchema = z.object({
             // The admin mutation gate, off until the panel's bytes are a pinned install; each mutation confirms its
             // target.
             mutations: z.stringbool().default(false),
+            // A DEVELOPMENT convenience: another deployment of this API whose admin reads /upstream mirrors, so the
+            // local panel can show production figures. Both empty (the default) and the lane 404s.
+            upstreamUrl: z.string().default(``),
+            // A session cookie for an admin account on upstreamUrl, copied out of a browser. Held only to be replayed
+            // by /upstream; never sent to the caller's browser, and never used by anything else.
+            upstreamCookie: z.string().default(``).meta({ secret: true }),
         })
         .prefault({}),
     // Resend email for invites and the setup link; unset logs the link server-side instead of sending it.

@@ -7,6 +7,7 @@ import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { type Auth, createAuth } from "./auth.js";
+import { adminUpstreamRoutes } from "./admin/admin-upstream.routes.js";
 import { localHostname } from "@intentic/sandbox-contract";
 import { CloudflareTokenError, ensureLocalDnsRecord, setAcmeChallenge } from "./sandbox/cloudflare.js";
 import { ingressEnabled, sandboxHostname } from "./sandbox/reachability.js";
@@ -394,6 +395,10 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
 
     // The agent wallet's signer routes; caps are re-checked here against the database, never trusted from a box.
     app.route(`/wallet`, walletHttpRoutes({ config, prisma }));
+
+    // A development lane: admin READS replayed against another deployment, so a local panel can show its figures; off
+    // (404s) unless ADMIN_UPSTREAM_URL and ADMIN_UPSTREAM_COOKIE are both set.
+    app.route(`/upstream`, adminUpstreamRoutes({ config, prisma, auth }));
 
     // Everything under /rpc flows through the oRPC OpenAPI handler, with the request logger on the context.
     app.all(`${API_BASE_PATH}/*`, async (c) => {
