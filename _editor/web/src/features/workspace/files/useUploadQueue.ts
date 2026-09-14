@@ -9,6 +9,7 @@ import { sandboxJson, sandboxUpload } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { WORKSPACE_TREE } from "../../../lib/queryKeys";
 import { chunkItems, dedupeByPath } from "./uploadChunking";
+import { clearUnlandedUploads, markUploadFailed, markUploadLanded, notePendingUpload } from "./pendingUploads";
 
 // Workspace upload queue: drops and picks append to a shared queue rather than clobbering an in-flight upload.
 // Per-file transport is a bounded XHR pool (HTTP/1.1 and HTTP/2); large trees stream as one tar instead, falling
@@ -55,6 +56,19 @@ const skippedNotice = ref<number | undefined>(undefined);
 const skippedUnchanged = ref(0);
 
 const joinPath = (dir: string, rel: string): string => (dir === `` ? rel : `${dir}/${rel}`);
+
+// The one place a file's status moves, so the explorer's placeholder row for it can't drift from the card's counts.
+// `queued` covers a retry resetting a file that a previous attempt already reported on.
+const setStatus = (item: QueueFile, status: FileStatus): void => {
+    item.status = status;
+    if (status === `done`) {
+        markUploadLanded(item.path);
+    } else if (status === `failed`) {
+        markUploadFailed(item.path);
+    } else if (status === `queued`) {
+        notePendingUpload(item.path, item.size);
+    }
+};
 
 // Projects detected in the drop, offered for install; dirs are workspace-root-relative already.
 const setupProjects = ref<readonly ProjectSetup[]>([]);
@@ -139,6 +153,9 @@ let controller = new AbortController();
 export const resetUploadQueue = (): void => {
     controller.abort();
     controller = new AbortController();
+    // Placeholder rows for bytes that never landed go with the queue; ones already on disk stay until the tree lists
+    // them, since the row is the only sign of them until it does.
+    clearUnlandedUploads();
     files.value = [];
     bytesTotal.value = 0;
     bytesDone.value = 0;
@@ -209,16 +226,16 @@ const uploadParallel = async (items: readonly QueueFile[], signal: AbortSignal):
             if (item.status === `done`) {
                 continue;
             }
-            item.status = `uploading`;
+            setStatus(item, `uploading`);
             currentName.value = item.path;
             try {
                 await uploadOneXhr(item, signal);
-                item.status = `done`;
+                setStatus(item, `done`);
             } catch (error) {
                 if (signal.aborted) {
                     return;
                 }
-                item.status = `failed`;
+                setStatus(item, `failed`);
                 item.error = errorMessage(error, `Upload failed.`);
             }
         }
@@ -250,7 +267,7 @@ const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): P
                 index += 1;
                 const current = items[index];
                 if (current !== undefined) {
-                    current.status = `uploading`;
+                    setStatus(current, `uploading`);
                 }
                 currentName.value = path;
             },
@@ -265,7 +282,7 @@ const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): P
     try {
         await sandboxJson<{ ok: true }>(`/workspace/upload-archive`, { method: `POST`, body, duplex: `half`, signal: control.signal } as RequestInit);
         for (const item of items) {
-            item.status = `done`;
+            setStatus(item, `done`);
         }
         return `done`;
     } catch (error) {
@@ -278,7 +295,7 @@ const uploadViaTar = async (items: readonly QueueFile[], signal: AbortSignal): P
             canStreamRequestBody = false;
             for (const item of items) {
                 if (item.status === `uploading`) {
-                    item.status = `queued`;
+                    setStatus(item, `queued`);
                 }
             }
             return `fallback`;
@@ -307,7 +324,7 @@ const uploadChunk = async (chunk: readonly QueueFile[], signal: AbortSignal): Pr
             // Reset everything not confirmed landed, drop the failed attempt's partial byte progress, then back off.
             for (const item of chunk) {
                 if (item.status !== `done`) {
-                    item.status = `queued`;
+                    setStatus(item, `queued`);
                     item.error = undefined;
                 }
             }
@@ -335,10 +352,22 @@ const uploadChunk = async (chunk: readonly QueueFile[], signal: AbortSignal): Pr
     // Retries exhausted: fail whatever never landed, keeping the last real error message where present.
     for (const item of chunk) {
         if (item.status !== `done`) {
-            item.status = `failed`;
+            setStatus(item, `failed`);
             item.error ??= `Upload failed after ${RETRY_ATTEMPTS} attempts.`;
         }
     }
+};
+
+// Takes one batch into the queue and starts the worker. Placeholder rows go in before the first byte moves, so the
+// explorer shows where the drop landed while the daemon's own listing (a walk of the whole workspace) is seconds away.
+const queueBatch = (items: QueueFile[]): void => {
+    for (const item of items) {
+        notePendingUpload(item.path, item.size);
+    }
+    files.value.push(...items);
+    bytesTotal.value += items.reduce((sum, item) => sum + item.size, 0);
+    pending.push(items);
+    void run();
 };
 
 const run = async (): Promise<void> => {
@@ -431,10 +460,7 @@ export function useUploadQueue() {
         const items = surviving.map((entry): QueueFile =>
             reactive({ path: joinPath(targetDir, entry.path), size: entry.file.size, status: `queued`, file: markRaw(entry.file) }),
         );
-        files.value.push(...items);
-        bytesTotal.value += items.reduce((sum, item) => sum + item.size, 0);
-        pending.push(items);
-        void run();
+        queueBatch(items);
     };
 
     // Drop-target entry point: shows the panel immediately, walks the tree with streaming progress, then hands the

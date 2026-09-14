@@ -10,6 +10,8 @@ import { useSandbox } from "../../sandbox/client/useSandbox";
 import { useRole } from "../../sandbox/secrets/useRole";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { resetUploadQueue } from "../files/useUploadQueue";
+import { resetPendingUploads, retireListedUploads } from "../files/pendingUploads";
+import { changedDirs } from "../changes/useWorkspaceLive";
 import { readExpandedDirs, writeExpandedDirs } from "../changes/workspaceSnapshot";
 import { scopeQuery, workspaceAgent } from "../health/workspaceScope";
 import { basename, parentDir } from "@intentic/ui/path";
@@ -70,6 +72,8 @@ export const resetWorkspaceTreeState = (): void => {
     clipboard.value = undefined;
     restoreExpanded();
     resetUploadQueue();
+    // Placeholder rows belong to the tree they were dropped into; another sandbox's tree is not that tree.
+    resetPendingUploads();
     resetEmptyDirsState();
 };
 
@@ -310,6 +314,20 @@ export function useWorkspaceTree() {
             }
         }
     });
+
+    // The watch above can't see a write below the walk's budget: a file landing there leaves the eager tree identical,
+    // so `query.data` never changes and the folder holding it would stay as it was listed. The file-watch batch names
+    // the directory, so refetch exactly the loaded ones it touched (an empty batch means "unknown", so all of them).
+    watch(changedDirs, ({ dirs }) => {
+        for (const path of lazyChildren.value.keys()) {
+            if ((dirs.size === 0 || dirs.has(path)) && !lazyLoading.value.has(path)) {
+                void fetchChildren(path);
+            }
+        }
+    });
+
+    // Retires an upload's placeholder row the moment the listing it was standing in for arrives.
+    watch(entriesByPath, (entries) => retireListedUploads((path) => entries.has(path)), { immediate: true });
 
     return {
         tree,

@@ -22,30 +22,45 @@ const MAX_ENTRIES = 5000;
 
 // One directory entry with its symlink followed; isDir is the TARGET's kind, so a folder link expands like one.
 // real is where the entry's bytes actually live; used for containment (link outside workspace) and the cycle guard.
+// size is the file's, which the listing carries; a directory has none.
 interface Entry {
     readonly name: string;
     readonly isDir: boolean;
     readonly real: string;
+    readonly size?: number;
     readonly link?: WorkspaceLink;
 }
 
-// Resolves one directory's entries; a plain entry costs no syscall (dirent alone).
-// A symlink costs stat (kind; failure marks it dangling, still listed), readlink (display text), realpath (cycle
-// guard).
+// Resolves one directory's entries; a plain directory costs no syscall (dirent alone), a plain file one stat for its
+// size. A symlink costs stat (kind and size; failure marks it dangling, still listed), readlink (display text),
+// realpath (cycle guard).
+// Every entry in a directory resolves concurrently, and the size comes back with the entry rather than being stat'd
+// again one at a time by the callers below: on a workspace of a few thousand files that is the difference between a
+// listing the browser waits a second for and one it waits a moment for.
 const followEntries = async (dirAbs: string, realDir: string, realRoot: string, dirents: readonly Dirent[]): Promise<Entry[]> =>
     Promise.all(
         dirents.map(async (dirent): Promise<Entry> => {
             const name = dirent.name;
-            if (!dirent.isSymbolicLink()) {
-                return { name, isDir: dirent.isDirectory(), real: join(realDir, name) };
-            }
             const abs = join(dirAbs, name);
+            if (!dirent.isSymbolicLink()) {
+                if (dirent.isDirectory()) {
+                    return { name, isDir: true, real: join(realDir, name) };
+                }
+                const stats = await stat(abs).catch(() => undefined);
+                return { name, isDir: false, real: join(realDir, name), ...(stats === undefined ? {} : { size: stats.size }) };
+            }
             const [target, to, real] = await Promise.all([stat(abs).catch(() => undefined), readlink(abs).catch(() => abs), realPathOf(abs)]);
             if (target === undefined) {
                 return { name, isDir: false, real, link: { to, state: "broken" } };
             }
             const inside = isUnder(realRoot, real) !== undefined;
-            return { name, isDir: target.isDirectory(), real, link: inside ? { to } : { to, state: "outside" } };
+            return {
+                name,
+                isDir: target.isDirectory(),
+                real,
+                ...(target.isDirectory() ? {} : { size: target.size }),
+                link: inside ? { to } : { to, state: "outside" },
+            };
         }),
     );
 
@@ -126,12 +141,11 @@ export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: n
                 const ignored = scope.isIgnored(entry.name, path, entry.isDir);
                 const link = entry.link === undefined ? {} : { link: entry.link };
                 if (!entry.isDir) {
-                    const stats = await stat(abs).catch(() => undefined);
                     children.push({
                         name: entry.name,
                         path,
                         type: "file",
-                        ...(stats !== undefined ? { size: stats.size } : {}),
+                        ...(entry.size === undefined ? {} : { size: entry.size }),
                         ...(ignored ? { ignored: true } : {}),
                         ...link,
                     });
@@ -229,12 +243,11 @@ export const listWorkspaceChildren = async (
                 const ignored = job.branchIgnored || scope.isIgnored(entry.name, path, entry.isDir);
                 const link = entry.link === undefined ? {} : { link: entry.link };
                 if (!entry.isDir) {
-                    const stats = await stat(abs).catch(() => undefined);
                     entries.push({
                         name: entry.name,
                         path,
                         type: "file",
-                        ...(stats !== undefined ? { size: stats.size } : {}),
+                        ...(entry.size === undefined ? {} : { size: entry.size }),
                         ...(ignored ? { ignored: true } : {}),
                         ...link,
                     });

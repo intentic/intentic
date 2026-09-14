@@ -19,6 +19,7 @@ import { viewersOfPath } from "../../../shell/presence/usePresence";
 import { noteUserCreatedDir, useEmptyDirs } from "./useEmptyDirs";
 import { useFileNesting } from "./useFileNesting";
 import { useUploadQueue } from "../files/useUploadQueue";
+import { type PendingState, pendingStateOf, withPendingEntries } from "../files/pendingUploads";
 import { isRecentlyChanged } from "../changes/useWorkspaceLive";
 import { lensPersonaId, reachOf } from "../directory-ui/personaReach";
 import { useWorkspaceTree } from "./useWorkspaceTree";
@@ -168,8 +169,9 @@ const lensReach = computed(() => {
     return card === undefined ? undefined : reachOf(card);
 });
 const refused = (path: string): boolean => lensReach.value?.refuses(path) === true;
-// Selection filtered to paths the ops may actually touch, so bulk delete doesn't hit paths the daemon will refuse.
-const unlockedOnly = (paths: readonly string[]): string[] => paths.filter((path) => !locked(path));
+// Selection filtered to paths the ops may actually touch, so bulk delete doesn't hit paths the daemon will refuse, nor
+// placeholder rows for files that aren't on disk under that name yet.
+const unlockedOnly = (paths: readonly string[]): string[] => paths.filter((path) => !locked(path) && !pending(path));
 
 // Children come from the eager walk's inline `children`, else the lazily-fetched map keyed by path. No `children` means
 // never listed (ignored, or beyond budget) and fetches on expand; `children: []` is a genuinely empty dir.
@@ -191,6 +193,24 @@ const byPath = computed(() => {
     walk(tree);
     return map;
 });
+
+// A placeholder row: bytes this browser sent (or is sending) that the daemon's listing hasn't caught up with yet. It
+// draws and expands like any row, but nothing may act on it — there is no file at that path to rename, move or open.
+// Only for a path the listing DOESN'T have: the folders on the way to an upload usually already exist, and drawing one
+// as provisional would say the folder itself was arriving.
+const pendingRow = (path: string): PendingState | undefined => (byPath.value.has(path) ? undefined : pendingStateOf(path));
+const pending = (path: string): boolean => pendingRow(path) !== undefined;
+const pendingTooltip = (path: string): string | undefined => {
+    const state = pendingRow(path);
+    return state === `uploading`
+        ? `Uploading…`
+        : state === `landing`
+          ? `Uploaded — waiting for the workspace listing`
+          : state === `failed`
+            ? `Upload failed; the file isn't in the workspace`
+            : undefined;
+};
+
 const leadEntry = computed(() => (lead.value === null ? undefined : byPath.value.get(lead.value)));
 // The directory an op targets: a dir itself, else the file's parent, else the tree's own root.
 const targetDir = (path: string | null): string => {
@@ -207,8 +227,10 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
     const open = expanded.value;
     // Filters apply once here, covering the root, lazy subtrees, and name matches that feed the selection/keyboard
     // axis. Nesting only applies unfiltered, since a filter flattens every level to match folded names.
-    const level = (nodes: readonly WorkspaceTreeEntry[]): readonly NestedEntry[] => {
-        const shown = nodes.filter((entry) => explorerShows(entry, filters.value));
+    // Files still on their way into `dir` join its listing here, in the order their real rows will take, so an upload
+    // has a row from the moment it starts rather than when the daemon's next walk proves it landed.
+    const level = (nodes: readonly WorkspaceTreeEntry[], dir: string): readonly NestedEntry[] => {
+        const shown = withPendingEntries(dir, nodes).filter((entry) => explorerShows(entry, filters.value));
         return fileNesting.value && needle === `` ? nestSiblings(shown) : shown.map((entry) => ({ entry }));
     };
 
@@ -220,9 +242,9 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
         return { entry, depth, isExpanded, barren: true, ...(chainTail ? { chainTail } : {}), ...(names.length > 1 ? { chain: names } : {}) };
     };
 
-    const walk = (nodes: readonly WorkspaceTreeEntry[], depth: number): (Row | MoreRow)[] => {
+    const walk = (nodes: readonly WorkspaceTreeEntry[], depth: number, dir: string): (Row | MoreRow)[] => {
         const out: (Row | MoreRow)[] = [];
-        for (const { entry, nested } of level(nodes)) {
+        for (const { entry, nested } of level(nodes, dir)) {
             if (entry.type !== `dir`) {
                 if (nested !== undefined) {
                     const isExpanded = open.has(entry.path);
@@ -237,7 +259,7 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
             }
             // While filtering, a dir earns its row by matching itself or holding a match, and is always shown open.
             if (needle !== ``) {
-                const childRows = walk(childrenOf(entry), depth + 1);
+                const childRows = walk(childrenOf(entry), depth + 1, entry.path);
                 if (!entry.name.toLowerCase().includes(needle) && childRows.length === 0) {
                     continue;
                 }
@@ -251,13 +273,14 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
                 const row = barrenRow(entry, depth, isExpanded);
                 out.push(row);
                 if (isExpanded) {
-                    out.push(...walk(childrenOf(row.chainTail ?? entry), depth + 1));
+                    const tail = row.chainTail ?? entry;
+                    out.push(...walk(childrenOf(tail), depth + 1, tail.path));
                 }
                 continue;
             }
             out.push({ entry, depth, isExpanded });
             if (isExpanded) {
-                out.push(...walk(childrenOf(entry), depth + 1));
+                out.push(...walk(childrenOf(entry), depth + 1, entry.path));
                 const cut = lazyHidden.value.get(entry.path) ?? 0;
                 if (cut > 0) {
                     out.push({ more: cut, depth: depth + 1, key: `${entry.path}#more` });
@@ -267,7 +290,7 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
         return out;
     };
 
-    const rows = walk(tree, 0);
+    const rows = walk(tree, 0, rootDir);
     if (rootHidden > 0 && needle === ``) {
         rows.push({ more: rootHidden, depth: 0, key: `#root-more` });
     }
@@ -371,6 +394,10 @@ const activate = (entry: WorkspaceTreeEntry, revealManagedDir: boolean, mode: Op
         }
         return;
     }
+    // A placeholder has no file behind it yet; opening one would read a path the daemon doesn't serve.
+    if (pending(entry.path)) {
+        return;
+    }
     emit(`openFile`, entry.path, mode);
 };
 
@@ -447,6 +474,9 @@ const onRowClick = (event: MouseEvent, row: Row): void => {
 // Double-click keeps the tab the first click previewed; only a file has anything to keep. A directory just toggles on
 // each click and lands back where it started, as in VSCode's explorer.
 const onRowDblClick = (row: Row): void => {
+    if (pending(row.entry.path)) {
+        return;
+    }
     if (row.entry.type === `file` || locked(row.entry.path)) {
         emit(`openFile`, row.entry.path, `keep`);
     }
@@ -462,7 +492,7 @@ const onChevronClick = (event: MouseEvent, row: Row): void => {
 
 // ---- rename (inline) ----
 const beginRename = (path: string): void => {
-    if (locked(path) || refuseWrite()) {
+    if (locked(path) || pending(path) || refuseWrite()) {
         return;
     }
     renamingPath.value = path;
@@ -944,6 +974,11 @@ const onRowDrop = (event: DragEvent, row: Row): void => {
     if (!offer.files) {
         return;
     }
+    // Opened before the files are read, so the placeholder rows appear inside the folder that took the drop rather than
+    // inside a closed one.
+    if (dir !== `` && !expanded.value.has(dir)) {
+        toggleExpand(dir);
+    }
     // Runs synchronously, since webkitGetAsEntry must fire while the drag items are still alive.
     enqueueFromDataTransfer(dir, dataTransfer);
 };
@@ -1091,7 +1126,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         :aria-selected="selection.has(row.entry.path)"
                         :aria-expanded="expandable(row) ? row.isExpanded : undefined"
                         :tabindex="tabbablePath === row.entry.path ? 0 : -1"
-                        :draggable="renamingPath !== row.entry.path && !locked(row.entry.path)"
+                        :draggable="renamingPath !== row.entry.path && !locked(row.entry.path) && !pending(row.entry.path)"
                         class="ui-row-select group flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-[0.8125rem]"
                         :class="{
                             'ui-row-select-on': selection.has(row.entry.path),
@@ -1099,7 +1134,9 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             'ui-row-select-drop': row.entry.path === dragOverPath,
                             'ui-row-select-changed': isRecentlyChanged(row.entry.path),
                             'opacity-50': clipboard?.mode === 'cut' && clipboard.paths.includes(row.entry.path),
+                            'ui-row-select-arriving': pending(row.entry.path),
                         }"
+                        v-tooltip.right="pendingTooltip(row.entry.path)"
                         :style="{ paddingLeft: `${0.5 + row.depth * 0.75}rem` }"
                         @click="onRowClick($event, row)"
                         @dblclick="onRowDblClick(row)"
@@ -1142,7 +1179,9 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             v-else
                             class="min-w-0 flex-1 truncate"
                             :class="[
-                                row.entry.ignored || row.barren || locked(row.entry.path) || deadLink(row.entry) ? 'text-subtle' : 'text-content/90',
+                                row.entry.ignored || row.barren || locked(row.entry.path) || deadLink(row.entry) || pending(row.entry.path)
+                                    ? 'text-subtle'
+                                    : 'text-content/90',
                                 // Out of the persona being read as: dimmed FURTHER, and only while a lens is on.
                                 // Opacity rather than a colour, so it stacks on whatever the row already was:
                                 // an ignored row outside the fence should read as both, not as one of the two.
@@ -1170,6 +1209,20 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         <!-- A dir fetching its children lazily on expand (ignored, or below the walk's budget). -->
                         <Icon
                             v-if="row.entry.type === 'dir' && lazyLoading.has(row.entry.path)"
+                            name="spinner"
+                            :spin="true"
+                            aria-hidden="true"
+                            class="shrink-0 text-2xs text-subtle"
+                        />
+                        <!-- Still on its way in: sending, or on disk with the workspace listing yet to catch up. -->
+                        <Icon
+                            v-if="pendingRow(row.entry.path) === 'failed'"
+                            name="exclamation-triangle"
+                            aria-hidden="true"
+                            class="shrink-0 text-2xs text-danger"
+                        />
+                        <Icon
+                            v-else-if="pending(row.entry.path)"
                             name="spinner"
                             :spin="true"
                             aria-hidden="true"
@@ -1345,5 +1398,12 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
 /* Flags a row changed on disk for ~2s; static, not animated, since DevTools rebuilds under a live CSS animation. */
 .ui-row-select-changed {
     background: color-mix(in srgb, var(--color-warning) 16%, transparent);
+}
+/* A file on its way in, drawn before the workspace listing has it: a tint under the row, which the spinner and the
+   dimmed name complete. A band rather than a dashed box on purpose — a dropped folder lands as a run of these rows, and
+   boxes stack into a ladder of doubled borders. Nothing here changes the row's height, so the real row replaces it
+   without moving. */
+.ui-row-select-arriving {
+    background: color-mix(in srgb, var(--color-primary-500) 7%, transparent);
 }
 </style>

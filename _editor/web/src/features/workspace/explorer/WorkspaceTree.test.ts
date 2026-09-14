@@ -37,6 +37,7 @@ vi.mock("../../sandbox/client/sandboxClient", async (importOriginal) => {
 
 const { default: WorkspaceTree } = await import("./WorkspaceTree.vue");
 const { resetWorkspaceTreeState } = await import("./useWorkspaceTree");
+const { markUploadFailed, notePendingUpload, resetPendingUploads, retireListedUploads } = await import("../files/pendingUploads");
 const { queryClient } = await import("../../../lib/queryPersistence");
 const { useLayout } = await import("../../../shell/window/useLayout");
 const { useNotifications } = await import("../../../shell/notifications/notifications");
@@ -626,6 +627,75 @@ describe(`where a drop on a row lands`, () => {
         await dropOn(rowNamed(el, `util.ts`), ``, [`text/uri-list`]);
 
         expect(daemon.calls).toEqual([]);
+    });
+});
+
+// A drop or paste puts bytes on the daemon seconds before its next walk lists them. Until then the row is a
+// placeholder, so what was just put into a folder is never missing from it — the failure this covers is a file that
+// looks like it went nowhere, which is what a walk-shaped delay looks like from the outside.
+describe(`files still arriving`, () => {
+    const rowNamed = (el: HTMLElement, name: string): HTMLElement =>
+        [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === name) as HTMLElement;
+
+    afterEach(() => resetPendingUploads());
+
+    it(`draws the pasted file in the folder it went into, where its real row will sit`, async () => {
+        restoreFrom([`src`]);
+        notePendingUpload(`src/notes.md`, 12);
+
+        const el = await mount({ tree: TREE });
+
+        expect(rows(el)).toEqual([`src`, `api`, `main.ts`, `notes.md`, `README.md`]);
+        const row = rowNamed(el, `notes.md`);
+        expect(row.className).toContain(`ui-row-select-arriving`);
+        expect(row.getAttribute(`draggable`)).toBe(`false`);
+        expect(row.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
+    });
+
+    it(`opens nothing when a row with no file behind it yet is clicked`, async () => {
+        restoreFrom([`src`]);
+        notePendingUpload(`src/notes.md`, 12);
+        const opened: string[] = [];
+
+        const el = await mount({ tree: TREE, onOpenFile: (path: string) => opened.push(path) });
+        rowNamed(el, `notes.md`).click();
+        await nextTick();
+
+        expect(opened).toEqual([]);
+    });
+
+    it(`stands up the folders of a dropped folder, and opens into them`, async () => {
+        notePendingUpload(`photos/trip/one.jpg`, 3);
+
+        const el = await mount({ tree: TREE });
+        expect(rows(el)).toEqual([`photos`, `src`, `README.md`]);
+
+        rowNamed(el, `photos`).click();
+        await nextTick();
+
+        expect(rows(el)).toEqual([`photos`, `trip`, `src`, `README.md`]);
+    });
+
+    it(`marks a failed one, rather than leaving a row that reads as still coming`, async () => {
+        restoreFrom([`src`]);
+        notePendingUpload(`src/notes.md`, 12);
+        markUploadFailed(`src/notes.md`);
+
+        const el = await mount({ tree: TREE });
+
+        expect(rowNamed(el, `notes.md`).querySelector(`[data-icon="exclamation-triangle"]`)).not.toBeNull();
+    });
+
+    it(`gives the row up to the real entry once the listing has it`, async () => {
+        restoreFrom([`src`]);
+        notePendingUpload(`src/notes.md`, 12);
+        const el = await mount({ tree: TREE });
+        expect(rows(el)).toContain(`notes.md`);
+
+        retireListedUploads(() => true);
+        await nextTick();
+
+        expect(rows(el)).toEqual([`src`, `api`, `main.ts`, `README.md`]);
     });
 });
 

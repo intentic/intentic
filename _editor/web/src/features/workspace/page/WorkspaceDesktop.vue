@@ -696,7 +696,8 @@ const onRootDrop = (event: DragEvent): void => {
         return;
     }
     const dataTransfer = event.dataTransfer;
-    // An internal tree-row drag moves rows to root; OS files upload to root; a drag from this document is neither.
+    // An internal tree-row drag moves rows to the tree's own root; OS files upload there too; a drag from this document
+    // is neither.
     const internal = dataTransfer.getData(`application/x-intentic-path`);
     if (internal !== ``) {
         void run(() => moveIntoMany(internal.split(`\n`), workspaceDir.value), `Couldn't move those files.`);
@@ -705,8 +706,10 @@ const onRootDrop = (event: DragEvent): void => {
     if (!offer.files) {
         return;
     }
+    // Lands in the folder the explorer is rooted at, like the row move above: with a project open, the workspace root
+    // isn't on screen, so files dropped there would vanish from the view that took the drop.
     // Runs the capture synchronously (webkitGetAsEntry needs the drop's items alive) and shows scanning instantly.
-    enqueueFromDataTransfer(``, dataTransfer);
+    enqueueFromDataTransfer(workspaceDir.value, dataTransfer);
 };
 // A row's own drop stops propagation; the window resets in the capture phase, before that, so the drop hint
 // can never stick.

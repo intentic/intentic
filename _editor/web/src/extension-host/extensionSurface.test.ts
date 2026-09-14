@@ -62,8 +62,8 @@ const candidatesIn = (files: readonly string[]): string[] => {
 
 // Tokens that compile to a utility but are not one anybody wrote: `flex-shrink` is a real Tailwind class and a real CSS
 // property used in a `<style>` block; `antialiased` is a real utility and an ordinary English word used in prose;
-// `top-11` appears in prose arguing against ever writing it literally; `italic` names the HTML element a comment
-// describes, and is also the CSS value and the field name a text renderer cannot avoid (a .pptx run is bold or
+// `top-11` appears in prose arguing against ever writing it literally; `italic` names the HTML element a comment and a
+// test name describe, and is also the CSS value and the field name a text renderer cannot avoid (a .pptx run is bold or
 // italic). Named here rather than worked around, since editing the prose would only move the coincidence to the next
 // person who writes the word.
 const NOT_CLASSES = new Set([`flex-shrink`, `antialiased`, `top-11`, `italic`]);

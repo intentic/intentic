@@ -38,6 +38,7 @@ import { specialChip } from "../explorer/specialPaths";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
+import { type PendingState, pendingStateOf, withPendingEntries } from "../files/pendingUploads";
 import { type ExplorerFilters, explorerShows, technicalHidden } from "../explorer/explorerFilter";
 import FileViewer from "../viewers/FileViewer.vue";
 import HistoryPanel from "../changes/HistoryPanel.vue";
@@ -202,7 +203,8 @@ const children = computed<readonly WorkspaceTreeEntry[]>(() =>
     dir.value === `` ? tree.value : (entriesByPath.value.get(dir.value)?.children ?? lazyChildren.value.get(dir.value) ?? []),
 );
 const listing = computed<readonly WorkspaceTreeEntry[]>(() => {
-    const shown = children.value.filter((node) => explorerShows(node, filters.value));
+    // Files still on their way into this folder are listed too, so a pick has a row before the daemon's walk agrees.
+    const shown = withPendingEntries(dir.value, children.value).filter((node) => explorerShows(node, filters.value));
     const query = filter.value.trim().toLowerCase();
     return query === `` ? shown : shown.filter((node) => node.name.toLowerCase().includes(query));
 });
@@ -218,6 +220,21 @@ const filterSheet = ref(false);
 // A symlink that goes nowhere or leaves the workspace: dimmed, with no drill-in, since the sandbox has nothing
 // to list behind it.
 const deadLink = (node: WorkspaceTreeEntry): boolean => node.link?.state !== undefined;
+
+// A row for a file still arriving: drawn so an upload is visible where it lands, but there is nothing at that path to
+// open or act on until the workspace listing has it. A folder still arriving drills in — its own rows are placeholders.
+// Only for a path the listing doesn't have: a folder an upload is landing in usually exists already.
+const pendingRow = (path: string): PendingState | undefined => (entriesByPath.value.has(path) ? undefined : pendingStateOf(path));
+const pending = (path: string): boolean => pendingRow(path) !== undefined;
+const openEntry = (node: WorkspaceTreeEntry): void => {
+    if (node.type === `dir` && !isLockedWorkspacePath(node.path) && !deadLink(node)) {
+        openDir(node.path);
+        return;
+    }
+    if (!pending(node.path)) {
+        openFile(node.path);
+    }
+};
 
 // Long-press row actions (the ContextMenu equivalents). `rootEl` is where a clipboard write targets the
 // visible window, not the opener's.
@@ -497,10 +514,8 @@ const onPick = (event: Event): void => {
                             :key="node.path"
                             type="button"
                             class="flex min-h-12 w-full items-center gap-3 px-3 text-left transition-colors active:bg-overlay"
-                            v-longpress="() => (sheetEntry = node)"
-                            @click="
-                                node.type === 'dir' && !isLockedWorkspacePath(node.path) && !deadLink(node) ? openDir(node.path) : openFile(node.path)
-                            "
+                            v-longpress="() => (sheetEntry = pending(node.path) ? undefined : node)"
+                            @click="openEntry(node)"
                         >
                             <!-- Private rows are dimmed and open their explanatory tab. -->
                             <Icon
@@ -510,9 +525,19 @@ const onPick = (event: Event): void => {
                             />
                             <span
                                 class="min-w-0 flex-1 truncate text-sm"
-                                :class="{ 'text-subtle': node.ignored || isLockedWorkspacePath(node.path) || node.link?.state !== undefined }"
+                                :class="{
+                                    'text-subtle': node.ignored || isLockedWorkspacePath(node.path) || node.link?.state !== undefined || pending(node.path),
+                                }"
                                 >{{ node.name }}</span
                             >
+                            <!-- Still on its way in: sending, or on disk with the workspace listing yet to catch up. -->
+                            <Icon
+                                v-if="pendingRow(node.path) === 'failed'"
+                                name="exclamation-triangle"
+                                aria-hidden="true"
+                                class="shrink-0 text-xs text-danger"
+                            />
+                            <Icon v-else-if="pending(node.path)" name="spinner" :spin="true" aria-hidden="true" class="shrink-0 text-xs text-subtle" />
                             <!-- A symlink wears its target's icon; this marker shows it's a pointer. No hover, so the sheet says where. -->
                             <Icon
                                 v-if="node.link !== undefined"

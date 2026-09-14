@@ -1,4 +1,5 @@
 import type { SidecarStatus } from "@intentic/sandbox-contract";
+import { parentDir } from "@intentic/ui/path";
 import { reactive, ref } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
@@ -24,6 +25,11 @@ const refreshModules = throttleTrailing(() => void queryClient.invalidateQueries
 // paths to list" signal, sent for a scaffold, branch switch, drop or reconnect too).
 const mayChangeModules = (paths: readonly string[]): boolean =>
     paths.length === 0 || paths.some((path) => path === `package.json` || path.endsWith(`/package.json`));
+
+/* DIRECTORIES THE LAST BATCH WROTE INTO, for listings the tree query can't refresh by itself: a lazily-loaded subtree
+   sits outside that query, and a file landing in one leaves the eager tree byte-identical, so nothing else would say it
+   arrived. An empty set is the daemon's own "too many paths to name" signal, and means any directory may have moved. */
+export const changedDirs = ref<{ readonly stamp: number; readonly dirs: ReadonlySet<string> }>({ stamp: 0, dirs: new Set() });
 
 // Per-path change epoch: the file viewer's read trigger includes it, so a same-size external edit still re-reads.
 const epochs = reactive(new Map<string, number>());
@@ -61,6 +67,7 @@ export const markWorkspaceChanged = (paths: readonly string[]): void => {
             }, HIGHLIGHT_MS),
         );
     }
+    changedDirs.value = { stamp: changedDirs.value.stamp + 1, dirs: new Set(paths.map((path) => parentDir(path))) };
     // Refetches even on an empty batch (the daemon's signal); throttled not debounced so a steady upload still
     // refreshes.
     refreshTree();
@@ -107,6 +114,7 @@ export const resetWorkspaceLive = (): void => {
     clearTimers.clear();
     epochs.clear();
     recentlyChanged.clear();
+    changedDirs.value = { stamp: 0, dirs: new Set() };
     lastWorkspaceChangeAt.value = 0;
     derivedEpochs.clear();
     sweepEpoch.value = 0;
