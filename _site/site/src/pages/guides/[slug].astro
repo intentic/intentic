@@ -194,7 +194,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
             padding: 0 18px 10px 0;
             text-align: left;
             font-size: 0.75rem;
-            font-weight: 600;
+            font-weight: var(--font-weight-semibold);
             letter-spacing: 0.03em;
             text-transform: uppercase;
             color: var(--color-subtle);
@@ -204,7 +204,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
         .opts tbody th {
             width: 24%;
             text-align: left;
-            font-weight: 500;
+            font-weight: var(--font-weight-medium);
         }
 
         .opts tbody td {
@@ -252,7 +252,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
                 display: block;
                 margin-bottom: 2px;
                 font-size: var(--text-2xs);
-                font-weight: 600;
+                font-weight: var(--font-weight-semibold);
                 letter-spacing: 0.05em;
                 text-transform: uppercase;
                 color: var(--color-subtle);

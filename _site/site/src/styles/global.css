@@ -81,6 +81,24 @@
     --bar-height: clamp(3.4rem, 5.625vw, 7.1rem);
 }
 
+/* WEIGHT, PER SKIN — the rule the app keeps in _editor/ui/src/styles/tokens.css and this file did not.
+   Light type on a dark ground blooms, so the same number reads heavier there; the app answers by writing a step
+   lighter in dark mode and the two then LOOK like the same weight. The site's dark skin was using the full scale,
+   which is why its `font-semibold` came out at 600 where the app would have drawn 500.
+
+   Both selectors carry `html` deliberately: Tailwind emits its own defaults into `:root`, which scores the same as
+   a bare attribute selector, and `html[...]` outscores it whichever order the bundler picks. */
+html:not([data-variant="desk"]) {
+    --font-weight-normal: 300;
+    --font-weight-medium: 400;
+    --font-weight-semibold: 500;
+}
+html[data-variant="desk"] {
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+}
+
 /* THE DARK SCHEME'S MATERIALS the colours that live inside a component rule rather than in the Tailwind namespace
    above. They are named here for one reason: the desk skin (styles/desk.css) cannot relight a literal. Everything a
    utility can already reach — canvas, content, line, the ember ramp — stays in `@theme` and is overridden there.
@@ -216,7 +234,7 @@
     h5,
     h6 {
         font-family: var(--font-mark);
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
     }
 
 /* Where the lines break. */
@@ -243,6 +261,8 @@
     /* DISPLAY TYPE CARVED STONE, NOT POLISHED METAL — and the difference is texture, not colour. */
     .display {
         font-family: var(--font-display);
+/* Pinned, not on the UI weight scale: the display face ships exactly one weight, so asking for anything else
+           just resolves back to this file and says something untrue about what is available. */
         font-weight: 600;
         color: var(--role-display-ink);
 /* Normal, not the positive tracking Playfair needed: Spectral is drawn for screens and already sets open, so
@@ -268,7 +288,7 @@
         gap: 0.6rem;
         font-size: var(--text-2xs);
         line-height: var(--text-2xs--line-height);
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
         letter-spacing: 0.22em;
         text-transform: uppercase;
         color: var(--color-gold);
@@ -298,7 +318,7 @@
 
         font-family: var(--font-sans);
         font-size: 0.9375rem;
-        font-weight: 500;
+        font-weight: var(--font-weight-medium);
         letter-spacing: 0.015em;
         line-height: 1.35;
         color: var(--color-content);
@@ -382,7 +402,7 @@
     /* THE PRIMARY IS CAST BRONZE It was a panel of dark wood with an ember label, and as an object it was lovely. */
     .btn-primary {
         color: var(--house-bronze-ink);
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
         text-shadow: var(--house-bronze-ink-lip);
         background-color: var(--house-bronze-fill);
         background-image: var(--house-bronze-sweep), var(--house-brushed), var(--house-bronze-body);
@@ -605,7 +625,7 @@
     .lockup .wordmark {
         font-family: var(--font-mark);
         font-size: inherit;
-        font-weight: 500;
+        font-weight: var(--font-weight-medium);
         line-height: 1;
         letter-spacing: 0.005em;
         color: var(--color-primary-500);
@@ -701,7 +721,7 @@
         font-size: var(--text-2xs);
         line-height: 1;
         min-height: 1.6rem;
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
         letter-spacing: 0.04em;
         color: var(--color-gold);
     }
@@ -758,7 +778,7 @@
         padding: 0.5rem 0.75rem;
         font-size: 0.875rem;
         line-height: 1.25rem;
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
         white-space: nowrap;
         border: 1px solid var(--color-line);
     }
@@ -846,7 +866,7 @@
         padding-top: 1.75rem;
         font-family: var(--font-mark);
         font-size: 1.5rem;
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
         color: var(--color-content);
     }
     .docs-body > h2:first-child {
@@ -859,7 +879,7 @@
         margin-bottom: 0.75rem;
         font-family: var(--font-mark);
         font-size: 1.125rem;
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
         color: var(--color-content);
     }
 
@@ -867,7 +887,7 @@
     .docs-body :is(h2, h3) > .docs-anchor {
         margin-left: 0.5rem;
         font-size: 0.8em;
-        font-weight: 400;
+        font-weight: var(--font-weight-normal);
         color: var(--color-subtle);
         text-decoration: none;
         opacity: 0;
@@ -933,7 +953,7 @@
     }
     .docs-body strong {
         color: var(--color-content);
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
     }
     .docs-body hr {
         margin: 3rem 0;
@@ -968,7 +988,7 @@
         padding: 0.625rem 0.875rem;
         text-align: left;
         font-size: 0.75rem;
-        font-weight: 600;
+        font-weight: var(--font-weight-semibold);
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--color-gold);
