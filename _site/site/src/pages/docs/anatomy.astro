@@ -1,0 +1,104 @@
+---
+import { anatomyScene } from "@intentic/site-content/anatomy";
+import AnatomyFigure from "../../components/figures/AnatomyFigure.astro";
+import DocsLayout from "../../components/docs/DocsLayout.astro";
+import DocsRelated from "../../components/docs/DocsRelated.astro";
+
+/* THE MENTAL MODEL, not a feature list. Four nouns every later page spends without introducing. */
+
+const scene = anatomyScene;
+
+/* The practical payoff of the picture: the same four parts, as the thing a reader actually decides to add. */
+const reaches = [
+    {
+        want: "Your agents are slow, or you want the work off your laptop",
+        add: "A different machine",
+        because: "Compute is the only thing it decides. Moving is a switch, not a migration: the workspace keeps its address and its name.",
+    },
+    {
+        want: "Two jobs should not see each other's code, tools or credentials",
+        add: "Another sandbox",
+        because: "A separate container and separate volumes on the same machine. Nothing crosses between them.",
+    },
+    {
+        want: "The same sandbox should work differently on a certain kind of task",
+        add: "Another persona",
+        because: "Same code, same tools installed, different set handed to the turn: other accounts, another folder, other instructions.",
+    },
+    {
+        want: "There is more code for the agents already in there to work on",
+        add: "Another project",
+        because: "A repository in the workspace. Every conversation in that sandbox can reach it the moment it arrives.",
+    },
+];
+---
+
+<DocsLayout
+    pageId="anatomy"
+    heading="Anatomy"
+    lead="Four words the rest of these docs spend as though you already had them: the machine, a sandbox, a persona, a project. This page is the one picture they all sit in, and the place each of them is defined."
+>
+    <h2>{scene.heading}</h2>
+    <p>
+        {scene.sub} An octopus is the useful shape to borrow, because the thing people expect to be true of it is the thing that is
+        actually true here: the arms do most of the thinking, and they carry on while the head is looking somewhere else.
+    </p>
+    <div class="docs-embed my-8">
+        <AnatomyFigure />
+    </div>
+
+    <h2>Which one do you reach for</h2>
+    <p>
+        Most questions about intentic are one of these four in disguise. The answer is usually the smallest part that changes: a persona
+        before a sandbox, a sandbox before a machine.
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>You want</th>
+                <th>Add</th>
+                <th>What that gets you</th>
+            </tr>
+        </thead>
+        <tbody>
+            {
+                reaches.map((row) => (
+                    <tr>
+                        <td>{row.want}</td>
+                        <td>
+                            <strong>{row.add}</strong>
+                        </td>
+                        <td>{row.because}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        The fork between the middle two is worth reading in full once you are running more than one job:{" "}
+        <a href="/docs/autonomous-employees/#another-sandbox-or-another-persona">another sandbox, or another persona?</a>
+    </p>
+
+    <h2>Where the drawing stops being true</h2>
+    <p>
+        A picture that is never corrected turns into a belief. Three things about the animal do not hold, and each of them is a place
+        readers otherwise guess wrong.
+    </p>
+    {
+        scene.limits.map((limit) => (
+            <Fragment>
+                <h3>{limit.heading}</h3>
+                <p>{limit.body}</p>
+            </Fragment>
+        ))
+    }
+
+    <DocsRelated
+        links={[
+            { href: "/docs/architecture/", title: "Architecture", why: "the same parts as a system map: where identity, code, state and compute actually live." },
+            { href: "/docs/glossary/", title: "Glossary", why: "every other word these docs use as if you had it." },
+            { href: "/where-it-runs/", title: "Where it runs", why: "the machine choice in full, including what it costs." },
+            { href: "/docs/parallel-agents/", title: "Parallel agents", why: "what happens when several agents reach for one project at once." },
+        ]}
+    />
+</DocsLayout>

@@ -129,6 +129,15 @@ mechanisms (branches, checks, terminals) named to make sense, which is exactly t
 first-time reader does not have. The building site says the same thing with three nouns a stranger
 already owns. If this band is ever redrawn, redraw the temple.
 
+**The octopus lives in the docs, and only there (2026-09-14, recorded decision).** `/docs/anatomy/` explains
+machine, sandbox, persona and project as one body whose arms have brains of their own, and that is not a
+breach of the rule above. The rule governs the page that has to land ONE claim on a stranger, where a second
+metaphor costs the whole argument. A docs page is read by somebody who already bought the claim and now has
+four nouns to hold, two of which (**persona**, **project**) were defined nowhere on the site before that page
+existed; there a second picture costs a paragraph and buys the vocabulary every later page spends. Both
+directions of the mistake are regressions: do not promote the octopus onto this page, and do not delete it
+from the docs as a rule violation. If a picture of those four nouns is ever wanted *here*, redraw the temple.
+
 ## Where the page lives
 
 - Copy: `_site/site-content/src/landing.ts`, a single `LandingContent` object. Change copy there,

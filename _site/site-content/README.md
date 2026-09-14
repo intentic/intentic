@@ -19,6 +19,11 @@ markup.
 - [src/automate.ts](src/automate.ts): the words of the automation machine — six triggers, the check that may veto a
   run, what a run turns out to be. One source for two drawings of it: the home page's Automate stage and the hero
   figure on /features/automate/, both rendered by `AutomateFigure.astro`.
+- [src/anatomy.ts](src/anatomy.ts): the four nouns the docs spend without introducing — machine, sandbox, persona,
+  project — each with the part of the animal it is drawn as, and each with a definition that has to survive that
+  gloss being deleted. Also where the drawing stops being true, which is on the page rather than in a footnote.
+  `AnatomyFigure.astro` draws it; the metaphor is licensed for `/docs/anatomy/` and nowhere else
+  (`docs/marketing/landing-blueprint.md`).
 - [src/pricing.ts](src/pricing.ts): the pricing page's copy; figures from [src/hosted.ts](src/hosted.ts), the
   published hosted figures (the plan's price, the free lane's hours and removal window, the machine's shape)
   every page that mentions money reads.

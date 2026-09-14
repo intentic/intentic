@@ -27,6 +27,12 @@ const families: Family[] = [
         about: "The two tiers, and the things that make up the half that runs on your hardware.",
         terms: [
             {
+                word: "Machine",
+                what: "The computer a sandbox runs on: your laptop, a server you rent, or one we host for you. It supplies processors, memory and disk, and nothing else about your agents depends on which one it is.",
+                href: "/docs/anatomy/",
+                page: "Anatomy",
+            },
+            {
                 word: "Sandbox",
                 what: "A long-lived workspace environment on a machine you choose, normally one Docker container plus durable volumes. It holds many conversations, their repos, terminals and capabilities, and is the only product tier that sees your code.",
                 href: "/docs/architecture/",
@@ -55,6 +61,12 @@ const families: Family[] = [
                 what: "The /work directory inside the sandbox: your repos, and the files the agent reads and writes. It lives in a named Docker volume, so it survives every update, rebuild and rollback.",
                 href: "/docs/docker/",
                 page: "Docker setup",
+            },
+            {
+                word: "Project",
+                what: "One repository in the workspace. No conversation owns one: every agent in that sandbox can reach it, each on a branch of its own, and the same project can sit in two sandboxes at once because each keeps its own clone.",
+                href: "/docs/anatomy/",
+                page: "Anatomy",
             },
             {
                 word: "Slug",
@@ -96,13 +108,19 @@ const families: Family[] = [
     },
     {
         label: "Doing the work",
-        about: "What an agent run is, and the words for running several at once.",
+        about: "What an agent run is, what scopes it, and the words for running several at once.",
         terms: [
             {
                 word: "Conversation",
                 what: "One thread of work with the agent, addressable and resumable by an id you choose. A sandbox holds many, and each one keeps its own transcript.",
                 href: "/docs/parallel-agents/",
                 page: "Parallel agents",
+            },
+            {
+                word: "Persona",
+                what: "A card that decides what a conversation is and may do: which tools are mounted, which connected accounts it signs in as, which folder it starts in, which instructions it runs on. What it withholds is absent from the turn rather than refused during it.",
+                href: "/docs/anatomy/",
+                page: "Anatomy",
             },
             {
                 word: "Turn",

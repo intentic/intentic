@@ -1,0 +1,665 @@
+---
+import { anatomyScene, type AnatomyPart } from "@intentic/site-content/anatomy";
+
+/* The relief on /docs/anatomy/: one body, arms with brains of their own, a band on each arm, tablets on the floor.
+   Geometry is COMPUTED from waypoints, not drawn by hand, so a reshaped arm carries its ganglion, its band, its
+   suckers, its patch of floor and its label pin with it. The words are anatomy.ts's. Highlighting is CSS only
+   (`:has`), so a browser without it shows the whole relief at rest rather than a figure that needs a script to read. */
+
+const anatomy = anatomyScene;
+
+type Pt = readonly [number, number];
+
+const VIEW = { w: 760, h: 545 };
+const GROUND = 452;
+
+/** Two decimals: enough for a 760-unit box, and it keeps the emitted paths from doubling in size. */
+const n = (v: number): number => Math.round(v * 100) / 100;
+
+/* An arm is a list of waypoints, not Bézier handles: a curl is three points where it would be six control points, and
+   the shape stays editable by someone who is not holding the cubic in their head. Catmull-Rom passes through all of
+   them; the ends are doubled so the curve starts and stops exactly where the list says. */
+const segmentOf = (pts: readonly Pt[], t: number) => {
+    const spans = pts.length - 1;
+    const i = Math.min(Math.floor(t * spans), spans - 1);
+    return {
+        s: t * spans - i,
+        p: [pts[Math.max(i - 1, 0)]!, pts[i]!, pts[i + 1]!, pts[Math.min(i + 2, spans)]!] as const,
+    };
+};
+
+const at = (pts: readonly Pt[], t: number): Pt => {
+    const { s, p } = segmentOf(pts, t);
+    const axis = (k: 0 | 1): number => {
+        const [a, b, c, d] = [p[0][k], p[1][k], p[2][k], p[3][k]];
+        return 0.5 * (2 * b + (c - a) * s + (2 * a - 5 * b + 4 * c - d) * s * s + (3 * b - a - 3 * c + d) * s * s * s);
+    };
+    return [axis(0), axis(1)];
+};
+
+/** Unit normal, 90° left of travel. The sign a caller passes is which flank of the arm it wants. */
+const normalAt = (pts: readonly Pt[], t: number): Pt => {
+    const { s, p } = segmentOf(pts, t);
+    const slope = (k: 0 | 1): number => {
+        const [a, b, c, d] = [p[0][k], p[1][k], p[2][k], p[3][k]];
+        return 0.5 * (c - a + 2 * (2 * a - 5 * b + 4 * c - d) * s + 3 * (3 * b - a - 3 * c + d) * s * s);
+    };
+    const dx = slope(0);
+    const dy = slope(1);
+    const len = Math.hypot(dx, dy) || 1;
+    return [-dy / len, dx / len];
+};
+
+interface Arm {
+    path: readonly Pt[];
+    /** Ribbon width at the shoulder and at the tip, in view units. */
+    base: number;
+    tip: number;
+    /** Which flank carries the suckers: chosen per arm so all four read as facing the viewer. */
+    flank: 1 | -1;
+    /** Nine suckers below the band; 1 is a tool the persona mounted, 0 is one it withheld. */
+    live: readonly (0 | 1)[];
+    /** Seconds of offset on the sway, so no two arms breathe in step. */
+    delay: number;
+}
+
+/* An exponent near 1 keeps the arm thick most of its length and thins it only near the tip. Higher, and the taper eats
+   the arm by halfway, which is what makes the suckers too small to read. */
+const halfWidth = (arm: Arm, t: number): number => (arm.tip + (arm.base - arm.tip) * (1 - t) ** 1.1) / 2;
+
+/** A point `spread` of the way out from the centreline toward one flank. */
+const flankAt = (arm: Arm, t: number, spread: number): Pt => {
+    const [x, y] = at(arm.path, t);
+    const [nx, ny] = normalAt(arm.path, t);
+    const w = halfWidth(arm, t) * spread;
+    return [x + nx * w, y + ny * w];
+};
+
+/** The arm's outline: out along one flank, back along the other. 44 samples is smooth at this scale. */
+const ribbon = (arm: Arm): string => {
+    const steps = 44;
+    const near: string[] = [];
+    const far: string[] = [];
+    for (let i = 0; i <= steps; i += 1) {
+        const t = i / steps;
+        const [ax, ay] = flankAt(arm, t, 1);
+        const [bx, by] = flankAt(arm, t, -1);
+        near.push(`${n(ax)} ${n(ay)}`);
+        far.push(`${n(bx)} ${n(by)}`);
+    }
+    return `M${near.join("L")}L${far.reverse().join("L")}Z`;
+};
+
+/** The arm's own brain, carved as a volute: drawn from the centre out, the direction a chisel cuts one. */
+const volute = (cx: number, cy: number, r: number, turns = 2.2): string => {
+    const steps = 44;
+    const pts: string[] = [];
+    for (let i = 0; i <= steps; i += 1) {
+        const k = i / steps;
+        const a = k * turns * Math.PI * 2;
+        pts.push(`${n(cx + Math.cos(a) * r * k)} ${n(cy + Math.sin(a) * r * k)}`);
+    }
+    return `M${pts.join("L")}`;
+};
+
+/* Where each feature sits along an arm. The band divides reach from grip, which is why every sucker is below it. */
+const GANGLION_T = 0.12;
+const BAND = { from: 0.38, to: 0.45 };
+const SUCKERS = { from: 0.52, to: 0.97 };
+
+/** The band as a carved ring: four corners, overhanging the arm on both flanks. */
+const bandRing = (arm: Arm, spread: number): string => {
+    const corners = [flankAt(arm, BAND.from, spread), flankAt(arm, BAND.to, spread), flankAt(arm, BAND.to, -spread), flankAt(arm, BAND.from, -spread)];
+    return `M${corners.map(([x, y]) => `${n(x)} ${n(y)}`).join("L")}Z`;
+};
+
+const suckersOf = (arm: Arm) =>
+    arm.live.map((live, i) => {
+        const t = SUCKERS.from + ((SUCKERS.to - SUCKERS.from) * i) / (arm.live.length - 1);
+        const [x, y] = flankAt(arm, t, arm.flank * 0.32);
+        return { x: n(x), y: n(y), r: n(Math.max(2.6, halfWidth(arm, t) * 0.5)), live };
+    });
+
+/** Where the arm comes closest to the floor: the patch it works, which is not the tip on an arm that curls up. */
+const lowestX = (arm: Arm): number => {
+    let best = at(arm.path, 0);
+    for (let i = 1; i <= 60; i += 1) {
+        const p = at(arm.path, i / 60);
+        if (p[1] > best[1]) {
+            best = p;
+        }
+    }
+    return best[0];
+};
+
+/* The four arms the page names. The outer pair curls up off the floor and the inner pair lies along it: an octopus
+   does not stand on four even legs, and four even legs was the first draft's whole problem. */
+const arms: Arm[] = [
+    {
+        path: [[322, 286], [292, 330], [250, 380], [196, 414], [140, 430], [96, 418], [82, 394]],
+        base: 38,
+        tip: 7,
+        flank: 1,
+        live: [1, 1, 0, 1, 1, 0, 1, 1, 1],
+        delay: 0,
+    },
+    {
+        path: [[350, 292], [342, 336], [332, 382], [314, 420], [270, 442], [216, 446]],
+        base: 36,
+        tip: 7,
+        flank: 1,
+        live: [1, 0, 1, 1, 1, 1, 0, 1, 1],
+        delay: -2.6,
+    },
+    {
+        path: [[410, 292], [418, 336], [428, 382], [446, 420], [490, 442], [544, 446]],
+        base: 36,
+        tip: 7,
+        flank: -1,
+        live: [1, 1, 1, 0, 1, 1, 1, 0, 1],
+        delay: -5.1,
+    },
+    {
+        path: [[438, 286], [468, 330], [510, 380], [564, 414], [620, 430], [664, 418], [678, 394]],
+        base: 38,
+        tip: 7,
+        flank: -1,
+        live: [0, 1, 1, 1, 0, 1, 1, 1, 1],
+        delay: -7.4,
+    },
+];
+
+/* Two more behind the body, unlabelled. They are there because an octopus has eight, and a drawing that showed four
+   would be making a claim about how many sandboxes a machine holds. */
+const backArms: Arm[] = [
+    { path: [[352, 280], [310, 318], [254, 350], [198, 370], [152, 360]], base: 26, tip: 5, flank: 1, live: [], delay: -3.8 },
+    { path: [[408, 280], [450, 318], [506, 350], [562, 370], [608, 360]], base: 26, tip: 5, flank: -1, live: [], delay: -6.2 },
+];
+
+const drawn = arms.map((arm) => {
+    const [gx, gy] = at(arm.path, GANGLION_T);
+    const [bx, by] = arm.path[0]!;
+    return {
+        limb: ribbon(arm),
+        ganglion: volute(gx, gy, 9),
+        band: bandRing(arm, 1.34),
+        bandInner: bandRing(arm, 0.92),
+        suckers: suckersOf(arm),
+        reachX: n(lowestX(arm)),
+        origin: `${n(bx)}px ${n(by)}px`,
+        delay: arm.delay,
+    };
+});
+
+/* The floor. One slab under each arm's patch, and a fifth in the gap between the inner two: a project nobody has
+   picked up is the ordinary case, and a drawing where every project is held would be saying otherwise. */
+const SLAB = { y: GROUND - 34, h: 34, w: 62 };
+const slabs = [...drawn.map((entry) => entry.reachX), 380].sort((a, b) => a - b);
+
+/** A pin naming one part: what it points at, where its plate sits, and which way the plate hangs off the leader. */
+interface Pin {
+    part: AnatomyPart;
+    anchor: Pt;
+    at: Pt;
+    align: "start" | "end" | "center";
+}
+
+const pinnedTo: Record<AnatomyPart["id"], Omit<Pin, "part">> = {
+    /* On the mantle's rim rather than its middle, so the leader does not cross the body it is naming. */
+    machine: { anchor: [458, 116], at: [624, 76], align: "start" },
+    sandbox: { anchor: at(arms[0]!.path, GANGLION_T), at: [112, 218], align: "end" },
+    persona: { anchor: at(arms[1]!.path, (BAND.from + BAND.to) / 2), at: [112, 384], align: "end" },
+    project: { anchor: [380, SLAB.y + SLAB.h], at: [380, 506], align: "center" },
+};
+
+const pins: Pin[] = anatomy.parts.map((part) => ({ part, ...pinnedTo[part.id] }));
+
+/** Leader: a hairline from the thing to the plate, its last stretch horizontal so it meets the plate square on. */
+const leader = (pin: Pin): string => {
+    const [ax, ay] = pin.anchor;
+    const [px, py] = pin.at;
+    if (pin.align === "center") {
+        return `M${n(ax)} ${n(ay)}L${px} ${py}`;
+    }
+    const turn = pin.align === "end" ? px + 18 : px - 18;
+    return `M${n(ax)} ${n(ay)}L${n(turn)} ${py}L${px} ${py}`;
+};
+
+const pct = (v: number, of: number): string => `${n((v / of) * 100)}%`;
+
+/* The highlight table, emitted from the parts list rather than written out four times: a fifth part would otherwise
+   light nothing and no test would notice. `:has` is the whole mechanism, so a browser without it simply never dims.
+   Pointer and focus are transient; a tapped plate (`:target`) is sticky and steps aside for them, because two parts
+   lit at once is the one state that makes the drawing say nothing. */
+const HOT = `:is(:hover, :focus-visible, :focus-within)`;
+const lit = (id: string, tail: string, body: string): string =>
+    [`.oc:has(.oc-t[data-part="${id}"]${HOT})`, `.oc:not(:has(.oc-t${HOT})):has(.oc-t[data-part="${id}"]:target)`]
+        .map((scope) => `${scope} ${tail}`)
+        .join(",") + `{${body}}`;
+
+const highlightCss = [
+    `.oc:has(.oc-t:is(:hover, :focus-visible, :focus-within, :target)) .oc-art{--ink:var(--color-line-bright);--face:url(#oc-quiet)}`,
+    ...anatomy.parts.flatMap((part) => [
+        lit(part.id, `.oc-p-${part.id}`, `--ink:var(--color-primary-400);--face:url(#oc-lit);filter:drop-shadow(0 0 9px var(--role-figure-halo))`),
+        lit(part.id, `:is(.oc-pin,.oc-def)[data-part="${part.id}"]`, `--oc-edge:var(--color-primary-400);--oc-word:var(--color-primary-300)`),
+        lit(part.id, `.oc-lead-${part.id} .oc-lead-line`, `stroke:var(--color-primary-400)`),
+    ]),
+].join("");
+---
+
+{/* Plain divs, not <figure>/<figcaption>/<article>. The markdown mirror the site emits for machines renders a
+    figcaption as one italic run-on, and it finds a page's readable region by matching the outermost <article>, which
+    a nested one inside a docs page is one edit away from cutting short. The drawing is labelled on the <svg> itself. */}
+<div class="oc">
+    <div class="oc-stage">
+        {/* `slice` is inert while the height is intrinsic; it only bites in the narrow rule, which crops the empty
+            strip the project plate used to stand in. */}
+        <svg class="oc-art" viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} preserveAspectRatio="xMidYMin slice" role="img" aria-label={anatomy.label}>
+            <defs>
+                <linearGradient id="oc-face" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="var(--color-gold)" stop-opacity="0.26" />
+                    <stop offset="1" stop-color="var(--color-gold)" stop-opacity="0.07" />
+                </linearGradient>
+                <linearGradient id="oc-lit" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="var(--color-primary-400)" stop-opacity="0.3" />
+                    <stop offset="1" stop-color="var(--color-primary-500)" stop-opacity="0.08" />
+                </linearGradient>
+                <linearGradient id="oc-quiet" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="var(--color-gold)" stop-opacity="0.1" />
+                    <stop offset="1" stop-color="var(--color-gold)" stop-opacity="0.03" />
+                </linearGradient>
+            </defs>
+
+            {/* The floor: one plinth line with joint ticks above it. */}
+            <g class="oc-floor">
+                <path class="oc-floor-line" d={`M0 ${GROUND}h${VIEW.w}`} />
+                <path class="oc-floor-joint" d={Array.from({ length: 8 }, (_, i) => `M${52 + i * 94} ${GROUND}v-9`).join("")} />
+            </g>
+
+            {/* How far each arm reaches: the persona's scope, drawn on the floor it covers. */}
+            <g class="oc-part oc-p-persona">
+                {drawn.map((entry) => <ellipse class="oc-reach" cx={entry.reachX} cy={GROUND - 17} rx="44" ry="23" />)}
+            </g>
+
+            {/* The projects. */}
+            <g class="oc-part oc-p-project">
+                {
+                    slabs.map((cx) => (
+                        <g class="oc-slab">
+                            <rect class="oc-slab-face" x={n(cx - SLAB.w / 2)} y={SLAB.y} width={SLAB.w} height={SLAB.h} />
+                            <path
+                                class="oc-slab-text"
+                                d={`M${n(cx - SLAB.w / 2 + 9)} ${SLAB.y + 10}h${SLAB.w - 18}M${n(cx - SLAB.w / 2 + 9)} ${SLAB.y + 18}h${SLAB.w - 28}M${n(cx - SLAB.w / 2 + 9)} ${SLAB.y + 26}h${SLAB.w - 38}`}
+                            />
+                        </g>
+                    ))
+                }
+            </g>
+
+            {/* Arms behind the body, laid in before the mantle so its rim cuts them off. */}
+            <g class="oc-part oc-p-sandbox oc-behind">
+                {backArms.map((arm) => <path class="oc-limb" d={ribbon(arm)} />)}
+            </g>
+
+            {/* The body: a tapered mantle, a neck, and the head the eyes sit on. */}
+            <g class="oc-part oc-p-machine">
+                {/* Sac, waist, then a head that widens again: the eyes need a bulge to sit on, or they read as goggles. */}
+                <path
+                    class="oc-mantle"
+                    d="M380 34C436 34 470 86 472 146C474 186 458 208 436 216C468 224 486 244 486 262C486 284 448 294 380 294C312 294 274 284 274 262C274 244 292 224 324 216C302 208 286 186 288 146C290 86 324 34 380 34Z"
+                />
+                <path class="oc-mantle-carve" d="M330 80C352 66 408 66 430 80M316 120C348 102 412 102 444 120" />
+                <path
+                    class="oc-papilla"
+                    d="M322 150h0M350 142h0M380 138h0M410 142h0M438 150h0M330 178h0M362 170h0M398 170h0M430 178h0M344 202h0M380 196h0M416 202h0"
+                />
+                <g class="oc-eye">
+                    <ellipse class="oc-eye-ball" cx="322" cy="256" rx="22" ry="17" />
+                    <path class="oc-eye-pupil" d="M310 256c5-7 19-7 24 0c-5 7-19 7-24 0Z" />
+                    <path class="oc-eye-lid" d="M300 252c6-13 38-13 44 0" />
+                </g>
+                <g class="oc-eye">
+                    <ellipse class="oc-eye-ball" cx="438" cy="256" rx="22" ry="17" />
+                    <path class="oc-eye-pupil" d="M426 256c5-7 19-7 24 0c-5 7-19 7-24 0Z" />
+                    <path class="oc-eye-lid" d="M416 252c6-13 38-13 44 0" />
+                </g>
+            </g>
+
+            {/* The four arms the page names, each carrying its own brain, its band and its grip. */}
+            {
+                drawn.map((entry) => (
+                    <g class="oc-arm" style={`transform-origin:${entry.origin};--d:${entry.delay}s`}>
+                        <path class="oc-part oc-p-sandbox oc-limb" d={entry.limb} />
+                        <path class="oc-part oc-p-sandbox oc-ganglion" d={entry.ganglion} />
+                        <g class="oc-part oc-p-persona">
+                            <path class="oc-band" d={entry.band} />
+                            <path class="oc-band-line" d={entry.bandInner} />
+                            {
+                                entry.suckers.map((sucker) => (
+                                    <circle class:list={["oc-sucker", sucker.live === 1 && "oc-sucker-on"]} cx={sucker.x} cy={sucker.y} r={sucker.r} />
+                                ))
+                            }
+                        </g>
+                    </g>
+                ))
+            }
+
+            {/* Leaders, drawn last so nothing crosses over them. */}
+            <g class="oc-leads">
+                {
+                    pins.map((pin) => (
+                        <g class={`oc-lead oc-lead-${pin.part.id}`}>
+                            <path class="oc-lead-line" d={leader(pin)} />
+                            <circle class="oc-lead-dot" cx={n(pin.anchor[0])} cy={n(pin.anchor[1])} r="3.4" />
+                        </g>
+                    ))
+                }
+            </g>
+        </svg>
+
+        {/* Real links, over the drawing rather than inside it: they carry the words, and tapping one opens its card. */}
+        {
+            pins.map((pin) => (
+                <a
+                    class:list={["oc-t", "oc-pin", `oc-pin-${pin.align}`]}
+                    data-part={pin.part.id}
+                    href={`#oc-${pin.part.id}`}
+                    style={`left:${pct(pin.at[0], VIEW.w)};top:${pct(pin.at[1], VIEW.h)}`}
+                >
+                    {pin.part.word}
+                </a>
+            ))
+        }
+    </div>
+
+    <div class="oc-defs">
+        {
+            anatomy.parts.map((part) => (
+                <div class="oc-t oc-def" data-part={part.id} id={`oc-${part.id}`}>
+                    {/* The gloss is a sibling of the heading, not a span inside it: in the markdown mirror an inline
+                        one reads as part of the heading ("### The machine the body"). */}
+                    <div class="oc-def-head">
+                        <h3 class="oc-def-word">{part.word}</h3>
+                        <p class="oc-def-creature">{part.creature}</p>
+                    </div>
+                    <p class="oc-def-gloss">{part.gloss}</p>
+                    <p class="oc-def-literal">{part.literal}</p>
+                    <ul class="oc-holds">{part.holds.map((held) => <li>{held}</li>)}</ul>
+                    {/* In its own paragraph for the same reason: a bare link after a list is glued to the last item. */}
+                    <p class="oc-def-link"><a class="oc-def-more" href={part.href}>{part.page}</a></p>
+                </div>
+            ))
+        }
+    </div>
+</div>
+
+<style is:inline set:html={highlightCss}></style>
+
+<style>
+    /* The figure sizes its own parts off its width, not the viewport: it sits in a docs column beside a rail. */
+    .oc {
+        container-type: inline-size;
+    }
+
+    .oc-stage {
+        position: relative;
+    }
+    .oc-art {
+        display: block;
+        width: 100%;
+        height: auto;
+        /* Both are inherited by every part below, which is how one rule dims the relief and another relights one limb. */
+        --ink: var(--color-gold);
+        --face: url(#oc-face);
+    }
+    .oc-part {
+        transition: filter 0.35s ease;
+    }
+
+    /* One stroke vocabulary for the whole carving. */
+    .oc-floor-line {
+        fill: none;
+        stroke: var(--color-line-bright);
+        stroke-width: 1.2;
+    }
+    .oc-floor-joint {
+        fill: none;
+        stroke: var(--color-line);
+        stroke-width: 1;
+    }
+    .oc-limb,
+    .oc-mantle {
+        fill: var(--face);
+        stroke: var(--ink);
+        stroke-width: 1.6;
+        stroke-linejoin: round;
+    }
+    .oc-behind .oc-limb {
+        opacity: 0.4;
+    }
+    .oc-mantle-carve,
+    .oc-eye-lid {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 1.3;
+        stroke-linecap: round;
+        opacity: 0.65;
+    }
+    /* Skin, carved as dots: a zero-length path with a round cap, so one `d` draws all twelve. */
+    .oc-papilla {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 3.4;
+        stroke-linecap: round;
+        opacity: 0.32;
+    }
+    /* Carved, not painted: the eye is the stone's own face and the pupil is cut into it. A dark socket instead reads
+       as an eye only in the dark skin, where the socket and the light skin's ink happen to be the same brown. */
+    .oc-eye-ball {
+        fill: var(--face);
+        stroke: var(--ink);
+        stroke-width: 1.6;
+    }
+    .oc-eye-pupil {
+        fill: var(--ink);
+    }
+    .oc-ganglion {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 1.8;
+        stroke-linecap: round;
+    }
+    .oc-band {
+        fill: var(--face);
+        stroke: var(--ink);
+        stroke-width: 1.6;
+    }
+    .oc-band-line {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 1;
+        opacity: 0.55;
+    }
+    .oc-sucker {
+        fill: var(--color-canvas);
+        stroke: var(--ink);
+        stroke-width: 1.1;
+        opacity: 0.45;
+    }
+    /* A mounted tool is filled; a withheld one is the faint ring beside it, because nothing here is switched off. */
+    .oc-sucker-on {
+        fill: var(--ink);
+        opacity: 1;
+    }
+    .oc-reach {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 1.1;
+        stroke-dasharray: 5 7;
+        opacity: 0.5;
+    }
+    .oc-slab-face {
+        fill: var(--face);
+        stroke: var(--ink);
+        stroke-width: 1.4;
+    }
+    .oc-slab-text {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        opacity: 0.5;
+    }
+    .oc-lead-line {
+        fill: none;
+        stroke: var(--color-line-bright);
+        stroke-width: 1;
+        transition: stroke 0.3s ease;
+    }
+    .oc-lead-dot {
+        fill: var(--color-gold);
+    }
+
+    /* The arms drift. The origin is each arm's own shoulder, written onto the element by the frontmatter. */
+    .oc-arm {
+        transform-box: view-box;
+        animation: oc-sway 11s ease-in-out infinite;
+        animation-delay: var(--d);
+    }
+    @keyframes oc-sway {
+        0%,
+        100% {
+            transform: rotate(-1deg);
+        }
+        50% {
+            transform: rotate(1deg);
+        }
+    }
+
+    /* A label plate, sitting on the drawing at a point the frontmatter computed. */
+    .oc-pin {
+        position: absolute;
+        display: block;
+        border: 1px solid var(--oc-edge, var(--color-line-strong));
+        background: var(--role-figure-panel);
+        padding: 0.3rem 0.6rem;
+        font-family: var(--font-mark);
+        font-size: 0.8125rem;
+        font-weight: 600;
+        line-height: 1.1;
+        white-space: nowrap;
+        color: var(--oc-word, var(--color-content));
+        text-decoration: none;
+        transition:
+            border-color 0.3s ease,
+            color 0.3s ease;
+    }
+    .oc-pin-start {
+        transform: translate(0, -50%);
+    }
+    .oc-pin-end {
+        transform: translate(-100%, -50%);
+    }
+    .oc-pin-center {
+        transform: translate(-50%, -50%);
+    }
+
+    /* The four definitions. Always present and always readable: the highlight is an aid, never the way in. */
+    .oc-defs {
+        display: grid;
+        gap: 0.75rem;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 1.5rem;
+    }
+    .oc-def {
+        border: 1px solid var(--oc-edge, var(--color-line));
+        background: var(--color-card);
+        padding: 1.1rem 1.2rem 1.2rem;
+        transition: border-color 0.3s ease;
+    }
+    .oc-def-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.2rem 0.6rem;
+    }
+    .oc-def-word {
+        font-family: var(--font-mark);
+        font-size: 1.0625rem;
+        font-weight: 600;
+        line-height: 1.2;
+        color: var(--oc-word, var(--color-content));
+        transition: color 0.3s ease;
+    }
+    .oc-def-creature {
+        font-family: var(--font-sans);
+        font-size: 0.75rem;
+        font-weight: 400;
+        letter-spacing: 0.02em;
+        color: var(--color-gold);
+    }
+    .oc-def-gloss {
+        margin-top: 0.7rem;
+        border-left: 2px solid var(--color-line-strong);
+        padding-left: 0.7rem;
+        font-size: 0.875rem;
+        line-height: 1.5;
+        color: var(--color-gold-bright);
+    }
+    .oc-def-literal {
+        margin-top: 0.8rem;
+        font-size: 0.875rem;
+        line-height: 1.6;
+        color: var(--color-muted);
+    }
+    .oc-holds {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-top: 0.9rem;
+        padding: 0;
+        list-style: none;
+    }
+    .oc-holds li {
+        border: 1px solid var(--color-line);
+        background: var(--color-overlay);
+        padding: 0.15rem 0.5rem;
+        font-size: var(--text-2xs);
+        line-height: 1.4;
+        color: var(--color-subtle);
+    }
+    .oc-def-link {
+        margin-top: 0.9rem;
+    }
+    .oc-def-more {
+        font-size: 0.8125rem;
+        color: var(--color-link);
+    }
+    .oc-def-more::after {
+        content: " →";
+    }
+    .oc-def-more:hover {
+        text-decoration: underline;
+    }
+
+    /* Narrow: the plates come off the drawing, which has no room for them, the floor below them is cropped away, and
+       the cards stack. The drawing is decorative at this width; every word it labels is in the cards. */
+    @container (max-width: 40rem) {
+        .oc-pin,
+        .oc-leads {
+            display: none;
+        }
+        .oc-art {
+            aspect-ratio: 760 / 466;
+        }
+        .oc-defs {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .oc-arm {
+            animation: none;
+        }
+    }
+</style>

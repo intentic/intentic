@@ -27,6 +27,19 @@ export const docsBook: Book = {
                             },
                         },
                         {
+                            // Before Architecture on purpose: that page is a system map, and this is the vocabulary it
+                            // is drawn in. Owns "persona" and "project", which no other page defined.
+                            id: "anatomy",
+                            title: "Anatomy",
+                            blurb: "Machine, sandbox, persona and project, in one picture",
+                            meta: {
+                                title: "Anatomy · intentic docs",
+                                description:
+                                    "The four words these docs assume: the machine your work runs on, a sandbox, the persona that scopes a turn, and the projects agents reach for.",
+                                datePublished: "2026-09-14",
+                            },
+                        },
+                        {
                             id: "architecture",
                             title: "Architecture",
                             blurb: "Where identity, code, control, state and compute live",
@@ -46,7 +59,7 @@ export const docsBook: Book = {
                             meta: {
                                 title: "Glossary · intentic docs",
                                 description:
-                                    "What intentic means by daemon, sandbox, definition, bundle, runner, conversation, child agent, worktree, landing, harness, capability and control token.",
+                                    "What intentic means by machine, sandbox, persona, project, daemon, conversation, worktree, landing, harness, capability, runner and control token.",
                                 datePublished: "2026-08-11",
                             },
                         },
