@@ -14,11 +14,16 @@
  * on the art's empty middle and has one control; the vestibule is a working page with a picker, a command and
  * a reference column, and is laid out like one of the site's own article pages.
  *
- * EVERYTHING HERE IS PORTED FROM `_site/site/src/styles/global.css`, and when a recipe moves there it moves
- * here. It is deliberately written out rather than pulled from the app's tokens: those follow the accent the
- * user picked in the workspace, and the page a visitor is standing on when they meet these screens is one
- * fixed set of colours. Structure is GOLD; the ember is SPENT, never spread — a full stop on a headline beat,
- * the mark on the rung you have chosen, a ticked box.
+ * THE METALS THEMSELVES COME FROM `@intentic/house-css`, one layer further out again, and for the same reason
+ * one scale up: this file was a hand-kept copy of `_site/site/src/styles/global.css`, and "when a recipe moves
+ * there it moves here" is a rule nobody can keep. Carved stone, cast bronze, the cartouche frame kit and the
+ * ember glows are now `--house-*` and are read by the site, by this file and by the Sanctum skin. What is left
+ * here is the VALUES ONLY THESE SCREENS HAVE — the ground, the ink, the faces, the plate — and the composition
+ * of house material into the two plaques PrimeVue actually paints. The house metals are deliberately literal
+ * rather than pulled from the app's tokens: those follow the accent the user picked in the workspace, and the
+ * page a visitor is standing on when they meet these screens is one fixed set of colours. Structure is GOLD;
+ * the ember is SPENT, never spread — a full stop on a headline beat, the mark on the rung you have chosen, a
+ * ticked box.
  *
  * ── HOW IT REACHES THE APP'S OWN COMPONENTS ─────────────────────────────────────────────────────────────
  * `.entry` restates the design system's ROLE TOKENS in the site's values, which is the same move a skin makes
@@ -256,9 +261,8 @@
 }
 
 /* ── CARVED STONE, NOT POLISHED METAL ───────────────────────────────────────────────────────────────────
- * …and the difference is texture rather than colour. A dual-scale arithmetic composite inside one SVG filter
- * modulates fine mineral grain by a slow macro cloud, so some zones feel smoother and others more tactile —
- * stone is one material lit unevenly, not two materials stacked.
+ * …and the difference is texture rather than colour. The fill and the bevel are `--house-stone-*`; below is
+ * only this screen's use of them.
  *
  * DESCENDERS ARE STRUCTURAL HERE. The letters are painted as a background clipped to their shape, and a
  * background stops at the padding box, so anything a glyph reaches below it is simply not painted and the tail
@@ -273,9 +277,7 @@
     --descender: 0.2em;
     padding-block-end: var(--descender);
     margin-block-end: calc(-1 * var(--descender));
-    background-image:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480'%3E%3Cfilter id='d' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008' numOctaves='4' seed='11' stitchTiles='stitch' result='macro'/%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' seed='5' stitchTiles='stitch' result='fine'/%3E%3CfeComposite in='fine' in2='macro' operator='arithmetic' k1='0.4' k2='0.6' k3='0' k4='-0.04' result='grain'/%3E%3CfeColorMatrix in='grain' type='matrix' values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.72' intercept='0.14'/%3E%3CfeFuncG type='linear' slope='0.72' intercept='0.14'/%3E%3CfeFuncB type='linear' slope='0.72' intercept='0.14'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='480' height='480' filter='url(%23d)'/%3E%3C/svg%3E"),
-        linear-gradient(176deg, #cbb08d 0%, #bda07d 24%, #ab8c6c 52%, #97795c 78%, #86694f 100%);
+    background-image: var(--house-stone-noise), var(--house-stone-ramp);
     background-size:
         480px 480px,
         100% 100%;
@@ -284,20 +286,14 @@
     background-clip: text;
     color: transparent;
     -webkit-text-fill-color: transparent;
-    /* The bevel, and it has to be `filter` rather than `text-shadow`: the fill here IS a background, and a
-       background is painted BEFORE a text shadow, so a light shadow offset up-left would lay a flat pale copy
-       of the glyph over the texture it is meant to be lighting. Chained drop-shadows composite behind the
-       finished element instead — two pale edges for the lit face of the cut, a hard black one for its depth,
-       then two soft ones for the shadow the letter throws on the wall. */
-    filter: drop-shadow(0 -1px 0 rgba(247, 234, 208, 0.8)) drop-shadow(-1px -1px 0 rgba(247, 234, 208, 0.38)) drop-shadow(0 2px 0 rgba(0, 0, 0, 0.92))
-        drop-shadow(0 4px 5px rgba(0, 0, 0, 0.62)) drop-shadow(0 12px 24px rgba(0, 0, 0, 0.45));
+    filter: var(--house-stone-bevel);
 }
 /* Its own span, so it escapes the clipped gradient above. */
 .entry-stop {
     color: var(--ember);
     font-family: var(--face-display);
     margin-left: 0.06em;
-    filter: drop-shadow(0 0 14px rgba(224, 123, 39, 0.55));
+    filter: var(--house-ember-stop-glow);
 }
 
 /* ── THE FRAME ──────────────────────────────────────────────────────────────────────────────────────────
@@ -371,7 +367,7 @@
     place-items: center;
     font-size: 1.5rem;
     transform: translate(-50%, -52%);
-    filter: drop-shadow(0 0 6px rgba(12, 9, 7, 0.95)) drop-shadow(0 0 16px rgba(224, 123, 39, 0.35));
+    filter: var(--house-finial-glow);
     pointer-events: none;
 }
 
@@ -469,7 +465,7 @@
     .entry .p-button-secondary:where(:not(.p-button-text, .p-button-link)) {
         color: var(--ink);
         background: rgba(20, 14, 10, 0.72);
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(201,160,92,0.5)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(201,160,92,0.5)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(201,160,92,0.24)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(201,160,92,0.24)' stroke-width='2.24'/%3E%3C/svg%3E");
+        border-image-source: var(--house-cartouche);
         transition: color 0.22s ease;
     }
     /* The lit frame, stacked and faded in. Inherits `--cut`, so its notch can never drift from the one the
@@ -479,7 +475,7 @@
         position: absolute;
         inset: -1px;
         border: 1px solid transparent;
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(222,188,126,0.92)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(222,188,126,0.92)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(222,188,126,0.45)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(222,188,126,0.45)' stroke-width='2.24'/%3E%3C/svg%3E");
+        border-image-source: var(--house-cartouche-lit);
         border-image-slice: 13;
         border-image-width: 13px;
         border-image-repeat: stretch;
@@ -500,37 +496,19 @@
         opacity: 1;
     }
 
-    /* ── CAST BRONZE — the committing action, and the only light-on-dark object on these screens.
-       Gold rather than ember, because ember is the page's one spent colour and filling a plaque with it would
-       leave the accents nothing to be brighter than. Three layers make it metal rather than a swatch, front to
-       back: a specular sweep raking across the plate at the angle the page's own light comes from, a brushed
-       grain (generated, because a repeating gradient off-axis staircases at button size and beats into moiré),
-       and the body. The label is CUT INTO the plate — a warm near-black with one pale hairline above each
-       letter, 11:1 on the metal — and it does not lighten on hover, because metal that brightens does not turn
-       its engraving pale. */
+    /* ── CAST BRONZE — the committing action, and the only light-on-dark object on these screens. The metal
+       is `--house-bronze-*` and its argument is in house.css; what this rule adds is the cartouche the app's
+       version of the plaque is cut into, which the site's does not have to state twice. */
     .entry .p-button:where(:not(.p-button-secondary, .p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)) {
         font-weight: var(--font-weight-semibold);
-        color: #21140a;
-        text-shadow: 0 1px 0 rgba(255, 248, 232, 0.42);
-        background-color: #d9b169;
-        background-image:
-            linear-gradient(100deg, transparent 26%, rgba(255, 250, 236, 0.42) 44%, rgba(255, 250, 236, 0.08) 55%, transparent 68%),
-            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='64'%3E%3Cfilter id='b' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.9' numOctaves='3' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.23 0 0 0 0 0.07 0.5 0 0 0 -0.16'/%3E%3C/filter%3E%3Crect width='320' height='64' filter='url(%23b)'/%3E%3C/svg%3E"),
-            linear-gradient(180deg, #f2d69f 0%, #ddb571 40%, #c99a4f 74%, #b3823c 100%);
-        /* Stretched to the button rather than tiled: turbulence has no seam, so a repeat would show its joins,
-           and one field scaled to the plate is how a piece is brushed after it is cut. */
+        color: var(--house-bronze-ink);
+        text-shadow: var(--house-bronze-ink-lip);
+        background-color: var(--house-bronze-fill);
+        background-image: var(--house-bronze-sweep), var(--house-brushed), var(--house-bronze-body);
         background-size: 100% 100%;
         background-repeat: no-repeat;
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(255,239,203,0.92)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(255,239,203,0.92)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(120,80,32,0.45)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(120,80,32,0.45)' stroke-width='2.24'/%3E%3C/svg%3E");
-        /* A lit hairline along the top edge and a shade along the foot is the whole of a bevel at this size.
-           The outer pair lifts the plaque off the wall: a warm halo the near-black page has nothing else like,
-           and a short drop under it so the object has somewhere to sit. */
-        box-shadow:
-            inset 0 1px 0 rgba(255, 252, 242, 0.8),
-            inset 0 -1px 0 rgba(88, 56, 18, 0.5),
-            inset 0 0 16px rgba(140, 94, 36, 0.25),
-            0 0 30px rgba(226, 168, 78, 0.3),
-            0 6px 18px -6px rgba(0, 0, 0, 0.75);
+        border-image-source: var(--house-cartouche-bronze);
+        box-shadow: var(--house-bronze-bevel);
     }
     /* Under the pointer the plate catches more of the same light rather than changing colour: one warm sheen,
        one opacity, so the lift arrives as a single movement. */
@@ -538,7 +516,7 @@
         content: "";
         position: absolute;
         inset: 0;
-        background: linear-gradient(180deg, rgba(255, 250, 236, 0.42) 0%, rgba(255, 244, 220, 0.12) 55%, transparent 100%);
+        background: var(--house-bronze-sheen);
         opacity: 0;
         pointer-events: none;
         transition: opacity 0.22s ease;
@@ -548,15 +526,10 @@
         .p-button:where(:not(.p-button-secondary, .p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)):not(:disabled):hover,
     .entry
         .p-button:where(:not(.p-button-secondary, .p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)):focus-visible {
-        color: #21140a;
-        background-color: #d9b169;
+        color: var(--house-bronze-ink);
+        background-color: var(--house-bronze-fill);
         border-color: transparent;
-        box-shadow:
-            inset 0 1px 0 rgba(255, 252, 242, 0.8),
-            inset 0 -1px 0 rgba(88, 56, 18, 0.5),
-            inset 0 0 16px rgba(140, 94, 36, 0.25),
-            0 0 38px rgba(226, 168, 78, 0.42),
-            0 8px 22px -6px rgba(0, 0, 0, 0.78);
+        box-shadow: var(--house-bronze-bevel-lit);
     }
     .entry
         .p-button:where(:not(.p-button-secondary, .p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)):not(:disabled):hover::after,
@@ -580,7 +553,7 @@
         text-shadow: none;
         box-shadow: none;
         opacity: 1;
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(201,160,92,0.34)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(201,160,92,0.34)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(201,160,92,0.16)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(201,160,92,0.16)' stroke-width='2.24'/%3E%3C/svg%3E");
+        border-image-source: var(--house-cartouche-dim);
     }
 
     /* ── THE QUIET TIER — no chrome at all until a pointer arrives: an escape hatch, a Cancel, the way back.

@@ -1385,6 +1385,9 @@ importers:
       '@intentic/extension-ui':
         specifier: workspace:*
         version: link:../../_shared/extension-ui
+      '@intentic/house-css':
+        specifier: workspace:*
+        version: link:../../_shared/house-css
       '@intentic/localhost-https':
         specifier: workspace:*
         version: link:../../_tools/localhost-https
@@ -3350,6 +3353,8 @@ importers:
         specifier: 'catalog:'
         version: 3.3.9(typescript@5.9.3)
 
+  _shared/house-css: {}
+
   _shared/registry:
     dependencies:
       tslib:
@@ -3571,6 +3576,9 @@ importers:
       '@intentic/constants':
         specifier: workspace:*
         version: link:../../_tools/constants
+      '@intentic/house-css':
+        specifier: workspace:*
+        version: link:../../_shared/house-css
       '@intentic/registry':
         specifier: workspace:*
         version: link:../../_shared/registry

@@ -454,7 +454,7 @@
 }
 .home .compare-ours {
     border-color: rgba(224, 123, 39, 0.3);
-    background: linear-gradient(160deg, rgba(60, 36, 16, 0.5), rgba(20, 14, 9, 0.55));
+    background: var(--wash-ember);
     padding: 1.9rem;
 }
 .home .compare-chat {

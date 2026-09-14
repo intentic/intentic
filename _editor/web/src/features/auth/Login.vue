@@ -352,7 +352,7 @@ watch(
 }
 .step[aria-current="step"] .entry-lozenge {
     color: var(--ember);
-    filter: drop-shadow(0 0 5px rgba(224, 123, 39, 0.9)) drop-shadow(0 0 12px rgba(224, 123, 39, 0.55));
+    filter: var(--house-ember-mark-glow);
 }
 .step h2 {
     font-family: var(--face-mark);

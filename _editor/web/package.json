@@ -44,6 +44,7 @@
         "@intentic/extension-api": "workspace:*",
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/extension-ui": "workspace:*",
+        "@intentic/house-css": "workspace:*",
         "@intentic/registry": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/sandbox-run": "workspace:*",

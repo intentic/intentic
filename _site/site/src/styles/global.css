@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* THE HOUSE METALS — carved stone, cast bronze, the cartouche kit, the ember glows. Shared with the app's
+ * entry screens and the Sanctum skin, which paint the same objects: _shared/house-css/README.md. */
+@import "../../../../_shared/house-css/house.css";
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════════
  * THE SITE, TOLD AS CARVED STONE.
@@ -192,6 +195,16 @@
        have moved everything here and left the footer behind. */
     --color-ground: #090706;
 
+    /* ── The two panel washes ────────────────────────────
+     * A surface here is a shallow diagonal ramp rather than a flat fill, which is what stops a page of
+     * fifteen panels reading as fifteen identical rectangles. There are two, and the difference is what the
+     * panel is FOR: `--wash-panel` is the ordinary one, worn by `.card` and by any figure drawing a card;
+     * `--wash-ember` is what a CHOSEN panel wears — the column that is the answer in a comparison, the
+     * outcome at the end of a diagram — and it is the only place the accent is spread over an area rather
+     * than spent on a mark. Both are stated here because three files paint them and they must not drift. */
+    --wash-panel: linear-gradient(160deg, rgba(34, 25, 17, 0.6), rgba(18, 13, 9, 0.55));
+    --wash-ember: linear-gradient(160deg, rgba(60, 36, 16, 0.5), rgba(20, 14, 9, 0.55));
+
     /* ── Rules, in three weights ─────────────────────────
      * Everything structural is one of these, and all three are gold at an alpha rather than a grey: a
      * hairline on this ground has to read as metal catching light, not as a seam. */
@@ -345,25 +358,11 @@
 
 @layer components {
     /* ══ DISPLAY TYPE ═══════════════════════════════════════════════════════════════════════════════
-     * CARVED STONE, NOT POLISHED METAL — and the difference is texture, not colour.
-     *
-     * This started as a single smooth gradient from near-white to gold, and it read as gold leaf: too
-     * bright at the top (#fbf3e2 is four steps lighter than anything in the reference art, so the letters
-     * blew out and the relief had nothing to sit against) and too saturated at the foot. Sampling the
-     * reference gives a much narrower, much less shiny range — its brightest 0.5% of glyph pixels average
-     * #dfc8aa, not white — so the ramp below tops out there and lands on a warm grey-brown.
-     *
-     * The mottle is what actually makes it stone. Three background layers are clipped to the glyphs at
-     * once: a coarse fractal cloud for the blotching a weathered surface has, a fine one for grain, and
-     * the ramp under both. They composite with `overlay` and `soft-light`, so the noise moves the ramp's
-     * own colour lighter and darker rather than laying grey over it — a stone is one material lit
-     * unevenly, not two materials stacked. `stitchTiles` makes each cloud tile seamlessly, so a heading
-     * that wraps does not show a seam at the fold.
-     *
-     * `feColorMatrix` is a full matrix rather than `saturate 0` on purpose: feTurbulence generates noise
-     * in the ALPHA channel too, so a saturate-only filter leaves a randomly transparent rect whose holes
-     * average back toward the flat grey underneath — the mottle was being cancelled out almost exactly.
-     * This matrix takes the mean of the RGB noise as the grey AND pins alpha to 1.
+     * CARVED STONE, NOT POLISHED METAL — and the difference is texture, not colour. The material is
+     * `--house-stone-noise` / `--house-stone-ramp` / `--house-stone-bevel`, and house.css carries its whole
+     * argument: why the ramp stops short of white, why the mottle is a dual-scale composite, and why the
+     * bevel has to be a `filter`. What is below is this site's USE of it — the clip, the tracking and the
+     * descender clearance.
      *
      * DESCENDERS ARE STRUCTURAL HERE, NOT A LINE-HEIGHT SETTING. The letters are painted as a background
      * clipped to their shape, and a background is painted across the element's PADDING box — so anything a
@@ -391,10 +390,9 @@
         --display-descender: 0.2em;
         padding-block-end: var(--display-descender);
         margin-block-end: calc(-1 * var(--display-descender));
-        /* Dual-scale arithmetic composite: macro veining modulates fine mineral tooth inside one SVG. */
         background-image:
-            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480'%3E%3Cfilter id='d' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008' numOctaves='4' seed='11' stitchTiles='stitch' result='macro'/%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' seed='5' stitchTiles='stitch' result='fine'/%3E%3CfeComposite in='fine' in2='macro' operator='arithmetic' k1='0.4' k2='0.6' k3='0' k4='-0.04' result='grain'/%3E%3CfeColorMatrix in='grain' type='matrix' values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.72' intercept='0.14'/%3E%3CfeFuncG type='linear' slope='0.72' intercept='0.14'/%3E%3CfeFuncB type='linear' slope='0.72' intercept='0.14'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='480' height='480' filter='url(%23d)'/%3E%3C/svg%3E"),
-            linear-gradient(176deg, #cbb08d 0%, #bda07d 24%, #ab8c6c 52%, #97795c 78%, #86694f 100%);
+            var(--house-stone-noise),
+            var(--house-stone-ramp);
         background-size:
             480px 480px,
             100% 100%;
@@ -402,15 +400,7 @@
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
-        /* THE BEVEL, and it has to be `filter` rather than `text-shadow`. The fill here IS a background,
-           and a background is painted BEFORE a text shadow — so a light text-shadow offset up-left would
-           lay a flat pale copy of the glyph straight over the texture it is meant to be lighting.
-           `drop-shadow` composites behind the finished element instead, so each of these reads as an edge
-           OUTSIDE the stroke: two pale ones up and to the left for the lit face of the cut, then a hard
-           black one below for the cut's depth, then two soft ones for the shadow the letter throws on the
-           wall. Chained, so each sees the one before it and the black picks out the pale. */
-        filter: drop-shadow(0 -1px 0 rgba(247, 234, 208, 0.8)) drop-shadow(-1px -1px 0 rgba(247, 234, 208, 0.38))
-            drop-shadow(0 2px 0 rgba(0, 0, 0, 0.92)) drop-shadow(0 4px 5px rgba(0, 0, 0, 0.62)) drop-shadow(0 12px 24px rgba(0, 0, 0, 0.45));
+        filter: var(--house-stone-bevel);
     }
 
     /* The full stop that ends a headline beat, and often the only ember on the screen. Its own span, so it
@@ -420,7 +410,7 @@
         color: var(--color-primary-500);
         margin-left: 0.06em;
         font-family: var(--font-display);
-        filter: drop-shadow(0 0 14px rgba(224, 123, 39, 0.55));
+        filter: var(--house-ember-stop-glow);
     }
 
     /* ══ LABELS ═════════════════════════════════════════════════════════════════════════════════════ */
@@ -504,7 +494,7 @@
 
         background-color: rgba(20, 14, 10, 0.5);
         border: 1px solid transparent;
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(201,160,92,0.5)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(201,160,92,0.5)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(201,160,92,0.24)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(201,160,92,0.24)' stroke-width='2.24'/%3E%3C/svg%3E");
+        border-image-source: var(--house-cartouche);
         border-image-slice: 13;
         border-image-width: 13px;
         border-image-repeat: stretch;
@@ -533,7 +523,7 @@
         position: absolute;
         inset: -1px;
         border: 1px solid transparent;
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(222,188,126,0.92)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(222,188,126,0.92)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(222,188,126,0.45)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(222,188,126,0.45)' stroke-width='2.24'/%3E%3C/svg%3E");
+        border-image-source: var(--house-cartouche-lit);
         border-image-slice: 13;
         border-image-width: 13px;
         border-image-repeat: stretch;
@@ -593,61 +583,33 @@
      * words cut INTO it, dark on metal, where everything else is cream on stone. One glance finds it from
      * across the page, and it cannot be confused with a frame, because no frame here is filled.
      *
-     * IT IS GOLD, NOT EMBER, and that distinction is the whole reason this stays honest. Ember is the
-     * brand's accent and the rule is that it is SPENT, never spread — the full stop on a headline beat, a
-     * lotus bullet, a link. Filling a 220px button with it would spend the page's one saturated colour on
-     * furniture and leave the accents with nothing to be brighter than. Gold is the site's STRUCTURAL
-     * metal, already in every rule; raising it from a hairline to a solid, in exactly one place, is a
-     * promotion the vocabulary already has a word for.
-     *
-     * THREE LAYERS MAKE IT METAL RATHER THAN A SWATCH, front to back: a specular sweep raking across the
-     * plate at the angle the page's own light comes from, a brushed grain, and the body. The grain is
-     * GENERATED rather than drawn as striped gradients for the reason the wood's was — a repeating
-     * gradient off-axis has to step a pixel row every so often, and each stop is a hard edge the
-     * rasteriser cannot anti-alias along its length, so it staircases at button size and beats into moiré.
-     * Turbulence has no period to beat against itself. Frequency is lopsided, near-nothing across and high
-     * down the plate, which is what turns isotropic noise into the drag marks of a wire brush; it is
-     * matrixed to a flat dark gold driving ALPHA only, because what varies across brushed metal is how
-     * much light a scratch throws back, not its hue. */
+     * The metal itself is `--house-bronze-*`, and house.css carries the rest of the argument: why it is
+     * GOLD and not ember, why the grain is generated rather than drawn as striped gradients, and why the
+     * engraved label does not lighten under the pointer. */
     .btn-primary {
-        /* Cut into the metal, not printed on it: a warm near-black, with one pale hairline above each
-           letter so the stroke reads as an edge with a depth rather than as ink. 11:1 on the plate. */
-        color: #21140a;
+        color: var(--house-bronze-ink);
         font-weight: 600;
-        text-shadow: 0 1px 0 rgba(255, 248, 232, 0.42);
-        background-color: #d9b169;
-        background-image:
-            linear-gradient(100deg, transparent 26%, rgba(255, 250, 236, 0.42) 44%, rgba(255, 250, 236, 0.08) 55%, transparent 68%),
-            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='64'%3E%3Cfilter id='b' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.9' numOctaves='3' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.23 0 0 0 0 0.07 0.5 0 0 0 -0.16'/%3E%3C/filter%3E%3Crect width='320' height='64' filter='url(%23b)'/%3E%3C/svg%3E"),
-            linear-gradient(180deg, #f2d69f 0%, #ddb571 40%, #c99a4f 74%, #b3823c 100%);
-        /* Stretched to the button rather than tiled: turbulence has no seam, so a repeat would show its
-           joins, and one field scaled to the plate is how a piece is brushed after it is cut. */
+        text-shadow: var(--house-bronze-ink-lip);
+        background-color: var(--house-bronze-fill);
+        background-image: var(--house-bronze-sweep), var(--house-brushed), var(--house-bronze-body);
         background-size: 100% 100%;
         background-repeat: no-repeat;
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(255,239,203,0.92)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(255,239,203,0.92)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(120,80,32,0.45)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(120,80,32,0.45)' stroke-width='2.24'/%3E%3C/svg%3E");
-        /* A lit hairline along the top edge and a shade along the foot is the whole of a bevel at this
-           size. The outer pair is what actually lifts the plate off the wall: a warm halo the near-black
-           page has nothing else like, and a short drop under it so the object has somewhere to sit. */
-        box-shadow:
-            inset 0 1px 0 rgba(255, 252, 242, 0.8),
-            inset 0 -1px 0 rgba(88, 56, 18, 0.5),
-            inset 0 0 16px rgba(140, 94, 36, 0.25),
-            0 0 30px rgba(226, 168, 78, 0.3),
-            0 6px 18px -6px rgba(0, 0, 0, 0.75);
+        border-image-source: var(--house-cartouche-bronze);
+        box-shadow: var(--house-bronze-bevel);
     }
     .btn-primary::before {
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(255,251,240,1)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(255,251,240,1)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(140,96,40,0.5)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(140,96,40,0.5)' stroke-width='2.24'/%3E%3C/svg%3E");
+        border-image-source: var(--house-cartouche-bronze-lit);
     }
     /* Under the pointer the plate catches more of the same light rather than changing colour: one warm
        sheen, one opacity, so the lift arrives as a single movement. */
     .btn-primary::after {
-        background: linear-gradient(180deg, rgba(255, 250, 236, 0.42) 0%, rgba(255, 244, 220, 0.12) 55%, transparent 100%);
+        background: var(--house-bronze-sheen);
     }
     /* The label does not lighten on hover — it is cut into metal, and metal that brightens does not turn
        its engraving pale. Only the plate moves. */
     .btn-primary:hover,
     .btn-primary:focus-visible {
-        color: #21140a;
+        color: var(--house-bronze-ink);
     }
 
     /* The plain cartouche is already the secondary, so this only names it — every call site that says
@@ -732,7 +694,7 @@
         display: grid;
         place-items: center;
         transform: translate(-50%, -55%);
-        filter: drop-shadow(0 0 6px rgba(12, 9, 7, 0.95)) drop-shadow(0 0 16px rgba(224, 123, 39, 0.35));
+        filter: var(--house-finial-glow);
         pointer-events: none;
     }
 
@@ -742,7 +704,7 @@
     .card {
         position: relative;
         border: 1px solid var(--color-line);
-        background: linear-gradient(160deg, rgba(34, 25, 17, 0.6), rgba(18, 13, 9, 0.55));
+        background: var(--wash-panel);
         transition:
             border-color 0.25s ease,
             transform 0.25s ease;

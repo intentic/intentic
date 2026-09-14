@@ -2279,7 +2279,7 @@ const warmSandboxCredential = async (): Promise<void> => {
 }
 .rung-on .rung-name .entry-lozenge {
     color: var(--ember);
-    filter: drop-shadow(0 0 5px rgba(224, 123, 39, 0.9)) drop-shadow(0 0 12px rgba(224, 123, 39, 0.55));
+    filter: var(--house-ember-mark-glow);
 }
 .rung-cost {
     font-size: 0.8125rem;

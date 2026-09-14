@@ -1,0 +1,12 @@
+{
+    "name": "@intentic/house-css",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        "./house.css": "./house.css"
+    },
+    "files": [
+        "house.css"
+    ]
+}

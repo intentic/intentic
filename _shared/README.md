@@ -15,7 +15,9 @@ A package belongs in `_shared/` when one of these is true:
 - packages in **three or more parts** import it;
 - **both hubs** — `_editor` and `_sandbox` — import it;
 - it is part of the **SDK an extension author may depend on** (`_extensions/README.md` lists that set, and
-  `.oxlintrc.json` enforces it).
+  `.oxlintrc.json` enforces it);
+- it is **house material** — a stylesheet or asset that two parts both paint, where keeping it in either one
+  would make the other's own look a dependency on it.
 
 And one rule holds without exception: **nothing in `_shared/` may import from any other part.** A shared
 package that reached back into the daemon or the web app would make the middle a cycle, and every consumer
@@ -39,3 +41,4 @@ three of four of their dependents are deploy-internal, so moving them would only
 | [workspace-ignore](workspace-ignore)             | which paths are never read: the secrets floor, shared by editor, daemon and iq |
 | [api-contract](api-contract)                     | the wire between the web app and the platform API                              |
 | [capability-catalog](capability-catalog)         | what a capability is, and every kind there is                                  |
+| [house-css](house-css)                           | the metals the site and the app are both cut from, stated once                 |

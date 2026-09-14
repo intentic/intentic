@@ -5,7 +5,10 @@
         "interface": true,
         "type": true
     },
-    "ignoreDependencies": ["tslib"],
+    // `@intentic/house-css` is a stylesheet reached by a relative `@import` from a consumer's own CSS, which is
+    // this repo's convention for cross-package CSS and is invisible to a module graph. The dependency is
+    // declared so the edge is stated in the manifest, not so anything imports the package by name.
+    "ignoreDependencies": ["tslib", "@intentic/house-css"],
     "ignoreBinaries": ["docker", "docker compose", "ssh", "mutagen", "cloudflared", "rg", "tmux", "psql", "bun"],
     "workspaces": {
         ".": {
@@ -119,6 +122,12 @@
         },
         "_sandbox/*": {
             "entry": ["src/index.ts", "src/**/*.test.ts"]
+        },
+        // A stylesheet, not a module: no `src/`, no TypeScript. Empty rather than `["house.css"]` because knip's
+        // own defaults already find the file — what has to be overridden is the `_shared/*` default below, which
+        // would look for a `src/index.ts` that does not exist and report the package as unreachable.
+        "_shared/house-css": {
+            "entry": []
         },
         "_shared/*": {
             "entry": ["src/index.ts", "src/**/*.test.ts"]

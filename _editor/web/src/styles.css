@@ -12,6 +12,13 @@
  * order is load-bearing — see _editor/ui/src/styles/index.css. */
 @import "../../../_editor/ui/src/styles/index.css";
 
+/* THE HOUSE METALS — carved stone, cast bronze, the cartouche frame kit and the ember glows, as `--house-*`
+ * properties on `:root`. Not part of the design system and deliberately not accent-aware: it is the material
+ * the marketing site is built out of, and the two places in this app that wear the site's look read it from
+ * there rather than each keeping a copy. Both consumers are below — `./skins/sanctum.css` and
+ * `./styles/entry.css`. See _shared/house-css/README.md. */
+@import "../../../_shared/house-css/house.css";
+
 /* The class surface this app PROMISES to extension bundles — see the note where the extension `@source` used
  * to be, below. It lives in the design system because that is whose surface it is, and is imported here
  * because only the app that loads extension bundles has to pay for it. */
