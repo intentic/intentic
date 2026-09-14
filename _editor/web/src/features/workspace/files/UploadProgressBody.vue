@@ -30,6 +30,10 @@ const {
     dismiss,
 } = useUploadQueue();
 
+// The host's gap class lands on this component's root, which some phases don't have; bound by hand so Vue never
+// tries to inherit it onto nothing.
+defineOptions({ inheritAttrs: false });
+
 const pct = computed(() => (bytesTotal.value === 0 ? 100 : Math.min(100, Math.round((bytesDone.value / bytesTotal.value) * 100))));
 
 // Shown while bytes are in flight or failed; a clean finish's headline already says it all.
@@ -56,6 +60,9 @@ const groups = computed(() => {
 });
 const failures = computed(() => files.value.filter((file) => file.status === `failed`));
 
+// The scan line, which needs either a count or a name to say anything.
+const scanLine = computed(() => scanning.value && (files.value.length > 0 || scanningName.value !== ``));
+
 // Offer shown for the whole upload (not a dialog or prompt), so drag-and-drop still just works, with time to uncheck
 // it. One row per project; label names the file read (e.g. "pnpm · pnpm-lock.yaml") so the pick isn't opaque.
 const setupSummary = computed(() =>
@@ -64,6 +71,10 @@ const setupSummary = computed(() =>
         label: `${project.recipe.manager} · ${project.recipe.evidence}`,
     })),
 );
+
+// A clean finish leaves nothing under the headline; rendering no element at all is what keeps the card's gap row
+// from being reserved for an empty box.
+const drawn = computed(() => scanLine.value || breakdown.value || setupSummary.value.length > 0);
 
 let timer: ReturnType<typeof setTimeout> | undefined;
 watch(
@@ -90,7 +101,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="text-xs text-content">
+    <div v-if="drawn" v-bind="$attrs" class="text-xs text-content">
         <!-- Still scanning while files are already uploading; the headline belongs to the upload by then. -->
         <p v-if="scanning && files.length > 0" class="mb-2 truncate border-b border-line pb-2 text-2xs text-subtle">
             Scanning… {{ scannedCount }} {{ scannedCount === 1 ? `file` : `files`

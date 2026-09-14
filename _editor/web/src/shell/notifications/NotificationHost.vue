@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Icon, type IconName, InfoHint, useDevice } from "@intentic/ui";
+import { Button, Icon, type IconName, InfoHint, ui, useDevice } from "@intentic/ui";
 import { onBeforeUnmount, ref, watch } from "vue";
 import { type Notification, type NotificationAction, type NotificationTone, useNotifications } from "./notifications";
 
@@ -99,6 +99,8 @@ const press = (entry: Notification, action: NotificationAction): void => {
                     :spin="entry.spin === true"
                     aria-hidden="true"
                 />
+                <!-- Every control here is drawn bigger than the sentence and pulled back by the same amount, so the row
+                     stays one line tall and the card can't grow padding it never asked for. -->
                 <div class="flex min-w-0 items-center gap-2">
                     <!-- Wraps rather than truncating: a problem or condition needs the full reason, not an ellipsis mid-sentence. -->
                     <p class="min-w-0 flex-1 break-words text-xs font-medium text-content">{{ entry.title }}</p>
@@ -109,7 +111,7 @@ const press = (entry: Notification, action: NotificationAction): void => {
                         size="small"
                         :severity="action.severity ?? `secondary`"
                         :label="action.label"
-                        class="shrink-0"
+                        class="-my-1 shrink-0"
                         v-tooltip.top="action.hint"
                         @click="press(entry, action)"
                     />
@@ -117,19 +119,19 @@ const press = (entry: Notification, action: NotificationAction): void => {
                     <InfoHint v-if="entry.hint" class="shrink-0" :label="entry.title">
                         <span class="block text-xs text-content">{{ entry.hint }}</span>
                     </InfoHint>
-                    <!-- Kept to one line's height: as a full-height sibling it stretches a gutter down the whole card. -->
                     <button
                         v-if="entry.dismiss"
                         type="button"
-                        class="shrink-0 cursor-pointer rounded p-0.5 text-muted transition-colors hover:text-content"
+                        :class="ui.iconButton(`-my-1`)"
                         aria-label="Dismiss"
                         @click="entry.dismiss()"
                     >
-                        <Icon name="times" class="text-2xs" />
+                        <Icon name="times" class="text-xs" />
                     </button>
                 </div>
                 <p v-if="entry.detail" class="col-start-2 mt-0.5 break-words text-2xs text-muted">{{ entry.detail }}</p>
-                <!-- Escape hatch for content that isn't two strings, e.g. a composed turn or per-folder upload progress. -->
+                <!-- Escape hatch for content that isn't two strings (a composed turn, per-folder upload progress); the gap
+                     rides on the body's own root, so a body with nothing to draw must render no element at all. -->
                 <component :is="entry.body" v-if="entry.body" class="col-start-2 mt-2" />
                 <div v-if="!compact(entry) && entry.actions && entry.actions.length > 0" class="col-start-2 mt-2 flex items-center justify-end gap-1">
                     <Button
