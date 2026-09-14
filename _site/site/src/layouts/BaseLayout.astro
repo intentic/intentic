@@ -10,6 +10,7 @@ import { getImagePath } from "astro-opengraph-images/util.js";
 import FrontDesk from "../components/FrontDesk.astro";
 import LiveNotice from "../components/LiveNotice.astro";
 import PageBackdrop from "../components/PageBackdrop.astro";
+import { THEME_COLOR, variantScript } from "../lib/variant";
 
 interface Props {
     title?: string;
@@ -71,6 +72,7 @@ const jsonLd = buildPageGraph({
 });
 
 const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
+
 ---
 
 <!doctype html>
@@ -115,7 +117,9 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         <meta name="twitter:image" content={ogImage.href} />
         <meta name="twitter:image:alt" content={title} />
 
-        <meta name="theme-color" content="#0c0907" />
+        <meta name="theme-color" content={THEME_COLOR.default} />
+        {/* After the tag it rewrites, and before the body it skins. */}
+        <script is:inline set:html={variantScript()} />
         {/* Preload the reading face used by every page. */}
         <link rel="preload" as="font" type="font/woff2" href="/fonts/mukta-400-latin.woff2" crossorigin />
         <noscript>

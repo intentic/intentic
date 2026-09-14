@@ -1,6 +1,6 @@
 ---
 import { Code } from "astro:components";
-import { intenticWarm } from "../../lib/shiki-theme";
+import { intenticThemes } from "../../lib/shiki-theme";
 
 interface Props {
     code: string;
@@ -20,5 +20,5 @@ const { code, lang = "bash", title } = Astro.props;
             </div>
         )
     }
-    <Code code={code} lang={lang} theme={intenticWarm} />
+    <Code code={code} lang={lang} themes={intenticThemes} defaultColor="dark" />
 </div>

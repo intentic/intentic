@@ -91,7 +91,7 @@
     max-width: 36ch;
     font-size: 1.15rem;
     line-height: 1.6;
-    color: #c2a077;
+    color: var(--role-hero-sub);
     text-wrap: balance;
 }
 
@@ -123,10 +123,7 @@
     z-index: 2;
     width: 62%;
     margin: 0 auto;
-    box-shadow:
-        0 2px 0 rgba(201, 160, 92, 0.06),
-        0 0 2.5rem 0.4rem rgba(0, 0, 0, 0.6),
-        0 2rem 4.5rem -0.8rem rgba(0, 0, 0, 0.9);
+    box-shadow: var(--role-stage-shadow);
 }
 /* THE WINGS RISE INTO THE FIGURES, and that is the point of them. */
 .home .window-plan,
@@ -188,12 +185,12 @@
     align-items: flex-end;
     justify-content: center;
     padding: 0.85rem;
-    background: rgba(10, 7, 5, 0.06);
+    background: var(--role-play-veil);
     transition: background-color 0.25s ease;
 }
 .home .play:hover,
 .home .play:focus-visible {
-    background: rgba(10, 7, 5, 0.42);
+    background: var(--role-play-veil-on);
 }
 /* THE PRESS IS THE SITE'S OWN SMALL BUTTON, borrowed whole. */
 .home .play:hover .btn::before,
@@ -204,7 +201,7 @@
 }
 .home .play:hover .btn,
 .home .play:focus-visible .btn {
-    color: #fff6e6;
+    color: var(--role-play-content-on);
 }
 
 /* The build section uses one drawing width. */
@@ -315,7 +312,7 @@
     }
 }
 .home .compare-ours {
-    border-color: rgba(224, 123, 39, 0.3);
+    border-color: var(--role-ember-line);
     background: var(--wash-ember);
     padding: 1.9rem;
 }
@@ -547,7 +544,7 @@
 }
 .home .command {
     margin-top: 1.7rem;
-    background: rgba(8, 6, 4, 0.72);
+    background: var(--role-code-fill);
 }
 .home .command-head {
     border-bottom: 1px solid var(--color-line);
@@ -695,8 +692,8 @@
 }
 .home .plate-foot::after {
     background:
-        linear-gradient(180deg, var(--color-canvas) 0%, rgba(10, 7, 5, 0.6) 34%, rgba(10, 7, 5, 0.42) 68%, rgba(10, 7, 5, 0.78) 100%),
-        rgba(12, 9, 7, 0.14);
+        var(--role-plate-foot),
+        rgb(var(--role-scrim) / 0.14);
 }
 .home .final-inner {
     display: flex;
@@ -728,7 +725,7 @@
     bottom: 0;
     left: 0.04em;
     height: 2px;
-    background: linear-gradient(90deg, transparent, rgba(224, 123, 39, 0.9) 18%, rgba(224, 123, 39, 0.9) 82%, transparent);
+    background: var(--role-ember-rule);
 }
 .home .final-sub {
     max-width: 46ch;

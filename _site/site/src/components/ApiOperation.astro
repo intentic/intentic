@@ -1,7 +1,7 @@
 ---
 import { Code } from "astro:components";
 import type { RefOperation, RefRow } from "../lib/api-reference";
-import { intenticWarm } from "../lib/shiki-theme";
+import { intenticThemes } from "../lib/shiki-theme";
 
 /* ONE ROUTE, as a row you can open. */
 
@@ -135,13 +135,13 @@ const hasInput = operation.params.length > 0 || operation.body !== undefined;
             <div>
                 <div class="eyebrow eyebrow-bare mb-2">curl</div>
                 <div class="code-window">
-                    <Code code={operation.curl} lang="bash" theme={intenticWarm} />
+                    <Code code={operation.curl} lang="bash" themes={intenticThemes} defaultColor="dark" />
                 </div>
             </div>
             <div>
                 <div class="eyebrow eyebrow-bare mb-2">TypeScript</div>
                 <div class="code-window">
-                    <Code code={operation.typescript} lang="typescript" theme={intenticWarm} />
+                    <Code code={operation.typescript} lang="typescript" themes={intenticThemes} defaultColor="dark" />
                 </div>
             </div>
         </div>

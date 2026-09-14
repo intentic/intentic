@@ -1,0 +1,8 @@
+---
+/* The light skin's front door. Same landing page as /, and landing here is what turns the skin on: BaseLayout's
+   pre-paint script reads this path, sets the cookie, and every page the reader opens afterwards stays light.
+   `noindex` because the words are identical to / — this route is a link to hand out, not a page to rank. */
+import Landing from "../components/Landing.astro";
+---
+
+<Landing noindex />

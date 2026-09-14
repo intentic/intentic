@@ -380,7 +380,7 @@ const { payload } = Astro.props;
     .api-play {
         margin-top: 1.5rem;
         border: 1px solid var(--color-line-strong);
-        background: rgba(8, 6, 4, 0.5);
+        background: var(--role-playground-fill);
     }
     .api-play-head {
         display: flex;
@@ -456,7 +456,7 @@ const { payload } = Astro.props;
     .api-send {
         padding: 0.4rem 1.1rem;
         border: 1px solid var(--color-primary-600);
-        background: linear-gradient(180deg, rgba(224, 123, 39, 0.22), rgba(224, 123, 39, 0.08));
+        background: var(--role-playground-tab);
         font-family: var(--font-mark);
         font-size: 0.8125rem;
         font-weight: 600;
@@ -467,8 +467,8 @@ const { payload } = Astro.props;
             color 0.15s ease;
     }
     .api-send:hover {
-        background: linear-gradient(180deg, rgba(224, 123, 39, 0.34), rgba(224, 123, 39, 0.14));
-        color: var(--color-primary-100, #fdf0e0);
+        background: var(--role-playground-tab-on);
+        color: var(--color-primary-200);
     }
     .api-reset {
         padding: 0.4rem 0.8rem;

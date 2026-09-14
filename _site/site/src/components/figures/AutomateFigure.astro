@@ -171,7 +171,7 @@ const glyph = (paths: string) =>
         column-gap: 0.6rem;
         align-items: center;
         border: 1px solid var(--color-line);
-        background: rgba(31, 23, 16, 0.5);
+        background: var(--role-figure-panel);
         padding: 0.5rem 0.8rem;
         color: var(--color-gold);
         transition:
@@ -300,7 +300,7 @@ const glyph = (paths: string) =>
         gap: 0.25rem 0.75rem;
         margin: 0;
         border-top: 1px solid var(--color-line);
-        background: rgba(10, 8, 6, 0.5);
+        background: var(--role-figure-terminal);
         padding: 0.7rem 1.25rem;
     }
     .am-cmd-caption {
@@ -321,9 +321,9 @@ const glyph = (paths: string) =>
         color: var(--color-subtle);
     }
     .am-outcome {
-        border: 1px solid rgba(224, 123, 39, 0.32);
+        border: 1px solid var(--role-decision-line);
         background: var(--wash-ember);
-        box-shadow: 0 0 40px -18px rgba(224, 123, 39, 0.55);
+        box-shadow: var(--role-ember-glow);
     }
     .am-outcome .am-node-title {
         font-size: 1.0625rem;
@@ -586,18 +586,18 @@ const glyph = (paths: string) =>
     @keyframes am-wake {
         0% {
             border-color: var(--color-line-bright);
-            background-color: rgba(60, 36, 16, 0.6);
+            background-color: var(--role-figure-row-on);
             color: var(--color-primary-400);
         }
         6% {
             border-color: var(--color-line-bright);
-            background-color: rgba(60, 36, 16, 0.6);
+            background-color: var(--role-figure-row-on);
             color: var(--color-primary-400);
         }
         20%,
         100% {
             border-color: var(--color-line);
-            background-color: rgba(31, 23, 16, 0.5);
+            background-color: var(--role-figure-panel);
             color: var(--color-gold);
         }
     }
@@ -613,13 +613,13 @@ const glyph = (paths: string) =>
     }
     @keyframes am-arrive {
         0% {
-            border-color: rgba(224, 123, 39, 0.5);
-            box-shadow: 0 0 46px -14px rgba(224, 123, 39, 0.7);
+            border-color: var(--role-ember-line-strong);
+            box-shadow: var(--role-ember-glow-lit);
         }
         50%,
         100% {
-            border-color: rgba(224, 123, 39, 0.32);
-            box-shadow: 0 0 40px -18px rgba(224, 123, 39, 0.55);
+            border-color: var(--role-decision-line);
+            box-shadow: var(--role-ember-glow);
         }
     }
     @keyframes am-flow-x {

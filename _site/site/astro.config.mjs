@@ -102,7 +102,10 @@ export default defineConfig({
         sitemap({
             // The search index is an endpoint, not a page: no title, nothing to land on; indexing it doubles the
             // corpus.
-            filter: (page) => !page.endsWith("/404/") && !page.endsWith("/404") && !page.endsWith(".json"),
+            // /desk/ is the light skin's entry point, word for word the home page; listing it would offer search a
+            // duplicate of / that is already marked noindex.
+            filter: (page) =>
+                !page.endsWith("/404/") && !page.endsWith("/404") && !page.endsWith(".json") && !page.endsWith("/desk/") && !page.endsWith("/desk"),
             changefreq: "monthly",
             priority: 0.7,
             serialize(item) {

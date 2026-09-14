@@ -389,7 +389,7 @@ const currentPath = Astro.url.pathname;
             border-color 0.3s ease;
     }
     .bar[data-lifted] {
-        background: rgba(10, 7, 5, 0.86);
+        background: var(--role-bar-fill);
         border-bottom-color: var(--color-line);
         backdrop-filter: blur(14px);
     }
@@ -411,7 +411,7 @@ const currentPath = Astro.url.pathname;
         flex: none;
     }
     .wordmark {
-        text-shadow: 0 0 22px rgba(224, 123, 39, 0.35);
+        text-shadow: var(--role-bar-glow);
     }
 
     /* Relative positioning anchors the shared flyout. */
@@ -466,15 +466,15 @@ const currentPath = Astro.url.pathname;
         --cut: 9px;
 
         /* The flyout panel uses a dark warm linen surface. */
-        background-color: #1f1710;
+        background-color: var(--role-nav-sheet);
         background-image:
             url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='m' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='4' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.04 0 0 0 0 0.025 0 0 0 0 0.012 0.5 0 0 0 -0.13'/%3E%3C/filter%3E%3Cfilter id='h' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.03 0.72' numOctaves='1' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.78 0 0 0 0 0.63 0 0 0 0 0.45 0.2 0 0 0 -0.1'/%3E%3C/filter%3E%3Cfilter id='v' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72 0.03' numOctaves='1' seed='23' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.78 0 0 0 0 0.63 0 0 0 0 0.45 0.17 0 0 0 -0.09'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23m)'/%3E%3Crect width='200' height='200' filter='url(%23h)'/%3E%3Crect width='200' height='200' filter='url(%23v)'/%3E%3C/svg%3E"),
-            radial-gradient(130% 120% at 50% 8%, rgba(52, 38, 24, 0.28) 0%, rgba(22, 16, 10, 0.12) 62%, rgba(9, 6, 4, 0.34) 100%);
+            var(--role-nav-sheet-wash);
         background-repeat: repeat, no-repeat;
         background-size: 200px 200px, cover;
         /* Menu panels use the same double rule as buttons. */
         border: 1px solid transparent;
-        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M8.4 0.6H39.6M47.4 8.4V39.6M39.6 47.4H8.4M0.6 39.6V8.4' fill='none' stroke='rgba(201,160,92,0.66)' stroke-width='1.2'/%3E%3Cpath d='M39.6 0.6L47.4 8.4M47.4 39.6L39.6 47.4M8.4 47.4L0.6 39.6M0.6 8.4L8.4 0.6' fill='none' stroke='rgba(201,160,92,0.66)' stroke-width='2.34'/%3E%3Cpath d='M10.22 5H37.78M43 10.22V37.78M37.78 43H10.22M5 37.78V10.22' fill='none' stroke='rgba(201,160,92,0.4)' stroke-width='1'/%3E%3Cpath d='M37.78 5L43 10.22M43 37.78L37.78 43M10.22 43L5 37.78M5 10.22L10.22 5' fill='none' stroke='rgba(201,160,92,0.4)' stroke-width='1.95'/%3E%3C/svg%3E");
+        border-image-source: var(--role-nav-sheet-frame);
         border-image-slice: 16;
         border-image-width: 16px;
         border-image-repeat: stretch;
@@ -488,7 +488,7 @@ const currentPath = Astro.url.pathname;
             0 calc(100% - var(--cut)),
             0 var(--cut)
         );
-        filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55)) drop-shadow(0 24px 34px rgba(0, 0, 0, 0.5));
+        filter: var(--role-nav-sheet-shadow);
     }
 
     /* Menu body spacing moves with the shared panel. */

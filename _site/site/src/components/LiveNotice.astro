@@ -45,7 +45,7 @@ const active = notice?.active === true;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--notice-ground, rgba(31, 23, 16, 0.96));
+        background: var(--notice-ground, var(--role-notice-ground));
         border-bottom: 1px solid var(--notice-edge, var(--color-line-strong));
         backdrop-filter: blur(14px);
     }

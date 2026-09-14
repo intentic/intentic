@@ -95,17 +95,17 @@ const glyph = (paths: string) =>
     <svg class="tp-defs" width="0" height="0" aria-hidden="true" focusable="false">
         <defs>
             <linearGradient id="tp-face" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stop-color="#c9a05c" stop-opacity="0.3" />
-                <stop offset="1" stop-color="#c9a05c" stop-opacity="0.09" />
+                <stop offset="0" stop-color="var(--color-gold)" stop-opacity="0.3" />
+                <stop offset="1" stop-color="var(--color-gold)" stop-opacity="0.09" />
             </linearGradient>
             <linearGradient id="tp-rock" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stop-color="#c9a05c" stop-opacity="0.14" />
-                <stop offset="1" stop-color="#c9a05c" stop-opacity="0.03" />
+                <stop offset="0" stop-color="var(--color-gold)" stop-opacity="0.14" />
+                <stop offset="1" stop-color="var(--color-gold)" stop-opacity="0.03" />
             </linearGradient>
             <radialGradient id="tp-halo">
-                <stop offset="0" stop-color="#e07b27" stop-opacity="0.4" />
-                <stop offset="0.55" stop-color="#e07b27" stop-opacity="0.12" />
-                <stop offset="1" stop-color="#e07b27" stop-opacity="0" />
+                <stop offset="0" stop-color="var(--color-primary-500)" stop-opacity="0.4" />
+                <stop offset="0.55" stop-color="var(--color-primary-500)" stop-opacity="0.12" />
+                <stop offset="1" stop-color="var(--color-primary-500)" stop-opacity="0" />
             </radialGradient>
         </defs>
     </svg>
@@ -389,7 +389,7 @@ const glyph = (paths: string) =>
         stroke-width: 2.3;
     }
     .tp-plan {
-        fill: rgba(224, 123, 39, 0.18);
+        fill: var(--role-figure-halo);
         stroke: var(--color-primary-400);
         stroke-width: 1.6;
     }
@@ -411,7 +411,7 @@ const glyph = (paths: string) =>
     }
     /* The doorway uses the plate's dark fill. */
     .tp-door {
-        fill: rgba(9, 7, 5, 0.82);
+        fill: var(--role-figure-doorway);
         stroke: var(--color-line-bright);
         stroke-width: 1.2;
     }

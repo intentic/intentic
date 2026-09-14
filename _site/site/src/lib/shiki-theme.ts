@@ -48,3 +48,55 @@ export const intenticWarm = {
         },
     ],
 };
+
+// The desk skin's half of the pair. Same scopes in the same order, same idea — one brand-orange signal on keywords,
+// warm neutrals for everything else — inverted for paper: prominence here is depth, not brightness. Every colour
+// clears 4.5:1 on the light code ground (#f7f4ef, the app's own light terminal), so a snippet is readable and not
+// merely tinted. Shipped alongside the dark theme rather than instead of it: `<Code>` emits both, the dark one
+// inline and this one as `--shiki-light`, and desk.css switches between them.
+export const intenticPaper = {
+    name: "intentic-paper",
+    type: "light" as const,
+    bg: "transparent",
+    fg: "#29201a",
+    settings: [
+        { settings: { foreground: "#29201a", background: "transparent" } },
+        { scope: ["comment", "punctuation.definition.comment"], settings: { foreground: "#78665c", fontStyle: "italic" } },
+        {
+            scope: [
+                "keyword",
+                "keyword.control",
+                "keyword.operator.new",
+                "keyword.operator.expression",
+                "storage",
+                "storage.type",
+                "storage.modifier",
+                "modifier",
+            ],
+            settings: { foreground: "#9e4502" },
+        },
+        {
+            scope: ["constant.numeric", "constant.language", "constant.language.boolean", "support.constant"],
+            settings: { foreground: "#84390d" },
+        },
+        { scope: ["string", "string.quoted", "string.template", "constant.other.symbol"], settings: { foreground: "#75551c" } },
+        { scope: ["punctuation.definition.string"], settings: { foreground: "#7d5f26" } },
+        {
+            scope: ["entity.name.type", "support.type", "support.class", "entity.name.class", "entity.other.inherited-class"],
+            settings: { foreground: "#8a4f2a" },
+        },
+        { scope: ["entity.name.function", "support.function", "meta.function-call.generic"], settings: { foreground: "#3b2a1c" } },
+        { scope: ["variable", "variable.other", "meta.definition.variable", "variable.parameter"], settings: { foreground: "#29201a" } },
+        {
+            scope: ["meta.object-literal.key", "support.type.property-name", "variable.other.property", "entity.name.tag"],
+            settings: { foreground: "#62564e" },
+        },
+        {
+            scope: ["punctuation", "meta.brace", "keyword.operator", "punctuation.separator", "punctuation.terminator"],
+            settings: { foreground: "#78665c" },
+        },
+    ],
+};
+
+/** Both skins' themes, in the shape `<Code themes={...}>` wants. Dark is the default, so it stays the inline colour. */
+export const intenticThemes = { light: intenticPaper, dark: intenticWarm };

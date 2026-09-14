@@ -1,6 +1,8 @@
 @import "tailwindcss";
 /* House metals stay shared with the app entry screens and Sanctum skin. */
 @import "../../../../_shared/house-css/house.css";
+/* The light skin. Ordered first because it cannot lose: its selector outscores the `:root` Tailwind emits. */
+@import "./desk.css";
 
 /* Site tokens and components use the shared carved-stone vocabulary. */
 
@@ -192,6 +194,87 @@
     --bar-height: clamp(3.4rem, 5.625vw, 7.1rem);
 }
 
+/* THE DARK SCHEME'S MATERIALS the colours that live inside a component rule rather than in the Tailwind namespace
+   above. They are named here for one reason: the desk skin (styles/desk.css) cannot relight a literal. Everything a
+   utility can already reach — canvas, content, line, the ember ramp — stays in `@theme` and is overridden there.
+   Values are exactly what the rules below used to spell out. */
+:root {
+    /* Selection, and the search palette's hit highlight: the same ember wash at the same weight. */
+    --role-selection: rgba(224, 123, 39, 0.32);
+    --role-mark-fill: rgba(224, 123, 39, 0.28);
+    /* An ember hairline: the border a live/selected thing wears. */
+    --role-ember-line: rgba(224, 123, 39, 0.3);
+    --role-ember-line-strong: rgba(224, 123, 39, 0.5);
+    /* What a live panel in a figure throws: a halo, not a shadow. */
+    --role-ember-glow: 0 0 40px -18px rgba(224, 123, 39, 0.55);
+    --role-ember-glow-lit: 0 0 46px -14px rgba(224, 123, 39, 0.7);
+
+    /* The cartouche button: its face, the wash that fades in under the pointer, and the label that brightens. */
+    --role-btn-face: rgba(20, 14, 10, 0.5);
+    --role-btn-wash: rgba(70, 50, 30, 0.4);
+    --role-btn-hover-content: #fff6e6;
+
+    /* Frames, cards, windows and their furniture. */
+    --role-frame-fill: rgba(30, 22, 15, 0.55);
+    --role-window-fill: #0f0b08;
+    --role-window-shadow: 0 2px 0 rgba(201, 160, 92, 0.06), 0 24px 60px -12px rgba(0, 0, 0, 0.85);
+    --role-rail-fill: linear-gradient(180deg, rgba(46, 33, 21, 0.6), rgba(20, 14, 10, 0.6));
+    --role-plinth-fill: rgba(31, 23, 16, 0.5);
+    /* One hairline of the wall's 84px grid. */
+    --role-wall-grid: rgba(201, 160, 92, 0.032);
+    --role-code-fill: rgba(8, 6, 4, 0.72);
+
+    /* The chat figure's surfaces, reused by the product shots. */
+    --role-chat-fill: rgba(31, 23, 16, 0.55);
+    --role-chat-line: rgba(224, 123, 39, 0.28);
+    --role-chat-assistant-fill: rgba(31, 23, 16, 0.35);
+    --role-decision-fill: rgba(224, 123, 39, 0.1);
+    --role-decision-line: rgba(224, 123, 39, 0.32);
+    --role-decision-quiet-fill: rgba(239, 227, 205, 0.06);
+    --role-composer-fill: rgba(245, 155, 63, 0.16);
+
+    /* The drawn figures — the temple, the automation diagram — and the API playground under /api. */
+    --role-figure-panel: rgba(31, 23, 16, 0.5);
+    --role-figure-row-on: rgba(60, 36, 16, 0.6);
+    --role-figure-terminal: rgba(10, 8, 6, 0.5);
+    /* The one hole in the temple's face. */
+    --role-figure-doorway: rgba(9, 7, 5, 0.82);
+    --role-figure-halo: rgba(224, 123, 39, 0.18);
+    --role-playground-fill: rgba(8, 6, 4, 0.5);
+    --role-playground-tab: linear-gradient(180deg, rgba(224, 123, 39, 0.22), rgba(224, 123, 39, 0.08));
+    --role-playground-tab-on: linear-gradient(180deg, rgba(224, 123, 39, 0.34), rgba(224, 123, 39, 0.14));
+    /* The strip the worker un-hides when something is down. */
+    --role-notice-ground: rgba(31, 23, 16, 0.96);
+
+    /* The bar's hover sweep, and the ember rule under the home page's active tab. */
+    --role-nav-wash: linear-gradient(90deg, rgba(224, 123, 39, 0.13) 0%, rgba(224, 123, 39, 0.05) 34%, transparent 72%);
+    --role-nav-sheet: #1f1710;
+    --role-nav-sheet-wash: radial-gradient(130% 120% at 50% 8%, rgba(52, 38, 24, 0.28) 0%, rgba(22, 16, 10, 0.12) 62%, rgba(9, 6, 4, 0.34) 100%);
+    --role-nav-sheet-frame: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M8.4 0.6H39.6M47.4 8.4V39.6M39.6 47.4H8.4M0.6 39.6V8.4' fill='none' stroke='rgba(201,160,92,0.66)' stroke-width='1.2'/%3E%3Cpath d='M39.6 0.6L47.4 8.4M47.4 39.6L39.6 47.4M8.4 47.4L0.6 39.6M0.6 8.4L8.4 0.6' fill='none' stroke='rgba(201,160,92,0.66)' stroke-width='2.34'/%3E%3Cpath d='M10.22 5H37.78M43 10.22V37.78M37.78 43H10.22M5 37.78V10.22' fill='none' stroke='rgba(201,160,92,0.4)' stroke-width='1'/%3E%3Cpath d='M37.78 5L43 10.22M43 37.78L37.78 43M10.22 43L5 37.78M5 10.22L10.22 5' fill='none' stroke='rgba(201,160,92,0.4)' stroke-width='1.95'/%3E%3C/svg%3E");
+    --role-nav-sheet-shadow: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55)) drop-shadow(0 24px 34px rgba(0, 0, 0, 0.5));
+    --role-bar-fill: rgba(10, 7, 5, 0.86);
+    --role-bar-glow: 0 0 22px rgba(224, 123, 39, 0.35);
+
+    /* WHAT DARKENS THE PHOTOGRAPH — three near-blacks, as bare RGB triples because every stop below sets its own
+       alpha. The plate's well is deeper than the page's own black, and the phone crop sits between them. */
+    --role-scrim: 12 9 7;
+    --role-scrim-well: 9 6 4;
+    --role-scrim-crop: 10 7 5;
+    /* How much of the photograph survives, and the flat tint laid over whatever does. */
+    --role-plate-dim: 1;
+    --role-plate-tint: 0.12;
+
+    /* The home page's own furniture: the stage's frame shadow, the veil over the demo figure that lifts its play
+       button, the hero's subtitle, the ember rule under a live tab, and the plate's foot. */
+    --role-stage-shadow: 0 2px 0 rgba(201, 160, 92, 0.06), 0 0 2.5rem 0.4rem rgba(0, 0, 0, 0.6), 0 2rem 4.5rem -0.8rem rgba(0, 0, 0, 0.9);
+    --role-play-veil: rgba(10, 7, 5, 0.06);
+    --role-play-veil-on: rgba(10, 7, 5, 0.42);
+    --role-play-content-on: #fff6e6;
+    --role-hero-sub: #c2a077;
+    --role-ember-rule: linear-gradient(90deg, transparent, rgba(224, 123, 39, 0.9) 18%, rgba(224, 123, 39, 0.9) 82%, transparent);
+    --role-plate-foot: linear-gradient(180deg, var(--color-canvas) 0%, rgba(10, 7, 5, 0.6) 34%, rgba(10, 7, 5, 0.42) 68%, rgba(10, 7, 5, 0.78) 100%);
+}
+
 @layer base {
     html {
         font-family: var(--font-sans);
@@ -241,7 +324,7 @@
         text-wrap: pretty;
     }
     ::selection {
-        background: rgba(224, 123, 39, 0.32);
+        background: var(--role-selection);
     }
 }
 
@@ -323,7 +406,7 @@
         text-decoration: none;
         white-space: nowrap;
 
-        background-color: rgba(20, 14, 10, 0.5);
+        background-color: var(--role-btn-face);
         border: 1px solid transparent;
         border-image-source: var(--house-cartouche);
         border-image-slice: 13;
@@ -371,7 +454,7 @@
         content: "";
         position: absolute;
         inset: 0;
-        background: rgba(70, 50, 30, 0.4);
+        background: var(--role-btn-wash);
         opacity: 0;
         pointer-events: none;
         transition: opacity 0.22s ease;
@@ -382,7 +465,7 @@
         opacity: 1;
     }
     .btn:hover {
-        color: #fff6e6;
+        color: var(--role-btn-hover-content);
     }
 
 /* An icon inside a control is a FLEX ITEM, not a letter: `block` so it stops sitting on the text baseline with a descender's worth of space under it. */
@@ -446,7 +529,7 @@
     .frame {
         position: relative;
         border: 1px solid var(--color-line-strong);
-        background: rgba(30, 22, 15, 0.55);
+        background: var(--role-frame-fill);
     }
     .frame::before {
         content: "";
@@ -520,11 +603,9 @@
 /* THE WINDOW: ONE FRAME, AND EVERY SCREENSHOT ON THE SITE IS IN IT. */
     .window {
         position: relative;
-        background: #0f0b08;
+        background: var(--role-window-fill);
         border: 1px solid var(--color-line-strong);
-        box-shadow:
-            0 2px 0 rgba(201, 160, 92, 0.06),
-            0 24px 60px -12px rgba(0, 0, 0, 0.85);
+        box-shadow: var(--role-window-shadow);
         transition:
             border-color 0.25s ease,
             transform 0.25s ease;
@@ -542,7 +623,7 @@
         /* The ledge's own width, minus what the two turned corners reach into it from either end. */
         padding: 0 calc(var(--corner-size) + 0.4rem);
         border-bottom: 1px solid var(--color-line);
-        background: linear-gradient(180deg, rgba(46, 33, 21, 0.6), rgba(20, 14, 10, 0.6));
+        background: var(--role-rail-fill);
     }
 /* Where the shot was taken. */
     .window-address {
@@ -651,7 +732,7 @@
         inset: 0;
         pointer-events: none;
         background-image:
-            linear-gradient(rgba(201, 160, 92, 0.032) 1px, transparent 1px), linear-gradient(90deg, rgba(201, 160, 92, 0.032) 1px, transparent 1px);
+            linear-gradient(var(--role-wall-grid) 1px, transparent 1px), linear-gradient(90deg, var(--role-wall-grid) 1px, transparent 1px);
         background-size: 84px 84px;
         mask-image: radial-gradient(ellipse 85% 62% at 50% 0%, rgba(0, 0, 0, 0.85), transparent 72%);
     }
@@ -692,13 +773,7 @@
     /* The plinth is a full-bleed strip for measured figures. */
     .plinth {
         position: relative;
-        background: linear-gradient(
-            180deg,
-            transparent 0%,
-            rgba(31, 23, 16, 0.5) 42%,
-            rgba(31, 23, 16, 0.5) 58%,
-            transparent 100%
-        );
+        background: linear-gradient(180deg, transparent 0%, var(--role-plinth-fill) 42%, var(--role-plinth-fill) 58%, transparent 100%);
     }
     .plinth::before,
     .plinth::after {
@@ -735,7 +810,7 @@
     /* Terminal/code window. */
     .code-window {
         border: 1px solid var(--color-line);
-        background: rgba(8, 6, 4, 0.72);
+        background: var(--role-code-fill);
         font-family: var(--font-mono);
         font-size: 0.8125rem;
         line-height: 1.6;
@@ -747,6 +822,11 @@
         padding: 0.75rem 1rem;
         overflow-x: auto;
         background: transparent !important;
+    }
+    /* A two-theme <Code> writes the DEFAULT theme's colour inline but moves its font style into a custom property, so
+       the italic a comment used to get has to be read back. desk.css reads the light half of the same pair. */
+    :is(.astro-code, .astro-code span) {
+        font-style: var(--shiki-dark-font-style, inherit);
     }
 
     /* A link in running copy: gold, going ember under the pointer. */
@@ -763,11 +843,11 @@
 
     /* Product chat surfaces are reused by the site chat figure. */
     .chat-surface {
-        background: rgba(31, 23, 16, 0.55);
-        border: 1px solid rgba(224, 123, 39, 0.28);
+        background: var(--role-chat-fill);
+        border: 1px solid var(--role-chat-line);
     }
     .chat-surface-assistant {
-        background: rgba(31, 23, 16, 0.35);
+        background: var(--role-chat-assistant-fill);
         border: 1px solid var(--color-line);
     }
 
@@ -784,12 +864,12 @@
         border: 1px solid var(--color-line);
     }
     .chat-decision-primary {
-        background: rgba(224, 123, 39, 0.1);
-        border-color: rgba(224, 123, 39, 0.32);
+        background: var(--role-decision-fill);
+        border-color: var(--role-decision-line);
         color: var(--color-primary-400);
     }
     .chat-decision-secondary {
-        background: rgba(239, 227, 205, 0.06);
+        background: var(--role-decision-quiet-fill);
         border-color: var(--color-line-strong);
         color: var(--color-content);
     }
@@ -802,7 +882,7 @@
         height: 2rem;
         width: 2rem;
         border-radius: 9999px;
-        background: rgba(245, 155, 63, 0.16);
+        background: var(--role-composer-fill);
         color: var(--color-primary-400);
     }
     .composer-send-off {
@@ -824,7 +904,7 @@
         position: absolute;
         inset: 0;
         z-index: -1;
-        background: linear-gradient(90deg, rgba(224, 123, 39, 0.13) 0%, rgba(224, 123, 39, 0.05) 34%, transparent 72%);
+        background: var(--role-nav-wash);
         opacity: 0;
         transition: opacity 0.18s ease;
     }
@@ -917,7 +997,7 @@
 
     /* Search-result highlighting inside the palette. */
     mark {
-        background: rgba(224, 123, 39, 0.28);
+        background: var(--role-mark-fill);
         color: var(--color-content);
     }
     .docs-body p {
@@ -1045,6 +1125,15 @@
         text-decoration: none;
     }
 
+    /* The way back out of the desk skin. It sits in the footer of every page, in the markup either way so that one
+       cached document can serve both skins, and is only shown where it means something. */
+    .variant-exit {
+        display: none;
+    }
+    html[data-variant="desk"] .variant-exit {
+        display: inline-flex;
+    }
+
     /* Keyboard keys named in prose ("press /"). */
     .docs-body kbd {
         border: 1px solid var(--color-line-strong);
@@ -1059,8 +1148,8 @@
 /* THE PLATE The photographed temple wall. */
 .plate {
     /* `--plate-dim` — how much of the photograph survives at all. */
-    --plate-dim: 1;
-    --plate-scrim: 0.12;
+    --plate-dim: var(--role-plate-dim);
+    --plate-scrim: var(--role-plate-tint);
 
     position: absolute;
     inset: 0;
@@ -1090,7 +1179,7 @@
     bottom: 0;
     left: 0;
     height: 38%;
-    background: linear-gradient(180deg, transparent 0%, rgba(12, 9, 7, 0.55) 52%, var(--color-canvas) 100%);
+    background: linear-gradient(180deg, transparent 0%, rgb(var(--role-scrim) / 0.55) 52%, var(--color-canvas) 100%);
 }
 /* THE SCRIM IS A WELL, not a ramp, and the symmetry of the art is why. */
 .plate::after {
@@ -1098,10 +1187,22 @@
     position: absolute;
     inset: 0;
     background:
-        radial-gradient(58% 46% at 50% 30%, rgba(9, 6, 4, 0.74) 0%, rgba(9, 6, 4, 0.6) 42%, rgba(9, 6, 4, 0.28) 72%, transparent 100%),
-        linear-gradient(0deg, rgba(9, 6, 4, 0.72) 0%, rgba(9, 6, 4, 0.42) 18%, rgba(9, 6, 4, 0.12) 38%, transparent 58%),
-        radial-gradient(128% 108% at 50% 40%, transparent 46%, rgba(9, 6, 4, 0.52) 100%),
-        rgba(12, 9, 7, var(--plate-scrim));
+        radial-gradient(
+            58% 46% at 50% 30%,
+            rgb(var(--role-scrim-well) / 0.74) 0%,
+            rgb(var(--role-scrim-well) / 0.6) 42%,
+            rgb(var(--role-scrim-well) / 0.28) 72%,
+            transparent 100%
+        ),
+        linear-gradient(
+            0deg,
+            rgb(var(--role-scrim-well) / 0.72) 0%,
+            rgb(var(--role-scrim-well) / 0.42) 18%,
+            rgb(var(--role-scrim-well) / 0.12) 38%,
+            transparent 58%
+        ),
+        radial-gradient(128% 108% at 50% 40%, transparent 46%, rgb(var(--role-scrim-well) / 0.52) 100%),
+        rgb(var(--role-scrim) / var(--plate-scrim));
 }
 /* THE BAND EVERY PAGE OPENS ON. */
 .page-backdrop {
@@ -1124,9 +1225,9 @@
         180deg,
         transparent 0,
         transparent var(--bar-height),
-        rgba(12, 9, 7, 0.62) calc(var(--bar-height) + 5rem),
-        rgba(12, 9, 7, 0.82) calc(var(--bar-height) + 14rem),
-        rgba(12, 9, 7, 0.82) 100%
+        rgb(var(--role-scrim) / 0.62) calc(var(--bar-height) + 5rem),
+        rgb(var(--role-scrim) / 0.82) calc(var(--bar-height) + 14rem),
+        rgb(var(--role-scrim) / 0.82) 100%
     );
 }
 
@@ -1137,7 +1238,7 @@
     bottom: 0;
     left: 0;
     height: 7rem;
-    background: linear-gradient(180deg, transparent, rgba(12, 9, 7, 0.6) 55%, var(--color-canvas) 96%);
+    background: linear-gradient(180deg, transparent, rgb(var(--role-scrim) / 0.6) 55%, var(--color-canvas) 96%);
     pointer-events: none;
 }
 /* ON A PHONE THE ART IS CROPPED TO ONE FIGURE, and which one is not a free choice. */
@@ -1154,8 +1255,14 @@
 /* Below the columns break the copy takes the whole width, so the well has nothing left to spare and becomes a plain top-down darkening. */
     .plate::after {
         background:
-            linear-gradient(180deg, rgba(10, 7, 5, 0.62) 0%, rgba(10, 7, 5, 0.5) 40%, rgba(10, 7, 5, 0.52) 66%, rgba(10, 7, 5, 0.86) 100%),
-            rgba(12, 9, 7, var(--plate-scrim));
+            linear-gradient(
+                180deg,
+                rgb(var(--role-scrim-crop) / 0.62) 0%,
+                rgb(var(--role-scrim-crop) / 0.5) 40%,
+                rgb(var(--role-scrim-crop) / 0.52) 66%,
+                rgb(var(--role-scrim-crop) / 0.86) 100%
+            ),
+            rgb(var(--role-scrim) / var(--plate-scrim));
     }
 }
 @media (min-width: 100rem) {

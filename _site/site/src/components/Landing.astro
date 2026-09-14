@@ -25,6 +25,11 @@ import TrustCards from "./TrustCards.astro";
 import Window from "./Window.astro";
 import "../styles/home.css";
 
+interface Props {
+    /** Set by /desk, which serves this same page as the light skin's entry point and must not compete with / in search. */
+    noindex?: boolean;
+}
+
 const content = landingContent;
 
 // FAQPage data stays flat; topic bands belong only to the page layout.
@@ -52,7 +57,14 @@ const browserSteps = content.connect.steps.slice(0, -1);
 const machineStep = content.connect.steps.at(-1)!;
 ---
 
-<BaseLayout title={content.meta.title} description={content.meta.description} faq={faq} extraJsonLd={[buildSoftwareAppSchema()]} backdrop={false}>
+<BaseLayout
+    title={content.meta.title}
+    description={content.meta.description}
+    faq={faq}
+    extraJsonLd={[buildSoftwareAppSchema()]}
+    backdrop={false}
+    noindex={Astro.props.noindex}
+>
     <div class="home flex flex-1 flex-col">
         {/* The home bar overlays the plate; other pages use PageBackdrop. */}
         <Nav />

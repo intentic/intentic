@@ -7,6 +7,7 @@ import { guidePages, guidesHref } from "@intentic/site-content/guides";
 import { productHref, productPages } from "@intentic/site-content/product";
 import { APP_URL, discordUrl, githubIssuesUrl, githubReleasesUrl, githubUrl, ORG_NAME, ORG_TAGLINE } from "@intentic/site-content/site";
 import { GITHUB_MARK } from "../lib/marks";
+import { DEFAULT_VARIANT_HREF } from "../lib/variant";
 import DiscordIcon from "./DiscordIcon.astro";
 import ExternalIcon from "./ExternalIcon.astro";
 import Lotus from "./Lotus.astro";
@@ -191,6 +192,11 @@ const legalLinks = [
                     </a>
                 ))
             }
+            {/* The way out of the light skin. In the markup on every page so one cached document serves both, and
+                shown only when that skin is on — see `.variant-exit` in global.css. */}
+            <a href={DEFAULT_VARIANT_HREF} class="variant-exit min-h-6 items-center transition-colors hover:text-gold-bright">
+                Developer view →
+            </a>
         </span>
         <span class="inline-flex items-center gap-1">
             Open source on
