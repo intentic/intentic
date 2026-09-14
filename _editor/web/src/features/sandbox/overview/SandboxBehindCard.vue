@@ -3,7 +3,7 @@ import { Button, Code, CopyButton, Notice, RowGroup, RowNote } from "@intentic/u
 import { computed, ref } from "vue";
 import { daemonBehind, daemonDrifted, driftedRoutes, missingRoutes } from "./useDaemonRoutes";
 import { useEnvironment } from "../environment/useEnvironment";
-import { runSeveringDeviceCommand, useHostRunning } from "../devices/useDevices";
+import { runSeveringDeviceCommand, useDevices, useHostRunning } from "../devices/useDevices";
 import ConnectDeviceHint from "../devices/ConnectDeviceHint.vue";
 
 // Checks the daemon's route surface against this app's contract, not version strings (SandboxUpdateCard); catches
@@ -26,7 +26,15 @@ const reloadPage = (): void => location.reload();
 
 // The machine this sandbox runs on, when it is a connected device: then the reload is a button here and the
 // command below is only for a checkout nothing can reach.
-const hostId = useHostRunning(() => slug.value);
+const running = useHostRunning(() => slug.value);
+const { devices } = useDevices({ poll: false });
+const onlineDevices = computed(() => devices.value.filter((device) => device.hostId !== undefined && device.online === true));
+// Which machine runs this sandbox is itself read off the daemon's fleet payload, so a daemon far enough behind to
+// disagree about that payload answers "none" — and the one button that fixes it would vanish with the field it was
+// gated on, exactly when this card is on screen. A single online device is not a guess, so it is offered: the reload's
+// argv names this sandbox's own slug on the far side, so a machine that doesn't hold it refuses rather than restarting
+// something else. Two of them is a guess, and stays the printed command.
+const hostId = computed(() => running.value ?? (onlineDevices.value.length === 1 ? onlineDevices.value[0]?.hostId : undefined));
 const reloading = ref(false);
 const reloaded = ref(false);
 const failed = ref<string | undefined>(undefined);

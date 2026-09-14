@@ -8,6 +8,7 @@ import {
     DeviceCommandResultSchema,
     DeviceFlowLineSchema,
     DeviceSandboxFlowInputSchema,
+    DevicesListSchema,
 } from "../schemas/devices.js";
 import { PresenceReportSchema } from "../schemas/logs.js";
 import { OkSchema } from "../schemas/shared.js";
@@ -168,6 +169,18 @@ export const systemContract = {
         })
         .input(SubagentIdParamSchema)
         .output(SessionTranscriptSchema),
+    // On the contract, not a hand-written route beside it: this payload is what every "do it out there" button is
+    // gated on, so its shape has to be fingerprinted like any other, or a daemon older than the app disagrees about
+    // it silently and the buttons just stop being drawn.
+    devices: oc
+        .route({
+            method: "GET",
+            path: "/system/devices",
+            summary: "The machines you have connected",
+            description:
+                "Every computer this sandbox can see, whether it reached it through desktop sync or through a connected device, in one row per machine: what it says about itself, which sandboxes it holds, and what stopped it answering when nothing came back.",
+        })
+        .output(DevicesListSchema),
     // One stream for every op; the daemon adds no judgment, a refusal is the machine's own `error` line.
     manageDeviceSandbox: oc
         .route({

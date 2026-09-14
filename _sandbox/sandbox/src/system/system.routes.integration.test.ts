@@ -292,6 +292,13 @@ test("events: the hello names the daemon's build and where its boot is, then str
     controller.abort();
 });
 
+// On the contract like the doors it leads to, so the daemon advertises its shape and a browser reading a field this
+// build doesn't send is told, instead of quietly drawing a fleet with nothing in it.
+test("system.devices answers the fleet view through the typed client", async () => {
+    const client = clientFor(createApp(services()));
+    expect(await client.system.devices()).toEqual({ devices: [] });
+});
+
 // Enrollment is a property of each device, read off the device list, not one syncingFrom/mirroredBy pair on the
 // sandbox; these tests ask the same route the view does.
 const enrollments = async (app: { request: (path: string) => Promise<Response> | Response }): Promise<{ machine: string; mode: string }[]> => {

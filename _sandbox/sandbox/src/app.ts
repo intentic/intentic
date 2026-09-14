@@ -39,7 +39,6 @@ import { createBackendProxyRoute } from "./extensions/backend/backend-proxy.rout
 import { createExtensionBundleRoute } from "./extensions/extension-bundle.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserProfileRoute } from "./browser/sessions/browser-profile.js";
-import { createDevicesRoute } from "./hosts/devices.routes.js";
 import { HOST_PEER, hostPeerRoutes } from "./hosts/host-peer.js";
 import { peerConnectPath, peerEnrollPath, peerMcpPath } from "./peers/peer.js";
 import { mountPeerRoutes } from "./peers/peer-routes.js";
@@ -540,10 +539,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.post("/system/sessions/revoke", access.revokeSessions);
     app.post("/system/access/disable", access.disable);
 
-    // Desktop sync's enrollment surface with the merged devices view beside it; exact-path doors are the agent's.
+    // Desktop sync's enrollment surface; exact-path doors are the agent's. The merged devices view is a contract
+    // route (system.devices), so it arrives through the oRPC handler below.
     app.post("/system/authorized-key", sync.enrollKey);
     app.get("/system/sync", sync.state);
-    app.get("/system/devices", createDevicesRoute(services));
     app.post("/system/sync/report", sync.report);
     app.delete("/system/authorized-key", sync.revokeOwn);
     app.delete("/system/authorized-key/:machine", sync.revokeMachine);

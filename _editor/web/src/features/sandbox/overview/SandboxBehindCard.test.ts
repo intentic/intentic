@@ -135,6 +135,30 @@ it(`runs the reload on the device hosting this sandbox instead of printing it`, 
     expect(severingCalls).toEqual([`ada-laptop:dev-reload`]);
 });
 
+// Which machine runs this sandbox is read off the very payload a behind daemon disagrees about, so the button that
+// fixes it must not be gated on that answer alone: one online device is the only machine it could be.
+it(`reloads on the one connected device when nothing claims to run this sandbox`, async () => {
+    fleet.value = [{ key: `ada-laptop`, label: `ada-laptop`, hostId: `ada-laptop`, online: true }];
+    setDaemonRoutes(LEVEL, reshaped(`settings.get`));
+    const el = mount();
+    const reload = [...el.querySelectorAll(`button`)].find((button) => button.textContent === `Reload sandbox`);
+    reload?.click();
+    expect(severingCalls).toEqual([`ada-laptop:dev-reload`]);
+});
+
+// Two machines and no reading of which holds this container is a guess, and a reload aimed at the wrong one is a
+// restart somebody didn't ask for; the command goes back on screen instead.
+it(`prints the command rather than choosing between two connected devices`, () => {
+    fleet.value = [
+        { key: `ada-laptop`, label: `ada-laptop`, hostId: `ada-laptop`, online: true },
+        { key: `desk`, label: `desk`, hostId: `desk`, online: true },
+    ];
+    setDaemonRoutes(LEVEL, reshaped(`settings.get`));
+    const el = mount();
+    expect([...el.querySelectorAll(`button`)].some((button) => button.textContent === `Reload sandbox`)).toBe(false);
+    expect(el.textContent ?? ``).toContain(`dev-reload.sh sandbox-abc123`);
+});
+
 // The case the command block was hiding: a machine is already syncing this sandbox, so the reason there is no
 // button is a card away, and saying so is worth more than the command it sits under.
 it(`offers to connect the machine already syncing this sandbox`, () => {

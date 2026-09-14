@@ -216,6 +216,15 @@ and the Capabilities device cards, which state a sync-only machine as a row of t
 colour the board gives it and the one thing it cannot do yet. Before that, Capabilities knew only the card door, so a
 live machine could be listed on one screen and missing from the other.
 
+That list is a contract route (`system.devices`), not a hand-written one beside them, so the daemon advertises its
+payload shape along with every other route's. It has to be: which machine runs this sandbox is read out of this
+payload, and every "do it out there" button is gated on that answer — so a daemon that shapes the payload differently
+than the browser expects reads as a fleet holding nothing, and the buttons stop being drawn with no error anywhere.
+Fingerprinted, the same disagreement surfaces as drift on the Sandbox-behind card instead. That card's own reload is
+the one button that must survive it, so it falls back to the single connected device when nothing claims this sandbox
+([SandboxBehindCard.vue](../../_editor/web/src/features/sandbox/overview/SandboxBehindCard.vue)); the reload names this
+sandbox's slug on the far side, so a machine that doesn't hold it refuses rather than restarting something else.
+
 Folding two readings into one row is where a name stops being enough. **WSL hands a distro the Windows machine's own
 hostname**, and a distro is usually named after the machine too, so both of merge's keys collide between environments
 that share nothing else — separate filesystems, separate agents, separate containers. The agent therefore reports

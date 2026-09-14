@@ -1,17 +1,10 @@
 import { systemContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import type { Context } from "hono";
-import type { AppEnv,OrpcContext } from "../app-env.js";
 import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
+import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { runDeviceCommand } from "./device-commands.js";
 import { devices, manageDeviceSandbox, runDeviceAgentFlow } from "./device-reports.js";
-
-/* GET /system/devices. */
-export const createDevicesRoute =
-    (services: Parameters<typeof devices>[0]) =>
-    async (c: Context<AppEnv>): Promise<Response> =>
-        c.json({ devices: await devices(services) });
 
 /* The `system.*Device*` procedures, implemented where the devices themselves live rather than in system/system.routes.ts. */
 export const createDeviceSystemRoutes = (services: Services) => {
@@ -28,6 +21,9 @@ export const createDeviceSystemRoutes = (services: Services) => {
         }
     };
     return {
+        // The merged fleet view. No maintainer floor: this is what every devices-aware card reads to draw itself, and
+        // the doors it leads to carry their own.
+        devices: i.devices.handler(async () => ({ devices: await devices(services) })),
         // Acts on a sandbox on one of the user's devices, streaming the machine's own output; this door can also delete
         // one. Everything past the gate is the machine's call, including refusing, which arrives as the stream's own
         // terminal error.

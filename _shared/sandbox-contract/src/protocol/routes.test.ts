@@ -168,6 +168,13 @@ describe(`the real sandbox contract`, () => {
         expect(SANDBOX_ROUTES.length).toBeGreaterThan(100);
     });
 
+    // The fleet payload decides whether every "do it out there" button is drawn at all, so a daemon shaping it
+    // differently has to read as drift rather than as a machine that runs nothing.
+    it(`fingerprints the fleet view the device buttons are gated on`, () => {
+        expect(sandboxRouteName(`GET`, `/system/devices`)).toBe(`system.devices`);
+        expect(SANDBOX_ROUTE_SHAPES[`system.devices`]).toEqual(expect.any(String));
+    });
+
     it(`resolves a known concrete request back to its contract name`, () => {
         expect(sandboxRouteName(`GET`, `/vpn`)).toBe(`vpn.list`);
     });
