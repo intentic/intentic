@@ -135,6 +135,27 @@ it("answers from the composer's own object URL, without asking the daemon at all
     expect(blob).not.toHaveBeenCalled();
 });
 
+// Forgetting has to reach the refusal too: a path asked about before its bytes existed is parked on a 404, and a
+// cache that only drops the value would keep answering from that parking rather than fetching the file that is
+// there now.
+it("asks again for a path that was refused before it was forgotten", async () => {
+    const path = freshPath();
+    blob.mockRejectedValue(new HttpError(404));
+    attachmentPreview(path);
+    await settle();
+    expect(blob).toHaveBeenCalledTimes(1);
+
+    forgetPreview(path);
+    blob.mockReset();
+    blob.mockResolvedValue(new Blob([`x`]));
+
+    expect(attachmentPreview(path)).toBeUndefined();
+    await settle();
+
+    expect(blob).toHaveBeenCalledTimes(1);
+    expect(attachmentPreview(path)).toBe(`blob:thumb`);
+});
+
 // A staged file's URL is revoked on removal; the cache must drop it too or hand out a dead thumb.
 it("drops a staged file's URL when the chip is removed", async () => {
     const path = freshPath();

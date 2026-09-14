@@ -80,20 +80,16 @@ watch(
     { immediate: true, flush: `post` },
 );
 
-const extension = computed(() => {
-    const dot = name.lastIndexOf(`.`);
-    return dot > 0 ? name.slice(dot + 1).toUpperCase() : ``;
-});
-
-// Kind, scale, and length where length is knowable: the three facts a filename alone withholds.
+// Scale, and length where length is knowable: the facts a filename withholds. Never the kind, which is the name's own
+// ending — the one part of it the middle-ellipsis above never gives up.
 const meta = computed(() => {
-    const bits = extension.value === `` ? [] : [extension.value];
-    if (peek?.present === true) {
-        bits.push(formatBytes(peek.size));
-        const lines = peekLines(peek);
-        if (lines !== undefined) {
-            bits.push(`${lines.toLocaleString()} ${lines === 1 ? `line` : `lines`}`);
-        }
+    if (peek?.present !== true) {
+        return ``;
+    }
+    const bits = [formatBytes(peek.size)];
+    const lines = peekLines(peek);
+    if (lines !== undefined) {
+        bits.push(`${lines.toLocaleString()} ${lines === 1 ? `line` : `lines`}`);
     }
     return bits.join(` · `);
 });
@@ -246,10 +242,11 @@ onBeforeUnmount(() => clearTimeout(timer));
                 </span>
             </span>
         </component>
+        <!-- `self-center`: a chip carrying a thumbnail is taller than its text, and only a removable chip — the composer's, which draws no lead lines — is ever asked to sit beside one. -->
         <button
             v-if="removable"
             type="button"
-            class="composer-ghost relative m-1 h-5 w-5 shrink-0 self-start"
+            class="composer-ghost relative m-1 h-5 w-5 shrink-0 self-center"
             aria-label="Remove attachment"
             @click="emit(`remove`)"
         >

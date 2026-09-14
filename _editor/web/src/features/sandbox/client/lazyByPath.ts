@@ -106,6 +106,14 @@ export const lazyByPath = <T>(load: (path: string) => Promise<T>): LazyByPath<T>
         },
         drop: (path) => {
             asked.delete(path);
+            // Every trace of the path, or the next ask answers from a parked refusal or a chain still mid-backoff.
+            refused.delete(path);
+            loading.delete(path);
+            const timer = sleeping.get(path);
+            if (timer !== undefined) {
+                clearTimeout(timer);
+                sleeping.delete(path);
+            }
             const { [path]: _dropped, ...rest } = values.value;
             values.value = rest;
         },

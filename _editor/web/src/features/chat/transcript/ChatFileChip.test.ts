@@ -71,8 +71,10 @@ it("keeps the end of the name, which is what tells two attachments apart", () =>
     expect(drawn?.children[1]?.textContent).toBe(`12645.log`);
 });
 
-it("states the kind and the scale a filename withholds", () => {
-    expect(mount({ peek: LOG }).textContent).toContain(`LOG · 2.3 MB`);
+it("states the scale a filename withholds, and not the kind it already carries", () => {
+    const text = mount({ peek: LOG }).textContent ?? ``;
+    expect(text).toContain(`2.3 MB`);
+    expect(text).not.toContain(`LOG`);
 });
 
 // The head window is clipped, so the file's own line count isn't known and must not be guessed at.

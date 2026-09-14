@@ -1231,14 +1231,14 @@ watch(
                                         <Icon name="code" class="shrink-0 text-2xs" />
                                         <span class="max-w-36 truncate">{{ editorChipLabel }}</span>
                                     </button>
-                                    <!-- Attachment chips use the same path key as the sent bubble. -->
+                                    <!-- Keyed by path like the sent bubble, but not until the upload lands: the daemon's copy of a file still going up is a prefix, which decodes as a part-drawn picture the path's cache then keeps. -->
                                     <ChatFileChip
                                         v-for="a in attachments"
                                         :key="a.id"
                                         :name="a.name"
                                         :path="a.path"
-                                        :peek="attachmentPeek(a.path)"
-                                        :preview-url="attachmentPreview(a.path)"
+                                        :peek="a.status === 'done' ? attachmentPeek(a.path) : undefined"
+                                        :preview-url="a.status === 'done' ? attachmentPreview(a.path) : a.previewUrl"
                                         :progress="a.status === 'uploading' ? a.progress : undefined"
                                         :error="a.status === 'failed' ? (a.error ?? 'Upload failed') : undefined"
                                         framed
