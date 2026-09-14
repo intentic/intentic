@@ -24,9 +24,12 @@ const PER_TOOL_CLEANERS = [
     [`test runners`, `On a green run, the line-per-passing-test list, but the summary stays`],
     [`directory listings`, `Every long-listing entry loses its link count, owner, group and timestamp, keeping mode, name and size`],
     [`file lists`, `A run of paths (from find, git ls-files, rg -l) groups under its directory, saying the shared root once`],
+    [`search hits`, `A file's name is said once and its later hits indent under it, every line number and match kept`],
+    [`generated-file diffs`, `A diff hunk in a lock file, bundle or source map becomes one line saying how much changed`],
 ];
 const GLOBAL_CLEANERS = [
     [`dedupe repeats`, `3 or more identical lines in a row become one, plus a count`],
+    [`machine-generated blobs`, `A run of 400 characters with no space in it — minified JSON, base64, a bundled file — keeps its start and end`],
     [`head/tail cap`, `Over 100 lines keeps the first 30 and the last 50, though a file read (cat, sed -n, git diff) keeps 2000`],
     [`redact secrets`, `Masks credential-shaped values after a token/password/key name, and credentials in URLs`],
     [`collapse repeats`, `Output identical to an earlier run this session isn't shown twice`],
@@ -109,7 +112,7 @@ const GLOBAL_CLEANERS = [
             </div>
         </div>
 
-        <!-- A lookup table (13 rules), not a bullet list. -->
+        <!-- A lookup table (twelve rules), not a bullet list. -->
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">What each cleaner takes out</h3>
         <p class="mt-1.5 text-2xs text-muted">
             A rule only ever touches the tool it's named for, so the git rule can't reach your test output. Switch any of them off on its own.

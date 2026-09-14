@@ -3,6 +3,10 @@ import { filterOutput } from "./agent-output-filter.mjs";
 import { CACHE_MARKER, CLEANERS, cleanLines, collapseCached, matchedCleaners, parseCleaners, sessionKeyFromLog } from "./cleaners.mjs";
 
 
+// The cap's byte budgets are only reachable with blobs intact: `wide` cuts a 2 KB run down to ~340 bytes, so a fixture
+// built to trip the cap never gets there with it on. The cap tests below turn it off to probe the cap alone.
+const WITHOUT_WIDE = new Set(CLEANERS.filter((id) => id !== "wide"));
+
 // In-memory stand-in for the file-backed cache store, for deterministic tests with no disk access.
 const memoryStore = () => {
     const map = new Map();
@@ -56,7 +60,7 @@ test("cleanLines: cap elides the middle past MAX when enabled", () => {
 
 test("cleanLines: cap trims long-line output that never reaches the line limit", () => {
     const lines = Array.from({ length: 40 }, (_, i) => `src/a${i}.css:1:${"x".repeat(2000)}`);
-    const out = cleanLines(lines, { command: "grep -rn x --include=*.css .", exitCode: "0", enabled: new Set(CLEANERS) }).lines;
+    const out = cleanLines(lines, { command: "grep -rn x --include=*.css .", exitCode: "0", enabled: WITHOUT_WIDE }).lines;
     expect(lines.length).toBeLessThan(100);
     expect(out.length).toBeLessThan(lines.length);
     expect(out.join("\n").length).toBeLessThan(20_000);
@@ -66,11 +70,11 @@ test("cleanLines: cap trims long-line output that never reaches the line limit",
 test("cleanLines: a read gets a far larger byte budget than a log, and keeps its head", () => {
     // 60 KB clears the log budget but stays under the read budget; same bytes, capped as a log, kept as a read.
     const lines = Array.from({ length: 30 }, (_, i) => `${i}: ${"x".repeat(2000)}`);
-    expect(cleanLines(lines, { command: "cat big.json", exitCode: "0", enabled: new Set(CLEANERS) }).lines).toHaveLength(30);
-    expect(cleanLines(lines, { command: "curl -s http://api/x", exitCode: "0", enabled: new Set(CLEANERS) }).lines.length).toBeLessThan(30);
+    expect(cleanLines(lines, { command: "cat big.json", exitCode: "0", enabled: WITHOUT_WIDE }).lines).toHaveLength(30);
+    expect(cleanLines(lines, { command: "curl -s http://api/x", exitCode: "0", enabled: WITHOUT_WIDE }).lines.length).toBeLessThan(30);
     // Past the read budget, output is trimmed from the end, where a file read naturally stops.
     const huge = Array.from({ length: 60 }, (_, i) => `${i}: ${"x".repeat(2000)}`);
-    const capped = cleanLines(huge, { command: "cat big.json", exitCode: "0", enabled: new Set(CLEANERS) }).lines;
+    const capped = cleanLines(huge, { command: "cat big.json", exitCode: "0", enabled: WITHOUT_WIDE }).lines;
     expect(capped[0]).toBe(huge[0]);
     expect(capped.at(-1)).toContain("use the Read tool");
 });
@@ -79,11 +83,84 @@ test("cleanLines: a single line over the whole budget is truncated rather than d
     const out = cleanLines([`{"data":"${"x".repeat(40_000)}"}`], {
         command: "curl -s http://api/x",
         exitCode: "0",
-        enabled: new Set(CLEANERS),
+        enabled: WITHOUT_WIDE,
     }).lines;
     expect(out).toHaveLength(1);
     expect(out[0]).toContain("line truncated at");
     expect(out[0].length).toBeLessThan(20_000);
+});
+
+test("wide: an unbroken run is cut to its head and tail, and prose on the same line is not", () => {
+    const blob = "x".repeat(5000);
+    const out = cleanLines([`config.json:1:{"icons":"${blob}"} loaded from disk`], {
+        command: "rg -n icons config.json",
+        exitCode: "0",
+        enabled: new Set(CLEANERS),
+    }).lines;
+    expect(out).toHaveLength(1);
+    // The hit's own prefix and the words after the blob survive; only the run between them is cut.
+    expect(out[0].startsWith(`config.json:1:{"icons":"`)).toBe(true);
+    expect(out[0].endsWith(" loaded from disk")).toBe(true);
+    expect(out[0]).toMatch(/… \d+ chars elided …/);
+    expect(out[0].length).toBeLessThan(400);
+});
+
+test("wide: a long line of words keeps every character", () => {
+    // 2400 characters of prose, far past any line threshold; no run in it is machine-generated, so nothing is cut.
+    const prose = Array.from({ length: 400 }, (_, i) => `word${i}`).join(" ");
+    const lines = [`README.md:12:- ${prose}`];
+    expect(cleanLines(lines, { command: "rg -n word README.md", exitCode: "0", enabled: new Set(CLEANERS) }).lines).toEqual(lines);
+});
+
+test("wide: cutting blobs first leaves the cap with nothing to drop", () => {
+    // Each line carries a 2 KB blob: 80 KB, over the log budget, so the cap would elide the middle lines outright.
+    const lines = Array.from({ length: 40 }, (_, i) => `src/a${i}.css:1:${"x".repeat(2000)}`);
+    const enabled = new Set(CLEANERS);
+    const { lines: out, stages } = cleanLines(lines, { command: "grep -rn x --include=*.css .", exitCode: "0", enabled });
+    // Every file is still named, which is what the cap alone could not do.
+    expect(out).toHaveLength(40);
+    expect(out.every((line, i) => line.startsWith(`src/a${i}.css:1:`))).toBe(true);
+    expect(stages.find((stage) => stage.id === "cap")).toBeUndefined();
+    // And smaller than the cap's own answer: 40 trimmed lines against the 16 KB budget the cap would have kept.
+    const capped = cleanLines(lines, { command: "grep -rn x --include=*.css .", exitCode: "0", enabled: WITHOUT_WIDE }).lines;
+    expect(out.join("\n").length).toBeLessThan(capped.join("\n").length);
+});
+
+test("diff: a generated file's hunks fold to a count, the source file beside it does not", () => {
+    const lines = [
+        "diff --git a/_shared/sandbox-contract/contract.lock.json b/_shared/sandbox-contract/contract.lock.json",
+        "index 1111111..2222222 100644",
+        "--- a/_shared/sandbox-contract/contract.lock.json",
+        "+++ b/_shared/sandbox-contract/contract.lock.json",
+        "@@ -1,3 +1,3 @@",
+        `-  "PersonasListSchema": {"properties":{"personas":{"type":"array"}}}`,
+        `+  "PersonasListSchema": {"properties":{"personas":{"type":"array"},"connected":{"type":"array"}}}`,
+        "diff --git a/src/personas.ts b/src/personas.ts",
+        "@@ -10,2 +10,3 @@",
+        " const personas = load();",
+        "+const connected = accounts();",
+    ];
+    const out = cleanLines(lines, { command: "git diff", exitCode: "0", enabled: new Set(CLEANERS) }).lines;
+    expect(out).toEqual([
+        lines[0],
+        "… 6 lines of generated-file diff elided (+1 −1) …",
+        ...lines.slice(7),
+    ]);
+});
+
+test("diff: a diff of source files is handed back untouched", () => {
+    const lines = [
+        "diff --git a/src/app.ts b/src/app.ts",
+        "@@ -1,2 +1,2 @@",
+        "-const port = 3000;",
+        "+const port = 4000;",
+    ];
+    expect(cleanLines(lines, { command: "git diff", exitCode: "0", enabled: new Set(CLEANERS) }).lines).toEqual(lines);
+});
+
+test("wide: a failure keeps its blobs verbatim", () => {
+    const lines = [`error: unexpected token in {"payload":"${"z".repeat(5000)}"}`];
+    expect(cleanLines(lines, { command: "curl -s http://api/x", exitCode: "1", enabled: new Set(CLEANERS) }).lines).toEqual(lines);
 });
 
 test("cleanLines: git global options before the verb still read as a deliberate read", () => {

@@ -19,13 +19,14 @@ verbatim. When lines are dropped it prints a footer naming the retrieval command
 Each cleaner has a stable `id`, and there are two kinds:
 
 - **Command-scoped** (`pnpm`, `apt`, `test`): a command regex plus a line transform.
-- **Shape** (`ls`, `files`, `hits`): no `match` at all. They are offered on every success and decide from the
-  OUTPUT: `ls` rewrites long-listing entries to `<octal> <name> <size>`, `files` folds a run of ≥10 bare paths
-  into one line per directory under a shared root, `hits` says a search result's path once and indents that
-  file's later hits under it. This is not a stylistic choice: a command regex cannot see past `cd x && …`, and a
-  replay of the session corpus says four out of five agent commands are written that way. All three fall back to
-  the lines they were handed when they recognise nothing (a non-English `ls` locale, a run of loose words, a
-  timestamp that reads like `path:line:`), so being always-on costs nothing when they are wrong.
+- **Shape** (`diff`, `ls`, `files`, `hits`): no `match` at all. They are offered on every success and decide from
+  the OUTPUT: `diff` replaces a generated file's hunks with a count, `ls` rewrites long-listing entries to
+  `<octal> <name> <size>`, `files` folds a run of ≥10 bare paths into one line per directory under a shared root,
+  `hits` says a search result's path once and indents that file's later hits under it. This is not a stylistic
+  choice: a command regex cannot see past `cd x && …`, and a replay of the session corpus says four out of five
+  agent commands are written that way. All four fall back to the lines they were handed when they recognise
+  nothing (a non-English `ls` locale, a run of loose words, a timestamp that reads like `path:line:`, a diff of
+  hand-written files), so being always-on costs nothing when they are wrong.
 
 **A stripper claims the command, not a filename that contains its name.** `\bpnpm\b` matched
 `node_modules/.pnpm/@cursor+sdk` and `':!pnpm-lock.yaml'`; `\bvitest\b` matched `cat _editor/web/vitest.setup.ts`.
@@ -35,8 +36,9 @@ whole question is which high-volume commands no handler claimed: a command wrong
 opportunity hidden. The match is anchored the way `READ_COMMAND` is and for the same reason (below): a lookbehind
 on `[\w.\-/]` rather than a statement start, so the quote, the `&&` and the line start all read alike.
 
-Global stages are `dedup` (collapse ≥3 identical consecutive lines), `cap` (head/tail truncation), and `redact`
-(mask secret-named assignments, AWS keys, bearer tokens, URL creds: on both success and failure).
+Global stages are `dedup` (collapse ≥3 identical consecutive lines), `wide` (cut the middle out of a
+machine-generated run), `cap` (head/tail truncation), and `redact` (mask secret-named assignments, AWS keys,
+bearer tokens, URL creds: on both success and failure).
 
 Two things `cap` and `redact` each learned the hard way, because both were measured wrong for a while and both
 cost the model real information:
@@ -82,10 +84,28 @@ cost the model real information:
   becoming a bare header: it costs nothing (the header would have cost a line of its own) and it leaves every
   group headed by an anchor that can be copied straight into an editor.
 
+- **A run is the unit, not a line, and not prose.** `wide` cuts the middle out of any unbroken run of 400+
+  non-space characters: minified JSON, base64, a bundled-JS line, a `strings` dump. The RUN and not the LINE,
+  because the two shapes share lines and no line-length threshold separates them: this repo's own README bullets
+  pass 2,000 characters, and `git diff` of `contract.lock.json` puts a 5,941-character line on screen whose
+  longest unbroken run is 546, because the generated JSON has English `description` values inside it. Sampling
+  the corpus by band settles it: a blind line elision at >800 would have saved 4.17 MB and cut real prose in
+  every band it touched; eliding runs saves **975 KB** and cannot touch a word. It runs **after** `dedup`,
+  because eliding two long lines' middles can leave them identical and dedup would then report as repeats what
+  the command printed once each: and **before** `cap`, because a blob cut to its ends often brings the whole
+  output back under budget, so the cap never has to drop a line at all.
+- **A generated file's diff says one thing: that it changed.** `diff` folds the hunks of a lock file, bundle,
+  source map or checked-in schema dump into `… N lines of generated-file diff elided (+A −B) …`, keeping git's
+  own `diff --git` header so the reader still sees which file and how much. It is matched on the path in that
+  header, never on the command, so it cannot reach a file the agent is actually editing. Worth **351 KB** over
+  the corpus, more than every command-scoped cleaner and more than `cap` earns on the same replay: one real
+  `git diff … contract.lock.json | head -40` goes from 36,042 bytes to 194. `wide` does **not** cover this case
+  and the two are not substitutes.
+
 **Add a cleaner:** append `{ id, match, apply }` (or a `strip(id, match, patterns)`) to `COMMAND_CLEANERS`:
 omit `match` for a shape cleaner: and it joins `CLEANERS` automatically. Keep it dependency-free (the filter
 must never break). Candidates surface from `discover` (below). Add the id to `CLEANER_OPTIONS` in
-`_editor/web/src/pages/sandbox/savingsChart.ts` in the same commit: that list is what draws the switch on the
+`_editor/web/src/features/sandbox/usage/savingsChart.ts` in the same commit: that list is what draws the switch on the
 Agent tab and labels the mechanism's mark on the savings bar, and a cleaner missing from it saves tokens under
 a name no screen can print.
 
@@ -195,12 +215,30 @@ they are what the iq search teaching is judged on.
 `SavingsReport` is two families, deliberately never one ranking:
 
 - `input` (the cleaners, from `filter-stats.jsonl`. Exact, windowed by UTC day. `gaps`) the un-cleaned
-  commands worth a handler: is **grouped by command line**, `commands` runs summing to `tokens`.
+  commands worth a handler: is **grouped by command signature**, `commands` runs summing to `tokens`.
 - `search`: the iq search teaching A/B, randomized per conversation. Two readings, `"searchCalls"` then
   `"openingSearches"`. Same `TurnExperiment` shape, same Welch machinery, same absence rule.
 
 `TurnExperiment.metrics` is a head-and-tail tuple, not a plain list: one coin flip, one arm assignment, and N
 readings over them: so the first is always the headline and a screen never has to check whether there is one.
+
+**`gaps` prices what is LEFT, and it took three corrections to say that.** The row is weighed by `emittedBytes`,
+grouped by the verb a cleaner would match on, and skips the verbs that hand back bytes the model named.
+
+- **Raw bytes are the cap's receipt, not an opportunity.** Ranked by `rawBytes`, one live report's top five were
+  a 122,145-token command that emitted **44**, a 78,715 that emitted 2,283, a 61,459 that emitted 554 and a
+  15,241 that emitted 329: four commands whose whole cost `cap` had already removed, printed under a heading
+  that asks for a handler. The one still costing the model 35,803 tokens ranked fourth.
+- **Ad-hoc commands never repeat, so a command line cannot be a group.** Grouped by the literal line, 915 gap
+  rows made 914 groups: the biggest had two runs and the rest had one, and the `×N` the screen prints to justify
+  writing a handler could never be anything but `×1`. The signature is the verb, plus a subcommand for the
+  fifteen verbs that have them (`git diff`, `pnpm install`): for everything else the second word is that run's
+  own question (`rg displayName`, `rg fastModel`) and folding it in is what scattered them.
+- **A deliberate read is not a gap.** `cat`, `sed -n`, `head`, `tail` and friends return exactly the bytes the
+  model asked for by name; no handler will ever be written for them, and by emitted volume they outranked
+  everything else two to one. Tested against the signature rather than the line, so `rg … | head -30` stays a
+  gap in `rg` while `head -20 file` reads as what it is. Git's read verbs are deliberately not on that list:
+  `git diff` prints what git decides to print, and what it decided was 36 KB of a lock file.
 
 The web renders `input` as one stacked bar (mechanisms + what reached the assistant) on the Usage tab, where the
 range window lives, and each experiment reading through one arms chart (`SavingsArmsChart.vue`, metric-aware).

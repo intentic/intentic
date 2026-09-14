@@ -189,11 +189,16 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
                         :evidence="savingsVerdict.evidence"
                     />
                     <!--
-                        Grouped by command and ranked by total, answering "what deserves a handler" rather than "biggest single run";
-                        the count shows because cost across many runs is what justifies writing one.
+                        Grouped by the command a handler would be written against and ranked by what those runs still cost, answering
+                        "what deserves a handler" rather than "biggest single run"; the count shows because cost across many runs is
+                        what justifies writing one. The figure is what reached the assistant, so a command the cap already emptied is
+                        absent rather than top of the list.
                     -->
                     <div v-if="savings !== undefined && savings.input.gaps.length > 0" class="flex flex-col gap-1">
-                        <p class="text-2xs font-medium uppercase tracking-wide text-subtle">Un-cleaned (add a handler)</p>
+                        <div class="flex items-baseline justify-between gap-2">
+                            <p class="text-2xs font-medium uppercase tracking-wide text-subtle">Un-cleaned (add a handler)</p>
+                            <p class="text-2xs text-subtle">tokens still reaching the assistant</p>
+                        </div>
                         <p v-for="gap in savings.input.gaps.slice(0, 5)" :key="gap.command" class="flex items-baseline gap-1.5 text-2xs">
                             <span class="shrink-0 tabular-nums text-muted">~{{ formatTokens(gap.tokens) }}</span>
                             <span class="shrink-0 tabular-nums text-subtle">×{{ gap.commands }}</span>

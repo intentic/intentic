@@ -66,13 +66,38 @@ test("summarizeStats: a holdout the cleaners did not separate publishes no numbe
     expect(summarizeStats(rows).holdout.measuredSavedPct).toBeUndefined();
 });
 
-test("summarizeStats: high-volume cleaned commands with no cleaner surface as gaps, grouped by command", () => {
+test("summarizeStats: high-volume cleaned commands with no cleaner surface as gaps, grouped by verb", () => {
     const rows = [
-        { command: "weird-tool run", rawBytes: 9000, emittedBytes: 9000, matched: [], heldOut: false },
-        { command: "weird-tool run", rawBytes: 3000, emittedBytes: 3000, matched: [], heldOut: false },
+        // Two ad-hoc lines that share nothing but the command a handler would be written against.
+        { command: "cd /work && weird-tool run --scope _editor", rawBytes: 9000, emittedBytes: 9000, matched: [], heldOut: false },
+        { command: "weird-tool run --scope _sandbox | head -20", rawBytes: 3000, emittedBytes: 3000, matched: [], heldOut: false },
     ];
-    // `commands` and `tokens` sum over all runs of the command, not just its largest single run.
-    expect(summarizeStats(rows).gaps).toEqual([{ command: "weird-tool run", commands: 2, tokens: 3000 }]);
+    // `commands` and `tokens` sum over all runs of the verb, not just its largest single run.
+    expect(summarizeStats(rows).gaps).toEqual([{ command: "weird-tool", commands: 2, tokens: 3000 }]);
+});
+
+test("summarizeStats: a gap is weighed by what reached the model, not by what the cleaners already removed", () => {
+    const rows = [
+        // The cap ate 480 KB of this one: nothing is left for a handler to take.
+        { command: "rg -n selectionBackground typings/", rawBytes: 488_000, emittedBytes: 180, matched: [], heldOut: false },
+        { command: "git diff contract.lock.json | head -40", rawBytes: 146_000, emittedBytes: 96_000, matched: [], heldOut: false },
+    ];
+    expect(summarizeStats(rows).gaps).toEqual([{ command: "git diff", commands: 1, tokens: 24_000 }]);
+});
+
+test("summarizeStats: a deliberate file read is never a gap, but a computed report is", () => {
+    const rows = [
+        { command: "cat _sandbox/sandbox/src/git/ops/commit-message.ts", rawBytes: 26_000, emittedBytes: 26_000, matched: [], heldOut: false },
+        { command: "cd /work && sed -n '120,270p' src/styles.css", rawBytes: 26_000, emittedBytes: 26_000, matched: [], heldOut: false },
+        { command: "head -60 /root/.cache/webq/out/fly-io-docs.md", rawBytes: 26_000, emittedBytes: 26_000, matched: [], heldOut: false },
+        { command: "cd /work && git show 3241dd07b -- src/schemas/devices.ts", rawBytes: 20_000, emittedBytes: 20_000, matched: [], heldOut: false },
+        // `head` here is the pipeline's sink, not the command: the gap belongs to the search that filled it.
+        { command: "cd /work && rg -n displayName _editor | head -30", rawBytes: 24_000, emittedBytes: 24_000, matched: [], heldOut: false },
+    ];
+    expect(summarizeStats(rows).gaps).toEqual([
+        { command: "rg", commands: 1, tokens: 6000 },
+        { command: "git show", commands: 1, tokens: 5000 },
+    ]);
 });
 
 test("parseStatsFile: skips blank and corrupt lines", () => {

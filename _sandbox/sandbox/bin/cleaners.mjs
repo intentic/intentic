@@ -222,6 +222,53 @@ const foldHitRuns = (lines) => {
     return out;
 };
 
+// A lock file, a bundle, a source map, a checked-in schema dump: nobody reads its diff line by line, and a `git diff`
+// that names one prints tens of KB of it. Matched on the path git itself puts in the header, so the fold cannot reach a
+// file the agent is actually working on.
+const GENERATED_PATH = /(?:^|\/)(?:[^/]*\.lock(?:\.json)?|[^/]*-lock\.json|pnpm-lock\.yaml|go\.sum|[^/]*\.min\.(?:js|css|mjs)|[^/]*\.map)$/;
+const DIFF_HEADER = /^diff --git a\/(\S+) b\/(\S+)$/;
+// `+++`/`---` before the counts: the file headers carry a `+` or `-` too, and counting them would inflate both.
+const isAdded = (line) => line.startsWith("+") && !line.startsWith("+++");
+const isRemoved = (line) => line.startsWith("-") && !line.startsWith("---");
+
+// Every hunk of a generated file becomes one summary line. The `diff --git` header stays: the reader still learns the
+// file changed and by how much, which is all a generated file's diff ever told them.
+const foldGeneratedDiffs = (lines) => {
+    const out = [];
+    let folding = false;
+    let added = 0;
+    let removed = 0;
+    let dropped = 0;
+    const flush = () => {
+        if (folding && dropped > 0) {
+            out.push(`… ${dropped} lines of generated-file diff elided (+${added} −${removed}) …`);
+        }
+        folding = false;
+        added = 0;
+        removed = 0;
+        dropped = 0;
+    };
+    for (const line of lines) {
+        const header = DIFF_HEADER.exec(line);
+        if (header !== null) {
+            flush();
+            folding = GENERATED_PATH.test(header[2]);
+            out.push(line);
+            continue;
+        }
+        if (!folding) {
+            out.push(line);
+            continue;
+        }
+        dropped++;
+        added += isAdded(line) ? 1 : 0;
+        removed += isRemoved(line) ? 1 : 0;
+    }
+    flush();
+    // Nothing recognised, or a header with one line under it: hand back exactly what came in.
+    return bodyBytes(out) < bodyBytes(lines) ? out : lines;
+};
+
 // Command-scoped cleaners (id + command regex + transform) and shape cleaners (no `match`, offered on every success);
 // composable, every enabled match runs in array order.
 const COMMAND_CLEANERS = [
@@ -246,14 +293,17 @@ const COMMAND_CLEANERS = [
         /^PASS\s+\S/, // jest per-file PASS header
         /^\s*[.·]+\s*$/, // pytest/mocha dot progress
     ]),
+    // `diff` reads the whole output's structure, the three after it read runs of lines; folding the generated hunks away
+    // first keeps those three from ever looking inside one.
+    { id: "diff", apply: foldGeneratedDiffs },
     { id: "ls", apply: compactListing },
     { id: "files", apply: foldPathRuns },
     { id: "hits", apply: foldHitRuns },
 ];
 
-// Every registry cleaner id plus the global stages: dedup and redact run on all output, cap is head/tail truncation,
-// cache collapses an identical repeat (owned by agent-output-filter).
-export const CLEANERS = [...COMMAND_CLEANERS.map((cleaner) => cleaner.id), "dedup", "cap", "redact", "cache"];
+// Every registry cleaner id plus the global stages: dedup and redact run on all output, wide cuts machine-generated
+// blobs out of a line, cap is head/tail truncation, cache collapses an identical repeat (owned by agent-output-filter).
+export const CLEANERS = [...COMMAND_CLEANERS.map((cleaner) => cleaner.id), "dedup", "wide", "cap", "redact", "cache"];
 
 // Collapses a run of 3+ identical consecutive lines to one line plus a count marker. Lossless on distinct content, so
 // it's safe on both success output and repeated failure traces.
@@ -277,6 +327,18 @@ const dedupeRuns = (lines) => {
     }
     return out;
 };
+
+// An unbroken run of non-space characters this long is machine-generated: minified JSON, a base64 blob, a bundled-JS
+// line, a binary `strings` dump. Prose and code break for a space every few characters, so the RUN is the unit here and
+// not the line: a 2000-character README bullet or a wrapped error message keeps every word, while the blob beside it on
+// the same line is cut. A line-length threshold cannot make that distinction at any setting.
+const WIDE_RUN = 400;
+const WIDE_HEAD = 240;
+const WIDE_TAIL = 80;
+// Head-heavy: a blob's first characters say what it is (the JSON keys, the `data:` prefix), its last say where it ends.
+const elideRun = (run) => `${run.slice(0, WIDE_HEAD)}… ${run.length - WIDE_HEAD - WIDE_TAIL} chars elided …${run.slice(-WIDE_TAIL)}`;
+const WIDE_PATTERN = new RegExp(String.raw`\S{${WIDE_RUN + 1},}`, "g");
+const elideWideRuns = (lines) => lines.map((line) => (line.length > WIDE_RUN ? line.replaceAll(WIDE_PATTERN, elideRun) : line));
 
 // Masks common secret shapes before output reaches the model, as defense-in-depth. A secret-shaped NAME is not enough
 // (source often says "token" without holding one), so the VALUE must look like a credential too.
@@ -548,50 +610,61 @@ const capOutput = (lines, command) => {
     return [...head, `… ${lines.length - head.length - tail.length} lines elided (${bodyBytes(lines)} bytes) …`, ...tail];
 };
 
+// Every claiming cleaner, then the stages that read the text rather than the command. `ran` weighs each one and hands
+// the lines back, so the order here is the order the ledger attributes bytes in.
+const cleanSucceeded = (lines, command, enabled, ran) => {
+    let out = lines;
+    for (const cleaner of COMMAND_CLEANERS) {
+        // A shape cleaner has no `match`: it is offered every command and decides from the text itself.
+        if (enabled.has(cleaner.id) && (cleaner.match === undefined || cleaner.match.test(command))) {
+            out = ran(cleaner.id, cleaner.apply(out));
+        }
+    }
+    if (enabled.has("dedup")) {
+        out = ran("dedup", dedupeRuns(out));
+    }
+    // After dedup, never before: eliding the middle of two long lines can leave them identical, and dedup would then
+    // report as repeats what the command actually printed once each. Before the cap for the opposite reason — a blob cut
+    // down to its head and tail may bring the whole output back under budget, so the cap never has to drop a line.
+    if (enabled.has("wide")) {
+        out = ran("wide", elideWideRuns(out));
+    }
+    if (enabled.has("cap")) {
+        const capped = capOutput(out, command);
+        if (capped !== out) {
+            out = ran("cap", capped);
+        }
+    }
+    return out;
+};
+
+// Failures keep detail verbatim: only collapse long identical runs (lossless) and cap at a generous tail.
+const cleanFailed = (lines, enabled, ran) => {
+    const out = enabled.has("dedup") ? ran("dedup", dedupeRuns(lines)) : lines;
+    return out.length > FAIL_TAIL
+        ? // Own id, never `cap`: this fires regardless of the spec, so `cap`'s toggle shouldn't get credit for it.
+          ran("failtail", [`… ${out.length - FAIL_TAIL} earlier lines elided …`, ...out.slice(-FAIL_TAIL)])
+        : out;
+};
+
 // Gated pipeline over ANSI/\r-cleaned lines: success runs matching command cleaners then the cap; failure keeps
 // everything but a generous tail. Stages are weighed sequentially, so they sum to the total saving — a cleaner before
 // the cap gets credit for lines the cap would have taken anyway.
 export const cleanLines = (lines, { command, exitCode, enabled, values = [] }) => {
     const stages = [];
-    let out = lines;
     let bytes = bodyBytes(lines);
     // Weighs one stage against what reached it, recording the difference under its id — even 0, so the report can tell
     // "fired and worth nothing" from "never ran".
     const ran = (id, next) => {
-        out = next;
-        const after = bodyBytes(out);
+        const after = bodyBytes(next);
         stages.push({ id, saved: bytes - after });
         bytes = after;
+        return next;
     };
-    if (exitCode === "0") {
-        for (const cleaner of COMMAND_CLEANERS) {
-            // A shape cleaner has no `match`: it is offered every command and decides from the text itself.
-            if (enabled.has(cleaner.id) && (cleaner.match === undefined || cleaner.match.test(command))) {
-                ran(cleaner.id, cleaner.apply(out));
-            }
-        }
-        if (enabled.has("dedup")) {
-            ran("dedup", dedupeRuns(out));
-        }
-        if (enabled.has("cap")) {
-            const capped = capOutput(out, command);
-            if (capped !== out) {
-                ran("cap", capped);
-            }
-        }
-    } else {
-        // Failures keep detail verbatim: only collapse long identical runs (lossless) and cap at a generous tail.
-        if (enabled.has("dedup")) {
-            ran("dedup", dedupeRuns(out));
-        }
-        if (out.length > FAIL_TAIL) {
-            // Own id, never `cap`: this fires regardless of the spec, so `cap`'s toggle shouldn't get credit for it.
-            ran("failtail", [`… ${out.length - FAIL_TAIL} earlier lines elided …`, ...out.slice(-FAIL_TAIL)]);
-        }
-    }
+    let out = exitCode === "0" ? cleanSucceeded(lines, command, enabled, ran) : cleanFailed(lines, enabled, ran);
     // Redaction runs last on both paths so a leaked secret is masked even inside an error dump.
     if (enabled.has("redact")) {
-        ran(
+        out = ran(
             "redact",
             out.map((line) => redactLine(line, values)),
         );

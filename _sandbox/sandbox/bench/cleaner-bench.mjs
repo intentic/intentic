@@ -80,6 +80,35 @@ const FIXTURES = [
         raw: `${["HOME=/root", "GITHUB_TOKEN=ghp_0123456789abcdef", "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE", "DATABASE_URL=postgres://user:s3cr3t@db:5432/app", "PATH=/usr/bin"].join("\n")}\n`,
     },
     {
+        name: "lock-file diff",
+        command: "cd /work/intentic && git diff _shared/sandbox-contract/contract.lock.json | head -40",
+        exitCode: "0",
+        // A generated lock file is one minified JSON object per schema: few lines, tens of KB, and a read's byte budget
+        // lets most of it through. That the file changed is the whole of what its diff tells a reader.
+        raw: `${[
+            "diff --git a/contract.lock.json b/contract.lock.json",
+            "index 8c1f2a3..9d4e5b6 100644",
+            "--- a/contract.lock.json",
+            "+++ b/contract.lock.json",
+            "@@ -1,4 +1,4 @@",
+            ...Array.from(
+                { length: 6 },
+                (ignored, schema) =>
+                    `-  "Schema${schema}": {"additionalProperties":false,"properties":{${Array.from({ length: 90 }, (unused, field) => `"field${field}":{"type":"string"}`).join(",")}}}`,
+            ),
+        ].join("\n")}\n`,
+    },
+    {
+        name: "minified hit (wide)",
+        command: "cd /work/intentic && rg -n BUNDLED_ICONS _editor/ui/src/icons",
+        exitCode: "0",
+        // A search into a generated source file: the hit's own prefix is the answer, the bundled line behind it is not.
+        raw: `${Array.from(
+            { length: 4 },
+            (ignored, hit) => `_editor/ui/src/icons/iconData.generated.ts:${hit + 1}:export const BUNDLED_ICONS=[{"prefix":"mdi","icons":{${"a".repeat(6000)}}}]`,
+        ).join("\n")}\n`,
+    },
+    {
         name: "tsc failure",
         command: "cd /work/intentic && ./node_modules/.bin/tsgo --noEmit",
         exitCode: "1",
@@ -95,7 +124,9 @@ const CONFIGS = [
     { name: "no-files", spec: "-files" },
     { name: "no-ls", spec: "-ls" },
     { name: "no-dedup", spec: "-dedup" },
-    { name: "strip-only", spec: "-cap,-dedup,-redact,-files,-ls" },
+    { name: "no-wide", spec: "-wide" },
+    { name: "no-diff", spec: "-diff" },
+    { name: "strip-only", spec: "-cap,-dedup,-redact,-files,-ls,-wide,-diff" },
 ];
 
 const cleanedFor = (raw, command, exitCode, spec) => (spec === "off" ? raw : filterOutput(raw, command, exitCode, "0", "", parseCleaners(spec)).out);
@@ -256,7 +287,7 @@ const discover = (file) => {
         process.stdout.write("no high-volume un-cleaned commands: every noisy command matched a cleaner.\n");
         return;
     }
-    process.stdout.write("high-volume commands with NO matching cleaner (add a handler for these):\n");
+    process.stdout.write("commands with NO matching cleaner, by tokens still reaching the model (add a handler for these):\n");
     for (const gap of report.gaps) {
         // ×N first: cost across many runs signals a handler worth writing; a single occurrence is likely noise.
         process.stdout.write(`  ~${gap.tokens} tok ×${gap.commands}  ${gap.command}\n`);

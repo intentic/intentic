@@ -84,18 +84,67 @@ const parseRows = (text: string): StatRow[] =>
             }
         });
 
-// Commands that matched no cleaner and are still costly, grouped by command line and ranked by total bytes. The per-run
-// floor (not per-group) excludes chatter that only adds up in volume.
+// Verbs that hand back the bytes the model named by name: nothing in them is for a handler to strip, and none will ever
+// be written. Tested against the SIGNATURE and not the line, so `rg … | head -30` stays a gap in `rg` while `head -20
+// file` reads as what it is. Git's read verbs are deliberately absent: `git diff` prints what git decides to print,
+// including a generated lock file nobody asked to see, which is exactly a handler's job.
+const READ_VERBS = new Set(["cat", "bat", "sed", "awk", "head", "tail", "less", "more"]);
+
+// Words before the command: an env assignment, a privilege or scheduling wrapper, and that wrapper's own argument.
+const isPrefixWord = (word: string, previous: string | undefined): boolean =>
+    /^[A-Za-z_]\w*=/.test(word) || word === "sudo" || word === "timeout" || (previous === "timeout" && /^\d+[smhd]?$/.test(word));
+// Verbs that are never the point of the command; the signature moves on to the next pipeline segment.
+const SHELL_NOISE = new Set(["cd", "echo", "true", "set", "export", "source", "time", "for", "do", "while", "if", "then"]);
+// Only these keep their second word. For anything else it is an argument — `rg displayName` and `rg fastModel` are one
+// gap in `rg`, and folding the argument in would scatter it over as many one-run groups as the agent had questions.
+const SUBCOMMAND_VERBS = new Set(["git", "pnpm", "npm", "npx", "yarn", "docker", "cargo", "go", "gh", "kubectl", "systemctl", "apt", "apt-get", "pip", "poetry"]);
+
+// One pipeline segment's verb, or "" when the segment carries none (only prefix words, or a shell keyword).
+const segmentVerb = (segment: string): string => {
+    const words = segment.trim().split(/\s+/);
+    let index = 0;
+    while (index < words.length && isPrefixWord(words[index] ?? "", words[index - 1])) {
+        index++;
+    }
+    const word = (words[index] ?? "").replace(/^[({]+/, "");
+    const verb = word.slice(word.lastIndexOf("/") + 1);
+    if (verb === "" || SHELL_NOISE.has(verb)) {
+        return "";
+    }
+    const next = words[index + 1];
+    return SUBCOMMAND_VERBS.has(verb) && next !== undefined && /^[a-z][\w-]*$/.test(next) ? `${verb} ${next}` : verb;
+};
+
+// The verb a cleaner would match on, recovered from the line the agent wrote. Grouping by the whole line cannot work:
+// ad-hoc commands are unique by construction (their paths and patterns differ every time), so every group is one run and
+// the ranking degenerates into "biggest single output".
+export const commandSignature = (command: string): string => {
+    for (const segment of command.split(/[|;&]+/)) {
+        const verb = segmentVerb(segment);
+        if (verb !== "") {
+            return verb;
+        }
+    }
+    return "";
+};
+
+// Commands no cleaner claimed, grouped by the verb a handler would match on and weighed by what the model was actually
+// handed. EMITTED, never raw: a command whose 480 KB the cap already removed has no handler opportunity left in it, and
+// ranking by raw put four such commands in the top five of one live report while the one still costing 36k tokens ranked
+// fourth. The per-run floor (not per-group) excludes chatter that only adds up in volume.
 const GAP_MIN_BYTES = 2000;
 const summarizeGaps = (cleaned: StatRow[]): InputSavings["gaps"] => {
     const byCommand = new Map<string, { commands: number; bytes: number }>();
     for (const row of cleaned) {
-        if ((row.matched !== undefined && row.matched.length > 0) || (row.rawBytes ?? 0) <= GAP_MIN_BYTES) {
+        if ((row.matched !== undefined && row.matched.length > 0) || (row.emittedBytes ?? 0) <= GAP_MIN_BYTES) {
             continue;
         }
-        const command = row.command ?? "";
-        const current = byCommand.get(command) ?? { commands: 0, bytes: 0 };
-        byCommand.set(command, { commands: current.commands + 1, bytes: current.bytes + (row.rawBytes ?? 0) });
+        const signature = commandSignature(row.command ?? "");
+        if (READ_VERBS.has(signature)) {
+            continue;
+        }
+        const current = byCommand.get(signature) ?? { commands: 0, bytes: 0 };
+        byCommand.set(signature, { commands: current.commands + 1, bytes: current.bytes + (row.emittedBytes ?? 0) });
     }
     return [...byCommand.entries()]
         .map(([command, entry]) => ({ command, commands: entry.commands, tokens: tokens(entry.bytes) }))
