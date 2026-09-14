@@ -200,6 +200,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                     @click="editing ? undefined : onPreviewClick($event)"
                 >
                     <!-- Reading and editing render the same document through the shared prose engine. -->
+                    <!-- Full height: an empty or short file is then a click target the size of the pane, not one line at the top of it. -->
                     <MarkdownDocument
                         ref="surface"
                         :key="path"
@@ -209,7 +210,8 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                         :caret-at="landing"
                         :decorate="decorate"
                         :label="path"
-                        class="mx-auto max-w-3xl"
+                        :placeholder="editing ? `Start typing.` : `Empty file.`"
+                        class="mx-auto min-h-full max-w-3xl"
                         @change="onChange"
                         @save="(value: string) => emit(`save`, value)"
                     />

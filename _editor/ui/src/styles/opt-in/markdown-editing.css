@@ -112,6 +112,21 @@
     min-height: 1lh;
 }
 
+/* A DOCUMENT WITH NOTHING IN IT still says where to type: the surface keeps one blank paragraph for the caret, and this is the only state that paragraph is the whole document. */
+.md-editing[data-placeholder]:has(> p:only-child:empty) {
+    position: relative;
+}
+
+/* Absolute, so the caret sits at the start of the line rather than after the ghost. */
+.md-editing[data-placeholder]:has(> p:only-child:empty)::before {
+    content: attr(data-placeholder);
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: var(--color-subtle);
+    pointer-events: none;
+}
+
 /* A SPACE AT THE END OF A LINE IS STILL A CHARACTER, and this is what stops the browser deciding otherwise. */
 .md-editing .md-block-active::after {
     content: "\200b";

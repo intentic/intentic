@@ -6,7 +6,7 @@ import { createMarkdownHistory, type EditKind } from "../../markdown/history.js"
 import { splitMarkdownBlocks } from "../../markdown/index.js";
 import { blockBody, buildBlockElement, caretAtOffset, offsetOfCaret } from "../../markdown/sourceDom.js";
 
-const { source, caretAt } = defineProps<{ source: string; caretAt?: number }>();
+const { source, caretAt, placeholder = `` } = defineProps<{ source: string; caretAt?: number; placeholder?: string }>();
 const emit = defineEmits<{ change: [value: string]; save: [value: string] }>();
 
 const host = ref<HTMLElement>();
@@ -132,20 +132,30 @@ const partsOf = (block: string): { body: string; gap: string } => {
     return { body: block.slice(0, block.length - gap.length), gap };
 };
 
-const render = (next: string): void => {
+// Markdown has no block for "nothing", so a document with nothing in it would draw no children at all: a
+// `contenteditable` with nowhere to click, nothing to focus and no line to put a caret in. It gets one blank
+// paragraph instead, and blank lines alone count as nothing, so `text()` reads back as empty as the file is.
+const EMPTY = [{ body: ``, gap: `` }];
+const nothingIn = (parts: readonly { body: string; gap: string }[]): boolean => parts.every((part) => part.body === ``);
+
+// Draws the whole document: one element per block, in order.
+const layout = (parts: readonly { body: string; gap: string }[]): void => {
     const root = host.value;
     if (root === undefined) {
         return;
     }
-    const { blocks } = splitMarkdownBlocks(next);
     root.replaceChildren();
-    built = [];
-    for (const block of blocks) {
-        const part = partsOf(next.slice(block.start, block.end));
-        const element = buildBlockElement(part.body);
+    built = (nothingIn(parts) ? EMPTY : parts).map((part) => {
+        // An empty block is a blank line, not a construct: `buildBlockElement` would draw it as verbatim source.
+        const element = part.body === `` ? document.createElement(`p`) : buildBlockElement(part.body);
         root.appendChild(element);
-        built.push({ body: part.body, gap: part.gap, element });
-    }
+        return { body: part.body, gap: part.gap, element };
+    });
+};
+
+const render = (next: string): void => {
+    const { blocks } = splitMarkdownBlocks(next);
+    layout(blocks.map((block) => partsOf(next.slice(block.start, block.end))));
 };
 
 // `contenteditable=true`, not `plaintext-only`: Chromium forces `white-space:pre-wrap` on plaintext-only below the
@@ -153,31 +163,31 @@ const render = (next: string): void => {
 // Rebuilds only the blocks whose text actually changed: the DOM's text is already right, only its markup is stale, so a
 // long file's typing cost is one paragraph, not the whole document.
 const sync = (): void => {
-    const root = host.value;
-    if (root === undefined || composing) {
+    if (host.value === undefined || composing) {
         return;
     }
     const current = text();
     const { blocks } = splitMarkdownBlocks(current);
     const wanted = blocks.map((block) => partsOf(current.slice(block.start, block.end)));
     const offset = caretOffset();
+    const elements = blockElements();
     // An empty block (the caret's transient line) is left alone; re-splitting would find one fewer block and rebuild it
-    // away.
-    const pending = blockElements().some((element) => blockBody(element) === ``);
+    // away. It is the caret's line only while the DOM still matches the model: fewer elements than that means the
+    // browser deleted some of its own, and what it leaves behind (a hollowed-out heading, after select-all-delete) is
+    // markup the document no longer contains.
+    const pending = elements.length === built.length && elements.some((element) => blockBody(element) === ``);
     syncing = true;
     try {
-        if (wanted.length !== built.length && pending) {
+        if (wanted.length === 0) {
+            // Nothing left in the document at all: the blank line it gets typed back into, in place of whatever the
+            // browser's own delete left standing (Ctrl-A Backspace empties a heading's element without removing it).
+            layout(wanted);
+        } else if (wanted.length !== built.length && pending) {
             // Nothing to do: the extra element is the empty line, and it is not the document's business.
-        } else if (wanted.length !== built.length) {
-            // A structural edit (blank line, blocks joined): counts no longer line up, so the cheapest fix is relaying
-            // out.
-            root.replaceChildren();
-            built = [];
-            for (const part of wanted) {
-                const element = buildBlockElement(part.body);
-                root.appendChild(element);
-                built.push({ body: part.body, gap: part.gap, element });
-            }
+        } else if (wanted.length !== built.length || elements.length !== built.length) {
+            // A structural edit (blank line, blocks joined, a delete the browser performed itself): counts no longer
+            // line up, so the cheapest fix is relaying out.
+            layout(wanted);
         } else {
             wanted.forEach((part, index) => {
                 const previous = built[index];
@@ -546,10 +556,12 @@ defineExpose({ text, focus: (): void => host.value?.focus() });
 
 <template>
 <!-- The caller supplies the prose measure so both halves align. -->
+<!-- Ghost text for a document with nothing in it, drawn by the editing skin off this attribute; a blank line alone looks like a pane that failed to load. -->
     <div
         ref="host"
         class="md-prose md-editing"
         aria-label="Document"
+        :data-placeholder="placeholder === `` ? undefined : placeholder"
         @input="onInput"
         @beforeinput="onBeforeInput"
         @keydown="onKeydown"

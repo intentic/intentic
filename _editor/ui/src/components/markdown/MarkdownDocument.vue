@@ -103,6 +103,7 @@ defineExpose({ text, commit, focus: (): void => surface.value?.focus(), dirty, s
             class="min-w-0 flex-1"
             :source="doc"
             :caret-at="caretAt"
+            :placeholder="placeholder"
             :aria-label="label"
             @change="onChange"
             @save="commit"
