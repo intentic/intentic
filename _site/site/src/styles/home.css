@@ -9,11 +9,11 @@
 }
 
 .home .h2 {
-/* The bottom margin is NEGATIVE on purpose, and it is not a spacing choice. */
-    margin: 0.9rem 0 calc(-1 * var(--display-descender));
+    margin: 0.9rem 0 0;
     max-width: 24ch;
     font-size: clamp(1.9rem, 3.2vw, 2.75rem);
-/* 1.24, not the 1.16 this used to run: Playfair's content box is ~1.33em, and set tighter than ~1.2 the lines crowd. */
+/* 1.24, not the 1.16 this used to run: a display serif's content box is taller than its cap height, and set
+   tighter than ~1.2 the lines crowd. */
     line-height: 1.24;
 }
 .home .lede {

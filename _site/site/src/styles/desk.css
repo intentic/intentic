@@ -183,13 +183,6 @@ html[data-variant="desk"] {
     --role-plate-foot: linear-gradient(180deg, var(--color-canvas) 0%, rgb(var(--role-scrim) / 0.6) 34%, rgb(var(--role-scrim) / 0.42) 68%, rgb(var(--role-scrim) / 0.78) 100%);
 
     /* ── The house materials ──────────────────────────────────────────────────────────── */
-    /* CARVED STONE IS THE ONE THING THAT CANNOT BE RELIT. The display face clips a photograph of dark stone into its
-       glyphs and bevels it with five drop-shadows tuned against black; on paper that is mud at 2:1. The face stays
-       Playfair and the letterforms do not move — they are simply filled with ink, which is also the whole of what
-       makes this skin read as approachable rather than carved. */
-    --house-stone-noise: none;
-    --house-stone-ramp: linear-gradient(0deg, var(--color-content), var(--color-content));
-    --house-stone-bevel: none;
 
     /* THE PLATE STAYS GOLD, and is simply calmed: two stops instead of four, no brushed drag marks, no specular
        sweep raking across it, no halo. What is left is a cast plaque with the label cut into it — the same object

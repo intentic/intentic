@@ -11,8 +11,6 @@ import FrontDesk from "../components/FrontDesk.astro";
 import LiveNotice from "../components/LiveNotice.astro";
 import PageBackdrop from "../components/PageBackdrop.astro";
 import { THEME_COLOR, variantScript } from "../lib/variant";
-import { typefaceCss, typefaceScript } from "../lib/typeface";
-import TypeLab from "../components/TypeLab.astro";
 
 interface Props {
     title?: string;
@@ -122,9 +120,6 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         <meta name="theme-color" content={THEME_COLOR.default} />
         {/* After the tag it rewrites, and before the body it skins. */}
         <script is:inline set:html={variantScript()} />
-        {/* Temporary: the type lab (lib/typeface.ts). Both lines go when a reading face has been chosen. */}
-        <style is:inline set:html={typefaceCss()} />
-        <script is:inline set:html={typefaceScript()} />
         {/* Preload the reading face used by every page. One variable file covers 400, 500 and 600. */}
         <link rel="preload" as="font" type="font/woff2" href="/fonts/public-sans-400-600-latin.woff2" crossorigin />
         <noscript>
@@ -154,7 +149,6 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         <LiveNotice />
         {Astro.props.backdrop !== false && <PageBackdrop />}
         <slot />
-        <TypeLab />
 
         <script>
             /* One observer reveals every fade-in element. */

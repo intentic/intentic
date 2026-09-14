@@ -3,28 +3,27 @@
 @import "../../../../_shared/house-css/house.css";
 /* The light skin. Ordered first because it cannot lose: its selector outscores the `:root` Tailwind emits. */
 @import "./desk.css";
-/* Temporary: the type lab's candidate faces (scripts/type-lab-fonts.mts). Goes with the lab. */
-@import "./type-lab-faces.css";
 
 /* Site tokens and components use the shared carved-stone vocabulary. */
 
-/* Display, body, and mono faces each have a defined size band. */
+/* Display, body, and mono faces each have a defined size band. The display face ships one weight, 600, because
+   that is the only one the headline uses. */
 
 @font-face {
-    font-family: "Playfair Display";
+    font-family: "Spectral";
     font-style: normal;
-    font-weight: 400 900;
+    font-weight: 600;
     font-display: swap;
-    src: url("/fonts/playfair-latin.woff2") format("woff2");
+    src: url("/fonts/spectral-600-latin.woff2") format("woff2");
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
         U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
-    font-family: "Playfair Display";
+    font-family: "Spectral";
     font-style: normal;
-    font-weight: 400 900;
+    font-weight: 600;
     font-display: swap;
-    src: url("/fonts/playfair-latin-ext.woff2") format("woff2");
+    src: url("/fonts/spectral-600-latin-ext.woff2") format("woff2");
     unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
         U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
@@ -136,7 +135,7 @@
 
     --font-sans: "Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
     --font-mark: "Baloo 2", "Trebuchet MS", ui-rounded, sans-serif;
-    --font-display: "Playfair Display", Georgia, "Times New Roman", serif;
+    --font-display: "Spectral", Georgia, "Times New Roman", serif;
     --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
 
     --text-2xs: 0.6875rem;
@@ -309,31 +308,16 @@
     /* DISPLAY TYPE CARVED STONE, NOT POLISHED METAL — and the difference is texture, not colour. */
     .display {
         font-family: var(--font-display);
-/* Settable because a display face may ship only one weight; a 400-only serif asked for 600 gets smeared into a
-           synthetic bold. The lab's faces each declare the weight they actually have. */
-        font-weight: var(--display-weight, 600);
-/* Positive tracking, because Playfair at these sizes sets tight enough that adjacent letters kiss. */
-        letter-spacing: max(0.02em, 0.09rem);
+        font-weight: 600;
+/* Normal, not the positive tracking Playfair needed: Spectral is drawn for screens and already sets open, so
+           tracking it out only loosened the words. */
+        letter-spacing: normal;
         line-height: 1.24;
-        --display-descender: 0.2em;
-        padding-block-end: var(--display-descender);
-        margin-block-end: calc(-1 * var(--display-descender));
-        background-image:
-            var(--house-stone-noise),
-            var(--house-stone-ramp);
-        background-size:
-            480px 480px,
-            100% 100%;
-        background-blend-mode: soft-light, normal;
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        filter: var(--house-stone-bevel);
     }
+
 
     /* Each headline beat owns its stop span. */
     .stop {
-        -webkit-text-fill-color: var(--color-primary-500);
         color: var(--color-primary-500);
         margin-left: 0.06em;
         font-family: var(--font-display);
