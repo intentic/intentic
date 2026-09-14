@@ -392,6 +392,39 @@ same way: ask every few minutes, start what is not active.
 A watchdog that only logs when it acts makes a healthy machine and a watchdog that stopped running look
 identical, and "nothing was reporting an error" is the whole of the incident above.
 
+**And the reconciler is GENERATED, so a host is only ever as new as its last re-run — which is the failure mode
+one level up from that one.** Everything this section describes lives in `setup-wsl-fleet.ps1`; what executes
+every three minutes is `reconcile.ps1`, the copy that script wrote the last time somebody ran it *on that
+machine*. Nothing in a pipeline, in this file, or in `fleet.log` said which generation a host was passing. On
+**14 September** the fleet host was still running a reconciler generated on **29 August** — the day before the
+incident that produced the entire disk section above. It had no free-space reading, no `LowDiskGb` floor, no
+prune, and not the rule that a host under the floor does not get Docker Desktop restarted at it. So it
+restarted Docker Desktop, twice, against a disk at **2.41 GB free of 952 GB** (`docker_data.vhdx` 443 GB, the
+distro's `ext4.vhdx` 190 GB — the 30 August shape, to within a few GB), and logged `pass: 6/6 runners active`
+either side of both. Every guard written to stop exactly this had been in git for a fortnight and had never
+once executed.
+
+Run **34859144791** is what that cost: the ext4 inside `docker_data.vhdx` went read-only under `images-platform`
+while it was apt-installing Chromium's libraries, which read as `Input/output error` then
+`Read-only file system` from `dpkg` — a step that has nothing to do with disks — and the host daemon then
+stopped answering, so `release / plan` failed in `Initialize containers` in under a second on a different
+worker and took the release with it. **Two red jobs, one full disk, and no line anywhere naming it.**
+
+Two things close it. The pass line now carries the date its reconciler was generated
+(`pass: 6/6 runners active [gen 2026-09-14]`), so a fortnight-old watchdog is visible in the log everyone
+already reads. And `-Check` diffs the deployed `reconcile.ps1` against the one the script would write now — a
+text compare and not an age, because the question is whether this host has the guards this file describes, with
+the stamp itself and `Set-Content`'s BOM and CRLF excluded from it so that a correct host does not read as stale
+the day after setup — and it reports host free space while it is there:
+
+```powershell
+# On the Windows host. Registers nothing, starts nothing, changes no setting.
+./_tools/scripts/ci/setup-wsl-fleet.ps1 -Check
+```
+
+**A STALE answer means every claim this section makes about that machine is unverified**, and the repair is to
+re-run the script without `-Check`. Read it first when CI fails for a reason the diff cannot explain.
+
 **What this does not fix: an unattended reboot still waits for a sign-in.** The task is a logon task, and this
 host has no automatic logon set. Windows signs the account back in after its own update restarts — which is what
 happened on the 26th, and why the Windows runner returned — but a power cut does not. `-AutoLogon` in
@@ -596,7 +629,8 @@ like, and `wsl -d archlinux -e /bin/sh -c 'docker version'` is how to ask for it
   680 GB free against the host's 2.04. `setup-wsl-fleet.ps1`'s reconciler reads free space **on Windows** every
   pass, logs the number whether or not it acted, and under `-LowDiskGb` (60) reclaims the build cache and
   dangling layers — never a tagged image and never a volume, because that daemon also runs the operator's own
-  sandboxes.
+  sandboxes. **On a host whose reconciler is current, and that is not a given**: the same machine hit 2.41 GB
+  again on 14 September while passing a copy generated before any of this existed. `-Check` is what answers it.
 - **playwright**: `/ci-cache/ms-playwright` holds the Chromium that `images-platform`'s sign-in smoke drives
   (~200 MB with its headless shell and ffmpeg), named by that job's `PLAYWRIGHT_BROWSERS_PATH`. Keeping the
   download warm is the smaller half of the reason. The larger half is that **the default is not private to the
