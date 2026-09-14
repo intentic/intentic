@@ -1135,17 +1135,6 @@
         text-decoration: none;
     }
 
-    /* THE TWO COPIES OF EVERY PRODUCT SHOT (ProductShot.astro). Each skin hides the copy that is not its own and
-       never touches the other, so the visible image keeps whatever display its own classes gave it — several of
-       these are absolutely positioned frames in the hero's stack. A hidden, lazy <img> is not fetched, so a reader
-       pays for one of the pair, not both. */
-    html:not([data-variant="desk"]) .shot-light {
-        display: none;
-    }
-    html[data-variant="desk"] .shot-dark {
-        display: none;
-    }
-
     /* The way back out of the desk skin. It sits in the footer of every page, in the markup either way so that one
        cached document can serve both skins, and is only shown where it means something. */
     .variant-exit {
@@ -1338,4 +1327,20 @@
     .btn::after {
         transition: none;
     }
+}
+
+/* THE TWO COPIES OF EVERY PRODUCT SHOT (ProductShot.astro). Each skin hides the copy that is not its own and never
+   touches the other, so the visible image keeps whatever display its own classes gave it — several of these are
+   absolutely positioned frames in the hero's stack. A hidden, lazy <img> is not fetched, so a reader pays for one
+   of the pair, not both.
+
+   UNLAYERED ON PURPOSE, and the specificity is counted rather than guessed. home.css is unlayered, so its
+   `.home .stage-shot { display: block }` beats anything in `@layer components` however specific — which is exactly
+   what happened: four dark screenshots went on painting on the light pages because this pair lived in a layer.
+   Out here the fight is decided on specificity, and `html[data-variant] .shot-*` (0,2,1) outscores it (0,2,0). */
+html:not([data-variant="desk"]) .shot-light {
+    display: none;
+}
+html[data-variant="desk"] .shot-dark {
+    display: none;
 }

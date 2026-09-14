@@ -1,0 +1,155 @@
+---
+/* THE TYPE LAB, and it is temporary. A docked panel for picking the site's reading face by eye, on the real pages,
+   rather than by looking at nine specimens side by side in a tool. Each choice is a plain link to `?font=<id>`:
+   the pre-paint script in lib/typeface.ts reads the parameter, writes the cookie, strips the parameter and applies
+   the face, so there is no client JavaScript here and no flash of the previous face on the way.
+
+   Delete this component, lib/typeface.ts and the two lines that call them once a face has won. */
+import { TYPEFACES, DEFAULT_TYPEFACE, FONT_PARAM } from "../lib/typeface";
+---
+
+<details class="type-lab">
+    <summary class="type-lab-tab">
+        <span class="type-lab-mark">Aa</span>
+        <span>Type</span>
+    </summary>
+    <div class="type-lab-body">
+        <p class="type-lab-lede">
+            Pick the reading face. It follows you across the site and survives a reload; everything else on the page stays put.
+        </p>
+        <ul class="type-lab-list">
+            {
+                TYPEFACES.map((face) => (
+                    <li>
+                        <a href={`?${FONT_PARAM}=${face.id}`} class="type-lab-choice" data-font-choice={face.id}>
+                            <span class="type-lab-name">
+                                {face.label}
+                                {face.id === DEFAULT_TYPEFACE.id && <span class="type-lab-now">current</span>}
+                            </span>
+                            <span class="type-lab-note">{face.note}</span>
+                        </a>
+                    </li>
+                ))
+            }
+        </ul>
+    </div>
+</details>
+
+<script is:inline>
+    /* Marks the face being worn, which only the browser knows — the HTML is one cached document for every choice. */
+    (function () {
+        var worn = document.documentElement.dataset.font ?? "mukta";
+        var choice = document.querySelector('[data-font-choice="' + worn + '"]');
+        if (choice !== null) {
+            choice.setAttribute("aria-current", "true");
+        }
+    })();
+</script>
+
+<style>
+    /* Docked bottom-left, clear of the demo bar that sits bottom-centre. */
+    .type-lab {
+        position: fixed;
+        bottom: 1rem;
+        left: 1rem;
+        z-index: 60;
+        width: max-content;
+        max-width: min(22rem, calc(100vw - 2rem));
+        border: 1px solid var(--color-line-strong);
+        background: var(--color-card);
+        box-shadow: var(--role-window-shadow);
+        font-family: var(--font-sans);
+    }
+    .type-lab-tab {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.8rem;
+        cursor: pointer;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--color-gold);
+        list-style: none;
+    }
+    .type-lab-tab::-webkit-details-marker {
+        display: none;
+    }
+    .type-lab-mark {
+        font-family: var(--font-display);
+        font-size: 1rem;
+        line-height: 1;
+        text-transform: none;
+        letter-spacing: 0;
+        color: var(--color-primary-500);
+    }
+    .type-lab-body {
+        border-top: 1px solid var(--color-line);
+        padding: 0.7rem 0.8rem 0.85rem;
+        /* Nine faces with a line of reasoning each is taller than most windows; the list scrolls inside the panel
+           rather than the panel covering the page it is there to let you read. */
+        max-height: min(58vh, 32rem);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+    .type-lab-lede {
+        margin: 0 0 0.6rem;
+        font-size: 0.75rem;
+        line-height: 1.5;
+        color: var(--color-subtle);
+    }
+    .type-lab-list {
+        display: grid;
+        gap: 0.15rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .type-lab-choice {
+        display: block;
+        padding: 0.4rem 0.55rem;
+        border: 1px solid transparent;
+        text-decoration: none;
+    }
+    .type-lab-choice:hover,
+    .type-lab-choice:focus-visible {
+        border-color: var(--color-line-strong);
+        background: var(--role-btn-wash, rgba(224, 123, 39, 0.12));
+    }
+    /* The face you are reading in right now. */
+    .type-lab-choice[aria-current] {
+        border-color: var(--role-ember-line);
+        background: var(--role-decision-fill);
+    }
+    .type-lab-name {
+        display: flex;
+        align-items: baseline;
+        gap: 0.4rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--color-content);
+    }
+    .type-lab-now {
+        font-size: var(--text-2xs);
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--color-primary-400);
+    }
+    .type-lab-note {
+        display: block;
+        margin-top: 0.1rem;
+        font-size: 0.75rem;
+        line-height: 1.4;
+        color: var(--color-muted);
+    }
+    @media (max-width: 30rem) {
+        .type-lab {
+            max-width: calc(100vw - 2rem);
+        }
+        .type-lab-body {
+            max-height: 50vh;
+        }
+    }
+</style>

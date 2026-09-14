@@ -231,6 +231,31 @@ html[data-variant="desk"] {
     --house-finial-glow: none;
 }
 
+/* WHAT MAKES THE INNER PAGES READABLE. Every page but the home page stands its heading, lede and controls directly
+   on the backdrop, with no card under them — so the art has to get out of the way where the words are. The dark skin
+   does this with `.page-backdrop-veil`, a hard darkening from just under the bar downward; at `--role-plate-veil: 0.3`
+   the same gradient on paper was doing almost nothing, and a reader met an apsara behind every paragraph.
+
+   This is the same idea with its own curve, not the dark one scaled: clear under the bar so the plate's carved top
+   border still shows, then most of the way to paper by the time the first heading starts (bar + 7rem), and held
+   there. The home page never sees this rule — its hero is composed against the art on purpose, and it renders its
+   own plate without a veil. */
+html[data-variant="desk"] .page-backdrop-veil {
+    background: linear-gradient(
+        180deg,
+        transparent 0,
+        transparent calc(var(--bar-height) * 0.85),
+        rgb(var(--role-scrim) / 0.72) calc(var(--bar-height) + 2.5rem),
+        rgb(var(--role-scrim) / 0.93) calc(var(--bar-height) + 7rem),
+        rgb(var(--role-scrim) / 0.93) 100%
+    );
+}
+
+/* The seam at the foot of the plated band has to reach the canvas on paper too, or the art stops on a visible edge. */
+html[data-variant="desk"] .plate-fade {
+    background: linear-gradient(180deg, transparent, rgb(var(--role-scrim) / 0.72) 55%, var(--color-canvas) 96%);
+}
+
 /* The plate's other two rungs. Same breakpoints as the dark skin's, and they have to come after the block above:
    `html[data-variant]` and a `:root` inside a media query score the same, so order is what separates them. */
 @media (max-width: 48rem) {
