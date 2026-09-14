@@ -787,8 +787,8 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                 :style="narrowBody ? undefined : { width: uiLength(layout.sidebarWidth.value) }"
             >
                 <!-- Files and Changes are the primary modes; restore history is deliberately quieter, sharing one resize handle. -->
-                <!-- `border-b border-line` matches every other bar in the app, so the header line runs unbroken across the window. -->
-                <div class="view-header flex items-center gap-1 border-b border-line px-1.5">
+                <!-- No bottom rule: the filter row below already separates the switch from the tree; `shadow-none` drops the skin fillet that stands in for one. -->
+                <div class="view-header flex items-center gap-1 px-1.5 shadow-none">
                     <SegmentedControl v-model="sidebarMode" size="xs" :options="sidebarModeOptions" />
                     <span class="flex-1"></span>
                     <button
