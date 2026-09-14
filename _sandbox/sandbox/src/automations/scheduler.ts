@@ -357,6 +357,7 @@ const runFire = async (
                     // Preserve the conversation to resume instead of minting a fresh one.
                     ...(resumedConversationId !== undefined ? { conversationId: resumedConversationId } : {}),
                     ...(resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {}),
+                    ...(automation.actsAs !== undefined ? { actsAs: automation.actsAs } : {}),
                     createdAt: Date.now(),
                 });
                 void services.activity

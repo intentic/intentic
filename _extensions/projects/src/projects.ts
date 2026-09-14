@@ -48,8 +48,8 @@ export const slugOf = (typed: string): string =>
         .replace(/^[^a-z0-9]+/, ``)
         .replace(/-+$/, ``);
 
-// Where a tile opens: the workspace rooted at the repository, the same address on the phone and the desktop.
-export const projectPath = (id: string): string => `/workspace?dir=${encodeURIComponent(id)}`;
+// Where a tile opens once the project is the shell's scope: the workspace, which roots itself at the open project.
+export const WORKSPACE_PATH = `/workspace`;
 
 // Where See it opens: the Preview area on this repository's own target (previewModel.repoTargetId).
 export const previewPath = (id: string): string => `/preview?target=${encodeURIComponent(`repo:${id}`)}`;

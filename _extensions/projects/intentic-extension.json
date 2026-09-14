@@ -5,12 +5,31 @@
     "version": "1.0.0",
     "category": "workspace",
     "icon": "th-large",
-    "engines": { "intentic": "^2.12.0" },
+    "engines": {
+        "intentic": "^2.12.0"
+    },
     "permissions": {
-        "sandbox": ["GET /workspace/repos", "POST /workspace/repos/new", "GET /workspace/file"]
+        "sandbox": [
+            "GET /workspace/repos",
+            "POST /workspace/repos/new",
+            "GET /workspace/file"
+        ]
     },
     "contributes": {
-        "views": [{ "id": "projects", "label": "Projects", "surface": "rail" }],
-        "commands": [{ "command": "projects.open", "title": "Go to Projects", "icon": "th-large" }]
+        "views": [
+            {
+                "id": "projects",
+                "label": "Projects",
+                "surface": "rail",
+                "badge": true
+            }
+        ],
+        "commands": [
+            {
+                "command": "projects.open",
+                "title": "Go to Projects",
+                "icon": "th-large"
+            }
+        ]
     }
 }

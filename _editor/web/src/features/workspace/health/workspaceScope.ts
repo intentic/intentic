@@ -1,4 +1,5 @@
-import { ref } from "vue";
+import { computed, ref } from "vue";
+import { projectScope } from "../../../app/projectScope";
 
 // Whose copy of the workspace this view shows: a conversation's checkout, or the shared /work tree (undefined).
 // Module-level singleton, since consumers span outside the Workspace (chat sets it, the route mirrors it).
@@ -15,8 +16,8 @@ export const scopeQuery = (query: URLSearchParams): URLSearchParams => {
     return query;
 };
 
-// The directory the desktop view is rooted at, "" for the whole tree: a project opened from the Projects dashboard
-// shows as its own tree, with a chip back to everything. Mirrored to `?dir=` by useWorkspaceRoute, the same query
-// the phone's drill-down reads, so one address opens the same folder on either shell.
-export const workspaceDir = ref<string>(``);
+// The directory the desktop view is rooted at, "" for the whole tree: the open project (app/projectScope.ts) shows as
+// its own tree, with a chip back to everything. The phone's drill-down (`?dir=`) is its own thing: a folder being
+// looked into, not the project being worked on.
+export const workspaceDir = computed<string>(() => projectScope.value ?? ``);
 

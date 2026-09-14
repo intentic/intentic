@@ -293,6 +293,8 @@ async function* runConversationTurn(
             ...(input.account !== undefined ? { account: input.account } : {}),
             ...(input.origin !== undefined ? { origin: input.origin } : {}),
             ...opt("startedBy", input.actor),
+            ...opt("startIn", input.startIn),
+            ...opt("actsAs", input.actsAs),
             // A fork names its source once; `keep` is the cut's index in the source's own record.
             ...(input.forkOf !== undefined
                 ? { forkedFrom: { conversationId: input.forkOf.conversationId, index: input.forkOf.keep, files: input.forkOf.files } }

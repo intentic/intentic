@@ -14,6 +14,9 @@ export interface TurnSettings {
     readonly account: string | undefined;
     // Persona id the turn acts as; undefined means an ordinary chat with every connected account reachable.
     readonly actsAs: string | undefined;
+    // The folder the conversation opens in (the project it belongs to); undefined means the workspace root. The daemon
+    // latches the first turn's answer.
+    readonly startIn: string | undefined;
     readonly model: string;
     readonly effort: string;
     readonly thinking: boolean;
@@ -94,6 +97,8 @@ export const turnRequestBody = (input: {
         account: here ? input.settings.account : undefined,
         // Omitted rather than empty: an unresolved persona card gets an ordinary chat, not an error.
         ...(here && input.settings.actsAs !== undefined ? { actsAs: input.settings.actsAs } : {}),
+        // Omitted for another box, whose projects are its own.
+        ...(here && input.settings.startIn !== undefined ? { startIn: input.settings.startIn } : {}),
         sessionId: input.resume?.id,
         ...(input.forkOf !== undefined ? { forkOf: input.forkOf } : {}),
         // Empty selection (catalog not yet loaded) is dropped; the daemon resolves its own live default.

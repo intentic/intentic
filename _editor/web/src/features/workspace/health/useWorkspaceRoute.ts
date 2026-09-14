@@ -1,7 +1,7 @@
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
-import { workspaceAgent, workspaceDir } from "./workspaceScope";
+import { workspaceAgent } from "./workspaceScope";
 
 // Two-way syncs the open file (and `?agent` scope) between the URL and the tabs singleton, so reload and
 // back/forward work; only file tabs are addressable. `route.params.path` is string[] or "" when bare; writes need an
@@ -26,24 +26,6 @@ export function useWorkspaceRoute(): void {
         }
         const { agent: _dropped, ...rest } = route.query;
         void router.replace({ query: agent === undefined ? rest : { ...rest, agent } });
-    });
-
-    // URL <-> rooted directory, the same shape as the agent scope above: the route wins at mount, a scope set from
-    // outside (the Projects dashboard's link, a chip press) writes back.
-    const urlDir = computed(() => {
-        const dir = route.query[`dir`];
-        return typeof dir === `string` ? dir : ``;
-    });
-    workspaceDir.value = urlDir.value;
-    watch(urlDir, (dir) => {
-        workspaceDir.value = dir;
-    });
-    watch(workspaceDir, (dir) => {
-        if (dir === urlDir.value) {
-            return;
-        }
-        const { dir: _dropped, ...rest } = route.query;
-        void router.replace({ query: dir === `` ? rest : { ...rest, dir } });
     });
 
     const urlPath = computed(() => {

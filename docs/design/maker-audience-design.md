@@ -403,3 +403,36 @@ Written after phases 0 to 4 were built, where the code disagreed with the plan a
   read at the call site, and each comes back with the other answer.
 - **A `home` glyph was added to the icon set** while the first home existed; the dashboard wears `th-large`.
 
+## 12. The project scope
+
+Built after the dashboard, on the owner's read that opening a project should narrow the whole shell rather than
+one view. One selection, `projectScope` (`app/projectScope.ts`), kept per sandbox like the rail's pins and shown for
+everyone, developer or maker.
+
+**What it narrows, and where.** Every surface that reads repository facts reads them through one of three
+sources, and each source applies the scope once: `usePanels` (the rail's tiles, every extension view through
+`api.workspace.repos()`, the preview's targets), `useRepos` (the tree's affordances and the history switcher) and
+`useChanges` (the Changes list). The workspace roots at the project (`workspaceDir` is derived from the scope,
+and the chip in its toolbar clears it). Nothing per view learned about projects: a pipelines or maintenance tile
+that keys by repository narrows because its facts did.
+
+**Who belongs to a project.** The agents board keeps the conversations with evidence of belonging
+(`board/projectMembership.ts`): the conversation opened inside the project, or the persona it acts as starts
+inside it, carries it (`context.repos`), or is fenced to a folder inside or around it. A persona that says
+nothing about the project and a root-started conversation with no persona stay under All projects, so the scope
+narrows rather than relabels. A draft not yet sent stays, since it was opened under the project and has no
+record yet. Two facts had to reach the wire for this: `startIn` and `actsAs` are latched on the conversation at
+its first turn and exposed on the summary; `startIn` is also accepted on the turn itself, so New agent under a
+scope opens the conversation in the project (a persona's own start folder still wins). A held wake follows the
+thread it would continue or the persona it would speak as (`actsAs`, snapshotted on the held record at hold
+time); a workflow run follows any of its steps. The chip counts rows, not conversations: a hidden run's steps
+hide with it and count once. The archive stays the sandbox's, since its Delete all empties the whole pile and
+its count must say the whole pile. The Agents rail badge stays sandbox-wide too, so a hold on another project
+is never missed while looking at one.
+
+**Where it shows.** The Projects tile is seated for everyone, since a mode needs an indicator: its title reads
+"Projects · web" and it wears a folder mark while a project is open; the dashboard marks the open tile and offers
+All projects; the workspace and the agents board each carry a chip that names the project, counts what it hid,
+and clears it. The extension API grew `api.workspace.project()`, `setProject()` and `onDidChangeProject()`
+(2.13.0), since the dashboard that sets the scope is an extension.
+

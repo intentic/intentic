@@ -87,9 +87,16 @@ const KNOW: RailGroup = { id: `know`, label: `Know`, items: [signal(`documentati
 
 // One table per audience; only the Work band differs. Preview is `always` for being visited constantly, not for its
 // badge, which counts an inventory, not a claim.
+// The Projects tile is seated for everyone: it is where the project scope (app/projectScope.ts) is read and changed,
+// and a scope with no seat would be a mode with no indicator. For a developer it sits beside the file tree; for a
+// maker it takes the tree's seat and the tree stands in for it.
 const RAIL_GROUPS_BY_AUDIENCE: Record<Audience, readonly RailGroup[]> = {
     developer: [
-        { id: `work`, label: `Work`, items: [always(`chat`), always(`agents`), always(WORKSPACE_VIEW_ID), always(`preview`)] },
+        {
+            id: `work`,
+            label: `Work`,
+            items: [always(`chat`), always(`agents`), always(PROJECTS_VIEW_ID), always(WORKSPACE_VIEW_ID), always(`preview`)],
+        },
         JUDGE,
         SETUP,
         KNOW,

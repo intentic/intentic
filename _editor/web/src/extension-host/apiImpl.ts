@@ -4,6 +4,7 @@ import { extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-manifest
 import { useDevice, useTheme } from "@intentic/ui";
 import { type AgentHarness, type AgentProvider, type ExtensionSummary, sandboxRequestFor, WorkspaceFileSchema } from "@intentic/sandbox-contract";
 import { watch } from "vue";
+import { projectScope, setProjectScope } from "../app/projectScope";
 import { useAudience } from "../app/useAudience";
 import { effortLabelOf } from "../features/chat/models/effortScale";
 import { modelLabelFor } from "../features/chat/accounts/providerCatalog";
@@ -322,6 +323,12 @@ export const createExtensionApi = (
             capabilities: () => host.capabilities(),
             onDidChange: (listener) => {
                 const stop = watch([() => host.repos(), () => host.capabilities()], () => listener());
+                return track({ dispose: () => stop() });
+            },
+            project: () => projectScope.value,
+            setProject: (project) => setProjectScope(project),
+            onDidChangeProject: (listener) => {
+                const stop = watch(projectScope, (value) => listener(value));
                 return track({ dispose: () => stop() });
             },
             onDidChangeRefs: (listener) => track(onRefsChanged(listener)),

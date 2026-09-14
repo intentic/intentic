@@ -296,6 +296,9 @@ export const AutomationApprovalSchema = z.object({
             "The thread this belongs to, when it has one, so approving continues that conversation rather than opening a new one. Without it, one visitor's chat becomes a card per approved message and an agent that meets them again every turn.",
         ),
     sessionId: z.string().optional().describe("The provider session that thread last ran on."),
+    // Snapshotted from the automation at hold time, so a project-scoped board can file the wake under what the persona
+    // reaches without reading the automation.
+    actsAs: entryId.optional().describe("Which persona the approved run would speak as."),
     createdAt: z.number().describe("When it started waiting, in milliseconds."),
     // When the daemon may run this itself, for a `holdForSeconds` hold; absent for a `requireApproval` hold, which only
     // the owner releases.

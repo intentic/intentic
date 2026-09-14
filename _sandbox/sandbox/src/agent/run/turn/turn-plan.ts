@@ -384,6 +384,8 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
             capabilities,
             setupNoticeFor(setup),
             persona,
+            // The conversation's own record wins over this turn's request: the folder is latched at the first turn.
+            (input.conversationId === undefined ? undefined : services.agents.entry(input.conversationId)?.startIn) ?? input.startIn,
             installed,
             prompt,
             {
@@ -439,6 +441,9 @@ const honoured = (
     capabilities: AgentCapabilities,
     setupNotice: string | undefined,
     persona: TurnPersona,
+    // Where the conversation asked to start (the project it belongs to), honoured when the card names no folder of
+    // its own; a card's start folder is the card's decision, a request's is the person's.
+    requestedStartIn: string | undefined,
     // Unfiltered manifest: needed to know which connectors exist, so their credentials can be withheld; the filtered
     // list can't say that.
     installed: readonly Capability[],
@@ -465,7 +470,7 @@ const honoured = (
     // Where the card says to start, resolved through the workspace escape guard; a path that fails it is dropped rather
     // than refused, so a typo'd folder opens at the workspace root instead of failing the session outright. Resolved
     // ahead of the instructions, which read the start folder to know whose standing rules apply.
-    const startIn = persona.workspace?.startIn;
+    const startIn = persona.workspace?.startIn ?? requestedStartIn;
     const startPath = startIn === undefined || startIn === "" ? undefined : resolveWithin(context.effectiveCwd, startIn);
     // The same starting position as the daemon reaches it: `startPath` is a namespace address the daemon isn't inside,
     // so anything read off disk goes through `localCwd` instead. The root moves with an isolated turn, since its world

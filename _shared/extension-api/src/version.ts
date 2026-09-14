@@ -76,4 +76,8 @@
 // same way. The shell renames its own tiles and verbs by it (Land now is Accept, Workspace is Files beside a Project
 // home), and a view that says "branch" or "land" to a maker would be the one surface still speaking git. Additive:
 // a view that never asks renders as it always has.
-export const extensionApiVersion = "2.12.0";
+// 2.13.0 adds the project scope to `api.workspace`: `project()`, `setProject()` and `onDidChangeProject()`. One
+// repository, chosen once for the whole shell, that `repos()` is already narrowed to; the dashboard that sets it
+// (`ext-projects`) is an extension, so the setter had to be on the API. Additive: a view that never asks sees the
+// narrowed `repos()` and nothing else changes for it.
+export const extensionApiVersion = "2.13.0";

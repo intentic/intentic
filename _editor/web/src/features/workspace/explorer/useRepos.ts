@@ -1,5 +1,6 @@
 import type { GitReposResponse } from "@intentic/api-contract";
 import { computed } from "vue";
+import { projectScope, withinScope } from "../../../app/projectScope";
 import { sandboxJson } from "../../sandbox/client/sandboxClient";
 import { GIT_REPOS } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
@@ -11,10 +12,13 @@ export function useRepos() {
         queryKey: GIT_REPOS.of(),
         queryFn: () => sandboxJson<GitReposResponse>(`/git/repos`),
     });
-    const nested = computed<readonly string[]>(() => query.data.value?.repos ?? []);
+    const all = computed<readonly string[]>(() => query.data.value?.repos ?? []);
+    // The open project's repositories only (app/projectScope.ts), like every other repository-keyed source.
+    const nested = computed<readonly string[]>(() => all.value.filter(withinScope));
     // The dir ids that are repos, the tree tests membership by a row's (root-relative) path against this set.
     const repoDirs = computed<ReadonlySet<string>>(() => new Set(nested.value));
-    // "root" first, then the nested repos, the graph switcher's option list.
-    const options = computed<readonly string[]>(() => [`root`, ...nested.value]);
-    return { nested, repoDirs, options, refresh: query.refetch };
+    // "root" first, then the nested repos, the graph switcher's option list; the workspace's own repository is outside
+    // every project, so it is offered only when none is open.
+    const options = computed<readonly string[]>(() => (projectScope.value === undefined ? [`root`, ...nested.value] : nested.value));
+    return { nested, all, repoDirs, options, refresh: query.refetch };
 }

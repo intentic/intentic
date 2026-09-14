@@ -254,6 +254,8 @@ export class Conversation {
     readonly tierHold = ref<boolean>(false);
     // Persona this chat acts as externally, or undefined for the ordinary chat with every account; not sticky.
     readonly actsAs = ref<string | undefined>();
+    // The project the conversation was started under (app/projectScope.ts); sent with the first turn and latched there.
+    readonly startIn = ref<string | undefined>();
     // Saved workflow design the next message runs through, if any; not sticky, clears on send.
     readonly workflowId = ref<string | undefined>();
     // Saved loop the next message runs as, if any; not sticky, clears on send like `workflowId`.
@@ -1306,6 +1308,7 @@ export class Conversation {
             account: this.account.value,
             // Read at delivery, like the rest: a queued message goes out as whoever is picked when it actually leaves.
             actsAs: this.actsAs.value,
+            startIn: this.startIn.value,
             model: this.model.value,
             effort: this.effort.value,
             thinking: this.thinking.value,

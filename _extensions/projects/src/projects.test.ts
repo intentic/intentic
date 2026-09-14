@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { freeProjectName, previewPath, projectIds, projectPath, slugOf, summaryOf } from "./projects.js";
+import { freeProjectName, previewPath, projectIds, slugOf, summaryOf } from "./projects.js";
 
 describe(`which repositories are projects`, () => {
     it(`lists every repository but the workspace's own, in name order`, () => {
@@ -34,9 +34,8 @@ describe(`naming a new project`, () => {
     });
 });
 
-describe(`where a tile goes`, () => {
-    it(`opens the workspace rooted at the repository, and the preview on its own target`, () => {
-        expect(projectPath(`tools/cli`)).toBe(`/workspace?dir=tools%2Fcli`);
+describe(`where See it goes`, () => {
+    it(`opens the preview on the repository's own target`, () => {
         expect(previewPath(`shop`)).toBe(`/preview?target=repo%3Ashop`);
     });
 });

@@ -330,7 +330,7 @@ const sessionBinding = (
 // The fields `begin` records for a turn. Placement (branch or not) is explicit here rather than inferred from the
 // provider, since isolated and workspace conversations share the same identity and status lifecycle.
 export type AgentTurnIdentity = Pick<AgentTurn, "prompt"> &
-    Partial<Pick<AgentTurn, "title" | "model" | "effort" | "thinking" | "fast" | "tierHold" | "account" | "origin">> & {
+    Partial<Pick<AgentTurn, "title" | "model" | "effort" | "thinking" | "fast" | "tierHold" | "account" | "origin" | "startIn" | "actsAs">> & {
         readonly conversationId: string;
         readonly isolated: boolean;
         // Latched like `isolated`; only a conversation never seen before takes the request's runner, and naming one
@@ -514,6 +514,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             harness: entry.harness,
             ...(entry.branch !== undefined ? { branch: entry.branch } : {}),
             ...(entry.runner !== undefined ? { runner: entry.runner } : {}),
+            ...opt("startIn", entry.startIn),
+            ...opt("actsAs", entry.actsAs),
             updatedAt: Math.max(entry.updatedAt, state?.lastAt ?? 0),
             attention: {
                 plan: parked.includes("plan"),
@@ -805,6 +807,10 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 ...(account !== undefined ? { account } : {}),
                 ...(origin !== undefined ? { origin } : {}),
                 ...startedByOf(existing, turn),
+                // Where it opened and as whom: the first turn's answer, kept; a later turn's differing persona does not
+                // move the conversation to another project.
+                ...opt("startIn", existing?.startIn ?? turn.startIn),
+                ...opt("actsAs", existing?.actsAs ?? turn.actsAs),
                 ...(existing?.sessionId !== undefined ? { sessionId: existing.sessionId } : {}),
                 // Survives the rebuild; `updatedAt` moving past it is what makes the agent unread again, not clearing
                 // this.

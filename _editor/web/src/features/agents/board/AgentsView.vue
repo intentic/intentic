@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Disposable } from "@intentic/extension-api";
-import { isTrialProvider, type WorkflowRun } from "@intentic/sandbox-contract";
+import { type AutomationApproval, isTrialProvider, type WorkflowRun } from "@intentic/sandbox-contract";
 import { Button, clipboardOf, ui, ContextMenu, Modal, SearchBar, SegmentedControl, useDevice, useNarrow } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
@@ -12,6 +12,9 @@ import { synthesizeSessions, synthesizing } from "../fleet/synthesizeSessions";
 import { dropActionLabel, dropRejection, type PendingAction } from "./laneDrop";
 import { useAgentDrag } from "./useAgentDrag";
 import { useAgentFilter } from "./useAgentFilter";
+import { projectScope, setProjectScope } from "../../../app/projectScope";
+import { usePersonas } from "../../sandbox/personas/usePersonas";
+import { agentInProject, heldWakeInProject, runInProject } from "./projectMembership";
 import { type FleetLane, reviewAction, unregistered, watching } from "../fleet/agentStatus";
 import { useAgents } from "../fleet/useAgents";
 import { agentSeed } from "../fleet/useAgents-actions";
@@ -150,10 +153,33 @@ const { runs: workflowRuns, stop: stopWorkflowRun, archive: archiveWorkflowRun, 
 const needingYou = computed(() => runsNeedingYou(fleet.value));
 // A run under a query answers for its steps, since they have no cards of their own to answer with (runMatches).
 const runKept = (run: WorkflowRun): boolean => !filtering.value || runMatches(run, needle.value, fleet.value, matches);
+// Lanes group by the same rule (laneGroups) whether scope is `box` (this fleet) or `all` (plus every other box's
+// roster), so the two scopes can never order a column differently.
+// Sandbox is never a column or sort key: a column per box reproduces the exact problem the wider board exists to solve.
+const boxFleet = computed<FleetAgent[]>(() => (readingAcross.value ? [...fleet.value, ...otherFleet.value] : fleet.value));
+// The open project's conversations only (app/projectScope.ts, projectMembership.ts): a draft not yet sent stays, since
+// it was opened under this project and has no record to say so yet. Held wakes and live runs narrow by the same
+// evidence. The archive stays the sandbox's: its Delete all empties the whole pile, so its count must say the whole pile.
+const { personas } = usePersonas();
+const scopedFleet = computed<FleetAgent[]>(() => {
+    const project = projectScope.value;
+    if (project === undefined) {
+        return boxFleet.value;
+    }
+    return boxFleet.value.filter((agent) => unregistered(agent.status) || agentInProject(agent, project, personas.value));
+});
+const scopedHeld = computed<AutomationApproval[]>(() => {
+    const project = projectScope.value;
+    return project === undefined ? heldWakes.value : heldWakes.value.filter((wake) => heldWakeInProject(wake, project, personas.value, boxFleet.value));
+});
+const scopedRuns = computed<WorkflowRun[]>(() => {
+    const project = projectScope.value;
+    return project === undefined ? workflowRuns.value : workflowRuns.value.filter((run) => runInProject(run, project, personas.value, boxFleet.value));
+});
 // Both halves of the ledger, kept in both list and filtered forms: an archived run is off the board like an archived
 // agent, shown in Finished's archive view instead.
 // Kept in both forms since a "n of m" count needs the unfiltered denominator too.
-const boardRunRows = computed(() => workflowRuns.value.filter((run) => run.archivedAt === undefined));
+const boardRunRows = computed(() => scopedRuns.value.filter((run) => run.archivedAt === undefined));
 const liveRuns = computed(() => boardRunRows.value.filter(runKept));
 const archivedRunRows = computed(() => workflowRuns.value.filter((run) => run.archivedAt !== undefined));
 const archivedRuns = computed(() => archivedRunRows.value.filter(runKept));
@@ -175,11 +201,20 @@ const runsFor = (lane: FleetLane): WorkflowRun[] => {
 const BOARD_LANES = [`attention`, `active`, `finished`] as const;
 const ledgerRunIds = computed(() => runIdsInLedger(workflowRuns.value));
 
-// Lanes group by the same rule (laneGroups) whether scope is `box` (this fleet) or `all` (plus every other box's
-// roster), so the two scopes can never order a column differently.
-// Sandbox is never a column or sort key: a column per box reproduces the exact problem the wider board exists to solve.
-const scopedFleet = computed<FleetAgent[]>(() => (readingAcross.value ? [...fleet.value, ...otherFleet.value] : fleet.value));
-const scopedLanes = computed<Record<FleetLane, FleetAgent[]>>(() => (readingAcross.value ? laneGroups(scopedFleet.value) : lanes.value));
+// How many rows the project put out of sight, said on the chip so a quiet board is never mistaken for an empty fleet.
+// Rows, not conversations: a hidden run's steps hide with it and count once, as the run does on the wide board.
+const projectHidden = computed(() => {
+    if (projectScope.value === undefined) {
+        return 0;
+    }
+    const shown = new Set(scopedFleet.value.map((agent) => agent.id));
+    const agents = boxFleet.value.filter((agent) => !shown.has(agent.id) && !insideRun(agent, ledgerRunIds.value)).length;
+    const runs = workflowRuns.value.filter((run) => run.archivedAt === undefined).length - boardRunRows.value.length;
+    return agents + runs + heldWakes.value.length - scopedHeld.value.length;
+});
+const scopedLanes = computed<Record<FleetLane, FleetAgent[]>>(() =>
+    readingAcross.value || projectScope.value !== undefined ? laneGroups(scopedFleet.value) : lanes.value,
+);
 
 const boardLanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
     if (ledgerRunIds.value.size === 0) {
@@ -566,7 +601,7 @@ const LANES: readonly { key: FleetLane; label: string; dot: string; empty: strin
 // Held wakes count toward having something to show, so a fresh workspace with only a hold doesn't hide behind the
 // empty-board splash.
 const total = computed(
-    () => LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0) + boardRunRows.value.length + heldWakes.value.length,
+    () => LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0) + boardRunRows.value.length + scopedHeld.value.length,
 );
 // A different question from `total`: whether anything has EVER happened here, which is what the first-run screen turns
 // on. A never-registered conversation is a `draft` card, and an untouched draft doesn't count as started.
@@ -575,7 +610,7 @@ const started = computed(
     () =>
         LANES.reduce((sum, lane) => sum + boardLanes.value[lane.key].filter((agent) => agent.status !== `draft`).length, 0) +
             boardRunRows.value.length +
-            heldWakes.value.length +
+            scopedHeld.value.length +
             archiveSize.value >
         0,
 );
@@ -928,6 +963,20 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
 <!-- Drawn only when more than one sandbox exists (scopeOffered): a switch whose two settings look identical teaches the reader to ignore controls. -->
                 <SegmentedControl v-if="scopeOffered" v-model="fleetScope" :options="SCOPE_OPTIONS" class="shrink-0" />
+<!-- The open project, and the way out of it: the same scope the workspace chip clears, so both say the same thing. -->
+                <button
+                    v-if="projectScope !== undefined"
+                    type="button"
+                    class="ui-chip ui-chip-on h-6 shrink-0 px-1.5"
+                    :aria-label="`Showing agents on ${projectScope} only, ${projectHidden} elsewhere. Click to show every project's.`"
+                    v-tooltip.bottom="`Showing agents on ${projectScope} only, ${projectHidden} elsewhere. Click to show every project's.`"
+                    @click="setProjectScope(undefined)"
+                >
+                    <Icon name="folder-open" class="shrink-0 text-[0.7rem]" />
+                    <span class="max-w-32 truncate">{{ projectScope }}</span>
+                    <span v-if="projectHidden > 0" class="text-subtle">· {{ projectHidden }} hidden</span>
+                    <Icon name="times" class="shrink-0 text-[0.6rem] opacity-70" />
+                </button>
             </div>
             <SearchBar
                 ref="filterField"
@@ -1085,9 +1134,9 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         </Button>
                     </header>
 <!-- Held wakes lead the lane, since a hold is wholly waiting on the user, more than anything running below it; Attention lane only. -->
-                    <div v-if="lane.key === 'attention' && !archiveOpen && heldWakes.length > 0" class="flex flex-col gap-2.5 pb-2.5">
+                    <div v-if="lane.key === 'attention' && !archiveOpen && scopedHeld.length > 0" class="flex flex-col gap-2.5 pb-2.5">
                         <HeldWakeCard
-                            v-for="entry in heldWakes"
+                            v-for="entry in scopedHeld"
                             :key="entry.id"
                             :entry="entry"
                             :busy="busyHeld.has(entry.id)"
@@ -1126,7 +1175,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
 <!-- An emptied lane keeps its header rather than collapsing: three columns shrinking to one mid-keystroke would jump the whole board under the cursor. -->
                     <p
                         v-else-if="
-                            cardsFor(lane.key).length === 0 && runsFor(lane.key).length === 0 && !(lane.key === 'attention' && heldWakes.length > 0)
+                            cardsFor(lane.key).length === 0 && runsFor(lane.key).length === 0 && !(lane.key === 'attention' && scopedHeld.length > 0)
                         "
                         class="px-1 pb-3 text-2xs text-subtle"
                     >

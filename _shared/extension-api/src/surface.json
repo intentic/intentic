@@ -780,5 +780,93 @@
             "openAgent",
             "openSession"
         ]
+    },
+    "2.13.0": {
+        "manifest": [
+            "$schema",
+            "art",
+            "category",
+            "contributes",
+            "engines",
+            "entry",
+            "icon",
+            "logo",
+            "name",
+            "permissions",
+            "publisher",
+            "server",
+            "version"
+        ],
+        "contributes": [
+            "agent",
+            "automationTemplates",
+            "bin",
+            "capabilities",
+            "commands",
+            "documents",
+            "environment",
+            "files",
+            "listener",
+            "processes",
+            "settings",
+            "viewers",
+            "views"
+        ],
+        "api": [
+            "apiVersion",
+            "audience",
+            "chat",
+            "commands",
+            "documents",
+            "href",
+            "models",
+            "navigate",
+            "processes",
+            "route",
+            "sandbox",
+            "settings",
+            "terminal",
+            "theme",
+            "viewers",
+            "views",
+            "workspace"
+        ],
+        "listener": ["automation", "events", "provider"],
+        "sandboxApi": ["fetch", "json", "key", "origin", "reachable", "request", "role", "rpc"],
+        "moduleExports": [
+            "extensionApiVersion",
+            "flattenQuery",
+            "hostSlot",
+            "mergeQuery",
+            "readDaemonStream",
+            "resetSandboxScope",
+            "sandboxLedger",
+            "sandboxPoll",
+            "sandboxRef",
+            "sandboxScopeGuard",
+            "sandboxValue",
+            "satisfiesEngines"
+        ],
+        "workspaceApi": [
+            "capabilities",
+            "file",
+            "fillDiff",
+            "onDidChange",
+            "onDidChangeFiles",
+            "onDidChangeProject",
+            "onDidChangeRefs",
+            "openDiff",
+            "project",
+            "readJson",
+            "repos",
+            "setProject",
+            "write"
+        ],
+        "chatApi": [
+            "composeLoop",
+            "composeWorkflow",
+            "openAgent",
+            "openSession"
+        ]
     }
 }

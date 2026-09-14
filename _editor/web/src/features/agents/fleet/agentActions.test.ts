@@ -40,7 +40,7 @@ vi.mock("../../chat/panel/useChat-strip", () => ({ chatStrip: { value: { active:
 vi.mock("../../chat/panel/useChat-reveal", () => ({
     // `actsAs` is on the stub since startAgent pins the draft before summoning it, including to `undefined` when
     // pressing Anyone un-pins a persona.
-    draftConversation: () => ({ conversationId: `c1`, actsAs: { value: undefined }, enqueue: (prompt: string) => chat.enqueued.push(prompt) }),
+    draftConversation: () => ({ conversationId: `c1`, actsAs: { value: undefined }, startIn: { value: undefined }, enqueue: (prompt: string) => chat.enqueued.push(prompt) }),
     agentTabOf: () => ({}),
 }));
 // The summons channel is the seam startAgent shows the new tab through; this suite has no second window to receive it.

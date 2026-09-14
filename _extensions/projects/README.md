@@ -6,8 +6,9 @@ The workspace's repositories as a dashboard of tiles: open one as its own tree, 
 
 - Draw one tile per repository under the workspace root, with its name, its README's first paragraph, and whether
   the Preview area can show it running.
-- Open a tile as the Workspace rooted at that repository (`/workspace?dir=<repo>`), the same address the phone's
-  drill-down reads.
+- Open a tile by making its repository the shell's project scope (`api.workspace.setProject`), which narrows the
+  workspace, the agents board and every repository-keyed view to it, then opening the workspace, which roots itself
+  there. Say on the tile which project is open, and offer All projects.
 - Make a new repository in a press: a free name offered, the daemon's `POST /workspace/repos/new` behind Create,
   and the new project opened.
 
@@ -21,10 +22,11 @@ The workspace's repositories as a dashboard of tiles: open one as its own tree, 
 
 ## How it fits
 
-**A home for a different audience, over the same Workspace.** The shell's `audience` preference seats this tile
-where a developer has the file tree ([docs/design/maker-audience-design.md](../../docs/design/maker-audience-design.md)).
-Nothing here duplicates the Workspace: a tile opens it, rooted at one folder (`health/workspaceScope.ts`,
-`workspaceDir`), and the Workspace's own Restore points panel is the project's history.
+**The place the project scope is read and changed.** The tile is seated for everyone; a maker has it where a
+developer has the file tree ([docs/design/maker-audience-design.md](../../docs/design/maker-audience-design.md),
+section 12). The scope itself is the shell's (`app/projectScope.ts`): this extension only sets it and says which
+project is open, on its tile's title and mark. Nothing here duplicates the Workspace, which roots itself at the
+open project and keeps the project's history in its own Restore points panel.
 
 **It reads and makes repositories, and does nothing else.** `GET /workspace/repos` lists them, `GET /workspace/file`
 reads a README, `POST /workspace/repos/new` makes one. The daemon does the making: a folder, `git init` with its git

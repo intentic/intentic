@@ -197,9 +197,16 @@ export interface IntenticApi {
         role(): "owner" | "maintainer" | "collaborator" | "viewer";
     };
     readonly workspace: {
+        // The open project's repositories only (see `project`); everything when no project is open.
         repos(): readonly RepoFacts[];
         capabilities(): readonly CapabilityFacts[];
         onDidChange(listener: () => void): Disposable;
+        // Which project the whole shell is looking at: one repository's id, or undefined for everything. Sandbox-wide:
+        // the workspace roots at it, the agents board files conversations under it, and `repos()` above is narrowed to
+        // it, so a view keyed by repository narrows without asking. Reactive when read inside a computed.
+        project(): string | undefined;
+        setProject(project: string | undefined): void;
+        onDidChangeProject(listener: (project: string | undefined) => void): Disposable;
         // Fires when a ref moves in a repo (commit, branch, checkout, rebase) — a change `.git` watching can't
         // see as a file path. `repos` are root-relative ids.
         onDidChangeRefs(listener: (repos: readonly string[]) => void): Disposable;

@@ -69,7 +69,7 @@ const sandbox = useSandbox();
 const { canShip } = useRole();
 // The one count in this index anyone looks for; rides the /system/sync poll the sandbox chip already does, free.
 const { contendedPorts } = useSyncHealth();
-const { panels, isLoading } = usePanels();
+const { allPanels: panels, isLoading } = usePanels();
 const { capabilities } = useCapabilities();
 // Extensions row's count reads the cached registry only (`read: false`), never triggering a clone.
 const { entries: listedExtensions } = useRegistry({ read: false });

@@ -222,7 +222,7 @@ const convergence = computed(() => convergedBadge(state.value?.converged));
 // not first-run noise.
 const komodoDown = computed(() => komodoReachable.value === false && state.value?.converged !== undefined);
 // Links to the full Live-status board, resolved the same way the rail resolves its own route.
-const { panels } = usePanels();
+const { allPanels: panels } = usePanels();
 const { capabilities } = useCapabilities();
 const liveStatusRoute = computed(() => {
     const found = detectActivations(panels.value, capabilities.value).find(({ extension }) => extension.id === `live-status`);

@@ -3,15 +3,23 @@
 import { appLink, Button, Icon, Notice, Page, PageHeader, SkeletonRows, ui, useAsyncAction } from "@intentic/extension-ui";
 import { computed, nextTick, ref, useTemplateRef } from "vue";
 import { host } from "./host.js";
-import { freeProjectName, previewPath, projectPath, slugOf } from "./projects.js";
+import { freeProjectName, previewPath, slugOf, WORKSPACE_PATH } from "./projects.js";
 import { useProjects } from "./useProjects.js";
 
 const api = host();
 const { tiles, ids, isLoading, create } = useProjects();
 
-// Every destination is an anchor with an address: the tile opens the workspace rooted at the repository, and See it
-// the Preview area on its target.
+// Every destination is an anchor with an address. A tile makes its project the shell's scope (every area narrows to
+// it) and opens the workspace, which roots itself there; See it opens the Preview area on the project's own target.
 const linkTo = (path: string) => appLink(api.href(path), () => api.navigate(path));
+const openProject = (id: string) =>
+    appLink(api.href(WORKSPACE_PATH), () => {
+        api.workspace.setProject(id);
+        api.navigate(WORKSPACE_PATH);
+    });
+// Which project the shell is looking at, read live so the dashboard's own tiles say so.
+const current = computed(() => api.workspace.project());
+const showAll = (): void => api.workspace.setProject(undefined);
 
 // New project: one press opens the name, already filled with a free one; Enter or a second press makes it and opens
 // it. The field exists so the name can be changed before the folder exists, since a folder is harder to rename after.
@@ -34,7 +42,8 @@ const createProject = (): void => {
     void creating.run(async () => {
         const made = await create(slug.value);
         naming.value = false;
-        api.navigate(projectPath(made));
+        api.workspace.setProject(made);
+        api.navigate(WORKSPACE_PATH);
     }, `Could not start the project.`);
 };
 const cancelNaming = (): void => {
@@ -45,19 +54,34 @@ const cancelNaming = (): void => {
 
 <template>
     <Page width="wide">
-        <PageHeader title="Projects" description="Each of these is a repository in the workspace. Open one to work in it alone, or start a new one." />
+        <PageHeader
+            title="Projects"
+            :description="
+                current === undefined
+                    ? `Each of these is a repository in the workspace. Open one and everything, the files, the agents, the checks, narrows to it.`
+                    : `Everything is narrowed to ${current}: its files, its agents, its checks. Open another, or show all.`
+            "
+        >
+            <template v-if="current !== undefined" #actions>
+                <Button size="small" severity="secondary" @click="showAll"><Icon name="th-large" class="mr-1" />All projects</Button>
+            </template>
+        </PageHeader>
         <SkeletonRows v-if="isLoading" :rows="3" />
         <div v-else class="flex flex-wrap gap-3">
             <a
                 v-for="tile in tiles"
                 :key="tile.id"
-                v-bind="linkTo(projectPath(tile.id))"
-                class="group flex min-h-32 w-72 grow flex-col gap-2 rounded-xl border border-line bg-card p-4 text-left transition-colors hover:border-line-strong hover:bg-overlay"
+                v-bind="openProject(tile.id)"
+                class="group flex min-h-32 w-72 grow flex-col gap-2 rounded-xl border bg-card p-4 text-left transition-colors hover:bg-overlay"
+                :class="tile.id === current ? `border-link` : `border-line hover:border-line-strong`"
+                :aria-current="tile.id === current ? `true` : undefined"
             >
                 <div class="flex items-start gap-2">
                     <Icon name="folder-open" class="mt-0.5 shrink-0 text-lg text-link" />
                     <span class="min-w-0 flex-1">
-                        <span class="block truncate text-sm font-semibold text-content" :title="tile.id">{{ tile.name }}</span>
+                        <span class="block truncate text-sm font-semibold text-content" :title="tile.id"
+                            >{{ tile.name }}<span v-if="tile.id === current" class="ml-2 text-2xs font-normal text-link">open</span></span
+                        >
                         <span v-if="tile.id !== tile.name" class="block truncate text-2xs text-subtle">{{ tile.id }}</span>
                     </span>
                 </div>

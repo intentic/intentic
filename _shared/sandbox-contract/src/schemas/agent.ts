@@ -158,6 +158,14 @@ export const AgentTurnSchema = z
             .describe(
                 "Work in this conversation's own private copy of the repos rather than the shared tree, so several agents can work at once. Needs a conversation id.",
             ),
+        // Decided like `isolated`: the first turn's choice, latched. A persona's own start folder wins over it.
+        startIn: z
+            .string()
+            .max(200)
+            .optional()
+            .describe(
+                "Which folder the conversation opens in, relative to the workspace root; the project it belongs to. Decided on the first turn. A persona that names its own start folder wins.",
+            ),
         // Decided like `isolated`: the request's choice on the first turn, the registry's after. `runner` implies
         // isolation; absent means local.
         placement: AgentPlacementSchema.optional().describe(

@@ -6,6 +6,7 @@ import { summonChat } from "../../chat/run/summon";
 import { useChat } from "../../chat/run/useChat";
 import { composingConversation, draftConversation } from "../../chat/panel/useChat-reveal";
 import { queryClient } from "../../../lib/queryPersistence";
+import { projectScope } from "../../../app/projectScope";
 import { router } from "../../../router";
 import { refreshAcross } from "../../sandbox/live/fleetAcross";
 import { refreshChangesAcross } from "../../workspace/changes/changesAcross";
@@ -35,6 +36,9 @@ export const startAgent = (prompt?: string, actsAs?: string): string => {
     // window, put the caret in its composer, and on mobile navigate to it. A press over an untouched draft reuses it
     // instead of minting a second one.
     conversation.actsAs.value = actsAs;
+    // A conversation started while a project is open belongs to it: the daemon opens it there and the board files it
+    // under the project.
+    conversation.startIn.value = projectScope.value;
     summonChat({ kind: `reveal`, verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: true });
     revealConversation(conversation);
     if (prompt !== undefined) {

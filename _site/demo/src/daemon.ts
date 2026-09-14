@@ -443,7 +443,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
         () =>
             json({
                 personas: [
-                    { id: `maya-support`, label: `Maya · Customer Care`, capabilities: [`gmail-support`, `intercom`] },
+                    { id: `maya-support`, label: `Maya · Customer Care`, capabilities: [`gmail-support`, `intercom`], workspace: { startIn: `web` } },
                     { id: `owen-growth`, label: `Owen · Growth`, capabilities: [`x-brand`, `linkedin`] },
                     { id: `priya-ops`, label: `Priya · Operations`, capabilities: [`github`, `stripe-ops`] },
                 ],

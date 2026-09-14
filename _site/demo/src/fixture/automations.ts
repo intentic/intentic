@@ -83,6 +83,7 @@ const seedApprovals = (now: number): AutomationApproval[] => [
         payload: `visitor: "Does intentic work with a self-hosted GitLab?"`,
         origin: { automationId: `aut_front_desk`, provider: `webchat`, author: `visitor · 84.12.9.x` },
         title: `Front Desk: self-hosted GitLab?`,
+        actsAs: `maya-support`,
         createdAt: now - minutes(6),
     },
 ];

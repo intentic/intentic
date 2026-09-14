@@ -7,6 +7,7 @@ const settings = {
     harness: `native`,
     account: undefined,
     actsAs: undefined,
+    startIn: undefined,
     model: `opus`,
     effort: `high`,
     thinking: false,

@@ -68,6 +68,10 @@ export const PersistedAgentSchema = z.object({
     origin: AgentOriginSchema.optional(),
     // Who asked for the first turn, latched like `origin`; absent when the request carried no verified identity.
     startedBy: z.string().optional(),
+    // Where the conversation opened and as whom, latched at the first turn like `origin`: what a project-scoped board
+    // reads to decide whether this conversation is its own.
+    startIn: z.string().optional(),
+    actsAs: z.string().optional(),
     // Where this conversation was forked from; written once at the fork's first turn and never cleared.
     forkedFrom: ForkedFromSchema.optional(),
     // Per-repo worktree state. `base` is the main-line sha the branch stands on, moved by the pre-turn rebase;

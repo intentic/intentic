@@ -45,6 +45,8 @@ const capture = () => {
             },
         },
         commands: { register: () => ({ dispose: () => {} }) },
+        // The project scope a detect() may read; none open, which is every fresh sandbox.
+        workspace: { project: () => undefined },
     } as unknown as IntenticApi;
     return { api, views, documents };
 };

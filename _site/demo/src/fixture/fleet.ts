@@ -20,6 +20,7 @@ const NO_ATTENTION = { plan: false, question: false, permission: false, capabili
 export const fleetRoster = (now: number): AgentSummary[] => [
     {
         id: FEATURED_AGENT_ID,
+        startIn: `web`,
         sessionId: `ses_01j9checkout`,
         title: `Add Stripe checkout to the pricing page`,
         status: `running`,
@@ -48,6 +49,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
     },
     {
         id: AWAITING_AGENT_ID,
+        startIn: `web`,
         sessionId: `ses_01j9flaky`,
         title: `Fix the flaky signup e2e test`,
         status: `awaiting`,
@@ -73,6 +75,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
     },
     {
         id: CONFLICT_AGENT_ID,
+        startIn: `api`,
         sessionId: `ses_01j9auth`,
         title: `Refactor the auth middleware onto the new session store`,
         status: `conflict`,
@@ -96,6 +99,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
     },
     {
         id: `cnv_latency_p99`,
+        startIn: `api`,
         // CI job holding a control token; renders as the card's second provenance line.
         startedBy: `token:nightly CI`,
         sessionId: `ses_01j9latency`,
@@ -124,6 +128,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
     // Two steps of one workflow run: ordinary agents in every respect except sharing a `workflow` name.
     {
         id: `wf-a3f19c22-review-perf`,
+        startIn: `web`,
         sessionId: `ses_01j9wfperf`,
         title: `Review the checkout change for performance regressions`,
         status: `running`,
@@ -151,6 +156,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
     },
     {
         id: `wf-a3f19c22-review-security`,
+        startIn: `web`,
         sessionId: `ses_01j9wfsec`,
         title: `Review the checkout change for security holes`,
         status: `running`,
@@ -178,6 +184,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
     },
     {
         id: REVIEW_AGENT_ID,
+        startIn: `api`,
         sessionId: `ses_01j9soft`,
         title: `Migrate the users table to soft deletes`,
         status: `ready`,

@@ -1,6 +1,7 @@
 import { PanelsListSchema, type PanelSummary } from "@intentic/api-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
+import { withinScope } from "../../app/projectScope";
 import { sandboxJson } from "../sandbox/client/sandboxClient";
 import { PANELS } from "../../lib/queryKeys";
 import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
@@ -32,8 +33,13 @@ export function usePanels() {
         await invalidate();
     };
 
+    const allPanels = computed<PanelSummary[]>(() => query.data.value?.panels ?? []);
     return {
-        panels: computed<PanelSummary[]>(() => query.data.value?.panels ?? []),
+        // The open project's repositories only (app/projectScope.ts): what the rail, every extension view and the
+        // preview read, so opening a project narrows all of them at once.
+        panels: computed<PanelSummary[]>(() => allPanels.value.filter((panel) => withinScope(panel.repo))),
+        // Every repository, for the surfaces about the sandbox itself rather than the work in it.
+        allPanels,
         // List has arrived or failed for good; the rail waits on this before calling a tile absent rather than late.
         settled: computed(() => query.isFetched.value || query.isError.value),
         error,

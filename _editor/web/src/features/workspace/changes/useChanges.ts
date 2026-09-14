@@ -12,6 +12,7 @@ import type {
 } from "@intentic/api-contract";
 import type { PushRun } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
+import { withinScope } from "../../../app/projectScope";
 import { useChat } from "../../chat/run/useChat";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
@@ -352,8 +353,9 @@ export function useChanges() {
     });
 
     // Also includes repos git couldn't scan (empty lists plus an `error`) and repos that are merely out of sync;
-    // both contribute 0 to `count` and the panel splits them into their own rows.
-    const repos = computed<readonly RepoChanges[]>(() => query.data.value?.repos ?? []);
+    // both contribute 0 to `count` and the panel splits them into their own rows. Narrowed to the open project
+    // (app/projectScope.ts), under which the workspace's own repository is outside every project.
+    const repos = computed<readonly RepoChanges[]>(() => (query.data.value?.repos ?? []).filter((repo) => withinScope(repo.repo)));
     // Agent identities come straight off the response, not the fleet roster, since the roster drops archived agents
     // that a landing still names.
     const originAgents = computed<Readonly<Record<string, OriginAgent>>>(() => query.data.value?.originAgents ?? {});

@@ -245,9 +245,11 @@ describe(`rail order`, () => {
 
     // The top of the column is the scarce thing. Checked on railRank rather than a detected run, since two of
     // the four ids are core shell tiles that contribute no activation.
-    it(`keeps the busy permanent pair adjacent, with nothing seated between them`, () => {
-        // Start a turn, read what it did: the loop the rail serves. Approvals/Workflows used to sit between them.
-        expect(railRank(`workspace`)).toBe(railRank(`agents`) + 1);
+    it(`keeps the busy permanent run adjacent, with nothing seated between them`, () => {
+        // Start a turn, pick the project, read what it did: the loop the rail serves. Approvals/Workflows used to sit
+        // between them.
+        expect(railRank(`projects`)).toBe(railRank(`agents`) + 1);
+        expect(railRank(`workspace`)).toBe(railRank(`projects`) + 1);
     });
 
     it(`seats configuration below everything that lights up`, () => {
@@ -378,11 +380,12 @@ describe(`rail seats`, () => {
     });
 
     it(`spends permanent seats on the work loop and nowhere else`, () => {
-        // The count is the point: four fits above the fold, room for what lights up. A fifth means editing this.
+        // The count is the point: five fits above the fold, room for what lights up. A sixth means editing this. The
+        // fifth is the project scope's seat, the only place the shell says which project it is looking at.
         const permanent = RAIL_GROUPS.flatMap((group) => group.items)
             .filter((item) => item.seat === `always`)
             .map((item) => item.id);
-        expect(permanent).toEqual([`chat`, `agents`, `workspace`, `preview`]);
+        expect(permanent).toEqual([`chat`, `agents`, `projects`, `workspace`, `preview`]);
     });
 });
 
@@ -431,9 +434,9 @@ describe(`the maker's rail`, () => {
         view: async () => ({}),
     });
 
-    it(`keeps the developer's permanent seats when nothing has been answered`, () => {
+    it(`keeps the developer's home on the file tree when nothing has been answered, with the dashboard seated beside it`, () => {
         expect(seatPolicy(`workspace`)).toBe(`always`);
-        expect(seatPolicy(`projects`)).toBe(`signal`);
+        expect(seatPolicy(`projects`)).toBe(`always`);
         expect(homeViewId()).toBe(`workspace`);
     });
 
