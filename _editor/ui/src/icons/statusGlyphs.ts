@@ -9,7 +9,9 @@ export const STATUS_GLYPHS = {
     "circle-fill": { outline: ``, solid: `M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z` },
     clock: { outline: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M12 7v5l4 2` },
     "exclamation-circle": { outline: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M12 7v6`, solid: `M11 16h2v2h-2Z` },
-    "info-circle": { outline: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M11 11h1v6 M10 17h4`, solid: `M11 6h2v2h-2Z` },
+    // The `i` is bare on purpose: at 11px a serif flag and foot are sub-pixel and only smear the stem. The dot is
+    // wider than the stem and the gap between them is 3.5 units, the least that survives an 11px raster as a gap.
+    "info-circle": { outline: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M12 12v6`, solid: `M10.5 5h3v2.5h-3Z` },
     "question-circle": { outline: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M9 8c0-3 6-3 6 0 0 2-3 2-3 5`, solid: `M11 16h2v2h-2Z` },
     "plus-circle": { outline: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M12 7v10 M7 12h10` },
     square: { outline: `M3 3h18v18H3Z` },

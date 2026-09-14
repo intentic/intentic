@@ -493,8 +493,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 <!-- Mark, sentence and clock are one non-wrapping group inside the wrapping row: a sentence wider than the pane must wrap inside its own span. -->
             <span class="flex min-w-0 items-center gap-x-2">
                 <!-- Spins and shows elapsed time while the notice's wait runs, then settles to a plain line (ChatMessage.noticeWait). -->
-                <Icon v-if="pendingWait" name="spinner" spin class="shrink-0 text-2xs text-info" />
-                <Icon v-else name="info-circle" class="shrink-0 text-2xs" />
+                <!-- A mark set at the row's own 11px has no counter left to read; both glyphs take a step up from the sentence. -->
+                <Icon v-if="pendingWait" name="spinner" spin class="shrink-0 text-xs text-info" />
+                <Icon v-else name="info-circle" class="shrink-0 text-xs" />
                 <span class="min-w-0">{{ message.text }}</span>
                 <span v-if="pendingWait" class="shrink-0 tabular-nums">{{ formatElapsed(pendingWait.since, now) }}</span>
             </span>
