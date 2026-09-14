@@ -78,7 +78,14 @@ const PATH_FLOORS: Readonly<Record<string, MemberRole>> = {
     "/system/sync/pair": "collaborator",
     // Giving up one's own grant is reachable by every tier; the handler removes only the verified caller.
     "/members/self": "viewer",
+    // One's own passkeys are identity, not power, like staying signed in; the policy and recovery routes keep the
+    // mutation default and their own ownership gate.
+    "/system/passkeys/register/options": "viewer",
+    "/system/passkeys/register": "viewer",
 };
+
+// Removing a passkey by id: one's own is identity; the handler holds another member's to the owner.
+const passkeyRemoval = /^\/system\/passkeys\/[^/]+$/;
 
 const methodFloor = (method: string): MemberRole => (method === "GET" || method === "HEAD" ? "viewer" : "maintainer");
 
@@ -90,6 +97,9 @@ export const routeFloor = (method: string, path: string, target?: string): Membe
     }
     if (path === "/workspace/upload") {
         return uploadFloor(target);
+    }
+    if (method === "DELETE" && passkeyRemoval.test(path)) {
+        return "viewer";
     }
     const name = routeNameForRequest(ROUTES, method, path);
     if (name !== undefined) {

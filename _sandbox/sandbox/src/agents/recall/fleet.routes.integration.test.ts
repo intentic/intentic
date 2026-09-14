@@ -3,7 +3,7 @@ import type { Hono } from "hono";
 import { expect, test } from "vitest";
 import { createApp } from "../../app.js";
 import type { AppEnv } from "../../app-env.js";
-import { clientFor } from "../../harness/route-client.testing.js";
+import { clientFor, proven } from "../../harness/route-client.testing.js";
 import { services } from "../../harness/route-services.testing.js";
 import { runAgentTurn } from "../../harness/route-turns.testing.js";
 import { testConfig } from "../../testing.js";
@@ -28,7 +28,7 @@ interface FleetAnswer {
 const fleetApp = (): Hono<AppEnv> =>
     createApp(
         services({
-            auth: { authorize: async () => ({ email: "owner@example.com", role: "owner" as const }) },
+            auth: { authorize: async () => proven("owner@example.com", "owner") },
             // Left unstubbed on purpose; inert here, since nothing in this file reads an anchor back.
             turnAnchors: { record: async () => {}, of: async () => undefined, all: async () => new Map(), truncate: async () => {} },
             async *agent(request) {

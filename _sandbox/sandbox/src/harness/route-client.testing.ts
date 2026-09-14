@@ -6,7 +6,8 @@ import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import type { AnyRouter } from "@orpc/server";
 import type { Hono } from "hono";
 import { afterEach, vi } from "vitest";
-import { ForbiddenError } from "../auth/auth.js";
+import type { MemberRole, ProofMethod } from "@intentic/sandbox-contract";
+import { ForbiddenError, type ProvenCaller } from "../auth/auth.js";
 import type { AppEnv, OrpcContext } from "../app-env.js";
 
 // Route harness's client side: a typed oRPC client over the in-process app (or one feature's routes alone), auth stubs,
@@ -30,6 +31,10 @@ export const rejectAuth = async (): Promise<never> => {
 export const rejectForbidden = async (): Promise<never> => {
     throw new ForbiddenError("not the sandbox owner");
 };
+
+// A caller the bearer middleware would have produced: an identity, its tier, and the proof behind it (Google unless
+// the test says otherwise), for an `authorize` stub that admits everyone as this person.
+export const proven = (email: string, role: MemberRole, methods: readonly ProofMethod[] = ["google"]): ProvenCaller => ({ email, role, methods });
 
 // A JSON POST against the in-process app, for the plain (non-oRPC) routes.
 export const postJson = async (app: Hono<AppEnv>, path: string, body?: unknown): Promise<Response> =>

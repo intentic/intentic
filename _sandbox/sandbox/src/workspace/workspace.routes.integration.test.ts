@@ -27,7 +27,7 @@ import { MAX_RAW_BYTES } from "./files/workspace-files-download.js";
 import { UploadTooLargeError } from "./files/workspace-files-upload.js";
 import { sha256Text, statWorkspaceFileSize } from "./files/workspace-files.js";
 
-import { clientFor, errorCode } from "../harness/route-client.testing.js";
+import { clientFor, errorCode, proven } from "../harness/route-client.testing.js";
 import { fakeFiles, fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { testConfig } from "../testing.js";
@@ -381,7 +381,7 @@ test("a media ticket opens only the path it was minted for, and /workspace/media
         services({
             workspace: workspacePaths(root),
             files: fakeFiles({ size: statWorkspaceFileSize }),
-            auth: { authorize: async () => ({ email: "o@x.com", role: "owner" as const }), authorizeOwner: async () => {} },
+            auth: { authorize: async () => proven("o@x.com", "owner"), authorizeOwner: async () => {} },
         }),
     );
     try {

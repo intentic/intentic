@@ -51,6 +51,8 @@ import { type AcpConnections, createAcpConnections } from "./runtimes/acp/acp-co
 import { createPiAgent } from "./runtimes/pi/pi-agent.js";
 import { piSpawner } from "./runtimes/pi/pi-rpc.js";
 import { type ControlTokens, fileControlTokens } from "./auth/control-tokens.js";
+import { allowedOriginsOf, originAllowedBy } from "./auth/origins.js";
+import { createPasskeyCeremonies, filePasskeys, type PasskeyCeremonies, type PasskeyStore } from "./auth/passkeys.js";
 import { type DoorTokens, fileDoorTokens } from "./auth/door-tokens.js";
 import { createMediaTickets, type MediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets, type WsTickets } from "./auth/ws-tickets.js";
@@ -89,14 +91,16 @@ import { fileVerifyStore, type VerifyStore } from "./workspace/deps/verify-store
 import { type CiHookReconciler, createCiHookReconciler } from "./ci/hooks.js";
 import { createRunsCache, type RunsCache } from "./ci/runs-cache.js";
 import {
-    type Caller,
+    type AuthorizeOptions,
     createAuthorizer,
     createGoogleVerifier,
     fileMembersStore,
     fileOwnerStore,
     type MembersStore,
-    type VerifiedIdentity,
     ownerTicketVerifier,
+    type PasskeyPolicy,
+    type Proof,
+    type ProvenCaller,
 } from "./auth/auth.js";
 import { fileBrowserAccess } from "./auth/browser-access.js";
 import { createAuthConnections, type AuthConnections } from "./auth/connections.js";
@@ -321,6 +325,9 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly runnerParent: { current?: ParentCredentials };
     // Owner-minted, hashed, revocable tokens for driving this sandbox outside the browser; each carries its scope.
     readonly controlTokens: ControlTokens;
+    // Passkeys registered with this sandbox, the require switch and recovery hashes; the daemon is the relying party.
+    readonly passkeys: PasskeyStore;
+    readonly passkeyCeremonies: PasskeyCeremonies;
     // This sandbox's identity for the Connections card; undefined means /info returns {} (loopback/test).
     readonly info:
         | {
@@ -629,10 +636,13 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // When set, the daemon verifies the bearer on every route but /health and emits CORS; unset means loopback.
     readonly auth:
         | {
-              readonly authorize: (bearer: string, firstBind: string | undefined) => Promise<Caller>;
+              readonly authorize: (bearer: string, firstBind: string | undefined, options?: AuthorizeOptions) => Promise<ProvenCaller>;
+              // The roster and policy for a proof the daemon verified itself: a passkey assertion, a recovery code.
+              readonly authorizeProven: (proof: Proof) => Promise<ProvenCaller>;
               readonly authorizeOwner: (bearer: string) => Promise<void>;
               readonly authorizeRetirement: (bearer: string) => Promise<void>;
-              readonly mintSession: (identity: VerifiedIdentity) => Promise<MintedSession>;
+              readonly authorizeRecovery: (bearer: string) => Promise<ProvenCaller>;
+              readonly mintSession: (proof: Proof) => Promise<MintedSession>;
               // Re-keys the session signer, signing every browser out at once; backs 'sign out everywhere'.
               readonly rotateSessions: () => Promise<void>;
               readonly disableBrowserAccess: () => Promise<void>;
@@ -640,6 +650,30 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
           }
         | undefined;
 }
+
+// The sandbox as passkey relying party: the store beside members.json, the ceremonies the routes drive, and the view
+// of the store the authorizer's require-passkey policy reads.
+const createPasskeySlice = (
+    config: Config,
+    workspaceRoot: string,
+): { readonly passkeys: PasskeyStore; readonly passkeyCeremonies: PasskeyCeremonies; readonly passkeyPolicy: PasskeyPolicy } => {
+    const passkeys = filePasskeys(statePath(workspaceRoot, ".intentic/identity/passkeys.json"));
+    const sameEmail = (left: string, right: string): boolean => left.toLowerCase() === right.toLowerCase();
+    return {
+        passkeys,
+        passkeyCeremonies: createPasskeyCeremonies({
+            store: passkeys,
+            originAllowed: originAllowedBy(allowedOriginsOf(config.webOrigin)),
+            sandboxId: sandboxIdFromToken(config.connectToken) ?? "",
+            sandboxName: config.sandbox.name,
+        }),
+        passkeyPolicy: {
+            required: passkeys.required,
+            enrolled: async (email) => (await passkeys.list()).some((credential) => sameEmail(credential.email, email)),
+            exists: async (credentialId) => (await passkeys.find(credentialId)) !== undefined,
+        },
+    };
+};
 
 // Builds production services from config; the agent/intentic/git/files/sessions/tree members default to real
 // subprocess/fs functions.
@@ -687,6 +721,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
               }
             : undefined;
     const members = fileMembersStore(statePath(workspace.root, ".intentic/identity/members.json"));
+    const { passkeys, passkeyCeremonies, passkeyPolicy } = createPasskeySlice(config, workspace.root);
     // Bound owner, hoisted since the Access roster and gate routes both need to read, never write, the email.
     const ownerStore = fileOwnerStore(statePath(workspace.root, ".intentic/identity/owner.json"));
     // Session secret under historyRoot, daemon-private and persistent, so a restart doesn't sign every browser out.
@@ -700,6 +735,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
                   session: sessions.verify,
                   owner: ownerStore,
                   members,
+                  passkeys: passkeyPolicy,
                   browserAccess,
                   ...(config.connectToken !== "" ? { connectToken: config.connectToken } : {}),
                   ...(config.owner.email !== "" ? { expectedOwner: config.owner.email } : {}),
@@ -712,8 +748,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const auth = authorizer
         ? {
               authorize: authorizer.authorize,
+              authorizeProven: authorizer.authorizeProven,
               authorizeOwner: authorizer.authorizeOwner,
               authorizeRetirement: authorizer.authorizeRetirement,
+              authorizeRecovery: authorizer.authorizeRecovery,
               mintSession: sessions.mint,
               rotateSessions: sessions.rotate,
               disableBrowserAccess: browserAccess.disable,
@@ -1062,6 +1100,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ciRuns: createRunsCache(),
         ciHooks: createCiHookReconciler({ workspace, capabilities, ciStore, config, logger }),
         controlTokens: fileControlTokens(statePath(workspace.root, ".intentic/identity/control-tokens.json")),
+        passkeys,
+        passkeyCeremonies,
         doorTokens: fileDoorTokens(statePath(workspace.root, ".intentic/secrets/doors.json")),
         automations: fileAutomationsStore(
             statePath(workspace.root, ".intentic/config/automations.json"),

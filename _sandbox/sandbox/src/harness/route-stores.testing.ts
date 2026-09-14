@@ -1,4 +1,5 @@
 import type { Automation, Capability, Persona } from "@intentic/sandbox-contract";
+import type { PasskeyStore, StoredCredential, StoredRecoveryCode } from "../auth/passkeys.js";
 import type { AutomationRecord, AutomationsStore } from "../automations/automations-store.js";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { DismissalsStore, DismissedRecommendation } from "../capabilities/dismissals-store.js";
@@ -187,6 +188,45 @@ export const memoryMintedStore = (providerName: string): MintedStore => {
         },
         disconnect: async (id) => {
             accounts = accounts.filter((account) => account.id !== id);
+        },
+    };
+};
+
+// In-memory passkey store: the same seams as the file, so the routes and the authorizer's policy view are testable
+// without a temp dir. Starts with nothing required and no credentials.
+export const memoryPasskeyStore = (initial: StoredCredential[] = [], required = false): PasskeyStore => {
+    let credentials = [...initial];
+    let recovery: StoredRecoveryCode[] = [];
+    let isRequired = required;
+    return {
+        list: async () => [...credentials],
+        find: async (id) => credentials.find((credential) => credential.id === id),
+        add: async (credential) => {
+            credentials = [...credentials.filter((entry) => entry.id !== credential.id), credential];
+        },
+        remove: async (id) => {
+            const before = credentials.length;
+            credentials = credentials.filter((credential) => credential.id !== id);
+            return credentials.length !== before;
+        },
+        used: async (id, counter, backedUp, now) => {
+            credentials = credentials.map((credential) => (credential.id === id ? { ...credential, counter, backedUp, lastUsedAt: now } : credential));
+        },
+        required: async () => isRequired,
+        setRequired: async (value) => {
+            isRequired = value;
+        },
+        recovery: async () => recovery,
+        setRecovery: async (hashes) => {
+            recovery = hashes.map((hash) => ({ hash }));
+        },
+        spendRecovery: async (hash, now) => {
+            const match = recovery.find((code) => code.usedAt === undefined && code.hash === hash);
+            if (match === undefined) {
+                return false;
+            }
+            recovery = recovery.map((code) => (code === match ? { ...code, usedAt: now } : code));
+            return true;
         },
     };
 };

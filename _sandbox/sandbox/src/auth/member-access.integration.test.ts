@@ -5,7 +5,7 @@ import { ATTACHMENTS_DIR, type MemberRole } from "@intentic/sandbox-contract";
 import { createApp } from "../app.js";
 import type { AppEnv } from "../app-env.js";
 import { services } from "../harness/route-services.testing.js";
-import { rejectForbidden } from "../harness/route-client.testing.js";
+import { proven, rejectForbidden } from "../harness/route-client.testing.js";
 
 // role-floor.test.ts asserts the table; this asserts the surface the browser drives, where the two can drift apart.
 // An editor's explorer writes through /workspace/upload but everything else through oRPC, so a tier missing one route
@@ -14,7 +14,7 @@ import { rejectForbidden } from "../harness/route-client.testing.js";
 const appAs = (role: MemberRole): Hono<AppEnv> =>
     createApp(
         services({
-            auth: { authorize: async () => ({ email: `member@example.com`, role }), authorizeOwner: rejectForbidden },
+            auth: { authorize: async () => proven(`member@example.com`, role), authorizeOwner: rejectForbidden },
         }),
     );
 

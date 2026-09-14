@@ -259,6 +259,7 @@ describe(`isReviewableLockedPath`, () => {
         // None of the rest is versioned, so none is diff-reachable; the carve-out can't widen without that flag.
         expect(isReviewableLockedPath(`.intentic/identity/owner.json`)).toBe(false);
         expect(isReviewableLockedPath(`.intentic/identity/members.json`)).toBe(false);
+        expect(isReviewableLockedPath(`.intentic/identity/passkeys.json`)).toBe(false);
         expect(isReviewableLockedPath(`.intentic/secrets/ci.json`)).toBe(false);
         expect(isReviewableLockedPath(`.intentic/secrets/auth/codex/auth.json`)).toBe(false);
         expect(isReviewableLockedPath(`.intentic/records/sessions/claude/x.jsonl`)).toBe(false);
@@ -518,7 +519,7 @@ describe(`BACKED_UP_STATE_PATHS`, () => {
 
     // identity means never restoring into another sandbox; that doesn't stop the owner keeping their own copy.
     it(`copies the ownership records that may never travel`, () => {
-        for (const path of [`.intentic/identity/owner.json`, `.intentic/identity/members.json`, `.intentic/identity/workspace.json`]) {
+        for (const path of [`.intentic/identity/owner.json`, `.intentic/identity/members.json`, `.intentic/identity/workspace.json`, `.intentic/identity/passkeys.json`]) {
             expect([path, BACKED_UP_STATE_PATHS.includes(path)]).toEqual([path, true]);
         }
     });

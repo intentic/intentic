@@ -7,6 +7,7 @@ import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { unstubbed } from "@intentic/testing";
 import { createAgentsRegistry } from "../agents/registry/agents-registry.js";
 import { createAuthConnections } from "../auth/connections.js";
+import { createPasskeyCeremonies } from "../auth/passkeys.js";
 import type { ControlScope } from "../auth/control-tokens.js";
 import { memoryDoorTokens } from "../auth/door-tokens.js";
 import { createMediaTickets } from "../auth/media-tickets.js";
@@ -26,6 +27,7 @@ import {
     memoryCapabilitiesStore,
     memoryDismissalsStore,
     memoryMintedStore,
+    memoryPasskeyStore,
     memoryPersonasStore,
     memorySecretVault,
     memoryThreadSessionsStore,
@@ -112,6 +114,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
     // The phrase index these suites search through: production schema and SQL, over nothing.
     const testSaid = openSearchIndex(IN_MEMORY);
     // Completed by unstubbed: only what these suites rely on appears below; anything else names itself if reached.
+    // Shared by the store and the ceremonies over it, so a passkey a test registers is one the same suite can sign in with.
+    const passkeyStore = overrides.passkeys ?? memoryPasskeyStore();
     const merged: Services = unstubbed<Services>("services", {
         config: testConfig,
         logger: createLogger(testConfig),
@@ -473,6 +477,10 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             exists: async () => true,
         },
         members: { list: async () => [], add: async () => {}, remove: async () => {} },
+        // Real ceremonies over an empty memory store, every origin allowed: a suite that registers a passkey drives the
+        // actual verifier, and one that only lists sees nothing.
+        passkeys: passkeyStore,
+        passkeyCeremonies: createPasskeyCeremonies({ store: passkeyStore, originAllowed: () => true, sandboxId: "test-sandbox", sandboxName: "test" }),
         // Loopback unless a test asks for the exposed daemon: it's the key's absence, not an override of `undefined`,
         // that means loopback. CORS is separate, emitted in every mode from config.webOrigin.
         auth:
@@ -480,8 +488,10 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                 ? undefined
                 : {
                       authorize: rejectAuth,
+                      authorizeProven: rejectAuth,
                       authorizeOwner: rejectAuth,
                       authorizeRetirement: rejectAuth,
+                      authorizeRecovery: rejectAuth,
                       mintSession: async () => ({ token: "sess-token", expiresAt: 0 }),
                       // Owner-only and destructive: an unstubbed call names itself rather than silently answering 200.
                       rotateSessions: async () => {

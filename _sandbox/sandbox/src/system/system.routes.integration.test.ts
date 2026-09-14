@@ -13,7 +13,7 @@ import { createBootTracker } from "../platform/boot/boot.js";
 
 import { testConfig } from "../testing.js";
 
-import { clientFor, rejectAuth, rejectForbidden } from "../harness/route-client.testing.js";
+import { clientFor, proven, rejectAuth, rejectForbidden } from "../harness/route-client.testing.js";
 import { fakeFiles, fakeProcesses } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { publishRuntimeChange } from "./runtime-watch.js";
@@ -110,7 +110,7 @@ test("system.session exchanges the verified bearer for a daemon-minted session",
         createApp(
             services({
                 auth: {
-                    authorize: async () => ({ email: "o@x.com", role: "owner" as const }),
+                    authorize: async () => proven("o@x.com", "owner"),
                     authorizeOwner: rejectForbidden,
                     mintSession: async (identity: { email: string }) => ({ token: `sess-${identity.email}`, expiresAt: 42 }),
                 },
@@ -124,7 +124,7 @@ test("control-token mint/list/revoke are owner-gated plain routes; mint returns 
     const minted: { label: string; scope: string }[] = [];
     const app = createApp(
         services({
-            auth: { authorize: async () => ({ email: "o@x.com", role: "owner" as const }), authorizeOwner: async () => {} },
+            auth: { authorize: async () => proven("o@x.com", "owner"), authorizeOwner: async () => {} },
             controlTokens: {
                 mint: async (label, scope) => {
                     minted.push({ label, scope });
@@ -157,7 +157,7 @@ test("control-token mint/list/revoke are owner-gated plain routes; mint returns 
 
 test("minting without a usable scope is refused rather than defaulted", async () => {
     const app = createApp(
-        services({ auth: { authorize: async () => ({ email: "o@x.com", role: "owner" as const }), authorizeOwner: async () => {} } }),
+        services({ auth: { authorize: async () => proven("o@x.com", "owner"), authorizeOwner: async () => {} } }),
     );
     const mintWith = (body: unknown) =>
         app.request("/system/control/tokens", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -184,7 +184,7 @@ test("presence: an /events connection joins the roster and a /system/presence re
     const app = createApp(
         services({
             auth: {
-                authorize: async () => ({ email: "a@x.com", name: "Ada", picture: "https://p/a.png", role: "maintainer" as const }),
+                authorize: async () => ({ ...proven("a@x.com", "maintainer"), name: "Ada", picture: "https://p/a.png" }),
                 authorizeOwner: rejectForbidden,
             },
         }),
@@ -421,14 +421,14 @@ test("POST /system/sync/pair: the operating tier may mint sync, lower roles are 
     expect(await (await owner.request("/system/sync/pair", { method: "POST" })).json()).toMatchObject({ mode: "sync" });
     expect(await (await owner.request("/system/sync/pair?mode=mirror", { method: "POST" })).json()).toMatchObject({ mode: "mirror" });
     const maintainer = createApp(
-        services({ auth: { authorize: async () => ({ email: "m@x.com", role: "maintainer" as const }), authorizeOwner: rejectForbidden } }),
+        services({ auth: { authorize: async () => proven("m@x.com", "maintainer"), authorizeOwner: rejectForbidden } }),
     );
     expect(
         await (await maintainer.request("/system/sync/pair?mode=sync", { method: "POST", headers: { authorization: "Bearer m" } })).json(),
     ).toMatchObject({ mode: "sync" });
 
     const collaborator = createApp(
-        services({ auth: { authorize: async () => ({ email: "c@x.com", role: "collaborator" as const }), authorizeOwner: rejectForbidden } }),
+        services({ auth: { authorize: async () => proven("c@x.com", "collaborator"), authorizeOwner: rejectForbidden } }),
     );
     expect(
         await (await collaborator.request("/system/sync/pair?mode=sync", { method: "POST", headers: { authorization: "Bearer c" } })).json(),

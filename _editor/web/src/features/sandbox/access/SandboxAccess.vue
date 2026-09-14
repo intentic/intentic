@@ -31,6 +31,7 @@ import { identityHue } from "../../../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../../../shell/presence/usePresence";
 import { useAccessInventory } from "./useAccessInventory";
 import ControlTokensSection from "./ControlTokensSection.vue";
+import PasskeysSection from "./PasskeysSection.vue";
 
 // Owner-only invites: daemon's enforced /members list first, fail-closed (sandboxJson throws on non-2xx), then the
 // platform's record + email, each with its own error. A declined or refused send isn't a failure, since the grant is
@@ -419,6 +420,9 @@ const revoke = async (target: string): Promise<void> => {
                 <RowNote>Only the sandbox owner can invite people or change roles.</RowNote>
             </template>
         </RowGroup>
+
+        <!-- How people prove themselves to this sandbox, before what programs hold. -->
+        <PasskeysSection />
 
         <!-- Program credentials follow people and include every sandbox token. -->
         <ControlTokensSection />

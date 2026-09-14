@@ -16,6 +16,11 @@ describe("routeFloor", () => {
         expect(routeFloor("POST", "/system/presence")).toBe("viewer");
         expect(routeFloor("POST", "/workspace/media-ticket")).toBe("viewer");
         expect(routeFloor("DELETE", "/members/self")).toBe("viewer");
+        // One's own passkeys are identity, like staying signed in; the handler holds another member's to the owner.
+        expect(routeFloor("GET", "/system/passkeys")).toBe("viewer");
+        expect(routeFloor("POST", "/system/passkeys/register/options")).toBe("viewer");
+        expect(routeFloor("POST", "/system/passkeys/register")).toBe("viewer");
+        expect(routeFloor("DELETE", "/system/passkeys/abc_123")).toBe("viewer");
     });
 
     test("driving agents is the collaborator tier", () => {
@@ -65,5 +70,8 @@ describe("routeFloor", () => {
         expect(routeFloor("POST", "/no/such/route")).toBe("maintainer");
         expect(routeFloor("POST", "/members")).toBe("maintainer");
         expect(routeFloor("POST", "/system/sessions/revoke")).toBe("maintainer");
+        // The require-passkey switch and its recovery codes keep the mutation default under their ownership gate.
+        expect(routeFloor("POST", "/system/passkeys/policy")).toBe("maintainer");
+        expect(routeFloor("POST", "/system/passkeys/recovery")).toBe("maintainer");
     });
 });

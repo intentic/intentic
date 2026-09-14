@@ -12,6 +12,7 @@ import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel
 import { expect, test, vi } from "vitest";
 
 import { createApp } from "./app.js";
+import { PasskeyRequiredError } from "./auth/auth.js";
 import { createAuthConnections } from "./auth/connections.js";
 
 import { createLogger } from "./logger.js";
@@ -22,7 +23,7 @@ import type { AgentTool } from "./agent/tools/agent-tools.js";
 
 import { testConfig } from "./testing.js";
 
-import { clientFor, collect, errorCode, postJson, rejectAuth, rejectForbidden } from "./harness/route-client.testing.js";
+import { clientFor, collect, errorCode, postJson, proven, rejectAuth, rejectForbidden } from "./harness/route-client.testing.js";
 import { fakeFiles, fakeHistory } from "./harness/route-fakes.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "./harness/route-services.testing.js";
 import { automationRecord, memoryAutomationsStore, memoryCapabilitiesStore } from "./harness/route-stores.testing.js";
@@ -124,6 +125,39 @@ test("the boot gate holds data routes and lets the probe and the session exchang
     expect((await held).status).toBe(200);
 });
 
+// The third answer the bearer middleware can give: the identity is welcome, the proof is short of the sandbox's rule.
+test("a proof the require-passkey policy refuses answers 428 with whether a passkey is held, on every gated route", async () => {
+    const enrolled = createApp(
+        services({
+            auth: {
+                authorize: async () => {
+                    throw new PasskeyRequiredError(true);
+                },
+                authorizeOwner: rejectForbidden,
+            },
+        }),
+    );
+    const held = await enrolled.request("/settings", { headers: { authorization: "Bearer google" } });
+    expect(held.status).toBe(428);
+    expect(await held.json()).toEqual({ error: "this sandbox requires your passkey", requires: "passkey", enrolled: true });
+
+    const unenrolled = createApp(
+        services({
+            auth: {
+                authorize: async () => {
+                    throw new PasskeyRequiredError(false);
+                },
+                authorizeOwner: rejectForbidden,
+            },
+        }),
+    );
+    const first = await postJson(unenrolled, "/system/session");
+    expect(first.status).toBe(428);
+    expect(await first.json()).toEqual({ error: "this sandbox requires a passkey; add one to continue", requires: "passkey", enrolled: false });
+    // /health stays the unauthenticated probe it always was.
+    expect((await unenrolled.request("/health")).status).toBe(200);
+});
+
 test("system.session in loopback mode (no auth, no identity) answers 401: there is no session to mint", async () => {
     expect((await postJson(createApp(services({})), "/system/session")).status).toBe(401);
 });
@@ -133,7 +167,7 @@ test("system.session in loopback mode (no auth, no identity) answers 401: there 
 // It still has to be gated like any authenticated route: by the middleware, on a header.
 test("POST /system/ws-ticket mints a one-shot ticket for the verified caller, and 401s an unauthenticated one", async () => {
     const app = createApp(
-        services({ auth: { authorize: async () => ({ email: "o@x.com", role: "owner" as const }), authorizeOwner: rejectForbidden } }),
+        services({ auth: { authorize: async () => proven("o@x.com", "owner"), authorizeOwner: rejectForbidden } }),
     );
     const response = await postJson(app, "/system/ws-ticket");
     expect(response.status).toBe(200);
@@ -155,7 +189,7 @@ test("POST /system/sessions/revoke re-keys sessions, closes live access, drops t
     const connections = createAuthConnections();
     connections.register({ email: "owner@x.com", role: "owner" }, close);
     const auth = {
-        authorize: async () => ({ email: "member@x.com", role: "collaborator" as const }),
+        authorize: async () => proven("member@x.com", "collaborator"),
         authorizeOwner: rejectForbidden,
         rotateSessions: async () => void (rotations += 1),
         connections,
@@ -165,7 +199,7 @@ test("POST /system/sessions/revoke re-keys sessions, closes live access, drops t
     expect(rotations).toBe(0);
 
     const ownerServices = services({
-        auth: { ...auth, authorize: async () => ({ email: "owner@x.com", role: "owner" as const }), authorizeOwner: async () => {} },
+        auth: { ...auth, authorize: async () => proven("owner@x.com", "owner"), authorizeOwner: async () => {} },
     });
     const ticket = ownerServices.wsTickets.mint({ email: "owner@x.com", role: "owner" });
     const owner = createApp(ownerServices);
@@ -183,7 +217,7 @@ test("account deletion can retire owner access permanently, and a member can rem
     const rotate = vi.fn(async () => {});
     const ownerServices = services({
         auth: {
-            authorize: async () => ({ email: "owner@x.com", role: "owner" as const }),
+            authorize: async () => proven("owner@x.com", "owner"),
             authorizeOwner: async () => {},
             authorizeRetirement: async () => {},
             disableBrowserAccess: disable,
@@ -220,7 +254,7 @@ test("account deletion can retire owner access permanently, and a member can rem
     memberConnections.register({ email: "member@x.com", role: "viewer" }, memberClose);
     const memberServices = services({
         auth: {
-            authorize: async () => ({ email: "member@x.com", role: "viewer" as const }),
+            authorize: async () => proven("member@x.com", "viewer"),
             authorizeOwner: rejectForbidden,
             connections: memberConnections,
         },
@@ -233,7 +267,7 @@ test("account deletion can retire owner access permanently, and a member can rem
     expect(memberServices.wsTickets.redeem(memberTicket)).toBeUndefined();
 
     const ownerCannotSelfRemove = createApp(
-        services({ auth: { authorize: async () => ({ email: "owner@x.com", role: "owner" as const }), authorizeOwner: async () => {} } }),
+        services({ auth: { authorize: async () => proven("owner@x.com", "owner"), authorizeOwner: async () => {} } }),
     );
     expect((await ownerCannotSelfRemove.request("/members/self", { method: "DELETE" })).status).toBe(400);
 });
@@ -290,7 +324,7 @@ test("control-token scopes widen: read observes, drive works, only land merges",
 test("POST /enroll rejects a wrong connect token and 412s until DevOps (when auth is enforced)", async () => {
     const app = createApp(
         services({
-            auth: { authorize: async () => ({ email: "a@x.com", role: "owner" as const }), authorizeOwner: async () => {} },
+            auth: { authorize: async () => proven("a@x.com", "owner"), authorizeOwner: async () => {} },
             config: { ...testConfig, connectToken: "ct" },
         }),
     );
@@ -1114,7 +1148,7 @@ test("environment: lower roles read state, maintainers approve/reject, and failu
     const memberApp = createApp(
         services({
             files: memoryFiles,
-            auth: { authorize: async () => ({ email: "member@example.com", role: "collaborator" as const }), authorizeOwner: rejectForbidden },
+            auth: { authorize: async () => proven("member@example.com", "collaborator"), authorizeOwner: rejectForbidden },
         }),
     );
     const seen = await memberApp.request("/environment");

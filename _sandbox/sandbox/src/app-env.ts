@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import type { Caller } from "./auth/auth.js";
+import type { ProvenCaller } from "./auth/auth.js";
 import type { Principal } from "./auth/principal.js";
 
 // The Hono env: the bearer middleware stashes the caller's verified identity so the oRPC context below can
@@ -8,7 +8,7 @@ import type { Principal } from "./auth/principal.js";
 // a party (a control token) stashes a principal instead (auth/principal.ts): no member identity, but a name the
 // work can be attributed to.
 export interface AppEnv {
-    Variables: { identity?: Caller; principal?: Principal };
+    Variables: { identity?: ProvenCaller; principal?: Principal };
 }
 
 // Per-request context handed to every oRPC handler. Auth + CORS run as Hono middleware ahead of the oRPC
@@ -19,7 +19,7 @@ export interface OrpcContext {
     headers: Headers;
     method: string;
     url: string;
-    identity?: Caller;
+    identity?: ProvenCaller;
     principal?: Principal;
 }
 

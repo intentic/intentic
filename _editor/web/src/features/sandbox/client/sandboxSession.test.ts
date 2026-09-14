@@ -24,7 +24,12 @@ const state = vi.hoisted(() => ({
     releaseMint: (): void => {},
     // Points the workspace at another sandbox like the switcher does, via the ref the module watches.
     select: (_id: string | undefined): void => {},
+    // Whether the daemon says a passkey is registered for this origin, the one thing the sign-in moment asks it.
+    passkeyOffered: false,
 }));
+
+// The passkey ceremonies are the gate's; here only the offer the sign-in moment asks for is answered.
+vi.mock("./passkeySignIn", () => ({ passkeyOffered: async () => state.passkeyOffered }));
 
 vi.mock("../../auth/useGoogleIdentity", () => ({
     useGoogleIdentity: () => ({
@@ -113,6 +118,7 @@ beforeEach(() => {
     state.canceled = 0;
     state.sandboxId = `sb-1`;
     state.mintParks = false;
+    state.passkeyOffered = false;
     // The active-sandbox ref lives in the mock factory (evaluated once per file) and survives load(); reset by hand.
     state.select(`sb-1`);
 });
@@ -441,4 +447,95 @@ it(`presentedEmail names the session identity, falling back to the Google creden
     expect(presentedEmail.value).toBe(`member@x.com`);
     invalidateSession();
     expect(presentedEmail.value).toBe(`google@x.com`);
+});
+
+// The daemon's third answer to an exchange: the proof is welcome, the sandbox requires a passkey. The gate is asked,
+// and the ceremony's session becomes the bearer; the Google proof that was taken is kept, since it was not refused.
+const stepUpResponse = (enrolled: boolean): Response =>
+    new Response(JSON.stringify({ error: `this sandbox requires a passkey`, requires: `passkey`, enrolled }), {
+        status: 428,
+        headers: { "content-type": `application/json` },
+    });
+const PASSKEY_SESSION = { token: `sess-passkey`, expiresAt: Date.now() + 30 * DAY_MS, email: `o@x.com` };
+
+it(`a 428 on the exchange raises the step-up with the proof it took, and the ceremony's session becomes the bearer`, async () => {
+    const fetchMock = vi.fn(async () => stepUpResponse(true));
+    vi.stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+    const { completeSignIn, useSignInPrompt } = await import("./signInPrompt");
+    const { prompt } = useSignInPrompt();
+    const pending = useSandboxSession().getSessionToken();
+    await vi.waitFor(() => expect(prompt.value).toMatchObject({ kind: `step-up`, enrolled: true, bearer: `id-token` }));
+    completeSignIn(PASSKEY_SESSION);
+    expect(await pending).toEqual({ token: `sess-passkey`, kind: `session` });
+    expect(JSON.parse(localStorage.getItem(`intentic.session.sb-1`) ?? ``)).toMatchObject({ token: `sess-passkey`, email: `o@x.com` });
+    expect(prompt.value).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(state.cleared).toBe(0);
+});
+
+it(`dismissing the step-up resolves nothing, stores nothing, and keeps the Google proof`, async () => {
+    vi.stubGlobal(`fetch`, vi.fn(async () => stepUpResponse(false)));
+    const { useSandboxSession } = await load();
+    const { dismissSignIn, useSignInPrompt } = await import("./signInPrompt");
+    const pending = useSandboxSession().getSessionToken();
+    await vi.waitFor(() => expect(useSignInPrompt().prompt.value).toMatchObject({ kind: `step-up`, enrolled: false }));
+    dismissSignIn();
+    expect(await pending).toBeUndefined();
+    expect(localStorage.getItem(`intentic.session.sb-1`)).toBeNull();
+    expect(state.cleared).toBe(0);
+});
+
+it(`a background exchange answered 428 raises no gate and establishes nothing`, async () => {
+    state.cachedIdToken = `cached-token`;
+    const fetchMock = vi.fn(async () => stepUpResponse(true));
+    vi.stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+    const { useSignInPrompt } = await import("./signInPrompt");
+    expect(await useSandboxSession().getSessionToken(otherBox, { background: true })).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(useSignInPrompt().prompt.value).toBeUndefined();
+});
+
+it(`with nothing in hand the prompt offers a passkey once the daemon has one, and its session wins without an exchange`, async () => {
+    state.mintParks = true;
+    state.passkeyOffered = true;
+    const fetchMock = vi.fn();
+    vi.stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+    const { completeSignIn, useSignInPrompt } = await import("./signInPrompt");
+    const { prompt } = useSignInPrompt();
+    const pending = useSandboxSession().getSessionToken();
+    await vi.waitFor(() => expect(prompt.value).toMatchObject({ kind: `choose`, passkey: true }));
+    completeSignIn(PASSKEY_SESSION);
+    expect(await pending).toEqual({ token: `sess-passkey`, kind: `session` });
+    // Google's parked mint is settled so nothing stays behind the gate, and no exchange ran: the passkey door minted.
+    expect(state.canceled).toBe(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(prompt.value).toBeUndefined();
+});
+
+it(`dismissing Google's gate takes the passkey offer down with it`, async () => {
+    state.mintParks = true;
+    vi.stubGlobal(`fetch`, vi.fn());
+    const { useSandboxSession } = await load();
+    const { useSignInPrompt } = await import("./signInPrompt");
+    const { prompt } = useSignInPrompt();
+    const pending = useSandboxSession().getSessionToken();
+    await vi.waitFor(() => expect(prompt.value).toMatchObject({ kind: `choose`, passkey: false }));
+    state.releaseMint();
+    expect(await pending).toBeUndefined();
+    expect(prompt.value).toBeUndefined();
+});
+
+it(`adoptSession stores a session another ceremony minted, served from then on without a mint`, async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+    const { adoptSession, getSessionToken, presentedEmail } = useSandboxSession();
+    adoptSession(`sb-1`, { ...PASSKEY_SESSION, email: `passkey@x.com` });
+    expect(await getSessionToken()).toEqual({ token: `sess-passkey`, kind: `session` });
+    expect(presentedEmail.value).toBe(`passkey@x.com`);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(state.minted).toBe(0);
 });

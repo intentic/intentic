@@ -1,6 +1,6 @@
 # @intentic/sandbox
 
-The **per-project AI-agent dev daemon**, a Docker image that runs as the project's workspace container on the customer's host. It exposes an HTTP API the browser drives **directly** over the sandbox's own tunnel (Google-backed renewable sessions): run provider-native agent turns over the project's repos, run the `intentic` CLI, do git operations, read/write inventory, and report the dev-server preview. Ships to GHCR as `ghcr.io/intentic/sandbox`. A private package (not published to npm).
+The **per-project AI-agent dev daemon**, a Docker image that runs as the project's workspace container on the customer's host. It exposes an HTTP API the browser drives **directly** over the sandbox's own tunnel (renewable sessions established from Google or from a passkey the daemon is the relying party for): run provider-native agent turns over the project's repos, run the `intentic` CLI, do git operations, read/write inventory, and report the dev-server preview. Ships to GHCR as `ghcr.io/intentic/sandbox`. A private package (not published to npm).
 
 The daemon runs in one of two **profiles** ([src/platform/boot/profile.ts](src/platform/boot/profile.ts)). `container`
 (the default) is everything above. `local` is the same daemon as a plain process on the user's own machine,
@@ -53,7 +53,7 @@ A directory-by-directory tour is [docs/subsystems.md](docs/subsystems.md); the d
 
 ## How it fits
 
-The agent half of the dev plane. The browser talks to this daemon **directly** over the sandbox's own tunnel; the daemon verifies Google identity when establishing a renewable session, resolves the selected provider's credential from its **own** stored accounts, and starts that provider's runtime per turn. The platform is never on this path and never contacts the sandbox: it only stores the sandbox's public URL (which the browser derived and wrote) so the browser knows where to reach it; the browser alone probes the daemon for liveness (`/health` + the `/events` stream).
+The agent half of the dev plane. The browser talks to this daemon **directly** over the sandbox's own tunnel; the daemon verifies Google identity, or a passkey registered with it, when establishing a renewable session, resolves the selected provider's credential from its **own** stored accounts, and starts that provider's runtime per turn. The platform is never on this path and never contacts the sandbox: it only stores the sandbox's public URL (which the browser derived and wrote) so the browser knows where to reach it; the browser alone probes the daemon for liveness (`/health` + the `/events` stream).
 
 Native Codex turns use `codex app-server --stdio`. A subscription turn gives app-server a custom Responses
 provider aimed at the bundled CLIProxyAPI translator; the translator authenticates upstream with the owner's

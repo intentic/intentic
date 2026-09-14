@@ -133,3 +133,120 @@ export const DaemonSessionSchema = z.object({
     email: z.string().describe("Who the sandbox verified you as."),
 });
 export type DaemonSession = z.infer<typeof DaemonSessionSchema>;
+
+// Passkeys registered with one sandbox, and the owner's rule that a passkey is the only proof that opens it. The
+// daemon is the WebAuthn relying party; these are the shapes its /system/passkeys routes and the 428 step-up carry.
+
+// How a session's identity was proven. A session carries the set it was minted from; the require-passkey policy reads
+// it on every request, so a session minted before the switch stops working on its next call.
+export const ProofMethodSchema = z.enum(["google", "ticket", "passkey", "recovery"]);
+export type ProofMethod = z.infer<typeof ProofMethodSchema>;
+
+export const PasskeySummarySchema = z.object({
+    id: z.string().describe("The credential id the authenticator chose, base64url."),
+    email: z.string().describe("Whose passkey this is; the owner's list carries every member's, a member's only their own."),
+    label: z.string().describe("The name given at registration, or the daemon's default."),
+    rpId: z.string().describe("The editor host this passkey is bound to; a passkey answers only from that origin."),
+    createdAt: z.number().describe("Epoch ms of registration."),
+    lastUsedAt: z.number().optional().describe("Epoch ms of the last sign-in it answered; absent means never."),
+    backedUp: z.boolean().describe("Whether the authenticator syncs this passkey (a phone's keychain) or holds the only copy (a hardware key)."),
+});
+export type PasskeySummary = z.infer<typeof PasskeySummarySchema>;
+
+export const PasskeysListSchema = z.object({
+    passkeys: z.array(PasskeySummarySchema),
+    required: z.boolean().describe("Whether a passkey is the only proof that opens this sandbox; owner-set."),
+    recovery: z
+        .object({ remaining: z.number() })
+        .optional()
+        .describe("Owner only, while required: how many one-time recovery codes are still unspent."),
+});
+export type PasskeysList = z.infer<typeof PasskeysListSchema>;
+
+export const PasskeyPolicySchema = z.object({ required: z.boolean() });
+export type PasskeyPolicy = z.infer<typeof PasskeyPolicySchema>;
+
+// Shown exactly once: the daemon keeps only their hashes.
+export const RecoveryCodesSchema = z.object({ codes: z.array(z.string()) });
+export type RecoveryCodes = z.infer<typeof RecoveryCodesSchema>;
+
+export const PasskeyRecoverRequestSchema = z.object({ code: z.string().min(1) });
+
+// The 428 body: the caller is who they say, but this sandbox requires a passkey and the proof presented has none.
+// `enrolled` says whether they hold one to answer with, or must add their first before anything else is served.
+export const PasskeyRequiredSchema = z.object({
+    error: z.string(),
+    requires: z.literal("passkey"),
+    enrolled: z.boolean(),
+});
+export type PasskeyRequired = z.infer<typeof PasskeyRequiredSchema>;
+
+// The two WebAuthn responses as the browser serialises them (`PublicKeyCredential.toJSON()`); every binary field is
+// base64url. The daemon parses the body with these before any cryptography runs.
+const Base64Url = z.string().regex(/^[A-Za-z0-9_-]+$/, "base64url");
+
+export const RegistrationResponseSchema = z.object({
+    id: Base64Url,
+    rawId: Base64Url,
+    type: z.literal("public-key"),
+    response: z.object({
+        clientDataJSON: Base64Url,
+        attestationObject: Base64Url,
+        transports: z.array(z.string()).optional(),
+    }),
+    authenticatorAttachment: z.string().optional(),
+    clientExtensionResults: z.record(z.string(), z.unknown()).optional(),
+});
+export type RegistrationResponse = z.infer<typeof RegistrationResponseSchema>;
+
+export const AuthenticationResponseSchema = z.object({
+    id: Base64Url,
+    rawId: Base64Url,
+    type: z.literal("public-key"),
+    response: z.object({
+        clientDataJSON: Base64Url,
+        authenticatorData: Base64Url,
+        signature: Base64Url,
+        userHandle: Base64Url.optional(),
+    }),
+    authenticatorAttachment: z.string().optional(),
+    clientExtensionResults: z.record(z.string(), z.unknown()).optional(),
+});
+export type AuthenticationResponse = z.infer<typeof AuthenticationResponseSchema>;
+
+export const PasskeyRegisterRequestSchema = z.object({
+    response: RegistrationResponseSchema,
+    label: z.string().optional(),
+});
+
+export const PasskeyAssertRequestSchema = z.object({ response: AuthenticationResponseSchema });
+
+// The options the daemon hands the browser, in the JSON form `PublicKeyCredential.parseCreationOptionsFromJSON` and
+// `parseRequestOptionsFromJSON` take. Typed rather than parsed: only the daemon writes them.
+export interface CredentialDescriptorJSON {
+    readonly type: "public-key";
+    readonly id: string;
+    readonly transports?: readonly string[];
+}
+
+export interface RegistrationOptionsJSON {
+    readonly rp: { readonly id: string; readonly name: string };
+    readonly user: { readonly id: string; readonly name: string; readonly displayName: string };
+    readonly challenge: string;
+    readonly pubKeyCredParams: readonly { readonly type: "public-key"; readonly alg: number }[];
+    readonly timeout: number;
+    readonly attestation: "none";
+    readonly excludeCredentials: readonly CredentialDescriptorJSON[];
+    readonly authenticatorSelection: { readonly residentKey: "required"; readonly requireResidentKey: true; readonly userVerification: "required" };
+}
+
+export interface AuthenticationOptionsJSON {
+    readonly rpId: string;
+    readonly challenge: string;
+    readonly timeout: number;
+    readonly userVerification: "required";
+    readonly allowCredentials: readonly CredentialDescriptorJSON[];
+    // Whether any passkey is registered for this origin at all, so a sign-in screen can offer the button only when
+    // pressing it can succeed.
+    readonly available: boolean;
+}

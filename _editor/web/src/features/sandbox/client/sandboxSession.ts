@@ -1,15 +1,18 @@
 import { computed, ref, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import type { SandboxSummary } from "@intentic/api-contract";
+import { type DaemonSession, type PasskeyRequired, PasskeyRequiredSchema } from "@intentic/sandbox-contract";
 import { removeStoredValue, storedKeys, storedValue, storeValue } from "../../../lib/browserStorage";
 import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
 import { healthAnswers, sandboxIdOf } from "../secrets/endpoint";
+import { passkeyOffered } from "./passkeySignIn";
+import { dismissSignIn, offerPasskey, raiseSignIn } from "./signInPrompt";
 import { useSandbox } from "./useSandbox";
 import { currentSandboxTarget, type SandboxTarget } from "./sandboxTarget";
 
-// The credential every daemon call presents, a daemon-minted session, with the Google ID token demoted to the
-// proof that establishes it: steady state no longer means an hourly Google reauth. Sessions are per sandbox,
-// persisted, and renewed in the background near expiry; only a call somebody is waiting on may prompt Google.
+// The credential every daemon call presents, a daemon-minted session, with the Google ID token (or a passkey) demoted
+// to the proof that establishes it: steady state no longer means an hourly Google reauth. Sessions are per sandbox,
+// persisted, and renewed in the background near expiry; only a call somebody is waiting on may prompt for a sign-in.
 
 interface StoredSession {
     readonly token: string;
@@ -102,9 +105,35 @@ const write = (sandboxId: string, session: StoredSession, broadcast = true): voi
     }
 };
 
+// The daemon's third answer to an exchange: the identity is welcome, the proof is short of the sandbox's passkey rule.
+interface StepUp {
+    readonly stepUp: PasskeyRequired;
+}
+
+const storedOf = (session: DaemonSession): StoredSession => ({ token: session.token, expiresAt: session.expiresAt, email: session.email });
+
+// The minted session off the exchange's body, or a throw for a daemon answering with something else.
+const mintedFrom = (body: unknown): StoredSession => {
+    const fields = typeof body === `object` && body !== null ? (body as { token?: unknown; expiresAt?: unknown; email?: unknown }) : {};
+    if (typeof fields.token !== `string` || fields.token === `` || typeof fields.expiresAt !== `number` || !Number.isFinite(fields.expiresAt) || typeof fields.email !== `string`) {
+        throw new Error(`The sandbox returned an invalid session.`);
+    }
+    if (Date.now() >= fields.expiresAt - EXPIRY_MARGIN_MS) {
+        throw new Error(`The sandbox returned an expired session.`);
+    }
+    return { token: fields.token, expiresAt: fields.expiresAt, email: fields.email };
+};
+
+// The step-up off a 428: a body that isn't the contract's still means the step-up, with `enrolled` false walking through
+// adding a first passkey; the daemon refusing a second one is what tells the truth.
+const stepUpFrom = (body: unknown): StepUp => {
+    const required = PasskeyRequiredSchema.safeParse(body);
+    return { stepUp: required.success ? required.data : { error: `this sandbox requires a passkey`, requires: `passkey`, enrolled: false } };
+};
+
 // Exchanges a verified bearer for a fresh session. A raw fetch on purpose: routing through sandboxRpc would
 // recurse back into this module's own headers hook.
-const exchange = async (target: SandboxTarget, bearer: string): Promise<StoredSession | `unauthorized`> => {
+const exchange = async (target: SandboxTarget, bearer: string): Promise<StoredSession | `unauthorized` | StepUp> => {
     try {
         const response = await fetch(`${target.base}/system/session`, {
             method: `POST`,
@@ -117,23 +146,13 @@ const exchange = async (target: SandboxTarget, bearer: string): Promise<StoredSe
         if (response.status === 401) {
             return `unauthorized`;
         }
+        if (response.status === 428) {
+            return stepUpFrom(await response.json().catch(() => undefined));
+        }
         if (!response.ok) {
             throw new SandboxSessionError(response.status, `The sandbox refused its session exchange (${response.status}).`);
         }
-        const body = (await response.json()) as { token?: unknown; expiresAt?: unknown; email?: unknown };
-        if (
-            typeof body.token !== `string` ||
-            body.token === `` ||
-            typeof body.expiresAt !== `number` ||
-            !Number.isFinite(body.expiresAt) ||
-            typeof body.email !== `string`
-        ) {
-            throw new Error(`The sandbox returned an invalid session.`);
-        }
-        if (Date.now() >= body.expiresAt - EXPIRY_MARGIN_MS) {
-            throw new Error(`The sandbox returned an expired session.`);
-        }
-        return { token: body.token, expiresAt: body.expiresAt, email: body.email };
+        return mintedFrom(await response.json());
     } catch (error) {
         if (error instanceof Error && error.name === `TimeoutError`) {
             throw new Error(`The sandbox did not finish signing in within 10 seconds.`, { cause: error });
@@ -164,51 +183,90 @@ const ownerTicketFor = async (target: SandboxTarget): Promise<string | undefined
     }
 };
 
-// The proof to spend: a cached one is free, a platform ticket is free of interruption too, and a fresh Google
-// mint is the last resort, only for a foreground caller once the daemon's been shown to answer.
-const proveIdentity = async (target: SandboxTarget, background: boolean): Promise<string | undefined> => {
+// The proof already in hand, free of interruption: a cached Google credential, or a platform ticket on a hosted box.
+const heldProof = async (target: SandboxTarget, background: boolean): Promise<string | undefined> => {
     const held = await getIdToken({ interactive: false });
-    if (held !== undefined || background) {
-        return held;
-    }
-    const vouched = await ownerTicketFor(target);
-    if (vouched !== undefined) {
-        return vouched;
-    }
-    return (await daemonAnswers(target)) ? getIdToken() : undefined;
+    return held !== undefined || background ? held : ownerTicketFor(target);
 };
 
-// The sign-in moment: spends a Google proof (cached, or freshly minted for a foreground caller) and exchanges
-// it. Network or malformed-response failures are thrown, not swallowed: a daemon that can't mint a session is
+type SignInChoice = { readonly kind: `google`; readonly idToken: string } | { readonly kind: `session`; readonly session: StoredSession };
+
+// The sign-in moment for someone with nothing in hand: Google's gate goes up, and a passkey is offered beside it once
+// the daemon says one is registered for this origin; whichever the person answers with settles it, and the other road
+// is closed so nothing stays parked.
+const chooseSignIn = async (target: SandboxTarget): Promise<SignInChoice | undefined> => {
+    if (!(await daemonAnswers(target))) {
+        return undefined;
+    }
+    const viaPasskey = raiseSignIn({ kind: `choose`, target, passkey: false }).then(
+        (session): SignInChoice | undefined => (session === undefined ? undefined : { kind: `session`, session: storedOf(session) }),
+    );
+    void passkeyOffered(target)
+        .then((offered) => offerPasskey(target, offered))
+        .catch(() => undefined);
+    const viaGoogle = getIdToken().then((idToken): SignInChoice | undefined => (idToken === undefined ? undefined : { kind: `google`, idToken }));
+    const chosen = await Promise.race([viaGoogle, viaPasskey]);
+    cancelSignIn();
+    dismissSignIn();
+    return chosen;
+};
+
+// A Google proof the sandbox accepted but will not open for: the gate asks for the passkey held, or walks through
+// adding a first one under this proof, and the ceremony's session comes back here.
+const stepUp = async (target: SandboxTarget, bearer: string, required: PasskeyRequired): Promise<StoredSession | undefined> => {
+    const session = await raiseSignIn({ kind: `step-up`, target, enrolled: required.enrolled, bearer });
+    return session === undefined ? undefined : storedOf(session);
+};
+
+// Exchanges a Google proof, following the daemon's three answers: a session; a refusal, which kills the proof and
+// earns one interactive retry when someone is waiting; or the passkey step-up, which a background poll never enters.
+const settleExchange = async (target: SandboxTarget, idToken: string, background: boolean, retry: boolean): Promise<StoredSession | undefined> => {
+    const minted = await exchange(target, idToken);
+    if (minted === `unauthorized`) {
+        // A background poll's refusal says nothing about the credential; only a foreground rejection clears it.
+        if (background) {
+            return undefined;
+        }
+        clearCredential();
+        if (!retry) {
+            throw new Error(`The sandbox rejected your Google sign-in.`);
+        }
+        // A rejected proof is dead; drop it and let this action drive one interactive retry rather than looping.
+        void import("../../../app/analytics").then(({ track }) => track(`sandbox_signin_gate`, { reason: `daemon-401` })).catch(() => undefined);
+        const replacement = await getIdToken();
+        return replacement === undefined ? undefined : settleExchange(target, replacement, false, false);
+    }
+    if (`stepUp` in minted) {
+        return background ? undefined : stepUp(target, idToken, minted.stepUp);
+    }
+    return minted;
+};
+
+// One establishment's road to a session: a held proof exchanged, else (for a foreground caller) the sign-in moment.
+const mintSession = async (target: SandboxTarget, background: boolean): Promise<StoredSession | undefined> => {
+    const held = await heldProof(target, background);
+    if (held !== undefined) {
+        return settleExchange(target, held, background, true);
+    }
+    if (background) {
+        return undefined;
+    }
+    const chosen = await chooseSignIn(target);
+    if (chosen === undefined) {
+        return undefined;
+    }
+    return chosen.kind === `session` ? chosen.session : settleExchange(target, chosen.idToken, false, true);
+};
+
+// The sign-in moment: spends a proof (cached, a passkey, or freshly minted Google for a foreground caller) and
+// exchanges it. Network or malformed-response failures are thrown, not swallowed: a daemon that can't mint a session is
 // broken, not just old.
 const establish = (target: SandboxTarget & { readonly sandboxId: string }, background: boolean): Promise<SandboxBearer | undefined> => {
     const generation = generationOf(target.sandboxId);
     const pending: Promise<SandboxBearer | undefined> = (async (): Promise<SandboxBearer | undefined> => {
-        const idToken = await proveIdentity(target, background);
-        if (idToken === undefined) {
+        const minted = await mintSession(target, background);
+        if (minted === undefined || generationOf(target.sandboxId) !== generation) {
             return undefined;
-        }
-        let minted = await exchange(target, idToken);
-        if (minted === `unauthorized` && !background) {
-            // A rejected proof is dead; drop it and let this action drive one interactive retry rather than looping.
-            void import("../../../app/analytics").then(({ track }) => track(`sandbox_signin_gate`, { reason: `daemon-401` })).catch(() => undefined);
-            clearCredential();
-            const replacement = await getIdToken();
-            if (replacement === undefined) {
-                return undefined;
-            }
-            minted = await exchange(target, replacement);
-        }
-        if (generationOf(target.sandboxId) !== generation) {
-            return undefined;
-        }
-        if (minted === `unauthorized`) {
-            // A background poll's refusal says nothing about the credential; only a foreground rejection clears it.
-            if (background) {
-                return undefined;
-            }
-            clearCredential();
-            throw new Error(`The sandbox rejected your Google sign-in.`);
         }
         write(target.sandboxId, minted);
         return { token: minted.token, kind: `session` };
@@ -240,7 +298,7 @@ const renew = async (target: SandboxTarget & { readonly sandboxId: string }, ses
     renewing.add(target.sandboxId);
     try {
         const minted = await exchange(target, sessionToken);
-        if (minted !== `unauthorized` && generation === generationOf(target.sandboxId)) {
+        if (minted !== `unauthorized` && !(`stepUp` in minted) && generation === generationOf(target.sandboxId)) {
             write(target.sandboxId, minted);
         }
         // A failed renewal changes nothing: the session works until expiry, a real rejection re-establishes next call.
@@ -308,6 +366,10 @@ watch(activeSandboxId, (id, previous) => {
     }
     cancelSignIn();
 });
+
+// Stores a session another ceremony minted for this browser: registering a passkey upgrades the session that asked,
+// and keeping the upgraded one is what lets the owner switch the passkey rule on without being asked for it at once.
+const adoptSession = (sandboxId: string, session: DaemonSession): void => write(sandboxId, storedOf(session));
 
 // Drops the active sandbox's session (a 401, a rotated secret, an account switch); the next call re-establishes
 // from a fresh Google proof.
@@ -430,7 +492,7 @@ const sessionExpiresAt = computed<number | undefined>(() => {
 });
 
 export function useSandboxSession() {
-    return { presentedEmail, sessionExpiresAt, getSessionToken, rejectSessionToken, invalidateSession, clearSessions, retireAccountAccess };
+    return { presentedEmail, sessionExpiresAt, getSessionToken, rejectSessionToken, adoptSession, invalidateSession, clearSessions, retireAccountAccess };
 }
 
 // One session store and channel per window: a hot-reloaded copy would mint into an instance nothing reads.

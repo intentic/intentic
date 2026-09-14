@@ -7,7 +7,7 @@ import { useAuth } from "./features/auth/useAuth";
 import { useSandbox } from "./features/sandbox/client/useSandbox";
 import { startNotificationSources } from "./shell/notifications/notificationSources";
 import NotificationHost from "./shell/notifications/NotificationHost.vue";
-import GoogleSigninGate from "./features/sandbox/gates/GoogleSigninGate.vue";
+import SigninGate from "./features/sandbox/gates/SigninGate.vue";
 import WindowControls from "./shell/window/WindowControls.vue";
 import WorkspaceRuntime from "./shell/WorkspaceRuntime.vue";
 
@@ -30,7 +30,7 @@ watch(user, (current, previous) => {
 <template>
     <RouterView />
     <WorkspaceRuntime v-if="user && activeSandboxId" />
-    <GoogleSigninGate />
+    <SigninGate />
     <HostModelPicker />
 <!-- THE ONE LANE. -->
     <NotificationHost />

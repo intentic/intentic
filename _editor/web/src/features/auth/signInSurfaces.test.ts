@@ -43,18 +43,18 @@ vi.mock(`./useGoogleIdentity`, () => ({
 vi.mock(`./useAuth`, () => ({
     useAuth: () => ({ user: ref({ email: `owner@example.com` }), signInWithGoogle: vi.fn(), signInWithGoogleCredential: vi.fn() }),
 }));
-vi.mock(`../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined) }) }));
+vi.mock(`../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: ref(undefined) }) }));
 vi.mock(`../../lib/useApi`, () => ({ apiClient: { desktop: { handoff: vi.fn() } } }));
 
 const { default: Login } = await import("./Login.vue");
 const { default: DesktopAuth } = await import("./DesktopAuth.vue");
-const { default: GoogleSigninGate } = await import("../sandbox/gates/GoogleSigninGate.vue");
+const { default: SigninGate } = await import("../sandbox/gates/SigninGate.vue");
 
 // Membership rule: any surface that can put a sign-in in front of someone, not just ones that import Google (which
 // would miss the gate).
 const SURFACES = [
     { name: `the login screen`, component: Login },
-    { name: `the workspace's sandbox gate`, component: GoogleSigninGate },
+    { name: `the workspace's sandbox gate`, component: SigninGate },
     { name: `the desktop hand-off page`, component: DesktopAuth },
 ] as const;
 

@@ -9,7 +9,9 @@ import { ORPCError } from "@orpc/server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
-import { bearerFrom, ForbiddenError } from "./auth/auth.js";
+import { bearerFrom, ForbiddenError, PasskeyRequiredError } from "./auth/auth.js";
+import { allowedOriginsOf, originAllowedBy } from "./auth/origins.js";
+import { createPasskeyRoutes } from "./auth/passkeys.routes.js";
 import { createAccessRoutes } from "./auth/access.routes.js";
 import { createControlTokenRoutes } from "./auth/control-tokens.routes.js";
 import { createMembersRoutes } from "./auth/members.routes.js";
@@ -108,6 +110,12 @@ const peerMcpPaths = PEER_DOORS.flatMap((door) => (door.mcp === undefined ? [] :
 // `session` moves a site sign-in into a sandbox profile; `lend` moves one back out.
 const webextCredentialPath = (path: string): boolean => path === "/system/webext/session" || path === "/system/webext/lend";
 
+// A passkey's sign-in doors: the assertion has no bearer yet (it is how one is minted), and the recovery door checks
+// its own bearer since the policy would otherwise hold the owner it exists for out.
+const PASSKEY_SIGNIN_PATHS = new Set(["/system/passkeys/assert/options", "/system/passkeys/assert", "/system/session/recover"]);
+// The two registration routes, where a proof with no passkey may pass the policy for an identity holding none yet.
+const passkeyEnrolmentPath = (path: string): boolean => path === "/system/passkeys/register/options" || path === "/system/passkeys/register";
+
 // A runner's other doors: its own bearer token for the git routes, plus its credential doors (runners/).
 const runnerGitPath = /^\/system\/runners\/git\/[^/]+\/(?:info\/refs|git-upload-pack|git-receive-pack)$/;
 const runnerPublicPath = (path: string): boolean =>
@@ -115,6 +123,37 @@ const runnerPublicPath = (path: string): boolean =>
     path === "/system/runners/credentials/refresh" ||
     path.startsWith("/system/runners/translator/") ||
     runnerGitPath.test(path);
+
+// The paths the bearer middleware does not gate, each checking its own credential or none. Exact-path only: the
+// owner's per-machine revoke (/system/authorized-key/:machine) is not exempt and goes through the middleware.
+const BEARER_EXEMPT_PATHS = new Set([
+    "/health",
+    // A WebSocket upgrade carries no Authorization header; the terminal and the two browser wires authorize via the
+    // query string.
+    "/system/terminal",
+    "/system/browser-profile",
+    "/system/browser-view",
+    // Fetched by a <video>/<audio> tag or navigated to, so no header either; each checks its own scoped ticket.
+    "/workspace/media",
+    "/bundles/download",
+    "/enroll",
+    // The desktop-sync agent's door: POST redeems a one-time pairing, DELETE is the agent revoking with its own token.
+    "/system/authorized-key",
+    // Account deletion must stay repeatable after a partial attempt; the handler does its own owner check.
+    "/system/access/disable",
+    ...PASSKEY_SIGNIN_PATHS,
+]);
+const bearerExemptPath = (path: string): boolean =>
+    BEARER_EXEMPT_PATHS.has(path) ||
+    eventFirePath.test(path) ||
+    webchatPublicPath(path) ||
+    intakePublicPath(path) ||
+    ciWebhookPath.test(path) ||
+    gatePath.test(path) ||
+    peerPublicPath(path) ||
+    peerMcpPaths.some((pattern) => pattern.test(path)) ||
+    webextCredentialPath(path) ||
+    runnerPublicPath(path);
 
 // Routes that answer before the boot chain converges: /health and /events show boot progress, WebSocket upgrades live
 // outside boot state.
@@ -127,6 +166,7 @@ const READY_EXEMPT = new Set([
     "/health",
     "/events",
     "/system/session",
+    ...PASSKEY_SIGNIN_PATHS,
     "/system/presence",
     "/system/ws-ticket",
     "/system/terminal",
@@ -202,24 +242,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // CORS is emitted in every auth mode, from the same allowlist the authorizer would use.
     // The local profile needs it too: its host serves the app from its own origin, so the browser preflights loopback
     // like any cross-origin call.
-    const allowOrigins = services.config.webOrigin
-        .split(",")
-        .map((origin) => origin.trim())
-        .filter((origin) => origin !== "");
-    // An allowlist entry may name a family: `https://*.example.net` admits any single label in the wildcard position,
-    // for an editor webview's per-session origin.
-    // Still an allowlist, not a wildcard: the scheme and suffix are pinned, only one label floats.
-    const originAllowed = (origin: string): boolean =>
-        allowOrigins.some((entry) => {
-            const star = entry.indexOf("*");
-            if (star === -1) {
-                return entry === origin;
-            }
-            const prefix = entry.slice(0, star);
-            const suffix = entry.slice(star + 1);
-            const label = origin.slice(prefix.length, origin.length - suffix.length);
-            return origin.startsWith(prefix) && origin.endsWith(suffix) && label.length > 0 && !label.includes(".") && !label.includes("/");
-        });
+    // The same allowlist a passkey may be bound to (auth/origins.ts).
+    const originAllowed = originAllowedBy(allowedOriginsOf(services.config.webOrigin));
     app.use(
         "*",
         cors({
@@ -253,38 +277,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             verifyExtension: (presented) => services.extensionBackend.verifyExtensionToken(presented),
         });
         app.use("*", async (c, next) => {
-            // /system/terminal is a WebSocket upgrade with no Authorization header; it authorizes via the query string.
-            // /system/authorized-key is the desktop-sync agent's door: POST redeems a one-time pairing, DELETE is the
-            // agent revoking with its own sync token.
-            // Exact-path only: the owner's per-machine revoke (/system/authorized-key/:machine) is not exempt and goes
-            // through this middleware.
-            if (
-                c.req.path === "/health" ||
-                c.req.path === "/system/terminal" ||
-                // /system/browser-profile authorizes token+connect from the query string too, like the terminal.
-                c.req.path === "/system/browser-profile" ||
-                // /system/browser-view is the same screencast wire, pointed at the browser the agent drives.
-                c.req.path === "/system/browser-view" ||
-                // /workspace/media is fetched by a <video>/<audio> tag with no header; it checks its own scoped ticket
-                // instead.
-                c.req.path === "/workspace/media" ||
-                // /bundles/download is navigated to, so no header either; it checks its own ticket, scoped to the named
-                // bundle.
-                c.req.path === "/bundles/download" ||
-                c.req.path === "/enroll" ||
-                c.req.path === "/system/authorized-key" ||
-                // Account deletion must stay repeatable after a partial attempt; the handler does its own owner check.
-                c.req.path === "/system/access/disable" ||
-                eventFirePath.test(c.req.path) ||
-                webchatPublicPath(c.req.path) ||
-                intakePublicPath(c.req.path) ||
-                ciWebhookPath.test(c.req.path) ||
-                gatePath.test(c.req.path) ||
-                peerPublicPath(c.req.path) ||
-                peerMcpPaths.some((pattern) => pattern.test(c.req.path)) ||
-                webextCredentialPath(c.req.path) ||
-                runnerPublicPath(c.req.path)
-            ) {
+            if (bearerExemptPath(c.req.path)) {
                 return next();
             }
             // The non-bearer credentials (a panel, the vpn CLI, a control token, the desktop-sync agent) are admitted
@@ -302,7 +295,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 return next();
             }
             try {
-                const caller = await authorize(bearerFrom(c.req.header("authorization")), c.req.header("x-intentic-connect") ?? undefined);
+                const caller = await authorize(bearerFrom(c.req.header("authorization")), c.req.header("x-intentic-connect") ?? undefined, {
+                    enrolment: passkeyEnrolmentPath(c.req.path),
+                });
                 c.set("identity", caller);
                 // The role floor (auth/role-floor.ts) applies here, after authentication, in one place: a member below
                 // a route's tier gets a 403 naming the tier.
@@ -316,6 +311,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 // 403 is a verified identity that isn't the owner/member; 401 reads like any other unreachable daemon.
                 if (error instanceof ForbiddenError) {
                     return c.json({ error: error.message }, 403);
+                }
+                // 428: the identity is welcome, the proof is not enough; the body says whether a passkey is held or
+                // must first be added (the contract's PasskeyRequired).
+                if (error instanceof PasskeyRequiredError) {
+                    return c.json({ error: error.message, requires: "passkey", enrolled: error.enrolled }, 428);
                 }
                 return c.json({ error: "unauthorized" }, 401);
             }
@@ -534,6 +534,18 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.post("/system/control/tokens", controlTokens.mint);
     app.get("/system/control/tokens", controlTokens.list);
     app.delete("/system/control/tokens/:id", controlTokens.revoke);
+
+    // Passkeys: each member's own, the anonymous sign-in doors, the owner's require switch and its recovery codes.
+    const passkeys = createPasskeyRoutes(services);
+    app.get("/system/passkeys", passkeys.list);
+    app.post("/system/passkeys/register/options", passkeys.registerOptions);
+    app.post("/system/passkeys/register", passkeys.register);
+    app.post("/system/passkeys/assert/options", passkeys.assertOptions);
+    app.post("/system/passkeys/assert", passkeys.assert);
+    app.post("/system/passkeys/policy", passkeys.setPolicy);
+    app.post("/system/passkeys/recovery", passkeys.regenerateRecovery);
+    app.delete("/system/passkeys/:id", passkeys.remove);
+    app.post("/system/session/recover", passkeys.recover);
 
     // Sign out every browser, and retire access for good; the latter stays repeatable after a partial attempt.
     app.post("/system/sessions/revoke", access.revokeSessions);

@@ -252,7 +252,8 @@ export const createSystemRoutes = (services: Services) => {
             }
             return { ok: true };
         }),
-        // Exchanges a verified bearer for a daemon session; loopback and token-scoped callers mint nothing.
+        // Exchanges a verified bearer for a daemon session; loopback and token-scoped callers mint nothing. A renewal
+        // carries the proof of the session it renews: a passkey-proven session stays one, a Google one does not become one.
         session: i.session.handler(async ({ context }) => {
             if (services.auth === undefined || context.identity === undefined) {
                 throw new ORPCError("UNAUTHORIZED", { message: "no verified identity to mint a session for" });

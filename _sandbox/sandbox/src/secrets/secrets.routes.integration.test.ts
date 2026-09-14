@@ -10,7 +10,7 @@ import { SETTLES } from "@intentic/testing/vitest";
 
 import { createApp } from "../app.js";
 
-import { clientFor, errorCode, rejectForbidden } from "../harness/route-client.testing.js";
+import { clientFor, errorCode, proven, rejectForbidden } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
 
@@ -120,7 +120,7 @@ test("secrets.reveal returns values to the operating tier and refuses lower role
         createApp(
             services({
                 workspace,
-                auth: { authorize: async () => ({ email: "m@example.com", role: "maintainer" as const }), authorizeOwner: rejectForbidden },
+                auth: { authorize: async () => proven("m@example.com", "maintainer"), authorizeOwner: rejectForbidden },
             }),
         ),
     );
@@ -130,7 +130,7 @@ test("secrets.reveal returns values to the operating tier and refuses lower role
         createApp(
             services({
                 workspace,
-                auth: { authorize: async () => ({ email: "c@example.com", role: "collaborator" as const }), authorizeOwner: rejectForbidden },
+                auth: { authorize: async () => proven("c@example.com", "collaborator"), authorizeOwner: rejectForbidden },
             }),
         ),
     );

@@ -36,6 +36,11 @@ const LOCKED: Record<string, LockedFile> = {
         holds: `the tokens that let this sandbox be driven from outside it`,
         manage: { label: `Access`, to: `/sandbox/access` },
     },
+    "identity/passkeys.json": {
+        subject: `passkeys.json`,
+        holds: `the passkeys that open this sandbox, whether one is required, and the fingerprints of your recovery codes`,
+        manage: { label: `Access`, to: `/sandbox/access` },
+    },
     "secrets/ci.json": { subject: `ci.json`, holds: `the secret your builds use to reach this sandbox` },
     "secrets/doors.json": {
         subject: `doors.json`,

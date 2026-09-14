@@ -14,6 +14,10 @@ export class SandboxUnaddressedError extends Error {
     }
 }
 
+// 401 is a bearer the daemon no longer takes; 428 is one it takes but that the sandbox's passkey rule holds short.
+// Both drop the bearer and re-establish once: the second road runs through the step-up gate.
+const bearerRefused = (status: number): boolean => status === 401 || status === 428;
+
 // Bounds waiting for response headers only; a stream answers its headers immediately then runs indefinitely.
 const DEADLINE_MS = 45_000;
 
@@ -66,7 +70,7 @@ const bearerFor = async (target: SandboxTarget, background: boolean): Promise<Sa
     return bearer;
 };
 
-// Retries once on 401, invalidating exactly the bearer that failed, against the same target. `deadline` bounds
+// Retries once on 401 or 428, invalidating exactly the bearer that failed, against the same target. `deadline` bounds
 // only the wait for headers (off for streamed uploads); `background` skips any sign-in prompt.
 export const sandboxAuthenticatedFetch = async (
     request: Request,
@@ -98,7 +102,7 @@ export const sandboxAuthenticatedFetch = async (
         }
     };
     const response = await send(request, bearer.token);
-    if (response.status !== 401) {
+    if (!bearerRefused(response.status)) {
         return response;
     }
 

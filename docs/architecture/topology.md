@@ -105,7 +105,15 @@ flowchart TB
   ([owner-ticket.ts](../../_shared/sandbox-contract/src/policy/owner-ticket.ts)), a minutes-long Ed25519 claim signed
   with the reachability key and verified offline against the public half the provisioner put in the machine's
   env, naming this sandbox's id and the owner `OWNER_EMAIL` already names, so the platform sign-in is the only
-  one a hosted user makes. It adds no power the hosted exception below does not already grant. Additional
+  one a hosted user makes. It adds no power the hosted exception below does not already grant. A **passkey** is
+  the other sign-in credential, and the daemon is its relying party ([auth/passkeys.ts](../../_sandbox/sandbox/src/auth/passkeys.ts),
+  the verifier in [auth/webauthn.ts](../../_sandbox/sandbox/src/auth/webauthn.ts)): a signed-in owner or member
+  registers one from Sandbox ▸ Access, its public key lands in `/work/.intentic/identity/passkeys.json` beside
+  the roster, and an assertion from it mints a session with no Google involved. Every session carries how it
+  was proven (`amr`), and the owner may switch on **require a passkey**: from then a Google proof or the owner
+  ticket alone answers 428 on every route, a member with no passkey yet may spend their Google proof on
+  registering their first and nothing else, and the owner holds eight one-time recovery codes (hashed) against
+  losing every passkey; the reasoning is in [sandbox-passkeys.md](../design/sandbox-passkeys.md). Additional
   collaborators are granted via `/work/.intentic/identity/members.json`, and owner/membership are re-checked
   per request, so revoking a member kills their live sessions too. A PROGRAM (a CI job, a script, an editor
   bridge) holds a **control token** instead ([control-tokens.ts](../../_sandbox/sandbox/src/auth/control-tokens.ts)):

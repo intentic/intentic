@@ -1,11 +1,14 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { ProofMethodSchema } from "@intentic/sandbox-contract";
 import { jwtVerify, SignJWT } from "jose";
-import type { VerifiedIdentity } from "./auth.js";
+import { z } from "zod";
+import type { Proof } from "./auth.js";
 
-// Daemon-minted HMAC session: the steady-state browser credential once a Google ID token verifies identity.
-// Owner/member enforcement stays per-request in auth.ts, so a live session cannot outlive a revoked grant.
+// Daemon-minted HMAC session: the steady-state browser credential once a Google ID token or a passkey verifies identity.
+// Owner/member enforcement stays per-request in auth.ts, so a live session cannot outlive a revoked grant; the session
+// carries HOW it was proven (`amr`) so the require-passkey policy is re-read per request too.
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 // Pins the issuer so no other JWT sharing this secret can pass as a session, and vice versa.
@@ -17,10 +20,13 @@ export interface MintedSession {
     readonly expiresAt: number;
 }
 
+// The proof claims a session carries: the methods that established it, and the passkey it came from when one did.
+const ProofClaimsSchema = z.object({ amr: z.array(ProofMethodSchema).min(1), cid: z.string().optional() });
+
 export interface Sessions {
-    mint(identity: VerifiedIdentity): Promise<MintedSession>;
-    // Returns the identity a valid session was minted for; throws on signature/claim failure.
-    verify(token: string): Promise<VerifiedIdentity>;
+    mint(proof: Proof): Promise<MintedSession>;
+    // Returns the proof a valid session was minted for; throws on signature/claim failure.
+    verify(token: string): Promise<Proof>;
     // Re-keys the signing secret: every previously minted session, owner and members alike, stops verifying at once.
     // There is no per-session revoke, only this full sign-out-everywhere.
     rotate(): Promise<void>;
@@ -50,14 +56,16 @@ export const createSessions = (secretPath: string): Sessions => {
         return secret;
     };
     return {
-        mint: async (identity) => {
+        mint: async (proof) => {
             const expiresAt = Date.now() + SESSION_TTL_MS;
             const token = await new SignJWT({
-                ...(identity.name !== undefined ? { name: identity.name } : {}),
-                ...(identity.picture !== undefined ? { picture: identity.picture } : {}),
+                ...(proof.name !== undefined ? { name: proof.name } : {}),
+                ...(proof.picture !== undefined ? { picture: proof.picture } : {}),
+                amr: [...proof.methods],
+                ...(proof.credentialId !== undefined ? { cid: proof.credentialId } : {}),
             })
                 .setProtectedHeader({ alg: "HS256" })
-                .setSubject(identity.email)
+                .setSubject(proof.email)
                 .setIssuer(ISSUER)
                 .setIssuedAt()
                 .setExpirationTime(Math.floor(expiresAt / 1000))
@@ -70,10 +78,18 @@ export const createSessions = (secretPath: string): Sessions => {
             if (typeof payload.sub !== "string" || payload.sub === "") {
                 throw new Error("session token has no subject");
             }
+            // A session without `amr` predates the claim; refusing it costs one silent re-sign-in, accepting it would
+            // let the require-passkey policy be met by a token minted before the policy could ask.
+            const claims = ProofClaimsSchema.safeParse(payload);
+            if (!claims.success) {
+                throw new Error("session token carries no proof claims");
+            }
             return {
                 email: payload.sub,
                 ...(typeof payload["name"] === "string" ? { name: payload["name"] } : {}),
                 ...(typeof payload["picture"] === "string" ? { picture: payload["picture"] } : {}),
+                methods: claims.data.amr,
+                ...(claims.data.cid !== undefined ? { credentialId: claims.data.cid } : {}),
             };
         },
         // Cache is replaced before awaiting the write, so a verify racing rotation uses the new secret, not the

@@ -406,6 +406,16 @@ const STATE_FILES = [
         why: "The workspace identity, read from the /events hello frame rather than as a file.",
         portability: "identity",
     },
+    // Public keys and the owner's require-a-passkey switch; the one credential-shaped thing in it, the recovery codes,
+    // is stored hashed. `identity` because a passkey admits its holder to THIS sandbox: a copy that traveled would let
+    // a source sandbox's passkeys open the target.
+    {
+        path: ".intentic/identity/passkeys.json",
+        invalidates: [],
+        why: "The passkeys registered with this sandbox, whether one is required to open it, and the hashes of the owner's recovery codes; the Access tab reads them through /system/passkeys, never off disk.",
+        portability: "identity",
+        note: "Passkeys are bound to the sandbox they were registered with: add them again on the new one from its Access tab.",
+    },
     {
         path: ".intentic/config/templates.json",
         invalidates: [],
@@ -563,6 +573,7 @@ export const LOCKED_STATE_ENTRIES: ReadonlySet<string> = new Set([
     "identity/owner.json",
     "identity/members.json",
     "identity/control-tokens.json",
+    "identity/passkeys.json",
     "config/capabilities.json",
     "secrets/ci.json",
     "secrets/doors.json",

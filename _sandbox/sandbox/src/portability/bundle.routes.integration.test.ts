@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
 import { createApp } from "../app.js";
-import { rejectAuth, rejectForbidden } from "../harness/route-client.testing.js";
+import { proven, rejectAuth, rejectForbidden } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
@@ -38,7 +38,7 @@ const appOn = async (options: { readonly authed?: true } = {}): Promise<{ app: R
                               if (presented === "") {
                                   throw new Error("missing bearer token");
                               }
-                              return { email: "owner@example.com", role: "owner" as const };
+                              return proven("owner@example.com", "owner");
                           },
                           authorizeOwner: async () => {},
                       },
@@ -58,7 +58,7 @@ afterEach(async () => {
 test("a collaborator may not list, start, delete or bring one in: every direction is operating-tier gated", async () => {
     const app = createApp(
         services({
-            auth: { authorize: async () => ({ email: "member@example.com", role: "collaborator" as const }), authorizeOwner: rejectForbidden },
+            auth: { authorize: async () => proven("member@example.com", "collaborator"), authorizeOwner: rejectForbidden },
         }),
     );
     expect((await app.request("/bundles")).status).toBe(403);

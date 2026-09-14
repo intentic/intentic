@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { createApp } from "../app.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
+import { proven } from "../harness/route-client.testing.js";
 
 /* The connection route: the extension BACKENDS' credential read. */
 
@@ -17,7 +18,7 @@ const appWith = (permissions: readonly string[]) =>
     createApp(
         services({
             capabilities: memoryCapabilitiesStore([KOMODO]),
-            auth: { authorize: async () => ({ email: "owner@example.com", role: "owner" as const }) },
+            auth: { authorize: async () => proven("owner@example.com", "owner") },
             extensionBackend: {
                 start: async () => {},
                 restart: () => {},
