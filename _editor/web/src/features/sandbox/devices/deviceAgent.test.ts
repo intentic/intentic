@@ -14,7 +14,6 @@ type Report = NonNullable<Device[`report`]>;
 const report = (overrides: Partial<Report> = {}): Report => ({
     hostname: `rog`,
     os: `linux`,
-    sandboxes: [],
     pairings: [],
     ports: [],
     agent: { running: true, lastTickAt: NOW, build: `1.2.0`, installed: `1.2.0` },

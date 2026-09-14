@@ -190,14 +190,23 @@ const cardOf = (device: Device, scopes: DeviceScopes | undefined): string | unde
     return typeof pinned === `string` && pinned !== `` ? pinned : hostCard(device.platform);
 };
 
+// Whether this row has anything whose buttons are worth explaining: a description of the machine, a container list,
+// or both. A machine that answered neither already says so in its own gap sentence.
+const described = (device: Device): boolean => device.report !== undefined || device.sandboxes !== undefined;
+
+// A machine reached by desktop sync alone: no switch would give it buttons, only a device connection would. Silent
+// unless the row has something to explain — an unreported device's row already says it's enrolled and quiet.
+const connectBlock = (device: Device): ManageBlock | undefined => {
+    if (!described(device)) {
+        return undefined;
+    }
+    const card = hostCard(device.platform);
+    return { kind: `connect`, ...(card === undefined ? {} : { card }) };
+};
+
 export const manageBlock = (device: Device, scopes: DeviceScopes | undefined): ManageBlock | undefined => {
     if (device.hostId === undefined) {
-        // Only where there's a list to explain; an unreported device's row already says it's enrolled and silent.
-        if (device.report === undefined) {
-            return undefined;
-        }
-        const card = hostCard(device.platform);
-        return { kind: `connect`, ...(card === undefined ? {} : { card }) };
+        return connectBlock(device);
     }
     const card = cardOf(device, scopes);
     const link = { connection: device.hostId, ...(card === undefined ? {} : { card }) };
@@ -206,8 +215,9 @@ export const manageBlock = (device: Device, scopes: DeviceScopes | undefined): M
     if (device.online !== true) {
         return device.gap === undefined ? { kind: `offline`, ...link } : undefined;
     }
-    // A device that wouldn't answer already says so; its switches may well be on regardless.
-    if (device.gap !== undefined) {
+    // A machine that described nothing already says so; its switches may well be on regardless. One that listed its
+    // containers is a different case: those rows have buttons, so what gates them is still worth a sentence.
+    if (device.gap !== undefined && !described(device)) {
         return undefined;
     }
     if (scopes?.[`sandboxes`] !== `on`) {

@@ -234,7 +234,6 @@ describe("buildSkewLine and the status summary", () => {
     const report = (agent: Omit<DeviceReport["agent"], "installed">, installed: string | undefined): DeviceReport => ({
         hostname: "radarsu-rog",
         os: "linux",
-        sandboxes: [],
         pairings: [{ sandboxId: "work", mode: "sync", localDir: "/home/me/work", mirroring: "on" }],
         ports: [],
         agent: { ...agent, ...(installed === undefined ? {} : { installed }) },
@@ -319,7 +318,6 @@ describe("the summary's link count", () => {
     const quiet: DeviceReport = {
         hostname: "radarsu-omen",
         os: "win32",
-        sandboxes: [],
         pairings: [],
         ports: [],
         agent: { running: true, pid: 4242 },

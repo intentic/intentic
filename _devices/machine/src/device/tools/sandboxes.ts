@@ -29,7 +29,7 @@ export interface DockerRow {
     readonly image: string;
 }
 
-// Docker's own `--format '{{json .}}'` gives one JSON object per line; anything that is not one is a warning or
+// `docker ps --format` prints one JSON object per line (see FLEET_ARGS); anything that is not one is a warning or
 // banner riding along, skipped rather than thrown on.
 export const rowsFrom = (stdout: string): DockerRow[] =>
     stdout
@@ -81,9 +81,22 @@ const docker = async (args: readonly string[]): Promise<string> => {
     return stdout;
 };
 
+// The three fields `rowsFrom` reads, asked for by name. NEVER `{{json .}}`: the whole-object template carries `Size`,
+// so docker computes every container's disk usage by walking its writable layer — measured at 0.5-1.5s against 60ms
+// here — and on Docker Desktop's containerd snapshotter that walk FAILS ("snapshotter.Usage failed … lstat … no such
+// file or directory") whenever a temp file vanishes underneath it, which a sandbox writing to /tmp does constantly.
+// That is a fleet read, and so every button gated on it, broken by a size nothing asked for.
+export const FLEET_ARGS: readonly string[] = [
+    "ps",
+    "-a",
+    "--filter",
+    `name=^${PREFIX}`,
+    "--format",
+    `{"Names":{{json .Names}},"State":{{json .State}},"Image":{{json .Image}}}`,
+];
+
 // Exported for the auto-prepare tick (../auto-prepare.ts): one producer of "what runs on me", whoever is asking.
-export const fleet = async (): Promise<DeviceSandbox[]> =>
-    sandboxesFrom(rowsFrom(await docker(["ps", "-a", "--filter", `name=^${PREFIX}`, "--format", "{{json .}}"])));
+export const fleet = async (): Promise<DeviceSandbox[]> => sandboxesFrom(rowsFrom(await docker(FLEET_ARGS)));
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 

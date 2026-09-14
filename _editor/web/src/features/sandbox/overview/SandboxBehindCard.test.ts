@@ -147,7 +147,6 @@ it(`offers to connect the machine already syncing this sandbox`, () => {
             report: {
                 hostname: `radarsu-rog`,
                 os: `linux`,
-                sandboxes: [],
                 // Keyed as the sync agent keys it, which is docker's slug plus the zone.
                 pairings: [{ sandboxId: `sandbox-abc123-fra`, mode: `sync`, localDir: `/home/ada/work` }],
                 ports: [],

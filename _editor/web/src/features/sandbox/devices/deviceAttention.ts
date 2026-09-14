@@ -45,7 +45,9 @@ const GAP_TEXT: Record<NonNullable<Device[`gap`]>, string> = {
     // The only gap with nothing on the other end to ask, so it names both ways back in: the machine's own agent
     // command for one that is merely awake with its loop down, and, on the button, a fresh pairing.
     offline: `Asleep or offline. A machine that wakes dials back in by itself; one that is already awake needs its agent started.`,
-    "scope-off": `Turn on "Run commands" in this device's capability card to see what it is running.`,
+    // Its containers are listed regardless (they answer to "Manage sandboxes on this device"), so this names what is
+    // actually missing rather than claiming the machine is unreadable.
+    "scope-off": `"Run commands" is off in this device's capability card, so it won't describe itself: no folders, no mirrored ports, and no word on whether its agent is alive. Turn it on to see those.`,
     "no-agent": `Reachable, but it has no agent, so nothing here knows its folders or ports.`,
     unreported: `Enrolled, but it hasn't reported yet. An agent from before machine reports never will. Re-run its install to update it.`,
 };

@@ -62,9 +62,10 @@ export interface DeviceRow {
 }
 
 // Grouped once per device rather than per template read, since the same grouping backs every count and
-// warning both screens draw.
+// warning both screens draw. Containers and folders/ports are two answers behind two switches, so a machine that
+// listed its containers while refusing to describe itself still gets its rows, with nothing under them.
 const groupsOf = (device: Device): DeviceSandboxGroup[] =>
-    device.report === undefined ? [] : sandboxGroups(device.report.pairings, device.report.ports, device.report.sandboxes);
+    sandboxGroups(device.report?.pairings ?? [], device.report?.ports ?? [], device.sandboxes ?? []);
 
 export const deviceRow = (device: Device, latest: string | undefined): DeviceRow => {
     const agent = device.report?.agent;

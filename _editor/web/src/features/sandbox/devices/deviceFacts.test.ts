@@ -65,7 +65,6 @@ const wsl = (distro: string): NonNullable<Device[`report`]> => ({
     hostname: `radarsu-rog`,
     os: `linux`,
     wsl: { distro },
-    sandboxes: [],
     pairings: [],
     ports: [],
     agent: { running: true, installed: `1.252.0` },
@@ -99,7 +98,6 @@ test(`separates what the device is, how it is reached, and which agent it runs`,
         report: {
             hostname: `ADA-LAPTOP`,
             os: `win32`,
-            sandboxes: [],
             pairings: [],
             ports: [],
             agent: { running: true, build: `0.5.1`, installed: `0.5.1` },
@@ -114,7 +112,6 @@ test(`separates what the device is, how it is reached, and which agent it runs`,
 const reportWith = (agent: NonNullable<Device[`report`]>[`agent`]): Device[`report`] => ({
     hostname: `MY-PC`,
     os: `linux`,
-    sandboxes: [],
     pairings: [],
     ports: [],
     agent,
@@ -176,14 +173,14 @@ test(`ages a machine that is not here, and stays quiet about one that is`, () =>
     expect(lastSeenNote(device({ hostId: `my-pc`, online: true, lastSeen }))).toBeUndefined();
 });
 
-// A machine that has reported: folders and ports arrived, but the container list is empty.
+// A machine that has reported: folders, ports and its agent arrived. No container list — the sync door never carries
+// one, and this row has no device door to ask through.
 const reported = (overrides: Partial<Device> = {}): Device =>
     device({
         sync: enrolled(),
         report: {
             hostname: `laptop`,
             os: `win32`,
-            sandboxes: [],
             pairings: [],
             ports: [],
             agent: { running: true, installed: `1.183.0` },
@@ -236,6 +233,25 @@ test(`stays quiet about permissions on a device that cannot be reached`, () => {
     expect(manageBlock(device({ hostId: `my-pc`, online: true, gap: `no-agent` }), undefined)).toBeUndefined();
 });
 
+// The card setup writes for a new sandbox: sandbox management granted, "Run commands" not. The machine lists its
+// containers and describes nothing else, so those rows have working buttons and what gates them is still worth a
+// sentence — silence here was a row of buttons with nothing explaining them.
+test(`still names the switches on a machine that listed containers without describing itself`, () => {
+    const locked = device({
+        hostId: `my-pc`,
+        online: true,
+        platform: `linux`,
+        gap: `scope-off`,
+        sandboxes: [{ slug: `work`, container: `intentic-sandbox-work`, running: true, image: `img:1` }],
+    });
+    expect(manageBlock(locked, { platform: `linux`, shell: `off`, sandboxes: `on` })).toEqual({
+        kind: `remove-off`,
+        connection: `my-pc`,
+        card: `linux`,
+    });
+    expect(manageBlock(locked, { platform: `linux`, shell: `off`, sandboxes: `on`, sandboxRemove: `on` })).toBeUndefined();
+});
+
 // The device door can be shut while the sync door stays open (files syncing fine, sandbox socket down):
 // `online` was never surfaced before this.
 test(`says why a connected device that is asleep has no buttons`, () => {
@@ -274,7 +290,6 @@ test(`ages an enrollment by its own heartbeat`, () => {
 const watching = (overrides: Partial<NonNullable<Device[`report`]>> = {}): NonNullable<Device[`report`]> => ({
     hostname: `my-pc`,
     os: `linux`,
-    sandboxes: [],
     pairings: [],
     ports: [],
     agent: { running: true },

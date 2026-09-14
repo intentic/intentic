@@ -165,6 +165,14 @@ for "which connected, online device reports this sandbox's container", read by t
 through `hostRunningSelf` ([self-host.ts](../../_sandbox/sandbox/src/hosts/self-host.ts)), which answers from readings
 already held so composing a turn never waits on a laptop.
 
+It answers off the row's own container list (`Device.sandboxes`), not off the machine's report, because the two ride
+different switches: the containers come from `list_sandboxes` behind "Manage sandboxes on this device", the report from
+`intentic-machine status --json` behind "Run commands". A card that grants the first and not the second — which is
+exactly what setup writes for a new sandbox — can run every swap this predicate leads to while refusing to describe
+itself, so a refused status call leaves the row a named `scope-off` gap and its containers both
+([device-reports.ts](../../_sandbox/sandbox/src/hosts/device-reports.ts)). Folding the list into the report is what had a
+freshly added sandbox print a terminal command for the one rebuild it always needs.
+
 What that buys, per surface: a button where there used to be a command (the update/rebuild/rollback card, the
 container repair, the dev reload, the rebuild of a checkout-built sandbox from its checkout, deleting a sandbox
 from the machine holding it, enrolling desktop sync on a device already connected), and a paragraph in every

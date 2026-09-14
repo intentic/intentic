@@ -95,7 +95,6 @@ const syncOnly = (overrides: Partial<Device> = {}): Device => ({
     report: {
         hostname: `radarsu-rog`,
         os: `linux`,
-        sandboxes: [],
         pairings: [],
         ports: [],
         agent: { running: true, installed: `1.252.0` },
@@ -152,7 +151,9 @@ it(`carries the machine's own name into the form that connects it`, async () => 
     await nextTick();
 
     // Named after the enrollment on purpose: both doors answering to one name is what folds them into a single row.
-    expect(push).toHaveBeenCalledWith(expect.objectContaining({ params: { card: `linux` }, query: expect.objectContaining({ device: `radarsu-rog` }) }));
+    expect(push).toHaveBeenCalledWith(
+        expect.objectContaining({ params: { card: `linux` }, query: expect.objectContaining({ device: `radarsu-rog` }) }),
+    );
 });
 
 it(`says nothing about a machine already connected as a device`, async () => {

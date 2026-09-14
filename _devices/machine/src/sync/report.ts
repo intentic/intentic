@@ -10,7 +10,8 @@ import { backupSessionName, readSessionState, sessionName } from "./mutagen.js";
 
 // Everything this agent knows about the device, in one shape fed to `status`, `status --json`, the mirror
 // watcher's post, and the host capability, so they can't drift. No docker scan: enumerating a machine's containers
-// is the disclosure this design avoids; `sandboxes` is always empty here, filled in by whoever is trusted to.
+// is the disclosure this design avoids, so containers are no part of a report — they are asked for by name, through
+// the host door's `list_sandboxes`, and land beside the report on the reader's row.
 
 // Liveness needs both the held pid and the last finished pass: a dead loop still holds its pidfile (tunnel
 // listeners keep it alive), so `running` alone can misreport a stopped mirror as healthy. Undefined means no pass has
@@ -89,7 +90,6 @@ export const buildReport = (
     os: platform(),
     // Omitted rather than set to undefined off WSL, so a report says nothing at all about it instead of saying no.
     ...(wsl === undefined ? {} : { wsl }),
-    sandboxes: [],
     pairings: state.pairings.map((pairing) => pairingReport(mutagen, pairing)),
     ports: state.pairings.flatMap(portRows),
     agent,

@@ -263,7 +263,8 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
         </RowGroup>
 
 <!-- One row per sandbox, the page's only disclosure: a row is a summary and its folder, ports, image and share are the evidence. -->
-        <RowGroup v-if="device.report" label="Sandboxes on this device" :count="row.groups.length">
+<!-- Either answer draws rows: a card granting sandbox management alone lists containers and describes no folders. -->
+        <RowGroup v-if="device.report || device.sandboxes" label="Sandboxes on this device" :count="row.groups.length">
 <!-- The same two commands the pairing rows carry, run bare (every sandbox this machine pairs). -->
             <RowNote v-if="switches.length > 0" variant="block">
                 <div class="flex flex-col gap-2">
@@ -302,9 +303,9 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             <RowNote variant="block">
 <!-- No `agent` prop, deliberately: that state is the strip above, not a second liveness statement riding this list. -->
                 <DeviceDetail
-                    :pairings="device.report.pairings"
-                    :ports="device.report.ports"
-                    :sandboxes="device.report.sandboxes"
+                    :pairings="device.report?.pairings ?? []"
+                    :ports="device.report?.ports ?? []"
+                    :sandboxes="device.sandboxes ?? []"
                     :open="openIds"
                 >
                     <!-- The one row on this page that can close the page, said beside the name rather than only in the confirmation. -->

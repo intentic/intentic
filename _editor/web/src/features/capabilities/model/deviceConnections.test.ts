@@ -10,7 +10,6 @@ const NOW = 1_700_000_000_000;
 const report = (overrides: Partial<NonNullable<Device[`report`]>> = {}): Device[`report`] => ({
     hostname: `radarsu-rog`,
     os: `linux`,
-    sandboxes: [],
     pairings: [],
     ports: [],
     agent: { running: true, installed: `1.252.0` },

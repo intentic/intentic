@@ -46,7 +46,13 @@ const FLOW_TIMEOUT_MS = 60 * 60 * 1000;
 // Ceiling for watching an update: above the download, below the flow ceiling; the view then polls the version.
 const AGENT_FLOW_TIMEOUT_MS = 15 * 60 * 1000;
 
-export type PullResult = { readonly report: DeviceReport } | { readonly gap: DeviceGap };
+// One reading, in two halves that arrive independently because they ride two different switches: the machine's
+// description of itself (`status --json`, behind "Run commands") and the containers it holds (`list_sandboxes`, behind
+// "Manage sandboxes on this device"). No report still means a named gap; `sandboxes` is absent only when nobody could
+// look, so an empty list stays the answer "none there".
+export type PullResult = ({ readonly report: DeviceReport } | { readonly gap: DeviceGap }) & {
+    readonly sandboxes?: readonly DeviceSandbox[];
+};
 
 // One machine's last reading, plus any refresh currently in flight for it. `inflight` de-dupes concurrent readers into
 // a single pull.
@@ -136,7 +142,9 @@ export const sandboxesFromTool = (text: string, refused: boolean): DeviceSandbox
 };
 
 // Every failure reads as a named gap, not an absence. Status and fleet go out together under one deadline; the status
-// call alone decides no-agent/scope-off.
+// call alone decides no-agent/scope-off, and the fleet answer survives either verdict — a card granting sandbox
+// management and nothing else lists its containers while refusing to describe the machine, and that list is what every
+// "do it out there" button is gated on.
 const pull = async (services: Services, id: string): Promise<PullResult> => {
     // One deadline over both calls: the reading is what has a budget, not either half of it.
     const signal = AbortSignal.timeout(PULL_TIMEOUT_MS);
@@ -144,17 +152,18 @@ const pull = async (services: Services, id: string): Promise<PullResult> => {
         callTool(services, id, "run_command", { command: "intentic-machine status --json", timeoutMs: COMMAND_TIMEOUT_MS }, signal),
         callTool(services, id, "list_sandboxes", {}, signal).catch(() => ({ text: "", refused: true })),
     ]);
+    // Absent, not empty, when the machine wouldn't answer: "none there" is a reading, and this isn't one.
+    const containers = fleet.refused ? {} : { sandboxes: sandboxesFromTool(fleet.text, false) };
     if (status.refused) {
         // A scope refusal is a named value; any other refusal here still reads as "this machine would not answer".
-        return { gap: "scope-off" };
+        return { gap: "scope-off", ...containers };
     }
     const report = reportFrom(status.text);
     if (report === undefined) {
-        return { gap: "no-agent" };
+        return { gap: "no-agent", ...containers };
     }
-    const sandboxes = sandboxesFromTool(fleet.text, fleet.refused);
     // Report's agent block is left as stated; version rides the row (agentVersion) instead, not merged here.
-    return { report: { ...report, sandboxes } };
+    return { report, ...containers };
 };
 
 const gapOf = (result: PullResult): DeviceGap | undefined => ("gap" in result ? result.gap : undefined);
@@ -222,6 +231,37 @@ const platformOf = (declared: string | undefined, report: DeviceReport | undefin
 const differentPlatform = (left: string | undefined, right: string | undefined): boolean =>
     left !== undefined && right !== undefined && left !== right;
 
+// One host pull as the pieces a row is assembled from: the machine's own description, where it lands, everything this
+// side knows about the machine regardless of whether it described itself, and the gap standing in for a missing
+// description. Containers sit in `known` rather than the report because they answer to their own switch.
+const pulledHost = (
+    host: HostSummary,
+    result: PullResult,
+): {
+    readonly report: DeviceReport | undefined;
+    readonly platform: string | undefined;
+    readonly known: Partial<Device>;
+    readonly gap: DeviceGap;
+} => {
+    const report = "report" in result ? result.report : undefined;
+    const platform = platformOf(host.platform, report);
+    return {
+        report,
+        platform,
+        known: {
+            hostId: host.id,
+            online: host.online,
+            ...(platform === undefined ? {} : { platform }),
+            ...(host.facts === undefined ? {} : { facts: host.facts }),
+            ...(host.version === undefined ? {} : { agentVersion: host.version }),
+            ...(host.lastSeen === undefined ? {} : { lastSeen: host.lastSeen }),
+            ...(result.sandboxes === undefined ? {} : { sandboxes: [...result.sandboxes] }),
+        },
+        // A result with neither half is not representable; "offline" keeps the fallback a named gap rather than none.
+        gap: "gap" in result ? result.gap : "offline",
+    };
+};
+
 // Pure reconciliation of enrollments, volunteered reports and host pulls into rows, testable without IO. Conservative:
 // a sync enrollment and host capability fold into one row only when both report and their hostnames agree.
 export const mergeDevices = (
@@ -265,36 +305,21 @@ export const mergeDevices = (
     const answered = hosts.filter((entry) => "report" in entry.result);
     const silent = hosts.filter((entry) => !("report" in entry.result));
     for (const { host, result } of [...answered, ...silent]) {
-        const report = "report" in result ? result.report : undefined;
-        // Everything this side knows about the machine itself, as opposed to what it is doing for this sandbox.
-        const platform = platformOf(host.platform, report);
-        const identity = {
-            hostId: host.id,
-            online: host.online,
-            ...(platform === undefined ? {} : { platform }),
-            ...(host.facts === undefined ? {} : { facts: host.facts }),
-            ...(host.version === undefined ? {} : { agentVersion: host.version }),
-            ...(host.lastSeen === undefined ? {} : { lastSeen: host.lastSeen }),
-        };
+        const { report, platform, known, gap } = pulledHost(host, result);
         const existing = claim(report, host.id, platform);
         if (existing !== undefined) {
             // Pulled report wins; a shut door removes nothing, only sets online:false. gap only when nothing else
             // shows.
             Object.assign(existing, {
-                ...identity,
+                ...known,
                 ...(report === undefined ? {} : { report }),
-                ...(report === undefined && existing.report === undefined ? { gap: "gap" in result ? result.gap : "offline" } : {}),
+                ...(report === undefined && existing.report === undefined ? { gap } : {}),
             });
             continue;
         }
         const key = distinct(report?.hostname ?? host.id, host.id);
         taken.add(key);
-        rows.push({
-            key,
-            label: host.id,
-            ...identity,
-            ...(report === undefined ? { gap: "gap" in result ? result.gap : "offline" } : { report }),
-        });
+        rows.push({ key, label: host.id, ...known, ...(report === undefined ? { gap } : { report }) });
     }
 
     // No report reads as "unreported", not as empty folders/ports, which a too-old agent would also look like.

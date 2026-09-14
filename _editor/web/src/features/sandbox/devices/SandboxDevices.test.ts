@@ -282,7 +282,6 @@ it(`puts the machines worth reading first`, () => {
     const report = (capturedAt: number): Device[`report`] => ({
         hostname: `host`,
         os: `linux`,
-        sandboxes: [],
         pairings: [],
         ports: [],
         agent: { running: true, installed: `0.1.0` },
@@ -308,10 +307,13 @@ it(`names the image each sandbox on the machine is running, once the row is open
             label: `laptop`,
             sync: paired(),
             platform: `linux`,
+            // A container list only ever comes through a device connection, so a row carrying one holds that door.
+            hostId: `host-1`,
+            online: true,
+            sandboxes: [{ slug: `work`, container: `intentic-sandbox-work`, running: true, image: `ghcr.io/intentic/sandbox:2.3.1` }],
             report: {
                 hostname: `laptop`,
                 os: `linux`,
-                sandboxes: [{ slug: `work`, container: `intentic-sandbox-work`, running: true, image: `ghcr.io/intentic/sandbox:2.3.1` }],
                 pairings: [],
                 ports: [],
                 agent: { running: true, installed: `0.1.0` },
@@ -333,10 +335,10 @@ const managed = (running: boolean): Device => ({
     platform: `linux`,
     hostId: `host-1`,
     online: true,
+    sandboxes: [{ slug: `work`, container: `intentic-sandbox-work`, running, image: `ghcr.io/intentic/sandbox:2.3.1` }],
     report: {
         hostname: `laptop`,
         os: `linux`,
-        sandboxes: [{ slug: `work`, container: `intentic-sandbox-work`, running, image: `ghcr.io/intentic/sandbox:2.3.1` }],
         pairings: [],
         ports: [],
         agent: { running: true, installed: `1.183.0` },
@@ -389,15 +391,12 @@ const shared = (): Device => {
     return {
         ...row,
         facts: { os: `Ubuntu 24.04`, arch: `x64`, shell: `bash`, home: `/home/ada`, roots: [`/home/ada`], engine: { memoryBytes: 20 * GIB, cpus: 12 } },
-        report: {
-            ...row.report!,
-            sandboxes: [
-                {
-                    ...row.report!.sandboxes[0]!,
-                    resources: { memoryBytes: 12 * GIB, cpus: 4, privileged: true, gpu: false, hostRuntime: [], overlayRuntime: [`--privileged`] },
-                },
-            ],
-        },
+        sandboxes: [
+            {
+                ...row.sandboxes![0]!,
+                resources: { memoryBytes: 12 * GIB, cpus: 4, privileged: true, gpu: false, hostRuntime: [], overlayRuntime: [`--privileged`] },
+            },
+        ],
     };
 };
 
@@ -464,7 +463,6 @@ const syncOnly = (): Device => ({
         hostname: `laptop`,
         os: `win32`,
         // Empty because the sync agent never reports containers.
-        sandboxes: [],
         pairings: [{ sandboxId: `work-abc`, mode: `sync`, localDir: `C:\\Users\\ada\\work`, mutagenStatus: `watching` }],
         ports: [],
         agent: { running: true, installed: `1.183.0` },
@@ -509,14 +507,14 @@ const busyMachine = (): Device => ({
     platform: `linux`,
     hostId: `host-1`,
     online: true,
+    sandboxes: [
+        { slug: `sandbox-bce57bb9fe3b`, container: `c1`, running: true, image: `img:a` },
+        { slug: `sandbox-0738cd6b5027`, container: `c2`, running: true, image: `img:b` },
+        { slug: `sandbox-4c64429cade7`, container: `c3`, running: false, image: `img:c` },
+    ],
     report: {
         hostname: `radarsu-rog`,
         os: `linux`,
-        sandboxes: [
-            { slug: `sandbox-bce57bb9fe3b`, container: `c1`, running: true, image: `img:a` },
-            { slug: `sandbox-0738cd6b5027`, container: `c2`, running: true, image: `img:b` },
-            { slug: `sandbox-4c64429cade7`, container: `c3`, running: false, image: `img:c` },
-        ],
         pairings: [
             { sandboxId: `sandbox-bce57bb9fe3b`, mode: `sync`, localDir: `/home/radarsu/intentic/radarsu-web-platform-bce57bb9fe3b` },
             { sandboxId: `sandbox-0738cd6b5027`, mode: `sync`, localDir: `/home/radarsu/intentic/radarsu-local-0738cd6b5027` },
@@ -731,7 +729,6 @@ const behind = (): Device => ({
     report: {
         hostname: `laptop`,
         os: `linux`,
-        sandboxes: [],
         pairings: [],
         ports: [],
         agent: { running: true, installed: `0.1.0` },
@@ -932,10 +929,10 @@ const mirrored = (state: `on` | `off`, door: { hostId: string; online: boolean }
     sync: paired(),
     platform: `linux`,
     ...door,
+    sandboxes: [{ slug: `work`, container: `intentic-sandbox-work`, running: true, image: `img:a` }],
     report: {
         hostname: `laptop`,
         os: `linux`,
-        sandboxes: [{ slug: `work`, container: `intentic-sandbox-work`, running: true, image: `img:a` }],
         pairings: [{ sandboxId: `work-abc`, mode: `sync`, localDir: `/home/ada/work`, mutagenStatus: `watching`, mirroring: state }],
         // The port is carried in both states on purpose: the one-tick reading between the switch flipping and the
         // machine tearing its forwards down.
@@ -1031,7 +1028,6 @@ const mirrorOnly = (): Device => ({
     report: {
         hostname: `colleague`,
         os: `linux`,
-        sandboxes: [],
         pairings: [{ sandboxId: `work-abc`, mode: `mirror` }],
         ports: [{ port: 5173, host: `127.0.0.1`, sandboxId: `work-abc`, state: `mirrored` }],
         agent: { running: true, installed: `1.183.0` },
@@ -1182,7 +1178,6 @@ const twoPairings = (first: Partial<Record<string, unknown>> = {}, second: Parti
     report: {
         hostname: `radarsu-rog`,
         os: `linux`,
-        sandboxes: [],
         pairings: [
             { sandboxId: `work-a`, mode: `sync`, localDir: `/home/ada/a`, mutagenStatus: `watching`, ...first },
             { sandboxId: `work-b`, mode: `sync`, localDir: `/home/ada/b`, mutagenStatus: `watching`, ...second },

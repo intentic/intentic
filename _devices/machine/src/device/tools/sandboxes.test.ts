@@ -2,6 +2,7 @@ import type { HostScopes } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { ScopeError } from "../policy.js";
 import {
+    FLEET_ARGS,
     icCandidates,
     icReconnectArgs,
     icRemoveArgs,
@@ -33,6 +34,17 @@ const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
 });
 
 const row = (names: string, state = "running") => ({ names, state, image: "ghcr.io/intentic/sandbox:1" });
+
+// `{{json .}}` also carries `Size`, which docker computes by walking every container's writable layer: slow, and it
+// fails outright while a sandbox writes to /tmp. The fleet read needs three fields, so it names three fields.
+test("the fleet read names the fields it parses instead of asking for the whole container", () => {
+    const format = FLEET_ARGS[FLEET_ARGS.indexOf("--format") + 1] ?? "";
+    expect(format).not.toContain("{{json .}}");
+    // Rendered with each placeholder standing for its own value, so the template is checked against the parser that
+    // has to read it rather than against a copy of itself.
+    const rendered = format.replaceAll(/\{\{json \.(\w+)\}\}/g, `"$1-value"`);
+    expect(rowsFrom(rendered)).toEqual([{ names: "Names-value", state: "State-value", image: "Image-value" }]);
+});
 
 test("docker's json-lines output is read row by row, skipping whatever else the stream carried", () => {
     const stdout = [

@@ -1,4 +1,4 @@
-import type { HostSummary, DeviceFlowLine, DeviceReport, DeviceSandboxFlow } from "@intentic/sandbox-contract";
+import { type HostSummary, type DeviceFlowLine, type DeviceReport, type DeviceSandboxFlow, hostRunningSandbox } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { afterEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
@@ -13,7 +13,6 @@ vi.mock("../system/runtime-watch.js", () => ({ publishRuntimeChange: (...domains
 const report = (hostname: string, overrides: Partial<DeviceReport> = {}): DeviceReport => ({
     hostname,
     os: "linux",
-    sandboxes: [],
     pairings: [],
     ports: [],
     agent: { running: true, installed: "0.1.0" },
@@ -129,13 +128,15 @@ test("reads a sync-only machine's platform off its report", () => {
 // Rows join on hostname, not on the enrollment name or capability id, which can each differ.
 test("folds a sync enrollment and a host capability into one row when the hostname agrees", () => {
     const pulled: PullResult = {
-        report: report("blackbox", { sandboxes: [{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }] }),
+        report: report("blackbox"),
+        sandboxes: [{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }],
     };
     const merged = mergeDevices([enrolled("laptop")], [{ machine: "laptop", report: report("blackbox") }], [{ host: host("my-pc"), result: pulled }]);
 
     expect(merged).toHaveLength(1);
     expect(merged[0]).toMatchObject({ key: "blackbox", label: "laptop", sync: enrolled("laptop"), hostId: "my-pc", online: true });
-    expect(merged[0]?.report?.sandboxes).toHaveLength(1);
+    // The containers arrive through the host door and land on the row, never inside the volunteered report.
+    expect(merged[0]?.sandboxes).toHaveLength(1);
 });
 
 test("joins an offline device to the machine it is already syncing", () => {
@@ -391,6 +392,30 @@ test("asks for the status and the fleet in one go, and bounds the pair with one 
 test("a machine that refuses to answer at all reads as offline", async () => {
     const { services } = fakeServices("dead-pc", () => Promise.reject(new Error("socket is gone")));
     expect((await devices(services))[0]).toMatchObject({ hostId: "dead-pc", gap: "offline" });
+});
+
+// The card setup writes for a new sandbox: "Manage sandboxes on this device" on, "Run commands" off. Its containers
+// are what every swap button is gated on (hostRunningSandbox), and dropping them over the refused status call is what
+// made a fresh sandbox print a terminal command for its own first rebuild.
+test("keeps the containers of a machine whose status call is refused", async () => {
+    const fleet = [{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }];
+    const { services } = fakeServices("locked-pc", async (call) =>
+        call.tool === "run_command" ? answer(`This device has no tool called "run_command".`, true) : answer(JSON.stringify(fleet)),
+    );
+
+    const row = (await devices(services))[0];
+    expect(row).toMatchObject({ hostId: "locked-pc", online: true, gap: "scope-off" });
+    expect(row?.sandboxes).toEqual(fleet);
+    expect(hostRunningSandbox(await devices(services), "work")).toBe("locked-pc");
+});
+
+// "None there" is a reading and "nobody could look" is not; a refused fleet call must not come back as an empty
+// machine, which would read as a docker with nothing in it.
+test("carries no container list at all when the machine refuses to list them", async () => {
+    const { services } = fakeServices("shy-pc", async (call) =>
+        call.tool === "run_command" ? answer(statusEnvelope(report("shy"))) : answer(`This device has no tool called "list_sandboxes".`, true),
+    );
+    expect((await devices(services))[0]?.sandboxes).toBeUndefined();
 });
 
 // Runner lifecycle: the two ops the daemon fills in for.

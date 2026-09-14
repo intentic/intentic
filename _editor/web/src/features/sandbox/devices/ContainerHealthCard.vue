@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { Device } from "@intentic/sandbox-contract";
-import { Button, Code, type DeviceSandboxGroup, Icon, sandboxGroups } from "@intentic/ui";
+import { Button, Code, Icon } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { apiClient } from "../../../lib/useApi";
 import { containerNotices } from "../overview/containerHealth";
-import { manageDeviceSandbox, useDevices } from "./useDevices";
+import { manageDeviceSandbox, useDevices, useHostRunning } from "./useDevices";
 import { useSandbox } from "../client/useSandbox";
 import { useRole } from "../secrets/useRole";
 
@@ -18,18 +18,11 @@ const notices = computed(() => (active.value === undefined ? [] : containerNotic
 // The daemon hostname's first label is the sandbox slug.
 const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
 
-// Guards against ownSlug and a sandbox's slug both being undefined and comparing equal.
+// The machine this sandbox runs on, by the one rule every "run it out there" path shares (hostRunningSandbox). Kept
+// as the row, not the id, since the confirmation below names the machine.
+const hostId = useHostRunning(() => ownSlug.value);
 const host = computed<Device | undefined>(() =>
-    ownSlug.value === undefined
-        ? undefined
-        : devices.value.find(
-              (device) =>
-                  device.hostId !== undefined &&
-                  device.report !== undefined &&
-                  sandboxGroups(device.report.pairings, device.report.ports, device.report.sandboxes).some(
-                      (group: DeviceSandboxGroup) => group.sandbox?.slug === ownSlug.value,
-                  ),
-          ),
+    hostId.value === undefined ? undefined : devices.value.find((device) => device.hostId === hostId.value),
 );
 
 // Owner-only: the platform rejects a non-owner's mint, so the button is hidden rather than left to fail.

@@ -30,7 +30,6 @@ type Report = NonNullable<Device[`report`]>;
 const report = (overrides: Partial<Report> = {}): Report => ({
     hostname: `rog`,
     os: `linux`,
-    sandboxes: [],
     pairings: [],
     ports: [],
     agent: { running: true, lastTickAt: NOW },
@@ -48,9 +47,15 @@ const device = (overrides: Partial<Device> = {}): Device => ({
     ...overrides,
 });
 
+// What the machine said about itself, across both of its answers: folders and ports from its report, containers from
+// the host door's own list, which rides the row because it answers to its own switch.
+type Held = Partial<Report> & { sandboxes?: Device[`sandboxes`] };
+
 // Two axes, kept apart: what the daemon says about the machine, and what the machine said about itself.
-const row = (overrides: Partial<Device> = {}, held: Partial<Report> = {}, latest?: string) =>
-    deviceRow(device({ report: report(held), ...overrides }), latest);
+const row = (overrides: Partial<Device> = {}, held: Held = {}, latest?: string) => {
+    const { sandboxes, ...reported } = held;
+    return deviceRow(device({ report: report(reported), ...(sandboxes === undefined ? {} : { sandboxes }), ...overrides }), latest);
+};
 
 // which machine reads as live
 
@@ -116,14 +121,14 @@ test(`puts the machines worth reading first, and breaks ties by name`, () => {
 
 // what a card says without being expanded
 
-const PAIRED: Partial<Report> = {
+const PAIRED: Held = {
     pairings: [{ sandboxId: `work-abc`, mode: `sync`, localDir: `/home/ada/work`, mutagenStatus: `watching` }],
     ports: [{ port: 8788, host: `127.0.0.1`, sandboxId: `work-abc`, state: `mirrored`, command: `node vite.js` }],
     sandboxes: [{ slug: `work-abc`, container: `sandbox-work-abc`, name: `intentic-dev`, running: true, image: `img:1` }],
 };
 
 // Names a sandbox with nothing but a folder, so a card can be given any number of them.
-const folders = (...ids: string[]): Partial<Report> => ({
+const folders = (...ids: string[]): Held => ({
     pairings: ids.map((id) => ({ sandboxId: id, mode: `sync` as const, localDir: `/w/${id}` })),
 });
 
@@ -147,10 +152,21 @@ test(`caps the lines it draws and counts what it left out`, () => {
 });
 
 test(`draws every match while the filter is set, so a port search never lands off the list`, () => {
-    const held: Partial<Report> = { ...folders(`a`, `b`, `c`, `d`), ports: [{ port: 8788, host: `127.0.0.1`, sandboxId: `d`, state: `mirrored` }] };
+    const held: Held = { ...folders(`a`, `b`, `c`, `d`), ports: [{ port: 8788, host: `127.0.0.1`, sandboxId: `d`, state: `mirrored` }] };
     const body = boardBody(row({}, held), `8788`, undefined, NOW);
     expect(body.lines.map((line) => line.title)).toEqual([`d`]);
     expect(body.more).toBe(0);
+});
+
+// A machine whose card grants sandbox management and nothing else lists its containers and refuses to describe
+// itself. Grouping off the report dropped those rows entirely, which is what left a freshly added sandbox reading a
+// terminal command for the one rebuild it always needs.
+test(`draws the containers of a machine that would not describe itself`, () => {
+    const locked = deviceRow(device({ gap: `scope-off`, report: undefined, sandboxes: PAIRED.sandboxes }), undefined);
+    expect(locked.groups.map((group) => group.sandbox?.slug)).toEqual([`work-abc`]);
+    // No report, so nothing under the row: its folder and its ports are exactly what the shut switch withholds.
+    expect(locked.groups[0]?.folder).toBeUndefined();
+    expect(locked.groups[0]?.ports).toEqual([]);
 });
 
 test(`separates what is wrong with the machine from what is wrong with its sandboxes`, () => {
@@ -182,7 +198,7 @@ test(`offers no filter over a board small enough to read`, () => {
 });
 
 test(`counts the fleet's sandboxes by state, and keeps "running" visible at zero`, () => {
-    const stopped: Partial<Report> = {
+    const stopped: Held = {
         ...PAIRED,
         sandboxes: [{ slug: `work-abc`, container: `sandbox-work-abc`, running: false, image: `img:1` }],
     };
@@ -249,7 +265,7 @@ const GRANTED = { sandboxes: `on`, sandboxRemove: `on` };
 // decides whether a machine that isn't answering is offered a fresh pairing at all.
 const concernsOf = (
     overrides: Partial<Device> = {},
-    held: Partial<Report> = {},
+    held: Held = {},
     latest?: string,
     scopes?: Record<string, string>,
     canPair = true,
@@ -263,7 +279,8 @@ test(`says nothing at all about a healthy, fully-permitted machine`, () => {
 });
 
 test(`leads with whether the machine answers, then how old the reading is`, () => {
-    const concerns = concernsOf({ gap: `no-agent` }, { capturedAt: NOW - 61_000 });
+    // Granted, like every case here that isn't about permissions: an ungranted switch is a third concern of its own.
+    const concerns = concernsOf({ gap: `no-agent` }, { capturedAt: NOW - 61_000 }, undefined, GRANTED);
     expect(concerns.map((concern) => concern.key)).toEqual([`gap`, `stale`]);
     expect(concerns[0]?.text).toContain(`it has no agent`);
     expect(concerns[1]?.text).toContain(`What follows is what it looked like then.`);

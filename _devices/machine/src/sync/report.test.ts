@@ -57,9 +57,10 @@ describe("buildReport", () => {
     });
 
     // The docker half is never this agent's to report: enumerating a machine's containers is a disclosure this
-    // design rules out. Asserted here so nothing quietly starts doing it.
+    // design rules out, so a report carries no such field at all — asked for by name through the host door instead.
+    // Asserted on the keys, since a value this side never sets can only come back as a field somebody added.
     it("never reports containers", () => {
-        expect(report({ pairings: [pairing({ sandboxId: "work" })] }).sandboxes).toEqual([]);
+        expect(Object.keys(report({ pairings: [pairing({ sandboxId: "work" })] }))).not.toContain("sandboxes");
     });
 
     it("carries the agent, because everything else is only true while its loop runs", () => {

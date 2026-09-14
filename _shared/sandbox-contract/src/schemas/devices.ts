@@ -307,8 +307,6 @@ export const DeviceReportSchema = z.object({
     // machine won't say. Windows, and every distro it hosts, all answer `hostname` with the same string while being
     // separate filesystems running separate agents, so this is the only thing that keeps them apart.
     wsl: z.object({ distro: z.string() }).optional(),
-    // Filled by the reader, never the agent; empty means no Docker or nothing looked, not that none exist.
-    sandboxes: z.array(DeviceSandboxSchema),
     pairings: z.array(DevicePairingSchema),
     ports: z.array(DevicePortSchema),
     // The one agent this device runs, on disk and in flight, in one block.
@@ -352,7 +350,8 @@ export const agentBuildSkew = (agent: DeviceAgent): { readonly running: string |
 export const DeviceGapSchema = z.enum([
     // A host capability that is enrolled but has no socket right now. Laptops sleep; this is not a fault.
     "offline",
-    // Connected, but "Run commands" is off on its capability card; the daemon may not ask it anything.
+    // Connected, but "Run commands" is off on its capability card, so it won't describe itself: no folders, no
+    // ports, no agent health. Says nothing about its containers, which ride their own switch (`Device.sandboxes`).
     "scope-off",
     // Reachable and asked, but has no `intentic-machine` installed, so nothing knows its folders or ports.
     "no-agent",
@@ -392,6 +391,12 @@ export const DeviceSchema = z.object({
     agentVersion: z.string().optional(),
     lastSeen: z.number().optional(),
     report: DeviceReportSchema.optional(),
+    // The containers this machine holds, read through the host door's own `list_sandboxes` and so behind its own
+    // switch ("Manage sandboxes on this device", or "Run commands"). Beside the report rather than inside it because
+    // the two ride different switches: a card granting sandbox management and nothing else answers this and no
+    // report at all. Absent means nobody could look — a sync-only machine, a refusal, an unread device — never that
+    // the machine holds none.
+    sandboxes: z.array(DeviceSandboxSchema).optional(),
     gap: DeviceGapSchema.optional(),
 });
 export type Device = z.infer<typeof DeviceSchema>;
@@ -400,12 +405,14 @@ export const DevicesListSchema = z.object({ devices: z.array(DeviceSchema) });
 // The connected, online device whose docker reports a given sandbox slug: the machine that sandbox RUNS ON, as opposed
 // to any machine merely paired with it. Answers the question every "run it there instead of asking the owner to type
 // it" path starts from, and is `undefined` for a sync-only agent, which reports no containers at all.
+// Reads the row's own container list, not the report's: a card that grants sandbox management without "Run commands"
+// can run every swap this answer leads to while refusing to describe itself, and judging it on the report would print
+// a terminal command for a machine one click could have done it on.
 export const hostRunningSandbox = (devices: readonly Device[], slug: string | undefined): string | undefined =>
     slug === undefined || slug === ""
         ? undefined
-        : devices.find(
-              (device) => device.hostId !== undefined && device.online === true && (device.report?.sandboxes ?? []).some((box) => box.slug === slug),
-          )?.hostId;
+        : devices.find((device) => device.hostId !== undefined && device.online === true && (device.sandboxes ?? []).some((box) => box.slug === slug))
+              ?.hostId;
 // GET /system/sync: sandbox-level facts only, whether sync is possible, whether anything is enrolled, and raw device
 // reports. Cheap: the sidebar badge reads this and must never fan out to a device.
 export const SyncStatusSchema = z.object({
