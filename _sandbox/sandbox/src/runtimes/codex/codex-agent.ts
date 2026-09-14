@@ -224,8 +224,13 @@ const mcpResultText = (item: Extract<CodexItem, { type: "mcp_tool_call" }>): str
 // Matches Codex's in-turn stream-retry notice; not a real failure, and no backoff instant is reported.
 const CODEX_STREAM_RETRY = /^Reconnecting\.\.\.\s*(\d+)\s*\/\s*(\d+)/;
 
-// Matches an older Codex build's auto-compaction warning, so a pinned CLI doesn't redden a healthy turn.
+// Codex's heads-up after every auto-compaction. The context_compaction item already carries the lifecycle frame, so
+// repeating it here would show the reader two compaction notices for one compaction.
 const CODEX_COMPACTED = /long threads and multiple compactions/i;
+
+// Codex messages this chat swallows on any channel: each reports something already framed elsewhere, so neither an
+// error nor a muted line may come of them.
+const codexDropped = (message: string): boolean => CODEX_COMPACTED.test(message) || CODEX_MODEL_RESUMED_ELSEWHERE.test(message);
 
 // Classifies a Codex error message that is not actually a failure; both of Codex's error channels run through here so a
 // notice reads the same either way. Undefined means a real failure.
@@ -234,22 +239,29 @@ const codexNotice = (message: string): AgentEvent | undefined => {
     if (retry !== null) {
         return { kind: "provider_retry", attempt: Number(retry[1]), maxAttempts: Number(retry[2]) };
     }
-    if (CODEX_COMPACTED.test(message)) {
-        return { kind: "compact", trigger: "auto" };
-    }
     // An advisory isn't a failure: the turn still answers normally, so it must not mark the phase errored.
     return CODEX_ADVISORY.test(message) ? { kind: "error", code: "codex-advisory", message } : undefined;
 };
 
 // Codex's warning channel, which by construction carries advisories rather than failures: whatever it says, the turn
 // runs on. So nothing here may redden the turn or offer to pick it back up; the worst case is a muted line. Undefined
-// drops the warning entirely, for the one Codex raises about something this chat already did on purpose.
+// drops the warning entirely.
 const codexWarning = (message: string): AgentEvent | undefined => {
-    if (CODEX_MODEL_RESUMED_ELSEWHERE.test(message)) {
+    if (codexDropped(message)) {
         return undefined;
     }
-    // Shapes with a frame of their own (stream retry, auto-compaction) keep it; the rest become the muted line.
+    // Shapes with a frame of their own (stream retry) keep it; the rest become the muted line.
     return codexNotice(message) ?? { kind: "error", code: "codex-advisory", message };
+};
+
+// Codex's error channel, classified whole: the frames to emit, and whether the turn really died. A dropped message
+// yields nothing at all, and only a message that classifies as neither notice nor advisory counts as a failure.
+const codexError = (message: string): { frames: AgentEvent[]; errored: boolean } => {
+    if (codexDropped(message)) {
+        return { frames: [], errored: false };
+    }
+    const notice = codexNotice(message);
+    return notice !== undefined ? { frames: [notice], errored: false } : { frames: [{ kind: "error", message }], errored: true };
 };
 
 // Wider than mentionsSpentAllowance since Codex's own retries are already spent by the time this matches.
@@ -615,13 +627,9 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
             yield { kind: "error", message: event.error.message };
             capture.errored = true;
         } else if (event.type === "error") {
-            const notice = codexNotice(event.message);
-            if (notice !== undefined) {
-                yield notice;
-                continue;
-            }
-            yield { kind: "error", message: event.message };
-            capture.errored = true;
+            const failure = codexError(event.message);
+            yield* failure.frames;
+            capture.errored ||= failure.errored;
         } else if (event.type === "warning") {
             // Never sets `errored`: a warned turn still answers, and a plan phase that holds its message must still
             // hand it over.

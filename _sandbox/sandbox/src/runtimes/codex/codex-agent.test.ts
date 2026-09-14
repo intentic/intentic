@@ -484,6 +484,46 @@ test("a context-compaction item is the compact lifecycle frame, and the turn's a
     ]);
 });
 
+// Codex's post-compaction heads-up, worded as codex-rs/core/src/compact.rs emits it; it follows every auto-compaction,
+// on top of the context_compaction item.
+const COMPACTED_HEADS_UP =
+    "Heads up: Long threads and multiple compactions can cause the model to be less accurate. " +
+    "Start a new thread when possible to keep threads small and targeted.";
+
+test("the post-compaction heads-up is dropped, so one compaction reads as one notice", async () => {
+    const { runner } = fakeCodexRunner([
+        { type: "thread.started", thread_id: "thr-17" },
+        { type: "item.completed", item: { id: "compact-1", type: "context_compaction" } },
+        { type: "warning", message: COMPACTED_HEADS_UP },
+        { type: "item.completed", item: { id: "m1", type: "agent_message", text: "carrying on" } },
+    ]);
+    // Codex reports one compaction on two channels; a second compact frame would print the chat's "Context compacted"
+    // line twice for a single compaction.
+    expect(await collect(createTestAgent(runner), request)).toEqual([
+        { kind: "session", sessionId: "thr-17" },
+        { kind: "compact", trigger: "auto" },
+        { kind: "delta", text: "carrying on" },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+});
+
+test("the post-compaction heads-up is dropped on the error channel too, rather than failing the turn", async () => {
+    const { runner } = fakeCodexRunner([
+        { type: "thread.started", thread_id: "thr-18" },
+        { type: "error", message: COMPACTED_HEADS_UP },
+        { type: "item.completed", item: { id: "m1", type: "agent_message", text: "carrying on" } },
+    ]);
+    // Codex has serialized this heads-up as an error before; reddening a turn that only compacted is the bug that
+    // mapping it to a compact frame was meant to fix, and dropping it fixes without doubling the notice.
+    expect(await collect(createTestAgent(runner), request)).toEqual([
+        { kind: "session", sessionId: "thr-18" },
+        { kind: "delta", text: "carrying on" },
+        { kind: "text_end" },
+        { kind: "done" },
+    ]);
+});
+
 test("a plan turn survives a compaction and still proposes its plan", async () => {
     // A compaction marking the phase errored would drop a plan the turn really produced; plan turns are exactly the
     // long kind that hits the threshold.
