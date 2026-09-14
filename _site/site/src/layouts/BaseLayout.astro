@@ -120,8 +120,8 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         <meta name="theme-color" content={THEME_COLOR.default} />
         {/* After the tag it rewrites, and before the body it skins. */}
         <script is:inline set:html={variantScript()} />
-        {/* Preload the reading face used by every page. One variable file covers 400, 500 and 600. */}
-        <link rel="preload" as="font" type="font/woff2" href="/fonts/public-sans-400-600-latin.woff2" crossorigin />
+        {/* Preload the reading face used by every page. One variable file covers the whole 100–900 axis. */}
+        <link rel="preload" as="font" type="font/woff2" href="/fonts/public-sans-100-900-latin.woff2" crossorigin />
         <noscript>
             <style>
                 .fade-in {

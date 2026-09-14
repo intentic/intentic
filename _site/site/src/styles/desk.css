@@ -84,6 +84,9 @@ html[data-variant="desk"] {
     --wash-ember: linear-gradient(160deg, color-mix(in oklab, var(--color-card) 86%, var(--desk-brand-300)), var(--color-card));
 
     /* ── Tier 3 · the materials named in global.css's :root ───────────────────────────── */
+    /* No stone to echo here: on paper the headline is simply the page's ink. */
+    --role-display-ink: var(--color-content);
+
     --role-selection: color-mix(in oklab, var(--desk-brand-500) 30%, transparent);
     --role-mark-fill: color-mix(in oklab, var(--desk-brand-500) 32%, transparent);
     --role-ember-line: color-mix(in oklab, var(--desk-brand-700) 45%, transparent);

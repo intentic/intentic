@@ -66,23 +66,26 @@
         U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
-/* THE READING FACE. One variable file per subset covers 400 (body), 500 (control labels) and 600 (small-caps
-   labels) — the three weights the site sets. It replaced Mukta, which set too light to read as ink at body sizes. */
+/* THE READING FACE, over its WHOLE axis. One variable file per subset, declared 100–900.
+   This used to be cut to 400–600, the three weights the site's own rules set, and that silently clamped everything
+   outside it: `font-extrabold` on the 404 numeral drew at 600, and any later utility would have too, with nothing
+   to say so. Google ships the same file for either request — the narrower declaration bought nothing and cost the
+   top of the axis. */
 @font-face {
     font-family: "Public Sans";
     font-style: normal;
-    font-weight: 400 600;
+    font-weight: 100 900;
     font-display: swap;
-    src: url("/fonts/public-sans-400-600-latin.woff2") format("woff2");
+    src: url("/fonts/public-sans-100-900-latin.woff2") format("woff2");
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
         U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
     font-family: "Public Sans";
     font-style: normal;
-    font-weight: 400 600;
+    font-weight: 100 900;
     font-display: swap;
-    src: url("/fonts/public-sans-400-600-latin-ext.woff2") format("woff2");
+    src: url("/fonts/public-sans-100-900-latin-ext.woff2") format("woff2");
     unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
         U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
@@ -165,6 +168,12 @@
    utility can already reach — canvas, content, line, the ember ramp — stays in `@theme` and is overridden there.
    Values are exactly what the rules below used to spell out. */
 :root {
+/* THE HEADLINE'S INK. The display type used to be a photograph of stone clipped into its glyphs, shaded from
+       #cbb08d at the top of each line to #86694f at the foot. Taking the texture and its bevel off left the type
+       falling back to `--color-content`, which is cream — measured against the old screenshots, 1.7x brighter than
+       the stone ever was. This is that stone's own mid stop, flat: the colour without the picture. */
+    --role-display-ink: #ab8c6c;
+
     /* Selection, and the search palette's hit highlight: the same ember wash at the same weight. */
     --role-selection: rgba(224, 123, 39, 0.32);
     --role-mark-fill: rgba(224, 123, 39, 0.28);
@@ -263,8 +272,16 @@
     body {
         min-height: 100vh;
         overflow-x: hidden;
-        -webkit-font-smoothing: antialiased;
         text-rendering: optimizeLegibility;
+    }
+/* GREYSCALE AA BELONGS ONLY WHERE THE HALATION IS, which is the rule the app keeps in
+       _editor/ui/src/styles/base.css and the site did not. Light type on a dark ground blooms and reads heavier than
+       the same type dark-on-light; greyscale antialiasing thins it back. Applied to BOTH skins — which is what this
+       was doing — it thins the light one too, where there is no bloom to correct and the strokes were already the
+       thing being complained about. */
+    html:not([data-variant="desk"]) body {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
     }
     /* Borders degrade to the line token, never to white. */
     *,
@@ -309,6 +326,7 @@
     .display {
         font-family: var(--font-display);
         font-weight: 600;
+        color: var(--role-display-ink);
 /* Normal, not the positive tracking Playfair needed: Spectral is drawn for screens and already sets open, so
            tracking it out only loosened the words. */
         letter-spacing: normal;
