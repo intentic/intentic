@@ -17,6 +17,9 @@
     --face-mark: "Baloo 2", "Trebuchet MS", ui-rounded, sans-serif;
     --face-read: "Public Sans", ui-sans-serif, system-ui, sans-serif;
     --corner-size: 1.7rem;
+/* The canvas as a bare triple, which is what a gradient stop needs to fade toward it at an alpha. The plate's washes are
+   shapes, not colours, so the desk skin re-points this and keeps every stop where it is. */
+    --scrim: 12 9 7;
 
     /* The design system's roles, in the site's own values — see the header for why these are the `--color-*`. */
     --color-canvas: var(--canvas);
@@ -98,7 +101,7 @@
     bottom: 0;
     left: 0;
     height: 38%;
-    background: linear-gradient(180deg, transparent 0%, rgba(12, 9, 7, 0.55) 52%, var(--canvas) 100%);
+    background: linear-gradient(180deg, transparent 0%, rgb(var(--scrim) / 0.55) 52%, var(--canvas) 100%);
 }
 /* The scrim is a WELL, not a ramp, and the symmetry of the art is why: a gradient run left to right darkens one figure and leaves the other lit. */
 .entry-plate::after {
@@ -126,7 +129,7 @@
         180deg,
         transparent 0,
         transparent var(--veil-clear),
-        rgba(12, 9, 7, 0.72) calc(var(--veil-clear) + (var(--veil-hold) - var(--veil-clear)) * 0.55),
+        rgb(var(--scrim) / 0.72) calc(var(--veil-clear) + (var(--veil-hold) - var(--veil-clear)) * 0.55),
         var(--canvas) min(var(--veil-hold), 100%),
         var(--canvas) 100%
     );
@@ -404,5 +407,159 @@
     }
     .entry .p-checkbox-icon {
         color: #1a0f06;
+    }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   THE SAME TWO SCREENS IN DAYLIGHT.
+
+   A reader who came from intentic.dev/desk has been reading a light page, and /login and /setup are the first thing
+   they meet on this side — so they wear the site's light skin exactly as they already wear its dark one.
+
+   KEYED ON THE SCHEME, NOT ON THE PROFILE, and that distinction is the whole of it. A profile decides the scheme once,
+   on arrival; after that the scheme is what is true, and someone who came in on /desk and then picked Sanctum is a dark
+   reader whatever brought them. Keying on `data-profile` dressed that person's sign-in screen in daylight metals on a
+   near-black ground. It also means anyone who simply chose Light in Settings gets these screens too, which they should
+   have all along: light is light, however it was asked for. `data-mode` is present only when dark (useTheme spells
+   light by removing it), so the negation is the light scheme exactly.
+
+   Almost nothing here is a new colour. The entry screens run INSIDE the app, whose own light scheme is already live
+   under them (no `data-mode`, so semantic-colors.css's `:root` roles resolve light); the block above replaced those
+   roles with the site's dark ones, and most of this block is simply handing them back. What is left over is the site's
+   own vocabulary — the two metals, the plate's washes and the cast-bronze plaque — and every one of those values is
+   _site/site/src/styles/desk.css's, name for name. scripts/check-desk-palette.mjs fails the build if the two part. */
+html:not([data-mode="dark"]) .entry {
+    /* GOLD DOES NOT SURVIVE DAYLIGHT — #c9a05c on paper is 2.2:1, unreadable as the label type it carries. Both metals
+       become burnt orange and keep their order, and the ember lands a step off them. Fixed brand rather than the picked
+       accent, for the reason the dark skin is fixed gold: nobody has picked anything yet on these two screens. */
+    --gold: var(--color-brand-900);
+    --gold-bright: var(--color-brand-800);
+    --ember: var(--color-brand-700);
+
+    /* The app's own light surfaces and ink, which `.entry` above traded for the site's dark ones. */
+    --canvas: var(--role-canvas);
+    --plate: var(--role-card);
+    --rule: var(--role-line);
+    --rule-strong: var(--role-line-strong);
+    --rule-bright: color-mix(in oklab, var(--color-brand-700) 38%, var(--role-line-strong));
+    --ink: var(--role-content);
+    --ink-muted: var(--role-muted);
+    --ink-subtle: var(--role-subtle);
+    --color-overlay: var(--role-overlay);
+    --color-line-subtle: var(--role-line-subtle);
+    --color-link: var(--role-link);
+    --color-success: var(--role-success);
+    --color-warning: var(--role-warning);
+    --color-danger: var(--role-danger);
+    --color-info: var(--role-info);
+    --color-primary-fill-hover: var(--color-brand-800);
+    --color-fill-content: var(--role-fill-content);
+
+    /* The plate's washes fade toward paper now; the stops themselves do not move. */
+    --scrim: 245 237 231;
+
+    /* THE PLATE STAYS GOLD, and is simply calmed: two stops instead of four, no brushed drag marks, no specular sweep,
+       no halo. It sits deeper than the dark skin's gold because #f2d69f on this paper is 1.2:1 — at #dcb06c → #b98b45
+       the plaque holds its own outline and the cut-in ink never drops below 5.8:1. */
+    --house-bronze-fill: #c79a56;
+    --house-bronze-body: linear-gradient(180deg, #dcb06c 0%, #b98b45 100%);
+    --house-bronze-sweep: none;
+    --house-brushed: none;
+    --house-bronze-ink: #21140a;
+    /* Halved: at this size the dark skin's lit lip reads as a blur on paper. */
+    --house-bronze-ink-lip: 0 1px 0 rgb(255 248 232 / 0.22);
+    /* A bevel is a lit edge and a shaded foot and nothing else — the glow was the dark skin's alone. */
+    --house-bronze-bevel:
+        inset 0 1px 0 rgb(255 250 236 / 0.5),
+        inset 0 -1px 0 rgb(88 56 18 / 0.28),
+        0 1px 2px rgb(61 40 22 / 0.1),
+        0 2px 6px -1px rgb(61 40 22 / 0.12);
+    --house-bronze-bevel-lit:
+        inset 0 1px 0 rgb(255 250 236 / 0.62),
+        inset 0 -1px 0 rgb(88 56 18 / 0.3),
+        0 2px 4px rgb(61 40 22 / 0.07),
+        0 12px 28px -8px rgb(61 40 22 / 0.2);
+    --house-bronze-sheen: linear-gradient(180deg, rgb(255 252 244 / 0.3) 0%, rgb(255 250 236 / 0.08) 60%, transparent 100%);
+
+    /* The frames keep their notched geometry and change metal: brand-800 at a heavier alpha, because the lighter
+       orange drew this edge at 1.8:1 on paper where the dark skin draws its own at 2.9:1. */
+    --house-cartouche: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(158,69,2,0.7)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(158,69,2,0.7)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(158,69,2,0.34)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(158,69,2,0.34)' stroke-width='2.24'/%3E%3C/svg%3E");
+    --house-cartouche-lit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(158,69,2,0.95)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(158,69,2,0.95)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(158,69,2,0.5)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(158,69,2,0.5)' stroke-width='2.24'/%3E%3C/svg%3E");
+    --house-cartouche-bronze: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(255,248,232,0.85)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(255,248,232,0.85)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(88,56,18,0.5)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(88,56,18,0.5)' stroke-width='2.24'/%3E%3C/svg%3E");
+    --house-cartouche-bronze-lit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(255,252,244,0.95)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(255,252,244,0.95)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(88,56,18,0.55)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(88,56,18,0.55)' stroke-width='2.24'/%3E%3C/svg%3E");
+    --house-cartouche-dim: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(158,69,2,0.48)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(158,69,2,0.48)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(158,69,2,0.22)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(158,69,2,0.22)' stroke-width='2.24'/%3E%3C/svg%3E");
+
+    /* Ember glows read as smudges on white; the marks they sat behind are dark enough to carry themselves. */
+    --house-ember-stop-glow: none;
+    --house-finial-glow: none;
+
+    color-scheme: light;
+}
+
+/* A PLATE OF ITS OWN, not the night photograph washed out: cream parchment, the same apsaras and spires, an empty
+   middle for the headline. The app ships the two rungs its own breakpoints ask for. */
+html:not([data-mode="dark"]) .entry-plate-img {
+    background-image: url("/assets/angkor/temple-desk-900.avif");
+}
+@media (min-width: 60rem) {
+    html:not([data-mode="dark"]) .entry-plate-img {
+        background-image: url("/assets/angkor/temple-desk-1600.avif");
+    }
+}
+
+/* The well is the same idea with its own curve, not the dark one scaled: the art arrives pale, so it needs no dimming
+   at all — only enough veil to keep the ornament from competing with the words standing over it. */
+html:not([data-mode="dark"]) .entry-plate::after {
+    background:
+        radial-gradient(58% 46% at 50% 34%, rgb(var(--scrim) / 0.62) 0%, rgb(var(--scrim) / 0.46) 42%, rgb(var(--scrim) / 0.2) 72%, transparent 100%),
+        linear-gradient(0deg, rgb(var(--scrim) / 0.88) 0%, rgb(var(--scrim) / 0.56) 20%, rgb(var(--scrim) / 0.18) 40%, transparent 60%),
+        radial-gradient(128% 108% at 50% 40%, transparent 44%, rgb(var(--scrim) / 0.42) 100%);
+}
+
+/* No stone to echo on paper: the headline is simply the page's ink. */
+html:not([data-mode="dark"]) .entry-display {
+    background-image: none;
+    color: var(--ink);
+    -webkit-text-fill-color: var(--ink);
+    filter: none;
+}
+
+/* A warm room throws no neutral shadow, and none of this depth: the app's own light drop. */
+html:not([data-mode="dark"]) .entry-frame {
+    box-shadow:
+        0 4px 10px rgb(61 40 22 / 0.08),
+        0 24px 56px -12px rgb(61 40 22 / 0.26);
+}
+
+/* Same layer as the tiers above, so specificity settles it and a caller's own utility still wins over both. */
+@layer components {
+    /* The stone cartouche on paper is the card it stands on, and under the pointer its label goes DEEPER rather than
+       brighter. The wash is mixed into the plate, never into `transparent`: these buttons sit on a card. */
+    html:not([data-mode="dark"]) .entry .p-button-secondary:where(:not(.p-button-text, .p-button-link)) {
+        color: var(--ink);
+        background: var(--plate);
+    }
+    html:not([data-mode="dark"]) .entry .p-button-secondary:where(:not(.p-button-text, .p-button-link)):not(:disabled):hover,
+    html:not([data-mode="dark"]) .entry .p-button-secondary:where(:not(.p-button-text, .p-button-link)):focus-visible {
+        color: var(--color-brand-900);
+        background: color-mix(in oklab, var(--color-brand-600) 8%, var(--plate));
+    }
+
+    /* Still a panel of the same rock that nobody has dressed: it keeps the ground and loses the metal. */
+    html:not([data-mode="dark"]) .entry .p-button:disabled:not(.p-button-loading) {
+        background-color: color-mix(in oklab, var(--color-line) 55%, var(--plate));
+        color: var(--ink-subtle);
+    }
+
+    html:not([data-mode="dark"]) .entry .p-button-text:where(:not(.p-button-danger, .p-button-warn, .p-button-success)):not(:disabled):hover {
+        background: color-mix(in oklab, var(--color-brand-600) 10%, transparent);
+    }
+
+    /* An unticked box is paper with a rule round it; a ticked one carries the ember and a white mark. */
+    html:not([data-mode="dark"]) .entry .p-checkbox-box {
+        background: var(--plate);
+    }
+    html:not([data-mode="dark"]) .entry .p-checkbox-icon {
+        color: var(--color-fill-content);
     }
 }

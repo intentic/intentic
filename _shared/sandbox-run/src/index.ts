@@ -193,6 +193,9 @@ export const REPLAY_ENV = [
     // The dev checkout this container was launched from; allowlisted so `INTENTIC_SET_ENV` can deliver it and every
     // later dev recreate keeps it. A path on the host, meaningless in here except as an argument sent back out.
     "SANDBOX_DEV_ROOT",
+    // The arriving profile's own sandbox definition. Replayed rather than consumed, because a recreate is how a
+    // workspace that never filled gets a second chance at it; the daemon applies it only to one that arrived empty.
+    "SANDBOX_DEFINITION_SEED",
 ] as const;
 
 // `printenv -0` / `env -0` output → name/value pairs. NUL framing is the only safe channel for these values:

@@ -1,13 +1,20 @@
+import { DEFAULT_PROFILE, PROFILE_PARAM, type Profile } from "@intentic/constants";
+import { APP_URL } from "@intentic/site-content/site";
+
 // The site ships one set of pages in two skins. The dark carved-stone design is the default; `desk` is the light one,
 // for readers who were sent a link and are not here to look at a terminal. Which one a visitor gets is decided in the
 // browser before first paint (BaseLayout's inline script), never at the edge — one HTML document per URL stays
 // cacheable, and only the `data-variant` attribute on <html> differs.
+//
+// The same script hands the choice on to the app, since the reader crosses to another origin the cookie below cannot
+// reach. A variant is which design THIS site wears; a profile is who is arriving, which the app answers in more than
+// paint (@intentic/constants profile.ts). They share their names, and this is the only place that maps one to the other.
 
 /** Written by the pre-paint script, read by it on every later page. */
 export const VARIANT_COOKIE = "variant";
 
 /** The light skin's name, and the value of `<html data-variant>` when it is on. Any other value means the default. */
-export const DESK_VARIANT = "desk";
+export const DESK_VARIANT = "desk" satisfies Profile;
 
 /** Landing anywhere under this path turns the light skin on and remembers it. */
 export const DESK_PATH = "/desk";
@@ -56,5 +63,38 @@ export const variantScript = (): string => `(function () {
         if (themeColor !== null) {
             themeColor.setAttribute("content", ${q(THEME_COLOR.desk)});
         }
+    }
+    // An unchosen reader hands the app nothing: no cookie, no path, no link means no opinion, and the app keeps
+    // whatever it already had. Anything chosen that is not desk is the default, including the footer's way out,
+    // which is what lets that link put the app back too.
+    if (chosen === "") {
+        return;
+    }
+    var profile = chosen === ${q(DESK_VARIANT)} ? ${q(DESK_VARIANT)} : ${q(DEFAULT_PROFILE)};
+    // The pages are static and shared by both designs, so the profile is attached here rather than baked into each
+    // href — the same reason the design itself is. Runs on DOMContentLoaded because this script sits in <head>,
+    // above every link it rewrites.
+    var carry = function () {
+        var links = document.querySelectorAll("a[href]");
+        for (var i = 0; i < links.length; i++) {
+            var target;
+            try {
+                target = new URL(links[i].getAttribute("href"), window.location.href);
+            } catch (e) {
+                continue;
+            }
+            if (target.origin !== ${q(new URL(APP_URL).origin)}) {
+                continue;
+            }
+            // set(), not an appended string: /where-it-runs hands the app a ?machine= already, and a second query
+            // string would take the rung with it.
+            target.searchParams.set(${q(PROFILE_PARAM)}, profile);
+            links[i].setAttribute("href", target.toString());
+        }
+    };
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", carry);
+    } else {
+        carry();
     }
 })();`;

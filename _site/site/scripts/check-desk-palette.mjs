@@ -21,6 +21,7 @@ const app = resolve(root, "../../_editor/ui/src/styles");
 const primitives = readFileSync(resolve(app, "primitive-colors.css"), "utf8");
 const semantics = readFileSync(resolve(app, "semantic-colors.css"), "utf8");
 const desk = readFileSync(resolve(root, "src/styles/desk.css"), "utf8");
+const entry = readFileSync(resolve(root, "../../_editor/web/src/styles/entry.css"), "utf8");
 
 const failures = [];
 const fail = (what, expected, actual) => failures.push(`${what}\n    app  : ${expected}\n    desk : ${actual}`);
@@ -152,14 +153,54 @@ if (canvasRecipe === null) {
     }
 }
 
+// ── 4. the entry screens ─────────────────────────────────────────────────────────────────────────────────────────
+// /login and /setup are the site's design worn by the app, so a reader arriving from /desk meets them in the light
+// skin too — and they carry their own copy of the house materials, in a third package, behind a third selector. Only
+// the house metals are copied: everything else in that block hands the app's own light roles back, which cannot drift
+// from the app by construction. desk.css spells its bevels with `--desk-shadow-*`, which do not exist over there, so
+// they are expanded before the two are compared.
+const entryBlock = /html:not\(\[data-mode="dark"\]\) \.entry \{([^}]*)\}/u.exec(entry)?.[1];
+if (entryBlock === undefined) {
+    fail("entry.css has no light block, so /login and /setup arrive dark for a reader who came from /desk", 'html:not([data-mode="dark"]) .entry { … }', "(missing)");
+} else {
+    const expandShadows = (value) =>
+        normalise(
+            value
+                .replace(/var\((--desk-shadow-[123])\)/gu, (_, name) => deskDecl(name) ?? _)
+                .replace(/var\(--desk-shadow-tint\)/gu, deskDecl("--desk-shadow-tint") ?? "var(--desk-shadow-tint)"),
+        );
+    // Only the ones the entry screens actually paint with: the site has marks the app has no counterpart for, and a
+    // value copied across for a selector that does not exist here would be a line nobody could ever check by looking.
+    const houseNames = [...desk.matchAll(/^\s*(--house-[\w-]+)\s*:/gmu)].map((m) => m[1]).filter((name) => entry.includes(`var(${name})`));
+    for (const name of houseNames) {
+        const expected = expandShadows(deskDecl(name) ?? "");
+        const actual = decl(entryBlock, name);
+        if (expected !== actual) {
+            fail(`the entry screens' ${name}`, expected, actual ?? "(missing)");
+        }
+    }
+    // The plate's washes fade toward paper in both, and it is the same paper.
+    if (decl(entryBlock, "--scrim") !== deskDecl("--role-scrim")) {
+        fail("the entry screens' --scrim is meant to be the site's --role-scrim", deskDecl("--role-scrim") ?? "(missing)", decl(entryBlock, "--scrim") ?? "(missing)");
+    }
+    // A frame's drop is the deepest of the three, and the site names it rather than writing it out.
+    const frame = /html:not\(\[data-mode="dark"\]\) \.entry-frame \{([^}]*)\}/u.exec(entry)?.[1] ?? "";
+    if (decl(frame, "box-shadow") !== expandShadows("var(--desk-shadow-3)")) {
+        fail("the entry frame's drop shadow", expandShadows("var(--desk-shadow-3)"), decl(frame, "box-shadow") ?? "(missing)");
+    }
+}
+
 if (failures.length > 0) {
     console.error(
         `desk palette has drifted from the app's light theme (${failures.length} ${failures.length === 1 ? "difference" : "differences"}).\n` +
-            `  app  : _editor/ui/src/styles/{primitive,semantic}-colors.css\n` +
-            `  desk : _site/site/src/styles/desk.css\n\n` +
+            `  app   : _editor/ui/src/styles/{primitive,semantic}-colors.css\n` +
+            `  desk  : _site/site/src/styles/desk.css\n` +
+            `  entry : _editor/web/src/styles/entry.css (its light-scheme blocks)\n\n` +
             `${failures.join("\n\n")}\n\n` +
-            `Copy the app's values across, or if the app moved on purpose, move desk.css with it.`,
+            `Copy the app's values across, or if the app moved on purpose, move the other two with it.`,
     );
     process.exit(1);
 }
-console.log(`desk palette matches the app's light theme: ${Object.values(RAMP).flat().length} ramp steps, ${ROLES.length} roles, and the plate's scrim.`);
+console.log(
+    `desk palette matches the app's light theme: ${Object.values(RAMP).flat().length} ramp steps, ${ROLES.length} roles, the plate's scrim, and the entry screens' house materials.`,
+);

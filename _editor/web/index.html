@@ -26,14 +26,49 @@
                 }
             }
         </script>
-<!-- Restore saved display preferences before first paint. -->
+<!-- Adopt an arriving profile, then restore saved display preferences — all before first paint. -->
         <script>
             try {
+                // WHO ARRIVED. A link from intentic.dev names the profile the reader was reading in; the values
+                // below are @intentic/constants profile.ts, and src/bootProfile.test.ts fails if they part.
+                var PROFILE_KEYS = ["ui-color-scheme", "ui-skin", "ui-audience"];
+                var PROFILES = {
+                    default: { "ui-color-scheme": "dark", "ui-skin": "sanctum" },
+                    desk: { "ui-color-scheme": "light", "ui-skin": "none", "ui-audience": "maker" },
+                };
+                var owns = Object.prototype.hasOwnProperty;
+                var url = new URL(window.location.href);
+                var asked = url.searchParams.get("profile");
+                if (asked !== null && owns.call(PROFILES, asked)) {
+                    var next = PROFILES[asked];
+                    var last = localStorage.getItem("ui-profile");
+                    var was = last !== null && owns.call(PROFILES, last) ? PROFILES[last] : {};
+                    for (var i = 0; i < PROFILE_KEYS.length; i++) {
+                        var key = PROFILE_KEYS[i];
+                        var have = localStorage.getItem(key);
+                        // A profile may write a key while nobody else has: unset, or still carrying what the last
+                        // profile put there. So a link never overrides a choice made in Settings, and leaving a
+                        // profile releases the keys it set rather than stranding them.
+                        if (have !== null && have !== (owns.call(was, key) ? was[key] : null)) continue;
+                        if (owns.call(next, key)) localStorage.setItem(key, next[key]);
+                        else localStorage.removeItem(key);
+                    }
+                    localStorage.setItem("ui-profile", asked);
+                    // Consumed here so the router never sees it and a reload can't re-apply it over a later choice;
+                    // any other query the app was given (?machine=) is left where it was.
+                    url.searchParams.delete("profile");
+                    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+                }
                 var accentVars = localStorage.getItem("ui-accent-vars");
                 if (accentVars) document.documentElement.setAttribute("style", accentVars);
                 var uiTextSize = localStorage.getItem("ui-text-size");
                 if (uiTextSize === "default" || uiTextSize === "large")
                     document.documentElement.setAttribute("data-text-size", uiTextSize);
+                // The tag ships dark, so light is the one scheme that has to be undone here; without it useTheme
+                // arrives after the stylesheet has already painted a dark canvas under a light reader.
+                var uiScheme = localStorage.getItem("ui-color-scheme");
+                if (uiScheme === "light") document.documentElement.removeAttribute("data-mode");
+                else if (uiScheme === "dark") document.documentElement.setAttribute("data-mode", "dark");
                 // A skin repaints every surface in the app, so arriving late means a white flash of the normal
                 // look before the deep one lands — the worst flash of the three. See src/skins/README.md.
                 var uiSkin = localStorage.getItem("ui-skin");

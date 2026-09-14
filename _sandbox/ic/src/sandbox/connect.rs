@@ -70,6 +70,7 @@ fn connect(
     let mut sync_pair_token = env("SYNC_PAIR_TOKEN").unwrap_or_default();
     let mut host_pair_token = env("HOST_PAIR_TOKEN").unwrap_or_default();
     let mut owner_email = env("OWNER_EMAIL").unwrap_or_default();
+    let mut definition_seed = env("SANDBOX_DEFINITION_SEED").unwrap_or_default();
     let cf_token = env("CF_TOKEN").unwrap_or_default();
 
     /* Same idea and the same phase vocabulary as the desktop app's own plan (desktop-app/src/setupPlan.ts). */
@@ -172,6 +173,7 @@ fn connect(
         sync_pair_token = claim.sync_pair_token.unwrap_or(sync_pair_token);
         host_pair_token = claim.host_pair_token.unwrap_or(host_pair_token);
         owner_email = claim.owner_email.unwrap_or(owner_email);
+        definition_seed = claim.definition_seed.unwrap_or(definition_seed);
     }
     /* Reachability is the platform's own edge now, and provisioning it is a pure function there. */
     let has_public_name = !sandbox_hostname.is_empty();
@@ -362,6 +364,9 @@ fn connect(
         ("GOOGLE_CLIENT_ID", &google_client_id),
         ("CONNECT_TOKEN", &connect_token),
         ("OWNER_EMAIL", &owner_email),
+        // The arriving profile's own sandbox. Empty for everyone who arrived without one, and dropped with the
+        // other empties below rather than handed over as a blank the daemon would try to decode.
+        ("SANDBOX_DEFINITION_SEED", &definition_seed),
         ("WEB_ORIGIN", &web_origin),
         ("SANDBOX_PUBLIC_URL", &sandbox_public_url),
         ("PLATFORM_URL", &platform_url_container),

@@ -8,6 +8,7 @@ import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { decryptSecret } from "../../crypto.js";
 import { connectTokenIdentity } from "../mint-sandbox.js";
+import { definitionSeedFor, ENV_DEFINITION_SEED } from "../profiles/profiles.js";
 import { ingressEnabled, sandboxHostname } from "../reachability.js";
 import {
     createApp,
@@ -108,6 +109,8 @@ export interface HostedProvisionArgs {
     readonly ownerEmail: string;
     // Caller's country, decided by the route (region.ts); both machine and volume are created here for residency.
     readonly region: string;
+    // Which profile the browser arrived in, if any; decides the definition this machine seeds itself from on first boot.
+    readonly profile?: string | undefined;
 }
 
 // Single composer for both cold-provision and pool-claim configs, so the two origins cannot drift; a hosted machine's
@@ -129,6 +132,7 @@ export const hostedMachineConfig = (
     stockImage: string = config.hosted.image,
 ) => {
     const hostname = sandboxHostname(config.ingress.zone, args.connectToken);
+    const seed = definitionSeedFor(args.profile);
     return {
         ...flyMachineConfig({
             name: machineName,
@@ -148,6 +152,9 @@ export const hostedMachineConfig = (
                 // sign-in.
                 [ENV_PLATFORM_PUBLIC_KEY, publicKeyPemOf(config.ingress.signingKey)],
                 [`IDLE_STOP_MINUTES`, String(config.hosted.idleStopMinutes)],
+                // Replayed on every claim, overlay and restart, like the rest of this config; the daemon applies it
+                // only to a workspace that arrived empty, so a replay cannot run over work.
+                ...(seed === undefined ? [] : [[ENV_DEFINITION_SEED, seed] as const]),
             ],
             frontDoor: { hostname },
         }),

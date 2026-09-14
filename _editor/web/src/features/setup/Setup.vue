@@ -34,6 +34,7 @@ import { useSandbox } from "../sandbox/client/useSandbox";
 import { desktopInstaller, desktopSetupLink, desktopVersion, openDesktopLink } from "../../app/environments/desktop";
 import { environment } from "../../app/environments/environment";
 import { bashCommand, psCommand, scriptSource } from "../../app/environments/scriptCommand";
+import { arrivingProfile } from "../../app/useProfile";
 import DesktopSetupProgress from "./DesktopSetupProgress.vue";
 import { useDesktopSetup } from "./desktopSetup";
 import SetupCompose from "./SetupCompose.vue";
@@ -915,7 +916,9 @@ const mint = async (key: string): Promise<void> => {
     }
     setupError.value = undefined;
     try {
-        const minted = await apiClient.sandbox.setupCode({ sandboxId: created.value.id });
+        // The profile rides the code, not the command: the connect script exports what /setup/claim hands back, and
+        // the machine seeds its own half of the profile from that on first boot.
+        const minted = await apiClient.sandbox.setupCode({ sandboxId: created.value.id, profile: arrivingProfile() });
         if (key !== targetKey.value) {
             return;
         }

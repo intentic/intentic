@@ -2,6 +2,7 @@ import type { SandboxSummary } from "@intentic/api-contract";
 import { ORPCError } from "@orpc/client";
 import { hashKey } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
+import { arrivingProfile } from "../../../app/useProfile";
 import { removeStoredValue, storeValue } from "../../../lib/browserStorage";
 import { ACTIVE_KEY, activeSandboxId } from "../overview/activeSandbox";
 import { queryClient } from "../../../lib/queryPersistence";
@@ -104,7 +105,8 @@ const hostedChanges = new Map<string, number>();
 
 const hostedProvision = async (sandboxId: string, token: string): Promise<SandboxSummary> => {
     const version = hostedChanges.get(sandboxId);
-    const updated = await apiClient.sandbox.hostedProvision({ sandboxId, token });
+    // The machine composes its environment from this: the profile's own sandbox.toml is applied at its first boot.
+    const updated = await apiClient.sandbox.hostedProvision({ sandboxId, token, profile: arrivingProfile() });
     await queryClient.cancelQueries({ queryKey: SANDBOX_LIST_KEY });
     if (hostedChanges.get(sandboxId) === version) {
         queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>

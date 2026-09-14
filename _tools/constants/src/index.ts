@@ -2,6 +2,7 @@
 // hand-synced values can't drift.
 
 export * from "./provider-logos.js";
+export * from "./profile.js";
 
 // Fixed directory layouts shared across the package boundary; kept as plain values (no node:fs) since this module is
 // importable from the browser. WORKSPACE_ROOT and HISTORY_ROOT are just defaults: a running daemon reads its actual

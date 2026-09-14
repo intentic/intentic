@@ -21,6 +21,9 @@ pub struct Claim {
     /// when the flow installs no agent.
     pub host_pair_token: Option<String>,
     pub owner_email: Option<String>,
+    /// The arriving profile's own sandbox, as base64 TOML. The daemon applies it once, to a workspace that
+    /// arrived empty; a machine that already holds work ignores it, so replaying a command cannot overwrite.
+    pub definition_seed: Option<String>,
 }
 
 /* Is this address a platform on THIS machine? */
@@ -84,6 +87,7 @@ pub fn claim(platform_url: &str, code: &str) -> Result<Claim> {
         sync_pair_token: lookup("SYNC_PAIR_TOKEN"),
         host_pair_token: lookup("HOST_PAIR_TOKEN"),
         owner_email: lookup("OWNER_EMAIL"),
+        definition_seed: lookup("SANDBOX_DEFINITION_SEED"),
     })
 }
 

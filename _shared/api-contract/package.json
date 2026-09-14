@@ -24,6 +24,7 @@
         "watch": "tsgo --build --watch"
     },
     "dependencies": {
+        "@intentic/constants": "workspace:*",
         "@intentic/resources": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@orpc/contract": "catalog:",

@@ -1,3 +1,4 @@
+import { PROFILE_IDS } from "@intentic/constants";
 import { GrantedRoleSchema } from "@intentic/sandbox-contract";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
@@ -48,6 +49,10 @@ export const meContract = {
 // Owner and shared sandboxes; every route takes `sandboxId`, owner-only ones reject non-owners. `attach` records an
 // address the owner already runs; the platform never calls into it.
 const sandboxIdInput = z.object({ sandboxId: z.string() });
+
+// Which profile the browser arrived in, on the two calls that compose a new machine's environment. Optional
+// everywhere: a caller that names none gets a sandbox with nothing applied to it, which is the default profile.
+const profileInput = z.object({ profile: z.enum(PROFILE_IDS).optional() });
 export const sandboxContract = {
     list: oc.route({ method: "GET", path: "/sandbox/list" }).output(z.object({ sandboxes: z.array(SandboxSummarySchema) })),
     create: oc
@@ -69,7 +74,7 @@ export const sandboxContract = {
     hostedOffer: oc.route({ method: "GET", path: "/sandbox/hosted-offer" }).output(HostedOfferSchema),
     hostedProvision: oc
         .route({ method: "POST", path: "/sandbox/hosted-provision" })
-        .input(z.object({ sandboxId: z.string(), token: z.string().min(1) }))
+        .input(z.object({ sandboxId: z.string(), token: z.string().min(1) }).extend(profileInput.shape))
         .output(SandboxSummarySchema),
     hostedRelease: oc.route({ method: "POST", path: "/sandbox/hosted-release" }).input(sandboxIdInput).output(SandboxSummarySchema),
     // What the machine is doing, asked of the provider; polled only during a hosted wait, never from `list`.
@@ -90,7 +95,7 @@ export const sandboxContract = {
     addressOffer: oc.route({ method: "GET", path: "/sandbox/address-offer" }).output(AddressOfferSchema),
     // Signed way into a hosted sandbox for its owner; owner-only, hosted-only, 404 elsewhere.
     ownerTicket: oc.route({ method: "POST", path: "/sandbox/owner-ticket" }).input(sandboxIdInput).output(OwnerTicketSchema),
-    setupCode: oc.route({ method: "POST", path: "/sandbox/setup-code" }).input(sandboxIdInput).output(SetupCodeSchema),
+    setupCode: oc.route({ method: "POST", path: "/sandbox/setup-code" }).input(sandboxIdInput.extend(profileInput.shape)).output(SetupCodeSchema),
     emailSetupLink: oc
         .route({ method: "POST", path: "/sandbox/email-setup-link" })
         .input(sandboxIdInput)

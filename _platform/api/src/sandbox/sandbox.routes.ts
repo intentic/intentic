@@ -44,6 +44,7 @@ import { assertHostedStanding, HostedSuspended, hostedSuspensionOf } from "./hos
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { mintSandbox } from "./mint-sandbox.js";
+import { definitionSeedFor, ENV_DEFINITION_SEED } from "./profiles/profiles.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
 import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT } from "@intentic/sandbox-contract/ingress-contract";
 import { mintOwnerTicket, OWNER_TICKET_TTL_MS } from "@intentic/sandbox-contract/owner-ticket";
@@ -364,6 +365,7 @@ export const sandboxRoutes = {
                 connectToken: input.token,
                 ownerEmail: user.email.toLowerCase(),
                 region: hostedRegionFor(context.config.hosted, context.headers),
+                profile: input.profile,
             });
             // Written once the machine exists, so a refused build leaves no count behind; a lost write costs the
             // caps one row, never the owner a machine.
@@ -602,6 +604,12 @@ export const sandboxRoutes = {
         // Seeds the daemon's owner binding with the creator's own email, so ownership always matches the intentic
         // account.
         payload[`OWNER_EMAIL`] = user.email.toLowerCase();
+        // The profile's own sandbox, for the lane where the machine is the owner's: the connect script exports this
+        // map, and the daemon applies the definition once, on a workspace that arrived empty.
+        const seed = definitionSeedFor(input.profile);
+        if (seed !== undefined) {
+            payload[ENV_DEFINITION_SEED] = seed;
+        }
         const code = randomBytes(8).toString(`base64url`);
         const expiresAt = new Date(Date.now() + SETUP_CODE_TTL_MS);
         // Claim stamp belongs to the code: a fresh code must start unclaimed, or the wizard would report a stale claim.
