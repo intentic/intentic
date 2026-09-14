@@ -358,12 +358,12 @@ const onPick = (event: Event): void => {
                     :class="ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`)"
                     @click="segment === 'changes' ? changes.refresh() : refetch()"
                     aria-label="Refresh"
-                    :disabled="segment === 'changes' ? changes.actionBusy.value || changes.loading.value : busy || isLoading"
+                    :disabled="segment === 'changes' ? changes.actionBusy.value || changes.fetching.value : busy || isLoading"
                 >
                     <Icon
                         name="refresh"
                         class="text-base"
-                        :spin="segment === 'changes' ? changes.loading.value || changes.actionBusy.value : isLoading || busy"
+                        :spin="segment === 'changes' ? changes.fetching.value || changes.actionBusy.value : isLoading || busy"
                     />
                 </button>
             </div>

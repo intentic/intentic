@@ -244,7 +244,13 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
         deletions,
         codeStat,
         testStat,
-        loading: query.isFetching,
+        // A read is in flight: what a spinner rides on. True for background refreshes too, so nothing deciding what the
+        // panel SAYS may read it — see `loaded`.
+        fetching: query.isFetching,
+        // This agent's diff has been answered and is still held. The panel's waits and empty sentences are claims about
+        // the branch, so they wait for this: the same watcher batch that refreshes the workspace review invalidates
+        // every agent diff beside it (systemEvents), about once a second while files land.
+        loaded: computed(() => query.data.value !== undefined),
         error,
         refresh: query.refetch,
         fileDiff,

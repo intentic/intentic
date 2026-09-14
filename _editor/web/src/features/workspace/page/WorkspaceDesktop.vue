@@ -761,9 +761,9 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                             @click="changes.refresh()"
                             v-tooltip.bottom="'Refresh'"
                             aria-label="Refresh changes"
-                            :disabled="changes.actionBusy.value || changes.loading.value"
+                            :disabled="changes.actionBusy.value || changes.fetching.value"
                         >
-                            <Icon name="refresh" class="text-xs" :spin="changes.loading.value || changes.actionBusy.value" />
+                            <Icon name="refresh" class="text-xs" :spin="changes.fetching.value || changes.actionBusy.value" />
                         </button>
                     </template>
                 </div>

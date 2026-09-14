@@ -143,7 +143,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
             </span>
         </button>
         <button type="button" :class="ITEM" @click="run(() => changes.refresh())">
-            <Icon name="refresh" class="mt-0.5 text-xs text-subtle" :spin="changes.loading.value" />
+            <Icon name="refresh" class="mt-0.5 text-xs text-subtle" :spin="changes.fetching.value" />
             <span class="text-sm text-content md:text-xs">Refresh</span>
         </button>
         <button v-if="canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value || archived" @click="toggleAutoLand">

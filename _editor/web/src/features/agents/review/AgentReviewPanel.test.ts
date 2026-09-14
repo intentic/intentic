@@ -405,57 +405,62 @@ it(`lands a path clicked in the report on its row, and says so in the diff heade
     expect(header.textContent).toContain(REASON_COPY.binary.mark);
 });
 
-// The first read used to be a line of text where the review was about to be, so the panel said one thing, then
-// replaced it with a completely different shape. Two facts are pinned here: the wait keeps the branch even before it
-// is old enough to be drawn (so the empty state, which says the opposite, can never flash), and once drawn it is the
-// review's own two columns.
-it(`holds the review's shape through its first read instead of a line of text`, async () => {
-    vi.useFakeTimers();
+// An empty review that answers from refs instead of a daemon: which read state the panel is in is the whole subject
+// of the two tests below, and useAgentChanges' own query is gated on a daemon this suite doesn't run.
+const reading = (state: { fetching: boolean; loaded: boolean }): ReturnType<typeof useAgentChanges> =>
+    ({
+        repos: ref([]),
+        modulesOf: () => [],
+        files: ref([]),
+        count: ref(0),
+        absorbed: ref(0),
+        pending: ref([]),
+        blocked: ref([]),
+        additions: ref(0),
+        deletions: ref(0),
+        codeStat: ref({ files: 0, additions: 0, deletions: 0 }),
+        testStat: ref({ files: 0, additions: 0, deletions: 0 }),
+        fetching: ref(state.fetching),
+        loaded: ref(state.loaded),
+        error: ref(undefined),
+        refresh: vi.fn(),
+        fileDiff: vi.fn(),
+        viewed: ref(new Set<string>()),
+        viewedCount: ref(0),
+        setViewed: vi.fn(),
+        land: vi.fn(),
+        setAutoLand: vi.fn(),
+        askResolve: vi.fn(),
+        discard: vi.fn(),
+        archive: vi.fn(),
+        conflicts: ref(undefined),
+        resolving: ref(undefined),
+        asked: ref(false),
+        actionBusy: ref(false),
+        actionError: ref(undefined),
+    }) as unknown as ReturnType<typeof useAgentChanges>;
+
+const mountReading = async (state: { fetching: boolean; loaded: boolean }): Promise<HTMLElement> => {
     const el = document.createElement(`div`);
     document.body.append(el);
-    app = createApp({
-        setup() {
-            // The daemon hasn't answered: every list is empty and `loading` is the only thing true. Built here rather
-            // than through useAgentChanges, whose query is gated on a daemon this suite doesn't run.
-            const reading = {
-                repos: ref([]),
-                modulesOf: () => [],
-                files: ref([]),
-                count: ref(0),
-                absorbed: ref(0),
-                pending: ref([]),
-                blocked: ref([]),
-                additions: ref(0),
-                deletions: ref(0),
-                codeStat: ref({ files: 0, additions: 0, deletions: 0 }),
-                testStat: ref({ files: 0, additions: 0, deletions: 0 }),
-                loading: ref(true),
-                error: ref(undefined),
-                refresh: vi.fn(),
-                fileDiff: vi.fn(),
-                viewed: ref(new Set<string>()),
-                viewedCount: ref(0),
-                setViewed: vi.fn(),
-                land: vi.fn(),
-                setAutoLand: vi.fn(),
-                askResolve: vi.fn(),
-                discard: vi.fn(),
-                archive: vi.fn(),
-                conflicts: ref(undefined),
-                resolving: ref(undefined),
-                asked: ref(false),
-                actionBusy: ref(false),
-                actionError: ref(undefined),
-            } as unknown as ReturnType<typeof useAgentChanges>;
-            return () => h(AgentReviewPanel, { agentId: AGENT, changes: reading, streaming: false, writing: false });
-        },
-    });
+    const review = reading(state);
+    app = createApp({ setup: () => () => h(AgentReviewPanel, { agentId: AGENT, changes: review, streaming: false, writing: false }) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(router);
     app.use(VueQueryPlugin, { queryClient });
     app.mount(el);
     await nextTick();
+    return el;
+};
+
+// The first read used to be a line of text where the review was about to be, so the panel said one thing, then
+// replaced it with a completely different shape. Two facts are pinned here: the wait keeps the branch even before it
+// is old enough to be drawn (so the empty state, which says the opposite, can never flash), and once drawn it is the
+// review's own two columns.
+it(`holds the review's shape through its first read instead of a line of text`, async () => {
+    vi.useFakeTimers();
+    const el = await mountReading({ fetching: true, loaded: false });
 
     // Below the reveal delay an answer still reads as immediate, so nothing is drawn — least of all the sentence for
     // an agent that changed nothing, which is the opposite of what is on its way.
@@ -474,4 +479,15 @@ it(`holds the review's shape through its first read instead of a line of text`, 
     expect(el.querySelector(`aside`)).not.toBeNull();
     expect(el.querySelector(`section`)).not.toBeNull();
     expect(el.textContent).not.toContain(`hasn't changed any files`);
+});
+
+// The next read is not another first read. The workspace watcher invalidates every agent diff beside the review it
+// refreshes, about once a second while anything writes into /work, so a wait redrawn over an answer already on
+// screen would take the reader's place away at that cadence for as long as the writes lasted.
+it(`keeps an answer on screen while the daemon is asked again`, async () => {
+    const el = await mountReading({ fetching: true, loaded: true });
+
+    expect(el.textContent).toContain(`hasn't changed any files`);
+    expect(el.textContent).not.toContain(`Reading this agent's changes…`);
+    expect(el.querySelector(`.skeleton`)).toBeNull();
 });

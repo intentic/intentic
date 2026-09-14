@@ -378,7 +378,14 @@ export function useChanges() {
         committing,
         stagedCount,
         outgoing,
-        loading: query.isFetching,
+        // A read is in flight: what the refresh control spins on. True for background refreshes too, so nothing that
+        // decides what the panel SAYS may read it — see `loaded`.
+        fetching: query.isFetching,
+        // An answer has landed and is still held. The panel's empty line is a claim about the tree ("No uncommitted
+        // changes."), so it waits for this rather than for `fetching` to fall: a workspace being written to invalidates
+        // this query about once a second (systemEvents' CHANGES_REFRESH_MS), which would otherwise blink the settled
+        // answer back to the waiting line at that cadence.
+        loaded: computed(() => query.data.value !== undefined),
         error,
         refresh: query.refetch,
         fileDiff,

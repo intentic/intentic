@@ -75,7 +75,10 @@ export function useAgentHistory(agentId: Ref<string>, enabled: Ref<boolean>, at?
         // Absorbed files no commit in the span accounts for, surfaced rather than swallowed: content can reach main by
         // roads other than a commit since the land.
         unaccounted: computed(() => query.data.value?.unaccounted ?? 0),
-        loading: query.isFetching,
+        fetching: query.isFetching,
+        // Whether the walk has answered at all. The panel's wait reads this, not `fetching`: a later refresh over an
+        // answer already drawn is not another wait, and drawing one would take the reader's place away.
+        loaded: computed(() => query.data.value !== undefined),
         error,
     };
 }

@@ -1295,9 +1295,11 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
         </div>
 
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
-            <p v-if="changes.loading.value && changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">Loading changes…</p>
+            <!-- The wait before the first answer, and only that: a refresh over an answer already on screen keeps the answer, since a workspace
+                 being written to re-reads this list about once a second. An error above is the answer instead, so neither line shows under one. -->
+            <p v-if="!changes.loaded.value && !changes.error.value" class="px-3 py-2 text-2xs text-subtle">Loading changes…</p>
             <!-- A clean tree says so explicitly, rather than leaving a mostly-empty column with nothing claiming the emptiness is the answer. -->
-            <p v-else-if="changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">No uncommitted changes.</p>
+            <p v-else-if="changes.loaded.value && changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">No uncommitted changes.</p>
             <!-- A lit chip over an empty list says so too — otherwise a filtered-to-nothing tree reads as having lost its files. -->
             <p v-else-if="dirty.length === 0 && filterLabel" class="px-3 py-2 text-2xs text-subtle">
                 Nothing from {{ filterLabel }} is left in the tree.

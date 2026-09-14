@@ -83,10 +83,11 @@ const history = useAgentHistory(
 
 // The two waits with nothing on screen behind them, told apart because they promise different things: the first read
 // of the branch, and (on an agent whose work the reader has already committed) the walk through history that finds
-// where it went. A refresh with rows already drawn is neither: it keeps the spinner in the list header, since
-// replacing a list the reader is using with bars would be a loss of place, not a promise.
-const firstRead = computed(() => changes.loading.value && changes.count.value === 0);
-const historyRead = computed(() => changes.count.value === 0 && changes.absorbed.value > 0 && history.loading.value);
+// where it went. A refresh is neither, whether or not it has rows behind it: it keeps the spinner in the list header,
+// since replacing an answer the reader is using with bars would be a loss of place, not a promise.
+// An error is an answer too: it renders above, and waiting under it would promise a list that isn't coming.
+const firstRead = computed(() => !changes.loaded.value && changes.error.value === undefined);
+const historyRead = computed(() => changes.count.value === 0 && changes.absorbed.value > 0 && !history.loaded.value);
 const waiting = computed(() => firstRead.value || historyRead.value);
 const waitLabel = computed(() => (firstRead.value ? `Reading this agent's changes…` : `Finding where this work went in your history…`));
 // Same thresholds every other skeleton in the app answers to, keyed on the agent so walking from one review to the
@@ -705,7 +706,7 @@ const seamWidth = computed<number>({
                     <span v-else class="whitespace-nowrap text-2xs text-muted">
                         <span class="font-medium text-content">{{ bodyFiles.length }}</span> file{{ bodyFiles.length === 1 ? "" : "s" }}
                     </span>
-                    <Icon v-if="changes.loading.value" name="spinner" class="shrink-0 text-2xs text-muted" spin />
+                    <Icon v-if="changes.fetching.value" name="spinner" class="shrink-0 text-2xs text-muted" spin />
                     <span class="flex-1"></span>
                     <!--
                         Totals for the whole review; the code/tests split is now carried by the filter options above
