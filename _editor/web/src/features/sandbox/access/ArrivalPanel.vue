@@ -17,7 +17,7 @@ import { sandboxJson } from "../client/sandboxClient";
 import { useSandbox } from "../client/useSandbox";
 import { helpTopics, SOURCE_GUIDES } from "../overview/assistantGuide";
 
-// Inbound half of <MoveCard>: one picker, one checklist, one report for all four arrival sources. The daemon detects
+// Body of <ImportCard>: one picker, one checklist, one report for all four arrival sources. The daemon detects
 // the source from the file itself, so the picker never asks; every source becomes a plan first, and only Apply writes.
 // Credentials are a separate consent, the same lock-in-a-box as <ExportBundleDialog>'s.
 

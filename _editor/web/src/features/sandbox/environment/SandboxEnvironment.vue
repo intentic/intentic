@@ -5,11 +5,12 @@ import { useEnvironment } from "./useEnvironment";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import EnginesCard from "./EnginesCard.vue";
 import EnvironmentCard from "./EnvironmentCard.vue";
-import MoveCard from "../access/MoveCard.vue";
+import ExportCard from "../access/ExportCard.vue";
+import ImportCard from "../access/ImportCard.vue";
 
-// The Sandbox hub's Environment tab: what this sandbox is (overlay, engines), then moving it. The move cards are split
-// by direction (out/in), not by artifact, since each artifact is a choice inside a direction rather than its own card.
-// The overlay sits above MoveCard, since a bundle's last step is the rebuild it hands you.
+// The Sandbox hub's Environment tab: what this sandbox is (overlay, engines), then moving it. Moving is split by
+// direction (out/in), not by artifact, since each artifact is a choice inside a direction rather than its own card.
+// The overlay sits above both, since a bundle's last step is the rebuild it hands you.
 
 const { proposal, pending, applied, query } = useEnvironment();
 const empty = computed(() => !proposal.value && !pending.value && !applied.value);
@@ -42,7 +43,8 @@ const outline = useSandboxOutline(reading);
         -->
         <EnginesCard />
 
-        <!-- One card, both directions: out is drawn first, since that's the one an owner reaches for while still holding this sandbox. -->
-        <MoveCard />
+        <!-- Out is drawn first: that's the one an owner reaches for while still holding this sandbox. -->
+        <ExportCard />
+        <ImportCard />
     </div>
 </template>

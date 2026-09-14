@@ -18,9 +18,9 @@ import ExportBundleDialog from "./ExportBundleDialog.vue";
 import { workspaceRepoOf } from "../overview/workspaceRepo";
 import { sizeLabel } from "@intentic/base/format";
 
-// Outbound half of <MoveCard>: everything that leaves this sandbox, at three fidelities (published workspace,
+// Body of <ExportCard>: everything that leaves this sandbox, at three fidelities (published workspace,
 // sandbox.toml document, bundle), in that order since publishing unlocks what a definition can carry and comparing
-// writes nothing. Card chrome and the role check belong to <MoveCard>, not here.
+// writes nothing. Card chrome and the role check belong to <ExportCard>, not here.
 
 // The workspace repo, the half a definition cannot supply for itself.
 const workspace = ref<WorkspaceRemote | undefined>(undefined);
