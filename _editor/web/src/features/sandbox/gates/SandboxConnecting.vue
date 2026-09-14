@@ -20,6 +20,9 @@ const { invalidateSession, getSessionToken } = useSandboxSession();
 // Runs only while an outage is ongoing; a connected workspace pays nothing for the clock.
 const timing = computed(() => connection.value.unavailableSince !== undefined);
 const now = useNow(timing);
+// Why the platform refused the last wake, if it did: spent hours (the owner can buy the plan) or the owner's hosted
+// lane switched off (nothing here can lift it).
+const refusal = computed(() => activeWakeRefused.value?.kind);
 const notice = computed(() =>
     connectionNotice({
         failure: connection.value.failure,
@@ -27,8 +30,8 @@ const notice = computed(() =>
         // A machine the platform started for this sandbox, which earns the gate the right to name a cause.
         hostedMachine: (active.value?.hosted ?? null) !== null,
         outageMs: connection.value.unavailableSince === undefined ? 0 : now.value - connection.value.unavailableSince,
-        // Whether the platform refused the last wake for spent hours; addressed to the owner, who can buy the plan.
-        hoursSpent: activeWakeRefused.value !== undefined,
+        hoursSpent: refusal.value === `hours`,
+        suspended: refusal.value === `suspended`,
         owner: active.value?.role === `owner`,
         // The machine that deleted this sandbox's container reported it on the way out; nothing else can establish this.
         removed: (active.value?.removedAt ?? null) !== null,

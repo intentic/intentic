@@ -14,7 +14,7 @@ const config = (over: Record<string, unknown> = {}): Config =>
     ({
         // The lane needs both the credential and the edge (hostedEnabled), like the idle sweep's fixture.
         ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },
-        hosted: { flyApiToken: `fly`, flyOrg: `intentic`, monthlyHours: 40, overBudgetGraceMinutes: 60, ...over },
+        hosted: { flyApiToken: `fly`, flyOrg: `intentic`, monthlyHours: 40, overBudgetGraceMinutes: 60, newAccountDays: 0, newAccountHours: 0, ...over },
         hostedPlan: { compEmails: `` },
     }) as unknown as Config;
 
@@ -38,6 +38,8 @@ const prismaWith = (rows: ReturnType<typeof machine>[], over: Record<string, Rec
         },
         hostedUsage: { findUnique: vi.fn().mockResolvedValue(null) },
         hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
+        // In good standing unless a test says otherwise; the tick reads the owner's row before the meter.
+        user: { findUnique: vi.fn().mockResolvedValue({ hostedSuspendedAt: null }) },
         ...over,
     }) as unknown as PrismaClient;
 
@@ -103,6 +105,19 @@ describe(`the hour meter's stop`, () => {
         expect(await stopOverBudgetHosted(prisma, config({ monthlyHours: 0 }), logger, NOW)).toEqual({ stopped: 0 });
         expect(await stopOverBudgetHosted(prisma, config({ flyApiToken: `` }), logger, NOW)).toEqual({ stopped: 0 });
         expect(stops(calls)).toHaveLength(0);
+    });
+
+    // A suspension holds whatever the month says: a subscriber's machine, an owner with hours left, a platform with no
+    // ceiling at all.
+    it(`stops a suspended owner's running machine with the month untouched and the ceiling off`, async () => {
+        const calls = stubFly(`started`);
+        const suspended = { findUnique: vi.fn().mockResolvedValue({ hostedSuspendedAt: NOW }) };
+        const prisma = prismaWith([machine()], {
+            user: suspended,
+            hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) },
+        });
+        expect(await stopOverBudgetHosted(prisma, config({ monthlyHours: 0 }), logger, NOW)).toEqual({ stopped: 1 });
+        expect(stops(calls)).toHaveLength(1);
     });
 
     it(`stops every running machine of a spent owner in one pass, and only theirs`, async () => {

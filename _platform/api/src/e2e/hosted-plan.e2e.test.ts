@@ -48,7 +48,8 @@ const configFor = (databaseUrl: string, stripeApiUrl: string): Config =>
         intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: `true` },
         ingress: testIngressConfig,
         // The hosted lane on, so the offer, wake and slot gate exist; Fly itself is answered by the stub below.
-        hosted: { flyApiToken: `fly-e2e`, flyOrg: `e2e`, monthlyHours: MONTHLY_HOURS, perUser: 1 },
+        // The ramp off: every person here is seeded minutes old, and this suite's arithmetic is the month's.
+        hosted: { flyApiToken: `fly-e2e`, flyOrg: `e2e`, monthlyHours: MONTHLY_HOURS, perUser: 1, newAccountDays: 0, abuseMinutes: 0 },
         hostedPlan: {
             ...STRIPE,
             stripeSecretKey: STRIPE.secretKey,

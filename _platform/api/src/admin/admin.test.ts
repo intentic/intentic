@@ -1,13 +1,13 @@
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import type { ORPCError } from "@orpc/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic/prisma";
 import type { StripeGateway } from "../sandbox/hosted/hosted-plan-stripe.js";
 import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
 import { requireAdmin } from "../guards.js";
-import { deleteUserAccount, stopHostedMachine } from "./admin-actions.js";
+import { deleteUserAccount, liftUserHosted, stopHostedMachine, suspendUserHosted } from "./admin-actions.js";
 import { adminAttention } from "./admin-attention.js";
 import { adminCosts } from "./admin-costs.js";
 import { sendAdminDigest } from "./admin-digest.js";
@@ -199,6 +199,8 @@ describe(`adminAttention`, () => {
             sandbox: { findMany: async () => [] },
             hostedPlan: { findMany: async () => [] },
             hostedPoolMachine: { findMany: async () => [] },
+            hostedStrike: { findMany: async () => [] },
+            user: { findMany: async () => [] },
         }) as unknown as PrismaClient;
 
     it(`answers empty and untruncated when nothing needs a human`, async () => {
@@ -400,6 +402,9 @@ describe(`adminUserDetail`, () => {
                     },
                 ],
             },
+            hostedStrike: {
+                findMany: async () => [{ appName: `intentic-sbx-1`, kind: `cpu`, measure: 0.97, windowMinutes: 90, action: `stopped`, createdAt: new Date(`2026-08-24T10:00:00Z`) }],
+            },
         } as unknown as PrismaClient;
 
         const detail = await adminUserDetail(prisma, ` alice@example.COM `, () => NOW);
@@ -422,6 +427,9 @@ describe(`adminUserDetail`, () => {
             members: [{ email: `bob@example.com`, role: `collaborator`, accepted: false }],
         });
         expect(detail?.memberOf).toEqual([{ sandboxName: `team box`, ownerEmail: `boss@example.com`, role: `viewer`, accepted: true }]);
+        // Standing and the watch's verdicts ride along, the strike in the page's own units.
+        expect(detail?.hostedSuspended).toBeNull();
+        expect(detail?.strikes).toEqual([{ appName: `intentic-sbx-1`, kind: `cpu`, measure: 0.97, windowMinutes: 90, action: `stopped`, at: `2026-08-24T10:00:00.000Z` }]);
     });
 });
 
@@ -591,6 +599,44 @@ describe(`admin over the OpenAPI wire`, () => {
         expect((await right.json()) as { ok: boolean }).toMatchObject({ ok: false });
     });
 
+    it(`suspension demands the account's email retyped and a reason, refuses the admin's own account, and lifts the same way`, async () => {
+        const stub = {
+            user: { findUnique: async () => ({ id: `u2`, email: `victim@example.com`, hostedSuspendedAt: null, hostedSuspendedReason: null }) },
+        } as unknown as PrismaClient;
+        const mismatch = await serve(`/rpc/admin/user/suspend`, { email: `radarsu@gmail.com` }, stub, {
+            mutations: true,
+            body: { userId: `u2`, reason: `mining`, confirmEmail: `wrong@example.com` },
+        });
+        expect(mismatch.status).toBe(400);
+        const reasonless = await serve(`/rpc/admin/user/suspend`, { email: `radarsu@gmail.com` }, stub, {
+            mutations: true,
+            body: { userId: `u2`, reason: ``, confirmEmail: `victim@example.com` },
+        });
+        expect(reasonless.status).toBe(400);
+        const self = {
+            user: { findUnique: async () => ({ id: `u1`, email: `radarsu@gmail.com` }) },
+        } as unknown as PrismaClient;
+        const own = await serve(`/rpc/admin/user/suspend`, { email: `radarsu@gmail.com` }, self, {
+            mutations: true,
+            body: { userId: `u1`, reason: `mining`, confirmEmail: `radarsu@gmail.com` },
+        });
+        expect(own.status).toBe(400);
+        // The gate passed; with no hosted lane the action declines in a sentence rather than throwing.
+        const right = await serve(`/rpc/admin/user/suspend`, { email: `radarsu@gmail.com` }, stub, {
+            mutations: true,
+            body: { userId: `u2`, reason: `mining`, confirmEmail: `victim@example.com` },
+        });
+        expect(right.status).toBe(200);
+        expect((await right.json()) as { ok: boolean }).toMatchObject({ ok: false });
+        // Lifting an account in good standing is a sentence too, not an error.
+        const lift = await serve(`/rpc/admin/user/unsuspend`, { email: `radarsu@gmail.com` }, stub, {
+            mutations: true,
+            body: { userId: `u2`, confirmEmail: `victim@example.com` },
+        });
+        expect(lift.status).toBe(200);
+        expect((await lift.json()) as { ok: boolean; message: string }).toMatchObject({ ok: false, message: expect.stringContaining(`not suspended`) });
+    });
+
     it(`erasure demands the account's email retyped and refuses the admin's own account`, async () => {
         const prisma = {
             user: { findUnique: async () => ({ id: `u2`, email: `victim@example.com` }) },
@@ -701,6 +747,8 @@ describe(`sendAdminDigest`, () => {
                     })),
             },
             hostedPoolMachine: { findMany: async () => [] },
+            hostedStrike: { findMany: async () => [] },
+            user: { findMany: async () => [] },
         }) as unknown as PrismaClient;
 
     it(`sends once per day: the latch losing means somebody else already sent`, async () => {
@@ -742,6 +790,48 @@ describe(`admin actions`, () => {
         const result = await stopHostedMachine(prisma, hostedOn, `sb1`);
         expect(result.ok).toBe(false);
         expect(result.message).toContain(`sb1`);
+    });
+
+    it(`suspension stops the account's running machines now and writes the reason; lifting clears it`, async () => {
+        const hostedOn = configWith({
+            hosted: { monthlyHours: 40, poolSize: 2, image: `x`, flyApiToken: `t`, flyOrg: `o` },
+            ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },
+        });
+        const updates: Record<string, unknown>[] = [];
+        const stopped: string[] = [];
+        vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
+            const href = String(url);
+            if (href.endsWith(`/stop`)) {
+                stopped.push(href);
+                return Promise.resolve(new Response(``, { status: 200 }));
+            }
+            return Promise.resolve(new Response(JSON.stringify({ id: `m1`, state: `started` })));
+        });
+        let standing: { hostedSuspendedAt: Date | null; hostedSuspendedReason: string | null } = { hostedSuspendedAt: null, hostedSuspendedReason: null };
+        const prisma = {
+            user: {
+                findUnique: async () => standing,
+                update: async (args: { data: { hostedSuspendedAt: Date | null; hostedSuspendedReason: string | null } }) => {
+                    updates.push(args.data);
+                    standing = args.data;
+                    return {};
+                },
+            },
+            hostedMachine: { findMany: async () => [{ id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, sandbox: { ownerId: `u2` } }] },
+        } as unknown as PrismaClient;
+        const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger;
+        try {
+            const suspended = await suspendUserHosted(prisma, hostedOn, logger, { id: `u2`, email: `victim@example.com` }, `mining`);
+            expect(suspended.ok).toBe(true);
+            expect(suspended.message).toContain(`one running machine was stopped`);
+            expect(stopped).toEqual([expect.stringContaining(`/apps/intentic-sbx-a/machines/m1/stop`)]);
+            expect(updates[0]).toMatchObject({ hostedSuspendedReason: `mining` });
+            expect((await suspendUserHosted(prisma, hostedOn, logger, { id: `u2`, email: `victim@example.com` }, `again`)).ok).toBe(false);
+            expect((await liftUserHosted(prisma, logger, { id: `u2`, email: `victim@example.com` })).ok).toBe(true);
+            expect(updates[1]).toEqual({ hostedSuspendedAt: null, hostedSuspendedReason: null });
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 
     // One sandbox with no machine, a user row to delete, and a plan row (or none).

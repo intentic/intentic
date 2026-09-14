@@ -120,6 +120,27 @@ export const configSchema = z.object({
             buildsPerDay: z.coerce.number().int().nonnegative().default(5),
             buildConcurrency: z.coerce.number().int().positive().default(4),
             buildMinutesPerDay: z.coerce.number().int().nonnegative().default(600),
+            // Newcomer ramp: an account younger than newAccountDays has newAccountHours as its month's ceiling. Either
+            // at 0 disables it.
+            newAccountDays: z.coerce.number().int().nonnegative().default(7),
+            newAccountHours: z.coerce.number().int().nonnegative().default(10),
+            // Same-source caps on NEW machines: distinct accounts handed one in 24 hours per client address, and per
+            // email domain (gmail's excepted). 0 disables each; no trusted address (api.trustedIpHeader absent) skips the
+            // first.
+            provisionsPerIpPerDay: z.coerce.number().int().nonnegative().default(3),
+            provisionsPerDomainPerDay: z.coerce.number().int().nonnegative().default(10),
+            // The abuse watch (hosted-abuse.ts) over the provider's own per-machine metrics; abuseMinutes 0 turns it off.
+            metricsUrl: z.url().default(`https://api.fly.io/prometheus`),
+            abuseMinutes: z.coerce.number().int().nonnegative().default(15),
+            // A machine is judged only once its current awake stretch is this long, on this window's average.
+            abuseWindowMinutes: z.coerce.number().int().positive().default(90),
+            // CPU busy share (0..1 of the machine's CPUs) and egress (GB per hour) at or above which the window is a
+            // strike; egress 0 disables that rule.
+            abuseCpuShare: z.coerce.number().min(0).max(1).default(0.85),
+            abuseEgressGbPerHour: z.coerce.number().nonnegative().default(10),
+            // Strikes within abuseStrikeDays that suspend the account's hosted lane; 0 never suspends automatically.
+            abuseStrikesToSuspend: z.coerce.number().int().nonnegative().default(2),
+            abuseStrikeDays: z.coerce.number().int().positive().default(30),
         })
         .prefault({}),
     // Intentic's own model keys serving free-trial chat, tried as a pool. Empty (default) disables the trial.
@@ -161,6 +182,9 @@ export const configSchema = z.object({
             // Dev TLS cert/key so the API serves https, since Google's One Tap needs it; empty in prod behind a proxy.
             httpsKey: z.string().default(``),
             httpsCert: z.string().default(``),
+            // The one header the proxy in front sets to the caller's address; what sessions and the same-source caps
+            // trust. Empty trusts nothing, so a self-hosted platform without a proxy records no addresses at all.
+            trustedIpHeader: z.string().default(`cf-connecting-ip`),
         })
         .prefault({}),
     // The agent wallet's signer; empty custodyUrl/custodyKey disables /wallet. The platform holds no key material.

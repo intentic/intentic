@@ -398,6 +398,8 @@ export const HostedPlanUsageSchema = z.object({
     allowanceMinutes: z.number().int().nonnegative().nullable(),
     // When the month rolls over (the first of next month, UTC).
     resetsAt: z.iso.datetime(),
+    // Present while the ceiling is a new account's ramp rather than the month's: when the full one applies.
+    rampUntil: z.iso.datetime().optional(),
 });
 export type HostedPlanUsage = z.infer<typeof HostedPlanUsageSchema>;
 
@@ -579,6 +581,8 @@ export const HostedHoursSchema = z.object({
     // Monthly ceiling and what's left, in whole hours; `remaining` floors, so "1 hour left" isn't a few minutes.
     allowance: z.number().int().nonnegative(),
     remaining: z.number().int().nonnegative(),
+    // Present while a new account's ceiling is the ramp's rather than the month's: when the full one applies (ISO).
+    rampUntil: z.iso.datetime().optional(),
 });
 export type HostedHours = z.infer<typeof HostedHoursSchema>;
 
@@ -590,6 +594,8 @@ export const HostedOfferSchema = z.object({
     hours: HostedHoursSchema.optional(),
     // True when the caller is on the hosted plan (or comped); the card reads "always on" instead of showing hours.
     plan: z.boolean().optional(),
+    // True when the hosted lane is switched off for this account (hosted-standing.ts); `remaining` is 0 with it.
+    suspended: z.boolean().optional(),
 });
 export type HostedOffer = z.infer<typeof HostedOfferSchema>;
 
@@ -620,10 +626,10 @@ export const SandboxSummarySchema = z.object({
     bootReport: BootReportSchema.nullable(),
     // The last check-in refused, and why; null in the common case, cleared once an announce succeeds.
     announceRefusal: AnnounceRefusalSchema.nullable(),
-/* WHEN THE CONTAINER WAS DELETED, and by which machine — reported by the removal itself, null for every sandbox that was not removed. */
+    /* WHEN THE CONTAINER WAS DELETED, and by which machine — reported by the removal itself, null for every sandbox that was not removed. */
     removedAt: z.string().nullable(),
     removedBy: z.string().nullable(),
-/* THE CONNECT TOKEN, on the OWNER's row only; null on a member's. */
+    /* THE CONNECT TOKEN, on the OWNER's row only; null on a member's. */
     token: z.string().nullable(),
     // The caller's trust tier on this sandbox: `owner` for their own, the invite's granted role for a shared
     // one. What the web gates its affordances on; the daemon independently enforces the same tier as route
@@ -923,7 +929,17 @@ export type AdminFunnel = z.infer<typeof AdminFunnelSchema>;
 // One row of "this needs a human"; composed server-side so the vocabulary lives in one place.
 // `kind` and the anchor ids are for grouping and drill-down, never for the UI to re-derive the words.
 export const AdminAttentionItemSchema = z.object({
-    kind: z.enum([`stuck-setup`, `announce-refusal`, `unreachable-sandbox`, `plan-past-due`, `pool-claim-lingering`, `pool-build-stale`]),
+    kind: z.enum([
+        `stuck-setup`,
+        `announce-refusal`,
+        `unreachable-sandbox`,
+        `plan-past-due`,
+        `pool-claim-lingering`,
+        `pool-build-stale`,
+        // The abuse watch struck a machine this week, and an account whose hosted lane is off (hosted-abuse.ts).
+        `hosted-strike`,
+        `hosted-suspended`,
+    ]),
     severity: z.enum([`danger`, `warning`]),
     title: z.string(),
     detail: z.string().optional(),
@@ -1026,6 +1042,20 @@ export const AdminUserDetailSchema = z.object({
     plan: z.object({ status: z.string(), currentPeriodEnd: z.iso.datetime() }).nullable(),
     trialDays: z.array(z.object({ day: z.string(), messages: z.number(), lastModel: z.string().nullable() })),
     hostedMonthMinutes: z.number(),
+    // The hosted lane's standing (hosted-standing.ts): null in good standing.
+    hostedSuspended: z.object({ at: z.iso.datetime(), reason: z.string() }).nullable(),
+    // The abuse watch's verdicts against this account's machines, newest first (hosted-abuse.ts).
+    strikes: z.array(
+        z.object({
+            appName: z.string(),
+            kind: z.enum([`cpu`, `egress`]),
+            // In the rule's unit: a CPU busy share 0..1, or GB per hour.
+            measure: z.number(),
+            windowMinutes: z.number(),
+            action: z.enum([`stopped`, `suspended`, `reported`]),
+            at: z.iso.datetime(),
+        }),
+    ),
     wallets: z.array(
         z.object({
             network: z.string(),
@@ -1051,6 +1081,8 @@ export const AdminUserSchema = z.object({
     sandboxCount: z.number(),
     // Stripe's word for plan state, absent when the account never completed a checkout.
     planStatus: z.string().optional(),
+    // True when the hosted lane is switched off for this account; absent in good standing.
+    hostedSuspended: z.boolean().optional(),
 });
 export type AdminUser = z.infer<typeof AdminUserSchema>;
 

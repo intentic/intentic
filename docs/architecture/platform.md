@@ -33,8 +33,12 @@ Who pays for scale is a design decision, not an accident:
   (`connect.sh`) or the user's server (the `workspace` provider): no scheduler, no capacity manager, and
   agent turns, dev servers and builds cost intentic nothing. The exception is the **hosted starter**, the
   machine a browser arrival is given (Fly, one microVM per sandbox), which intentic does pay for: it is
-  bounded by an hour allowance per account and by the idle-stop that puts it to sleep the moment nobody is
-  connected, and it is the rung a user leaves the moment they want power rather than convenience. It is
+  bounded by an hour allowance per account (smaller in an account's first days) and by the idle-stop that puts
+  it to sleep the moment nobody is connected, and it is the rung a user leaves the moment they want power
+  rather than convenience. It is also the one rung somebody would farm or mine on, so it carries its own
+  defences (`docs/design/hosted-abuse.md`): per-address and per-domain caps on new machines, and a watch over
+  the provider's own per-machine meter that stops a free machine at full load for a whole window and suspends
+  the account's hosted lane on the repeat — from outside the box, since the platform cannot look inside one. It is
   bounded a third way, by the provider: a Fly org's machine allowance is finite, so the platform counts its
   own fleet — sandboxes, warm stock, builders — against `HOSTED_MAX_MACHINES` and treats running out as a
   fact to state rather than a failure to report. The setup page says there are no machines free and points at

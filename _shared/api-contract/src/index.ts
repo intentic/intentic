@@ -208,6 +208,16 @@ export const adminContract = {
         .route({ method: "POST", path: "/admin/user/delete" })
         .input(z.object({ userId: z.string().min(1), confirmEmail: z.string().min(3) }))
         .output(AdminActionResultSchema),
+    // Switch the hosted lane off for an account (its machines stop now) or back on; confirm is the retyped email.
+    // The reason is read back to the owner in every refusal, so it is written for them.
+    userSuspend: oc
+        .route({ method: "POST", path: "/admin/user/suspend" })
+        .input(z.object({ userId: z.string().min(1), reason: z.string().trim().min(3).max(200), confirmEmail: z.string().min(3) }))
+        .output(AdminActionResultSchema),
+    userUnsuspend: oc
+        .route({ method: "POST", path: "/admin/user/unsuspend" })
+        .input(z.object({ userId: z.string().min(1), confirmEmail: z.string().min(3) }))
+        .output(AdminActionResultSchema),
 };
 
 // Aggregated contract consumed by the oRPC client and implemented per-domain on the server.

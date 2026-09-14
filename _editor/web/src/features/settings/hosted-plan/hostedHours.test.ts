@@ -53,6 +53,13 @@ describe(`the meter`, () => {
         expect(hoursLeftLine(hoursMeter(usage(1_680))!)).toBe(`12 h of 40 h left this month`);
     });
 
+    it(`names the day a new account's ramp ends instead of the month`, () => {
+        const ramped = hoursMeter({ ...usage(120, 600), rampUntil: `2026-09-21T12:00:00.000Z` })!;
+        expect(ramped.rampUntil).toBe(`2026-09-21T12:00:00.000Z`);
+        expect(hoursLeftLine(ramped)).toBe(`8 h of 10 h left until ${formatDayShort(`2026-09-21T12:00:00.000Z`)}`);
+        expect(hoursLeftLine(hoursMeter({ ...usage(600, 600), rampUntil: `2026-09-21T12:00:00.000Z` })!)).toContain(`used up until`);
+    });
+
     it(`is low under five hours, but not at the first minute of a month, and not once spent`, () => {
         expect(lowOnHours(hoursMeter(usage(2_100)))).toBe(true);
         expect(lowOnHours(hoursMeter(usage(0)))).toBe(false);

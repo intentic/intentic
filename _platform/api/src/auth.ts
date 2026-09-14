@@ -31,6 +31,9 @@ export const createAuth = (config: Config, prisma: PrismaClient, logger: Logger)
         basePath: "/api/auth",
         trustedOrigins: [config.webOrigin],
         database: prismaAdapter(prisma, { provider: "postgresql" }),
+        // A session's address is read from the one header the proxy sets (client-ip.ts), never a forwarded chain the
+        // caller could have written.
+        advanced: { ipAddress: { ipAddressHeaders: config.api.trustedIpHeader === `` ? [] : [config.api.trustedIpHeader] } },
         emailAndPassword: { enabled: false },
         socialProviders: {
             google: {

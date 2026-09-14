@@ -5,7 +5,8 @@ import { hostedBudgetOf, hostedUsedMinutes, openHostedStretch, settleHostedStret
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
-const config = (monthlyHours = 40): Config => ({ hosted: { flyApiToken: `fly`, monthlyHours }, hostedPlan: { compEmails: `` } }) as unknown as Config;
+const config = (monthlyHours = 40, ramp: { newAccountDays: number; newAccountHours: number } = { newAccountDays: 0, newAccountHours: 0 }): Config =>
+    ({ hosted: { flyApiToken: `fly`, monthlyHours, ...ramp }, hostedPlan: { compEmails: `` } }) as unknown as Config;
 
 const prismaWith = (over: Record<string, Record<string, ReturnType<typeof vi.fn>>>) =>
     ({
@@ -103,6 +104,46 @@ describe(`the hosted hour meter`, () => {
         it(`never reports a negative remainder, however far past the ceiling a stretch ran`, async () => {
             const over = prismaWith({ hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 9_000 }) } });
             expect(await hostedBudgetOf(over, config(), `u1`)).toMatchObject({ usedMinutes: 9_000, remainingMinutes: 0 });
+        });
+    });
+
+    // A fresh account's month is the ramp's figure until the account is old enough; the moment that changes rides
+    // along so every surface can say so.
+    describe(`the newcomer ramp`, () => {
+        const now = new Date(`2026-08-13T12:00:00.000Z`);
+        const ramp = { newAccountDays: 7, newAccountHours: 10 };
+        const born = (daysAgo: number) => ({ findUnique: vi.fn().mockResolvedValue({ createdAt: new Date(now.getTime() - daysAgo * 24 * 60 * 60_000) }) });
+
+        it(`holds a week-old account to the ramp and says when the full month applies`, async () => {
+            const budget = await hostedBudgetOf(prismaWith({ user: born(2) }), config(40, ramp), `u1`, now);
+            expect(budget).toEqual({
+                metered: true,
+                allowanceMinutes: 600,
+                usedMinutes: 0,
+                remainingMinutes: 600,
+                rampUntil: new Date(`2026-08-18T12:00:00.000Z`),
+            });
+        });
+
+        it(`gives an account past the ramp the month's figure, with no ramp end to report`, async () => {
+            const budget = await hostedBudgetOf(prismaWith({ user: born(8) }), config(40, ramp), `u1`, now);
+            expect(budget).toMatchObject({ allowanceMinutes: 2400 });
+            expect(budget.rampUntil).toBeUndefined();
+        });
+
+        it(`never raises the month: a ramp above the month's figure is the month's figure`, async () => {
+            expect(await hostedBudgetOf(prismaWith({ user: born(1) }), config(5, ramp), `u1`, now)).toMatchObject({ allowanceMinutes: 300 });
+        });
+
+        it(`reads no account row at all with the ramp off`, async () => {
+            const user = born(1);
+            expect(await hostedBudgetOf(prismaWith({ user }), config(40), `u1`, now)).toMatchObject({ allowanceMinutes: 2400 });
+            expect(user.findUnique).not.toHaveBeenCalled();
+        });
+
+        it(`still exempts a subscriber, ramp or not`, async () => {
+            const prisma = prismaWith({ user: born(1), hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) } });
+            expect(await hostedBudgetOf(prisma, config(40, ramp), `u1`, now)).toMatchObject({ metered: false });
         });
     });
 

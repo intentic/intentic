@@ -12,7 +12,7 @@ export const meRoutes = {
     // setup payloads are secrets, not personal data.
     export: os.me.export.handler(async ({ context }) => {
         const user = requireUser(context);
-        const [sessions, accounts, sandboxes, memberships, invitesSent, hostedPlan, hostedUsage] = await Promise.all([
+        const [sessions, accounts, sandboxes, memberships, invitesSent, hostedPlan, hostedUsage, hostedProvisions, hostedStrikes, standing] = await Promise.all([
             context.prisma.session.findMany({
                 where: { userId: user.id },
                 select: { createdAt: true, expiresAt: true, ipAddress: true, userAgent: true },
@@ -37,7 +37,27 @@ export const meRoutes = {
                 select: { status: true, currentPeriodEnd: true, createdAt: true },
             }),
             context.prisma.hostedUsage.findMany({ where: { userId: user.id }, select: { month: true, minutes: true } }),
+            // The address each hosted machine was asked for from, and the abuse watch's verdicts: both about the
+            // subject, both kept only as long as they are counted (retention.ts).
+            context.prisma.hostedProvision.findMany({ where: { userId: user.id }, select: { ip: true, domain: true, appName: true, createdAt: true } }),
+            context.prisma.hostedStrike.findMany({
+                where: { userId: user.id },
+                select: { appName: true, kind: true, measure: true, windowMinutes: true, action: true, createdAt: true },
+            }),
+            context.prisma.user.findUnique({ where: { id: user.id }, select: { hostedSuspendedAt: true, hostedSuspendedReason: true } }),
         ]);
-        return { user, sessions, accounts, sandboxes, memberships, invitesSent, hostedPlan, hostedUsage };
+        return {
+            user,
+            sessions,
+            accounts,
+            sandboxes,
+            memberships,
+            invitesSent,
+            hostedPlan,
+            hostedUsage,
+            hostedProvisions,
+            hostedStrikes,
+            hostedSuspended: standing?.hostedSuspendedAt ? { at: standing.hostedSuspendedAt, reason: standing.hostedSuspendedReason } : null,
+        };
     }),
 };

@@ -43,6 +43,8 @@ export interface ConnectionNoticeInput {
     readonly outageMs: number;
     // The platform refused the last wake (PAYMENT_REQUIRED) for spent hours; `owner` decides who sees the plan.
     readonly hoursSpent?: boolean;
+    // The platform refused the last wake (FORBIDDEN) because the owner's hosted lane is switched off.
+    readonly suspended?: boolean;
     readonly owner?: boolean;
     // Set when the machine that deleted this sandbox's container said so (platform `removedAt`/`removedBy`). The one
     // fact no amount of waiting can produce, and the only one that licenses the word "removed".
@@ -122,6 +124,29 @@ const hoursSpentNotice = (input: ConnectionNoticeInput, name: string): Connectio
     };
 };
 
+// The platform will not start this machine for anybody: the owner's hosted lane is switched off (an acceptable-use
+// verdict, the platform's or an operator's). Nothing to press: the way back is the email the owner was sent, and the
+// reader's own computer, which the lane never covered.
+const suspendedNotice = (input: ConnectionNoticeInput, name: string): ConnectionNotice | undefined => {
+    if (!input.hostedMachine || input.suspended !== true) {
+        return undefined;
+    }
+    if (input.owner === false) {
+        return {
+            title: `"${name}" can't be started right now`,
+            body: `Hosted sandboxes are switched off for the owner's account, so the machine stays asleep until that is lifted. Nothing on your side causes this.`,
+            action: undefined,
+            waiting: false,
+        };
+    }
+    return {
+        title: `Hosted sandboxes are switched off for your account`,
+        body: `We won't start this machine: the email we sent says why and where to write if we have it wrong. Your files are still on it, and nothing else about your account changes. The same sandbox runs on your own computer, free and without limits, from its setup screen.`,
+        action: { kind: `setup`, label: `Run it on my computer` },
+        waiting: false,
+    };
+};
+
 /* THE EDGE'S OWN VERDICT, which is the only thing in this file that can tell a browser's broken network from a sandbox that is simply not there. */
 const detachedNotice = (input: ConnectionNoticeInput, name: string): ConnectionNotice | undefined =>
     input.failure?.kind === `detached` && input.outageMs >= DETACHED_AFTER_MS
@@ -159,7 +184,11 @@ const stuckNotice = (input: ConnectionNoticeInput, name: string): ConnectionNoti
 // The network-shaped causes read as one thing (a wait) while waiting can still fix them, then as the most specific
 // thing established about them. A refused wake outranks everything, at any age.
 const networkNotice = (input: ConnectionNoticeInput, kind: "timeout" | "closed" | "network" | "detached", name: string): ConnectionNotice =>
-    hoursSpentNotice(input, name) ?? detachedNotice(input, name) ?? stuckNotice(input, name) ?? waitingNotice(kind, name);
+    suspendedNotice(input, name) ??
+    hoursSpentNotice(input, name) ??
+    detachedNotice(input, name) ??
+    stuckNotice(input, name) ??
+    waitingNotice(kind, name);
 
 // The causes that are one fixed sentence whatever else is true, as a table — so the function below holds only the
 // decisions that need one, and a new cause cannot be added without giving it words.

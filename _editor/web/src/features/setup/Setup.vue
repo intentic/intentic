@@ -213,6 +213,8 @@ const hostedError = ref<NoticeModel | undefined>(undefined);
 const hostedRow = computed(() => created.value?.hosted ?? null);
 // Account's hosted allowance is already spent on a different sandbox; the card still renders, explaining why.
 const hostedSpent = computed(() => hostedOffered.value && (hostedOffer.value?.remaining ?? 0) === 0 && hostedRow.value === null);
+// The hosted lane is switched off for this account (an acceptable-use verdict); reads as spent, with its own words.
+const hostedSuspended = computed(() => hostedOffer.value?.suspended === true);
 // A refusal for room already met by this browser, harder than a later count; cleared only by `recheckCapacity`.
 const hostedRefusedForRoom = ref(false);
 // Platform out of machines (distinct from `hostedSpent`); gates only starting new, not an existing row.
@@ -295,11 +297,15 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                   // When the fleet is full, the badge says so instead of a price; the rung stays on screen, not hidden.
                   meta: hostedFull.value
                       ? `No machines free right now`
-                      : hostedOffer.value?.plan
-                        ? `On your plan · always on`
-                        : hostedHours.value === null
-                          ? `Free · ready in seconds`
-                          : `Free to try · ${hostedHours.value.allowance}h a month, always on with the plan`,
+                      : hostedSuspended.value
+                        ? `Switched off for this account`
+                        : hostedOffer.value?.plan
+                          ? `On your plan · always on`
+                          : hostedHours.value === null
+                            ? `Free · ready in seconds`
+                            : hostedHours.value.rampUntil === undefined
+                              ? `Free to try · ${hostedHours.value.allowance}h a month, always on with the plan`
+                              : `Free to try · ${hostedHours.value.allowance}h to start, more after your first days`,
                   note: `Runs on our servers`,
               },
           ]
@@ -1587,7 +1593,9 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 <!-- Keep the rung note to a short action or destination. -->
                                 <span class="text-xs leading-snug text-subtle">{{ option.note }}</span>
                                 <!-- Spent allowances remain visible instead of hiding an unavailable rung. -->
-                                <span v-if="option.value === `hosted` && hostedSpent" class="text-xs text-warning">Already using yours</span>
+                                <span v-if="option.value === `hosted` && hostedSpent" class="text-xs text-warning">{{
+                                    hostedSuspended ? `Not available to this account` : `Already using yours`
+                                }}</span>
                             </button>
                         </div>
                     </div>
@@ -1796,7 +1804,11 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     <template #icon><Icon :name="hostedError ? `refresh` : `bolt`" /></template>
                                 </Button>
                                 <p class="text-xs leading-relaxed text-subtle">
-                                    <template v-if="hostedSpent">
+                                    <template v-if="hostedSuspended">
+                                        Hosted sandboxes are switched off for this account; the email we sent says why and where to write. Running
+                                        it on your own computer is unaffected.
+                                    </template>
+                                    <template v-else-if="hostedSpent">
                                         You already have the free machine your account comes with. Pick another rung above, or delete the sandbox
                                         that's using it.
                                     </template>

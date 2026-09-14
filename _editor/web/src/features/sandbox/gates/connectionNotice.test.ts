@@ -42,6 +42,33 @@ describe(`connectionNotice`, () => {
     });
 });
 
+// The platform refused to start the machine because the owner's hosted lane is switched off: not a wait, at any age,
+// and the words depend on who is reading.
+describe(`a machine the platform will not start for its owner`, () => {
+    const asleep = classifyFailure({ message: `failed to fetch` });
+
+    it(`tells the owner what is off, that their files remain, and offers their own computer`, () => {
+        const shown = notice(asleep, { hostedMachine: true, suspended: true, owner: true });
+        expect(shown.waiting).toBe(false);
+        expect(shown.title).toContain(`switched off`);
+        expect(shown.body).toContain(`own computer`);
+        expect(shown.action).toEqual({ kind: `setup`, label: `Run it on my computer` });
+    });
+
+    it(`tells a guest it is the owner's account, with nothing to press`, () => {
+        const shown = notice(asleep, { hostedMachine: true, suspended: true, owner: false });
+        expect(shown.waiting).toBe(false);
+        expect(shown.body).toContain(`owner's account`);
+        expect(shown.action).toBeUndefined();
+    });
+
+    it(`outranks spent hours and the stuck wait, and says nothing on a machine the platform does not run`, () => {
+        const both = notice(asleep, { hostedMachine: true, suspended: true, hoursSpent: true, owner: true, outageMs: HOSTED_STUCK_AFTER_MS });
+        expect(both.title).toContain(`switched off`);
+        expect(notice(asleep, { hostedMachine: false, suspended: true }).waiting).toBe(true);
+    });
+});
+
 // A hosted machine that boots and dies leaves the workspace spinning with nothing to press, while the wake reflex
 // fires into it forever. Past a minute this gate stops calling it a wait and points at the setup screen instead.
 describe(`a machine the platform runs, that is not coming back`, () => {

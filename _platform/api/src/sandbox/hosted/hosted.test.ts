@@ -26,7 +26,7 @@ const config = (over?: Record<string, unknown>): Config =>
     ({
         webOrigin: `https://app.test`,
         google: { clientId: `gcid` },
-        api: { url: `https://api.test` },
+        api: { url: `https://api.test`, trustedIpHeader: `` },
         secrets: { key: `` },
         intenticCloudflare: { apiToken: `cf`, zone: `sbx.test`, reapDryRun: true },
         ingress: { ...testIngressConfig },
@@ -43,6 +43,11 @@ const config = (over?: Record<string, unknown>): Config =>
             perUser: 1,
             idleStopMinutes: 20,
             monthlyHours: 40,
+            // The newcomer ramp and the same-source caps off: this suite's arithmetic is the month's and the slots'.
+            newAccountDays: 0,
+            newAccountHours: 0,
+            provisionsPerIpPerDay: 0,
+            provisionsPerDomainPerDay: 0,
             idleDays: 21,
             idleWarnDays: 14,
             poolSize: 1,
@@ -58,7 +63,10 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof v
     const prisma = {
         hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
         hostedUsage: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}) },
-/* Two shapes. */
+        // In good standing, and the provision ledger accepts every row.
+        user: { findUnique: vi.fn().mockResolvedValue({ hostedSuspendedAt: null, hostedSuspendedReason: null }) },
+        hostedProvision: { create: vi.fn().mockResolvedValue({}), findMany: vi.fn().mockResolvedValue([]) },
+        /* Two shapes. */
         $transaction: vi.fn((work: Promise<unknown>[] | ((tx: unknown) => Promise<unknown>)) =>
             typeof work === `function` ? work(prisma) : Promise.all(work),
         ),
@@ -472,7 +480,7 @@ describe(`provisionHosted`, () => {
         expect(poolDelete).not.toHaveBeenCalled();
     });
 
-/* THE CLAIM MUST NOT CHANGE WHAT THE MACHINE IS HOLDING, and this is the assertion that says so. */
+    /* THE CLAIM MUST NOT CHANGE WHAT THE MACHINE IS HOLDING, and this is the assertion that says so. */
     it(`boots the digest the warm machine already holds, never the configured tag`, async () => {
         const machine = settlingMachine(`m7`);
         const calls = stubFetch([

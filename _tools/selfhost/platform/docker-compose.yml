@@ -157,6 +157,24 @@ services:
             HOSTED_BUILDS_PER_DAY: ${HOSTED_BUILDS_PER_DAY:-}
             HOSTED_BUILD_CONCURRENCY: ${HOSTED_BUILD_CONCURRENCY:-}
             HOSTED_BUILD_MINUTES_PER_DAY: ${HOSTED_BUILD_MINUTES_PER_DAY:-}
+            # The free lane's abuse defences (docs/design/hosted-abuse.md). The newcomer ramp: a smaller ceiling
+            # for an account's first days. The same-source caps: distinct accounts handed a machine per day from
+            # one address and one email domain. The abuse watch: a machine at full load for a whole window, by
+            # the provider's own meter, is stopped; the strike after the line suspends the account's hosted lane.
+            HOSTED_NEW_ACCOUNT_DAYS: ${HOSTED_NEW_ACCOUNT_DAYS:-}
+            HOSTED_NEW_ACCOUNT_HOURS: ${HOSTED_NEW_ACCOUNT_HOURS:-}
+            HOSTED_PROVISIONS_PER_IP_PER_DAY: ${HOSTED_PROVISIONS_PER_IP_PER_DAY:-}
+            HOSTED_PROVISIONS_PER_DOMAIN_PER_DAY: ${HOSTED_PROVISIONS_PER_DOMAIN_PER_DAY:-}
+            HOSTED_METRICS_URL: ${HOSTED_METRICS_URL:-}
+            HOSTED_ABUSE_MINUTES: ${HOSTED_ABUSE_MINUTES:-}
+            HOSTED_ABUSE_WINDOW_MINUTES: ${HOSTED_ABUSE_WINDOW_MINUTES:-}
+            HOSTED_ABUSE_CPU_SHARE: ${HOSTED_ABUSE_CPU_SHARE:-}
+            HOSTED_ABUSE_EGRESS_GB_PER_HOUR: ${HOSTED_ABUSE_EGRESS_GB_PER_HOUR:-}
+            HOSTED_ABUSE_STRIKES_TO_SUSPEND: ${HOSTED_ABUSE_STRIKES_TO_SUSPEND:-}
+            HOSTED_ABUSE_STRIKE_DAYS: ${HOSTED_ABUSE_STRIKE_DAYS:-}
+            # The one header the proxy in front sets to the caller's address (cloudflared: cf-connecting-ip).
+            # Sessions and the per-address cap trust it and nothing else; empty records no addresses at all.
+            API_TRUSTED_IP_HEADER: ${API_TRUSTED_IP_HEADER:-}
             # The free trial's model keys (comma-separated, tried in order — several are a pool). Empty
             # disables the trial outright: the routes 404 and Google sign-in is the chat's whole front door.
             TRIAL_KEYS: ${TRIAL_KEYS:-}

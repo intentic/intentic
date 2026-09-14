@@ -52,6 +52,8 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
         },
         user,
         logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+        // No proxy in front: the same-source address cap has nothing to read and skips itself.
+        headers: new Headers(),
         ...overrides,
     }) as OrpcContext;
 
@@ -312,8 +314,18 @@ describe(`a metered owner whose month is spent`, () => {
         ingress: { ...testIngressConfig },
         secrets: { key: `` },
         email: { apiKey: ``, from: `` },
-        hosted: { flyApiToken: `fly`, flyOrg: `org`, monthlyHours: 40, perUser: 1 },
+        hosted: {
+            flyApiToken: `fly`,
+            flyOrg: `org`,
+            monthlyHours: 40,
+            perUser: 1,
+            newAccountDays: 0,
+            newAccountHours: 0,
+            provisionsPerIpPerDay: 0,
+            provisionsPerDomainPerDay: 0,
+        },
         hostedPlan: { compEmails: `` },
+        api: { trustedIpHeader: `` },
     } as unknown as OrpcContext[`config`];
 
     // Owner's month fully spent, no plan, no machine awake: `findUnique` null keeps the idempotence check clear,
@@ -321,6 +333,7 @@ describe(`a metered owner whose month is spent`, () => {
     const spent = () =>
         fakePrisma({
             sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, hosted: { id: `h1`, appName: `app`, machineId: `m1`, wokeAt: null } }) },
+            user: { findUnique: vi.fn().mockResolvedValue({ hostedSuspendedAt: null, hostedSuspendedReason: null }) },
             hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
             hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 40 * 60 }) },
             hostedMachine: {
@@ -349,6 +362,73 @@ describe(`a metered owner whose month is spent`, () => {
             (thrown: unknown) => thrown,
         );
         expect(error).toMatchObject({ code: `PAYMENT_REQUIRED`, status: 402 });
+    });
+});
+
+/* A SUSPENDED OWNER'S MACHINE STARTS FOR NOBODY: not for the owner, not for a member who could wake it, and not by
+ * being released and provisioned again. FORBIDDEN in the suspension's own words, before the meter is read. */
+describe(`an owner whose hosted lane is suspended`, () => {
+    const hostedConfig = {
+        webOrigin: `https://app.test`,
+        intenticCloudflare: { apiToken: ``, zone: ``, reapDryRun: true },
+        ingress: { ...testIngressConfig },
+        secrets: { key: `` },
+        email: { apiKey: ``, from: `` },
+        hosted: {
+            flyApiToken: `fly`,
+            flyOrg: `org`,
+            monthlyHours: 40,
+            perUser: 1,
+            newAccountDays: 0,
+            newAccountHours: 0,
+            provisionsPerIpPerDay: 0,
+            provisionsPerDomainPerDay: 0,
+        },
+        hostedPlan: { compEmails: `` },
+        api: { trustedIpHeader: `` },
+    } as unknown as OrpcContext[`config`];
+
+    const suspended = () => {
+        const usage = vi.fn().mockResolvedValue({ minutes: 0 });
+        const prisma = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, hosted: { id: `h1`, appName: `app`, machineId: `m1`, wokeAt: null } }) },
+            user: { findUnique: vi.fn().mockResolvedValue({ hostedSuspendedAt: new Date(), hostedSuspendedReason: `mining` }) },
+            hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
+            hostedUsage: { findUnique: usage },
+            hostedMachine: {
+                findUnique: vi.fn().mockResolvedValue(null),
+                findMany: vi.fn().mockResolvedValue([]),
+                count: vi.fn().mockResolvedValue(0),
+            },
+        });
+        return { prisma, usage };
+    };
+
+    it(`is refused the wake with FORBIDDEN naming the reason, and the meter is never read`, async () => {
+        const { prisma, usage } = suspended();
+        const error = await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: context({ prisma, config: hostedConfig }) }).then(
+            () => undefined,
+            (thrown: unknown) => thrown,
+        );
+        expect(error).toMatchObject({ code: `FORBIDDEN` });
+        expect((error as Error).message).toContain(`mining`);
+        expect(usage).not.toHaveBeenCalled();
+    });
+
+    it(`is refused a new hosted machine the same way`, async () => {
+        const { prisma } = suspended();
+        await expectOrpcCode(
+            call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `tok` }, { context: context({ prisma, config: hostedConfig }) }),
+            `FORBIDDEN`,
+        );
+    });
+
+    it(`is offered nothing, and told why`, async () => {
+        const { prisma } = suspended();
+        const offer = await call(sandboxRoutes.hostedOffer, undefined, {
+            context: context({ prisma, config: hostedConfig, headers: new Headers() }),
+        });
+        expect(offer).toMatchObject({ enabled: true, remaining: 0, suspended: true });
     });
 });
 

@@ -7,6 +7,9 @@ export const hosted = {
     priceUsd: 20,
     // Awake hours per calendar month on the free lane (HOSTED_MONTHLY_HOURS); a sleeping machine spends none.
     freeHours: 40,
+    // A new account's ceiling for its first days (HOSTED_NEW_ACCOUNT_HOURS, HOSTED_NEW_ACCOUNT_DAYS), then the month's.
+    newAccountHours: 10,
+    newAccountDays: 7,
     // Minutes of inactivity before a hosted machine sleeps (HOSTED_IDLE_STOP_MINUTES).
     idleStopMinutes: 20,
     // Days unopened before removal, and the warning day (HOSTED_IDLE_DAYS, HOSTED_IDLE_WARN_DAYS); free lane only.
@@ -20,3 +23,6 @@ export const hosted = {
 
 // The free lane's removal window in weeks, for copy that says "three weeks".
 export const idleWeeks = Math.round(hosted.idleDays / 7);
+
+// The ramp's span as a person says it: "your first week", or "your first 10 days".
+export const rampSpan = hosted.newAccountDays === 7 ? `your first week` : `your first ${hosted.newAccountDays} days`;

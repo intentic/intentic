@@ -1,5 +1,6 @@
 import type { AdminAttention, AdminAttentionItem, BootReport, SetupReport } from "@intentic/api-contract";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
+import { DAY_MS } from "../durations.js";
 
 // Every row that is a person's setup, plan, or machine waiting on a human, composed into sentences here. Each category
 // is capped (`truncated` says so); ordered severity first, then newest.
@@ -12,11 +13,19 @@ const MINUTE_MS = 60 * 1000;
 const CLAIM_LINGER_MS = 15 * MINUTE_MS;
 // A build is minutes of image pull; hours of `building` is a machine the reconcile should have collected.
 const BUILD_STALE_MS = 2 * 60 * MINUTE_MS;
+// How far back the abuse watch's strikes stay on the feed; the account page keeps the rest.
+const STRIKE_WINDOW_MS = 7 * DAY_MS;
 const dateWord = (at: Date): string => at.toISOString().slice(0, 10);
+
+// What the watch measured, in the operator's units.
+const strikeWords = (strike: { kind: string; measure: number; windowMinutes: number }): string =>
+    strike.kind === `cpu`
+        ? `${Math.round(strike.measure * 100)}% CPU over ${strike.windowMinutes} min`
+        : `${strike.measure.toFixed(1)} GB/h out over ${strike.windowMinutes} min`;
 
 export const adminAttention = async (prisma: PrismaClient, now: () => Date = () => new Date()): Promise<AdminAttention> => {
     const at = now();
-    const [stuckSetups, unreachable, refusals, pastDue, lingeringClaims, staleBuilds] = await Promise.all([
+    const [stuckSetups, unreachable, refusals, pastDue, lingeringClaims, staleBuilds, strikes, suspended] = await Promise.all([
             // Claimed by a machine, never announced: the setup that started and died somewhere in between.
             prisma.sandbox.findMany({
                 where: { setupCodeClaimedAt: { not: null }, lastSeenAt: null },
@@ -56,6 +65,21 @@ export const adminAttention = async (prisma: PrismaClient, now: () => Date = () 
                 orderBy: { updatedAt: `asc` },
                 take: TAKE,
                 select: { appName: true, region: true, updatedAt: true },
+            }),
+            // The abuse watch's verdicts this week: a stop is worth a look, a suspension or a subscriber's report is
+            // a person's call.
+            prisma.hostedStrike.findMany({
+                where: { createdAt: { gte: new Date(at.getTime() - STRIKE_WINDOW_MS) } },
+                orderBy: { createdAt: `desc` },
+                take: TAKE,
+                select: { appName: true, kind: true, measure: true, windowMinutes: true, action: true, createdAt: true, user: { select: { email: true } } },
+            }),
+            // Accounts with the hosted lane off: each one waits on a human to lift it, or to decide not to.
+            prisma.user.findMany({
+                where: { hostedSuspendedAt: { not: null } },
+                orderBy: { hostedSuspendedAt: `desc` },
+                take: TAKE,
+                select: { email: true, hostedSuspendedAt: true, hostedSuspendedReason: true },
             }),
         ]);
 
@@ -129,6 +153,29 @@ export const adminAttention = async (prisma: PrismaClient, now: () => Date = () 
                 at: machine.updatedAt.toISOString(),
             }),
         ),
+        ...strikes.map(
+            (strike): AdminAttentionItem => ({
+                kind: `hosted-strike`,
+                severity: strike.action === `stopped` ? `warning` : `danger`,
+                title:
+                    strike.action === `reported`
+                        ? `${strike.user.email}'s machine ${strike.appName} ran at full load on the plan`
+                        : `${strike.user.email}'s machine ${strike.appName} was ${strike.action} for full load`,
+                detail: `${strikeWords(strike)}, by the provider's own meter.${strike.action === `reported` ? ` A subscriber's machine is never stopped by the watch; this is for a person to judge.` : ``}`,
+                at: strike.createdAt.toISOString(),
+                email: strike.user.email,
+            }),
+        ),
+        ...suspended.map(
+            (user): AdminAttentionItem => ({
+                kind: `hosted-suspended`,
+                severity: `warning`,
+                title: `${user.email}'s hosted lane is switched off`,
+                detail: `${user.hostedSuspendedReason ?? `no reason recorded`}. Lift it from the account page, or leave it.`,
+                at: user.hostedSuspendedAt?.toISOString(),
+                email: user.email,
+            }),
+        ),
     ];
 
     items.sort((a, b) => {
@@ -138,7 +185,7 @@ export const adminAttention = async (prisma: PrismaClient, now: () => Date = () 
         return (b.at ?? ``).localeCompare(a.at ?? ``);
     });
 
-    const truncated = [stuckSetups, unreachable, refusals, pastDue, lingeringClaims, staleBuilds].some((list) => list.length === TAKE);
+    const truncated = [stuckSetups, unreachable, refusals, pastDue, lingeringClaims, staleBuilds, strikes, suspended].some((list) => list.length === TAKE);
 
     return { items, truncated };
 };

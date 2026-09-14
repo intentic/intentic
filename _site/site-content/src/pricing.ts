@@ -1,5 +1,5 @@
 import type { FaqItem } from "./faq";
-import { hosted, idleWeeks } from "./hosted";
+import { hosted, idleWeeks, rampSpan } from "./hosted";
 import { landingContent } from "./landing";
 import { APP_URL } from "./site";
 
@@ -40,7 +40,7 @@ const columns: PricingColumn[] = [
         price: `Free, then $${hosted.priceUsd}`,
         priceNote: "a month per hosted sandbox via Stripe, cancel any time",
         includes: [
-            `Free: one hosted sandbox, ${hosted.freeHours} awake hours a month, removed after ${idleWeeks} weeks unopened`,
+            `Free: one hosted sandbox, ${hosted.freeHours} awake hours a month (${hosted.newAccountHours} in ${rampSpan}), removed after ${idleWeeks} weeks unopened`,
             "On the plan: always on, no hour ceiling, never removed. Add a second hosted sandbox for another slot",
             `${hosted.cpus} shared vCPUs, ${hosted.memoryGb} GB memory, ${hosted.diskGb} GB disk`,
             "The same workspace and every feature, on either",
@@ -63,7 +63,7 @@ const faq: FaqItem[] = [
         id: "do-i-need-the-plan",
         question: "Do I need it to run agents?",
         answer: [
-            `No. Agents run on your own AI accounts, on either machine. Only the hosted sandbox differs: free, it has ${hosted.freeHours} awake hours a month and is removed after ${idleWeeks} weeks unopened; on the plan it is always on.`,
+            `No. Agents run on your own AI accounts, on either machine. Only the hosted sandbox differs: free, it has ${hosted.freeHours} awake hours a month (${hosted.newAccountHours} in ${rampSpan}) and is removed after ${idleWeeks} weeks unopened; on the plan it is always on.`,
         ],
         more: { label: "Where your workspace runs", href: "/where-it-runs/" },
     },

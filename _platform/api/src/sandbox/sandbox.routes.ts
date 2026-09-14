@@ -7,6 +7,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import { clientIp } from "../client-ip.js";
 import { decryptSecret, encryptSecret } from "../crypto.js";
 import { requireOwnedSandbox, requireUser } from "../guards.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
@@ -38,6 +39,8 @@ import {
     releaseHosted,
 } from "./hosted/hosted-cleanup.js";
 import { hostedPlanEnabled, hostedSlotsOf, onHostedPlan } from "./hosted/hosted-plan.js";
+import { assertHostedSource, HostedSourceCapped, recordHostedProvision } from "./hosted/hosted-source.js";
+import { assertHostedStanding, HostedSuspended, hostedSuspensionOf } from "./hosted/hosted-standing.js";
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { mintSandbox } from "./mint-sandbox.js";
@@ -67,6 +70,26 @@ const REFUSAL_CODES = {
 // PAYMENT_REQUIRED is this platform's own code, not oRPC's; the status must be set explicitly or oRPC's unknown-code
 // fallback reports 500 for an ordinary, expected refusal.
 const paymentRequired = (message: string): ORPCError<`PAYMENT_REQUIRED`, undefined> => new ORPCError(`PAYMENT_REQUIRED`, { status: 402, message });
+
+// The hosted lane is switched off for the machine's OWNER (hosted-standing.ts): FORBIDDEN, in the suspension's own
+// words, for every act that would start a machine. Checked before anything is settled, counted or built.
+const requireHostedStanding = async (context: OrpcContext, ownerId: string): Promise<void> => {
+    try {
+        await assertHostedStanding(context.prisma, ownerId);
+    } catch (error) {
+        if (error instanceof HostedSuspended) {
+            throw new ORPCError(`FORBIDDEN`, { message: error.message });
+        }
+        throw error;
+    }
+};
+
+// The refusal's own sentence for `hours`; ISO on the wire, absent when the ceiling is the month's.
+const hoursOf = (budget: { allowanceMinutes: number; remainingMinutes: number; rampUntil?: Date }) => ({
+    allowance: Math.round(budget.allowanceMinutes / 60),
+    remaining: Math.floor(budget.remainingMinutes / 60),
+    ...(budget.rampUntil === undefined ? {} : { rampUntil: budget.rampUntil.toISOString() }),
+});
 
 const buildRefusal = (code: HostedBuildRefusal, message: string): ORPCError<string, undefined> =>
     REFUSAL_CODES[code] === `PAYMENT_REQUIRED` ? paymentRequired(message) : new ORPCError(REFUSAL_CODES[code], { message });
@@ -112,8 +135,24 @@ const restartOrRebuild = async (
     }
 };
 
-/* THE GATES A NEW HOSTED MACHINE PASSES, together because they are all refusals and none of them is about provisioning. */
-const assertHostedAllowance = async (context: OrpcContext, userId: string): Promise<void> => {
+/* THE GATES A NEW HOSTED MACHINE PASSES, together because they are all refusals and none of them is about
+ * provisioning. Standing first (a suspended account is told so before anything else), then the same-source caps
+ * (hosted-source.ts), then this account's own slots and hours. */
+const assertHostedAllowance = async (
+    context: OrpcContext,
+    source: { readonly userId: string; readonly email: string; readonly ip: string | undefined },
+): Promise<void> => {
+    const { userId } = source;
+    await requireHostedStanding(context, userId);
+    try {
+        await assertHostedSource(context.prisma, context.config, source);
+    } catch (error) {
+        if (error instanceof HostedSourceCapped) {
+            context.logger.warn({ userId, ip: source.ip }, `hosted provision: refused by a same-source cap`);
+            throw new ORPCError(`TOO_MANY_REQUESTS`, { message: error.message });
+        }
+        throw error;
+    }
     const [used, slots] = await Promise.all([
         context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: userId } } }),
         // Plan's slot count while live, otherwise the free lane's one (hosted-plan.ts).
@@ -269,7 +308,7 @@ export const sandboxRoutes = {
         if (!hostedEnabled(context.config)) {
             return { enabled: false, remaining: 0 };
         }
-        const [used, slots, budget, plan, capacity] = await Promise.all([
+        const [used, slots, budget, plan, capacity, suspension] = await Promise.all([
             context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: user.id } } }),
             hostedSlotsOf(context.prisma, context.config, user.id),
             // Included so the card states the ceiling before it's spent; omitted entirely when unmetered.
@@ -280,16 +319,17 @@ export const sandboxRoutes = {
             // Fleet-wide capacity, not this account's allowance: a fresh account can still meet a full provider.
             // Region-aware, since stock the residency rule forbids this caller isn't stock to promise.
             hostedCapacity(context.prisma, context.config, hostedRegionFor(context.config.hosted, context.headers)),
+            hostedSuspensionOf(context.prisma, user.id),
         ]);
         return {
             enabled: true,
-            remaining: Math.max(0, slots - used),
+            // A suspended account is offered nothing, whatever its slots say.
+            remaining: suspension === undefined ? Math.max(0, slots - used) : 0,
             // Absent unless true: a lane with room says nothing, so this can't age into a false scare.
             ...(capacity.full ? { full: true } : {}),
-            ...(budget.metered
-                ? { hours: { allowance: Math.round(budget.allowanceMinutes / 60), remaining: Math.floor(budget.remainingMinutes / 60) } }
-                : {}),
+            ...(budget.metered ? { hours: hoursOf(budget) } : {}),
             ...(plan ? { plan: true } : {}),
+            ...(suspension === undefined ? {} : { suspended: true }),
         };
     }),
     // Gives an existing sandbox a machine; idempotent (an existing machine is returned, never duplicated). A warm claim
@@ -313,17 +353,23 @@ export const sandboxRoutes = {
             const already = await context.prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, include: { hosted: true } });
             return toSummary(already, `owner`, context);
         }
-        await assertHostedAllowance(context, user.id);
+        const source = { userId: user.id, email: user.email, ip: clientIp(context.headers, context.config) };
+        await assertHostedAllowance(context, source);
         if (!ingressEnabled(context.config)) {
             throw new ORPCError(`NOT_FOUND`, { message: `this platform has no reachability fabric configured` });
         }
         try {
-            await provisionHosted(context.prisma, context.config, context.logger, {
+            const provisioned = await provisionHosted(context.prisma, context.config, context.logger, {
                 sandboxId: sandbox.id,
                 connectToken: input.token,
                 ownerEmail: user.email.toLowerCase(),
                 region: hostedRegionFor(context.config.hosted, context.headers),
             });
+            // Written once the machine exists, so a refused build leaves no count behind; a lost write costs the
+            // caps one row, never the owner a machine.
+            await recordHostedProvision(context.prisma, { ...source, appName: provisioned.appName }).catch((error: unknown) =>
+                context.logger.error({ err: error, sandboxId: sandbox.id }, `hosted provision: recording the source failed`),
+            );
         } catch (error) {
             if (error instanceof HostedProvisionCancelled) {
                 throw new ORPCError(`CONFLICT`, { message: error.message });
@@ -407,6 +453,7 @@ export const sandboxRoutes = {
             throw new ORPCError(`NOT_FOUND`, { message: `this sandbox has no machine we run` });
         }
         const user = requireUser(context);
+        await requireHostedStanding(context, sandbox.ownerId);
         await stopMachine(context.config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error: unknown) =>
             context.logger.warn({ err: error, app: hosted.appName }, `hosted restart: stop refused; starting anyway`),
         );
@@ -456,6 +503,7 @@ export const sandboxRoutes = {
             throw new ORPCError(`NOT_FOUND`, { message: `hosted sandboxes are not enabled on this platform` });
         }
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        await requireHostedStanding(context, user.id);
         try {
             return await requestHostedBuild(context.prisma, context.config, context.logger, {
                 sandboxId: sandbox.id,
@@ -500,6 +548,7 @@ export const sandboxRoutes = {
         if (!sandbox || sandbox.hosted === null) {
             throw new ORPCError(`NOT_FOUND`, { message: `sandbox not found` });
         }
+        await requireHostedStanding(context, sandbox.ownerId);
         await settleHostedStretch(context.prisma, context.config, context.logger, sandbox.hosted, sandbox.ownerId);
         const budget = await hostedBudgetOf(context.prisma, context.config, sandbox.ownerId);
         if (budget.metered && budget.remainingMinutes === 0) {

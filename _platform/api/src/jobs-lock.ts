@@ -16,6 +16,8 @@ export const JOB_HOSTED_CANARY = 5;
 export const JOB_HOSTED_BUILD = 6;
 // Settles stopped stretches and stops overspent machines; concurrent runs would double-bill a stretch.
 export const JOB_HOSTED_METER = 7;
+// Stops and strikes machines at full load; concurrent runs would strike one window twice.
+export const JOB_HOSTED_ABUSE = 8;
 
 export const runExclusive = async (config: Config, key: number, fn: () => Promise<void>): Promise<void> => {
     const client = new Client({ connectionString: config.database.url });

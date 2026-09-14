@@ -6,6 +6,9 @@ import { DAY_MS } from "../durations.js";
 
 const utcDayOf = (at: Date): string => at.toISOString().slice(0, 10);
 
+// Enough strikes to read a pattern; the ledger keeps more.
+const STRIKES = 20;
+
 export const adminUserDetail = async (
     prisma: PrismaClient,
     idOrEmail: string,
@@ -14,7 +17,7 @@ export const adminUserDetail = async (
     const needle = idOrEmail.trim();
     const user = await prisma.user.findFirst({
         where: { OR: [{ id: needle }, { email: { equals: needle, mode: `insensitive` } }] },
-        select: { id: true, email: true, name: true, image: true, createdAt: true, termsVersion: true },
+        select: { id: true, email: true, name: true, image: true, createdAt: true, termsVersion: true, hostedSuspendedAt: true, hostedSuspendedReason: true },
     });
     if (user === null) {
         return null;
@@ -24,7 +27,7 @@ export const adminUserDetail = async (
     const month = at.toISOString().slice(0, 7);
     const memberEmail = user.email.toLowerCase();
 
-    const [sessions, accounts, plan, trialRows, hostedRows, wallets, sandboxes, memberships] = await Promise.all([
+    const [sessions, accounts, plan, trialRows, hostedRows, wallets, sandboxes, memberships, strikes] = await Promise.all([
         prisma.session.findMany({
             where: { userId: user.id },
             orderBy: { createdAt: `desc` },
@@ -64,6 +67,12 @@ export const adminUserDetail = async (
             where: { email: memberEmail },
             select: { role: true, acceptedAt: true, sandbox: { select: { name: true, owner: { select: { email: true } } } } },
         }),
+        prisma.hostedStrike.findMany({
+            where: { userId: user.id },
+            orderBy: { createdAt: `desc` },
+            take: STRIKES,
+            select: { appName: true, kind: true, measure: true, windowMinutes: true, action: true, createdAt: true },
+        }),
     ]);
 
     // Payment counts per wallet, bounded by the wallet count (one per network).
@@ -92,6 +101,16 @@ export const adminUserDetail = async (
         plan: plan ? { status: plan.status, currentPeriodEnd: plan.currentPeriodEnd.toISOString() } : null,
         trialDays: trialRows,
         hostedMonthMinutes: hostedRows?.minutes ?? 0,
+        hostedSuspended: user.hostedSuspendedAt ? { at: user.hostedSuspendedAt.toISOString(), reason: user.hostedSuspendedReason ?? `` } : null,
+        // The rows are written by the watch with these words; an unknown one is a bug there, not a page to blank.
+        strikes: strikes.map((strike) => ({
+            appName: strike.appName,
+            kind: strike.kind === `egress` ? (`egress` as const) : (`cpu` as const),
+            measure: strike.measure,
+            windowMinutes: strike.windowMinutes,
+            action: strike.action === `suspended` ? (`suspended` as const) : strike.action === `reported` ? (`reported` as const) : (`stopped` as const),
+            at: strike.createdAt.toISOString(),
+        })),
         wallets: wallets.map((wallet, index) => ({
             network: wallet.network,
             address: wallet.address,

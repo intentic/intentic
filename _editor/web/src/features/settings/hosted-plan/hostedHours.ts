@@ -28,6 +28,8 @@ export interface HoursMeter {
     readonly remainingMinutes: number;
     readonly fraction: number;
     readonly resetsAt: string;
+    // Set while a new account's ceiling is the ramp's, not the month's: when the full one applies (ISO).
+    readonly rampUntil?: string;
 }
 
 export const hoursMeter = (usage: HostedPlanUsage | undefined): HoursMeter | undefined => {
@@ -41,6 +43,7 @@ export const hoursMeter = (usage: HostedPlanUsage | undefined): HoursMeter | und
         remainingMinutes,
         fraction: usage.allowanceMinutes === 0 ? 0 : remainingMinutes / usage.allowanceMinutes,
         resetsAt: usage.resetsAt,
+        ...(usage.rampUntil === undefined ? {} : { rampUntil: usage.rampUntil }),
     };
 };
 
@@ -50,11 +53,14 @@ export const LOW_HOURS_MINUTES = 5 * 60;
 export const lowOnHours = (meter: HoursMeter | undefined): boolean =>
     meter !== undefined && meter.remainingMinutes > 0 && meter.remainingMinutes <= Math.min(LOW_HOURS_MINUTES, meter.allowanceMinutes / 8);
 
-// "12 h of 40 h left this month", the meter's one line, shared by every surface that states it.
-export const hoursLeftLine = (meter: HoursMeter): string =>
-    meter.remainingMinutes === 0
-        ? `Free hours used up this month`
-        : `${formatMinutes(meter.remainingMinutes)} of ${formatMinutes(meter.allowanceMinutes)} left this month`;
+// "12 h of 40 h left this month", the meter's one line, shared by every surface that states it. A new account's
+// ramp names the day the full month applies instead of "this month", since its ceiling changes before the month does.
+export const hoursLeftLine = (meter: HoursMeter): string => {
+    const when = meter.rampUntil === undefined ? `this month` : `until ${formatDayShort(meter.rampUntil)}`;
+    return meter.remainingMinutes === 0
+        ? `Free hours used up ${when}`
+        : `${formatMinutes(meter.remainingMinutes)} of ${formatMinutes(meter.allowanceMinutes)} left ${when}`;
+};
 
 // Which lane this account is on, one word beside the name; absent when the platform sells no plan. A failing card is
 // the one alarm the chip still carries, in the danger tone.

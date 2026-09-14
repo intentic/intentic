@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
+import { DAY_MS } from "../../durations.js";
 import { onHostedPlan } from "./hosted-plan.js";
 import { getMachine, isFlyGone, LIVE_STATES } from "./fly/fly.js";
 
@@ -21,9 +22,35 @@ export interface HostedBudget {
     readonly allowanceMinutes: number;
     readonly usedMinutes: number;
     readonly remainingMinutes: number;
+    // Set while the newcomer ramp holds the ceiling down: when the account is old enough for the full one.
+    readonly rampUntil?: Date;
 }
 
 const unmetered: HostedBudget = { metered: false, allowanceMinutes: 0, usedMinutes: 0, remainingMinutes: 0 };
+
+/* THE NEWCOMER RAMP: an account younger than `hosted.newAccountDays` has `hosted.newAccountHours` as its
+ * month's ceiling instead of the full one. A farm of fresh accounts is the cheapest way to multiply the free
+ * lane, and ageing an account is the one cost it cannot skip; a person evaluating the product spends a few
+ * hours in their first week, not forty. Never raises the ceiling: a ramp above the month's figure is the
+ * month's figure. */
+const rampedAllowance = async (
+    prisma: Pick<PrismaClient, "user">,
+    config: Config,
+    userId: string,
+    now: Date,
+): Promise<{ allowanceMinutes: number; rampUntil?: Date }> => {
+    const full = config.hosted.monthlyHours * 60;
+    const { newAccountDays, newAccountHours } = config.hosted;
+    if (newAccountDays === 0 || newAccountHours === 0) {
+        return { allowanceMinutes: full };
+    }
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { createdAt: true } });
+    const rampUntil = user === null ? undefined : new Date(user.createdAt.getTime() + newAccountDays * DAY_MS);
+    if (rampUntil === undefined || rampUntil <= now) {
+        return { allowanceMinutes: full };
+    }
+    return { allowanceMinutes: Math.min(full, newAccountHours * 60), rampUntil };
+};
 
 // Minutes spent this month, live: settled row plus every open stretch of the owner's machines, no provider call. An
 // open stretch is attributed to the month it started in, like settling will; read even for subscribers.
@@ -45,12 +72,20 @@ export const hostedUsedMinutes = async (prisma: PrismaClient, userId: string, no
 // What this owner has left this month; the plan is checked first so a subscriber never pays for a meter read. `userId`
 // is always the sandbox's owner, never the caller, so a shared sandbox's guests spend the owner's month.
 export const hostedBudgetOf = async (prisma: PrismaClient, config: Config, userId: string, now: Date = new Date()): Promise<HostedBudget> => {
-    const allowanceMinutes = config.hosted.monthlyHours * 60;
-    if (allowanceMinutes === 0 || (await onHostedPlan(prisma, config, userId))) {
+    if (config.hosted.monthlyHours === 0 || (await onHostedPlan(prisma, config, userId))) {
         return unmetered;
     }
-    const usedMinutes = await hostedUsedMinutes(prisma, userId, now);
-    return { metered: true, allowanceMinutes, usedMinutes, remainingMinutes: Math.max(0, allowanceMinutes - usedMinutes) };
+    const [{ allowanceMinutes, rampUntil }, usedMinutes] = await Promise.all([
+        rampedAllowance(prisma, config, userId, now),
+        hostedUsedMinutes(prisma, userId, now),
+    ]);
+    return {
+        metered: true,
+        allowanceMinutes,
+        usedMinutes,
+        remainingMinutes: Math.max(0, allowanceMinutes - usedMinutes),
+        ...(rampUntil === undefined ? {} : { rampUntil }),
+    };
 };
 
 // Adds a settled stretch to its owner's month; atomic upsert so two racing settlements both increment. Also used by an

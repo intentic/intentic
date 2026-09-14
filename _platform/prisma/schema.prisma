@@ -23,6 +23,11 @@ model User {
     // login page showed when this account was created, and when. Stamped by the user-create hook.
     termsAcceptedAt  DateTime?
     termsVersion     String?
+    // The hosted lane switched off for this account (an operator's verdict, or the abuse watch's second strike):
+    // no machine is provisioned, woken, restarted or rebuilt while set, and an awake one is stopped. The
+    // account, its own-machine sandboxes and its data are untouched. Null is good standing.
+    hostedSuspendedAt     DateTime?
+    hostedSuspendedReason String?
     createdAt        DateTime           @default(now())
     updatedAt        DateTime           @updatedAt
     sessions         Session[]
@@ -31,6 +36,8 @@ model User {
     trialUsage       TrialUsage[]
     hostedUsage      HostedUsage[]
     hostedPlan       HostedPlan?
+    hostedProvisions HostedProvision[]
+    hostedStrikes    HostedStrike[]
     wallets          Wallet[]
     pushDevices      PushDevice[]
 
@@ -324,6 +331,53 @@ model HostedUsage {
     // The sweep deletes by month; the unique index above leads with userId, which it can't use.
     @@index([month])
     @@map("hosted_usage")
+}
+
+/* ONE HOSTED MACHINE HANDED OUT, and where the request came from: the rows the same-source caps count
+ * (api hosted-source.ts). A machine costs real money from the moment it exists, and a farm of fresh Google
+ * accounts is the cheapest way to be handed many; the client address and the email domain are the two facts
+ * the platform has about "the same somebody" at that moment, so they are written down here for a day's worth
+ * of counting. `ip` is what the trusted proxy header said, empty when there was none (a self-hosted platform
+ * with no proxy). Not tied to the machine row: a release-and-provision cycle must still count. Personal data,
+ * so retention.ts drops rows after the counting window; cascades with the user. */
+model HostedProvision {
+    id        String   @id @default(cuid())
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    ip        String
+    // The account's email domain, lowercased.
+    domain    String
+    appName   String
+    createdAt DateTime @default(now())
+
+    @@index([ip, createdAt])
+    @@index([domain, createdAt])
+    @@index([createdAt])
+    @@map("hosted_provision")
+}
+
+/* ONE VERDICT OF THE ABUSE WATCH (api hosted-abuse.ts) against a hosted machine, and what was done about it.
+ * The platform cannot see inside a machine and does not try; what it reads is the provider's own metric for
+ * the machine (CPU busy share, egress rate) over a window, and a machine that stays saturated for the whole
+ * window on the free lane is stopped and its owner told. `measure` is the figure the rule fired on, in the
+ * rule's own unit (`cpu`: busy share 0..1 of the machine's CPUs; `egress`: GB per hour). `action` is what
+ * followed: `stopped`, `suspended` (this strike crossed the account's line), or `reported` (a subscriber's
+ * machine, never stopped by the watch). Kept the ledger window like HostedUsage, since a suspension is argued
+ * against these rows; cascades with the user. */
+model HostedStrike {
+    id            String   @id @default(cuid())
+    userId        String
+    user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    appName       String
+    kind          String
+    measure       Float
+    windowMinutes Int
+    action        String
+    createdAt     DateTime @default(now())
+
+    @@index([userId, createdAt])
+    @@index([createdAt])
+    @@map("hosted_strike")
 }
 
 // One sign-in, carried from the user's REAL BROWSER into the desktop app's webview (_editor/desktop-app).

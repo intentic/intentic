@@ -5,6 +5,7 @@ import { CONFIG_SECRETS, loadConfig } from "./config.js";
 import { mask } from "./log.js";
 import { createLogger } from "./logger.js";
 import { createPrisma } from "./prisma.js";
+import { startHostedAbuse } from "./sandbox/hosted/hosted-abuse.js";
 import { startHostedBuilds } from "./sandbox/hosted/build/hosted-build.js";
 import { startHostedCanary } from "./sandbox/hosted/hosted-canary.js";
 import { startHostedCleanup } from "./sandbox/hosted/hosted-cleanup.js";
@@ -47,6 +48,8 @@ startHostedPool(prisma, config, logger);
 startHostedBuilds(prisma, config, logger);
 // Closes the stretch of every stopped machine and stops a free machine whose owner's month is spent.
 startHostedMeter(prisma, config, logger);
+// Stops a free machine at full load for a whole window, on the provider's own meter (hosted-abuse.ts).
+startHostedAbuse(prisma, config, logger);
 // Watches the hosted lane against Fly and says so when they disagree; read-only (hosted-health.ts).
 startHostedHealth(prisma, config, logger);
 // Provisions a sandbox end to end and waits for its daemon, off unless HOSTED_CANARY_MINUTES is set.

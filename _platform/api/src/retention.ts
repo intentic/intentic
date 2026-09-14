@@ -12,16 +12,21 @@ import { DAY_MS } from "./durations.js";
 
 // GDPR storage limitation: expired sessions/verifications/handoffs, plus invites unclaimed past this age.
 const INVITE_MAX_AGE_MS = 90 * DAY_MS;
+// The same-source caps count a day; a month of rows is every count that could still be disputed.
+const PROVISION_MAX_AGE_MS = 30 * DAY_MS;
 
-const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; verifications: number; handoffs: number; invites: number }> => {
+const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; verifications: number; handoffs: number; invites: number; provisions: number }> => {
     const now = new Date();
-    // 13 months of usage history, enough to dispute a limit; pseudonymous but per-user, so it still expires.
-    const ledgerCutoff = new Date(now.getTime() - 396 * DAY_MS).toISOString().slice(0, 10);
-    const [sessions, verifications, handoffs] = await Promise.all([
+    // 13 months of usage history, enough to dispute a limit; pseudonymous but per-user, so it still expires. Strikes
+    // are argued against the same way and keep the same window.
+    const ledgerCutoff = new Date(now.getTime() - 396 * DAY_MS);
+    const [sessions, verifications, handoffs, , , provisions] = await Promise.all([
         prisma.session.deleteMany({ where: { expiresAt: { lt: now } } }),
         prisma.verification.deleteMany({ where: { expiresAt: { lt: now } } }),
         prisma.desktopHandoff.deleteMany({ where: { expiresAt: { lt: now } } }),
-        prisma.hostedUsage.deleteMany({ where: { month: { lt: ledgerCutoff.slice(0, 7) } } }),
+        prisma.hostedUsage.deleteMany({ where: { month: { lt: ledgerCutoff.toISOString().slice(0, 7) } } }),
+        prisma.hostedStrike.deleteMany({ where: { createdAt: { lt: ledgerCutoff } } }),
+        prisma.hostedProvision.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - PROVISION_MAX_AGE_MS) } } }),
     ]);
     const stale = await prisma.sandboxMember.findMany({
         where: { createdAt: { lt: new Date(now.getTime() - INVITE_MAX_AGE_MS) } },
@@ -36,7 +41,7 @@ const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; v
     const invites = await prisma.sandboxMember.deleteMany({
         where: { id: { in: stale.filter((invite) => !known.has(invite.email)).map((invite) => invite.id) } },
     });
-    return { sessions: sessions.count, verifications: verifications.count, handoffs: handoffs.count, invites: invites.count };
+    return { sessions: sessions.count, verifications: verifications.count, handoffs: handoffs.count, invites: invites.count, provisions: provisions.count };
 };
 
 export const startRetention = (prisma: PrismaClient, config: Config, logger: Logger): void => {

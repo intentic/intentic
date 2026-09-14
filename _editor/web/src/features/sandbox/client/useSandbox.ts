@@ -128,14 +128,23 @@ const hostedRelease = withConcurrency(
 );
 
 // Wakes a sleeping hosted sandbox on a network-shaped connection failure, from any path that lands on it.
-// PAYMENT_REQUIRED (spent hours) is the one refusal kept and shown rather than swallowed.
+// Two refusals are kept and shown rather than swallowed: PAYMENT_REQUIRED (spent hours) and FORBIDDEN (the owner's
+// hosted lane is switched off); everything else is a wait.
 const WAKE_THROTTLE_MS = 60_000;
 const wokeAt = new Map<string, number>();
-// The sandbox whose last wake the platform refused for spent hours, with its own message.
-const wakeRefused = ref<{ readonly sandboxId: string; readonly message: string } | undefined>(undefined);
+export type WakeRefusalKind = "hours" | "suspended";
+// The sandbox whose last wake the platform refused, why, and in the platform's own words.
+const wakeRefused = ref<{ readonly sandboxId: string; readonly kind: WakeRefusalKind; readonly message: string } | undefined>(undefined);
+const refusalKind = (outcome: unknown): WakeRefusalKind | undefined => {
+    if (!(outcome instanceof ORPCError)) {
+        return undefined;
+    }
+    return outcome.code === `PAYMENT_REQUIRED` ? `hours` : outcome.code === `FORBIDDEN` ? `suspended` : undefined;
+};
 const recordWake = (sandboxId: string, outcome: unknown): void => {
-    if (outcome instanceof ORPCError && outcome.code === `PAYMENT_REQUIRED`) {
-        wakeRefused.value = { sandboxId, message: outcome.message };
+    const kind = refusalKind(outcome);
+    if (kind !== undefined && outcome instanceof ORPCError) {
+        wakeRefused.value = { sandboxId, kind, message: outcome.message };
         return;
     }
     if (wakeRefused.value?.sandboxId === sandboxId && outcome === undefined) {
@@ -163,7 +172,7 @@ watch(
             .catch((error: unknown) => recordWake(id, error));
     },
 );
-// Whether the ACTIVE sandbox's last wake was refused for spent hours.
+// The ACTIVE sandbox's last refused wake, if its last wake was refused.
 const activeWakeRefused = computed(() =>
     wakeRefused.value !== undefined && wakeRefused.value.sandboxId === active.value?.id ? wakeRefused.value : undefined,
 );

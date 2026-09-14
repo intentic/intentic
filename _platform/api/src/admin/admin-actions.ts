@@ -7,6 +7,7 @@ import { stopMachine } from "../sandbox/hosted/fly/fly.js";
 import { destroyHosted, hostedEnabled } from "../sandbox/hosted/hosted.js";
 import { cancelHostedPlan } from "../sandbox/hosted/hosted-plan.js";
 import type { StripeGateway } from "../sandbox/hosted/hosted-plan-stripe.js";
+import { hostedSuspensionOf, liftHostedSuspension, suspendHosted } from "../sandbox/hosted/hosted-standing.js";
 
 // Admin mutations, gated by routes (requireAdmin, the ADMIN_MUTATIONS switch, typed confirmation). Each action reuses
 // the owner's own teardown flows rather than inventing a new way to touch machines.
@@ -55,4 +56,28 @@ export const deleteUserAccount = async (
         }
     }
     return { ok: true, message: `${user.email} erased: sandboxes, grants and the hosted plan are gone with the account.` };
+};
+
+// Switches the hosted lane off for one account and stops its machines now (hosted-standing.ts); the account, its
+// own-machine sandboxes and its files are untouched, which the sentence says.
+export const suspendUserHosted = async (prisma: PrismaClient, config: Config, logger: Logger, user: { id: string; email: string }, reason: string): Promise<AdminActionResult> => {
+    if (!hostedEnabled(config)) {
+        return { ok: false, message: `The hosted lane is not configured on this platform.` };
+    }
+    if ((await hostedSuspensionOf(prisma, user.id)) !== undefined) {
+        return { ok: false, message: `${user.email} is already suspended.` };
+    }
+    const { stopped } = await suspendHosted(prisma, config, logger, user.id, reason);
+    return {
+        ok: true,
+        message: `${user.email} suspended: no hosted machine starts for this account until lifted; ${stopped === 1 ? `one running machine was` : `${stopped} running machines were`} stopped. Nothing else about the account changes.`,
+    };
+};
+
+export const liftUserHosted = async (prisma: PrismaClient, logger: Logger, user: { id: string; email: string }): Promise<AdminActionResult> => {
+    if ((await hostedSuspensionOf(prisma, user.id)) === undefined) {
+        return { ok: false, message: `${user.email} is not suspended.` };
+    }
+    await liftHostedSuspension(prisma, logger, user.id);
+    return { ok: true, message: `${user.email} is back in good standing; the owner's next visit wakes their machine.` };
 };

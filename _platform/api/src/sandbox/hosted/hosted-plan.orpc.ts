@@ -5,7 +5,7 @@ import { requireUser } from "../../guards.js";
 import { hostedEnabled } from "./hosted.js";
 import { applySubscription, hostedPlanEnabled, hostedSlotsOf, isComped, isOnPlan } from "./hosted-plan.js";
 import { type StripeGateway, stripeGateway } from "./hosted-plan-stripe.js";
-import { hostedUsedMinutes, usageMonth, usageResetsAt } from "./hosted-usage.js";
+import { hostedBudgetOf, usageMonth, usageResetsAt } from "./hosted-usage.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
 
@@ -13,20 +13,20 @@ const os = implement(apiContract).$context<OrpcContext>();
 const billingUrl = (context: OrpcContext, query = ``): string => `${context.config.webOrigin}/settings/billing${query}`;
 
 // The lane as it applies to one account: slots, machines, this month's meter, shared by the Billing page, avatar row
-// and Overview card so they can't disagree. usedMinutes is live, shown to subscribers too.
-const hostedFor = async (context: OrpcContext, userId: string, onPlan: boolean): Promise<HostedPlanHosted> => {
+// and Overview card so they can't disagree. usedMinutes is live, shown to subscribers too; the ceiling (ramped for a
+// new account, absent for a subscriber) is the budget's own answer, so the page and the wake cannot disagree.
+const hostedFor = async (context: OrpcContext, userId: string): Promise<HostedPlanHosted> => {
     const { prisma, config } = context;
     const now = new Date();
-    const [slots, machines, usedMinutes] = await Promise.all([
+    const [slots, machines, budget] = await Promise.all([
         hostedSlotsOf(prisma, config, userId),
         prisma.hostedMachine.findMany({
             where: { sandbox: { ownerId: userId } },
             select: { region: true, wokeAt: true, sandbox: { select: { id: true, name: true } } },
             orderBy: { createdAt: `asc` },
         }),
-        hostedUsedMinutes(prisma, userId, now),
+        hostedBudgetOf(prisma, config, userId, now),
     ]);
-    const metered = config.hosted.monthlyHours > 0 && !onPlan;
     return {
         slots,
         machines: machines.map((machine) => ({
@@ -37,9 +37,10 @@ const hostedFor = async (context: OrpcContext, userId: string, onPlan: boolean):
         })),
         usage: {
             month: usageMonth(now),
-            usedMinutes,
-            allowanceMinutes: metered ? config.hosted.monthlyHours * 60 : null,
+            usedMinutes: budget.usedMinutes,
+            allowanceMinutes: budget.metered ? budget.allowanceMinutes : null,
             resetsAt: usageResetsAt(now).toISOString(),
+            ...(budget.rampUntil === undefined ? {} : { rampUntil: budget.rampUntil.toISOString() }),
         },
         shape: { cpus: config.hosted.cpus, memoryMb: config.hosted.memoryMb, volumeGb: config.hosted.volumeGb },
     };
@@ -67,7 +68,7 @@ const hostedPlanStateOf = async (context: OrpcContext): Promise<HostedPlanState>
         ...(plan !== null
             ? { status: plan.status, renewsAt: plan.currentPeriodEnd.toISOString(), ...(plan.cancelAtPeriodEnd ? { cancelAtPeriodEnd: true } : {}) }
             : {}),
-        ...(hostedEnabled(config) ? { hosted: await hostedFor(context, context.user.id, onPlan) } : {}),
+        ...(hostedEnabled(config) ? { hosted: await hostedFor(context, context.user.id) } : {}),
     };
 };
 

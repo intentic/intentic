@@ -48,6 +48,8 @@ const config = (over?: Partial<Config[`hosted`]>): Config =>
             perUser: 1,
             idleStopMinutes: 20,
             monthlyHours: 40,
+            newAccountDays: 0,
+            newAccountHours: 0,
             idleDays: 21,
             idleWarnDays: 14,
             poolSize: 1,
