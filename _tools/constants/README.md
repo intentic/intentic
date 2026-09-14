@@ -11,6 +11,10 @@ The ports, paths and image references the daemon, the CLIs and the desktop app a
 
 - [src/index.ts](src/index.ts), the constants themselves: ports, the fixed directory layouts, legal and origin
   values, and the install-script table. Isomorphic, imported by browser code, so nothing here may touch `node:fs`.
+- [src/profile.ts](src/profile.ts): who is arriving — the profile a link from the site names, the localStorage
+  keys it seeds, and the look each one asks for. Here because the app applies it from an inline `<head>` script
+  that runs before any module and so cannot import anything; `_editor/web/src/bootProfile.test.ts` reads that
+  script back and fails if it has parted from this table. The site and the platform import it directly.
 - [src/node.mjs](src/node.mjs): `repoRoot()` and `packageRoot()`, behind the `@intentic/constants/node`
   subpath. Node-only, and hand-written JavaScript rather than compiled TypeScript.
 - [src/assertion-measure.mjs](src/assertion-measure.mjs), [src/contract-shrink.mjs](src/contract-shrink.mjs),

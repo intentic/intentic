@@ -13,6 +13,11 @@ import { parseDefinitionToml } from "./definition.js";
 const PROFILES_DIR = join(repoRoot(import.meta.url), `_platform/api/src/sandbox/profiles`);
 const files = readdirSync(PROFILES_DIR).filter((name) => name.endsWith(`.sandbox.toml`));
 
+// The rules a profile seeds are the same rows the Agent tab's own toggles write, and a toggle finds its row by id: a
+// seeded rule whose id has since been renamed there arrives as a stranger, so the promise reads as kept while the
+// switch the reader would look at stands off. Read as source because a daemon package cannot import the app's screens.
+const appRules = readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/features/sandbox/environment/rules.ts`), `utf8`);
+
 describe(`the profile definitions the platform seeds`, () => {
     it(`ships at least one, or the seed path is dead code`, () => {
         expect(files.length).toBeGreaterThan(0);
@@ -27,5 +32,13 @@ describe(`the profile definitions the platform seeds`, () => {
         // A definition that parses but declares nothing applies nothing, which is the same outcome as the typo.
         const declared = [Object.keys(definition.settings).length, definition.capabilities.length, definition.repositories.length];
         expect(declared.some((count) => count > 0)).toBe(true);
+    });
+
+    it.each(files)(`%s seeds rules the app still knows by id and calls by the same name`, (name) => {
+        const definition = parseDefinitionToml(readFileSync(join(PROFILES_DIR, name), `utf8`));
+        for (const rule of definition.settings.rules ?? []) {
+            expect(appRules, `no rule in the app carries the id "${rule.id}"`).toContain(`\`${rule.id}\``);
+            expect(appRules, `the app no longer labels a rule "${rule.label}"`).toContain(`\`${rule.label}\``);
+        }
     });
 });
