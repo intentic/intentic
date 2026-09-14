@@ -321,10 +321,9 @@ const eagernessOptions = [
     <!-- `id` so a chat's "Turn it off everywhere" link can land here directly, not at the top of a long settings page. -->
     <div id="models" class="flex flex-col gap-6">
         <!--
-            One group per catalog block; heading is the block's own, so it can't describe rows it no longer holds. Sticky, since the header now
-            carries controls over rows that scroll away from the button acting on them.
+            One group per catalog block; heading is the block's own, so it can't describe rows it no longer holds.
         -->
-        <RowGroup v-for="block in blocks" :key="block.id" :label="block.label" sticky>
+        <RowGroup v-for="block in blocks" :key="block.id" :label="block.label">
             <!--
                 Replaces the row count and caption that used to sit here, both restating what's on screen; this is the control that changes what the
                 group is. Stays on phone, unlike the selection cluster, since collapsing rows helps most there.

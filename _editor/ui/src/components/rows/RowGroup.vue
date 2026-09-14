@@ -17,16 +17,15 @@ import { provideRowDensity, type RowDensity } from "./row.js";
 // A group is a list, and a list is `compact`; that is the default and the whole standard. `comfortable`
 // remains <Row>'s own fallback outside a group (a card masthead outranking the rows under it). Override
 // only as an argued exception; `_tools/checks/row-tiers.mjs` refuses a group that merely restates the default.
-// Pins the header to the top of the scroll while rows pass under it, for a header that carries a control
-// over the rows (a select-all, bulk verbs) rather than only a label. Padding only when sticky, not a fill:
-// bg-canvas on this band reads as a dark box against the card below on the sanctum skin.
+// The header scrolls with its rows: a group header cannot pin, because this band carries no fill (bg-canvas
+// here reads as a dark box against the card below on the sanctum skin) and a transparent pinned band lets
+// the rows sliding under it show through its own text.
 const { density = `compact` } = defineProps<{
     label?: string;
     count?: string | number;
     caption?: string;
     flat?: boolean;
     undivided?: boolean;
-    sticky?: boolean;
     /** Leave alone: a group is a list and a list is `compact`. See the note above before overriding. */
     density?: RowDensity;
 }>();
@@ -38,13 +37,7 @@ provideRowDensity(computed(() => density));
     <section>
         <div
             v-if="label !== undefined || $slots[`label`] || $slots[`info`] || $slots[`actions`]"
-            class="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-1"
-            :class="
-                sticky === true
-                    ? // Gap to the surface is padding, not margin, so the sticky header sits flush above the card.
-                      `sticky top-0 z-20 -mx-1 px-2 pb-2.5 pt-2`
-                    : `mb-2.5`
-            "
+            class="mb-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 px-1"
         >
             <slot name="label"
                 ><span v-if="label !== undefined" :class="ui.sectionLabel()">{{ label }}</span></slot
