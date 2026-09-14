@@ -13,10 +13,11 @@
         border-radius: var(--radius-sm);
         background: var(--ui-tooltip-fill);
         color: var(--ui-tooltip-content);
+        border: 1px solid var(--ui-tooltip-border);
         padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
         font-size: var(--text-xs);
         line-height: var(--text-xs--line-height);
-        box-shadow: var(--ui-shadow-1);
+        box-shadow: var(--ui-shadow-2);
         overflow-wrap: anywhere; /* a path or a branch name has no spaces to break at */
         display: -webkit-box;
         -webkit-box-orient: vertical;
@@ -24,11 +25,17 @@
         overflow: hidden;
     }
 
-/* One triangle, rotated by which edge it hangs off. */
+/* Two stacked triangles, rotated by which edge they hang off: the wider one behind is the body's 1px rim carried across the arrow. */
     .ui-tooltip::after {
         content: "";
         position: absolute;
         border: 4px solid transparent;
+    }
+
+    .ui-tooltip::before {
+        content: "";
+        position: absolute;
+        border: 5px solid transparent;
     }
 
     .ui-tooltip-top::after {
@@ -38,11 +45,27 @@
         border-top-color: var(--ui-tooltip-fill);
     }
 
+    .ui-tooltip-top::before {
+        top: 100%;
+        left: var(--ui-tooltip-arrow);
+        margin-left: -5px;
+        margin-top: -1px;
+        border-top-color: var(--ui-tooltip-border);
+    }
+
     .ui-tooltip-bottom::after {
         bottom: 100%;
         left: var(--ui-tooltip-arrow);
         margin-left: -4px;
         border-bottom-color: var(--ui-tooltip-fill);
+    }
+
+    .ui-tooltip-bottom::before {
+        bottom: 100%;
+        left: var(--ui-tooltip-arrow);
+        margin-left: -5px;
+        margin-bottom: -1px;
+        border-bottom-color: var(--ui-tooltip-border);
     }
 
     .ui-tooltip-left::after {
@@ -52,10 +75,26 @@
         border-left-color: var(--ui-tooltip-fill);
     }
 
+    .ui-tooltip-left::before {
+        left: 100%;
+        top: var(--ui-tooltip-arrow);
+        margin-top: -5px;
+        margin-left: -1px;
+        border-left-color: var(--ui-tooltip-border);
+    }
+
     .ui-tooltip-right::after {
         right: 100%;
         top: var(--ui-tooltip-arrow);
         margin-top: -4px;
         border-right-color: var(--ui-tooltip-fill);
+    }
+
+    .ui-tooltip-right::before {
+        right: 100%;
+        top: var(--ui-tooltip-arrow);
+        margin-top: -5px;
+        margin-right: -1px;
+        border-right-color: var(--ui-tooltip-border);
     }
 }

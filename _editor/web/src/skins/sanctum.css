@@ -250,9 +250,10 @@
     }
 
 /* A tooltip is an overlay that happens to be small, so it takes the overlays' own value rather than one of its own: they never appear together. */
-    [data-skin="sanctum"] .ui-tooltip-body {
-        background-color: var(--sanctum-shadow);
-        border: 1px solid var(--sanctum-rule-strong);
+/* Set on the tooltip itself, not on <html>: the scheme's own tokens are unlayered there and would outrank this layer. */
+    [data-skin="sanctum"] .ui-tooltip {
+        --ui-tooltip-fill: var(--sanctum-shadow);
+        --ui-tooltip-border: var(--sanctum-rule-strong);
     }
 
     /* Controls are recessed channels with a lit upper edge. */

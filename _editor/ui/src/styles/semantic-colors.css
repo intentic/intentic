@@ -137,9 +137,11 @@
     --ui-shadow-2: 0 2px 4px rgb(var(--ui-shadow-tint) / 0.07), 0 12px 28px -8px rgb(var(--ui-shadow-tint) / 0.20);
     --ui-shadow-3: 0 4px 10px rgb(var(--ui-shadow-tint) / 0.08), 0 24px 56px -12px rgb(var(--ui-shadow-tint) / 0.26);
 
-/* The inverted chip. */
-    --ui-tooltip-fill: color-mix(in oklab, var(--color-surface-800) 82%, var(--color-brand-900));
-    --ui-tooltip-content: var(--color-surface-0);
+/* A raised paper chip, not an inverted one: a dark slab on warm paper reads as a foreign object. */
+/* A shade warmer than a card, so a tooltip raised over one still separates from it. */
+    --ui-tooltip-fill: color-mix(in oklab, var(--role-card) 88%, var(--paper-tint));
+    --ui-tooltip-content: var(--role-content);
+    --ui-tooltip-border: var(--role-line-strong);
 
     /* Hover surfaces warm the current semantic surface. */
     --ui-hover-wash: color-mix(in oklab, var(--color-primary-600) 8%, transparent);
@@ -198,6 +200,7 @@
 
     --ui-tooltip-fill: var(--color-surface-700);
     --ui-tooltip-content: var(--color-surface-0);
+    --ui-tooltip-border: var(--color-surface-600);
 
 /* GUARANTEED-INVALID, ON PURPOSE — the four states the light scheme re-answers in hue are answered here in lightness, and were already. */
     --ui-hover-wash: initial;
