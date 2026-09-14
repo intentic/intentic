@@ -225,7 +225,7 @@ export const AgentTurnSchema = z
                 "Content from outside caused this turn, and what to call the source. It is what makes the sandbox treat the turn as carrying somebody else's words.",
             ),
         // How tool calls are gated for this turn (the SDK's permissionMode, verbatim):
-        // plan: propose → approve → execute
+        // plan: propose → approve → execute; the proposing half asks nothing, it only withholds writes
         // default: prompts per tool on the permission side channel
         // acceptEdits: auto-accepts file edits
         // bypassPermissions: runs everything

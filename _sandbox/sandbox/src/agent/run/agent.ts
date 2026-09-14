@@ -6,6 +6,7 @@ import type {
     McpSdkServerConfigWithInstance,
     McpServerConfig,
     Options,
+    PermissionResult,
     PermissionUpdate,
     SpawnedProcess,
     SpawnOptions,
@@ -46,6 +47,7 @@ import { searchNoticeHooks } from "../verification/agent-search.js";
 import type { DependencyIssue } from "../../workspace/deps/reconcile-deps.js";
 import { editDiagnosticsHooks, type EditReviewer } from "../verification/agent-diagnostics.js";
 import { createShellEditTracker, type DirtyFiles } from "../tools/agent-shell-edits.js";
+import { EDIT_TOOL_NAMES } from "../../rules/edit-tools.js";
 import type { RuleCommandRun } from "../../rules/rule-command.js";
 import { installSteeringHooks } from "../providers/agent-installs.js";
 import type { ClassifiedInstall } from "../../environment/runtime-installs.js";
@@ -623,6 +625,19 @@ const askServer = (
 // user.
 const UNGATED = new Set([...ASK_TOOL_NAMES, "EnterPlanMode"]);
 
+// The only tools a planning turn is stopped from using: the ones that write a file (rules/edit-tools.ts).
+const PLAN_WRITE_TOOLS = new Set<string>(EDIT_TOOL_NAMES);
+
+/* PLANNING ASKS NOBODY: the container is the boundary and the plan card is the decision, so no per-tool card is raised
+ * while planning. A write is refused to the MODEL instead, since plan mode's promise is that the work waits. */
+const planDecision = (toolName: string, input: Record<string, unknown>): PermissionResult =>
+    PLAN_WRITE_TOOLS.has(toolName)
+        ? {
+              behavior: "deny",
+              message: `${toolName} writes the workspace, and this turn is still planning. Finish the plan and call ExitPlanMode; the work runs once the user approves it.`,
+          }
+        : { behavior: "allow", updatedInput: input };
+
 // Posture every approved plan executes in, since approval already covers everything it contains; also used by the
 // restart path for a restored card.
 export const POST_PLAN_MODE: PermissionMode = "bypassPermissions";
@@ -655,6 +670,20 @@ const toolWideAllow = (toolName: string): PermissionUpdate => ({
     destination: "session",
 });
 
+// What a permission the user has given produces; a live 'always' keeps the SDK's own suggestions, a restored grant has
+// none to keep.
+const allowDecision = (
+    toolName: string,
+    input: Record<string, unknown>,
+    always: boolean,
+    suggestions: readonly PermissionUpdate[],
+): PermissionResult => ({
+    behavior: "allow",
+    updatedInput: input,
+    decisionClassification: always ? "user_permanent" : "user_temporary",
+    ...(always ? { updatedPermissions: [...suggestions, toolWideAllow(toolName)] } : {}),
+});
+
 // Workspace-root-relative path for the permission card, matching the app's route space; a path outside the workspace
 // stays absolute.
 const relativePath = (absolute: string | undefined, cwd: string): string | undefined => {
@@ -671,71 +700,57 @@ const relativePath = (absolute: string | undefined, cwd: string): string | undef
 const nobodyToAsk = (request: AgentRequest): boolean =>
     request.unattended === true && !(request.conversationId !== undefined && turnSteered(request.conversationId));
 
-// Every permission decision the turn needs from the user. The SDK only calls this when the active mode requires a
-// prompt, so there's no mode branching here.
-const permissionGate =
-    (
-        request: AgentRequest,
-        push: (event: AgentEvent) => void,
-        shell: { sessionId: string | undefined },
-        documents: TurnDocuments,
-        prose: TurnProse,
-    ): CanUseTool =>
-    async (toolName, input, options) => {
-        // Refuses rather than parks: nobody can answer, and a hung card would read as the agent freezing.
-        if (nobodyToAsk(request)) {
-            return { behavior: "deny", message: `${toolName} needs a person to answer, and this turn is running unattended. Proceed another way.` };
-        }
-        if (toolName === "ExitPlanMode") {
-            const adjacent = prose.latest?.trim();
-            prose.latest = undefined;
-            const written = documents.latest?.plan === true ? documents.latest.markdown.trim() : undefined;
-            const text = adjacent ?? written;
-            // A blank card approves nothing; keep plan mode and let the next prose, or a written plan file, retry.
-            if (text === undefined || text === "") {
-                return {
-                    behavior: "deny",
-                    message: "Write the complete plan in your response, then call ExitPlanMode again.",
-                };
-            }
-            const { id, wait } = createRequest("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
-            // The write-up this prose points at, attached only when the file's plan is longer than the summary text
-            // itself.
-            const document =
-                adjacent !== undefined && documents.latest !== undefined && documents.latest.markdown.length > text.length
-                    ? documents.latest
-                    : undefined;
-            push({ kind: "plan", requestId: id, text, ...(document === undefined ? {} : { document }) });
-            const { reply, resolved } = await wait(request.signal);
-            push(resolved);
-            if (!reply.approve) {
-                return { behavior: "deny", message: reply.feedback?.trim() || "Keep refining the plan, do not exit plan mode yet." };
-            }
-            // Setting the mode on the session is what actually moves the SDK out of plan mode.
-            push({ kind: "mode", mode: POST_PLAN_MODE });
-            // Rebase before the agent builds on the plan, so it isn't working against a moved tree; the agent isn't
-            // told.
-            await syncOnAnswer(request, push, shell, true);
+// Every permission decision the turn needs from the user; the one mode this branches on is plan, which asks nobody.
+const permissionGate = (
+    request: AgentRequest,
+    push: (event: AgentEvent) => void,
+    shell: { sessionId: string | undefined },
+    documents: TurnDocuments,
+    prose: TurnProse,
+): CanUseTool => {
+    // The posture as the SESSION holds it: the agent enters plan mode itself (EnterPlanMode) and leaves it on approval.
+    let mode: PermissionMode = request.permissionMode ?? "bypassPermissions";
+    // The plan card: raised from the turn's latest prose, answered by the owner.
+    const decidePlan = async (input: Record<string, unknown>): Promise<PermissionResult> => {
+        const adjacent = prose.latest?.trim();
+        prose.latest = undefined;
+        const written = documents.latest?.plan === true ? documents.latest.markdown.trim() : undefined;
+        const text = adjacent ?? written;
+        // A blank card approves nothing; keep plan mode and let the next prose, or a written plan file, retry.
+        if (text === undefined || text === "") {
             return {
-                behavior: "allow",
-                updatedInput: input,
-                updatedPermissions: [{ type: "setMode", mode: POST_PLAN_MODE, destination: "session" }],
-                decisionClassification: "user_temporary",
+                behavior: "deny",
+                message: "Write the complete plan in your response, then call ExitPlanMode again.",
             };
         }
-        if (UNGATED.has(toolName)) {
-            return { behavior: "allow", updatedInput: input };
+        const { id, wait } = createRequest("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
+        // The write-up this prose points at, attached only when the file's plan is longer than the summary text
+        // itself.
+        const document =
+            adjacent !== undefined && documents.latest !== undefined && documents.latest.markdown.length > text.length
+                ? documents.latest
+                : undefined;
+        push({ kind: "plan", requestId: id, text, ...(document === undefined ? {} : { document }) });
+        const { reply, resolved } = await wait(request.signal);
+        push(resolved);
+        if (!reply.approve) {
+            return { behavior: "deny", message: reply.feedback?.trim() || "Keep refining the plan, do not exit plan mode yet." };
         }
-        // Consumes an answer already given by a restored card, so the resumed turn's re-ask doesn't re-prompt.
-        const granted = consumeRestoredGrant(request.conversationId, toolName);
-        if (granted !== undefined) {
-            return {
-                behavior: "allow",
-                updatedInput: input,
-                decisionClassification: granted.always ? "user_permanent" : "user_temporary",
-                ...(granted.always ? { updatedPermissions: [...(options.suggestions ?? []), toolWideAllow(toolName)] } : {}),
-            };
-        }
+        // Setting the mode on the session is what actually moves the SDK out of plan mode.
+        mode = POST_PLAN_MODE;
+        push({ kind: "mode", mode: POST_PLAN_MODE });
+        // Rebase before the agent builds on the plan, so it isn't working against a moved tree; the agent isn't
+        // told.
+        await syncOnAnswer(request, push, shell, true);
+        return {
+            behavior: "allow",
+            updatedInput: input,
+            updatedPermissions: [{ type: "setMode", mode: POST_PLAN_MODE, destination: "session" }],
+            decisionClassification: "user_temporary",
+        };
+    };
+    // The per-tool card: the turn parks here until somebody presses a button.
+    const askOwner = async (toolName: string, input: Record<string, unknown>, options: Parameters<CanUseTool>[2]): Promise<PermissionResult> => {
         const { id, wait } = createRequest("permission", {
             kind: "permission",
             requestId: "",
@@ -770,15 +785,35 @@ const permissionGate =
                     `The user declined ${toolName} and stopped the turn. STOP what you are doing and wait for them to say how to proceed.`,
             };
         }
-        return {
-            behavior: "allow",
-            updatedInput: input,
-            decisionClassification: reply.decision === "always" ? "user_permanent" : "user_temporary",
-            // SDK's own suggestions ride with the tool-wide grant, since they carry directory adds a blocked path
-            // needs.
-            ...(reply.decision === "always" ? { updatedPermissions: [...suggestions, toolWideAllow(toolName)] } : {}),
-        };
+        return allowDecision(toolName, input, reply.decision === "always", suggestions);
     };
+    return async (toolName, input, options) => {
+        // Refuses rather than parks: nobody can answer, and a hung card would read as the agent freezing.
+        if (nobodyToAsk(request)) {
+            return { behavior: "deny", message: `${toolName} needs a person to answer, and this turn is running unattended. Proceed another way.` };
+        }
+        if (toolName === "ExitPlanMode") {
+            return decidePlan(input);
+        }
+        if (UNGATED.has(toolName)) {
+            // The agent put itself into plan mode, so the rest of this turn is planning even though it wasn't launched
+            // that way.
+            if (toolName === "EnterPlanMode") {
+                mode = "plan";
+            }
+            return { behavior: "allow", updatedInput: input };
+        }
+        if (mode === "plan") {
+            return planDecision(toolName, input);
+        }
+        // Consumes an answer already given by a restored card, so the resumed turn's re-ask doesn't re-prompt.
+        const granted = consumeRestoredGrant(request.conversationId, toolName);
+        if (granted !== undefined) {
+            return allowDecision(toolName, input, granted.always, options.suggestions ?? []);
+        }
+        return askOwner(toolName, input, options);
+    };
+};
 
 // Runs one agent turn over `request.cwd`, streaming typed events; one path for every permission mode, the SDK decides
 // which UI fires. canUseTool and the ask handler feed this stream through a bridging queue.

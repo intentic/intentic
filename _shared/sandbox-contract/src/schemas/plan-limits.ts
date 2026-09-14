@@ -121,14 +121,14 @@ export type TranslatorAccounts = z.infer<typeof TranslatorAccountsSchema>;
 // resolves all of them, and `kind` says which card answered.
 export const AgentReplySchema = z.discriminatedUnion("kind", [
     // Approving sets `bypassPermissions` on the SDK session; the container, not per-tool prompts, is the isolation
-    // boundary from here on.
+    // boundary on both sides of this card, since planning asks nothing either.
     z.object({
         kind: z.literal("plan").describe("Answering a plan the agent proposed."),
         requestId: z.string().min(1).describe("Which card you are answering, from the frame that raised it."),
         approve: z
             .boolean()
             .describe(
-                "Whether to go ahead. Approving means the plan then runs without asking again per tool, because being asked whether a plan you just approved may run its first command is not a question worth having.",
+                "Whether to go ahead. Approving means the plan then runs without a prompt per tool, because being asked whether a plan you just approved may run its first command is not a question worth having.",
             ),
         feedback: z.string().optional().describe("Why not, which goes back to the model as the reason."),
     }),

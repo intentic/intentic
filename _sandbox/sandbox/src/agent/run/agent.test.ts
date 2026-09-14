@@ -542,6 +542,64 @@ test("ExitPlanMode refuses to raise an empty approval card", async () => {
     expect(frames.some((frame) => frame.kind === "plan")).toBe(false);
 });
 
+/* Drives the gate with nothing to answer, since these turns must ask nothing. A card raised anyway is denied rather
+ * than left hanging, so a regression fails the assertion instead of parking the test until it times out. */
+const gated = async (
+    turn: Parameters<typeof runAgent>[0],
+    calls: (gate: NonNullable<Options["canUseTool"]>) => Promise<void>,
+): Promise<AgentEvent[]> => {
+    const frames: AgentEvent[] = [];
+    const query: QueryFn = async function* (args) {
+        await calls(args.options.canUseTool!);
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+    for await (const event of runAgent(turn, query)) {
+        frames.push(event);
+        if (event.kind === "permission") {
+            resolveRequest({ kind: "permission", requestId: event.requestId, decision: "deny" });
+        }
+    }
+    return frames;
+};
+
+const asked = (frames: AgentEvent[]): AgentEvent[] => frames.filter((frame) => frame.kind === "permission");
+
+test("a planning turn runs what it reaches for without asking anybody", async () => {
+    let bash: PermissionResult | null | undefined;
+    const frames = await gated({ ...request, permissionMode: "plan" }, async (gate) => {
+        bash = await gate("Bash", { command: "git log -5" }, { signal: request.signal } as never);
+    });
+
+    // The command the CLI would have prompted about in any other mode runs as written.
+    expect(bash).toEqual({ behavior: "allow", updatedInput: { command: "git log -5" } });
+    expect(asked(frames)).toEqual([]);
+});
+
+test("a planning turn's write is refused to the model rather than raised at the user", async () => {
+    let edit: PermissionResult | null | undefined;
+    const frames = await gated({ ...request, permissionMode: "plan" }, async (gate) => {
+        edit = await gate("Edit", { file_path: "src/app.ts" }, { signal: request.signal } as never);
+    });
+
+    // The refusal names the way out, so the model finishes the plan instead of retrying the write.
+    expect(edit).toMatchObject({ behavior: "deny", message: expect.stringContaining("ExitPlanMode") });
+    expect(asked(frames)).toEqual([]);
+});
+
+test("the agent entering plan mode mid-turn puts the rest of the turn on the planning posture", async () => {
+    const decisions: (PermissionResult | null)[] = [];
+    // Starts in the mode that asks per tool: without the posture following the agent, the Bash call raises a card.
+    const frames = await gated({ ...request, permissionMode: "default" }, async (gate) => {
+        decisions.push(await gate("EnterPlanMode", {}, { signal: request.signal } as never));
+        decisions.push(await gate("Bash", { command: "rg todo" }, { signal: request.signal } as never));
+        decisions.push(await gate("Write", { file_path: "src/new.ts" }, { signal: request.signal } as never));
+    });
+
+    expect(decisions[1]).toMatchObject({ behavior: "allow" });
+    expect(decisions[2]).toMatchObject({ behavior: "deny" });
+    expect(asked(frames)).toEqual([]);
+});
+
 // Plan approval rebases onto today's main line before the agent builds; these tests own WHEN the rebase fires.
 // Shape of what resync returns: only the summary line is exposed to the reader.
 const parkedSync = { kind: "worktree" as const, branch: "agent/c1", base: "abc1234", sync: { commits: 2, blocked: [] } };
