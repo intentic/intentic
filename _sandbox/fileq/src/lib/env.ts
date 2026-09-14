@@ -1,7 +1,4 @@
-/* Where fileq stands and where its files go, resolved once per process. Inside a sandbox WORKSPACE_ROOT names
- * the workspace and sidecars live under its state directory (sidecar.ts); outside one (a bare
- * `npx @intentic/fileq`), there is no workspace and no sidecars — `read` still works, saving its full output
- * under an XDG home so a budget cut always has a file to point at. */
+/* Where fileq stands and where its files go, resolved once per process. */
 import { homedir } from "node:os";
 import { join } from "node:path";
 

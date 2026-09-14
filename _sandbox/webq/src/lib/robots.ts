@@ -1,9 +1,4 @@
-/* robots.txt, parsed the way Google documents it: rules grouped by user-agent (several agent lines can
- * share one group), the most specific matching rule wins (longest pattern), an allow beats a disallow of
- * equal length, `*` wildcards and `$` end-anchors supported. webq matches the "webq" group when a site
- * writes one and "*" otherwise. Crawl-delay and Sitemap lines are read too — the crawler paces itself with
- * the former (capped: a site asking for a day between requests has said "no", and the cap treats it as a
- * long delay rather than a bypass) and seeds from the latter. */
+/* robots.txt, parsed the way Google documents it: rules grouped by user-agent (several agent lines can share one group). */
 
 export interface RobotsRules {
     readonly allows: string[];

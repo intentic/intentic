@@ -90,7 +90,7 @@ export const deliverToChannel = async (connections: ReadonlyMap<string, SlackCon
         let posted = false;
         try {
             for (let base = 0; base < text.length; base += SLACK_MAX) {
-                // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Slack's chat.postMessage, not window.postMessage; there is no targetOrigin to pass
+                // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Slack postMessage has no targetOrigin.
                 await connection.web.chat.postMessage({ channel, text: text.slice(base, base + SLACK_MAX) });
                 posted = true;
             }
@@ -221,7 +221,7 @@ export const createSlackListener = (ctx: GatewayCtx, connections: () => Readonly
         const onError = (error: unknown): void => ctx.log.warn({ err: error }, "slack stream paint failed");
         const poster = {
             post: async (body: string): Promise<string> => {
-                // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Slack's chat.postMessage, not window.postMessage; there is no targetOrigin to pass
+                // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Slack postMessage has no targetOrigin.
                 const posted = await connection.web.chat.postMessage({ channel, thread_ts: threadTs, text: body });
                 if (posted.ts === undefined) {
                     throw new Error("slack chat.postMessage returned no ts");

@@ -82,10 +82,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
                 <StatusBadge v-else-if="pending && !proposal" variant="warning" label="pending rebuild" dot />
                 <StatusBadge v-else variant="warning" label="awaiting review" dot />
                 <button type="button" :class="ui.iconButton()" aria-label="Refresh" v-tooltip.top="'Refresh'" @click="load">
-                    <!--
-                        Uses `isFetching`, not `query.isFetching`: destructuring breaks the ref's auto-unwrap in templates,
-                        leaving the icon spin permanently true.
-                    -->
+<!-- Uses `isFetching`, not `query.isFetching`: destructuring breaks the ref's auto-unwrap in templates, leaving the icon spin permanently true. -->
                     <Icon name="refresh" class="text-sm" :spin="isFetching" />
                 </button>
             </div>
@@ -96,10 +93,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
             <!-- Leads in every state, including a pending proposal (incoming entries show marked as awaiting approval). -->
             <EnvironmentContents v-if="shown === `contents`" :groups="groups" :loading="loading" :error="contentsError" />
 
-            <!--
-                A proposal awaiting the owner's decision, diffed against the approved custom section; capability
-                fragments are daemon-owned and not up for review here.
-            -->
+<!-- A proposal awaiting the owner's decision, diffed against the approved custom section; capability fragments are daemon-owned and not up for review here. -->
             <template v-else-if="proposal">
                 <div class="flex h-72 flex-col overflow-hidden rounded-lg border border-line">
                     <DiffToolbar path="environment.custom.Dockerfile" />
@@ -119,18 +113,12 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
             <!-- The active overlay the running container was built from. -->
             <Code v-else-if="applied" :code="applied.content" lang="docker" label="Active overlay" />
 
-            <!--
-                Points to Update, not rebuild: an environment rebuild builds on the image already running, so it
-                wouldn't fix an outdated image.
-            -->
+<!-- Points to Update, not rebuild: an environment rebuild builds on the image already running, so it wouldn't fix an outdated image. -->
             <p v-if="unsupported" class="text-2xs text-subtle">
                 This sandbox's image is older than the plain-language contents list. Update the sandbox and the list appears beside the recipe.
             </p>
 
-            <!--
-                Runtime installs sessions keep making, cross-session and drift-corroborated; fixable ones are usually
-                already drafted into the proposal above. Shown under both views since it's a state fact, not a display one.
-            -->
+<!-- Runtime installs sessions keep making, cross-session and drift-corroborated; fixable ones are usually already drafted into the proposal above. -->
             <RuntimeInstalls
                 v-if="recurring.length"
                 :entries="recurring"
@@ -174,10 +162,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
                 </template>
             </template>
 
-            <!--
-                A base compiled from a checkout: what a newer image contains comes from there, not from a release. Offered
-                under every state, since source moves without the recipe changing.
-            -->
+<!-- A base compiled from a checkout: what a newer image contains comes from there, not from a release. -->
             <DevRebuild v-if="localImage && slug && canOperate" :slug="slug" :base="localImage.base" :root="localImage.root" />
 
             <Notice v-if="actionNotice" :of="actionNotice" />

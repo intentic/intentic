@@ -1,64 +1,25 @@
-/* PrimeVue component tuning. Lives in @layer primeng so plain Tailwind utilities (which sit
- * in the later `utilities` layer — see the cssLayer order in vue/plugin.ts) always win.
- * Everything is driven by the density/role tokens, so retuning happens in tokens.css. */
+/* PrimeVue component tuning. */
 @layer primeng {
-    /* `.p-inputtext` USED TO BE TUNED HERE and is now one of the selectors on `.ui-field-box`, down in
-     * @layer components. It moved for a reason worth keeping: PrimeVue injects its own styles into THIS layer at
-     * runtime, so a rule here and Aura's rule are the same layer at the same specificity and the winner is
-     * whichever the browser parsed last — which, between a runtime <style> and a bundled sheet, is not ours to
-     * promise. `components` is a later layer, so the field's own rules win outright; `utilities` is later still,
-     * so a call site's Tailwind class keeps beating both. */
+    /* `.p-inputtext` USED TO BE TUNED HERE and is now one of the selectors on `.ui-field-box`, down. */
 
-    /* Button labels never wrap — a squeezed flex row shrinks the button instead of
-     * breaking its label onto two lines. */
+    /* Button labels never wrap — a squeezed flex row shrinks the button instead. */
     .p-button {
         white-space: nowrap;
     }
 
-    /* Default size has no Aura font-size token (it inherits 16px), so it's pinned here.
-     * Padding/radius/icon widths live in theme.ts as per-size button tokens. */
+    /* Default size has no Aura font-size token (it inherits 16px), so it's pinned here. */
     .p-button:not(.p-button-sm):not(.p-button-lg) {
         font-size: var(--text-sm);
         line-height: var(--text-sm--line-height); /* same metrics as the text-sm inputs → 38px controls */
     }
 
-    /* The compact size's remaining two numbers. Aura tokenises neither per size — there is no
-     * `sm.lineHeight` and no `sm.gap` — so they are pinned here rather than in theme.ts beside the
-     * other four; together the six are the whole of `size="small"`.
-     *
-     * THE GAP IS THE ONE THAT MATTERS. Aura's root 8px is a text-sm gap: at 11px it stops reading as a
-     * labelled button and starts reading as an icon standing next to a word, which is exactly why the
-     * call sites that hand-shrank this button also all hand-set `gap-1` or `gap-0`. 4px is the board's.
-     *
-     * Two classes deep on purpose. Aura sets `gap` on `.p-button`, PrimeVue injects its styles into this
-     * same layer, and same-specificity rules in one layer are settled by source order — which between a
-     * runtime-injected <style> and a bundled sheet is not ours to promise. `.p-button.p-button-sm` wins
-     * on specificity instead, so the size holds however the two land in <head>.
-     *
-     * THE LEADING IS SPELLED OUT AS A LENGTH, tier × ratio, and not handed over as the bare ratio. A button's
-     * height is its padding plus its line box, and this button's line box must be the 2xs one whatever glyph
-     * is in it — while the icon-only variant below deliberately re-sizes the FONT to text-sm so a lone mark is
-     * not drawn at label size. A ratio multiplies whatever font-size it lands on, so it would take that
-     * override with it and stand every small icon-only button in the app ~5px taller than its labelled twin.
-     * Written this way the control keeps one height, and still follows a surface that rescales the tier under
-     * it (chat.css's popped-out transcript). */
+/* The compact size's remaining two numbers. */
     .p-button.p-button-sm {
         line-height: calc(var(--text-2xs) * var(--text-2xs--line-height));
         gap: var(--spacing);
     }
 
-    /* A compact LABEL is 11px; a bare glyph is not. PrimeVue applies the small button's font size to every
-     * icon too, which left icon-only actions (most visibly the export row's trash button) drawing an 11px
-     * mark in a 28px target. Give a button whose icon carries its whole meaning the normal UI glyph size,
-     * while icons beside compact labels continue to match those labels.
-     *
-     * `padding-inline: 0` IS THE REST OF THAT FIX, and without it the size above changes nothing visible.
-     * PrimeVue zeroes the side padding on `.p-button-icon-only` — the button is a fixed square, so every
-     * pixel of padding comes out of the glyph — and then `.p-button-sm` re-sets `padding` as a SHORTHAND
-     * further down the same sheet. Equal specificity, later in source: the shorthand wins and puts the side
-     * padding back. A small icon-only button is therefore a 28px box with 22px of padding and 2px of border
-     * in it, leaving under 7px for a 15px mark — a glyph squeezed to a sliver, which is what "the trash icon
-     * is tiny, like 4px" is. It hits every icon-only `size="small"` button in the app, not just this one. */
+/* A compact LABEL is 11px; a bare glyph is not. */
     .p-button.p-button-sm.p-button-icon-only,
     .p-button.p-button-sm.p-button-icon-only .p-button-icon {
         font-size: var(--text-sm);
@@ -68,8 +29,7 @@
         padding-inline: 0;
     }
 
-    /* Secondary's own hover is defined with the tier, below in @layer components — a later layer, so it wins
-     * whatever this says. What is left here is the borderless variant's, which is every tone's quiet form. */
+/* Secondary's own hover is defined with the tier, below in @layer components — a later layer, so it wins whatever this says. */
     [data-mode="dark"] .p-button-text:enabled:hover {
         background: color-mix(in srgb, var(--color-content) 12%, transparent);
     }
@@ -79,27 +39,9 @@
     }
 }
 
-/* Reusable presentational classes. @layer components sits below utilities so per-element
- * utility overrides still take precedence. */
+/* Shared component classes sit below utilities so per-element utilities win. */
 @layer components {
-    /* EVERY SOLID SEVERITY, IN THE APP'S OWN LANGUAGE — a low-opacity tint of the tone, the tone as the text
-     * colour, a slightly stronger tint as the border. Lives in @layer components (not primeng) so it beats
-     * PrimeVue's generated solid-fill styles; :where() zeros the negation list's specificity so a single utility
-     * class can still override any property.
-     *
-     * IT USED TO COVER ONLY THE DEFAULT, and that one omission is what forked the repo's buttons in two. With
-     * success/warn/danger left as Aura's solid fills — which say nothing this app's visual language says —
-     * there was no way to write a tinted destructive button with <Button>, so cmp.buttonDanger/Success/Warning
-     * were written as bare-<button> class recipes instead, cmp.buttonPrimary came along beside them for
-     * symmetry, and the app then had two action buttons that looked alike, sized differently, and were picked
-     * between arbitrarily. Tinting all four here is what lets there be one.
-     *
-     * The tone is a variable rather than four copies of the rule, so a new severity is one line and the
-     * hover/active mixes can never drift from the resting one. Note `warn`: PrimeVue 4 emits `p-button-warn`,
-     * and the old negation list still spelled PrimeVue 3's `p-button-warning` — so the app's one warning button
-     * fell through the exclusion and was painted in the BRAND colour. Excluded severities keep Aura's own
-     * treatment: `secondary` is the neutral outline this app uses for nearly every non-primary action, and
-     * text/outlined/link are variants rather than tones. */
+/* EVERY SOLID SEVERITY, IN THE APP'S OWN LANGUAGE — a low-opacity tint of the tone, the tone as the text colour, a slightly stronger tint as the border. */
     .p-button:where(:not(
         .p-button-secondary, .p-button-info, .p-button-contrast,
         .p-button-text, .p-button-outlined, .p-button-link
@@ -139,29 +81,8 @@
         background: color-mix(in srgb, var(--ui-button-tone) 22%, transparent);
     }
 
-    /* THE BORING TIER — the neutral fill that stands beside an accent button, and now the app's ONE spelling of
-     * a non-primary action. Same silhouette as the accent above, same 10%/20% structure, `content` instead of
-     * the brand as the tone: a reader takes in the difference as a colour rather than as a different shape.
-     *
-     * IT HAS TO BE WRITTEN HERE, and finding out why is the whole reason this rule exists. Aura paints secondary
-     * from `surface.100`, theme.ts points that at `var(--color-surface-100)`, and Tailwind emits a `@theme`
-     * variable only where something it can SEE references it — a runtime PrimeVue preset is not something it can
-     * see. So `--color-surface-100` was pruned from the production bundle, `background: var(--color-surface-100)`
-     * resolved to nothing, and in LIGHT MODE the boring button came out with no fill and no border: a filled
-     * control rendered as bare text, indistinguishable from the quiet tier beside it. Dark mode hid it, because
-     * the one rule that did land was a dark-only hover.
-     *
-     * That was invisible while `outlined` existed — the settings pages, which are where most of these live, drew
-     * their own border and never asked Aura for a fill. Retiring the bordered spelling is what surfaced it.
-     *
-     * Role tokens, not the numeric ramp, for the same reason: `content` / `line` are what the app's own utilities
-     * use, so they are always emitted, and they FLIP per scheme — one rule reads correctly in both instead of a
-     * light and a dark copy that drift. `:where()` keeps the negation free so a utility class still wins, and the
-     * borderless and link variants are excluded because a quiet button having no chrome is the point of it. */
-    /* The edge is stated, not inherited. Aura gives secondary `border-style: none` while every other severity
-     * gets a 1px solid one, so a boring button was 26px next to a 28px accent — two of a toolbar's controls
-     * sitting at different heights for no reason a reader could see, and the kind of 2px that only ever shows up
-     * once the two are finally side by side. Same box as every other tier, down to the hairline. */
+/* THE BORING TIER — the neutral fill that stands beside an accent button, and now the app's ONE spelling of a non-primary action. */
+/* The edge is stated, not inherited. */
     .p-button-secondary:where(:not(.p-button-text, .p-button-link)) {
         background: color-mix(in srgb, var(--color-content) 8%, transparent);
         color: var(--color-content);
@@ -178,24 +99,7 @@
         background: color-mix(in srgb, var(--color-content) 18%, transparent);
     }
 
-    /* THE LOUD TIER — the accent as a SOLID fill, and the only button in the app that shouts. It exists for
-     * the one thing a screen can ask that no other action asks: money. Join the membership, fix the card
-     * Stripe declined.
-     *
-     * It is a class and not a severity because it is not a TONE, it is a rank. Every severity above answers
-     * "what kind of thing does this do" — commit, warn, destroy — and any number of them can share a screen.
-     * This one answers "which single control is this page for", so a second one on the same page makes both
-     * of them ordinary. A severity would have invited exactly that; a named tier reads as a claim you have to
-     * mean, and there is nothing to stop `severity` from also being set for a tone that is not the accent.
-     *
-     * It replaces three hand-forced call sites on the billing page — `border-primary-fill! bg-primary-fill!
-     * font-semibold! text-fill-content! hover:bg-primary-fill-hover!`, a whole visual tier written out in
-     * `!` utilities because the design system had no way to say it, twice with `px-5!` and once without, so
-     * the app's two paying CTAs sat at different widths. The extra horizontal padding is part of the tier:
-     * this button is wider than its label needs because being easy to hit is the point of it.
-     *
-     * `--ui-button-tone` is re-declared rather than inherited so the solid hover/active can be mixed from the
-     * same variable the tinted tiers use, and a future palette change moves all four together. */
+/* THE LOUD TIER — the accent as a SOLID fill, and the only button in the app that shouts. */
     .p-button.ui-button-loud {
         --ui-button-tone: var(--color-primary-fill);
         padding-inline: calc(var(--spacing) * 5);
@@ -212,21 +116,7 @@
         color: var(--color-fill-content);
     }
 
-    /* ── THE BUTTON A FINGER HAS TO FIND, on the surfaces where a finger is the only pointer ──────────────
-     * The compact control is 26px, which is right for a mouse and under every thumb guideline there is. Most of
-     * the app answers that with `touch-target` (styles/utilities.css): the HIT AREA grows to 44px and the drawn
-     * box does not move, so one layout serves both pointers. That trick is wrong in exactly one place — a ROW of
-     * choices with gaps between them, where a 44px invisible overlay on each swallows the gap and the midpoint
-     * between two answers stops belonging to either. A decision card is that: two or three answers side by side,
-     * and the press commits something.
-     *
-     * So there the BOX grows, on coarse pointers only, and it is a named tier rather than the pair of utilities
-     * it used to be (`max-md:h-11 max-md:px-5` at the call site). The name is what stops the next such button
-     * picking 2.5rem — which is the whole argument of this file, applied to the one case that needs its own
-     * answer.
-     *
-     * `pointer: coarse` rather than a width breakpoint, and that is a correction to what it replaced: a narrow
-     * DESKTOP window is not a thumb, and a tablet in landscape is. */
+/* Compact touch controls use a 26px visual height. */
     @media (pointer: coarse) {
         .p-button.ui-button-thumb {
             min-height: 2.75rem;
@@ -234,21 +124,7 @@
         }
     }
 
-    /* ── A DISABLED BUTTON IS A FLAT PLATE, NOT A FADED ONE ───────────────────────────────────────────────
-     * Why an opacity was the wrong instrument for THIS system, and what the three variables are, is written
-     * where they are defined (tokens.css). What is here is the rule, and the two things it has to get right.
-     *
-     * IT NAMES `ui-button-loud` IN THE SELECTOR LIST. Every tier above paints through `.p-button:where(:not(…))`,
-     * which `:where()` keeps at one class, so a plain `.p-button:disabled` outranks all of them. The loud tier is
-     * the exception — it is `.p-button.ui-button-loud`, two classes, a tie this rule would lose half the time
-     * depending on where in the file somebody adds the next thing. Naming it is a third class and settles it, and
-     * it costs one selector rather than a comment asking the next reader not to reorder the file.
-     *
-     * IT EXCLUDES `loading`, WHICH IS THE ONE THAT WOULD HAVE SHIPPED. PrimeVue's Button reports itself disabled
-     * while it is loading (`disabled || loading`, Button.vue), so without the exclusion every button in the app
-     * would repaint itself as unavailable for the whole of the wait it just started — the exact moment a person
-     * is watching it to find out whether their press landed. A working button is the button it was, with a
-     * spinner in it. */
+    /* Disabled buttons keep their shape and lose contrast. */
     .p-button:disabled:not(.p-button-loading),
     .p-button.ui-button-loud:disabled:not(.p-button-loading) {
         opacity: 1;
@@ -260,26 +136,13 @@
         cursor: default;
     }
 
-    /* The borderless tiers keep having no chrome when they cannot be pressed: a plate appearing around a word
-     * that had none is a control GAINING an edge by becoming unavailable. Only the ink changes.
-     * `:where()` is free, so this lands at the same specificity as the rule above rather than beating it: it has
-     * to stay AFTER it, because in one layer at one weight source order is the whole of the answer. */
+/* The borderless tiers keep having no chrome when they cannot be pressed. */
     .p-button:where(.p-button-text, .p-button-link):disabled:not(.p-button-loading) {
         background: transparent;
         border-color: transparent;
     }
 
-    /* CHECKING A BOX SHOULD FEEL LIKE PRESSING SOMETHING. Aura transitions the box's colours and leaves the
-     * tick to appear between two frames — correct, and completely flat: the one control whose whole job is to
-     * acknowledge a click gives the least acknowledgement of any control in the app.
-     *
-     * Two motions, both on the design system rather than at a call site, so every checkbox already in the app
-     * (the extensions' dialogs, the upload picker, setup's command options) gains it without being touched.
-     *   • the tick draws in — it is mounted on check, not toggled, so this has to be an animation rather than
-     *     a transition; the overshoot in the easing is what reads as "soft" instead of "fast"
-     *   • the box dips under the pointer, and settles back on release
-     * Timings are shorter than they look written down: 160ms is at the edge of being felt rather than watched,
-     * which is the whole point for a control people tick in passing. */
+/* CHECKING A BOX SHOULD FEEL LIKE PRESSING SOMETHING. */
     .p-checkbox-box {
         transition-property: background, color, border-color, box-shadow, outline-color, transform;
     }
@@ -292,26 +155,7 @@
         animation: ui-check-in 160ms cubic-bezier(0.2, 0.9, 0.3, 1.25);
     }
 
-    /* QUIET TICK — the weight a COLUMN of checkboxes needs, and the switch note below is the same lesson one
-     * control over. Aura's ring (surface-600 in dark) is right for three decisions on a dialog. Down the side
-     * of a twenty-row list it is brighter than `line-strong`, the strongest hairline this app draws anywhere,
-     * so a column of empty boxes outranks the names it belongs to — and on a list whose ticks are an EXCEPTION
-     * (Acceptance runs every story until you narrow it) the loudest thing on the page is the state nobody
-     * chose. It also stops punching a hole: Aura fills the box with the app's canvas, which on a card row is a
-     * dark cut-out giving a one-edge control two.
-     *
-     * KNOW WHAT THIS COSTS. At rest the outline of an unchecked box is then under the 3:1 WCAG asks for the
-     * boundary of a control, which is why it is a modifier and not the default — a dialog's checkboxes keep
-     * Aura's. It is bought back by the two states that matter: pointing anywhere at the ROW hands the whole
-     * column back at full contrast, and a ticked box is the accent fill, which was never in question.
-     *
-     * `:not(:hover)` on the box AND on its row, rather than a brighter rule layered on top: the quiet rule
-     * simply stops matching once the pointer arrives, so nothing here can win a specificity fight with Aura's
-     * own hover, focus or checked treatment.
-     *
-     * The fill is the exception and is dropped in every unchecked state, hovered or not: handing the cut-out
-     * back on hover paints a near-black square on a row that has just lightened, which reads as a state
-     * change — the one thing this control must not say by accident. */
+/* QUIET TICK — the weight a COLUMN of checkboxes needs, and the switch note below is the same lesson one control over. */
     .p-checkbox.ui-checkbox-quiet:not(.p-checkbox-checked) .p-checkbox-box {
         background: transparent;
     }
@@ -320,20 +164,7 @@
         border-color: var(--color-line-strong);
     }
 
-    /* A CHECKBOX IS 18px OF INK AND HAS TO BE 44px OF TARGET, on a phone, everywhere, without being told.
-     *
-     * Aura's small checkbox is right beside a 12px label and it is the smallest thing a finger is ever asked
-     * to find: the acceptance board puts nine of them down the left edge of a 390px screen, one per story,
-     * each deciding whether that story runs. There is no per-call-site fix worth writing for that — every
-     * checkbox in the app has the same problem for the same reason — so the target is grown here, once, on
-     * the wrapper PrimeVue already renders.
-     *
-     * COARSE POINTERS ONLY, and by overlay rather than by size: the box's own dimensions are what the label
-     * beside it is aligned to, and every checked/indeterminate mark is drawn against them. An 18px box in a
-     * 44px hit area keeps every row in this app looking exactly as it does now.
-     *
-     * `.p-checkbox` is the wrapper, not the input — PrimeVue's input is visually hidden and stretched over
-     * the box already, so the overlay goes on the wrapper and the click lands where it always did. */
+/* A CHECKBOX IS 18px OF INK AND HAS TO BE 44px OF TARGET, on a phone, everywhere, without being told. */
     @media (pointer: coarse) {
         .p-checkbox {
             position: relative;
@@ -352,12 +183,7 @@
         }
     }
 
-    /* Compact switch — the size a LIST of toggles needs. Aura's 40×24 control is right when a toggle is one
-     * of three on a settings card; stacked fifteen deep (the Extensions tab) that same control becomes a
-     * column of brand-coloured blocks carrying more weight than the names it belongs to, and the eye reads
-     * the column before it reads the list. Same control at ~55% of the area, so the switches state the row's
-     * on/off without being the first thing on the page. PrimeVue sizes from these variables, so a modifier
-     * class is the whole implementation. */
+/* Compact switch — the size a LIST of toggles needs. */
     .ui-switch-sm {
         --p-toggleswitch-width: 2rem;
         --p-toggleswitch-height: 1.125rem;
@@ -365,28 +191,10 @@
         --p-toggleswitch-gap: 0.125rem;
     }
 
-    /* ── THE FIELD, AND THERE IS ONE ──────────────────────────────────────────────────────────────────────
-     * Every place a person types is this class, in three variants and two sizes; the vocabulary and the
-     * argument for it are in lib/ui.ts, beside the button's, and the sweep that produced it is in
-     * docs/input-audit.md.
-     *
-     * IT IS A CLASS AND NOT A TAILWIND STRING, which is the whole reason this rewrite touched CSS at all. A
-     * skin has to be able to repaint a field, and the only handle `ui.input()`'s class string offered was the
-     * ELEMENT: sanctum.css reached fields through a hand-maintained type list — text, search, email, password,
-     * number — and the app also ships `url`, `time` and `datetime-local`, so four fields rendered as flat boxes
-     * on a carved-stone surface and no call site could see why. A list of types is a promise that has to be
-     * renewed every time somebody types a new `type=`; a class is one selector that is right by construction.
-     * It is also what lets the field be promised to extension bundles by name (opt-in/extension-surface.css),
-     * which an arbitrary utility string can never be.
-     *
-     * `.p-inputtext` rides along because PrimeVue puts it on the fields inside its own composite controls (a
-     * picker's filter row, a date panel's spinner), and those must not be a second look. */
+    /* Fields share one frame contract across variants and sizes. */
     .ui-field-box,
     .p-inputtext {
-        /* The rim is TWO VARIABLES, not two colours, so a state that owns the rim (the error below) re-points
-         * them once and every rule that draws an edge follows. Written as literals it took a `:not()` on the
-         * hover rule to stop a pointer resting on an invalid field turning it neutral again — a state quietly
-         * cancelling the state that matters, which is the shape of bug this whole file is about. */
+/* The rim is TWO VARIABLES, not two colours, so a state that owns the rim (the error below) re-points them once and every rule that draws an edge follows. */
         --ui-field-line: var(--color-line);
         --ui-field-line-hover: var(--color-line-strong);
         border-radius: var(--radius-md);
@@ -395,13 +203,7 @@
         color: var(--color-content);
         padding-block: var(--ui-control-padding-y);
         padding-inline: var(--ui-control-padding-x);
-        /* 16px, AND THE DESIGN SIZE ONLY ONCE THERE IS A KEYBOARD. Mobile Safari zooms the whole page when a
-         * field under 16px takes focus, and it does not zoom back out — the reader is left panning a page that
-         * used to fit. Four call sites in the app knew that and wrote `text-base … md:text-xs` by hand; the
-         * other hundred and twenty-four did not, so most of the product's fields zoomed. It belongs here for
-         * the same reason `touch-target` belongs inside `iconButton`: it is owed by every one of them, and
-         * remembering it at a hundred call sites is not a thing that happens. Restored to the design size at
-         * `md`, where a viewport that wide is a pointer and a keyboard. */
+/* 16px, AND THE DESIGN SIZE ONLY ONCE THERE IS A KEYBOARD. */
         font-size: var(--text-base);
         line-height: var(--text-base--line-height);
         transition:
@@ -428,14 +230,7 @@
         border-color: var(--ui-field-line-hover);
     }
 
-    /* `:focus`, NOT `:focus-visible`. On a button the distinction is the point — a mouse press should not leave
-     * a ring behind. A text field is the opposite case: if it holds focus it is receiving keystrokes, so it owes
-     * the reader that signal however the focus arrived, including programmatically. One selector, no ambiguity.
-     *
-     * The `outline` is transparent and its offset is NEGATIVE. Transparent so it shows nothing here — the rim
-     * and the inset ring above are the visible state — but Windows High Contrast repaints system colours over
-     * author ones, and an element with no outline at all is one it cannot mark as focused. Negative offset draws
-     * even that inside the border box, so the one rule this file will not break is the one it exists for. */
+/* `:focus`, NOT `:focus-visible`. */
     .ui-field-box:focus,
     .p-inputtext:focus {
         border-color: var(--ui-field-focus-line);
@@ -444,26 +239,20 @@
         outline-offset: -2px;
     }
 
-    /* A field is one of the controls the design system does not repaint when it goes unavailable — there is no
-     * plate to swap, the box IS the plate — so it dims, at the app's one opacity (`--ui-off-dim`, tokens.css).
-     * Baked into the class rather than left to `ui-off` at the call site: it is owed by every field, and
-     * remembering it is not a thing a hundred call sites do. */
+/* Unavailable fields dim because the field itself is the plate. */
     .ui-field-box:disabled,
     .p-inputtext:disabled {
         opacity: var(--ui-off-dim);
         cursor: default;
     }
 
-    /* THE COMPACT SIZE — 26px, the compact button's exact height, for a dense surface. Why it exists and why
-     * `sm` is not a call-site judgement is in tokens.css beside the two numbers. */
+/* THE COMPACT SIZE — 26px, the compact button's exact height, for a dense surface. */
     .ui-field-sm {
         padding-block: var(--ui-field-padding-y-sm);
         padding-inline: var(--ui-field-padding-x-sm);
     }
 
-    /* Only the TYPE waits for `md` — the padding above applies everywhere. Below it this control is 16px like
-     * every other field, for the zoom reason, which makes it a roomier target on the one pointer that needs
-     * one; the 26px that matches the compact button is a desktop measurement and lands where it is measured. */
+/* Only the TYPE waits for `md` — the padding above applies everywhere. */
     @media (width >= 48rem) {
         .ui-field-sm {
             font-size: var(--text-xs);
@@ -471,26 +260,14 @@
         }
     }
 
-    /* ── THE FIELD WITH NO BOX, whose frame belongs to whatever it sits in ────────────────────────────────
-     * The chat composer's textarea inside its bordered form; every SearchBar inside `.ui-search-row`; the
-     * command palette's top band. The wrapper draws the rim, the fill and the focus state for the whole
-     * assembly (`:focus-within`), and this brings nothing that would draw a second one a few pixels inside it.
-     *
-     * IT WAS A MARKER CLASS WITH NO RULES. `field-bare` existed only to be excluded — sanctum.css checks for it
-     * before cutting its recess — while the actual "no chrome" was six utilities repeated at each call site
-     * (`bg-transparent … text-content placeholder:text-subtle focus:outline-none`), which is six chances to
-     * write five. Now it means what it says, and the exclusion in the skin is checking a class that does
-     * something. Padding and font stay the caller's: the assembly's shape is the wrapper's decision. */
+    /* Frameless fields inherit their containing control's frame. */
     .field-bare {
         border: 0;
         background: transparent;
         box-shadow: none;
         outline: none;
         color: var(--color-content);
-        /* The same 16px floor as the framed field, and it matters MORE here: these are the composer, the
-         * command palette and every SearchBar — the fields a phone spends the most time in. A caller that
-         * wants a different desktop size says `md:text-xs`, which is the half that is a design choice; the
-         * mobile half is not one. */
+/* The same 16px floor as the framed field, and it matters MORE here: these are the composer, the command palette and every SearchBar. */
         font-size: var(--text-base);
         line-height: var(--text-base--line-height);
     }
@@ -502,18 +279,7 @@
         }
     }
 
-    /* ── AND THE BOX A `field-bare` FIELD SITS IN ────────────────────────────────────────────────────────
-     * `field-bare` says the frame belongs to the wrapper. This is the wrapper, and until now there was no such
-     * thing — every assembly drew its own, and all of them landed on `focus-within:border-line-strong`, which
-     * is the SAME neutral the box already goes to on hover. So the command field on the agent's checks page,
-     * the two on its rules page and the glob row all had a focus state that was indistinguishable from a
-     * pointer resting on them: the identical defect the framed fields had, one level up, and invisible from
-     * inside the field because the field is not the thing drawing it.
-     *
-     * It is the same rim, the same fill, the same inward ring on focus. A reader cannot tell whether the box
-     * they are typing in is one element or three, and that is the point — an assembly (a `$` prefix, a row of
-     * glob chips, a trailing button) has to look like the plain field beside it, or the layout is what says
-     * "this one is different" about two controls that do the same job. */
+    /* AND THE BOX A `field-bare` FIELD SITS IN `field-bare` says the frame belongs to the wrapper. */
     .ui-field-shell {
         --ui-field-line: var(--color-line);
         --ui-field-line-hover: var(--color-line-strong);
@@ -534,11 +300,7 @@
         box-shadow: inset 0 0 0 var(--ui-field-focus-inset) var(--ui-field-focus-ring);
     }
 
-    /* A BORDERLESS FIELD LIGHTS ITS GROUND, because it has no edge to move. The writing fields (ProseField,
-     * NoteEditor) are chrome-less on purpose — a page of prose must not sit in a grey box — so the focus rule
-     * above has nothing to colour, and they had each grown their own `focus:bg-overlay`. It is the same answer
-     * `.ui-search-row` gives one control over (utilities.css: "FOCUS IS A TINT, NOT AN EDGE"), so it is spelled
-     * once here rather than twice more at call sites. */
+/* A BORDERLESS FIELD LIGHTS ITS GROUND, because it has no edge to move. */
     .ui-field-lit:focus {
         background: var(--color-overlay);
     }
@@ -552,30 +314,7 @@
         cursor: default;
     }
 
-    /* THE FIELD THAT REPLACES A PIECE OF TEXT IN PLACE — a card's title while you rename it, a chat tab, a tree
-     * node, a terminal's label. Ten of these were in the tree spelled six ways: three radii, four text sizes,
-     * three backgrounds, and at five of them a `ring-1 ring-primary-500/50` that was NOT focus-scoped, so the
-     * ring was lit the entire time the field existed.
-     *
-     * `font: inherit` is the definition of the variant rather than a convenience: the control stands exactly
-     * where a line of text stood, so it takes that line's family, size, weight and leading, and the row it is in
-     * does not change height when the reader starts typing. What says "this is editable now" is the fill, and
-     * the focus rule above still lands on it.
-     *
-     * GEOMETRY IS THE CALLER'S HERE, which is the one place this file says that, and `ui.addTile()` is the
-     * precedent (lib/ui.ts): what these replace is not one shape. A tree node is a line, a terminal tab is a
-     * pill, the chat rail's is a whole CARD, and a sandbox title is a heading beside a hidden sizer twin it has
-     * to match to the pixel. A default block padding would be wrong for three of those and the rail would jump
-     * a row's height every time somebody renamed a chat. So the variant owns what is actually shared — no rim,
-     * a fill that says editable, the focus contract, the disabled fade — and the call site brings the box.
-     * `check:inputs` knows, and exempts this variant from the geometry rule for exactly this reason.
-     *
-     * IT IS THE ONE FIELD THAT DOES NOT TAKE THE 16px MOBILE FLOOR, and that is a conflict rather than an
-     * oversight. Matching the surrounding line and clearing the iOS zoom threshold are the same property asked
-     * for two different numbers, and this variant exists to keep the row still. A rename that grew a list row
-     * by four pixels every time somebody started typing would be the defect, and it would be on screen far more
-     * often than the zoom, which only happens on a phone, only while renaming, and only if the surrounding text
-     * is already under 16px. Named here so the next reader knows it was weighed. */
+/* THE FIELD THAT REPLACES A PIECE OF TEXT IN PLACE — a card's title while you rename it, a chat tab, a tree node, a terminal's label. */
     .ui-field-inline {
         border-color: transparent;
         background: var(--color-overlay);
@@ -583,11 +322,7 @@
         font: inherit;
     }
 
-    /* THE ERROR STATE IS THE FOCUS CONTRACT, RE-POINTED. It sets no rule of its own — it moves the two variables
-     * the rule above already reads, so an errored field that is also focused shows one coherent state instead of
-     * two fighting declarations. That is what it replaces: `.ui-field-input-error` was a lone
-     * `border-color: … !important`, which won against the rim and lost to nothing else, so a focused errored
-     * field was a red border with an accent ring inside it. */
+/* THE ERROR STATE IS THE FOCUS CONTRACT, RE-POINTED. */
     .ui-field-error-box {
         --ui-field-line: var(--color-danger-500);
         --ui-field-line-hover: var(--color-danger-500);
@@ -609,8 +344,7 @@
         color: var(--color-muted);
     }
 
-    /* Surface card — the single home of the old, copy-pasted
-     * `rounded-xl border border-surface-700 bg-surface-900 p-4` string. */
+    /* This selector is the single shared card surface. */
     .ui-card {
         border-radius: var(--ui-radius);
         border: 1px solid var(--color-line);
@@ -623,10 +357,7 @@
         background: transparent;
     }
 
-    /* Centered, width-constrained page shell. The default (`content`) reads its cap from the density token;
-       `wide` fits dense data-list panels without stretching edge-to-edge on large monitors; `full` is for
-       canvas surfaces that need every pixel. Attribute selectors (higher specificity, same layer) override
-       the base cap. */
+/* Centered, width-constrained page shell. */
     .ui-page {
         display: block;
         width: 100%;

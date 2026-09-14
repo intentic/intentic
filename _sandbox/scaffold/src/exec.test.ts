@@ -36,8 +36,7 @@ test("args with no separator, and a separator with nothing after it, are left ex
     expect(literalPathspecs(trailing)).toEqual(trailing);
 });
 
-// Scans from the end: the last `--` is git's separator, so a commit message that is itself `--` can't be mistaken for
-// one.
+// Treat only the final `--` as git's separator.
 test("a commit message that looks like the separator does not become one", () => {
     expect(literalPathspecs(["commit", "-q", "--only", "-m", "--", "--", "notes.md"])).toEqual([
         "commit",

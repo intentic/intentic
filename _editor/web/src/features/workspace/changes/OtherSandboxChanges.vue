@@ -97,7 +97,7 @@ const detail = (row: LedgerRow): string => {
             <span v-if="summary" class="shrink-0 text-2xs text-warning">{{ summary }}</span>
         </button>
 
-        <!-- Named boxes, not a count, shown outside the fold: a reader needs to know the summary is incomplete before deciding not to open this. -->
+        <!-- Name the boxes so a summary cannot be mistaken for a complete list. -->
         <p v-if="silentLine !== undefined" class="flex items-center gap-1.5 py-0.5 pl-4 pr-1 text-2xs text-subtle">
             <span class="min-w-0 flex-1 truncate">{{ silentLine }}</span>
             <button type="button" class="shrink-0 rounded px-1 py-0.5 text-link transition-colors hover:bg-overlay" @click="refreshChangesAcross()">
@@ -115,10 +115,7 @@ const detail = (row: LedgerRow): string => {
 
             <div v-for="row in rows" :key="rowKey(row)" class="flex min-w-0 items-center gap-1.5 py-1 pl-4 pr-1">
                 <div class="min-w-0 flex-1">
-                    <!--
-                        Box name first, repo second: the same repo can appear in several boxes, and which machine it's on is the question this
-                        answers.
-                    -->
+                    <!-- Box names lead repository names so the machine context is clear. -->
                     <p class="min-w-0 truncate text-2xs text-content">
                         <span class="text-muted">{{ row.sandboxName }}</span>
                         <span class="px-1 text-subtle">/</span>{{ row.repo }}
@@ -135,7 +132,7 @@ const detail = (row: LedgerRow): string => {
                     v-tooltip.top="`${sendVerb(row)} straight from here. Its own pre-push checks run in that sandbox, not this one`"
                     @click="pushRow(row)"
                 />
-                <!-- Everything this ledger can't do (diff, commit, checks) lives on that machine; the label names which one it's taking you to. -->
+                <!-- Unsupported actions remain on the owning machine. -->
                 <button
                     type="button"
                     class="shrink-0 rounded-md p-1 text-subtle transition-colors hover:bg-overlay hover:text-content"

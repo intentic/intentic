@@ -41,10 +41,7 @@ const standIn = (): Conversation => {
     return conversation;
 };
 
-/**
- * Promotes a peeked tab into an ordinary one, by id, for surfaces (a card's pin, its menu) that hold an id
- * rather than the live chat. A chat acting on itself uses Conversation.keep instead.
- */
+/** Promotes a peeked tab into an ordinary one, by id, for surfaces (a card's pin, its menu) that hold an id rather than the live chat. */
 export const keepChat = (conversationId: string): void => {
     conversations.value.find((conversation) => conversation.conversationId === conversationId)?.keep();
 };

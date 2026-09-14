@@ -106,9 +106,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         }
     };
 
-    // Splits enabled backend-shipping extensions into runnable ones and report-only rows (absent, incompatible).
-    // Each runnable extension's declared daemon reach stays on this side; the host never needs to know what it may ask
-    // for.
+    // Keep backend extension reach on the daemon side.
     const collect = async (): Promise<{
         runnable: BackendHostExtension[];
         reported: BackendStatus[];

@@ -68,10 +68,7 @@ watch(
             </span>
         </template>
 
-        <!--
-            Never dimmed, unlike the rest of an off row: it's the one control that still works. Placed in #control so
-            clicking it doesn't also toggle the row.
-        -->
+<!-- Never dimmed, unlike the rest of an off row: it's the one control that still works. -->
         <template v-if="skill.switchable" #control>
             <ToggleSwitch
                 class="ui-switch-sm shrink-0"
@@ -93,19 +90,13 @@ watch(
                 <SkillForm v-if="editing !== undefined" :skill="editing" :disabled="disabled" @save="emit(`save`, $event)" @cancel="emit(`toggle`)" />
                 <div v-else class="flex flex-col gap-3">
                     <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                        <!--
-                            States the trigger line in full since the closed row had to cut it; an empty one explains why the agent rarely
-                            picks this skill.
-                        -->
+<!-- States the trigger line in full since the closed row had to cut it; an empty one explains why the agent rarely picks this skill. -->
                         <p class="min-w-0 flex-1 text-2xs" :class="skill.description === `` ? `italic text-subtle` : `text-muted`">
                             {{ skill.description === `` ? `No description, the agent rarely picks a skill without one.` : skill.description }}
                         </p>
                         <CopyButton :text="body" label="Copy" v-tooltip.top="'The file exactly as its author wrote it'" />
                     </div>
-                    <!--
-                        Read-only rendering, no Read/Source toggle: the markup is already in the DOM, hidden until a caret enters it.
-                        The Copy button replaces what that toggle was for.
-                    -->
+<!-- Read-only rendering, no Read/Source toggle: the markup is already in the DOM, hidden until a caret enters it. -->
                     <MarkdownDocument
                         :model-value="body"
                         :label="`${skill.name} instructions`"

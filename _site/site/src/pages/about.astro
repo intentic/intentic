@@ -25,42 +25,18 @@ import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
 import VerifyDownload from "../components/VerifyDownload.astro";
 
-/* Who builds intentic: the depth behind the landing page's `#trust` band.
- *
- * It exists for two readers. A human deciding whether to run a container on their own machine and hand
- * it real credentials, and the machines (Google, LLM answer engines) that establish who is behind a
- * domain, which is what the ProfilePage graph in BaseLayout is for. The band converts; this page is
- * where the CV can be specific enough to be checkable.
- *
- * Everything here is already public on github.com/radarsu, linkedin.com/in/radarsu and radarsu.com.
- * Nothing is asserted that a reader cannot go and verify.
- *
- * THE PAGE MUST NOT BE THE BAND AGAIN. A reader arrives from "More about who builds this →", and this used
- * to answer that click with the same four cards in a worse arrangement: the same name, the same bio, the
- * same claims, on a narrower page with no hero. So it now opens the way every other top-level page opens
- * — a full-bleed band with a claim, a face and figures — and everything below it goes somewhere the band
- * cannot: the commit split at size, the career as a spine, and the libraries with their real download
- * counts under them. Same facts, none of them arranged the same way twice. */
+/* Who builds intentic: the depth behind the landing page's `#trust` band. */
 
 const stats = gitStats();
 
-/* The strongest number on this page used to be the third of four identical grey boxes. It is the one claim
- * nobody else in this market can make, so it leads, drawn to scale: the agent share as a filled bar rather
- * than a sentence about a ratio. Everything falls back to prose when git cannot answer (a shallow clone),
- * which is `gitStats()`'s own rule, not a special case here. */
+/* The strongest number on this page used to be the third of four identical grey boxes. */
 const n = (value: number) => value.toLocaleString(`en-GB`);
 
-/* Downloads are read from the registry at build time and are the whole argument of the open-source section:
- * "shipped and got used on their own" is a claim, and half a million installs a month is the evidence. A
- * package the registry cannot answer for keeps its sentence and loses its figure. */
+/* Downloads are read from the registry at build time and are the whole argument of the open-source section: "shipped and got used on their own" is a claim. */
 const downloads = await npmDownloads(openSource.map((project) => project.name));
 const downloadTotal = Object.values(downloads).reduce<number>((sum, value) => sum + (value ?? 0), 0);
 
-/* The claims, restyled for this page: three checkable ones in an even row, and the admission below them.
- * On the landing they are a 2×2 panel beside the bio, which works there; blown up to a full-width grid here
- * the fourth card — one short sentence, no link, no figure — became a hole in the middle of the page. It is
- * not padding, it is the thing that makes the other three believable, so it stays; it just stops pretending
- * to be a card of equal weight. */
+/* The claims, restyled for this page: three checkable ones in an even row, and the admission below them. */
 const claims = trustCards.filter((card) => card.href !== undefined);
 const admission = trustCards.find((card) => card.href === undefined);
 
@@ -74,8 +50,7 @@ const claimIcons = [
 <BaseLayout title={aboutMeta.title} description={aboutMeta.description} extraJsonLd={[buildProfilePageSchema("/about/")]}>
     <Nav />
     <main class="flex-1">
-        {/* 1 · The hero the page never had: same shell as /extensions/, so About stops reading as a
-            documentation sub-page. The right half, empty until now, is where the face goes. */}
+        {/* Keep the About hero in the same shell as the extensions page. */}
         <section class="page-hero">
             <div class="wall"></div>
             <div class="below-bar relative mx-auto max-w-7xl px-6 pb-14">
@@ -85,8 +60,7 @@ const claimIcons = [
                         <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">{aboutHero.headline}</h1>
                         <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">{aboutHero.lede}</p>
 
-                        {/* The name, still prominent, but as the signature under the claim rather than as the
-                            headline the reader already read on the landing page. */}
+                        {/* Keep the name as a signature below the hero claim. */}
                         <div class="mt-7 border-l-2 border-primary-600/40 pl-4">
                             <p class="text-lg font-semibold tracking-tight text-content">{CREATOR_NAME}</p>
                             <p class="mt-1 max-w-copy text-sm leading-relaxed text-muted">{creatorRole}</p>
@@ -96,12 +70,7 @@ const claimIcons = [
                         <CreatorLinks class="mt-6" />
                     </div>
 
-                    {/* The shot is a tight crop on a white ground, which on this canvas would read as a
-                        sticker pasted onto the page. So it is framed as a plate and the white is pulled into
-                        the palette rather than left at #fff: a warm wash multiplied over it tints the ground
-                        and the skin the same direction, and a glow behind seats the whole thing in the band.
-                        Cutting the background out was tried and is not available — at this crop there is
-                        barely any background to cut. */}
+                    {/* Frame the white-background portrait as a tinted plate instead of removing its background. */}
                     <figure class="relative mx-auto w-full max-w-[17rem] lg:mx-0 lg:justify-self-end">
                         <div
                             class="pointer-events-none absolute -inset-8 rounded-full blur-xl"
@@ -129,8 +98,7 @@ const claimIcons = [
             </div>
         </section>
 
-        {/* 2 · The figures, in the site's own band shape (the gallery uses the same strip). The commit split
-            is measured, so the bar is drawn from the ratio rather than styled to a nice width. */}
+        {/* Keep the figures in the shared band and draw the commit split from its ratio. */}
         <section class="plinth" aria-label="Checkable figures">
             <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-10 gap-y-6 px-6 py-6">
                 {
@@ -163,7 +131,7 @@ const claimIcons = [
             </div>
         </section>
 
-        {/* 3 · The three checkable claims, even-height, with the admission carrying the row underneath. */}
+        {/* Keep the three claims at equal height with the admission below them. */}
         <section class="mx-auto max-w-7xl px-6 py-16 lg:py-20" aria-labelledby="claims-heading">
             <div class="eyebrow text-link">Why trust any of this</div>
             <h2 id="claims-heading"class="display mt-3 text-2xl font-semibold sm:text-3xl">
@@ -224,8 +192,7 @@ const claimIcons = [
             <VerifyDownload />
         </section>
 
-        {/* 4 · The career as a spine rather than five dots, with the reason the product exists pinned beside
-            it: the CV answers "can he build it", the panel answers "why did he". */}
+        {/* Keep the career spine beside the product-origin panel. */}
         <section class="border-t band-rule" aria-labelledby="background-heading">
             <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
                 <div class="grid gap-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-16">
@@ -249,8 +216,7 @@ const claimIcons = [
                         </ol>
                     </div>
 
-                    {/* Pinned, because the spine beside it is five items tall and a short panel parked at the
-                        top of that would leave exactly the dead half-page this rebuild set out to remove. */}
+                    {/* Pin the origin panel beside the full career spine. */}
                     <div class="relative overflow-hidden border border-line bg-card/60 p-7 lg:sticky lg:top-28 lg:self-start sm:p-8">
                         <div
                             class="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full"
@@ -279,8 +245,7 @@ const claimIcons = [
             </div>
         </section>
 
-        {/* 5 · The libraries, with the evidence under them. The names were always here; the counts are what
-            turn "got used on their own" from a sentence into something a reader can weigh. */}
+        {/* Keep library names with their usage evidence. */}
         <section class="border-t band-rule" aria-labelledby="open-source-heading">
             <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
                 <div class="eyebrow text-link">Open source, before this</div>
@@ -321,16 +286,13 @@ const claimIcons = [
             </div>
         </section>
 
-        {/* 6 · Contact, then the same closing band every other top-level page ends on. */}
+        {/* Keep contact before the shared closing band. */}
         <section class="border-t band-rule">
             <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
                 <div class="card flex flex-wrap items-center justify-between gap-x-8 gap-y-4 p-6 sm:p-7">
                     <div>
                         <h2 class="text-lg font-semibold tracking-tight text-content">Get in touch</h2>
-                        {/* No `\S+@\S+` exists anywhere in this markup: the address ships as separate spans and the
-                            script below assembles it. A human reads it either way: with JavaScript off it stays
-                            legible, just not clickable, while a harvester matching a plain address pattern finds
-                            nothing to take. The parts are also why the mailto is built rather than written. */}
+                        {/* Keep the email split into spans so the address is readable but not a plain markup match. */}
                         <p class="mt-2 max-w-copy text-sm leading-relaxed text-muted">
                             Reach me at{" "}
                             <span
@@ -344,8 +306,7 @@ const claimIcons = [
                             , in the community server, or open a public issue.
                         </p>
                     </div>
-                    {/* Three channels, one card, in order of how much they ask of the reader: Discord is a message,
-                        an issue is a written-up case, the address is for the thing that belongs to nobody else. */}
+                    {/* Keep contact channels together in order of escalation. */}
                     <div class="flex flex-wrap gap-3">
                         <a href={discordUrl} target="_blank" rel="noopener" class="btn btn-secondary inline-flex items-center gap-2">
                             <DiscordIcon size={15} />
@@ -379,11 +340,7 @@ const claimIcons = [
     <Footer />
 
     <script>
-        /* Upgrade the spelled-out address to a real mailto, once, on first interaction.
-         *
-         * Deferred to interaction rather than done on load because the cheapest harvesters render the page
-         * and scrape the DOM; the ones that also move a pointer or focus a link are a different class of
-         * effort. Nothing is lost if it never runs: the address is already readable in the markup. */
+        /* Upgrade the spelled-out address to a real mailto, once, on first interaction. */
         const target = document.getElementById("contact-email");
         const user = target?.dataset.user;
         const domain = target?.dataset.domain;

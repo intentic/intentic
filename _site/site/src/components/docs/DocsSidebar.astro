@@ -1,22 +1,7 @@
 ---
 import { type Book, type BookPage, bookHref } from "@intentic/site-content/book";
 
-/* One book's rail: its shelves, with sub-group headings and indented sub-pages.
- *
- * WHAT IT REPLACES was sixteen rows of one flat list, ten of them under a single "Guides" label, with
- * "Manifest reference" sitting at the same indent as "Extensions" so the tree's real shape was invisible. A
- * reader could not tell from the rail which of two adjacent rows was a chapter and which was a page inside one.
- *
- * NOTHING COLLAPSES. A book's rows across its labelled shelves fit a viewport, which is part of why there are
- * two books, and a collapsing rail costs a click on every visit to see where you are, the thing a sidebar
- * exists to tell you. The shelf you are on is marked instead, so orientation is free.
- *
- * NO AUDIENCE LINES HERE, though the shelves carry them. Rendered in the rail they cost about 180px: enough
- * that on a 1000px-tall viewport the last shelf fell below the rail's own scroll, which is the opposite of what
- * this rewrite was for. They are a CHOOSING aid, so they belong where someone is choosing: the index states each
- * as a question, and the top bar's menu carries them under each row. Once you are inside a book, the label plus
- * the rows under it is the orientation you need.
- */
+/* One book's rail: its shelves, with sub-group headings and indented sub-pages. */
 
 interface Props {
     book: Book;
@@ -25,16 +10,7 @@ interface Props {
 
 const { book, pageId } = Astro.props;
 
-/* Two MUTUALLY EXCLUSIVE class sets rather than a base plus an override. Tailwind resolves a conflict by
- * stylesheet order, not by the order classes appear on the element, and `border-transparent`/`text-muted`
- * are emitted after `border-primary-500`/`text-primary-400`, so a base carrying them beat the active pair and
- * the current page rendered identically to every other row.
- *
- * THE RAIL SPEAKS THE SAME TWO WORDS THE BAR'S MENU DOES: position is `.nav-wash` and the words brightening a
- * step (global.css), state is ember plus the rule down the left edge. The hairline this used to move on hover
- * is gone from the idle set, and that is the whole change — a rule appearing under the pointer said "you are
- * here" in the site's own vocabulary for a row that was merely being pointed at, three inches under a menu
- * where the rule means something else. */
+/* Two MUTUALLY EXCLUSIVE class sets rather than a base plus an override. */
 const rowBase = "nav-wash block border-l-2 py-1 text-sm transition-colors";
 const rowIdle = "border-transparent text-muted hover:text-content";
 const rowActive = "border-primary-500 font-medium text-primary-400";
@@ -46,10 +22,7 @@ const isActiveShelf = (pages: BookPage[]): boolean => pages.some((page) => page.
 
 const flatten = (pages: BookPage[]): BookPage[] => pages.flatMap((page) => [page, ...(page.children ?? [])]);
 
-/* A group whose label repeats its own first row shows it twice: an Extensions group leading with the Extensions
- * page made the rail read "Extensions / Extensions / Build an extension". The label is there to separate a run
- * from its neighbours, and a parent row with indented children already does that, so it is dropped in that case.
- * "Worked examples" survives, because no page is called that. */
+/* A group whose label repeats its own first row shows it twice. */
 const labelFor = (group: { label?: string; items: BookPage[] }): string | undefined =>
     group.label === group.items[0]?.title ? undefined : group.label;
 ---
@@ -62,8 +35,7 @@ const labelFor = (group: { label?: string; items: BookPage[] }): string | undefi
             const active = isActiveShelf(pages);
             return (
                 <div class="mt-6 first:mt-0">
-                    {/* The current shelf's label takes the accent: at a glance it answers "which part of the docs
-                        am I in", which no amount of row highlighting does. */}
+                    {/* Accent the current shelf label so the active documentation group is explicit. */}
                     <div class:list={["eyebrow mb-2 pl-3", active && "text-primary-500"]}>{section.label}</div>
                     {section.groups.map((group) => (
                         <div class="mt-3 first:mt-0">

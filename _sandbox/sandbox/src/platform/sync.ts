@@ -143,7 +143,7 @@ export const verifySyncToken = async (historyRoot: string, presented: string, ch
     const now = Date.now();
     if (checkedIn && (matched.seenAt === undefined || now - matched.seenAt >= SEEN_THROTTLE_MS)) {
         await persist(historyRoot, (current) =>
-            // oxlint-disable-next-line oxc/no-map-spread -- an enrollment is readonly; a fresh record for the one machine that polled is the point
+            // oxlint-disable-next-line oxc/no-map-spread -- Each enrollment update creates a fresh record.
             current.map((entry) => (entry.key === matched.key ? { ...entry, seenAt: now } : entry)),
         );
     }

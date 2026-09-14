@@ -109,26 +109,7 @@ const fail = (code, why) => { console.error(why); process.exit(code); };
         fail(1, `still converging: ${pending.join(", ") || "(no step detail)"}`);
         return;
     }
-    /* THE STARTER SITE, THE ONE THING A NEW USER SEES, and until this ran neither half of it was guarded.
-     *
-     * It is half image (the Dockerfile bakes the monorepo at /opt/starter) and half daemon (the first boot
-     * copies it into the workspace and starts its dev server, src/scaffold/starter-site.ts), and the two halves
-     * fail silently in opposite directions: a bake that stops landing leaves a daemon with nothing to copy, and
-     * a daemon that decides "this workspace is not fresh" leaves a perfectly good bake untouched. Both open an
-     * empty sandbox and neither fails anything. The desktop installs of 2026-08-24 shipped the second one for a
-     * day, with a green pipeline the whole time.
-     *
-     * This container is exactly the shape that first boot has: no volumes, so /work is empty and the daemon
-     * owns it. Terminal (exit 2) rather than retried, the seed is awaited inside the boot chain, so once
-     * boot.ready is true the answer will not change by looking again.
-     *
-     * Names come from the image's own contract module, never from a copy in this script: the browser, the
-     * daemon and the Dockerfile all read them from there, and a fourth spelling here would be the one that
-     * rots. Reached through the package's PUBLIC entry, resolved from the daemon's install root the way the
-     * daemon's own import resolves — never a path into the package's internals. A path was what this read
-     * first (`dist/starter.js`), and the 2026-09-06 reorganisation moved the file to `dist/state/starter.js`
-     * behind an unchanged root export: every real reader followed it, this gate did not, and it failed two
-     * perfectly healthy halves on a module that was right there. */
+    /* Verify that the image bakes and first boot seeds the starter site. */
     let starter;
     try {
         starter = await import(pathToFileURL(require.resolve("@intentic/sandbox-contract", { paths: ["/opt/sandbox"] })).href);

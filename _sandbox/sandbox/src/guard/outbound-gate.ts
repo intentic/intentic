@@ -21,8 +21,7 @@ export const outboundGateHooks = (rules: Readonly<Record<string, AdmissionRule>>
                     if (input.hook_event_name !== "PreToolUse") {
                         return {};
                     }
-                    // The tmux hook may have rewrapped this command already; the inner command survives verbatim inside
-                    // it.
+                    // Preserve the command inside tmux rewrapping.
                     const command = (input.tool_input as { command?: unknown }).command;
                     if (typeof command !== "string") {
                         return {};

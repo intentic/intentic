@@ -3,8 +3,7 @@ import { expect, test } from "vitest";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 import { checks } from "./invariant.js";
 
-/* The repository's own words, made checkable: the vault sweep is "an invariant rather than a one-time
- * conversion", and it runs at one moment. These pin what the standing check sees between two of them. */
+/* The repository's own words, made checkable: the vault sweep is "an invariant rather than a one-time conversion", and it runs at one moment. */
 
 const fail = (message: string): never => {
     throw new Error(message);

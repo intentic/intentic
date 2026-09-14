@@ -21,43 +21,9 @@ import { refreshConnections } from "../accounts/useChat-accounts";
 import { useSandboxVersion } from "../../sandbox/overview/useSandboxVersion";
 import ProviderLogo from "../accounts/ProviderLogo.vue";
 
-/* THE APP'S ONE MODEL PICKER (search + provider rail + one grouped list): width-agnostic so a desktop host
- * puts it in a Popover and a mobile host in a BottomSheet, and CALLER-AGNOSTIC so every surface that spends a
- * model gets the same list. Rows span every provider and are MODELS ONLY: a pick is a (provider, model) pair.
- *
- * IT PICKS, IT DOES NOT APPLY. The selection arrives as two props and leaves as one `pick` event, which is what
- * lets the chat composer bind it to a conversation (ChatModelPicker), the suggested-session box bind it to a
- * draft that has no tab yet, and an extension bind it to a run it is about to start (api.models.pick). Anything
- * that configures a SESSION rather than choosing a model goes in the `footer` slot: accounts, the harness axis,
- * extended thinking, because none of that means anything to a caller who has no session.
- *
- * AND A `commit` SLOT UNDER THAT, for the one kind of caller whose answer SPENDS MONEY. Everywhere else a model
- * row is the answer and answering closes the panel: the composer writes it to the conversation, the settings row
- * writes it to a pin, and both keep editing after it. A run button cannot work that way — the panel it opens is
- * configuring a run that has not started, so an answer would have to START it, and the panel would be a control
- * where clicking a list row bills you. Those callers leave `pick` staging the selection instead and put their own
- * verb in this slot, which is the whole reason the panel now ends in a press rather than in a dismissal.
- *
- * The slot is drawn by the CALLER, exactly as `footer` is: this panel owns the column, not the chrome inside it.
- * A caller that fills it must be `shrink-0` (it is the one row that may never be squeezed out by a tall footer)
- * and `sticky bottom-0` so it stays in thumb reach in the mobile sheet, which scrolls as one piece.
- *
- * ACCESS IS THE FIRST THING A ROW STATES. Every provider's catalog is non-empty whether or not its credential is
- * connected (the daemon serves a seed floor so a turn always resolves a model), so the list used to offer models
- * that could not run, indistinguishable from ones that could. Connected providers now lead, the rest follow
- * dimmed under a chip naming what they'd cost: "Free · Google sign-in" against "Needs ChatGPT subscription",
- * because which of those it is decides whether the row is worth a click. A locked row stays PICKABLE on purpose:
- * selecting it points the caller there and its own connect gate takes over with the handshake, so choosing a
- * model and connecting for it stay one continuous move.
- *
- * The rail is a FILTER, never a switcher. Hosts remount the body per open, so the query/rail reset and the
- * catalogs refresh on every open. */
+/* THE APP'S ONE MODEL PICKER (search + provider rail + one grouped list). */
 
-/* `submit` is the keyboard's way to the `commit` slot, and it is deliberately NOT plain Enter. Enter picks the
- * highlighted row, everywhere, in every binding of this panel — that is the one keystroke a search-and-choose
- * list may not redefine per caller, and for the callers that commit it is how the list's value gets set at all.
- * ⌘/Ctrl-Enter is this app's send (the composer's own), and it is the right shape for the other half: a
- * deliberate two-finger gesture for the press that starts something. A caller with no commit bar ignores it. */
+/* `submit` is the keyboard's way to the `commit` slot, and it is deliberately NOT plain Enter. */
 const emit = defineEmits<{ pick: [PickerEntry]; submit: []; close: [] }>();
 const { provider, model, unpickable } = defineProps<{
     // The pair the list checkmarks; both, since a model id is only meaningful under the provider that vends it.
@@ -282,15 +248,9 @@ onMounted(() => {
 </script>
 
 <template>
-    <!--
-        Flex column with a shrinkable middle, so the panel fits whatever height its host gives (a desktop popover caps
-        to the room around its trigger). Search and footer hold their size; the list gives.
-    -->
+<!-- Flex column with a shrinkable middle, so the panel fits whatever height its host gives (a desktop popover caps to the room around its trigger). -->
     <div class="flex min-h-0 flex-col" role="combobox" aria-haspopup="listbox" aria-expanded="true" aria-label="Model picker">
-        <!--
-            Keys bind on the bar, not the field: they bubble from the input, and what they mean (Enter picks, Esc
-            clears then closes) is this panel's business.
-        -->
+<!-- Keys bind on the bar, not the field: they bubble from the input, and what they mean (Enter picks, Esc clears then closes) is this panel's business. -->
         <SearchBar
             ref="searchInput"
             v-model="query"
@@ -306,15 +266,9 @@ onMounted(() => {
             @keydown.esc="onEsc"
         />
 
-        <!--
-            Fixed height so the rail's filter states never resize the panel; min-h-40, not 0, since the footer's height
-            depends on what's connected, and a picker with no models must not fully collapse into it.
-        -->
+<!-- Fixed height so the rail's filter states never resize the panel; min-h-40, not 0, since the footer's height depends on what's connected. -->
         <div class="flex h-80 min-h-40 flex-col max-md:h-auto max-md:min-h-0">
-            <!--
-                Provider strip filters, never switches: scoping to one provider is a safe glance; switching only
-                happens by picking a model row.
-            -->
+<!-- Provider strip filters, never switches: scoping to one provider is a safe glance; switching only happens by picking a model row. -->
             <div
                 role="radiogroup"
                 aria-label="Filter by provider"
@@ -351,10 +305,7 @@ onMounted(() => {
                     />
                     <!-- The current provider's dot: independent of the filter selection; both must be legible at once. -->
                     <span v-if="railActive(lane)" class="absolute right-1 top-1 h-1 w-1 rounded-full bg-primary-500" aria-hidden="true"></span>
-                    <!--
-                        One corner, two mutually exclusive faults: a provider with a broken account has an account, so
-                        it is never the locked one.
-                    -->
+<!-- One corner, two mutually exclusive faults: a provider with a broken account has an account, so it is never the locked one. -->
                     <Icon
                         v-if="providerNeedsReauth(railLead(lane))"
                         name="exclamation-triangle"
@@ -377,10 +328,7 @@ onMounted(() => {
                 aria-label="Models"
             >
                 <template v-for="section in sections" :key="section.key">
-                    <!--
-                        Group header doubles as the access line (cost + way out); absent once connected, since a usable
-                        provider needs no annotation. The folded local lane carries only the label, having no account.
-                    -->
+<!-- Group header doubles as the access line (cost + way out); absent once connected, since a usable provider needs no annotation. -->
                     <div
                         v-if="section.label !== undefined"
                         class="flex items-center gap-1.5 px-3 pb-1 pt-2 text-2xs font-medium uppercase tracking-wide text-subtle"
@@ -421,10 +369,7 @@ onMounted(() => {
                         >
                     </div>
                     <template v-for="block in section.blocks" :key="block.key">
-                        <!--
-                            Family header, shown only for older-version blocks; the latest band needs none, since the
-                            section header above already names the group.
-                        -->
+<!-- Family header, shown only for older-version blocks; the latest band needs none, since the section header above already names the group. -->
                         <p v-if="block.label !== undefined" class="px-3 pb-0.5 pt-1.5 pl-8 text-2xs text-subtle" role="presentation">
                             {{ block.label }}
                         </p>
@@ -462,10 +407,7 @@ onMounted(() => {
                                 class="shrink-0 text-2xs text-subtle"
                                 :aria-label="BADGE_META[badge].label"
                             />
-                            <!--
-                                The per-row lock, redundant with the section chip while browsing; in search the row is
-                                all there is to go on.
-                            -->
+<!-- The per-row lock, redundant with the section chip while browsing; in search the row is all there is to go on. -->
                             <Icon
                                 v-if="isLocked(row.entry)"
                                 name="lock"
@@ -475,10 +417,7 @@ onMounted(() => {
                             <Icon v-if="isSelected(row.entry)" name="check" class="shrink-0 text-2xs text-primary-500" aria-hidden="true" />
                         </button>
                     </template>
-                    <!--
-                        Group disclosure: a group opens at one row per family so Claude's catalog doesn't bury others.
-                        Not role=option; the keyboard path to a buried version is search.
-                    -->
+<!-- Group disclosure: a group opens at one row per family so Claude's catalog doesn't bury others. -->
                     <button
                         v-if="section.label !== undefined && section.collapsible"
                         type="button"
@@ -508,10 +447,7 @@ onMounted(() => {
                         Search all providers
                     </button>
                 </div>
-                <!--
-                    The door to everything this list can only badge: a second account, dropping one, sign-in mechanics.
-                    Hidden while searching; a real link, at the foot of the list.
-                -->
+<!-- The door to everything this list can only badge: a second account, dropping one, sign-in mechanics. -->
                 <RouterLink
                     v-if="!searching"
                     to="/sandbox/agent"

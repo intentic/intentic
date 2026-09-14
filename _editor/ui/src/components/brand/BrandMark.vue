@@ -1,8 +1,4 @@
-<!--
-    A thing, in a rounded square: <Avatar>'s counterpart for non-people (capabilities, extensions, registry entries). Fallback ladder: inline SVG
-    art, then a simple-icons logo, then a bundled icon, then initials. Art renders via `<img>`, never inlined or v-html, so a hostile SVG cannot
-    script the page.
--->
+<!-- A thing, in a rounded square: <Avatar>'s counterpart for non-people (capabilities, extensions, registry entries). -->
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { artSrc, type Brand, brandUrl, loadBrand } from "./brandMark.js";
@@ -70,11 +66,7 @@ watch(
             idle ? `opacity-50 grayscale` : ``,
             // Both belong to the badge shape only: a flush mark is inside a border that is already drawn.
             flush ? `` : [`border border-line`, size >= 28 ? `rounded-lg` : `rounded-md`],
-            /* Two independent questions, and they stay independent: `flush` decides the OUTLINE (whose border
-             * and whose corners), artwork decides the PLATE (whether there is anything to paint under the
-             * mark). A drawing brings its own square, so it gets no plate in either shape: see the note above.
-             * Otherwise the brand's own plate replaces the neutral one only once its colour is known: a tinted
-             * tile under a fallback glyph would claim a brand that never loaded. */
+/* Two independent questions, and they stay independent: `flush` decides the OUTLINE (whose border and whose corners). */
             drawing !== undefined ? `` : brand === undefined ? `bg-content/5 text-muted` : `brand-plate`,
         ]"
         :style="{
@@ -95,11 +87,7 @@ watch(
         }"
         aria-hidden="true"
     >
-        <!--
-            `object-cover`, not `contain`: this is a tile, not a framed picture, so it should meet the rounded corners
-            like
-            an app icon. Decorative (empty alt), since the name is always drawn beside it.
-        -->
+<!-- `object-cover`, not `contain`: this is a tile, not a framed picture, so it should meet the rounded corners like an app icon. -->
         <img v-if="drawing !== undefined" :src="drawing" alt="" class="h-full w-full object-cover" draggable="false" />
         <template v-else-if="brand === undefined">
             <Icon v-if="glyph !== undefined" :name="glyph" :style="{ fontSize: `${size * 0.5}px` }" />
@@ -107,10 +95,7 @@ watch(
                 {{ initials }}
             </span>
         </template>
-        <!--
-            Masks the fetched SVG over the brand's colour, rather than showing the image, since brandColor.ts's cleared
-            colour is what should paint, not the file's own.
-        -->
+<!-- The fetched SVG is masked with the configured brand colour. -->
         <span
             v-else
             class="brand-mark absolute"
@@ -133,10 +118,7 @@ watch(
     </span>
 </template>
 
-<!--
-    Colours key off `[data-mode]`, the same switch as Shiki's code-block colours, so a theme flip repaints two custom properties instead of
-    refetching. The element carries only custom properties inline, never the colour, so no `!important` is needed here.
--->
+<!-- Colours key off `[data-mode]`, the same switch as Shiki's code-block colours, so a theme flip repaints two custom properties instead of refetching. -->
 <style scoped>
 .brand-plate {
     background-color: var(--brand-plate-light);

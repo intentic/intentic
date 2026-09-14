@@ -39,12 +39,7 @@ const lastWorkspaceChangeAt = ref(0);
 export const worktreeMovedRecently = (): boolean =>
     lastWorkspaceChangeAt.value !== 0 && Date.now() - lastWorkspaceChangeAt.value < WORKTREE_MOVE_WINDOW_MS;
 
-/* WHETHER THE TREE HAS MOVED SINCE A MOMENT, for anything holding a verdict about the files as they were: a red
- * pre-push check is the answer for exactly as long as nothing has been written (usePushFlow.ts). Answered from the
- * watcher rather than a digest of the change list, since an edit to an already-dirty file changes no path and no
- * count. Errs toward "changed": a dropped stream reconnects with the daemon's empty batch, which stamps this, so a
- * gap in the feed retires a verdict rather than vouching for one. Never having heard anything is not evidence of
- * quiet, so a zero stamp reads as changed too. */
+/* WHETHER THE TREE HAS MOVED SINCE A MOMENT, for anything holding a verdict about the files as they were. */
 export const workspaceChangedSince = (at: number): boolean => lastWorkspaceChangeAt.value === 0 || lastWorkspaceChangeAt.value > at;
 
 export const markWorkspaceChanged = (paths: readonly string[]): void => {

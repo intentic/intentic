@@ -1,8 +1,4 @@
-<!--
-    A non-record line on a <RowGroup>'s surface: an empty-state sentence, a fallback message, or an "add one" affordance. The add glyph rides the
-    chevron's column and size (ROW_TOGGLE_GAPS/ROW_TOGGLE_SIZES), so it lines up with disclosure rows above it. A navigational line is <Row>, not
-    this.
--->
+<!-- A non-record line on a <RowGroup>'s surface: an empty-state sentence, a fallback message, or an "add one" affordance. -->
 <script setup lang="ts">
 import type { IconName } from "../../icons/iconSets.js";
 import Icon from "../primitives/Icon.vue";
@@ -41,10 +37,7 @@ const TEXT = { comfortable: `text-sm`, compact: `text-xs`, dense: `text-2xs` } a
         <slot>{{ label }}</slot>
     </div>
 
-    <!--
-        `mark` for the same reason <Row> hands it out: a block at the tail of a list often previews the row it's
-        about to add, and that's only honest at the size those rows actually draw.
-    -->
+<!-- `mark` for the same reason <Row> hands it out: a block at the tail of a list often previews the row it's about to add. -->
     <div v-else-if="variant === `block`" :class="ROW_BLOCK_PAD[tier]"><slot :mark="ROW_TIERS[tier].mark" /></div>
 
     <!-- The pressable one; `ui-row-select` is the app's one hover-and-focus treatment for a row you can press. -->

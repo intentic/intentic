@@ -155,10 +155,7 @@ export const takePendingSetup = (): Promise<SetupArgs | null> => invoke(`take_pe
 export const takePendingRecreate = (): Promise<RecreateArgs | null> => invoke(`take_pending_recreate`);
 // Taken, not read: the pairing token inside is single-use, so a duplicate delivery would spend it unwatched.
 export const takePendingSync = (): Promise<SyncArgs | null> => invoke(`take_pending_sync`);
-/**
- * Runs the enrollment (sync.sh/sync.ps1) with the folder the user picked, absent for a mirror pairing. Streams
- * under the `sync-setup` run id.
- */
+/** Runs the enrollment (sync.sh/sync.ps1) with the folder the user picked, absent for a mirror pairing. */
 export const syncRun = (args: SyncArgs, dir?: string): Promise<void> => invoke(`sync_run`, { args, dir: dir ?? null });
 /** How much already lives in the folder the user picked, for the sync confirmation message. */
 export const folderEntries = (path: string): Promise<number> => invoke(`folder_entries`, { path });
@@ -191,10 +188,7 @@ export const workspaceOpen = (path?: string): Promise<void> => invoke(`workspace
 // Brings this window to the front, for a run that stopped while nobody was looking (windows.rs takes the frame
 // back rather than opening beside it).
 export const setupAlert = (): Promise<void> => invoke(`setup_alert`);
-/* Where the install has got to, as this screen draws it, for the workspace page to draw the same bar once
- * this screen has stepped aside (windows.rs `announce_setup`). Sent on every change: the page's copy of the
- * bar is only ever as fresh as the last report. `closed` is the card being put away after a run ended, which
- * is the page's cue to take its strip down too. */
+/* Setup progress is shared with the workspace bar. */
 export interface SetupReport {
     name?: string;
     state: `running` | `waiting` | `failed` | `stopped` | `done` | `closed`;
@@ -204,8 +198,7 @@ export interface SetupReport {
     step?: string;
 }
 export const setupProgress = (report: SetupReport): Promise<void> => invoke(`setup_progress`, { report });
-/* This page's content is `height` tall: size the window to it (fitWindow.ts is the caller). The window is the
- * page's own, chosen on the Rust side from which webview invoked this, so nothing here names one. */
+/* This page's content is `height` tall: size the window to it (fitWindow.ts is the caller). */
 export const fitToContent = (height: number): Promise<void> => invoke(`fit_to_content`, { height });
 /** End a run and everything it started. */
 export const runStop = (id: string): Promise<void> => invoke(`run_stop`, { id });

@@ -183,10 +183,7 @@ const submit = async (): Promise<void> => {
 </script>
 
 <template>
-    <!--
-        The header asks the folder's question, not claims its contents: "Personas in X" reads as an existing list,
-        wrong on the folder's first use. "Who works in …" holds whether the answer is written, borrowed, or edited here.
-    -->
+<!-- The header asks the folder's question, not claims its contents: "Personas in X" reads as an existing list, wrong on the folder's first use. -->
     <Modal v-model:open="visible" size="md" :header="`Who works in ${folderName}`">
         <div class="flex flex-col gap-4">
             <p class="text-xs text-subtle">
@@ -217,10 +214,7 @@ const submit = async (): Promise<void> => {
             <div class="flex flex-col gap-3" :class="cards.length > 0 ? `border-t border-line pt-4` : ``">
                 <div class="flex items-center gap-2">
                     <span :class="ui.sectionLabel()">{{ heading }}</span>
-                    <!--
-                        Always the same corner, and only ever one link at a time — two side by side would turn this into a three-way
-                        choice. Set off from the heading, or it reads as a continuation of the uppercase label.
-                    -->
+<!-- Always the same corner, and only ever one link at a time — two side by side would turn this into a three-way choice. -->
                     <button
                         v-if="mode !== `new`"
                         type="button"
@@ -239,10 +233,7 @@ const submit = async (): Promise<void> => {
                     </button>
                 </div>
 
-                <!--
-                    Rows styled like the ones above on purpose — same kind of thing, one folder along. Each names where it
-                    starts today, since that's what picking it here takes away.
-                -->
+<!-- Rows styled like the ones above on purpose — same kind of thing, one folder along. -->
                 <template v-if="mode === `existing`">
                     <input v-if="filterable" v-model="filter" :class="ui.input('w-full')" placeholder="Find a persona…" aria-label="Find a persona" />
                     <div class="flex max-h-56 flex-col gap-1 overflow-y-auto">
@@ -285,10 +276,7 @@ const submit = async (): Promise<void> => {
                         <span v-if="nameHint !== undefined" class="text-xs text-warning">{{ nameHint }}</span>
                     </div>
 
-                    <!--
-                        Folded, since most cards keep the full toolbox; the badge keeps a limited card visible even closed.
-                        Absent while picking an existing card — that mode moves a persona without re-deciding anything about it.
-                    -->
+<!-- Folded, since most cards keep the full toolbox; the badge keeps a limited card visible even closed. -->
                     <div class="flex flex-col gap-3">
                         <div class="flex items-center gap-2">
                             <button

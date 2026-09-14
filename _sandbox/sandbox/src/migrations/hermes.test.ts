@@ -2,8 +2,7 @@ import { expect, test } from "vitest";
 import type { PlannedItem } from "./adapter-shared.js";
 import { detectHermes, planHermes } from "./hermes.js";
 
-/* The adapter over a lived-in fixture home: one of everything it maps, one of everything it must refuse, and
- * the judgment calls (localhost demotion, credential heuristic, baked-name renaming) asserted by name. */
+/* The migration adapter maps supported fixture state and rejects unsupported state. */
 
 const CONFIG = `
 model:

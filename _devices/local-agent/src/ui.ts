@@ -5,10 +5,7 @@
 /** How a run renders, chosen once from the environment (see createUi). */
 export type UiMode = "rich" | "plain" | "nested";
 
-/**
- * One step of a flow: phase id, label, and a rough weight (seconds) used only to compare, for a time estimate rather
- * than a step count.
- */
+/** One step of a flow: phase id, label, and a rough weight (seconds) used only to compare, for a time estimate rather than a step count. */
 export interface PlanStep {
     readonly phase: string;
     readonly label: string;
@@ -49,10 +46,7 @@ export interface Ui {
 
 // What the renderer needs from the outside.
 
-/**
- * Process seams this reads, matching what stricli injects as `this.process`; a command passes its context, a test
- * passes a fake.
- */
+/** Process seams this reads, matching what stricli injects as `this.process`; a command passes its context, a test passes a fake. */
 export interface UiProcess {
     readonly stdout: { write: (chunk: string) => unknown; isTTY?: boolean | undefined; columns?: number | undefined };
     readonly stderr: { write: (chunk: string) => unknown };
@@ -87,10 +81,7 @@ const ESTIMATE_FLOOR_SECONDS = 20;
 
 // Pure helpers, exported for their own tests.
 
-/**
- * Wraps text to at most `width`; only the live line truncates instead. A word longer than width is left to overflow
- * rather than broken (a URL, meant to be copied).
- */
+/** Wraps text to at most `width`; only the live line truncates instead. */
 export const wrap = (text: string, width: number): string[] => {
     if (width < 20) {
         return [text];

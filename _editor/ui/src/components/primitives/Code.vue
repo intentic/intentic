@@ -1,7 +1,4 @@
-<!--
-    Highlighted code block: a thin wrapper over useHighlighter with a header label and copy button. Falls back to a plain `<pre>` while highlighting
-    is in flight, and permanently for unsupported languages.
--->
+<!-- Highlighted code block: a thin wrapper over useHighlighter with a header label and copy button. -->
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { ui } from "../../lib/ui.js";
@@ -125,10 +122,7 @@ watch(
         :style="maxLines === undefined ? undefined : { '--ui-code-clamp-lines': maxLines }"
     >
         <div class="flex flex-col gap-1.5">
-            <!--
-                Only a label gets a row of its own; an unlabelled block needs no empty chrome row above it. The copy
-                button sits on the block, in reserved space, instead.
-            -->
+<!-- Only a label gets a row of its own; an unlabelled block needs no empty chrome row above it. -->
             <div v-if="label" class="flex items-center justify-between">
                 <span class="text-2xs font-medium text-muted">{{ label }}</span>
             </div>
@@ -139,22 +133,10 @@ watch(
                     class="scrollbar-thin overflow-x-auto rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs text-content"
                     :class="{ 'whitespace-pre-wrap': wrap, 'break-words': wrap }"
                     >{{ code }}</pre>
-                <!--
-                    `bg-canvas`, not transparent: it sits over the code surface; the block's right padding keeps text
-                    clear of it.
-                -->
-                <!--
-                    The wrapper, not the button, carries `relative`: Button's root always sets it too, and class order,
-                    not source order, decides which one wins.
-                -->
-                <!--
-                    `flex`, not a bare block: a block-level chip sits on the text line and inherits its leading, which
-                    throws off the corner inset.
-                -->
-                <!--
-                    Nudged left of the scrollbar's width in scroll mode; a utility class here beats code.css's `@layer
-                    components`.
-                -->
+<!-- `bg-canvas`, not transparent: it sits over the code surface; the block's right padding keeps text clear of it. -->
+<!-- The wrapper, not the button, carries `relative`: Button's root always sets it too, and class order, not source order, decides which one wins. -->
+<!-- `flex`, not a bare block: a block-level chip sits on the text line and inherits its leading, which throws off the corner inset. -->
+<!-- Nudged left of the scrollbar's width in scroll mode; a utility class here beats code.css's `@layer components`. -->
                 <div v-if="copyable" class="absolute top-1.5 flex" :class="scrolled ? `right-5` : `right-1.5`">
                     <CopyButton :text="code" label="Copy" class="bg-canvas" @copied="emit(`copied`)" />
                 </div>

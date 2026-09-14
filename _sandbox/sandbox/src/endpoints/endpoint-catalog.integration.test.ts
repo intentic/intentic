@@ -36,8 +36,7 @@ test("a plain id stands as it is, and a published display name still wins", asyn
     expect(catalog.models.map((model) => model.label)).toEqual(["Llama-3-8B", "Qwen3 Coder", "gpt-4o-mini"]);
 });
 
-// How much the server will take, the number a turn is refused against; every case below is about not carrying a wrong
-// one.
+// Refuse turns that exceed the server's advertised capacity.
 
 test("llama.cpp's served window is read off /props and stands for every row that server lists", async () => {
     // The real server's shape: the slot's window after the flag is divided/clamped, unrelated to weights.

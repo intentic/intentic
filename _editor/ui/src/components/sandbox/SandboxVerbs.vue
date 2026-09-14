@@ -1,7 +1,4 @@
-<!--
-    Row controls for one sandbox: the power verb plus an overflow menu for the rest, shared by the web and desktop apps. Verb labels and order live
-    in sandboxVerbs.ts; the menu is local, per-row state. Emits `act` only.
--->
+<!-- Row controls for one sandbox: the power verb plus an overflow menu for the rest, shared by the web and desktop apps. -->
 <script setup lang="ts">
 import type { MenuItem } from "primevue/menuitem";
 import Button from "../primitives/Button.vue";

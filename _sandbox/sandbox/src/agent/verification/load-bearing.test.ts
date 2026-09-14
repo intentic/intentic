@@ -9,9 +9,7 @@ const daysAgo = (days: number): number => Math.floor((NOW - days * 86_400_000) /
 const FIELD = "\u001f";
 const logLine = (hash: string, at: number, subject: string): string => [hash, String(at), subject].join(FIELD);
 
-/* A git that answers the pickaxe from a table keyed by the searched line, and RECORDS what it was asked, which
- * is half of what these tests assert: the budget and the candidacy rules are claims about how many subprocesses
- * a turn spends, and a fake that only returned rows could not fail them. */
+/* A git that answers the pickaxe from a table keyed by the searched line, and RECORDS what it was asked, which is half of what these tests assert. */
 const fakeGit = (history: Record<string, readonly string[]>) => {
     const asked: string[] = [];
     const git: GitRunner = async (_dir, args) => {
@@ -106,8 +104,7 @@ describe("what the history defends", () => {
         expect(await defencesOf("/repo", "src/a.ts", [line], MAX_PROBES, NOW, git)).toEqual([]);
     });
 
-    /* A git that cannot answer is not a turn that gets sent back to work. An untracked file, a path outside any
-     * repository and a shallow clone all land here, and all of them mean the same thing about the line. */
+/* A git that cannot answer is not a turn that gets sent back to work. */
     test("a failing git reads as no history rather than propagating", async () => {
         const failing: GitRunner = async () => {
             throw new Error("fatal: not a git repository");

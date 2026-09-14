@@ -58,11 +58,7 @@ describe("probeSelf", () => {
         expect(verdict.ok === false && verdict.detail).toContain("502");
     });
 
-    /* A HOSTED SANDBOX HAS NO TUNNEL, so it must not be told about one. It is a Fly app the platform's edge
-     * replays to (ingress-tunnel.ts reachPosture → `direct`) and dials nothing itself, so the 502 it meets
-     * when the edge is not routing is the edge's, and the old wording — "its tunnel is not routing here yet" —
-     * named a component it does not have and implied waiting would fix it. Five minutes of that is what a
-     * customer read before being offered a restart that could not help. */
+/* A HOSTED SANDBOX HAS NO TUNNEL, so it must not be told about one. */
     it("blames the edge, not a tunnel, for a hosted sandbox's 502", async () => {
         vi.stubGlobal("fetch", async () => new Response("not connected right now", { status: 502 }));
         const verdict = await probeSelf(PUBLIC_URL, "abc", "direct");
@@ -158,10 +154,7 @@ describe("createReachReporter", () => {
         expect(createReachReporter(config, logger).status()).toEqual({ state: "off" });
     });
 
-    /* A container told a public name but given nothing to dial with. The verdict is knowable before any probe
-     * and cannot change while the box runs, so it is stated once, with the reason and without a probe: the
-     * five minutes of "its tunnel has not come up yet" that used to fill this case read as waiting, and the
-     * people reading them waited. */
+/* A container told a public name but given nothing to dial with. */
     it("settles at once when the daemon dials no edge, naming why and probing nothing", async () => {
         const probe = vi.fn(async () => new Response(JSON.stringify({ sandboxId: OWN_ID }), { status: 200 }));
         vi.stubGlobal("fetch", probe);

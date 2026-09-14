@@ -75,10 +75,7 @@ const repair = async (): Promise<void> => {
                 <div class="flex min-w-0 flex-col gap-1">
                     <p class="text-sm font-medium text-content">{{ notice.title }}</p>
                     <p class="text-xs text-muted">{{ notice.detail }}</p>
-                    <!--
-                        The env by name, for a bug report or a `docker inspect` — evidence a reader may skip, so it
-                        sits under the sentence that does not need it.
-                    -->
+<!-- The env by name, for a bug report or a `docker inspect` — evidence a reader may skip, so it sits under the sentence that does not need it. -->
                     <p v-if="notice.keys?.length" class="flex flex-wrap items-center gap-1 text-xs text-muted">
                         <span>Missing from this container:</span>
                         <Code v-for="key of notice.keys" :key="key" :code="key" />
@@ -125,10 +122,7 @@ const repair = async (): Promise<void> => {
         <p v-if="done" class="text-xs text-content">{{ done }}</p>
         <p v-if="failure" class="text-xs text-danger">
             {{ failure }}
-            <!--
-                Said next to the error rather than instead of it: this call cuts its own connection by design, so
-                "it failed" and "it worked" look identical from here until the sandbox answers again.
-            -->
+<!-- Said next to the error rather than instead of it: this call cuts its own connection by design. -->
             <span class="text-muted">If the sandbox was replaced, this page reconnects on its own once it is back.</span>
         </p>
     </section>

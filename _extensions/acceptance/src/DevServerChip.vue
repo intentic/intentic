@@ -37,10 +37,7 @@ const start = async (): Promise<void> => {
     <!-- Says so rather than showing an inert dot, so silence here doesn't read as "not started yet". -->
     <span v-if="targets.stateOf(repo) === `none`" class="text-2xs text-subtle">no dev server</span>
 
-    <!--
-        Not a <Notice>: this is an inline chip that truncates and carries its text in a tooltip, not a block that owns its own line. Borrows the
-        danger tint directly rather than a shared recipe, which is how that recipe drifted into non-notices elsewhere.
-    -->
+    <!-- Not a <Notice>: this is an inline chip that truncates and carries its text in a tooltip, not a block that owns its own line. -->
     <span v-else-if="failure" class="truncate rounded-lg border border-danger/40 bg-danger/10 px-2 py-0.5 text-2xs text-danger" :title="failure">{{
         failure
     }}</span>
@@ -84,10 +81,7 @@ const start = async (): Promise<void> => {
         <Icon name="chevron-down" class="text-subtle" />
     </button>
 
-    <!--
-        Starting: where Start used to vanish, and where the boot's output lives, since `starting` means the daemon spawned it but nothing has bound a
-        port yet.
-    -->
+    <!-- Starting state keeps the boot output beside its action. -->
     <button
         v-else-if="targets.stateOf(repo) === `starting`"
         type="button"
@@ -112,10 +106,7 @@ const start = async (): Promise<void> => {
         Start dev server
     </button>
 
-    <!--
-        Each row: an address, the package that bound it, and its terminal, since knowing where the output lives is the difference between reading
-        this list and acting on it.
-    -->
+    <!-- Each running server row includes its address and terminal. -->
     <Popover ref="popover">
         <div class="flex w-pop-sm flex-col gap-2 p-1">
             <p class="text-sm font-medium text-content">
@@ -148,10 +139,7 @@ const start = async (): Promise<void> => {
                     </span>
                 </span>
             </div>
-            <!--
-                Placed where the count is read: with several apps behind one dev script, only each group's own row says which app its stories are
-                walked against.
-            -->
+            <!-- Group rows identify the app served by a shared script. -->
             <p v-if="targets.serversOf(repo).length > 1" class="text-2xs text-subtle">
                 Each group below says which of these its stories are walked against: the dev server is shared, the addresses are not.
             </p>

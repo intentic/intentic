@@ -4,10 +4,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { readWatermark, watermarkPath, writeWatermark } from "./watermark.js";
 
-/* THE RESUME MARK, ACROSS A REAL RESTART. An integration suite rather than a unit one because the failure it
- * guards only exists on disk: the gateway dies with the container, and what it reads back on the way up is
- * either the reason no mail is replayed or the reason some is lost. A fake filesystem would assert that the
- * code calls writeFile, which is not the thing that has ever gone wrong. */
+/* THE RESUME MARK, ACROSS A REAL RESTART. */
 
 let root: string;
 
@@ -28,8 +25,7 @@ describe("readWatermark", () => {
         expect(await readWatermark(path)).toEqual({ historyId: "998877", announced: { evt1: "2026-08-09T12:00:00Z" } });
     });
 
-    /* A missing mark means "start from now", which dispatches nothing. That is the only safe reading of not
-     * knowing where you were: the alternative is waking an agent for every message in the mailbox. */
+/* A missing mark means "start from now", which dispatches nothing. */
     it("reads a first run as no cursor at all", async () => {
         expect(await readWatermark(watermarkPath(root, "never-run"))).toEqual({});
     });

@@ -62,10 +62,7 @@ const heal = (error: unknown): void => {
     location.reload();
 };
 
-/**
- * Routes an error that may mean this browser's stored state is poisoned; called by the handlers below and by
- * Vue's errorHandler (main.ts), where a bad hydrated blob first bites.
- */
+/** Routes an error that may mean this browser's stored state is poisoned; called by the handlers below and by Vue's errorHandler (main.ts). */
 export const reportStartupError = (error: unknown): void => {
     if (healing || performance.now() - startedAt > STARTUP_WINDOW_MS) {
         return;
@@ -119,10 +116,7 @@ const deleteAllDatabases = async (): Promise<void> => {
     await Promise.all(names.map(deleteDatabase));
 };
 
-/**
- * The reload's half of the wipe; awaited at the top of main.ts before any mirror opens, so every delete runs
- * against a database nothing holds open. A no-op on a normal boot.
- */
+/** The reload's half of the wipe; awaited at the top of main.ts before any mirror opens, so every delete runs against a database nothing holds open. */
 export const purgeIfMarked = async (): Promise<void> => {
     try {
         if (localStorage.getItem(WIPE_KEY) === null) {

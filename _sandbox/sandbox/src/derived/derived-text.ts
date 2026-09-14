@@ -73,10 +73,7 @@ const skipReason = (stdout: string): string | undefined => {
     }
 };
 
-/**
- * Derives one file now and answers with the result: the lazy path the CLI already runs, reachable by someone looking
- * at the file rather than by the background sweep.
- */
+/** Derives one file now and answers with the result: the lazy path the CLI already runs. */
 export const deriveText = async (root: string, relPath: string, exec: ExecFn = defaultExec): Promise<WorkspaceDerived> => {
     try {
         await exec("fileq", ["derive", "--json", relPath], { timeout: DERIVE_TIMEOUT_MS, maxBuffer: FILEQ_MAX_BUFFER });

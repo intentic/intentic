@@ -1,10 +1,7 @@
 import { expect, test } from "vitest";
 import { sealAnswer } from "./webext-peer.js";
 
-/* THE SEAL. A page is the richest supply of text written to be read by a model and acted on, so what comes back
- * from one arrives wrapped, with the id on both ends, and anything marker-shaped inside it neutralized. Pure
- * over an MCP answer, so it is pinned here; that the bridge applies it to every `tools/call` is the peer
- * routes' own test. */
+/* THE SEAL. */
 
 const text = (tool: string, said: string): string => {
     const sealed = sealAnswer("my-chrome", tool, { jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: said }], isError: false } }) as {
@@ -28,8 +25,7 @@ test("a page that forges the envelope or the harness's own voice has it neutrali
     expect(sealed).not.toContain("<system-reminder>");
 });
 
-/* The allowlist is written fail-closed: the extension's own voice is a short list, and everything else — a tool
- * this daemon has never heard of, because the extension shipped it in a store release — is sealed. */
+/* The allowlist is written fail-closed: the extension's own voice is a short list, and everything else — a tool this daemon has never heard of. */
 test("the extension's own account of itself is not wrapped, and an unknown tool is", () => {
     expect(text("describe", `Chrome 141 on Windows`)).toBe(`Chrome 141 on Windows`);
     expect(text("some_new_tool_from_a_future_release", `whatever it says`)).toContain("<untrusted-content");

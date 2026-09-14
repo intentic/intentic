@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { manifest } from "../manifest.js";
 
-/* THE CARD IS DATA, so this is the test that it is data the daemon will accept. `manifest.ts` parses the
- * package's own intentic-extension.json through the real ExtensionManifestSchema, so a typo in the card fails
- * here rather than at install time on somebody's sandbox. */
+/* THE CARD IS DATA, so this is the test that it is data the daemon will accept. */
 describe("the Obsidian capability card", () => {
     const card = manifest.contributes?.capabilities?.find((entry) => entry.id === "obsidian");
 

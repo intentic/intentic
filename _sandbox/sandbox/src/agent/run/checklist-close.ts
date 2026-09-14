@@ -1,19 +1,7 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { readTaskStore, type StoredTask, taskStoreDir } from "./task-store.js";
 
-/* THE LIST A TURN IS ABOUT TO LEAVE OPEN, said back to it once at Stop. The board reads the agent's own checklist to
- * tell a finished session from one that stopped short (agents-registry.ts unfinishedOf), and that reading is only as
- * good as the agent's bookkeeping: a session that did its last step and never ticked it, or whose step the owner
- * redirected away from and never deleted, wears "1 of 5 steps unfinished" after landing, with nothing measured
- * wrong. The system prompt already asks for the list to be kept current, and a standing instruction decays as
- * context grows (agent-search.ts found the same for `rg`); a Stop is the one moment the list's state is about to be
- * read, so it is the one moment worth spending a sentence on.
- *
- * Read off the CLI's own task store (task-store.ts), keyed by the session the Stop names, not off the daemon's fold:
- * the store is what the next turn is seeded from and what the hand-off note prints, so it is the list that will be
- * believed. Asked once per turn: an agent stopping short on purpose says so and stops again, and a second ask would
- * be the loop this guard exists for. Advisory in wording too: closing an item the agent has not done would be worse
- * than leaving it open, so the note names the third way out. */
+/* THE LIST A TURN IS ABOUT TO LEAVE OPEN, said back to it once at Stop. */
 
 // Enough of the list to act on; a long list is named by its count, not re-pasted.
 const NAMED_ITEMS = 5;

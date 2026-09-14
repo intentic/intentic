@@ -1,8 +1,4 @@
-<!--
-    Full-screen /chat route, desktop only: publishes the dock slot the chat panel teleports into (shell/dockSlots.ts). Its parent must be a grid,
-    since the panel styles itself with `grid-area: chat`. When the chat is in its own window, this area shows a notice with an explicit recall button
-    instead — never an automatic recall.
--->
+<!-- Full-screen /chat route, desktop only: publishes the dock slot the chat panel teleports into (shell/dockSlots.ts). -->
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
 import { onMounted, onUnmounted, useTemplateRef } from "vue";
@@ -12,10 +8,7 @@ import { chatFullDock } from "../../../shell/window/dockSlots";
 
 const { floats, dock } = useChatFloating();
 
-/* STANDING HERE IS CHOOSING THE RAIL AS THE CHAT'S HOME. Every control that leads here sets the home first,
- * but a bookmark or a hand-typed /chat arrives without one, and this area with the home still on `side` would
- * be a screen whose own tile is missing from the rail beside it. Claiming it in setup keeps the invariant (on
- * /chat ⇒ the rail is home ⇒ its tile is lit) whatever the door; a no-op through every ordinary one. */
+/* STANDING HERE IS CHOOSING THE RAIL AS THE CHAT'S HOME. */
 useLayout().setChatHome(`rail`);
 
 const slot = useTemplateRef(`slot`);
@@ -29,8 +22,7 @@ onUnmounted(() => {
 
 <template>
     <div class="relative h-full w-full">
-        <!-- Published even while another window holds the panel, so "Bring it back here" lands it in this slot
-             the instant the window goes: no intermediate hop through the side column. -->
+<!-- Published even while another window holds the panel, so "Bring it back here" lands it in this slot the instant the window goes. -->
         <div class="grid h-full w-full" style="grid-template-areas: &quot;chat&quot;; grid-template-columns: 1fr; grid-template-rows: 1fr">
             <div ref="slot" class="contents"></div>
         </div>

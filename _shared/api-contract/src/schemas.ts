@@ -620,17 +620,10 @@ export const SandboxSummarySchema = z.object({
     bootReport: BootReportSchema.nullable(),
     // The last check-in refused, and why; null in the common case, cleared once an announce succeeds.
     announceRefusal: AnnounceRefusalSchema.nullable(),
-    /* WHEN THE CONTAINER WAS DELETED, and by which machine — reported by the removal itself, null for every
-     * sandbox that was not removed. The only fact that separates a box that is gone for good from one that is
-     * merely off, which silence at the edge cannot do. Cleared the moment the sandbox announces again. */
+/* WHEN THE CONTAINER WAS DELETED, and by which machine — reported by the removal itself, null for every sandbox that was not removed. */
     removedAt: z.string().nullable(),
     removedBy: z.string().nullable(),
-    /* THE CONNECT TOKEN, on the OWNER's row only; null on a member's. The browser spends it on exactly one
-     * daemon-side act, the first-bind that seeds ownership, which is the owner's act by definition: a member
-     * reaches a daemon that is already bound, and the daemon never reads the header again. On the platform the
-     * same secret is a credential in its own right (it spends the owner's trial allowance, asks the owner's
-     * wallet for signatures, speaks as the sandbox to /sandbox/announce), so it is not something a `viewer`
-     * invite may carry away. */
+/* THE CONNECT TOKEN, on the OWNER's row only; null on a member's. */
     token: z.string().nullable(),
     // The caller's trust tier on this sandbox: `owner` for their own, the invite's granted role for a shared
     // one. What the web gates its affordances on; the daemon independently enforces the same tier as route
@@ -644,11 +637,7 @@ export const SandboxSummarySchema = z.object({
 });
 export type SandboxSummary = z.infer<typeof SandboxSummarySchema>;
 
-/* THE OWNER'S SPENDING CAPS on the platform's wallet signer (api wallet/), written over a SESSION and nowhere
- * else. The sandbox's wallet card carries the same two numbers for its own pre-check and its ledger's words, but
- * the container is not a trust boundary, so the copy the signer enforces is written only by the browser the
- * owner is signed into, over this shape: the editor sends it as the card is saved. USD decimal strings with up
- * to six places, USDC's own precision; money is never a float on either side. */
+/* THE OWNER'S SPENDING CAPS on the platform's wallet signer (api wallet/), written over a SESSION and nowhere else. */
 export const WalletPolicySchema = z.object({
     network: WalletNetworkSchema,
     perPaymentMaxUsd: z.string().regex(/^\d+(\.\d{1,6})?$/),

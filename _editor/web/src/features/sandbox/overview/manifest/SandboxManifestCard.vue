@@ -60,13 +60,10 @@ const applyRepair = (path: string, action: ManifestRepairAction): Promise<void> 
             </template>
             <template #below>
                 <div class="flex flex-col gap-1 pb-1 text-2xs">
-                    <!-- Buttons sit on the line they answer; collecting them at the bottom would force matching each to a row by position. -->
+                    <!-- Actions stay beside the facts they answer. -->
                     <div v-for="(line, index) in notice.lines" :key="index" class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                         <p class="text-muted">{{ line.text }}</p>
-                        <!--
-                            Nested, not inline, so a narrow panel can't split the two buttons across lines and risk misclicking a key's
-                            repair. `spoken` gives a screen reader the sentence's subject, since the visible label just says the button text.
-                        -->
+                        <!-- Actions stack on narrow panels to prevent split-row misclicks. -->
                         <span v-if="line.repairs.length > 0" class="flex flex-wrap items-center gap-2">
                             <Button
                                 v-for="action in line.repairs"
@@ -83,10 +80,7 @@ const applyRepair = (path: string, action: ManifestRepairAction): Promise<void> 
                     </div>
                     <!-- Outranks the diagnosis: the one line here that requires action. -->
                     <p v-if="notice.fix !== undefined" class="text-content">{{ notice.fix }}</p>
-                    <!--
-                        Only refusals show here; a successful repair makes the row disappear, so a banner would repeat what's already
-                        visible.
-                    -->
+<!-- Only refusals show here; a successful repair makes the row disappear, so a banner would repeat what's already visible. -->
                     <Notice v-if="repairNotice && acting === notice.path" :of="repairNotice" />
                 </div>
             </template>

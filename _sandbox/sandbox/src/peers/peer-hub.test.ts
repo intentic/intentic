@@ -1,12 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { createPeerHub, type PeerClient } from "./peer-hub.js";
 
-/* What is left of a hub once oRPC owns the wire: the roster, liveness, and what to do when a peer goes.
- * Request/response correlation is not tested here because it is not implemented here: the link does it, and
- * _devices/machine/src/device/link.test.ts proves it over a real handler.
- *
- * The `mcp` calls below therefore assert PLUMBING (does the right peer get it, what happens when it is gone),
- * never protocol. One suite for every door, because the hub is one module: what a door varies is the spec. */
+/* What is left of a hub once oRPC owns the wire: the roster, liveness, and what to do when a peer goes. */
 
 interface Facts {
     readonly os: string;
@@ -149,8 +144,7 @@ test("the tool list survives a peer going offline, so an asleep laptop stays usa
     expect(live.knownTools("laptop")).toEqual({ tools: [{ name: "run_command" }] });
 });
 
-/* A lid closing does not always produce a close frame: the socket can simply stop answering. The card's dot is
- * read as "the agent can work here right now", so liveness has to be a probe rather than a memory. */
+/* A lid closing does not always produce a close frame: the socket can simply stop answering. */
 test("a peer that stops answering the heartbeat is dropped", async () => {
     vi.useFakeTimers();
     try {

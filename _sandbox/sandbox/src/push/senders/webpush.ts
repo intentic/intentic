@@ -2,9 +2,7 @@ import type { PushNotification, WebPushChannel } from "@intentic/sandbox-contrac
 import webpush, { WebPushError } from "web-push";
 import { DEAD, type ChannelSend } from "./send.js";
 
-/* The web-push transport: the daemon posts the encrypted payload straight to the endpoint the browser's push
- * service minted, signed with this sandbox's VAPID key. No third party of ours in the loop, this is the
- * end-to-end-encrypted half of the split described in PushChannelSchema. */
+/* Web push sends encrypted payloads with the sandbox VAPID key. */
 
 // 403 has a transport-specific meaning worth naming: the endpoint is alive but was minted for a DIFFERENT
 // VAPID key. This is the easier one to miss, and it happens whenever the sandbox is recreated: push-store

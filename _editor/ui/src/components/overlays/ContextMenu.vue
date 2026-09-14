@@ -1,7 +1,4 @@
-<!--
-    The app's right-click menu: PrimeVue's ContextMenu at house density, with a reserved icon/check gutter that's all-or-nothing per menu. `url`
-    makes a row a real anchor (status bar, new-tab, middle-click); `command` still runs on a plain click, cancelling the anchor's own navigation.
--->
+<!-- The app's right-click menu: PrimeVue's ContextMenu at house density, with a reserved icon/check gutter that's all-or-nothing per menu. -->
 <script setup lang="ts">
 import PrimeContextMenu from "primevue/contextmenu";
 import type { MenuItem } from "primevue/menuitem";
@@ -18,9 +15,7 @@ const {
     model: MenuItem[];
     /** rem: the menu's floor, so a short verb list doesn't render as a sliver. */
     minWidth?: number;
-    /* Which document the menu opens in, for a caller that draws into one of its own (an iframe): a menu left
-       behind in the wrong document is a menu the user cannot see. Undefined ⇒ PrimeVue's default, which is
-       right for everything in the app's own window, floating panels included, since each is its own window. */
+/* Which document the menu opens in, for a caller that draws into one of its own (an iframe). */
     appendTo?: HTMLElement | string;
 }>();
 
@@ -68,15 +63,11 @@ const onRowClick = (event: MouseEvent, item: MenuItem): void => {
         <template #item="{ item, props }">
             <a v-bind="props.action" :href="item.url" :target="item.target" @click="onRowClick($event, item as MenuItem)">
                 <span v-if="hasGutter" class="flex w-3.5 shrink-0 justify-center">
-                    <!-- A checkable row draws its state even when false: the gutter holds the space either
-                         way, so the label cannot shift as the toggle flips. -->
+                    <!-- Checkable rows reserve the gutter even when unchecked so labels do not shift. -->
                     <Icon v-if="`checked` in item" v-show="item['checked'] === true" name="check" class="text-sm text-muted" />
                     <Icon v-else-if="item.icon" :name="item.icon as IconName" class="text-sm" />
                 </span>
-                <!-- The label, and under it the row's own consequence when it has one to state. A `hint` is for
-                     the menus whose rows are CHOICES rather than commands: "Fork" and "Fork chat only" differ
-                     only in what happens to the files, which no verb short enough to be a label can carry, and
-                     it is optional precisely so the command menus above stay the single dense line they were. -->
+<!-- The label, and under it the row's own consequence when it has one to state. -->
                 <span class="flex min-w-0 flex-1 flex-col">
                     <span class="truncate" :class="item['danger'] === true && `text-danger`">{{ item.label }}</span>
                     <span v-if="item['hint']" class="truncate text-2xs text-subtle">{{ item["hint"] }}</span>

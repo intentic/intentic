@@ -214,10 +214,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
             />
         </template>
 
-        <!--
-            Slot only passed when there is a notice, so the strip reserves no margin when empty. Inapplicable chores get a footnote under the list
-            instead (<ScopeNote>).
-        -->
+        <!-- Slot only passed when there is a notice, so the strip reserves no margin when empty. -->
         <template v-if="notice || error" #strips>
             <Notice v-if="notice" tone="warning">{{ notice }}</Notice>
             <Notice v-if="error" :of="noticeOf(error)" />
@@ -230,7 +227,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
         <template #detail>
             <!-- Gap stays; the scroller and shrink-to-fit belong to SplitView, not this wrapper. -->
             <div class="flex flex-col gap-6">
-                <!-- Also covers the window before the sandbox handshake unblocks the fetch. Shows the book's shape, not a loading sentence. -->
+                <!-- Also covers the window before the sandbox handshake unblocks the fetch. -->
                 <MaintenanceSkeleton v-if="isPending" />
 
                 <!-- The empty state this design most wants reachable; states what was checked rather than congratulating. -->
@@ -271,7 +268,7 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
                     </RowGroup>
                 </template>
 
-                <!-- Record of what was left out (no subject here, a probe that can't run, a broken tool); qualifies the list, so it comes last. -->
+                <!-- The omitted-record note qualifies the visible maintenance list. -->
                 <ScopeNote v-if="only" :probes="only.probes" :inapplicable="only.verdicts.filter((verdict) => verdict.state === `not-applicable`)" />
             </div>
         </template>

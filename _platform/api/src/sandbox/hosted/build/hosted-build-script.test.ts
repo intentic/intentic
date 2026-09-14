@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson, LOG_TAIL_BYTES, REPORT_HEADERS } from "./hosted-build-script.js";
 
-/* THE SCRIPT'S PROMISES, pinned as text: the brakes it carries are the ones the platform cannot enforce from
- * outside once the builder is running. A build under `timeout`, a push to the image the platform named, the
- * cache beside it, and exactly one report, with the exit code in the header the route reads. */
+/* THE SCRIPT'S PROMISES, pinned as text: the brakes it carries are the ones the platform cannot enforce from outside once the builder is running. */
 describe(`the builder script`, () => {
     const script = buildScript();
 

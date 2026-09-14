@@ -94,8 +94,7 @@ beforeEach(() => {
     vi.useFakeTimers({ toFake: [`Date`] });
     clock += BETWEEN_TESTS_MS;
     vi.setSystemTime(clock);
-    // resetAllMocks, not clearAllMocks: a queued mockRejectedValueOnce a test never reached must not fire in the next
-    // one.
+    // Reset all mocks so queued one-shot failures cannot leak between tests.
     vi.resetAllMocks();
     timed.length = 0;
     ready.mockResolvedValue({ claude: true, gemini: true, codex: true, cursor: true });

@@ -140,17 +140,7 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
 // Seated only while chat is docked and not floated, except briefly after popping out from /chat itself.
 const chatTileSeated = computed(() => chatOnRail.value && (!chatFloats.value || route.name === `chat`));
 
-/* Preview closes the Work band: start a turn (Chat), read what it did (Agents/Workspace), LOOK at the running
- * app. Evidence-driven like every extension tile: it appears once the workspace has anything a live iframe can
- * show (a runnable repo, a monorepo's apps, a forwarded port, a served public page) and is absent on a box with
- * none, where it could only open an empty state. The badge counts what is actually ANSWERING right now:
- * neutral, because "your app is up"
- * is inventory, not a debt (viewBadge.ts).
- *
- * BOTH READINGS COME FROM THE PANEL'S OWN BUILDERS (previewModel.railTargets), never from a second opinion
- * about what counts as previewable. The first cut of this tile had one: it counted a monorepo as evidence while
- * the panel only listed such a repo's `_apps/` instances, so a monorepo whose root `dev` runs turbo: with no
- * `_apps/` at all: badged "1 running" over a screen saying there was nothing to preview. */
+/* Preview closes the Work band by showing the running result. */
 const { files: publicFiles } = usePublicOutbox();
 const previewTile = computed<AreaTile | undefined>(() => {
     if (!previewEvidence(panels.value, forwardedPorts.value, publicFiles.value)) {
@@ -212,12 +202,7 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
     },
     ...(previewTile.value === undefined ? [] : [previewTile.value]),
 ]);
-/* Browsers appears the moment a turn opens one and stays while the daemon still lists it: a rail tile that
- * tracks live work rather than a permanent surface. It renders in the rail's live-runtime cluster (next to the
- * ports indicator and the terminal), not among the navigation tiles: a browser session is runtime state like a
- * tmux session, not an area like Agents or Workspace. The badge counts RUNNING browsers only: a finished one is
- * still readable in the view (its pages are the record of where the agent went) but it is not something
- * happening now, and a rail count that never drops to zero stops meaning anything. */
+/* The Browsers tile stays visible while the daemon lists an open browser. */
 const browserTile = computed<AreaTile | undefined>(() => {
     if (browsers.value.length === 0) {
         return undefined;
@@ -368,9 +353,7 @@ watch(
     { immediate: true },
 );
 
-// Hangs the menu off the rail's right edge, level with the tile, instead of PrimeVue's default pointer
-// position (wrong for a tile this narrow). A synthetic MouseEvent, since `show` calls preventDefault/stopPropagation on
-// it.
+// Position the menu beside the rail tile using a synthetic event.
 const showBesideRail = (menu: { show: (event: Event) => void } | undefined, event: MouseEvent): void => {
     const tile = event.currentTarget as HTMLElement | null;
     const rail = (tile?.closest(`nav`) ?? tile)?.getBoundingClientRect();
@@ -483,19 +466,13 @@ useKeybindings();
             <PresenceAvatars :members="presenceOthers" direction="column" :size="28" />
             <span class="mb-1 icon-rail-divider h-px bg-line"></span>
 
-            <!--
-                Bands (Work/Judge/Know) are separated by whitespace, not lines: hairlines mark only the two real
-                boundaries — identity, work areas, live runtime. Stays live through a daemon catch-up; cached views still work.
-            -->
+<!-- Bands (Work/Judge/Know) are separated by whitespace, not lines: hairlines mark only the two real boundaries — identity, work areas, live runtime. -->
             <div class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
                 <template v-for="(band, at) in tileBands" :key="band.group.id">
                     <!-- Air where a hairline used to be; aria-hidden, since the tiles already carry their own labels. -->
                     <span v-if="at > 0" class="icon-rail-band" aria-hidden="true"></span>
                     <template v-for="tile in band.items" :key="tile.to">
-                        <!--
-                            A held seat, not a tile yet (railMemory.ts): draws the glyph it will show, dim, so arrival doesn't
-                            shift the tiles below it. Not focusable or announced — there's nothing here to act on.
-                        -->
+<!-- A held seat, not a tile yet (railMemory.ts): draws the glyph it will show, dim, so arrival doesn't shift the tiles below it. -->
                         <span
                             v-if="tile.ghost"
                             class="icon-rail-tile flex items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40"
@@ -513,23 +490,11 @@ useKeybindings();
                             @contextmenu="onTileContextMenu(tile, $event)"
                         >
                             <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-[1.375rem]" />
-                            <!-- One badge for every tile, core or extension: see AreaTile.badge. The badge goes in
-                                 whole, undefined included, because ViewBadgeChip owns the test for whether there is
-                                 a chip AND the motion of it arriving: testing out here would unmount the plate in
-                                 the same tick the count cleared, with nothing left to animate away. No tooltip of
-                                 its own either: it would nest inside the tile's and open a second box on top of
-                                 it: its sentence rides the tile instead (see tileLabel). -->
+<!-- One badge for every tile, core or extension: see AreaTile.badge. -->
                             <ViewBadgeChip :badge="tile.badge" class="absolute right-0.5 top-0.5 text-[0.6rem]" />
-                            <!--
-                                Work in flight behind this tile (ViewBadge.running): its own corner, never the chip, so a
-                                branch that is red AND re-running says both at once instead of one evicting the other.
-                                Bottom right, the corner the chip and the note both leave free (see RunningMark).
-                            -->
+<!-- Work in flight behind this tile (ViewBadge.running): its own corner, never the chip. -->
                             <RunningMark v-if="tile.badge?.running !== undefined" class="absolute bottom-0.5 right-0.5" />
-                            <!--
-                                Opposite corner from the badge so the two never overlap; muted ink, no plate — it isn't an errand.
-                                Hidden from assistive tech: its text is already in the tile's aria-label (see railTileLabel).
-                            -->
+<!-- Opposite corner from the badge so the two never overlap; muted ink, no plate — it isn't an errand. -->
                             <span v-if="tile.note" class="absolute bottom-0.5 left-0.5 flex leading-none text-subtle" aria-hidden="true">
                                 <Icon :name="tile.note.icon" class="text-[0.6rem]" />
                             </span>
@@ -538,10 +503,7 @@ useKeybindings();
                 </template>
             </div>
 
-            <!--
-                Every unseated area; kept outside the scrolling run so it's never scrolled out of sight. Dashed like
-                the "+" below it (both are doors); no hover label while its menu is open, since they'd overlap.
-            -->
+<!-- Every unseated area; kept outside the scrolling run so it's never scrolled out of sight. -->
             <button
                 ref="moreTrigger"
                 type="button"
@@ -559,10 +521,7 @@ useKeybindings();
             <AnchoredOverlay v-model="moreOpen" :anchor="moreTrigger ?? undefined" side="right" cross="start">
                 <div class="flex w-48 flex-col gap-0.5 p-1">
                     <p v-if="moreTiles.length === 0" class="px-2 py-1.5 text-xs text-subtle">Every area is on the rail</p>
-                    <!--
-                        Two controls per row — go there, and pin it (keepOnRail) — as siblings, not nested, since a link
-                        can't contain a button without losing its own click-modifier and copy-link. Hover fill covers the wrapper.
-                    -->
+<!-- Two controls per row — go there, and pin it (keepOnRail) — as siblings, not nested. -->
                     <div
                         v-for="tile in moreTiles"
                         :key="tile.to"
@@ -626,10 +585,7 @@ useKeybindings();
                 >
             </RouterLink>
 
-            <!--
-                Live-runtime surfaces, like the terminal, so they sit in this cluster rather than the nav tiles.
-                Same AreaTile markup as those tiles, badged by what's still running (browserTile/subagentTile).
-            -->
+<!-- Live-runtime surfaces, like the terminal, so they sit in this cluster rather than the nav tiles. -->
             <RouterLink
                 v-for="tile in runtimeTiles"
                 :key="tile.to"
@@ -646,10 +602,7 @@ useKeybindings();
                 <RunningMark v-if="tile.badge?.running !== undefined" class="absolute bottom-0.5 right-0.5" />
             </RouterLink>
 
-            <!--
-                Toggles the one global terminal panel, badged with live sessions (background jobs excluded, they
-                never idle). Inert while unreachable — a PTY has no offline form — and absent below maintainer tier.
-            -->
+<!-- Toggles the one global terminal panel, badged with live sessions (background jobs excluded, they never idle). -->
             <button
                 v-if="canShip"
                 type="button"
@@ -669,10 +622,7 @@ useKeybindings();
                 >
             </button>
 
-            <!--
-                Every "add" here writes to the sandbox's deploy.config.ts or clones into /work, never platform
-                storage. Lights in the rail's one accent when active, like a nav tile — never a second color.
-            -->
+<!-- Every "add" here writes to the sandbox's deploy.config.ts or clones into /work, never platform storage. -->
             <RouterLink
                 to="/capabilities"
                 :class="[
@@ -689,10 +639,7 @@ useKeybindings();
             <AccountPanel />
         </nav>
 
-        <!--
-            A slot, not the panel: the panel mounts above the router and teleports in here (dockSlots.ts), so
-            one live instance serves the column, the floating window, and routes this shell doesn't cover.
-        -->
+<!-- This slot serves the panel's docked and floating instances. -->
         <div ref="chatDock" class="contents"></div>
 
         <main class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">

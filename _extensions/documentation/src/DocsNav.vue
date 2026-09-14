@@ -1,7 +1,4 @@
-<!--
-    Contents index for a document set. Draws no borders or lines of its own — <NavRail> owns that rule — separating groups by spacing and weight
-    instead. A repeated path prefix (e.g. `_sandbox/`) dims so the differing leaf name reads first.
--->
+<!-- Contents index for a document set. -->
 <script setup lang="ts">
 import { type NavGroup, NavRail, Row } from "@intentic/extension-ui";
 import { computed, nextTick, ref, watch, type ComponentPublicInstance } from "vue";

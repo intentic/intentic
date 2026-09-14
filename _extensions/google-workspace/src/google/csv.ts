@@ -1,10 +1,4 @@
-/* CSV BOTH WAYS, because a spreadsheet range is a grid and CSV is the only shape of grid that survives being
- * typed into a shell argument or read out of a file.
- *
- * Hand-rolled rather than depended on: this package ships as a deployed tree in the sandbox image, the whole
- * of what is needed is quoting and embedded newlines, and the alternative is a dependency in the image for
- * forty lines. RFC 4180 rules, a quote inside a quoted field is doubled, a field containing a comma, a quote
- * or a newline is quoted, and CRLF and LF are both accepted on the way in. */
+/* CSV conversion preserves spreadsheet ranges in both directions. */
 
 export const parseCsv = (text: string): string[][] => {
     const rows: string[][] = [];

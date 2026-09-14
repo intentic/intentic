@@ -1,8 +1,4 @@
-<!--
-    The one control allowed in <PageHeader #actions>: a labelled button for an action that commits something (`primary` marks the page's one call to
-    action), or a quiet icon-only button for one that doesn't (Refresh, a link). `hint` is the why, not the what; `href` renders an anchor carrying
-    the destination's own icon.
--->
+<!-- PageHeader actions contain one labelled commit button. -->
 
 <script setup lang="ts">
 import Button from "../primitives/Button.vue";

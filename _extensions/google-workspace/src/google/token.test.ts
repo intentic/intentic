@@ -52,8 +52,7 @@ describe("assertionFor", () => {
 });
 
 describe("tokenFailure", () => {
-    /* The failure this integration actually dies of, and the reason it gets its own sentence: Google says
-     * "Bad Request", and the cause is a consent screen left in Testing seven days ago. */
+    /* Token failures include Google's concrete cause. */
     it("names the 7-day Testing trap on a rejected refresh token", () => {
         const message = tokenFailure(connection, "user", "invalid_grant", "Bad Request");
         expect(message).toMatch(/"Testing" issues refresh tokens that die after 7 days/);

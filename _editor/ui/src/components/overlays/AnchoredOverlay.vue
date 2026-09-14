@@ -1,8 +1,4 @@
-<!--
-    The app's anchored overlay: a panel pinned to its trigger, teleported and measured against the trigger's own `ownerDocument`/`defaultView` rather
-    than the module-scope window, so it works in a popped-out panel. Dismissal is a stateless outside pointerdown; Escape binds in the bubble phase
-    so content can intercept it first.
--->
+<!-- Measure anchored overlays against their trigger's document. -->
 <script setup lang="ts">
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { type Cross, placeAnchored, type Placement, type Side } from "../../lib/anchorPlacement.js";
@@ -149,10 +145,7 @@ onBeforeUnmount(disarm);
 <template>
     <Teleport v-if="open && anchor !== undefined" :to="anchor.ownerDocument.body">
         <div ref="box" class="ui-anchored" :class="`ui-anchored-${placement?.side ?? side}`" :style="style" role="dialog" aria-modal="false">
-            <!--
-                This div is the surface that paints and clips; the frame around it must not, or it would cut off its
-                own arrow.
-            -->
+<!-- This div is the surface that paints and clips; the frame around it must not, or it would cut off its own arrow. -->
             <div class="ui-anchored-surface">
                 <slot />
             </div>

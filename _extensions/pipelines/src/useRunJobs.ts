@@ -3,8 +3,7 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
 
-/* Lazily fetches ALL jobs for a single pipeline run when `enabled` flips on (the user expanded that row).
- * Not polled, the run's terminal state is stable and the cost of one extra call per expand is negligible. */
+/* Lazily fetches ALL jobs for a single pipeline run when `enabled` flips on (the user expanded that row). */
 
 export function useRunJobs(run: Ref<PipelineRun | undefined>) {
     const api = host();

@@ -108,10 +108,7 @@ onBeforeUnmount(() => (saving.value = false));
 <template>
     <!-- The document opens as a `drawer`: its own heading and margins, not a fact hanging off the row's title. -->
     <DisclosureRow density="compact" body="drawer" :open="expanded" @update:open="emit(`toggle`)">
-        <!--
-            Outside the row's button (`#before`): a checkbox nested in one is invalid and unusable, and ticking (narrows the run) differs from
-            opening (writes the story). Small and quiet by default, since almost none of this column is ever ticked; full contrast returns on hover.
-        -->
+        <!-- The selection checkbox stays outside the row button. -->
         <template #before>
             <Checkbox
                 :model-value="selected"
@@ -126,30 +123,18 @@ onBeforeUnmount(() => (saving.value = false));
         <template #title>
             <!-- Open, the document below already carries the title, so the row shows the file path instead of repeating it. -->
             <span v-if="expanded" class="block min-w-0 truncate font-mono text-2xs font-normal text-subtle">{{ story.path }}</span>
-            <!--
-                One step off white, full white on hover: the app's own weight for a scanned list (file tree, search, commits), so a row carrying a
-                failed verdict still stands out. `muted` reads as a fact about a row, not its subject.
-            -->
+            <!-- Story rows use the shared scanned-list surface and hover state. -->
             <span v-else class="block min-w-0 truncate font-normal text-content/80 group-hover:text-content">{{ story.title }}</span>
         </template>
 
-        <!--
-            Verdict before the count, count in a fixed-width cell, this list's own trailing-column recipe; reversed, the count's position moved with
-            whether a badge was present, giving the column a ragged edge.
-        -->
+        <!-- Verdict precedes the count, which uses a fixed-width trailing cell. -->
         <template #meta>
             <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" />
-            <!--
-                Criteria are a story's readiness, not its correctness; a story with none still runs. Stated quietly, so a fresh workspace doesn't
-                teach people to ignore the colour.
-            -->
+            <!-- Criteria are a story's readiness, not its correctness; a story with none still runs. -->
             <span class="w-20 shrink-0 text-right">{{ authored === 0 ? `no criteria` : `${authored} criteria` }}</span>
         </template>
 
-        <!--
-            Its own margins and a measured column (68ch, prose.css), not the list's row padding, since an unbounded 72rem card ran criteria past a
-            readable line length.
-        -->
+        <!-- Report details use the shared measured column, not row padding. -->
         <template #below>
             <!-- Escape closes the row, which unmounts the document and triggers its own flush, so leaving never loses an edit. -->
             <div class="py-2 sm:px-2" @keydown.esc="emit(`toggle`)">
@@ -183,10 +168,7 @@ onBeforeUnmount(() => (saving.value = false));
                     <Notice v-if="failure" :of="noticeOf(failure)" class="mt-4" />
                 </div>
 
-                <!--
-                    Outside the measured column: kept inside the 68ch rule, these buttons floated in empty space either side and read as a stray
-                    cluster.
-                -->
+                <!-- Report actions stay inside the measured column. -->
                 <div class="mt-6 flex items-center justify-end gap-2 border-t border-line/60 pt-3">
                     <!-- Narrows the run to this story; not a second way to start one, the run pill still owns the gate and the label. -->
                     <Button label="Run only this" size="small" severity="secondary" @click="emit(`run`)">

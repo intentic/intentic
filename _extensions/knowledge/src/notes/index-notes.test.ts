@@ -117,8 +117,7 @@ describe(`overviewOf`, () => {
         expect(overview.untyped).toEqual([`stray-thought.md`]);
     });
 
-    /* The vocabulary is a habit, not a gate: an undeclared word is REPORTED and the note holding it is still
-     * perfectly readable. This is what lets an agent capture something new mid-task without stalling. */
+/* The vocabulary is a habit, not a gate: an undeclared word is REPORTED and the note holding it is still perfectly readable. */
     it(`reports a kind and a relationship the vocabulary has not adopted`, () => {
         const drifted = buildIndex([...NOTES, file(`vendors/acme.md`, `---\ntype: vendor\ninvoices: ["[[Intentic]]"]\n---\n`)]);
         const report = overviewOf(drifted);

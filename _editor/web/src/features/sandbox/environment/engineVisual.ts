@@ -1,8 +1,7 @@
 import type { EngineId } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 
-/* THE MARK ON AN ENGINE ROW, the same question the environment and skills lists already answer: which program is
- * this, at a glance, without reading five similar names down a column. */
+/* THE MARK ON AN ENGINE ROW, the same question the environment and skills lists already answer: which program is this, at a glance. */
 
 export interface EngineVisual {
     readonly logo?: string;

@@ -4,25 +4,13 @@ import { Image } from "astro:assets";
 import { shotAsset, SHOT_WIDTHS } from "../../lib/shots";
 import Window from "../Window.astro";
 
-/* One screenshot, framed — and the frame is the site's own, the same carved window the home page stands
- * its three hero surfaces in. It used to draw its own: a rounded box with three grey studs and the route
- * on a pill. The studs went, for the reason set out on `Window`: a row of dots piles a second ornament
- * system into the same small square the turned elbow occupies. The route stayed — a reader can go and open
- * that screen in the live demo — and moved to the far end of the ledge, clear of both corners.
- *
- * The phone frame stays a separate shape, and keeps its round corners, because it is not a frame around a
- * picture — it IS the object the picture is of, and phones are round. `bare` is for panels that are already
- * a window of their own (the docked chat), so they take the hairline and the shadow and no ledge. */
+/* One screenshot, framed — and the frame is the site's own, the same carved window the home page stands its three hero surfaces in. */
 
 interface Props {
     shot: ProductShot;
     /** The hero is the page's LCP; everything below it waits until it is scrolled near. */
     priority?: boolean;
-    /**
-     * How wide the page paints this shot, so the browser can pick a rung of its srcset. The frame cannot
-     * know: a hero owns the whole column and a paired block owns half of it. So the page says. The phone
-     * frame is the exception below: it caps its own width, so it describes itself.
-     */
+/** How wide the page paints this shot, so the browser can pick a rung of its srcset. */
     sizes: string;
     class?: string;
 }

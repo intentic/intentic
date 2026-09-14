@@ -1,7 +1,4 @@
-<!--
-    The app's action button: PrimeVue's, unchanged, plus automatic press-locking when the `@click` handler returns a promise that outlives a beat.
-    `loading`/`disabled` from outside still win. A default slot replaces the whole body, so the spinner overlays it instead of swapping the label.
--->
+<!-- The app's action button: PrimeVue's, unchanged, plus automatic press-locking when the `@click` handler returns a promise that outlives a beat. -->
 <script setup lang="ts">
 import PrimeButton from "primevue/button";
 import { computed, useAttrs, useSlots } from "vue";
@@ -38,15 +35,9 @@ const ownSpinner = computed(() => slots[`loadingicon`] === undefined);
         <template v-if="ownSpinner" #loadingicon><Icon name="spinner" spin /></template>
         <template v-else #loadingicon="slotProps"><slot name="loadingicon" v-bind="slotProps ?? {}" /></template>
         <template v-if="wrapped" #default>
-            <!--
-                `display: contents` keeps the children as direct flex items; `visibility` hides them so the button
-                doesn't resize when the spinner appears.
-            -->
+<!-- `display: contents` keeps the children as direct flex items; `visibility` hides them so the button doesn't resize when the spinner appears. -->
             <span class="contents" :class="shown ? `invisible` : ``"><slot /></span>
-            <!--
-                Absolutely centred over the button so the hidden content keeps its width; `ui-press-spinner` is now
-                only the press-lock tests' hook, not a style.
-            -->
+<!-- Absolutely centred over the button so the hidden content keeps its width; `ui-press-spinner` is now only the press-lock tests' hook, not a style. -->
             <span v-if="shown" class="ui-press-spinner absolute inset-0 flex items-center justify-center"><Icon name="spinner" spin /></span>
         </template>
     </PrimeButton>

@@ -28,9 +28,7 @@ describe(`setupRedirect`, () => {
         expect(setupRedirect([sandbox({ id: `a`, ...CONNECTED })])).toBeUndefined();
     });
 
-    /* The regression this file exists for. /setup creates the row when the name is typed, so a user who names a
-     * sandbox and closes the tab owns one that has never had a daemon, and the old `length === 0` test let them
-     * back into a workspace shell that could only ever paint "connecting" at a machine nobody started. */
+/* The regression this file exists for. */
     it(`sends a named-but-never-started sandbox back to its own unfinished setup`, () => {
         expect(setupRedirect([sandbox({ id: `pending` })])).toEqual({ path: `/setup`, query: { sandbox: `pending` } });
     });

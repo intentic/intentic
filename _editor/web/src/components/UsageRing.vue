@@ -105,10 +105,7 @@ onBeforeUnmount(hide);
         <span class="sr-only">{{ activity ? `${usageDetail(headroom)} ${activity}.` : usageDetail(headroom) }}</span>
 
         <Teleport v-if="open && anchor !== undefined" :to="anchor.ownerDocument.body">
-            <!--
-                aria-hidden: the sr-only line already says this; pointer-events-none: never eat the hover that raised
-                it.
-            -->
+<!-- aria-hidden: the sr-only line already says this; pointer-events-none: never eat the hover that raised it. -->
             <div
                 ref="box"
                 class="ui-anchored pointer-events-none"
@@ -117,19 +114,13 @@ onBeforeUnmount(hide);
                 aria-hidden="true"
             >
                 <div class="ui-anchored-surface w-60 gap-3 px-3 py-2.5 text-left">
-                    <!--
-                        Age sits in the header, not the footer: every figure below is a floor once stale, qualifying
-                        the whole card.
-                    -->
+<!-- Age sits in the header, not the footer: every figure below is a floor once stale, qualifying the whole card. -->
                     <div class="flex items-baseline justify-between gap-2">
                         <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Plan limits</span>
                         <span class="shrink-0 text-2xs text-subtle">measured {{ formatAge(headroom.measuredAt) }}</span>
                     </div>
 
-                    <!--
-                        One line per pool: pools are independently gated, so which is about to bite can't come from one
-                        number.
-                    -->
+<!-- One line per pool: pools are independently gated, so which is about to bite can't come from one number. -->
                     <div v-for="pool in headroom.pools" :key="pool.kind" class="flex flex-col gap-1">
                         <div class="flex items-baseline justify-between gap-2">
                             <span class="min-w-0 truncate text-xs" :class="pool === headroom.binding ? `font-medium text-content` : `text-muted`">

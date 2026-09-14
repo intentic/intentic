@@ -654,7 +654,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         usageStore: accountUsage,
     });
     // OpenCode and the Gemini slice reference each other; safe since the model read runs lazily, after returning.
-    // oxlint-disable-next-line prefer-const -- openCode's config closure below reads `gemini` before this is assigned, which is what the definite-assignment `!` is for. There is no initialiser to merge into.
+    // oxlint-disable-next-line prefer-const -- The config closure reads this binding before assignment.
     let gemini!: GeminiSlice;
     const openCode = createOpenCodeService(authRoot, {
         // Where a non-isolated conversation runs, the one directory whose permission watcher is worth opening at boot.

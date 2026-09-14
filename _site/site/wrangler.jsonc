@@ -10,39 +10,12 @@
     // handed out https://intentic.dev/device.ps1, while the site still served /computer.ps1 and answered the new
     // path with the 404 page — piped straight into somebody's PowerShell.
     "name": "intentic",
-    /* WHICH ACCOUNT THAT NAME LIVES IN. The API token this repo deploys with can see two accounts, and wrangler
-     * will not pick between them without a terminal: a deploy from CI or from an agent's shell stops with "More
-     * than one account available but unable to select one in non-interactive mode" AFTER the astro build, which
-     * reads as a build that failed at the last step. Worse is the version where somebody exports
-     * CLOUDFLARE_ACCOUNT_ID by hand and gets the other account, which is how a Worker called `intentic` comes to
-     * exist twice, in two accounts, with the live domain bound to only one of them.
-     *
-     * This is the zone's own account (the one intentic.dev is in), written down rather than left to the
-     * environment. An account id is an identifier, not a credential — the token stays in the environment. */
+    /* This account id selects the account containing intentic.dev; the token remains in the environment. */
     "account_id": "14aaba5ad087e7ed506d1470b14489ab",
     "compatibility_date": "2026-03-26",
     "main": "./worker.ts",
-    /* WHAT PRODUCES ./dist, AND NOTHING ELSE. `build.command` is the step wrangler runs BEFORE it deploys, so a
-     * `wrangler deploy` inside it re-enters the same command: deploy -> build -> deploy -> build, an astro build
-     * per level, until something is killed. It read `astro build && wrangler deploy && node
-     * scripts/submit-indexnow.mjs` from 496ea7338, which is a description of the DEPLOY sequence written into the
-     * BUILD hook, and it meant no `wrangler deploy` from this package could ever terminate.
-     *
-     * That is the other half of why intentic.dev sat eight days behind main: the name below pointed at a Worker
-     * that does not exist, and this made the command that would have said so never return.
-     *
-     * The deploy sequence it was reaching for is a deploy concern and lives in package.json's `deploy` script,
-     * where IndexNow already runs after wrangler so the key file and the changed pages are live before Bing is
-     * pinged. */
-    /* `astro build` COPIES public/ INTO dist/, IT DOES NOT PRODUCE IT. /demo/ is a second Vite app whose output lands
-     * in public/demo/, which is gitignored and therefore absent from every fresh checkout: without the build below,
-     * this command produces a dist with no demo in it and says nothing, which is how the 2026-09-07 deploy replaced
-     * the demo the landing page's own call to action links to with the 404 page.
-     *
-     * Vite is invoked directly rather than through `pnpm --filter @intentic/demo build`, which runs pnpm's
-     * injected-dependency sync after the script and fails the whole command when that sync cannot hardlink
-     * (cross-device node_modules, as in an Intentic sandbox) — a deploy refused over an output that is already
-     * correct. */
+    /* The build command only builds; deployment and post-deploy indexing run separately. */
+    /* Build the demo into public/demo before Astro copies public into dist. */
     "build": {
         "command": "pnpm -C ../demo exec vite build && astro build",
     },

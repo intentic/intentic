@@ -1,11 +1,6 @@
 import { DEFAULT_MODELS, DEFAULT_REPLY, startFakeUpstream } from "./server.ts";
 
-/* The container's entrypoint. Node 24 runs TypeScript by erasing its types, which is why this package has no
- * build step and no dependencies at all: the image is the stock node base with two `.ts` files copied in. That
- * is the whole reason it can be stood up inside a test in a second.
- *
- * Every setting is an environment variable because the only caller is a container start. A fixed port, unlike
- * the library's default of 0, because a container is addressed by name and port from the outside. */
+/* The container's entrypoint. */
 
 const list = (raw: string | undefined): string[] =>
     (raw ?? ``)

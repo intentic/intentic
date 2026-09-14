@@ -2,9 +2,7 @@ import { expect, test } from "vitest";
 import type { AgentsRegistry } from "./registry/agents-registry.js";
 import { checks } from "./invariant.js";
 
-/* The failure the user sees: a card at rest on the fleet board while the turn behind it spends the owner's
- * allowance. The turn path and the registry each keep their own record of "running", and nothing reconciles
- * them: a begin that did not happen leaves the two describing different worlds. */
+/* The failure the user sees: a card at rest on the fleet board while the turn behind it spends the owner's allowance. */
 
 const fail = (message: string): never => {
     throw new Error(message);

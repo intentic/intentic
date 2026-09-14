@@ -43,10 +43,7 @@ const harness = computed<AgentHarness>(() => pin?.harness ?? `native`);
 
 const capabilities = computed(() => capabilitiesOf(provider.value, harness.value));
 
-/* THE THREE CONTROLS FOR HOW THIS ENTRY IS RUN — effort, extended thinking, speed — are the shell picker's own
- * (pickerRunSettings.ts), because they ask the same questions about the same kind of selection. They were
- * written out twice, here and in HostPickerBody, down to the clamp rule and the meter itself.
- * `hasContent` is what the footer below needs before it draws a border. */
+/* THE THREE CONTROLS FOR HOW THIS ENTRY IS RUN — effort, extended thinking, speed — are the shell picker's own (pickerRunSettings.ts). */
 const { hasContent: runSettingsShown } = usePickerRunSettings(
     provider,
     model,
@@ -82,13 +79,7 @@ const configure = (patch: Partial<ModelPin>): void => {
     }
 };
 
-/* A pick answers and closes, like the composer; the controls below write through and stay open as entry
- * settings. Effort survives a re-point; harness, thinking and fast speed don't, since they belong to the
- * provider, not the pin.
- *
- * A PIN IS BORN WITH ITS RUN SETTINGS ALREADY SET (`defaultRunSettings`), because the panel that configures it
- * has no way to say "leave it to the model" and a reader must never be shown a state the entry does not hold.
- * They go under the pick, so anything carried across the re-point still wins. */
+/* A pick answers and closes, like the composer; the controls below write through and stay open as entry settings. */
 const pick = (entry: PickerEntry): void => {
     const kept = pin?.provider === entry.provider ? pin : { effort: pin?.effort };
     emit(`pick`, pruned({ ...defaultRunSettings(), ...kept, provider: entry.provider, model: entry.value }));
@@ -116,9 +107,7 @@ const unpickable = (entry: PickerEntry): boolean =>
                     </span>
                 </div>
 
-                <!-- Reasoning effort, extended thinking and speed: the shell picker's own controls, shared
-                     verbatim (PickerRunSettings), because a reader configuring a pinned entry here and a run over there
-                     is answering the same three questions about the same kind of selection. -->
+<!-- Reasoning effort, extended thinking and speed: the shell picker's own controls, shared verbatim (PickerRunSettings). -->
                 <PickerRunSettings
                     :provider="provider"
                     :model="model"
@@ -129,10 +118,7 @@ const unpickable = (entry: PickerEntry): boolean =>
                     @update="configure($event)"
                 />
 
-                <!--
-                    Harness axis: the provider's own runtime, or its model through Claude Code. Separate from the model since the same subscription
-                    ids run under either.
-                -->
+                <!-- Harness axis: the provider's own runtime, or its model through Claude Code. -->
                 <div v-if="harnessChoosable" class="flex items-center justify-between gap-2">
                     <span class="text-2xs font-medium uppercase tracking-wide text-muted">Harness</span>
                     <div class="flex items-center gap-1">
@@ -150,10 +136,7 @@ const unpickable = (entry: PickerEntry): boolean =>
                     </div>
                 </div>
 
-                <!--
-                    Matters more here than in the composer: nobody is watching these runs, so a limitation like "no mid-turn steering" won't be
-                    discovered by trying it.
-                -->
+                <!-- Model limits must be visible before an unattended run starts. -->
                 <div v-if="limitations.length > 0" class="flex items-center justify-between gap-2">
                     <span class="text-2xs font-medium uppercase tracking-wide text-muted">Not available here</span>
                     <InfoHint label="What isn't available here" :text="`${limitations.length}`" class="shrink-0">

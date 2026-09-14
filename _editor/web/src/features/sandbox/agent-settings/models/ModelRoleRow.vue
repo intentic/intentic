@@ -62,15 +62,9 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
 </script>
 
 <template>
-    <!--
-        Spine follows what's below: a pinned list, or the note slot; neither means nothing draws. `#below` needs the indent the old checkbox column
-        gave for free, now that the mark swap replaced it.
-    -->
+    <!-- Spine follows what's below: a pinned list, or the note slot; neither means nothing draws. -->
     <Row :as="selectable ? `label` : `div`" :selected="selected" :spine="pinned || $slots[`note`] !== undefined" :description="role.blurb">
-        <!--
-            Sized from the tier's own `mark`, not a literal number, so the lead column matches every row at every density; the tick centers on the
-            glyph rather than sitting beside it.
-        -->
+        <!-- The lead size comes from the row tier so density stays consistent. -->
         <template #lead="{ mark, iconClass }">
             <span class="relative flex shrink-0 items-center justify-center" :style="{ width: `${mark}px`, height: `${mark}px` }">
                 <Icon :name="glyph" aria-hidden="true" class="text-muted transition-opacity" :class="[iconClass, glyphClass]" />
@@ -87,10 +81,7 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
             </span>
         </template>
 
-        <!--
-            flex-wrap: a long job label may push the chip to its own line before pushing off the row. The chip sits snug against the name rather than
-            below it, so it doesn't read as a heading for the description.
-        -->
+        <!-- flex-wrap: a long job label may push the chip to its own line before pushing off the row. -->
         <template #title>
             <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                 <span class="min-w-0">{{ role.label }}</span>
@@ -106,10 +97,7 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
             />
         </template>
 
-        <!--
-            The row is a `<label>`: without this, pressing a control under the headline (re-point, reorder, remove) would also tick the job. `<Row>`
-            does the same for `#control`; `#below` is the caller's to guard.
-        -->
+        <!-- Controls inside the label must not toggle the role. -->
         <template v-if="pinned || $slots[`note`]" #below>
             <div class="flex flex-col gap-2" @click.stop>
                 <!-- Each entry shows its tier beside the model; `noteThinking` flags one-shots, where reasoning adds latency. -->

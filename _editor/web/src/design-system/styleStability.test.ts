@@ -2,9 +2,7 @@
 import { stabilizeStyleWrites } from "@intentic/ui/style-stability";
 import { afterEach, expect, it } from "vitest";
 
-/* What Vite's dev client does on every hot CSS update, verbatim (client.mjs `updateStyle`): find the style node
- * for this id and assign the new text over the old. Tailwind re-pushes the app's whole stylesheet whenever any
- * scanned source file changes, so the text is usually the text that is already there. */
+/* Hot CSS updates replace the style node's text in place. */
 const updateStyle = (id: string, content: string): void => {
     const existing = document.head.querySelector<HTMLStyleElement>(`style[data-vite-dev-id="${id}"]`);
     if (existing === null) {

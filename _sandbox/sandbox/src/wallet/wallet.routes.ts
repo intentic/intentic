@@ -9,14 +9,7 @@ import { relayWalletSign } from "./wallet-signer.js";
 import { spentTodayAtomic } from "./wallet-ledger.js";
 import { atomicToUsd, usdcBalance, usdcNetworkOf, usdToAtomic } from "./x402.js";
 
-/* The `wallet` CLI's three routes, the agent-facing surface of the sandbox wallet, scoped to the agent
- * token in auth/grants.ts like `services` and `capabilities`.
- *
- * `status` and `history` are reads an agent plans around: what the wallet holds, what today's budget has
- * left, what was paid and to whom. `fetch` is the one door money can leave through, and the whole consent
- * story lives behind it (wallet/payment-offer.ts): the daemon makes the request, parses the endpoint's own
- * 402, checks the owner's policy, raises the card, signs at the platform, retries, and answers with the paid
- * response. Nothing here reads a key, because the container never holds one. */
+/* Wallet routes are scoped to the agent token. */
 
 const walletEntry = async (services: Services): Promise<WalletConfig | undefined> => {
     const entry = (await services.capabilities.list()).find((capability) => capability.kind === "wallet");

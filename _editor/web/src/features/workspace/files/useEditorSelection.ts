@@ -1,9 +1,6 @@
 import { ref } from "vue";
 
-/* The live Monaco selection, as a module-level singleton (like useWorkspaceTabs): CodeView reports it, the
- * chat composer's editor-context chip reads it. Only one code editor is mounted at a time (the active
- * workspace tab), so a single slot is enough, clear() is path-guarded so a fast tab switch's unmount can't
- * wipe the successor's report. */
+/* The live Monaco selection, as a module-level singleton (like useWorkspaceTabs): CodeView reports it, the chat composer's editor-context chip reads it. */
 
 export interface EditorSelection {
     // Workspace-relative path of the file the selection lives in.

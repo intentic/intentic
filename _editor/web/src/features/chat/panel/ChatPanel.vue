@@ -219,25 +219,15 @@ const seamWidth = computed<number>({
 </script>
 
 <template>
-    <!--
-        Docked, the panel is a column (bar on top, pane below); on a wide surface the bar becomes a rail on the left.
-        Left, in both wide forms, so navigation stays before content and the transcript's scrollbar keeps the window's
-        own right edge — the target a pointer can hit without aiming.
-    -->
-    <!--
-        `--capacity-rail` is the width the rail stands in, published here since the rail is lifted out of the row (so
-        the transcript's scroller can reach the window edge); zero when not drawn, so both states are one rule.
-    -->
+<!-- Docked, the panel is a column (bar on top, pane below); on a wide surface the bar becomes a rail on the left. -->
+<!-- `--capacity-rail` reserves the out-of-flow rail width without widening the transcript. -->
     <div
         ref="root"
         class="chat-panel lane-ground-card relative flex h-full min-h-0 overflow-hidden bg-card"
         :class="chatWide ? 'flex-row' : 'flex-col'"
         :style="{ '--capacity-rail': showsCapacity ? uiLength(CAPACITY_RAIL_PX) : `0px` }"
     >
-        <!--
-            An overlay seam (`place="edge"`), not in-flow, since docked the panel's own axis is the bar-then-panes column,
-            not this border. `pane="after"`: the chat is right of the seam, so dragging left widens it.
-        -->
+<!-- An overlay seam (`place="edge"`), not in-flow, since docked the panel's own axis is the bar-then-panes column, not this border. -->
         <ResizeSeam
             v-if="!chatWide && !mobile"
             v-model="seamWidth"
@@ -255,12 +245,7 @@ const seamWidth = computed<number>({
         </template>
 
         <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-            <!--
-                The run bar: drawn wherever a run drives the panes (barRun), not only where its diagram can show. The back
-                arrow is the whole control where the diagram exists; docked, there's no diagram to point at, so the bar carries
-                the run's own glyph and the × that ends it. Above the panes, since the run owns every column, not just the
-                focused one.
-            -->
+<!-- The run bar: drawn wherever a run drives the panes (barRun), not only where its diagram can show. -->
             <div v-if="barRun" class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
                 <Button
                     v-if="shownRun && !showingGraph"
@@ -290,21 +275,12 @@ const seamWidth = computed<number>({
                 </button>
             </div>
 
-            <!--
-                The diagram takes the whole pane area — it's the map of those columns, so showing both answers one question
-                twice.
-            -->
+<!-- The diagram takes the whole pane area — it's the map of those columns, so showing both answers one question twice. -->
             <ChatRunGraph v-if="showingGraph && shownRun" :run="shownRun" class="min-h-0 flex-1" @open="openRunColumn" />
 
-            <!--
-                The panes share the room equally (mirroring the terminal panel's split cells) until the floor, then scroll
-                sideways instead of crushing.
-            -->
+<!-- The panes share the room equally (mirroring the terminal panel's split cells) until the floor, then scroll sideways instead of crushing. -->
             <div v-else ref="paneRow" class="chat-panes flex min-h-0 min-w-0 flex-1 overflow-x-auto" :style="{ '--min-pane': minPaneLength }">
-                <!--
-                    A pane's own × only appears in a split: with one column, closing it is the panel's job, not a control living
-                    inside the pane. The panel answers the press, same as `focus` — which chats are on screen is the frame's state.
-                -->
+<!-- A pane's own × only appears in a split: with one column, closing it is the panel's job, not a control living inside the pane. -->
                 <ChatPane
                     v-for="conversation in shown"
                     :key="conversation.conversationId"
@@ -317,21 +293,13 @@ const seamWidth = computed<number>({
             </div>
         </div>
 
-        <!--
-            What the reader can run next, in room the panes have no use for; belongs to the window, not any one chat (like
-            the chat list on the other edge). Yields to the panes rather than competing. Out of flow, drawn over the
-            transcript's own margin, so the scrollbar keeps the window's edge.
-        -->
+<!-- What the reader can run next, in room the panes have no use for; belongs to the window, not any one chat (like the chat list on the other edge). -->
         <ChatCapacityRail v-if="showsCapacity" />
     </div>
 </template>
 
 <style scoped>
-/*
- * Equal columns, hairline between, nothing ranking one above another: a focused-pane accent used to imply
- * keystroke routing that the caret already shows, and it made a side-by-side comparison read as a main pane and a
- * spare. Panes are equals; the panel draws them that way.
- */
+/* Equal columns, hairline between, nothing ranking one above another: a focused-pane accent used to imply keystroke routing that the caret already shows. */
 .chat-panes :deep(.chat-pane) {
     flex: 1 1 0;
     min-width: var(--min-pane);
@@ -339,8 +307,5 @@ const seamWidth = computed<number>({
 .chat-panes :deep(.chat-pane + .chat-pane) {
     border-left: 1px solid var(--color-line);
 }
-/*
- * The headroom rail's width isn't taken from this row — it's drawn over the margin, and the bordering pane pads
- * by `--capacity-rail` (rules live in chat.css, qualified with `.chat-panel` to outrank the basis above).
- */
+/* The pane reserves the out-of-flow rail width through `--capacity-rail`. */
 </style>

@@ -402,9 +402,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         } else {
             automation.guard = form.guard.trim();
         }
-        // Blank ⇒ absent ⇒ the account with the most headroom. An account id only makes sense for a single provider, so
-        // a ladder spanning providers clears the pin instead of naming an account the wrong provider has never heard
-        // of.
+        // Clear an account pin when model choices span providers.
         const oneProvider = new Set(form.models.map((pin) => pin.provider)).size <= 1;
         if (form.account === `` || !oneProvider) {
             delete automation.account;

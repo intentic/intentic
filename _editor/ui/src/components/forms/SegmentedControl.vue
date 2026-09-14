@@ -1,7 +1,4 @@
-<!-- SegmentedControl control: a row of small toggle pills for switching between a few exclusive views
-     (Preview/Source, Linux/Windows, Name/Content). The active pill wears `.ui-pill-on`, the design system's
-     one answer for "this is the one you are on" (styles/utilities.css); idle pills are muted text. Native
-     buttons keep it keyboard-accessible without ARIA wiring. -->
+<!-- SegmentedControl control: a row of small toggle pills for switching between a few exclusive views (Preview/Source, Linux/Windows, Name/Content). -->
 <script setup lang="ts" generic="T extends string">
 import type { IconName } from "../../icons/iconSets.js";
 import { useDevice } from "../../composables/useDevice.js";
@@ -64,12 +61,7 @@ const nameOf = (option: { label: string; title?: string; markTitle?: string; mar
                 // over the pill beside it: the one shape where a bigger hit area buys a wrong press.
                 stretch ? `` : `touch-target`,
                 stretch
-                    ? /* THE FULL-WIDTH TRACK STILL HAS A DENSITY, which it used to ignore: `size` only reached
-                       * the compact pill, so any surface wanting the track's shape was handed a thumb-sized one
-                       * whether or not a thumb was ever going to press it. `sm` keeps the 36px target the setup
-                       * flow's steps need on a phone; `xs` is the same track at a pointer's height, for a
-                       * toggle that owns its row in a narrow column and would otherwise spend a third of that
-                       * column's height saying two words. */
+                    ? /* Full-width tracks use size-specific hit heights. */
                       [`flex flex-1 items-center justify-center text-center`, size === `xs` ? `min-h-6 px-1.5 text-2xs` : `min-h-9 px-2 text-xs`]
                     : // A compact pill is ONE line, always. It rides fixed-height toolbar rows (.view-header is
                       // 2.25rem), so a pill that breaks doesn't merely look wrong: it stands taller than the bar

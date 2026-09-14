@@ -1,7 +1,4 @@
-/* The shared fetch cache: raw HTML keyed by (URL, render mode), never the derived markdown — one cached
- * fetch serves every transform (--raw, --query, different budgets), and parallel subagents researching the
- * same site stop paying the network twice. Entries are single JSON files under a two-hex fan-out; a stale
- * or unreadable entry is a miss, never an error, because the network is the fallback that always exists. */
+/* Cache raw HTML by URL and render mode; transforms never share derived markdown. */
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";

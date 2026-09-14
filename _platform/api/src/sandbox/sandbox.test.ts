@@ -352,10 +352,7 @@ describe(`a metered owner whose month is spent`, () => {
     });
 });
 
-/* THE CONNECT TOKEN STAYS WITH THE OWNER. sandbox.list hands the browser one row per sandbox the caller can
- * reach, and every row used to carry the decrypted connect token: a `viewer` invite was therefore worth the
- * owner's whole platform-side standing (the trial allowance, wallet signatures, the announce). A member's row
- * now says null; the daemon a member reaches is bound already and never asks for the token. */
+/* THE CONNECT TOKEN STAYS WITH THE OWNER. */
 describe(`sandbox.list and the connect token`, () => {
     it(`decrypts the token onto the owner's rows and withholds it from a member's`, async () => {
         const prisma = fakePrisma({
@@ -374,9 +371,7 @@ describe(`sandbox.list and the connect token`, () => {
     });
 });
 
-/* DELETING A HOSTED SANDBOX CHARGES ITS OPEN STRETCH FIRST. The meter reads an awake machine's minutes live off
- * its row (hosted-usage.ts), so the cascade that took the row took the minutes with it, and
- * provision → work → delete → provision again was a free lane with no ceiling at all. */
+/* DELETING A HOSTED SANDBOX CHARGES ITS OPEN STRETCH FIRST. */
 describe(`sandbox.delete on a hosted sandbox`, () => {
     const hostedConfig = {
         webOrigin: `https://app.test`,

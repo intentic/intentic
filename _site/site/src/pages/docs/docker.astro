@@ -2,13 +2,7 @@
 import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
 import DocsLayout from "../../components/docs/DocsLayout.astro";
 
-/* THE ANATOMY PAGE, not a fifth install path. Quickstart owns "how do I get one running" for all four
- * routes; this page owns "what did that create, and how do I live with it": the object names every route
- * derives identically, where the data sits, the capability posture, and the lifecycle helpers.
- *
- * The names, ports and flags below come from @intentic/sandbox-run (the run contract) and were rendered from
- * it rather than typed, for the reason that module exists at all: hand-copied run shapes drift, and a drifted
- * doc teaches someone to build a sandbox that is quietly missing something. */
+/* THE ANATOMY PAGE, not a fifth install path. */
 
 const inspect = `# Everything this machine's sandboxes created, by name.
 docker ps -a  --filter name=intentic-sandbox
@@ -126,10 +120,7 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
         <code>rm -rf</code>-ing its workspace cannot reach the history that would let you recover from it. Both survive a container being removed and recreated, which is why update and rebuild can swap the image under a sandbox without touching your files.
     </p>
 
-    {/* WRITTEN BECAUSE THE DOCS DID NOT SAY IT. Searching these docs for "backup" returned nothing, on a product
-        whose central promise is that your files are yours and outlive everything. There is no intentic backup
-        feature to describe, and inventing one would be worse than the gap. So this says the true thing: the
-        volumes are ordinary Docker volumes and your own tooling already knows how to copy one. */}
+    {/* State that backups use ordinary Docker-volume tooling because intentic provides no backup service. */}
     <h3>Backing them up</h3>
     <p>
         There is no intentic backup service, and there is nothing for one to do: these are ordinary named Docker volumes, so whatever you

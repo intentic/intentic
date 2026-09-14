@@ -1,8 +1,4 @@
-<!--
-    Per-capability credential help (scopes, how-to-get-it steps, a link to the provider's token page), read from the card's `guide` metadata. Callers
-    must not render this for a card with no guide. Always visible beside the form, never behind a disclosure; backticked literals in the guide text
-    render as chips.
--->
+<!-- Per-capability credential help (scopes, how-to-get-it steps, a link to the provider's token page), read from the card's `guide` metadata. -->
 <script setup lang="ts">
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { computed } from "vue";
@@ -37,12 +33,7 @@ const steps = computed<readonly string[]>(() => entry.guide?.steps ?? []);
 
 <template>
     <div class="ui-card flex flex-col gap-3">
-        <!--
-            The link leads, since opening the provider's token page is the actual first step; the numbered steps are
-            the
-            fallback. Hidden until a self-hosted card's instance URL is filled in, since there's no host yet to send
-            anyone to.
-        -->
+<!-- The link leads, since opening the provider's token page is the actual first step; the numbered steps are the fallback. -->
         <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <p class="text-sm font-semibold text-content">How to get it</p>
             <a
@@ -56,11 +47,7 @@ const steps = computed<readonly string[]>(() => entry.guide?.steps ?? []);
             </a>
         </div>
 
-        <!--
-            Permissions line comes before the steps, since it decides whether the token about to be made is the right
-            one.
-            Its icon matches <CapabilityEffects>'s glyph size/tone so it reads as labelling a fact, not decorating one.
-        -->
+<!-- Permissions line comes before the steps, since it decides whether the token about to be made is the right one. -->
         <p v-if="scopes" class="flex items-start gap-2 text-xs leading-relaxed text-muted">
             <Icon name="key" class="mt-0.5 shrink-0 text-2xs text-subtle" />
             <span class="min-w-0">
@@ -69,11 +56,7 @@ const steps = computed<readonly string[]>(() => entry.guide?.steps ?? []);
             </span>
         </p>
 
-        <!--
-            `break-words`: literals (hostnames, commands) have no spaces to break at, and the docked column is narrow.
-            Set at
-            chrome size since this is reference material beside the form, not the subject of the screen.
-        -->
+<!-- `break-words`: literals (hostnames, commands) have no spaces to break at, and the docked column is narrow. -->
         <ol v-if="steps.length > 0" class="flex list-decimal flex-col gap-2.5 pl-4 text-xs leading-relaxed break-words text-muted marker:text-subtle">
             <li v-for="(step, index) in steps" :key="index">
                 <span v-for="(part, partIndex) in guideParts(step)" :key="partIndex" :class="part.literal ? literal : ''">{{ part.text }}</span>

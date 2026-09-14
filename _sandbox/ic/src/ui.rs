@@ -3,34 +3,9 @@ use std::io::{IsTerminal, Write};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
-/* EVERY BYTE THIS BINARY SHOWS A PERSON, IN ONE PLACE — and the reason it can be pretty at all.
- *
- * The shapes below are a CONTRACT, not house style: docs/cli-output-protocol.md writes down the line format,
- * the three modes and the row vocabulary, and _devices/local-agent/src/ui.ts is this module's TypeScript
- * twin — the sync and device agents render through it, so an install reads as one program.
- *
- * The install output is read by two audiences that want opposite things. The desktop app spawns this binary
- * with piped stdio (desktop-app/src-tauri/src/scripts.rs) and turns `intentic: [phase] …` markers into a
- * progress bar; a CI step does the same with a log file. Those readers need output that never changes shape.
- * A person pasting the one-liner into a terminal needs the opposite: hierarchy, colour, a sense of how much
- * is left, and no forty lines of docker layer hashes.
- *
- * So the audiences are split by the one test that actually distinguishes them — is stdout a terminal — and
- * the split is total. `Mode::Plain` emits byte-for-byte what this binary has always emitted, so nothing that
- * parses it can tell this module was ever written. `Mode::Rich` is the redesign, and it can only ever be
- * reached by a human. The same test already gates the Windows requirement announcements (prepare/mod.rs).
- *
- * THE LIVE REGION IS EXACTLY ONE LINE. Redrawing a whole checklist in place needs the cursor moved up N
- * lines, which needs N to be right, which needs to know when a line wrapped — and this binary runs under
- * `curl | sudo sh`, inside dash, on PowerShell 5.1, in terminals of unknown width. A single line repainted
- * with a carriage return needs none of that, and a truncation to the narrowest width we might be on keeps
- * even that line from wrapping. Everything already settled scrolls above it as ordinary output.
- *
- * Consequence, and the one rule callers must follow: anything that writes to stdout WITHOUT going through
- * this module (docker's own output, a piped installer, get.docker.com) has to be bracketed by `suspend` and
- * `resume`, or it will land on top of the live line. */
+/* EVERY BYTE THIS BINARY SHOWS A PERSON, IN ONE PLACE — and the reason it can be pretty at all. */
 
-// ── modes and capabilities ──────────────────────────────────────────────────
+// modes and capabilities
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
@@ -83,7 +58,7 @@ const YELLOW: &str = "\x1b[33m";
 const CYAN: &str = "\x1b[36m";
 const RESET: &str = "\x1b[0m";
 
-// ── state ───────────────────────────────────────────────────────────────────
+// state
 
 struct State {
     mode: Mode,
@@ -243,7 +218,7 @@ fn unicode_safe() -> bool {
     true
 }
 
-// ── the public surface ──────────────────────────────────────────────────────
+// the public surface
 
 pub fn mode() -> Mode {
     ui().mode
@@ -634,7 +609,7 @@ pub fn error(message: &str) {
     let _ = out.flush();
 }
 
-// ── the live line ───────────────────────────────────────────────────────────
+// the live line
 
 /// Turn the running step into a settled line above the cursor. Its duration is the point: afterwards a
 /// four-minute pull and a half-second check look identical, and neither the user nor whoever reads their
@@ -756,18 +731,9 @@ fn start_spinner() {
     });
 }
 
-// ── estimates ───────────────────────────────────────────────────────────────
+// estimates
 
-/* A FRACTION, NOT A TALLY OF FINISHED LAYERS. Docker does not reliably print `Pull complete` for every layer
- * when it is not talking to a terminal — a real six-layer pull measured here reported three — so a count of
- * completions stalls partway and stays there, which reads as a stuck install during the exact minutes this
- * line exists to reassure through. Averaging each layer's own progress always advances, and the step's tick
- * is what says "finished"; the number itself never has to reach anything.
- *
- * Clamped monotonic against `floor` because the DENOMINATOR GROWS: docker announces layers as it discovers
- * them, so the honest average genuinely falls the moment a seventh appears, and a readout that goes backwards
- * costs more trust than the two points of precision it just bought. Capped below 100 for the same reason the
- * step estimate is: only the flow knows a step is done, and it has not said so yet. */
+/* A FRACTION, NOT A TALLY OF FINISHED LAYERS. */
 fn pull_percent(layers: &BTreeMap<String, f32>, floor: u32) -> u32 {
     if layers.is_empty() {
         return floor;
@@ -888,14 +854,7 @@ fn capitalize(text: &str) -> String {
     }
 }
 
-/* The two lines docker brackets a pull with that say nothing the step's own label has not already said:
- * `stable: Pulling from intentic/sandbox` on the way in, and the fully-qualified reference echoed back on the
- * way out. Both are debris on a screen whose step already reads "Download the sandbox image", and the log
- * keeps them regardless.
- *
- * A bare token is the safe rule for the second: every line docker emits that a person needs — a status, a
- * digest, a warning, an "unauthorized" — is a sentence with spaces in it, so refusing only whitespace-free
- * lines can never swallow a diagnosis. */
+/* Docker pull output brackets the image-fetch step. */
 fn is_pull_noise(line: &str) -> bool {
     let trimmed = line.trim();
     !trimmed.contains(char::is_whitespace)

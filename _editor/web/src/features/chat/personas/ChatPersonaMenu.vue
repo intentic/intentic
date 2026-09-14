@@ -51,10 +51,7 @@ const closeMenu = (event: MouseEvent): void => {
         </template>
 
         <template v-else>
-            <!--
-                The tick marks the current pick, including Anyone: with none ticked, an unset persona would read as a
-                broken menu.
-            -->
+<!-- The tick marks the current pick, including Anyone: with none ticked, an unset persona would read as a broken menu. -->
             <button
                 type="button"
                 class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
@@ -79,25 +76,15 @@ const closeMenu = (event: MouseEvent): void => {
                 :aria-selected="persona.id === picked"
                 @click="emit(`picked`, persona.id)"
             >
-                <!--
-                    Same face as this persona's own page and the chat rail. Drawn at full color even when unable to
-                    post yet: the line below already says so in words, and dimming would read as this row being
-                    disabled instead of just unready.
-                -->
+<!-- Same face as this persona's own page and the chat rail. -->
                 <PersonaFace :persona :size="28" class="mt-0.5" />
                 <span class="flex min-w-0 flex-col">
                     <span class="flex min-w-0 items-baseline gap-1.5">
                         <span class="truncate text-sm text-content md:text-xs">{{ persona.label ?? persona.id }}</span>
                         <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBounds(persona) }}</StatusBadge>
                     </span>
-                    <!--
-                        An account-less persona still bounds the turn and still names the speaker; what actually blocks
-                        a send is said once by the composer instead (ChatPane's personaNotice).
-                    -->
-                    <!--
-                        The card's own blurb, when set: what a chat is matched on, and what tells "Work" from "Studio"
-                        fastest.
-                    -->
+<!-- An account-less persona still bounds the turn and still names the speaker. -->
+<!-- The card's own blurb, when set: what a chat is matched on, and what tells "Work" from "Studio" fastest. -->
                     <span v-if="persona.brief !== undefined" class="truncate text-2xs text-subtle">{{ persona.brief }}</span>
                     <span v-if="persona.capabilities.length > 0" class="truncate text-2xs" :class="ready(persona) ? `text-subtle` : `text-muted`">
                         {{ accountsOf(persona) }}<template v-if="!ready(persona)">, not signed in yet</template>

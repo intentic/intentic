@@ -48,9 +48,7 @@ test("leading whitespace does not hide the slash", () => {
     expect(isUnknownSlashCommand("claude", "  /workspace view forgets the tree")).toBe(true);
 });
 
-/* An empty list means "no turn has run since this daemon started", never "this provider has no commands".
- * Guessing there would rewrite a real /compact into prose, so the guard stands down and lets the CLI answer:
- * agent.ts turns that answer into the unknown-command frame the client recovers from. */
+/* An empty list means "no turn has run since this daemon started", never "this provider has no commands". */
 test("an unlearned command list stands the guard down rather than guessing", () => {
     expect(isUnknownSlashCommand("claude", "/workspace view forgets the tree")).toBe(false);
     publish();

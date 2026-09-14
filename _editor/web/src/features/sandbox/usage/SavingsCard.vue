@@ -18,10 +18,7 @@ defineProps<{
 </script>
 
 <template>
-    <!--
-        `@container`: the body lays out against the card, not the viewport, which sit many nested widths apart (rail,
-        chat panel, tab padding).
-    -->
+<!-- `@container`: the body lays out against the card, not the viewport, which sit many nested widths apart (rail, chat panel, tab padding). -->
     <Card class="@container flex min-w-0 flex-col gap-3">
         <div class="flex items-start justify-between gap-2">
             <h3 class="text-sm font-semibold text-content">{{ title }}</h3>

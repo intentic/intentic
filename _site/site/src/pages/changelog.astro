@@ -6,20 +6,7 @@ import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
 import { loadChangelog } from "../lib/changelog";
 
-/* WHAT SHIPPED, said to the people it shipped for.
- *
- * Every line on this page was written as its own change landed: a sentence in the commit that made it, drafted
- * against the diff and carried through the release (src/lib/changelog.ts explains the path and why the Release
- * body is the one editable copy). Nothing is composed here at release time and nothing is composed here at
- * build time; this page is a reader.
- *
- * MOST RELEASES ARE NOT ON IT, and that is the feature. Intentic publishes around three releases a day, and the
- * overwhelming majority of them move something nobody outside the project could see: a refactor, a test, a
- * build fix. Those carry no note, so they have no entry, and what is left is the short list of changes somebody
- * would actually want to know about. A changelog that listed all ninety would be a log, not a changelog.
- *
- * The version numbers are here because the app reports one: somebody arriving from the update prompt is holding
- * a number and wants to know what is in the gap. They stay quiet in the design for everyone else. */
+/* WHAT SHIPPED, said to the people it shipped for. */
 
 const meta = getPageMeta("/changelog/");
 const { entries, unavailable } = await loadChangelog();
@@ -46,8 +33,7 @@ const dateline = (iso: string): string =>
             </p>
         </section>
 
-        {/* The read failed at build time. Said plainly rather than rendered as an empty page: "no entries" and
-            "we could not fetch the entries" look identical and mean opposite things. */}
+        {/* Build failures stay distinct from an empty changelog. */}
         {
             unavailable && (
                 <section class="mx-auto max-w-3xl px-6 pb-16">
@@ -63,8 +49,7 @@ const dateline = (iso: string): string =>
             )
         }
 
-        {/* Nothing to show yet: the notes start with the first release published after the feature
-            landed, and until then this page is honest about being empty rather than looking broken. */}
+        {/* An empty changelog remains explicitly empty until the first release. */}
         {
             !unavailable && entries.length === 0 && (
                 <section class="mx-auto max-w-3xl px-6 pb-16">
@@ -80,9 +65,7 @@ const dateline = (iso: string): string =>
                 {
                     entries.map((entry) => (
                         <article class="border-t border-line pt-8">
-                            {/* The dateline leads and the version follows it, in that order and at that weight,
-                                because the date is what orients a reader scrolling and the version is a lookup
-                                key for the one arriving from an update prompt. */}
+                            {/* Date leads the version so scrolling readers stay oriented. */}
                             <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                                 <time datetime={entry.publishedAt} class="text-sm font-medium text-content">
                                     {dateline(entry.publishedAt)}
@@ -101,8 +84,7 @@ const dateline = (iso: string): string =>
                                     </span>
                                 )}
                             </div>
-                            {/* What this release takes away, above what it adds: the same order the update
-                                card shows them in, because it is the order a reader needs them in. */}
+                            {/* Breaking changes precede additions, matching the update card. */}
                             {entry.breaking.length > 0 && (
                                 <ul class="mt-4 space-y-3">
                                     {entry.breaking.map((note) => (

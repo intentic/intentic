@@ -38,8 +38,7 @@ describe("owner ticket", () => {
         expect(isOwnerTicket("ig1.x.y")).toBe(false);
     });
 
-    /* One key signs both the reachability grant and the owner ticket, and neither may ever pass as the other:
-     * a grant is a sandbox's right to serve its hostnames, a ticket is a person's right to drive it. */
+    /* One key signs both the reachability grant and the owner ticket, and neither may ever pass as the other. */
     it("is never a reachability grant, and a grant is never a ticket", () => {
         const ticket = mintOwnerTicket(privatePem, { sandboxId: "0123456789ab", email: "o@x.dev", issuedAtMs: NOW });
         const grant = mintReachabilityGrant(privatePem, "0123456789ab", NOW);

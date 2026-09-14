@@ -289,13 +289,7 @@ test("launchOf narrates a start: launching until the command is seen, starting w
     panels.stopAll();
 });
 
-/* THE PANE'S ENVIRONMENT, which is where a start's cost is decided before its first line prints. The pnpm
- * switch is what a fresh sandbox's first screen hung on: without it `pnpm --filter <app> dev` over the image's
- * copied node_modules re-runs a whole install before the dev server, which the launch state can only report as
- * "starting" for however long that takes — and that install can stop on `… will be removed and reinstalled
- * from scratch. Proceed? (Y/n)` in a pane the user was never told to open. The `npm_config_` assertions are the
- * regression guard, not decoration: that prefix is read by neither pnpm 11 nor 12, so a switch spelled that
- * way looks thrown and is not, which is exactly how it got shipped. */
+/* Launch environments disable pnpm's unsolicited install before a process starts. */
 test("the launch env carries the assigned port, the run dir's bin, its own history and pnpm's unasked-for install switched off", () => {
     const env = launchEnv({ ...SPEC, port: 4321, portEnv: ["API_PORT"], env: { INTENTIC_DAEMON: "http://127.0.0.1:8787" } }, "/usr/bin");
     expect(env["PORT"]).toBe("4321");

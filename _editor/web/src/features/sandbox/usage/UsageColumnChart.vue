@@ -58,8 +58,7 @@ const PLOT_HEIGHT = `10rem`;
                         v-tooltip.top="tooltipFor(bucket)"
                         class="flex h-full min-w-0 flex-1 cursor-default items-end justify-center rounded-sm transition-colors hover:bg-content/5"
                     >
-                        <!-- Capped at 24px and centred, so a 7-column window gets air around its marks rather
-                             than seven slabs. -->
+                        <!-- Columns are capped at 24px and centered within the chart. -->
                         <div class="flex w-full max-w-6 flex-col justify-end gap-0.5" :style="{ height: `${(bucket.totals.costUsd / max) * 100}%` }">
                             <div
                                 v-for="(segment, index) in stackOf(bucket)"

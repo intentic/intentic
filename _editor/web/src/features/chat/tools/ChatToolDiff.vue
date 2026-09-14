@@ -3,9 +3,7 @@ import { computed } from "vue";
 import { DiffStat } from "@intentic/ui";
 import { type DiffRow, diffRows, diffStat } from "./chatToolDiff";
 
-/* Inline unified diff for one structured diff content entry of a tool card. The header path opens the file
- * where there is a workspace to open it in; rows come from the lightweight line differ: Monaco stays the
- * full-screen reviewer. */
+/* Inline unified diff for one structured diff content entry of a tool card. */
 
 const props = defineProps<{
     path: string;

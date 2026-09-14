@@ -4,10 +4,7 @@ import { type ShallowRef, shallowRef } from "vue";
 import { sandboxJson } from "../sandbox/client/sandboxClient";
 import { jsonBody } from "../sandbox/client/jsonBody";
 
-/* One shared per-extension settings store (keyed by the capability entry id), so the Sandbox hub's Extensions
- * tab and a running extension's api.settings read and write THE SAME reactive record, an edit in either place
- * notifies the other. Values persist daemon-side (.intentic/config/extension-settings.json); saves overwrite the whole
- * record, mirroring the sandbox-settings pattern. */
+/* One shared per-extension settings store (keyed by the capability entry id). */
 
 export interface ExtensionSettingsStore {
     // The non-secret values, undefined until the first load resolves. Secret values are NEVER held client-side

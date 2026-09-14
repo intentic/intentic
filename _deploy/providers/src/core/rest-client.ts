@@ -9,9 +9,7 @@ export interface RestClient {
     // A request that must succeed: returns the parsed body, or undefined for a 204. Throws on any non-2xx, 404
     // included, since a caller here believes the thing exists.
     readonly json: (url: string, init?: RequestInit) => Promise<unknown>;
-    // A request whose subject may not exist: returns the Response on 2xx, undefined on 404, and throws on any other
-    // non-2xx so a permission error is never read as absent. Returns the Response itself so callers parse or discard
-    // it.
+    // Return undefined only for 404; propagate other non-2xx responses.
     readonly maybe: (url: string, init?: RequestInit) => Promise<Response | undefined>;
 }
 

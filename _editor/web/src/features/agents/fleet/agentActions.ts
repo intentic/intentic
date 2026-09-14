@@ -101,8 +101,7 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
         open(agent);
     }
     const conversation = useChat().conversations.value.find((candidate) => candidate.conversationId === id);
-    // A registered agent always has a tab by now (`open()` just made one); an unknown card has no conversation to send
-    // to.
+    // Send only to conversations that still have an open agent card.
     if (conversation === undefined) {
         return { sent: false, why: `That agent has no conversation left to send to.` };
     }

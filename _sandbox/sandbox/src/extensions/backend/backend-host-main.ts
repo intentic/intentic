@@ -3,10 +3,7 @@ import { extensionApiVersion } from "@intentic/extension-api/protocol";
 import { BACKEND_CONFIG_ENV, type BackendHostConfig } from "./backend-host-config.js";
 import { createBackendHostApp } from "./backend-host.js";
 
-/* The backend host's process entry, spawned and supervised by the daemon (backend-supervisor.ts). Everything
- * of substance lives in backend-host.ts; this file only decodes the config, binds loopback, and prints the
- * ready line the supervisor waits for. It dies freely: a throw here (bad config, port taken) is an exit the
- * supervisor reads and reports, never something to recover in-process. */
+/* The backend host's process entry, spawned and supervised by the daemon (backend-supervisor.ts). */
 
 const raw = process.env[BACKEND_CONFIG_ENV];
 if (raw === undefined || raw === "") {

@@ -1,7 +1,4 @@
-<!--
-    One connection's row: name and state on the first line, its address on the second, at most one primary action — whichever step this connection
-    needs next. Rename and remove live behind the overflow menu; which primary action shows is decided per kind and state, in this file.
--->
+<!-- Connection rows show name, state, address, and the next primary action. -->
 <script setup lang="ts">
 import type { CapabilitySummary } from "@intentic/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
@@ -98,37 +95,20 @@ const items = computed<MenuItem[]>(() => {
 <template>
     <!-- One divided cell: the row, and, while something's outstanding, the step it's waiting on beneath it. -->
     <div>
-        <!--
-            Tinted while the form below is over this connection, so a pre-filled live gateway isn't mistaken for the
-            card's
-            defaults.
-        -->
+<!-- Tinted while the form below is over this connection, so a pre-filled live gateway isn't mistaken for the card's defaults. -->
         <Row :selected="editing">
             <template #title>
                 <span class="flex flex-wrap items-center gap-2">
-                    <!--
-                        Mono: an identifier the agent's skill/tools/env vars are named after, compared character by
-                        character.
-                    -->
+<!-- Mono: an identifier the agent's skill/tools/env vars are named after, compared character by character. -->
                     <span class="truncate font-mono">{{ instance.id }}</span>
                     <StatusBadge size="xs" :dot="true" :variant="state.tone" :label="state.label" />
                 </span>
             </template>
-            <!--
-                What tells this connection apart, given its own line and the full width rather than a capped trailing
-                cluster.
-            -->
+<!-- What tells this connection apart, given its own line and the full width rather than a capped trailing cluster. -->
             <template v-if="facts || needsRebuild" #description>
-                <!--
-                    `block`: an inline span can't ellipsise, so a long value would run under the row's button; the full
-                    value is one
-                    hover away.
-                -->
+<!-- `block`: an inline span can't ellipsise, so a long value would run under the row's button; the full value is one hover away. -->
                 <span v-if="facts" class="block truncate font-mono" :title="facts">{{ facts }}</span>
-                <!--
-                    Wraps where the address truncates: the tail is the way out of the state it describes, so it must
-                    stay visible.
-                -->
+<!-- Wraps where the address truncates: the tail is the way out of the state it describes, so it must stay visible. -->
                 <RouterLink v-if="needsRebuild" to="/sandbox/environment" class="block text-warning hover:underline">
                     {{ instance.status.detail ?? "Needs a sandbox rebuild" }}: Finish setup →
                 </RouterLink>
@@ -146,11 +126,7 @@ const items = computed<MenuItem[]>(() => {
             </template>
         </Row>
 
-        <!--
-            Wide tracking and `select-all` since the code is transcribed by hand into a handset; `tabular-nums` keeps
-            digits
-            from jumping when WhatsApp mints a fresh code.
-        -->
+<!-- Connection codes use selectable, fixed-width digits. -->
         <!-- Recessed against the group's surface so this reads as a step on the row, not a second row. -->
         <div v-if="pendingStep" class="flex flex-col gap-2 border-t border-line-subtle bg-canvas px-3 py-2.5">
             <div v-if="pairingCode" class="flex flex-wrap items-center gap-3">

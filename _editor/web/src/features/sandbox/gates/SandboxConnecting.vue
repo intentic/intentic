@@ -48,8 +48,7 @@ const signIn = async (): Promise<void> => {
 </script>
 
 <template>
-    <!-- The spinner follows what the notice says is still expected, not whether there's a button: a sandbox that was
-         deleted has nothing to press AND nothing to wait for. -->
+<!-- The spinner follows what the notice says is still expected, not whether there's a button. -->
     <GateCard icon="box" :title="notice.title" :spinner="notice.waiting">
         <p class="text-sm text-muted">{{ notice.body }}</p>
         <template #actions>

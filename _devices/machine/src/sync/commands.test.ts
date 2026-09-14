@@ -286,10 +286,7 @@ describe("buildSkewLine and the status summary", () => {
     });
 });
 
-/* THE WORD THIS COMMAND USED TO GIVE AWAY. Its whole job is to answer "is my machine connected", and it
- * answered it from the link list on disk, which records what the machine is MEANT to reach. A sandbox whose host
- * had been returning 502 for four hours, with the agent retrying it every 30 seconds, printed the same line as a
- * healthy one. */
+/* This line reports whether the machine is connected, not which scopes it carries. */
 describe("linkLine", () => {
     // Scopes are beside the point for this line and are taken from the schema's own defaults rather than written
     // out here, so a scope added later can't break a test that never looks at one.

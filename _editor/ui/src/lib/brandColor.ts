@@ -38,10 +38,7 @@ const LIGHT: Scheme = { direction: -1, separation: 0.42, plateLightness: 0.955, 
 
 const lightnessOf = (hex: string): number => rgbToOklch(hexToRgb(hex) ?? ([0, 0, 0] as const)).L;
 
-/**
- * Perceptual lightness distance between two hex colours; the quantity the placement above guarantees. Measured
- * over the rounded sRGB the browser paints, not the underlying float.
- */
+/** Perceptual lightness distance between two hex colours; the quantity the placement above guarantees. */
 export const lightnessSeparation = (a: string, b: string): number => Math.abs(lightnessOf(a) - lightnessOf(b));
 
 // WCAG relative luminance and contrast ratio, kept only as an independent sanity check against drift; placement
@@ -73,10 +70,7 @@ const resolve = (brand: Oklch, scheme: Scheme): { readonly mark: string; readonl
     };
 };
 
-/**
- * Both schemes' mark and plate for one official brand hex (`#rrggbb` or `#rgb`).
- * `undefined` if not a colour; callers fall back to their themed tiers.
- */
+/** Both schemes' mark and plate for one official brand hex (`#rrggbb` or `#rgb`). */
 export const brandPalette = (hex: string): BrandPalette | undefined => {
     const rgb = hexToRgb(hex);
     if (rgb === undefined) {
@@ -88,10 +82,7 @@ export const brandPalette = (hex: string): BrandPalette | undefined => {
     return { markDark: dark.mark, plateDark: dark.plate, markLight: light.mark, plateLight: light.plate };
 };
 
-/**
- * Official colour from a simple-icons SVG's `fill` attribute, so there's no brand-colour table to maintain.
- * `undefined` if the SVG carries no fill; the mark stays on its themed tier.
- */
+/** Official colour from a simple-icons SVG's `fill` attribute, so there's no brand-colour table to maintain. */
 export const officialHex = (svg: string): string | undefined => {
     const match = /fill\s*=\s*["']?(#[0-9a-fA-F]{3,8})/.exec(svg);
     const hex = match?.[1];

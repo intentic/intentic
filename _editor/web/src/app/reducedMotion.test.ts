@@ -2,9 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-/* Request and route activity must not start CSS animations: Chrome DevTools rebuilds an open Styles editor
- * when those animations start or stop. Progress icons use an SVG animation inside Icon instead, where reduced
- * motion is handled by its duration. Scanned rather than listed so a new call site cannot quietly regress it. */
+/* Request and route activity must not start CSS animations: Chrome DevTools rebuilds an open Styles editor when those animations start or stop. */
 
 const here = import.meta.dirname;
 const uiRoot = resolve(here, `../../../ui/src`);

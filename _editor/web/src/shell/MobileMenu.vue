@@ -205,10 +205,7 @@ const logout = async (): Promise<void> => {
         </section>
 
         <!-- Areas the desktop rail links to, minus the tab bar, grouped into the rail's own bands. -->
-        <!--
-            A badge's tooltip renders as a second line under the name, never a shrink-0 pill beside it — a
-            sentence-length pill would push or truncate the name. A bare count still uses the pill.
-        -->
+<!-- A badge's tooltip renders as a second line under the name, never a shrink-0 pill beside it — a sentence-length pill would push or truncate the name. -->
         <section v-for="band in areaBands" :key="band.group.id" class="flex flex-col gap-1">
             <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ band.group.label }}</h2>
             <RouterLink
@@ -234,11 +231,7 @@ const logout = async (): Promise<void> => {
                     <span v-if="area.badge?.tooltip !== undefined" class="mt-0.5 block text-xs" :class="badgeToneClass(area.badge)">{{
                         area.badge.tooltip
                     }}</span>
-                    <!--
-                        Running gets a line of its own rather than the rail's corner mark: a row this wide can afford the
-                        sentence, and it sits UNDER what is owed rather than replacing it, since a red branch and a run
-                        already going are two things the reader needs at once.
-                    -->
+<!-- Running gets a line of its own rather than the rail's corner mark: a row this wide can afford the sentence. -->
                     <span v-if="area.badge?.running !== undefined" class="mt-0.5 flex items-center gap-1 text-xs" :class="RUNNING_MARK_CLASS">
                         <RunningMark />{{ area.badge.running }}
                     </span>

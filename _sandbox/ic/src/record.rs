@@ -4,21 +4,7 @@ use std::path::PathBuf;
 use crate::logfile::intentic_home;
 use crate::util::Result;
 
-/* The channel record: which tag this sandbox follows, what it was on before, and what is BUILT AND WAITING
- * for it.
- *
- * All of it lives HERE, on the machine that runs the container, because all of it is about work this machine
- * performed and none of it survives a swap otherwise: the container's env carries the image it is running, and
- * `docker rm -f` is the moment the previous one stops being knowable at all. Writing it down before that rm is
- * the whole of what makes a bad update reversible — and the `staged_*` keys extend the same argument forward,
- * to an image `ic sandbox prepare` pulled and built that no container references yet.
- *
- * The staged keys are also the TRUST ANCHOR for the fast update path, for the same reason `previous` is one for
- * rollback: this file sits under the user's own home on the host, outside every volume the agent can reach, so
- * an entry here naming a built image is a statement `ic` made about work `ic` did.
- *
- * Plain KEY=VALUE, same file recreate.sh wrote (~/.intentic/sandbox-<slug>.channel). Last occurrence wins on
- * read, matching the `sed | tail -n 1` that read it before. */
+/* The channel record: which tag this sandbox follows, what it was on before, and what is BUILT AND WAITING for it. */
 
 #[derive(Clone, Default)]
 pub struct ChannelRecord {
@@ -130,9 +116,7 @@ fn write_file(path: &std::path::Path, record: &ChannelRecord) -> Result<()> {
 mod tests {
     use super::*;
 
-    /* No env mutation here on purpose: `set_var` is process-global and Rust runs tests in parallel threads,
-     * so a test that repoints INTENTIC_HOME races every other test that reads a path. These drive the file
-     * helpers directly against a tempdir instead. */
+/* No env mutation here on purpose: `set_var` is process-global and Rust runs tests in parallel threads. */
 
     fn swap(current: &str, previous: Option<&str>) -> ChannelRecord {
         ChannelRecord {

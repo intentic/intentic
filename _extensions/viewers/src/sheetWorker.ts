@@ -4,12 +4,7 @@ import type { SheetRows, SheetWorkerRequest, SheetWorkerResponse } from "./sheet
 
 /* oxlint-disable unicorn/require-post-message-target-origin -- dedicated-worker postMessage has no target origin */
 
-/* One workbook lives with one viewer worker, parsed once on `load` and served from memory after that.
- *
- * The reader is a PREVIEW, so it wants values rather than a spreadsheet engine: this reads the cells and the
- * sheet names, and deliberately does not carry formulas, merges or cell formatting across. What it buys for
- * that is the absence of an HTML-generation step, see sheetProtocol.ts for why a table built from values
- * beats a sanitised table built from markup the file chose. */
+/* One workbook lives with one viewer worker, parsed once on `load` and served from memory after that. */
 const sheets = new Map<string, SheetRows>();
 
 const load = async (buffer: ArrayBuffer): Promise<string[]> => {

@@ -1,7 +1,4 @@
-<!--
-    Binds <EffortMeter> to a Conversation: which effort rungs the current model offers, which one is set, and where a click writes. The scale is read
-    live from the model (effortScale.ts's effortsFor), never stored; Conversation.effort only clamps the choice at send.
--->
+<!-- Binds <EffortMeter> to a Conversation: which effort rungs the current model offers, which one is set, and where a click writes. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import type { Conversation } from "../session/conversation";

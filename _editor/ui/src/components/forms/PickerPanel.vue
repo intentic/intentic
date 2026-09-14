@@ -1,7 +1,4 @@
-<!--
-    <Picker>'s open panel: an optional filter box over a grouped listbox, with QuickOpen-style keyboard navigation (arrows wrap, Enter picks, Esc
-    clears then closes). Remounted per open, so query and highlight reset for free.
--->
+<!-- The picker supports wrapped arrow navigation, Enter to pick, and Escape to clear and close. -->
 <script setup lang="ts" generic="T extends string">
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useListNavigation } from "../../composables/useListNavigation.js";
@@ -163,10 +160,7 @@ onMounted(() => {
                     @mouseenter="activeIndex = row.index"
                 >
                     <slot name="icon" :option="row.option">
-                        <!--
-                            A row naming a person wears their face, bigger than the trigger's: a form field must not
-                            grow, but a people list is exactly where a glance should recognize a face.
-                        -->
+<!-- A row naming a person wears their face, bigger than the trigger's: a form field must not grow. -->
                         <PersonaFace v-if="row.option.face !== undefined" :persona="row.option.face" :size="28" />
                         <Icon
                             v-else-if="row.option.icon !== undefined"
@@ -176,20 +170,14 @@ onMounted(() => {
                             aria-hidden="true"
                         />
                     </slot>
-                    <!--
-                        Label and hint share one column, under the words they explain, not the icon; a check must clear
-                        both lines.
-                    -->
+<!-- Label and hint share one column, under the words they explain, not the icon; a check must clear both lines. -->
                     <span class="flex min-w-0 shrink flex-col gap-0.5">
                         <span
                             class="truncate text-sm md:text-xs"
                             :class="[row.option.value === selectedValue ? `text-link` : `text-content`, row.option.mono === true ? `font-mono` : ``, labelClass]"
                             >{{ row.option.label }}</span
                         >
-                        <!--
-                            Wraps on purpose: a sentence cut off mid-clause teaches nothing, and height is the only
-                            room left to spend.
-                        -->
+<!-- Wraps on purpose: a sentence cut off mid-clause teaches nothing, and height is the only room left to spend. -->
                         <span v-if="row.option.hint !== undefined" class="text-2xs leading-snug text-subtle">{{ row.option.hint }}</span>
                     </span>
                     <span v-if="row.option.description !== undefined" class="min-w-0 flex-1 truncate text-right text-2xs text-subtle">{{

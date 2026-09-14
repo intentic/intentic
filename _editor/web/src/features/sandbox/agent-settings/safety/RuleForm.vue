@@ -176,11 +176,7 @@ const save = (): void => {
             />
         </div>
 
-        <!--
-            Which repository, above the path narrowing because it is the coarser of the two and because it decides
-            something the paths don't: where the command runs. Only shown where there is more than one repository to
-            choose between, since a one-repository workspace has no question to answer here.
-        -->
+<!-- Repository selection determines where the command runs before path narrowing. -->
         <div v-if="repoChoices.length > 2" class="flex flex-col gap-1.5">
             <span :class="ui.sectionLabel(`text-2xs`)">Where</span>
             <Picker

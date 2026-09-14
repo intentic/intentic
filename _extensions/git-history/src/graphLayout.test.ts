@@ -71,8 +71,7 @@ describe(`computeGraphLayout`, () => {
     });
 
     it(`gives a later, unrelated branch a different colour from the one whose column it reuses`, () => {
-        // `e` reuses the column `b` vacated; a shared column must not mean shared colour, or two branches look like
-        // one.
+        // Keep reused graph columns independent of branch color.
         const layout = computeGraphLayout([
             commit(`d`, [`a`, `b`]),
             commit(`b`, [`c`]),

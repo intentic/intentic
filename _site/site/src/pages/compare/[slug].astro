@@ -5,13 +5,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
 
-/* One template, one page per comparison: a new comparison is an entry in an array and its nav row, footer
- * link, page meta, OG card and llms.txt entry all follow from it.
- *
- * The order is the argument, and it is table-forward: the one-line answer, then the head-to-head table as the
- * centrepiece (a reader who only scans sees the marked rows that go the other way), then the two things it
- * really comes down to, then the case FOR the other product last and at full weight. Everything a competitor
- * ships changes weekly, so each page names what it checked and dares the reader to correct it. */
+/* One template, one page per comparison: a new comparison is an entry in an array and its nav row, footer link, page meta. */
 
 export function getStaticPaths() {
     return comparePages.map((page) => ({ params: { slug: page.slug }, props: { page } }));
@@ -78,9 +72,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
                 </div>
             </section>
 
-            <!-- Head to head: the centrepiece. Only the rows that go the other way are marked: a scorecard
-                 with a tick on every row is one nobody believes. The "where you agree" line rides above it so
-                 the concession is read before the contrast. -->
+<!-- Head to head: the centrepiece. -->
             <section class="fade-in border-b band-rule py-14 lg:py-16">
                 <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
                     <h2 class="text-xl font-semibold tracking-tight text-content">Head to head</h2>
@@ -116,8 +108,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
                 </table>
             </section>
 
-            <!-- What it comes down to: the one or two distinctions that survive the table. Compact by design,
-                 the table already carried the detail, this is the thing to remember. -->
+<!-- What it comes down to: the one or two distinctions that survive the table. -->
             <section class="fade-in border-b band-rule py-14 lg:py-16">
                 <h2 class="text-xl font-semibold tracking-tight text-content">What it comes down to</h2>
                 <div class:list={["mt-6 grid gap-4", page.differences.length >= 3 ? "md:grid-cols-3" : "md:grid-cols-2"]}>
@@ -151,10 +142,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
                 <p class="mt-4 max-w-copy text-lg leading-relaxed text-content">{page.pickThem}</p>
             </section>
 
-            <!-- THE EVIDENCE, NAMED AND DATED. The old note said the page was checked "the week this shipped",
-                 which is not a date and ages into a claim nobody can test. This states the day the vendor's own
-                 documents were last opened and links each one, so a reader can check any row here against the
-                 source it came from, and can see for themselves how old that check is. -->
+<!-- THE EVIDENCE, NAMED AND DATED. -->
             <section class="border-t band-rule py-10">
                 <h2 class="text-sm font-semibold tracking-tight text-content">How this was checked</h2>
                 <p class="mt-3 max-w-copy text-sm leading-relaxed text-subtle">
@@ -211,9 +199,7 @@ const verifiedLabel = new Date(`${verifiedOn}T00:00:00Z`).toLocaleDateString("en
     <Footer />
 
     <style>
-        /* Three columns on a desktop; a stack of labelled cards on a phone, because a 3-column table of
-           sentences at 380px is a column of one word per line. The `data-side` attribute carries the column
-           header down into the stacked view, so a cell never floats free of whose it is. */
+        /* Three columns on a desktop; a stack of labelled cards on a phone, because a 3-column table. */
         .cmp {
             border-collapse: collapse;
         }

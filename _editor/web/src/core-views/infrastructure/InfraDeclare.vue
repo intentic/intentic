@@ -538,10 +538,7 @@ onMounted(progress.recover);
         </div>
     </details>
 
-    <!--
-        Review the plan, then apply. The first run also installs the deployment tooling (Komodo + Forgejo);
-        later runs reconcile. Adding a want only stages a change: this is where it becomes real.
-    -->
+<!-- Review the plan, then apply. -->
     <div class="mb-8 flex flex-col items-center gap-3 border-y border-line py-6">
         <template v-if="hasHost && wantsSomething">
             <!-- What applying will do, before anything changes (resolve to plan, read-only). -->
@@ -564,10 +561,7 @@ onMounted(progress.recover);
                 <template v-else>Builds what you configured on your server.</template>
             </p>
 
-            <!--
-                Live apply progress from the durable event stream; survives a refresh and keeps the terminal reachable
-                via "View logs".
-            -->
+<!-- Live apply progress from the durable event stream; survives a refresh and keeps the terminal reachable via "View logs". -->
             <ApplyProgress v-if="showApplyProgress" :progress="progress" />
         </template>
         <p v-else-if="!wantsSomething" class="max-w-lg text-center text-sm text-muted">
@@ -578,10 +572,7 @@ onMounted(progress.recover);
 
     <AddWantDialog v-model:visible="addOpen" @added="onAdded" />
 
-    <!--
-        Server removal is two separate acts: forgetting it here vs wiping the machine, spelled out with the
-        cleanup command front and center before the entry disappears.
-    -->
+<!-- Server removal is two separate acts: forgetting it here vs wiping the machine. -->
     <ConfirmDialog
         :open="removingServer !== undefined"
         header="Remove server"

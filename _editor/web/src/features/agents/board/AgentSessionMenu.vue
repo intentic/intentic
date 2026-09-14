@@ -130,11 +130,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 </span>
             </span>
         </button>
-        <!--
-            Replaces "Land now" rather than joining it: with landed work missing, a plain land would leave that part
-            exactly as missing.
-            This is just a second place to find the press the card already announces.
-        -->
+<!-- Replaces "Land now" rather than joining it: with landed work missing, a plain land would leave that part exactly as missing. -->
         <button v-if="away !== undefined && canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value" @click="relandNow">
             <Icon name="undo" class="mt-0.5 text-xs text-warning" />
             <span class="flex min-w-0 flex-col">
@@ -159,11 +155,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 </span>
             </span>
         </button>
-        <!--
-            The allowance posture, shown only on a card actually waiting on one.
-            Kept off the card itself: the card already has a press that spends money now, and a second one arming
-            future spend would be two decisions in one line.
-        -->
+<!-- The allowance posture, shown only on a card actually waiting on one. -->
         <button v-if="limitedCard !== undefined" type="button" :class="ITEM" :disabled="archived" @click="toggleSendsAgain">
             <Icon :name="sendsAgainOn ? 'clock' : 'refresh'" class="mt-0.5 text-xs" :class="sendsAgainOn ? 'text-link' : 'text-subtle'" />
             <span class="flex min-w-0 flex-col">

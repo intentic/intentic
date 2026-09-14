@@ -75,10 +75,7 @@ const openedBy = (line: string, tokens: readonly Token[] | undefined): number =>
     return depth;
 };
 
-/**
- * Analyzes `text` in one token walk; undefined if the grammar is unavailable or the walk is abandoned. Never a partial
- * answer, so callers can fall back to the untouched source.
- */
+/** Analyzes `text` in one token walk; undefined if the grammar is unavailable or the walk is abandoned. */
 export const analyzeCode = async (text: string, lang: string | undefined, grammars: Grammars): Promise<CodeAnalysis | undefined> => {
     const kept: string[] = [];
     const lines: number[] = [];

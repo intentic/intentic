@@ -74,11 +74,7 @@ onMounted(() => {
             />
         </div>
 
-        <!--
-            Vertical padding is 3, not 2: the field above already contributes 12px of its own, so a padding of 2 (8px) reads as an accidental
-            mismatch, not a decision.
-            Horizontal stays 2, aligning the model pill's glyph to the text's 16px column, since the pill carries 8px of its own.
-        -->
+        <!-- Padding keeps the suggested-session field aligned with the form above. -->
         <div class="flex flex-wrap items-center gap-x-1 gap-y-1.5 px-2 py-3">
             <div class="flex min-w-0 items-center gap-1">
                 <ComposerModelPill ref="modelPill" :conversation="conversation" :expanded="modelOpen" @click="modelOpen = !modelOpen" />
@@ -98,11 +94,7 @@ onMounted(() => {
             />
         </div>
 
-        <!--
-            Same picker body as the chat composer's, over this conversation, in the same overlay; no height cap here since the overlay itself
-            measures the room and passes it down.
-            Remounted per open, so ChatModelPicker can bind its conversation's refs once.
-        -->
+        <!-- The model picker shares the composer's overlay and has no local height cap. -->
         <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" header="Model" panel-class="w-[26rem]">
             <ChatModelPicker :conversation="conversation" @selected="modelOpen = false" />
         </ResponsiveOverlay>

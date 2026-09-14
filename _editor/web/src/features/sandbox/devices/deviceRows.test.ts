@@ -52,7 +52,7 @@ const device = (overrides: Partial<Device> = {}): Device => ({
 const row = (overrides: Partial<Device> = {}, held: Partial<Report> = {}, latest?: string) =>
     deviceRow(device({ report: report(held), ...overrides }), latest);
 
-// ── which machine reads as live ─────────────────────────────────────────────
+// which machine reads as live
 
 test(`calls a reachable, freshly-reported machine live`, () => {
     expect(deviceState(device(), NOW)).toBe(`live`);
@@ -114,7 +114,7 @@ test(`puts the machines worth reading first, and breaks ties by name`, () => {
     expect(rows.map((entry) => entry.device.label)).toEqual([`alpha`, `beta`, `dead`, `zed`]);
 });
 
-// ── what a card says without being expanded ────────────────────────────────
+// what a card says without being expanded
 
 const PAIRED: Partial<Report> = {
     pairings: [{ sandboxId: `work-abc`, mode: `sync`, localDir: `/home/ada/work`, mutagenStatus: `watching` }],
@@ -192,7 +192,7 @@ test(`counts the fleet's sandboxes by state, and keeps "running" visible at zero
     expect(tally.find((item) => item.label === `stopped`)?.value).toBe(1);
 });
 
-// ── the machine-wide switches ──────────────────────────────────────────────
+// the machine-wide switches
 
 const twoPairings = (overrides: { paused?: boolean; mirroring?: `on` | `off` } = {}): Partial<Report> => ({
     pairings: [
@@ -240,7 +240,7 @@ test(`states the halves without offering the switches on a machine it cannot rea
     expect(deviceSwitches(row({ online: false }, twoPairings()))).toEqual([]);
 });
 
-// ── what a machine wants from the reader ───────────────────────────────────
+// what a machine wants from the reader
 
 // Every per-device switch granted, so a case about the agent is not also a case about permissions.
 const GRANTED = { sandboxes: `on`, sandboxRemove: `on` };
@@ -348,7 +348,7 @@ test(`agrees with isSelf about which group is the one you're using`, () => {
     expect(isSelf(entry.device, group!, `other`)).toBe(false);
 });
 
-// ── the machine worth offering to connect ──────────────────────────────────
+// the machine worth offering to connect
 // What the screens that print a command need to know: a machine is already talking to this sandbox, and one card
 // away from being able to run that command for the reader.
 
@@ -388,7 +388,7 @@ test(`names nobody without a slug to match against`, () => {
     expect(deviceSyncingSandbox([syncing], ``)).toBeUndefined();
 });
 
-// ── the two addresses ──────────────────────────────────────────────────────
+// the two addresses
 
 test(`addresses a machine by its key on the Devices tab, and the board by dropping it`, () => {
     expect(deviceRoute(`rog`)).toEqual({ name: `sandbox`, params: { tab: `devices` }, query: { device: `rog` } });

@@ -210,10 +210,7 @@ watch(
 </script>
 
 <template>
-    <!--
-        `@container`: fitting title and headline on one line depends on pane width, not viewport. `body="drawer"` gives the opened row its own place,
-        not a hanging fact.
-    -->
+    <!-- `@container`: fitting title and headline on one line depends on pane width, not viewport. -->
     <DisclosureRow
         class="@container border-t border-line/60 first:border-t-0"
         density="compact"
@@ -225,10 +222,7 @@ watch(
             <Icon :name="verdict.chore.icon as IconName" class="shrink-0 text-muted" :class="iconClass" />
         </template>
 
-        <!--
-            Wide pane: title keeps full width, headline takes the flexible column. Narrow pane: both stack and truncate on their own line so the
-            state badge stays legible.
-        -->
+        <!-- Wide pane: title keeps full width, headline takes the flexible column. -->
         <template #title>
             <span class="flex min-w-0 flex-1 flex-col gap-0.5 font-normal @lg:flex-row @lg:items-center @lg:gap-3">
                 <span class="@lg:shrink-0 flex min-w-0 items-center gap-2">
@@ -248,10 +242,7 @@ watch(
         <!-- One spinner covers either kind of in-flight work; two side by side would say nothing extra. -->
         <template #meta>
             <Icon v-if="liveAgent || busyHere" name="spinner" spin class="shrink-0 text-subtle" />
-            <!--
-                Sits left of the state badge for reading order ('reported 5m ago, carrying'), outlined so it doesn't read as a second neutral pill.
-                The age hides on a narrow pane; the word never does.
-            -->
+            <!-- The age label precedes the state badge in reading order. -->
             <span
                 v-if="answer"
                 :title="answerTitle"
@@ -267,10 +258,7 @@ watch(
 
         <template #below>
             <div class="@lg:px-2">
-                <!--
-                    At the top of the opened row, above the evidence it is replacing: the first thing to read after pressing the button. States the
-                    subject and that the numbers below are still the old ones.
-                -->
+                <!-- Expanded rows place the action summary above their evidence. -->
                 <div v-if="busyHere" class="mb-3 flex items-start gap-2 rounded-lg bg-info/10 px-3 py-2">
                     <Icon name="spinner" spin class="mt-0.5 shrink-0 text-xs text-info" />
                     <!-- Always two lines: appending the caveat inline wrapped badly on narrower panes. -->
@@ -283,13 +271,10 @@ watch(
                     </span>
                 </div>
 
-                <!--
-                    Held until the row collapses, not faded on a timer, so a reader who looks away still finds it. 'Unchanged' is stated as loudly as
-                    a change: it is a finding too.
-                -->
+                <!-- Held until the row collapses, not faded on a timer, so a reader who looks away still finds it. -->
                 <div v-else-if="landed" class="mb-3 flex items-start gap-2 rounded-lg bg-success/10 px-3 py-2">
                     <Icon name="check-circle" class="mt-0.5 shrink-0 text-xs text-success" />
-                    <!-- Same two-line shape as the strip above. Before/after stays one wrapping unit, or the arrow ends up alone on its own line. -->
+                    <!-- Same two-line shape as the strip above. -->
                     <span class="flex min-w-0 flex-col gap-0.5">
                         <span class="text-xs text-content">Re-measured just now.{{ landed.from === landed.to ? ` Nothing changed.` : `` }}</span>
                         <span v-if="landed.from === landed.to" class="text-2xs text-subtle">{{ landed.to }}</span>
@@ -302,10 +287,7 @@ watch(
                     </span>
                 </div>
 
-                <!--
-                    Evidence comes first; everything that qualifies it follows. Verbatim from the measurement: this is the list the rule below is
-                    checked against.
-                -->
+                <!-- Evidence comes first; everything that qualifies it follows. -->
                 <ul v-if="shownDetail.length > 0" class="grid max-w-read grid-cols-facts items-baseline gap-x-3 gap-y-1">
                     <li v-for="row in shownDetail" :key="row.key" class="contents">
                         <span class="font-mono text-2xs text-subtle">{{ row.tag }}</span>
@@ -321,19 +303,13 @@ watch(
                     {{ allEvidence ? `Show fewer` : `Show all ${detailRows.length}` }}
                 </button>
 
-                <!--
-                    Footnote to the evidence above, not a preamble ahead of it. Phrased as what WOULD make this due, so it reads the same whether the
-                    chore is due or clear.
-                -->
+                <!-- Footnote to the evidence above, not a preamble ahead of it. -->
                 <p class="mt-3 max-w-read text-2xs leading-relaxed text-subtle">
                     {{ verdict.chore.description }}
                     <span class="text-content">{{ verdict.state === `due` ? `Shown because` : `Shows when` }}:</span> {{ verdict.chore.criterion }}
                 </p>
 
-                <!--
-                    Own tinted block, the same device as the measuring/landed strips above, not bare prose. `clean` wears the same badge as any
-                    outcome: it is a result, not a non-event.
-                -->
+                <!-- Own tinted block, the same device as the measuring/landed strips above, not bare prose. -->
                 <div v-if="run" class="mt-3 flex max-w-read flex-col gap-1.5 rounded-lg bg-content/5 px-3 py-2">
                     <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle">
                         <StatusBadge :variant="runTone.variant" :label="runTone.label" size="xs" />
@@ -360,12 +336,9 @@ watch(
 
                 <p v-if="evidenceNote" class="mt-3 max-w-read text-2xs leading-relaxed text-subtle">{{ evidenceNote }}</p>
 
-                <!-- Verbs sit under a rule at a fixed place: everything above them is now bounded (eight evidence rows, three report lines). -->
+                <!-- Actions follow a rule after the bounded evidence area. -->
                 <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-line/60 pt-3">
-                    <!--
-                        Hidden on a clear or unmeasured chore: spending money to prove nothing wrong is not this surface's job. Labelled 'Run it
-                        again' only once the answer already stands; the press itself stays available for a second attempt at a better tier.
-                    -->
+                    <!-- Hidden on a clear or unmeasured chore: spending money to prove nothing wrong is not this surface's job. -->
                     <AgentRunButton
                         v-if="verdict.prompt !== undefined && verdict.state !== `clear`"
                         :label="standing ? `Run it again` : verdict.chore.stance === `act` ? `Fix it` : `Look into it`"
@@ -374,10 +347,7 @@ watch(
                         :disabled="busy || busyHere || liveAgent !== undefined"
                         @run="startRun"
                     />
-                    <!--
-                        The only measurement trigger on the page, and the one move a stale row has. Stays visible and wears the running state instead
-                        of vanishing on press.
-                    -->
+                    <!-- The only measurement trigger on the page, and the one move a stale row has. -->
                     <Button
                         v-if="verdict.chore.needs.length > 0"
                         size="small"

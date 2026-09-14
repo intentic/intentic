@@ -24,9 +24,7 @@ describe(`matchesSearch`, () => {
         expect(find(`   `)).toBe(true);
     });
 
-    /* EVERY WORD MUST MATCH, BUT ANY FIELD MAY BE THE ONE THAT MATCHES IT. This is the rule that makes searching
-     * a log feel right: people remember a fragment of the message and a fragment of who wrote it, not two
-     * fragments of the same field. */
+/* EVERY WORD MUST MATCH, BUT ANY FIELD MAY BE THE ONE THAT MATCHES IT. */
     it(`requires every word, across any mix of fields`, () => {
         expect(find(`lane colours`)).toBe(true); // both in the subject
         expect(find(`lane renee`)).toBe(true); // one subject, one author

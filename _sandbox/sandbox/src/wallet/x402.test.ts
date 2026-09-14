@@ -1,10 +1,7 @@
 import { expect, it } from "vitest";
 import { atomicToUsd, mintAuthorization, parseChallenge, parseSettlement, paymentHeader, usdToAtomic } from "./x402.js";
 
-/* The wire, driven with the strings a real endpoint would actually send: what these prove is that a price
- * this wallet is about to pay is READ from the server's own challenge rather than assembled from anything
- * nearby, that both live protocol revisions land in one internal shape, and that the two 402 dialects this
- * wallet does not pay are refused by name instead of misparsed into a payment. */
+/* The wire, driven with the strings a real endpoint would actually send. */
 
 const base64 = (value: unknown): string => Buffer.from(JSON.stringify(value)).toString("base64");
 

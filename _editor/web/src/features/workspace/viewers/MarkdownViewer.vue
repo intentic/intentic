@@ -140,15 +140,9 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
 
 <template>
     <div ref="root" class="flex h-full min-h-0 flex-col">
-        <!--
-            No bar of its own: three controls and a section name aren't a toolbar's worth, so they ride the breadcrumb
-            instead of pushing prose down another row.
-        -->
+<!-- No bar of its own: three controls and a section name aren't a toolbar's worth, so they ride the breadcrumb instead of pushing prose down another row. -->
         <Teleport defer :to="`#${viewerActionsTarget(scope)}`">
-            <!--
-                Section the reader is in; a button, not a label, since the list behind it is wanted often enough, and it's
-                the only way to it on a pane too narrow to dock.
-            -->
+<!-- The current section opens the outline when the pane cannot dock it. -->
             <Button
                 v-if="current !== undefined"
                 ref="opener"
@@ -160,10 +154,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                 @click="overlayOpen = !overlayOpen"
             >
                 <Icon name="align-left" class="shrink-0 text-subtle" aria-hidden="true" />
-                <!--
-                    Narrower than it was on its own bar, since this now shares a row with the tab strip; the glyph alone still
-                    opens the outline.
-                -->
+<!-- Narrower than it was on its own bar, since this now shares a row with the tab strip; the glyph alone still opens the outline. -->
                 <span class="max-w-32 truncate max-md:hidden">{{ current }}</span>
             </Button>
 
@@ -179,10 +170,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                 <Icon name="align-left" />
             </button>
 
-            <!--
-                The way out, not half of a toggle: source is for what prose can't express (a blank line between blocks, a
-                swallowed construct, a matched search line).
-            -->
+<!-- The way out, not half of a toggle: source is for what prose can't express (a blank line between blocks, a swallowed construct, a matched search line). -->
             <button
                 type="button"
                 :class="ui.iconButton()"
@@ -196,10 +184,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
         </Teleport>
 
         <div class="relative flex min-h-0 flex-1">
-            <!--
-                A reading position is a hairline's worth of info, not a bar's; absent when the document fits its pane, or a
-                full-width line would misread as a finished progress bar.
-            -->
+<!-- A reading position is a hairline's worth of info, not a bar's; absent when the document fits its pane. -->
             <div
                 v-if="view === `document` && outline.scrollable.value"
                 class="pointer-events-none absolute left-0 top-0 z-10 h-px bg-link/60"
@@ -207,20 +192,14 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                 aria-hidden="true"
             ></div>
             <template v-if="view === `document`">
-                <!--
-                    Scroller spans the whole pane, scrollbar at its edge, rail parked in padding rather than beside it. Left
-                    padding fits markdown's hanging markers in both states (like VSCode's), so toggling Edit never shifts the column.
-                -->
+<!-- Scroller spans the whole pane, scrollbar at its edge, rail parked in padding rather than beside it. -->
                 <div
                     ref="scroller"
                     class="ui-softscroll h-full min-w-0 flex-1 overflow-auto bg-canvas py-5 pl-12"
                     :class="docked ? `pr-[18.5rem]` : `pr-6`"
                     @click="editing ? undefined : onPreviewClick($event)"
                 >
-                    <!--
-                        Same document, same type, in both states: reading uses the app's one prose engine, editing rebuilds it from
-                        source for a real caret. `save="none"`: FileViewer owns saving; re-keyed on path so undo never reaches into the last file.
-                    -->
+                    <!-- Reading and editing render the same document through the shared prose engine. -->
                     <MarkdownDocument
                         ref="surface"
                         :key="path"
@@ -235,10 +214,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                         @save="(value: string) => emit(`save`, value)"
                     />
                 </div>
-                <!--
-                    Parked in that padding, outside the scroller, so it neither scrolls with the document nor slides with a wide
-                    table. No border here: rows already draw one, and canvas colour covers content scrolling under it.
-                -->
+<!-- Parked in that padding, outside the scroller, so it neither scrolls with the document nor slides with a wide table. -->
                 <aside
                     v-if="docked"
                     class="absolute inset-y-0 flex w-72 flex-col bg-canvas py-5 pl-2 pr-2"
@@ -263,10 +239,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
             />
         </div>
 
-        <!--
-            Same outline, for panes that can't dock one (or a peek after the rail is off); anchored to the section
-            button on desktop, a sheet on phone.
-        -->
+<!-- Same outline, for panes that can't dock one (or a peek after the rail is off); anchored to the section button on desktop, a sheet on phone. -->
         <ResponsiveOverlay v-model="overlayOpen" :anchor="opener" header="Outline" panel-class="max-h-[60vh] w-72 p-2">
             <MarkdownOutline :headings="outline.headings.value" :active="outline.active.value" @jump="jumpFromOverlay" />
         </ResponsiveOverlay>

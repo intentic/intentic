@@ -31,9 +31,7 @@ interface HoverCardMessage {
 }
 
 // What one anchor reveals: `label` (a muted eyebrow), `title` (the full derived title), `messages` (what it came
-// from, when known). `note` is the session's state right now rather than its identity (e.g. "Running · turn 2 ·
-// editing ReviewPanel.vue · 2m"); it sits between title and messages since it qualifies the title, not replaces
-// it.
+// Keep the session note between title and messages because it qualifies the title.
 interface HoverCardContent {
     readonly label?: string;
     readonly title?: string;
@@ -177,13 +175,7 @@ defineExpose({ show, hide });
 <template>
     <!-- pointer-events-none so the card never eats the hover that summons it. -->
     <Teleport :to="to">
-        <!--
-            `overflow-hidden` both caps the content to the placement's height and lets full-bleed pictures sit flush
-            against
-            the rounded corners. A flex column shares that height: the words are `shrink-0` and keep every line, and
-            the
-            picture takes whatever is left, instead of a computed height clipped by the edge above.
-        -->
+<!-- `overflow-hidden` both caps the content to the placement's height and lets full-bleed pictures sit flush against the rounded corners. -->
         <div
             v-if="placement"
             class="pointer-events-none fixed z-50 flex min-w-[12rem] flex-col overflow-hidden rounded-lg border border-line-strong bg-card px-3 py-2 shadow-lg"
@@ -212,21 +204,11 @@ defineExpose({ show, hide });
                 <p v-if="message.text" class="line-clamp-[8] shrink-0 break-words whitespace-pre-wrap text-xs leading-relaxed text-muted">
                     {{ message.text }}
                 </p>
-                <!-- Named with their scale and first lines, the same tile the transcript draws; inert, since nothing here takes a pointer. -->
+                <!-- Placeholder tiles match transcript scale and remain inert. -->
                 <div v-if="message.files.length > 0" class="flex shrink-0 flex-wrap gap-2" :class="message.text || message.label ? 'mt-1.5' : ''">
                     <ChatFileChip v-for="file in message.files" :key="file.path" :name="file.name" :path="file.path" :peek="file.peek" :lead="2" inert />
                 </div>
-                <!--
-                    Full-bleed, out through the card's own padding, since an inset picture in an already-narrow card is
-                    a thumbnail
-                    of a thumbnail. Whole, never cropped: a screenshot (unlike prose) puts nothing important at a fixed
-                    position, so
-                    cropping to a ceiling could cut the one part that identifies it; contained instead, so recognition
-                    gets a
-                    smaller whole picture. `min-h-0` lets it yield to the words in a short card; without it a replaced
-                    element
-                    refuses to shrink and gets clipped by the card's edge.
-                -->
+<!-- Full-bleed, out through the card's own padding, since an inset picture in an already-narrow card is a thumbnail of a thumbnail. -->
                 <div
                     v-if="message.images.length > 0"
                     class="-mx-3 flex min-h-0 flex-col gap-px"

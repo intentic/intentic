@@ -2,8 +2,7 @@ import { expect, test } from "vitest";
 import { parseChord, windowsChord, wtypeArgs, xdotoolChord } from "./keys.js";
 import { DesktopError } from "./types.js";
 
-/* The one part of this package that can be tested without a screen, and the part most likely to be wrong,
- * because it is three translations of the same vocabulary and nothing but a test compares them. */
+/* The one part of this package that can be tested without a screen, and the part most likely to be wrong. */
 
 test("modifiers are recognised by every name a person would reach for", () => {
     expect(parseChord("ctrl+c")).toEqual({ modifiers: ["ctrl"], key: "c" });

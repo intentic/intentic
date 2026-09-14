@@ -1,5 +1,4 @@
-/* Type-checks this package's TESTS along with its source: the build config excludes them so they never reach
- * dist. noEmit, so it never writes anything. */
+/* This config type-checks tests without emitting them into the package. */
 {
     "extends": "./tsconfig.json",
     "compilerOptions": {

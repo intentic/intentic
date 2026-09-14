@@ -236,10 +236,7 @@ const onKeydown = (event: KeyboardEvent): void => {
                         @focus="lead = painted.row.key"
                     >
                         <span class="w-7 shrink-0 text-right font-mono text-2xs text-subtle">{{ painted.row.hit.line }}</span>
-                        <!--
-                            One span per colour token; the matched run is a `<mark>` (see searchSnippet.ts). A leading ellipsis marks a line
-                            cut to bring a far-right match into view.
-                        -->
+<!-- One span per colour token; the matched run is a `<mark>` (see searchSnippet.ts). -->
                         <span class="ws-snippet min-w-0 flex-1 truncate font-mono text-xs text-content/90"
                             ><span v-if="painted.elided" class="text-subtle">…</span
                             ><template v-for="(piece, index) in painted.pieces" :key="index"
@@ -275,18 +272,12 @@ const onKeydown = (event: KeyboardEvent): void => {
 </template>
 
 <style scoped>
-/*
- * Shiki sets an inline light colour plus a `--shiki-dark` custom property; dark mode is a pure CSS override, no
- * re-tokenizing. `!important` beats the inline light colour; an uncoloured piece leaves `color` inherited from the row.
- */
+/* Shiki sets an inline light colour plus a `--shiki-dark` custom property; dark mode is a pure CSS override, no. */
 [data-mode="dark"] .ws-snippet span,
 [data-mode="dark"] .ws-snippet mark {
     color: var(--shiki-dark) !important;
 }
-/*
- * Match keeps its syntax colour; only a tinted background is added, since recolouring would lose that signal.
- * Negative margin offsets the padding so marking a run doesn't shift later characters.
- */
+/* Match keeps its syntax colour; only a tinted background is added, since recolouring would lose that signal. */
 mark {
     background: color-mix(in srgb, var(--color-primary-500) 28%, transparent);
     color: inherit;

@@ -1,10 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { mergePasskey, type PasskeyCredential } from "./passkeys.js";
 
-/* The store is a passkey's ONLY carrier between browsers, and Chromium will not take back a credential that has
- * lost its rpId ("The Relying Party ID is a required parameter"). So the one thing a write here must be
- * incapable of is subtraction: these pin that down field by field, because the failure it prevents is silent at
- * every layer above it, a 2FA prompt that rejects with no reason given. */
+/* The passkey store is the only cross-browser credential carrier; its rpId must remain valid. */
 describe("mergePasskey", () => {
     const stored = {
         credentialId: "cred-1",
@@ -27,9 +24,7 @@ describe("mergePasskey", () => {
     });
 
     test("an explicit undefined does not erase a good field", () => {
-        /* `exactOptionalPropertyTypes` forbids writing this in typed code, which is exactly why the cast stays:
-         * the value under test comes off a CDP event, and the wire is not bound by our interface. Spreading
-         * such a payload straight onto the stored record is the mistake this asserts against. */
+/* `exactOptionalPropertyTypes` forbids writing this in typed code, which is exactly why the cast stays: the value under test comes off a CDP event. */
         const wire = { ...stored, rpId: undefined, signCount: 7 } as unknown as PasskeyCredential;
         const merged = mergePasskey(stored, wire);
         expect(merged.rpId).toBe("www.npmjs.com");

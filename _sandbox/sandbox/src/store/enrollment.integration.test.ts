@@ -35,8 +35,7 @@ describe("pairings", () => {
         expect(await pending.redeem(token)).toBe("rig");
         const written = JSON.parse(await readFile(burnsIn(historyRoot), "utf8")) as { digests: string[] };
         expect(written.digests).toHaveLength(1);
-        // Digests only, never the token: the file proves something was spent without holding anything that could spend
-        // it.
+        // Store digests without tokens so enrollment evidence cannot spend again.
         expect(written.digests[0]).toMatch(/^[0-9a-f]{64}$/);
         expect(await readFile(burnsIn(historyRoot), "utf8")).not.toContain(token);
 

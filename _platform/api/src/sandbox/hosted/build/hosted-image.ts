@@ -1,23 +1,7 @@
 import type { Logger } from "pino";
 import type { Config } from "../../../config.js";
 
-/* WHICH IMAGE THE WARM POOL IS ACTUALLY HOLDING, as a digest rather than as a tag, and the outage that makes
- * this worth a module.
- *
- * A pool machine's entire value is that the sandbox image is already on its disk: it boots once with
- * SANDBOX_PREWARM=1, pulls, warms the starter's dev server, and stops, so a later claim is a start (seconds)
- * rather than a pull (minutes). That value is silently destroyed every time `ghcr.io/intentic/sandbox:stable`
- * is re-pushed. The pool stored the TAG, the reconcile compared the tag against the config's tag — identical
- * before and after a re-push, so no drift was ever detected — and the claim then rewrote the machine's config
- * with that same tag, which Fly re-resolves to the NEW digest. The machine therefore had to pull a fresh image
- * before it could start, `startAfterUpdate` allows thirty seconds for that, and so every claim failed with
- * "did not start after its config was replaced" and fell through to a cold build. Measured in production: four
- * claims after one re-push, four failures, every affected user waiting out the full three-to-five minutes the
- * pool exists to avoid.
- *
- * A digest is the fix because it is the only name that means the same rootfs tomorrow. Pinned, a claim cannot
- * change what the machine is holding, so it cannot trigger a pull; and the drift check becomes true drift,
- * so a re-push drains and rebuilds the pool IN THE BACKGROUND, before anybody's sign-up meets it. */
+/* WHICH IMAGE THE WARM POOL IS ACTUALLY HOLDING, as a digest rather than as a tag, and the outage that makes this worth a module. */
 
 // One resolution per window: reconcile ticks and every provision ask, and the answer only changes on a push.
 const CACHE_TTL_MS = 60_000;
@@ -115,10 +99,7 @@ export const forgetHostedImage = (): void => {
 const memo = (configured: string, now: () => number): string | undefined =>
     cached !== undefined && cached.ref === configured && now() - cached.at < CACHE_TTL_MS ? cached.pinned : undefined;
 
-/* FAILS OPEN TO THE TAG, deliberately. A registry that is slow, down, or private in a way this cannot
- * authenticate against must not stop the lane handing anybody a sandbox — it only costs what today already
- * costs. The caller cannot tell the difference, which is the point: every consumer keeps comparing whatever
- * this returns against whatever it returned when the row was written. */
+/* Image resolution fails open to the configured tag when digest lookup cannot authenticate. */
 export const resolveHostedImage = async (config: Config, logger?: Logger, now: () => number = Date.now): Promise<string> => {
     const configured = config.hosted.image;
     const parsed = parseImageRef(configured);

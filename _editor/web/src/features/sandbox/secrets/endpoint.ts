@@ -112,7 +112,7 @@ export const selectEndpoint = async (sandbox: Addressing, fetchImpl: typeof fetc
         if (candidate.kind === `public` && index === candidates.length - 1) {
             return candidate;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are ORDERED preferences: probing the rest in parallel would spend requests on addresses we would discard anyway
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Candidate order is the fallback order.
         if (await probeEndpoint(candidate, expected, fetchImpl)) {
             return candidate;
         }

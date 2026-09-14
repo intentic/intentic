@@ -137,15 +137,7 @@ model Sandbox {
     // sha256(token) hex — the deterministic lookup key for the daemon's announce (token itself is encrypted
     // with a random IV, so its ciphertext can't be queried by value).
     tokenDigest        String          @unique
-    /* The sandbox's 12-hex id: the first twelve hex of `tokenDigest`, written at creation from the one
-     * derivation every party shares (sandboxIdFromToken, tunnel-ids). The leftmost label of every public name
-     * this sandbox will ever serve is built from it, so it is not reachability STATE — there is none, a grant
-     * is a signature over this value — it is the id as a KEY.
-     *
-     * Stored rather than sliced off `tokenDigest` on read because two callers need to look a sandbox UP by it
-     * and neither can afford a prefix scan: the ingress on every tunnel registration (GET
-     * /api/reachability/<id>) and the daily DNS sweep. Unique, and load-bearing: two rows sharing this id
-     * would serve each other's hostnames. */
+    /* This unique 12-hex prefix of tokenDigest is the sandbox's public lookup key. */
     tunnelId           String          @unique
     // The sandbox's public URL (https://sandbox-<id>.<zone>), reported by the DAEMON on every announce.
     // Null until the daemon first phones home.
@@ -181,14 +173,7 @@ model Sandbox {
     // refusal, cleared by an accepted announce, so a value here is always a live disagreement. Was a log line
     // only, which is what made a mis-addressed sandbox look identical to one that never started.
     announceRefusal    Json?
-    /* WHEN THIS SANDBOX'S CONTAINER WAS DELETED, as reported by whatever deleted it (`ic sandbox remove`, over
-     * the connect token, just before docker rm). Absence of a tunnel cannot answer this: an off machine, a
-     * stopped container and a deleted one are one silence at the edge, and only the remover knows which it
-     * was. Null for every sandbox that was never removed, which is nearly all of them.
-     *
-     * NOT a deletion of the row: the row is the identity (token, hostname, members, hours), the files are what
-     * went. Deleting the sandbox stays the owner's press. Cleared by the next accepted announce, so a box set
-     * up again on the same token stops being described as removed the moment it says otherwise. */
+    /* Records container deletion while retaining the sandbox identity for a later re-announce. */
     removedAt          DateTime?
     // Who said so, for the sentence the editor shows: the machine's own label ("radarsu-rog"), or null when
     // the remover could not name itself.
@@ -244,13 +229,7 @@ model HostedMachine {
     // coming back cancels the notice and a later absence earns a fresh one — the stamp is what stops the
     // warning arriving every morning of the week it covers.
     idleWarnedAt DateTime?
-    /* THE ENVIRONMENT OVERLAY THIS MACHINE RUNS (hosted-build.ts), all null on the stock image. `image` is the
-     * digest-pinned registry ref the machine was last booted with, `baseImage` the official tag that image was
-     * built FROM (a restart that finds the platform's image moved past it rebuilds), and `environmentHash` the
-     * approved overlay's sha256: what SANDBOX_ENVIRONMENT_HASH carries into the machine and what the daemon
-     * then reports as applied. `buildingId` names the build in flight and IS the one-build-at-a-time guard:
-     * won by a conditional update from null, the pool claim's pattern, so a second click cannot start a
-     * second builder. */
+    /* These fields identify the applied image, environment overlay, and at-most-one active build. */
     image           String?
     baseImage       String?
     environmentHash String?
@@ -270,17 +249,7 @@ model HostedCleanup {
     @@map("hosted_cleanup")
 }
 
-/* ONE OVERLAY BUILD for a hosted machine: the platform's `ic sandbox rebuild`, run on a builder machine inside
- * the sandbox's own Fly app (hosted-build.ts). `content` is the approved overlay exactly as the owner reviewed
- * it, `hash` its sha256 (re-hashed on arrival, the same guarantee the rebuild command's argument gives on a
- * docker host), `baseImage` the official tag the platform pinned the FROM to. Kept after the build so a later
- * base image update can rebuild the same recipe without the owner's browser.
- *
- * `state` is `building` from the builder's creation until its report or the reconcile's verdict, then `built`
- * or `failed`. The builder authenticates its report with a secret only it and this row (hashed) hold. `minutes`
- * is what the build cost, charged to the owner's month like awake minutes. `log` is the builder's tail, the one
- * thing an owner needs from a failed RUN. Rows are disposable: retention drops old ones, keeping what a machine
- * currently runs. */
+/* Stores one approved hosted-machine overlay build and its resulting status. */
 model HostedBuild {
     id                String        @id @default(cuid())
     hostedMachineId   String
@@ -313,20 +282,7 @@ model HostedBuild {
     @@map("hosted_build")
 }
 
-/* THE WARM POOL — machines built before anyone asks for one, so claiming the free sandbox takes the seconds
- * of a start instead of the minutes of an image pull. A pool machine is a full app + volume + machine on Fly
- * whose one boot ran a no-op instead of the sandbox (enough to pull the image onto its host, nothing more),
- * now sitting stopped. It carries NO identity: no connect token, no owner, no reachability grant — those are
- * written into its env at claim time, before the machine ever runs the sandbox, so the first-boot trust story
- * (OWNER_EMAIL seeded before the daemon exists) is exactly the built-to-order one.
- *
- * `state` is the build's own little machine: `building` from creation until the no-op boot is observed
- * stopped, `ready` from then until a claim wins the row, `claimed` for the instant between winning and the
- * hand-off committing (a `claimed` row that lingers is a claim that crashed — the reconcile job collects it).
- * `image` pins what was actually pulled: a config change strands nothing, the reconcile rebuilds drifted
- * machines. Region matters beyond latency — an EEA caller may only claim an EEA machine, or the privacy
- * policy's residency promise breaks. The hour meter does not know these rows exist: the no-op boot is the
- * platform's own cost, and a user's clock starts at claim, when their HostedMachine row is stamped. */
+/* Warm-pool machines are prebuilt, unassigned, and claimable only in their recorded region and state. */
 model HostedPoolMachine {
     id        String   @id @default(cuid())
     appName   String   @unique
@@ -335,15 +291,7 @@ model HostedPoolMachine {
     region    String
     image     String
     state     String
-    /* THE IDENTITY THIS MACHINE WILL HAVE, minted at build rather than at claim: a connect token (encrypted
-     * exactly like Sandbox.token), whose 12-hex digest names the app (`<prefix>-<id>`, the same name a
-     * built-to-order machine gets). The claim adopts it into the Sandbox row it serves. It lives ONLY in this
-     * row until then: the machine's env gets it at claim, so a warm machine holds no secret while it waits.
-     *
-     * Minted early for the edge's sake. A hosted sandbox is reached by a Fly replay to its app, and the edge
-     * derives the app name from the id in the hostname with no lookup at all — which holds only if every
-     * hosted app is named after its sandbox's id, pool-born ones included, and Fly never renames an app.
-     * Empty on stock built before identities existed, which the reconcile collects as worthless. */
+    /* A pool machine's token is minted before claim so its deterministic app name is stable. */
     token     String   @default("")
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
@@ -455,21 +403,7 @@ model HostedPlan {
     @@map("hosted_plan")
 }
 
-/* THE OWNER'S OWN USDC WALLET — one per (account, network), and the reason the platform is in this story at
- * all: the sandbox container is not a key boundary (its daemon and its agent both run as root in one
- * container, which SECURITY.md states as the threat model), so a wallet the agent could read is a wallet the
- * agent can drain. The key therefore lives on the far side of the connect token, and not even here as raw
- * material — `providerWalletId` names a wallet held by a regulated custody API, and this row is the join
- * from an account to it plus the caps the signer enforces.
- *
- * OWNER-SCOPED, NEVER POOLED, and that is a compliance property rather than a schema preference: funds are
- * the owner's own, the platform never aggregates or moves value between accounts, and every signature is
- * one instruction from that owner's own balance. `perPaymentMaxUsd`/`dailyCapUsd` mirror the sandbox
- * capability card's policy — re-sent on every apply, and re-checked HERE on every signature, so a
- * compromised sandbox can at worst spend what its owner already delegated.
- *
- * Amounts are decimal strings in USD (USDC's display form, six decimals): the signer's arithmetic runs in
- * atomic units, and a float column would be a rounding bug in the money path. */
+/* Wallets are owner-scoped custody handles with decimal-string payment caps. */
 model Wallet {
     id               String          @id @default(cuid())
     userId           String
@@ -515,15 +449,7 @@ model WalletPayment {
     @@map("wallet_payment")
 }
 
-/* ONE UTC DAY OF PLATFORM HISTORY, written by the daily rollup (api admin/admin-rollup.ts) so the admin
- * panel's trend lines survive the retention sweeps that take the raw rows (the hour meter at 13 months, trial
- * days sooner). Two kinds of column, told apart in the comments: WINDOW counts are exact facts about that day
- * (immutable timestamps), SNAPSHOT counts are the platform as it stood when the rollup ran (typically the
- * morning after), kept because the raw signal (lastSeenAt) moves and cannot be re-asked later.
- *
- * Rows are the panel's own bookkeeping, never user data: counts only, no ids, no emails — so retention
- * never needs to sweep them and a decade of trend history costs a few thousand rows. Upsert-keyed on `day`
- * so a re-run (boot after a crash) rewrites the row instead of doubling it. */
+/* Daily administrative counts retain window facts and rollup-time snapshots by UTC day. */
 model AdminDailyStat {
     id                 String   @id @default(cuid())
     day                String   @unique

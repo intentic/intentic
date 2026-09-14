@@ -50,8 +50,7 @@ vi.mock(`./usePrepush`, async () => {
     };
 });
 
-/* The watcher's stamp, which decides whether a verdict is still about the tree in front of the user. Modelled on the
- * real one (a stamp, not a digest): quiet since the stream opened, until a case writes something. */
+/* The watcher's stamp, which decides whether a verdict is still about the tree in front of the user. */
 vi.mock(`../changes/useWorkspaceLive`, () => {
     let lastAt = 1;
     return {
@@ -115,10 +114,7 @@ vi.mock(`../../sandbox/overview/useSandboxSettings`, async () => {
 
 // Resolves against what this sandbox can reach, so the proposal names a model that can actually be sent;
 // provider readiness is a different suite's business.
-/* What the repositories declare for themselves, which this flow reads to decide whether a push is checked at all. A
- * workspace where none of them declares anything, so these cases turn on the owner's own rule above — the reader over
- * both (rules.ts adoptedChecksFor) is pure and is NOT mocked, so a case that added a declaring repository here would
- * still be answered by the real one. */
+/* What the repositories declare for themselves, which this flow reads to decide whether a push is checked at all. */
 vi.mock(`../../sandbox/environment/useRepoChecks`, async () => {
     const { computed } = await import(`vue`);
     return { useRepoChecks: () => ({ repos: computed(() => []) }) };
@@ -268,9 +264,7 @@ test(`a red check raises a question that outlives the surface that asked`, async
     expect(usePushFlow().question.value).toEqual(flow.question.value);
 });
 
-/* CLOSING THE CARD ANSWERS NOTHING, which is what these are about. The complaint they exist for: the only record of
- * a three-minute verdict was the card, so closing it to read the terminal left running the suite again as the only
- * way back to what it had already found out. */
+/* CLOSING THE CARD ANSWERS NOTHING, which is what these are about. */
 
 test(`a closed card leaves the verdict standing, with everything the card had`, async () => {
     const { flow, finish } = await load();
@@ -522,8 +516,7 @@ test(`starting a fix with a picked model re-points the session before starting`,
     expect(flow.pending.value).toBeUndefined();
 });
 
-/* ONE FAILURE, MANY ATTEMPTS, ONE LIVE ANSWER. The cases below are the press against each thing the fleet can say
- * about the failure's latest attempt; the words are the contract's (planFixAttempt), the doors are this flow's. */
+/* ONE FAILURE, MANY ATTEMPTS, ONE LIVE ANSWER. */
 
 // The complaint this exists for: a second press used to re-send the whole opening prompt into the same session, with
 // nothing on the card saying an agent had already tried.

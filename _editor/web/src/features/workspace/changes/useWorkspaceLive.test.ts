@@ -31,9 +31,7 @@ describe(`markWorkspaceChanged`, () => {
         expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
     });
 
-    /* The package layout the review lists group under. It is held for minutes, so nothing but this push can end
-     * a wrong grouping, and the case that makes it wrong (a package created mid-session) is also the case
-     * where every one of its files is on screen in the Changes panel at once. */
+/* The package layout the review lists group under. */
     it(`re-reads the package layout when a manifest lands`, () => {
         markWorkspaceChanged([`_libs/new-pkg/package.json`]);
         expect(queryClient.getQueryState(modulesKey)?.isInvalidated).toBe(true);

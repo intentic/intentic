@@ -119,8 +119,7 @@ const asRecord = (value: unknown): Record<string, unknown> | undefined =>
 
 const asString = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
 
-// What one registry answers before comparison: the newest non-prerelease version, and whatever it says about the pinned
-// one.
+// Keep the newest registry version and its pinned-version facts together.
 interface RegistryAnswer {
     readonly latest: string;
     readonly deprecated?: string;

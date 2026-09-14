@@ -101,10 +101,7 @@ onBeforeUnmount(() => {
             <div v-else-if="minting || code === ``" class="text-sm text-muted">Preparing a one-time connection code…</div>
 
             <template v-else>
-                <!--
-                    Extension in this browser already has the code: nothing to copy, so say so instead of risking a
-                    second paste.
-                -->
+<!-- Extension in this browser already has the code: nothing to copy, so say so instead of risking a second paste. -->
                 <div v-if="extensionHere === true" class="rounded-md border border-subtle px-3 py-2 text-sm text-content">
                     Your extension has the code. Open it (the toolbar icon is showing <b>!</b>) and press <b>Connect</b>.
                 </div>

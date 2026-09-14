@@ -1,9 +1,7 @@
 import { expect, test } from "vitest";
 import { checks, type PeerRegistryDeps } from "./invariant.js";
 
-/* Revocation is two calls, one on each record, and the one that matters for safety is the second: a socket
- * the store has forgotten is a peer that still receives work, or that the agent can still drive. One rule
- * over three doors, so the suite drives each door's check by name. */
+/* Revocation is two calls, one on each record, and the one that matters for safety is the second. */
 
 const fail = (message: string): never => {
     throw new Error(message);

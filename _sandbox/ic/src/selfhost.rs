@@ -4,13 +4,7 @@ use std::process::{Command, Stdio};
 
 use crate::util::{bail, Result};
 
-/* Wiring a Linux machine as a deploy target — the root-side system mutations connect.sh's SELF_HOST=1 and
- * connect-host.sh share: a dedicated service user in the docker group with a generated SSH key, an sshd to
- * reach it through, /opt/intentic for provider state, a native cloudflared connector. Everything here is
- * idempotent — an existing user/key is reused so re-runs don't churn the key the platform pins.
- *
- * Root is obtained as the scripts obtained it: already-root, else passwordless `sudo -n` — never an
- * interactive sudo prompt from inside a flow the user believes is unprivileged. */
+/* Wiring a Linux machine as a deploy target — the root-side system mutations connect.sh's SELF_HOST=1 and connect-host.sh share. */
 
 pub struct Root {
     prefix: Vec<String>,

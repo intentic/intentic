@@ -33,10 +33,7 @@ const setAutomationFailureLimit = (event: Event): void => {
 
 <template>
     <RowGroup label="When a turn breaks">
-        <!--
-            The default; a chat's own retry banner doesn't touch this switch, since "finish this turn" and "this is how
-            the board behaves" are different questions. Governs everything that hasn't answered for itself.
-        -->
+<!-- The default; a chat's own retry banner doesn't touch this switch, since "finish this turn" and "this is how the board behaves" are different questions. -->
         <Row
             icon="refresh"
             title="Resume after provider outages, by default"
@@ -51,10 +48,7 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-        <!--
-            The one wait here with a known reopen time (the provider names it) rather than a guess; described as "send
-            again", not "retry", to keep the distinction.
-        -->
+<!-- Known provider reopen times are shown as "send again". -->
         <Row
             icon="clock"
             title="Send again when the allowance comes back, by default"
@@ -69,10 +63,7 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-        <!--
-            The non-waiting answer to the same limit: moves to another connected account of the same provider with room.
-            Opt-in since it spends a second account on the owner's behalf; with none available, it waits as the row above.
-        -->
+<!-- The non-waiting answer to the same limit: moves to another connected account of the same provider with room. -->
         <Row
             icon="user"
             title="Continue on another account when the allowance is spent, by default"
@@ -87,10 +78,7 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-        <!--
-            Carrying re-reads the whole context once and keeps what the model knew; starting fresh costs the measured
-            brief plus a capped copy and loses the rest. Threshold in tokens; 0 always starts fresh.
-        -->
+<!-- Carrying re-reads the whole context once and keeps what the model knew; starting fresh costs the measured brief plus a capped copy and loses the rest. -->
         <Row
             icon="clock"
             title="Carry the session when its context is under"
@@ -110,10 +98,7 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-        <!--
-            Covers a turn killed by the sandbox's own restart: an update, an environment approval, or an image rebuild.
-            The common case is the user's own approval taking down the run that asked for it.
-        -->
+<!-- Covers a turn killed by the sandbox's own restart: an update, an environment approval, or an image rebuild. -->
         <Row
             icon="refresh"
             title="Resume turns after a restart"
@@ -128,10 +113,7 @@ const setAutomationFailureLimit = (event: Event): void => {
             </template>
         </Row>
 
-        <!--
-            The one row here that stops rather than resumes: a job failing every run is misconfigured, and the scheduler
-            would otherwise spend a turn on it every tick. 0 (never) is the default.
-        -->
+<!-- Jobs failing every run stop instead of consuming another scheduled turn. -->
         <Row
             icon="stop"
             title="Stop a failing automation"

@@ -1,7 +1,4 @@
-<!--
-    The app's one text filter, in `panel` (a panel's borderless first row) or `field` (a standalone bordered box) dress. Uses `text-base` below `md`
-    to dodge iOS Safari's zoom-on-focus, and `type="text"` to dodge WebKit's own clear button. `matchCase` adds the `Aa` case-sensitivity switch.
--->
+<!-- The app's one text filter, in `panel` (a panel's borderless first row) or `field` (a standalone bordered box) dress. -->
 <script setup lang="ts">
 import { twMerge } from "tailwind-merge";
 import { computed, ref, useAttrs } from "vue";
@@ -100,11 +97,7 @@ const clear = (): void => {
             @keydown.esc="clearable && clear()"
         />
         <div class="absolute top-1/2 flex -translate-y-1/2 items-center gap-0.5" :class="variant === `panel` ? `right-2` : `right-1.5`">
-            <!--
-                `mousedown` is suppressed so a press keeps the caret in the field rather than stealing it; click still
-                fires for keyboard activation. Both controls sit inside the field, so `touch-target` grows the tap
-                area, not the glyph.
-            -->
+<!-- `mousedown` is suppressed so a press keeps the caret in the field rather than stealing it; click still fires for keyboard activation. -->
             <button
                 v-if="matchCase !== undefined"
                 type="button"

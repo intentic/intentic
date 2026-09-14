@@ -55,8 +55,7 @@ export const composeFile = (args: ComposeArgs): string => {
         `services:`,
         `    intentic-sandbox:`,
         `        image: ${args.image}`,
-        // A registry-less local tag must never be pulled (Docker Hub denies it); the moving `:stable` release always
-        // is.
+        // Never pull registry-less local tags; always pull the moving stable tag.
         `        pull_policy: ${imageHasRegistry(args.image) ? `always` : `never`}`,
         `        container_name: ${names.container}`,
         `        init: true`,

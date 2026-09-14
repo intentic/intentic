@@ -1,15 +1,5 @@
 ---
-/* A button that opens the search dialog. Rendered more than once per page: as a field at the top of the rail,
- * and as a compact control in the narrow-screen row beside "Menu" because the rail is collapsed on a phone
- * and search must not be a thing you have to open a menu to find.
- *
- * It says "documentation" rather than "docs": one index covers both books, so a reader searching from /developers gets
- * results from /docs and vice versa, and a control labelled with one book's name would look like a filter.
- *
- * The dialog itself is DocsSearch.astro, mounted once at layout level. It has to live outside the collapsible
- * rail: showModal() on a dialog inside a `display: none` ancestor opens nothing. All triggers are found by the
- * `data-search-open` attribute, so adding another one anywhere costs no wiring.
- */
+/* A button that opens the search dialog. */
 
 interface Props {
     /** "field" is the rail's full-width search box; "compact" is the icon-and-label button for narrow screens. */

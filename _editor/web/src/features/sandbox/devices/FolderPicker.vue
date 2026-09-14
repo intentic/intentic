@@ -161,10 +161,7 @@ const remove = (path: string): void => {
             </button>
         </div>
 
-        <!--
-            Opens downward rather than the overlay's own default (above), which would land the tree over the field's own
-            section heading. Still flips up if the window is too short.
-        -->
+<!-- Opens downward rather than the overlay's own default (above), which would land the tree over the field's own section heading. -->
         <ResponsiveOverlay v-model="open" :anchor="anchor" side="bottom" header="Choose a folder" panel-class="w-80 p-1">
             <!-- Holds the panel's height steady while the tree loads, rather than jumping once rows arrive. -->
             <div v-if="query.isPending.value" role="status" aria-busy="true">
@@ -174,10 +171,7 @@ const remove = (path: string): void => {
             <div v-else-if="rows.length === 0" :class="ui.emptyState('py-4 text-xs')">No folders in this workspace yet.</div>
             <div v-else class="flex max-h-72 flex-col overflow-y-auto">
                 <div v-for="row in rows" :key="row.entry.path" class="flex items-center" :style="{ paddingLeft: `${row.depth * 0.75}rem` }">
-                    <!--
-                        Opening and choosing are different intents, so different targets; a leaf keeps the same indent from a spacer
-                        so names stay in one column.
-                    -->
+<!-- Opening and choosing are different intents, so different targets; a leaf keeps the same indent from a spacer so names stay in one column. -->
                     <button
                         v-if="openable(row.entry)"
                         type="button"

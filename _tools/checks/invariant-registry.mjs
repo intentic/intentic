@@ -1,32 +1,5 @@
 #!/usr/bin/env node
-/* THE GATE THAT MAKES THE INVARIANT REGISTRY MEAN SOMETHING.
- *
- * A registry anyone may contribute to and nobody must is a folder that fills up for two months and is never
- * opened again. So every subsystem under the daemon's src/ answers the question exactly once: it either registers
- * a check, or it says in writing why it has none. A directory that does neither fails this gate, which is how a
- * NEW subsystem (the ones most likely to own state nobody has thought about yet) is forced to answer on the
- * commit that introduces it rather than never.
- *
- * WHAT IT REFUSES, and why each rule exists rather than being left to review:
- *
- *   1. A subsystem directory with no `invariant.ts` and no entry in UNAUDITED below. The backlog is deliberately
- *      a list in this file rather than an absent check: 50 directories that predate the mechanism are a debt to
- *      be worked down in the open, not a silence to be mistaken for coverage.
- *   2. An `invariant.ts` exporting no checks and carrying no `No runtime invariant:` reason. An empty companion
- *      is a legitimate and common answer: pure functions, thin wrappers, composition-only directories, but an
- *      unexplained one is indistinguishable from an unfinished one.
- *   3. A companion with checks that never calls `fail`. A check that cannot report is a green light with no
- *      subject, which is worse than no check at all.
- *   4. A companion nobody imports. A file that is written and never wired runs never and reads as covered.
- *   5. An UNAUDITED entry naming a directory that no longer exists, or one that has since written its
- *      invariant.ts. REPORTED, not refused: a backlog that outlives its subject is how a list like this quietly
- *      stops describing anything, but the turn that paid the debt is not the one to refuse for it, and with a
- *      dozen conversations landing into one tree a stale entry that fails is everyone else's red until the
- *      shared list is edited. The line says what to trim; the next edit of this file trims it.
- *
- * Deliberately NOT checked: whether a check is any good. That is review's job, and a gate that tried would only
- * teach people to write checks shaped like whatever it measured.
- */
+/* A registry anyone may contribute to and nobody must is a folder that fills up for two months and is never opened again. */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";

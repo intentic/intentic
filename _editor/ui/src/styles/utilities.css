@@ -1,33 +1,12 @@
 /* Custom utilities — thin scrollbars and loading placeholders, themed via role tokens. */
 @layer utilities {
-    /* The thin scrollbar's LOOK, and nothing else — reserving space is `.scrollbar-stable` below. The two were
-     * one class, and that made every scroller pay for a gutter most of them can never fill: these boxes NEST.
-     * The shell wraps every route in a `.scrollbar-thin` scroller, a full-height view (the fleet board, the
-     * workspace) puts its own inside that, and neither the wrapper nor the viewport around it can ever overflow
-     * — so the strips stacked at the window's right edge, measured at 35px of dead canvas on /agents. */
+/* The thin scrollbar's LOOK, and nothing else — reserving space is `.scrollbar-stable` below. */
     .scrollbar-thin {
         scrollbar-width: thin;
         scrollbar-color: var(--color-line-strong) transparent;
     }
 
-    /* ── WHAT `hover:bg-overlay` MEANS, PER SCHEME ────────────────────────────────────────────────────────
-     * ~90 controls in this app say "the pointer is on me" by naming the overlay surface, and on a near-black
-     * interface that is the right answer. In the light scheme it is not: `overlay` has to live in the 3.4
-     * points of lightness between the canvas and the card, so a hovered control moved 1.9 points and read as
-     * nothing at all. `--ui-hover-wash` is the per-scheme answer, and the argument for it — hue where there is
-     * no room left in lightness — is in semantic-colors.css beside the values.
-     *
-     * IT IS DONE HERE, ON TAILWIND'S OWN GENERATED CLASS, rather than by editing ninety call sites, and that is
-     * a deliberate trade. The alternative spellings were worse: a second colour token (`hover:bg-wash`) is the
-     * same change written ninety times and re-promised to every extension, and making `--color-overlay` itself
-     * a translucent wash would break the four floating surfaces that need it opaque — which is the double duty
-     * that caused this in the first place. Restating the utility keeps the vocabulary a call site already knows
-     * ("hover goes to the overlay tone") and lets each scheme decide what that tone is. Dark's token IS
-     * `--color-overlay`, so every one of these rules is a no-op there.
-     *
-     * The escaped selectors are Tailwind v4's emitted names; the group variants are the ones
-     * `extension-surface.css` promises, so a chip revealed inside a hovered row warms with the row it is in.
-     * Same layer as Tailwind's own utilities and later in source order, so it wins the tie without `!important`. */
+    /* Hover utilities use the scheme's overlay surface. */
     .hover\:bg-overlay:hover,
     .focus\:bg-overlay:focus,
     .focus-visible\:bg-overlay:focus-visible {
@@ -53,21 +32,13 @@
         background-color: var(--ui-hover-wash, var(--color-overlay));
     }
 
-    /* THE PILL THAT IS ON, in a <SegmentedControl>: the same arithmetic and the same fix, on the one state that
-     * is not a hover. The component asks for this class instead of `bg-overlay text-content`, because a pill
-     * that is ON is not a floating surface and never was — it only borrowed the tone that happened to be a step
-     * off the card. `--ui-pill-on*` (semantic-colors.css) is `overlay` plus the content ink in dark, so that
-     * scheme renders exactly as before. */
+/* THE PILL THAT IS ON, in a <SegmentedControl>: the same arithmetic and the same fix, on the one state that is not a hover. */
     .ui-pill-on {
         background-color: var(--ui-pill-on, var(--color-overlay));
         color: var(--ui-pill-on-content, var(--color-content));
     }
 
-    /* Reserve the scrollbar's strip even while the box isn't overflowing, so its content doesn't reflow sideways
-     * the moment the scrollbar appears. For the scrollers whose content actually crosses the fold under the user
-     * — a lane filling up, a list being filtered — and for nothing else: on a box that cannot overflow, this is
-     * simply a strip of dead space. The gutter tracks the drawn scrollbar's width exactly, and is inline-only
-     * per spec, so a box that scrolls horizontally gets no dead strip along its bottom. */
+/* Reserve the scrollbar's strip even while the box isn't overflowing, so its content doesn't reflow sideways the moment the scrollbar appears. */
     .scrollbar-stable {
         scrollbar-gutter: stable;
     }
@@ -86,21 +57,7 @@
         background: var(--color-muted);
     }
 
-    /* NO SCROLLBAR AT ALL, on a box that still scrolls. The third of the three scrollbar answers, and the one
-     * that had no name: the shell's icon rail, the workspace's file tabs and the browsers' tab strip each spelled
-     * `scrollbar-width: none` plus the `::-webkit-` pseudo-element out in their own scoped block, three copies of
-     * four lines whose only variation was the class it hung off.
-     *
-     * It cannot be a Tailwind utility written at the call site, which is why it lives here beside its two
-     * siblings rather than being inlined: `::-webkit-scrollbar` is a pseudo-element with no arbitrary-variant
-     * spelling that is worth reading, and a rule that must exist in a stylesheet should exist in the ONE
-     * stylesheet the design system owns.
-     *
-     * FOR A STRIP THAT IS ALREADY SHORTER THAN A SCROLLBAR IS TALL — a 44px rail, a row of tabs — where the
-     * platform bar would take a third of the box's height and sit under its own content. Never for a scroller a
-     * reader has to find their place in: this hides the only thing on screen that says how far down they are.
-     * The content must stay reachable by wheel, trackpad and drag without it (all three of these keep a wheel
-     * handler or an overlay thumb of their own). */
+/* NO SCROLLBAR AT ALL, on a box that still scrolls. */
     .scrollbar-none {
         scrollbar-width: none;
     }
@@ -109,48 +66,7 @@
         display: none;
     }
 
-    /* A FINGER'S WORTH OF HIT AREA, WITHOUT MOVING A PIXEL.
-     *
-     * The app's dense controls are measured for a mouse and they are right for one: a 24px icon button in a
-     * 36px toolbar row is what lets a workspace header carry six affordances. On a phone that same button is
-     * a 24px target, and the sweep that prompted this found most of them under it — 13 of 20 controls on the
-     * fleet board, 57 of 61 on the pipelines board, Approve and Reject at 22px tall, Send at 35.
-     *
-     * Growing the boxes was the obvious fix and the wrong one: every one of those rows has a measured height
-     * (`.view-header` is 2.25rem and the comments in useLayout.ts explain what each column's floor was
-     * measured against), so a 44px minimum applied to the BOX reflows desktop layouts that nothing is wrong
-     * with. The hit area and the drawn box do not have to be the same rectangle. This grows only the former,
-     * with an absolutely-positioned overlay centred on the control, so the ink, the row height and every
-     * measurement in this codebase stay exactly as they are.
-     *
-     * COARSE POINTERS ONLY, so a mouse keeps the precise target it was designed for and no desktop surface
-     * can regress: an overlay big enough for a thumb would swallow the gaps between toolbar buttons, which on
-     * a phone is what you want (the neighbours are 44px too and the midpoint has to belong to somebody) and
-     * on a desktop would make a six-button header ambiguous.
-     *
-     * 44px is Apple's floor. WCAG 2.2 SC 2.5.8 asks 24 and would already be met by most of these; 44 is what
-     * a thumb actually needs, and the whole reason to do this in CSS rather than by hand is that hitting the
-     * higher number costs nothing extra once the overlay exists.
-     *
-     * `position: relative` is set here rather than assumed: most callers are flex children with no position
-     * of their own, and an overlay in a static box escapes to the nearest positioned ancestor — which for a
-     * toolbar button is the panel, so the whole panel becomes the button. It is applied unconditionally, and
-     * only INSIDE the media query would be worse: a control that gains a containing block only on phones is
-     * a control whose absolutely-positioned children (a badge, a dropdown caret) move between form factors.
-     *
-     * BUT IT MUST NEVER BE THE THING THAT DECIDES WHERE THE CONTROL SITS, hence `:where()` and its zero
-     * specificity. This sheet is imported after Tailwind's, so in the same layer at equal specificity this
-     * rule won — and every `absolute` control that adopted the class was quietly moved. The chat's fork mark
-     * is the case that caught it: hung in the transcript's right margin (`absolute` + `bottom-0`), it came out
-     * relatively positioned, which drops an element back into the flow — so the mark left the margin and
-     * appeared UNDER the answer, in a zero-height strip it then overflowed. At zero specificity any position
-     * utility on the element wins, and a control with none still gets its containing block.
-     *
-     * `.ui-chip` IS NAMED HERE RATHER THAN ASKED TO WEAR THE CLASS, because a chip is ~24px of ink by
-     * definition and every one of them therefore needs this — which makes "remember to add touch-target" a
-     * hundred per cent failure waiting on somebody's memory. The alternative was a second copy of the overlay
-     * inside `.ui-chip`, i.e. two implementations of one idea, which is the thing this file exists to stop.
-     * Anything else that is unconditionally thumb-sized belongs on these two selectors too. */
+/* The app's dense controls are measured for a mouse and they are right for one. */
     :where(.touch-target, .ui-chip) {
         position: relative;
     }
@@ -167,21 +83,13 @@
             min-width: 44px;
             min-height: 44px;
             transform: translate(-50%, -50%);
-            /* The overlay is the target, so it must be the thing the tap lands on — and it must never be the
-               thing a paint lands on. No background, ever. */
+            /* The overlay is the target, so it must be the thing the tap lands on — and it must never be. */
             pointer-events: auto;
         }
     }
 }
 
-/* Loading placeholder. The caller owns the BOX — `class="skeleton h-4 w-32 rounded-full"` — and this owns the
-   fill and default radius, so every surface renders the same quiet shape for the thing it is about to show.
-   It deliberately stays still: request-driven CSS animations make Chrome DevTools rebuild an open Styles
-   editor when they start or stop.
-
-   In `components`, not `utilities`, for the same reason cmp.ts merges classes: the caller always wins. A tie in
-   `utilities` would resolve by source order, and this file loads after Tailwind's — which is how the first cut
-   of this rule turned every `rounded-full` avatar and stage circle into a square. */
+/* Loading placeholder. */
 @layer components {
     .skeleton {
         border-radius: 0.25rem;
@@ -189,39 +97,14 @@
     }
 }
 
-/* THE SELECTABLE ROW — one hover tint, one selected tint, for every list in the app a keyboard can walk: the
-   model picker, the design system's own PickerPanel, QuickOpen, the git graph and the file explorer.
-
-   All five had written this rule themselves, under five names (`.mp-row`, `.pk-row`, `.qo-row`, `.graphrow`,
-   `.treerow`), and the copies had drifted the way copies do: the two explorers tinted hover at 6% and the two
-   pickers at 5%, while QuickOpen had lost its hover rule altogether and lit up only under the keyboard. The
-   selected tint was the one thing all five still agreed on, which is what made the drift invisible — the state
-   people look at matched, so nobody checked the state they only feel.
-
-   A SIXTH copy outlived that sweep: chat's `.qopt`, whose hover rule was character-for-character this one and
-   whose selected tint was 14% against this 15% — one percent, invisible alone and unmissable once a picker put
-   both on screen at once (the model list here, the account rows in its own footer). It is gone; its four call
-   sites are these classes now.
-
-   WHEN NOT TO USE THIS. A tint marks the chosen row of a LIST — items sharing edges inside a container that
-   already draws its own frame, where boxing one row makes a box inside a box. A free-standing card on a canvas
-   (AgentCard on the board) is the other case entirely: it carries a border at rest, so selection has to change
-   that border and add a ring, and a fill would collide with the category and lane hues the card is already
-   using to say other things. Two shapes, two treatments, one primary — not one treatment.
-
-   `:not(:disabled)` rather than `:enabled`: a disabled row must not light up, but `:enabled` matches only form
-   elements, so a row rendered as a <div> would silently lose its hover. Focus-visible carries an inset ring
-   because a row a keyboard can reach must be able to show that it has been reached; on the lists that keep
-   focus on the CONTAINER (aria-activedescendant) it simply never fires. */
+/* Selectable rows share hover and selected tints. */
 @layer components {
     .ui-row-select {
         cursor: pointer;
         transition: background-color 0.1s;
     }
 
-    /* Light re-answers this in the accent, for the reason `--ui-hover-wash` gives: 5% of the ink on paper is
-       1.06:1 against the card under it, which is a row that does not answer the pointer. Dark keeps the ink
-       wash — the fallback is the value this rule has always had. */
+/* Light re-answers this in the accent, for the reason `--ui-hover-wash` gives: 5% of the ink on paper is 1.06:1 against the card under it. */
     .ui-row-select:hover:not(:disabled) {
         background: var(--ui-hover-wash, color-mix(in srgb, var(--color-content) 5%, transparent));
     }
@@ -231,25 +114,19 @@
         box-shadow: inset 0 0 0 1px var(--color-primary-500);
     }
 
-    /* After the hover rule, so the selected tint survives the pointer resting on it — a row that forgets it is
-       selected the moment you point at it is the one row you are most likely to be pointing at. */
+/* After the hover rule, so the selected tint survives the pointer resting on it. */
     .ui-row-select-on,
     .ui-row-select-on:hover:not(:disabled) {
         background: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
     }
 
-    /* A compact HORIZONTAL strip keeps selection to its tint and icon colour. Structural edge marks work on a
-       full-width list row, but inside a small rounded button they compete with corner badges and read as part of
-       the glyph. Keep this as a modifier so skins can suppress their own list edge without the caller knowing
-       what that edge is made from. */
+/* A compact HORIZONTAL strip keeps selection to its tint and icon colour. */
     .ui-row-select-horizontal.ui-row-select-on,
     .ui-row-select-horizontal.ui-row-select-on:hover:not(:disabled) {
         box-shadow: none;
     }
 
-    /* ── THE STATUS PILL — READ-ONLY STATE INK, SAME GEOMETRY AS THE CHIP ───────────────────────────────
-     * StatusBadge and every hand-drawn attention label share this padding; interactive filters wear
-     * `.ui-chip` instead, which copies the same block and inline measures. */
+    /* Status pills are read-only and share chip geometry. */
     .ui-status-pill {
         display: inline-flex;
         align-items: center;
@@ -258,25 +135,7 @@
         padding-inline: calc(var(--spacing) * 2.5);
     }
 
-    /* ── THE CHIP — A PILL THAT CARRIES A STATE, WHICH IS WHY IT IS NOT A BUTTON ──────────────────────────
-     * A filter you can switch on, a lane you can narrow to, an origin you can isolate, a handoff mode. The
-     * shape says "one of a set" and the fill says "this one is on"; a <Button> says neither, because a button's
-     * tiers are RANKS and a chip has no rank — six of them side by side are equals.
-     *
-     * IT IS HERE BECAUSE IT WAS EVERYWHERE ELSE. Twenty-one of these were hand-written across the chat strip,
-     * the review panel, the usage pages, the workflow designer and the browser board, in six geometries,
-     * and the ON state was spelled four ways — `bg-primary-600/15
-     * text-link`, `bg-link/10 border-link`, `bg-primary-600/25 ring-1`, and a bare `text-link`. The one that
-     * mattered is that some of them said "on" with a FILL and some with a BORDER, so a screen carrying both
-     * had two chips lit in two different languages.
-     *
-     * SAME ON-TINT AS `ui-row-select`, deliberately: a chosen chip and a chosen row are the same claim about
-     * the same accent, and a reader who has learned one has learned the other. The border is stated at rest
-     * (transparent) rather than added when lit, so lighting one cannot shift the row it sits in by two pixels.
-     *
-     * GEOMETRY IS THE CALLER'S TO NARROW, not to invent: utilities sit in a later layer, so `class="ui-chip
-     * px-3 py-1.5"` still works for a wider band inside a notice. What a caller cannot do by accident is
-     * disagree about the radius, the tone, the hover or what ON looks like. */
+    /* Chips carry state; buttons carry actions. */
     .ui-chip {
         display: inline-flex;
         align-items: center;
@@ -297,10 +156,7 @@
             border-color 0.12s;
     }
 
-    /* NOT the accent wash the rail and the rows take in light, and the reason is the chip's own resting plate:
-       it already carries 6% of the ink, so hovering it deepens something the reader can already see rather
-       than conjuring a plate out of nothing. Painting this in the accent would also put it within two points
-       of `.ui-chip-on` below — a chip you are merely pointing at, wearing the colour of a chip that is on. */
+/* NOT the accent wash the rail and the rows take in light, and the reason is the chip's own resting plate: it already carries 6% of the ink. */
     .ui-chip:hover:not(:disabled) {
         background: color-mix(in srgb, var(--color-content) 11%, transparent);
         color: var(--color-content);
@@ -311,8 +167,7 @@
         box-shadow: 0 0 0 1px var(--color-primary-500);
     }
 
-    /* After the hover, for the same reason the row's on-tint is: a chip that forgets it is lit the moment you
-       point at it is the chip you are most likely to be pointing at. */
+/* After the hover, for the same reason the row's on-tint is: a chip that forgets it is lit the moment you point at it is the chip you are most likely to be. */
     .ui-chip-on,
     .ui-chip-on:hover:not(:disabled) {
         background: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
@@ -320,8 +175,7 @@
         color: var(--color-link);
     }
 
-    /* One disabled answer for every pressable thing in the kit — the button's, read from the same three
-       variables (tokens.css), so a dimmed chip and a dimmed button cannot drift apart. */
+/* One disabled answer for every pressable thing in the kit — the button's, read from the same three variables (tokens.css). */
     .ui-chip:disabled {
         background: var(--ui-button-off-fill);
         border-color: var(--ui-button-off-line);
@@ -329,23 +183,7 @@
         cursor: default;
     }
 
-    /* ── THE PAINTED PART OF A METER ──────────────────────────────────────────────────────────────────────
-     * Every bar in the kit that fills a track to say how full something is: the plan-limit meters and their
-     * capacity bar, the usage ring's pool rows, the chat rail's capacity strip. They all work the same way —
-     * the caller sets a status TONE on the element (`text-danger`, `text-warning`, `text-link`), and the fill
-     * takes its colour from that — and they all used to do it with `bg-current`, which paints the ink itself.
-     * Ink is the wrong strength for an area; `--ui-meter-fill` (semantic-colors.css) is where that argument
-     * lives, along with the numbers.
-     *
-     * The class carries the tone through UNCHANGED, so the percentage printed beside the bar stays the legible
-     * text colour and only the bar softens. That is the whole reason this is a fill rule and not a second tone
-     * helper: one element, two jobs, and they want different colours.
-     *
-     * `@supports` GUARDS THE RELATIVE COLOUR SYNTAX, and it is not ceremony. A browser that cannot parse
-     * `oklch(from …)` does not fall back — the custom property still substitutes, `background-color` goes
-     * invalid at computed-value time, and every bar in the app renders transparent. Tailwind 4's own floor
-     * (Chrome 111) is eight versions below where relative colour landed (Chrome 119), so that gap is real,
-     * narrow, and worth three lines. Inside it, the bars keep exactly the colour they had before. */
+    /* Meter fills show usage against their track. */
     .ui-meter-fill {
         background-color: currentColor;
     }
@@ -356,16 +194,7 @@
         }
     }
 
-    /* ── "NOT RIGHT NOW", FOR THE CONTROLS THE KIT DOES NOT PAINT ─────────────────────────────────────────
-     * A <Button> and a chip go to a flat plate, because the design system knows exactly what they are made of.
-     * A list row, a card tile, a menu line and a form field are not that: a row's ground belongs to the panel
-     * it sits in, and a tile's fill is already carrying its own meaning. There is nothing to repaint, so the
-     * honest instrument is the one those call sites reached for on their own — dim the whole object.
-     *
-     * The point of the class is not the fade, it is that there is ONE of it. See `--ui-off-dim`.
-     *
-     * `:disabled` AND `aria-disabled`, because half of these are rows rendered as <div>s or <a>s, where the
-     * DOM attribute does not exist and the ARIA one is the only truthful signal. */
+    /* Unpainted disabled controls use the shared neutral plate. */
     .ui-off:disabled,
     .ui-off[aria-disabled="true"] {
         opacity: var(--ui-off-dim);
@@ -373,18 +202,7 @@
     }
 }
 
-/* THE SEARCH ROW — the one filter field, wherever it is worn: the command palette's top band, the model
-   picker's first row, every panel filter SearchBar draws, and the standalone bordered variant above a list.
-
-   FOCUS IS A TINT, NOT AN EDGE, and that is the whole point of the class. A search field is either edge to edge
-   inside a panel that already has a border, or a borderless slot in a box that already has one, so a focus rim
-   drawn around the field itself lands as a second frame a few pixels inside the first — the doubled highlight
-   the skins kept re-inventing. A fill has no edge to collide with: it says "the keystrokes land here" by making
-   the channel itself the lit thing. The input inside carries `field-bare` for the same reason, which is what
-   keeps a skin's field recipe off it and leaves the state to the row.
-
-   Kept faint on purpose. This is a field that is focused nearly all the time it is on screen — the palette
-   opens focused — so it has to read as "live", not as an alarm. */
+/* Search rows share the filter-field layout. */
 @layer components {
     .ui-search-row {
         transition: background-color 0.12s ease-out;
@@ -394,28 +212,18 @@
         background-color: color-mix(in srgb, var(--color-primary-500) 8%, transparent);
     }
 
-    /* A row inside a row is one assembly, so only the outer one takes the tint: FilterBar wraps the bar in a
-       box that also holds the result count, and two translucent fills stacked painted the field a shade darker
-       than the number beside it — a seam down the middle of one control. */
+/* A row inside a row is one assembly, so only the outer one takes the tint: FilterBar wraps the bar in a box that also holds the result count. */
     .ui-search-row .ui-search-row:focus-within {
         background-color: transparent;
     }
 }
 
-/* A SCROLLBAR THAT IS ONLY THERE WHEN WANTED — for the narrow columns, where `.scrollbar-thin`'s permanently
-   `line-strong` thumb is a second vertical line running the full height of a 16rem index that is otherwise
-   drawing no lines at all. At rest this one is a whisper, enough to say the list continues past the fold; it
-   comes up to a real thumb when the pointer is anywhere in the column. The track stays transparent in both
-   states, which is also what suppresses the stepper arrows the platform scrollbar draws at each end.
-
-   Written for the documentation index and kept in its scoped <style> until three more columns wanted it. */
+/* A SCROLLBAR THAT IS ONLY THERE WHEN WANTED — for the narrow columns. */
 @layer components {
     .ui-softscroll {
         scrollbar-width: thin;
         scrollbar-color: color-mix(in srgb, var(--color-content) 10%, transparent) transparent;
-        /* The .scrollbar-stable gutter, baked in rather than opted into — here it is what lets the
-         * whisper stay a whisper: the column keeps its width whether or not a scrollbar is showing,
-         * and a 16rem index is exactly the width where 10px of reflow is unmissable. */
+/* The .scrollbar-stable gutter, baked in rather than opted into — here it is what lets the whisper stay a whisper. */
         scrollbar-gutter: stable;
         transition: scrollbar-color 0.15s ease-out;
     }
@@ -425,9 +233,7 @@
     }
 }
 
-/* The tick a checkbox draws when it is ticked (primeng.css wires it to .p-checkbox-icon). Scale AND opacity,
-   not scale alone: a tick that grows from nothing at full opacity flickers at the first frame, where one that
-   fades as it grows simply arrives. */
+/* The tick a checkbox draws when it is ticked (primeng.css wires it to .p-checkbox-icon). */
 @keyframes ui-check-in {
     from {
         opacity: 0;
@@ -446,9 +252,7 @@
     }
 }
 
-/* Kept for the tiny tooltip and anchored-overlay reveal. Route and request-backed content must not use it:
-   those arrivals are covered by reducedMotion.test.ts because Chrome DevTools treats their animation lifecycle
-   as a reason to rebuild the open Styles editor. */
+/* Kept for the tiny tooltip and anchored-overlay reveal. */
 @keyframes ui-fade-in {
     from {
         opacity: 0;
@@ -458,34 +262,7 @@
     }
 }
 
-/* ── THE CORNER BADGE ARRIVING AND LEAVING ───────────────────────────────────────────────────────────
- * The count chip on a rail tile, a phone tab, the sandbox avatar and a hub row. It used to cut: a poll
- * returned, `v-if` flipped, and a red plate was simply THERE — which on a rail carrying eight tiles is
- * the one event most likely to be missed, because nothing about the frame it appeared in said it was new.
- *
- * The motion is transitions.dev's `notification-badge`, kept at its published numbers: a short diagonal
- * slide in from down-and-left under `ease-smooth-out`, while the chip itself springs from nothing on a
- * longer overshooting curve and unblurs. The two run at different lengths on purpose — the slide is over
- * at 260ms while the pop is still settling at 500ms — which is what makes it read as a thing thrown into
- * the corner rather than a box being resized. Leaving is one short move (180ms, no overshoot): arriving is
- * news and earns the flourish, going away is bookkeeping and must not hold the eye.
- *
- * TRANSITIONS, NOT @keyframes, AND THAT IS NOT A STYLE PREFERENCE. A badge is the definition of
- * request-driven — it appears because a poll answered — and starting a CSS Animation from request state
- * makes Chrome DevTools rebuild an open Styles editor every time (reducedMotion.test.ts). The snippet as
- * published uses an `animation` for the slide, because a keyframe is the only way to run `translate` and
- * `scale` at two different durations when both live in one `transform`. Spelling them as the separate
- * `translate` and `scale` properties buys the same two clocks from a plain transition, and then the whole
- * thing is one element with no wrapper and no animation lifecycle to notify anybody about.
- *
- * The offsets are the snippet's -8.2px/12.4px rounded to the spacing scale. No `filter` at rest: on 9.6px
- * bold text a permanent `blur(0)` is enough to drop subpixel antialiasing, so the chip would sit there
- * very slightly softer than the label beside it forever, to buy nothing. `none` interpolates against a
- * blur as the identity, so the fade still blurs.
- *
- * `will-change` lives on the two active classes rather than on `.ui-badge`, so the layer exists for the
- * 500ms the chip is moving instead of for as long as the rail is on screen — eight permanently promoted
- * layers is what the hint costs when it is written at rest. */
+/* THE CORNER BADGE ARRIVING AND LEAVING The count chip on a rail tile, a phone tab, the sandbox avatar and a hub row. */
 @layer components {
     .ui-badge {
         --ui-badge-slide-dur: 260ms;
@@ -513,8 +290,7 @@
         will-change: translate, scale, opacity, filter;
     }
 
-    /* No slide out: the chip leaves from where it is. A badge that retraced its entry would claim the
-       corner for another 260ms after it stopped having anything to say. */
+/* No slide out: the chip leaves from where it is. */
     .ui-badge-leave-active {
         transition:
             scale var(--ui-badge-close-dur) var(--ui-badge-close-ease),
@@ -523,8 +299,7 @@
         will-change: scale, opacity, filter;
     }
 
-    /* After `.ui-badge`, which states the resting values at the same specificity: source order is the
-       only thing deciding this, so these two rules can never move above it. */
+/* After `.ui-badge`, which states the resting values at the same specificity: source order is the only thing deciding this. */
     .ui-badge-enter-from {
         translate: var(--ui-badge-offset-x) var(--ui-badge-offset-y);
         scale: 0;
@@ -538,11 +313,7 @@
         filter: blur(var(--ui-badge-blur));
     }
 
-    /* The central answer, here rather than as a `motion-reduce:` at four call sites. Dropping the
-       transition is enough on its own: Vue measures the leave off this element's computed style, reads
-       no duration, and unmounts on the next frame — so the chip goes back to appearing and vanishing
-       outright, which is exactly the behaviour being asked for. The from-states are neutralised too, or
-       a reader who suppresses motion would get the offset and the blur as a permanent first frame. */
+/* The central answer, here rather than as a `motion-reduce:` at four call sites. */
     @media (prefers-reduced-motion: reduce) {
         .ui-badge-enter-active,
         .ui-badge-leave-active {

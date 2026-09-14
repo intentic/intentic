@@ -4,10 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::util::{timestamp, Fail, Result};
 
-/* Every connect/recreate leaves a log on this machine — otherwise a failed setup is only ever seen on the
- * terminal it scrolled past, and a recreate's `docker rm` destroys the old container's `docker logs` before
- * anyone thinks to save them. Same dir the shell flows always used (~/.intentic/logs, INTENTIC_LOG_DIR to
- * move it), same retention: the newest 10 per flow prefix. */
+/* Every connect/recreate leaves a log on this machine — otherwise a failed setup is only ever seen on the terminal it scrolled past. */
 
 pub fn log_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("INTENTIC_LOG_DIR") {

@@ -12,10 +12,7 @@ export interface FaqItem {
     more?: { label: string; href: string };
 }
 
-/**
- * One topic band of the FAQ; grouped so a visitor skimming collapsed headlines can tell which questions are worth
- * opening.
- */
+/** One topic band of the FAQ; grouped so a visitor skimming collapsed headlines can tell which questions are worth opening. */
 export interface FaqGroup {
     /** Anchor id for the topic nav; prefixed so it can never collide with a question's id. */
     id: string;

@@ -30,17 +30,7 @@ const manifestOf = (publisher: string, name: string): string =>
 
 const entryOf = (name: string): string => `import { defineComponent, h } from "vue";
 
-/* ${labelOf(name)}, a workspace extension, running from its own directory with no build step.
- *
- * Edit this file and reload the extensions to see the change; the daemon serves these bytes directly. Everything
- * this extension is allowed to do is declared in intentic-extension.json beside it, the host refuses any
- * registration the manifest does not name, and \`api.sandbox\` refuses every daemon route until
- * \`permissions.sandbox\` names it. There is no permissions block yet, which is deliberate: add one the first
- * time something here genuinely needs to read from the daemon.
- *
- * Style with the design system's own classes (\`ui-page\`, \`ui-card\`, \`ui-code\`) and role tokens
- * (\`--color-content\`, \`--color-muted\`), they follow the light/dark scheme on their own. The app's utility
- * classes are NOT reliably available here, because its CSS build never saw this file. */
+/* ${labelOf(name)}, a workspace extension, running from its own directory with no build step. */
 
 const View = defineComponent({
     name: \`${labelOf(name).replace(/ /gu, ``)}View\`,

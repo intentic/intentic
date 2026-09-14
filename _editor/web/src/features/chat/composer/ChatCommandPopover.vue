@@ -39,15 +39,9 @@ defineExpose({ move, pickActive });
             :class="{ 'ui-row-select-on': index === activeIndex }"
             @mousedown.prevent="emit('pick', command.name)"
         >
-            <!--
-                One tier below the sibling popovers' primary text, since mono reads wider/heavier at the same size
-                (same rule as .chat-markdown code).
-            -->
+<!-- One tier below the sibling popovers' primary text, since mono reads wider/heavier at the same size (same rule as .chat-markdown code). -->
             <span class="shrink-0 font-mono text-2xs text-content">/{{ command.name }}</span>
-            <!--
-                Capped, not shrunk: argumentHint is unbounded provider text. shrink-0 keeps short hints at natural
-                width; max-w only clamps the rare long ones that would crowd out the description.
-            -->
+<!-- Capped, not shrunk: argumentHint is unbounded provider text. -->
             <span v-if="command.hint" class="max-w-[45%] shrink-0 truncate font-mono text-2xs text-subtle">{{ command.hint }}</span>
             <span class="truncate text-2xs text-subtle">{{ command.description }}</span>
         </button>

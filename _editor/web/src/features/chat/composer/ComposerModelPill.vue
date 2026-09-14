@@ -1,8 +1,4 @@
-<!--
-    Model pill (provider mark, name, chevron) that opens <ChatModelPicker>, shared by both composers. Exposes its button as `el`: AnchoredOverlay
-    must anchor off the real element, not a copy, for a popped-out composer to keep working. No hover label; `aria-label` carries the full 'provider
-    · model' pair.
--->
+<!-- Model pill (provider mark, name, chevron) that opens <ChatModelPicker>, shared by both composers. -->
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { Conversation } from "../session/conversation";

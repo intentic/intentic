@@ -1,10 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { setPriority } from "node:os";
 
-/* The daemon is the control plane; every direct child is workload. Provider CLIs are spawned inside SDKs we
- * do not control, so prefixing Bash tool commands left the largest resident children (Claude, Codex, OpenCode)
- * at the daemon's own priority. Linux exposes the current direct-child set in one procfs read. Renice them
- * shortly after spawn; niceness is inherited, so their compilers/tests/subagents follow automatically. */
+/* The daemon is the control plane; every direct child is workload. */
 const WORKLOAD_NICE = 10;
 const POLL_MS = 250;
 

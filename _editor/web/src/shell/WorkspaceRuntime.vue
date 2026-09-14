@@ -50,9 +50,6 @@ startDraftingReceipts();
 </script>
 
 <template>
-    <!--
-        Mobile docks neither panel normally — chat is its own route, the terminal its own tab — but a
-        floating window is always the exception: the panel is that window's entire content.
-    -->
+<!-- Mobile docks neither panel normally — chat is its own route, the terminal its own tab — but a floating window is always the exception. -->
     <PoppablePanels v-if="!mobile || floatingWindowPanel !== undefined" />
 </template>

@@ -4,16 +4,7 @@ use crate::docker;
 use crate::logfile::Log;
 use crate::util::{bail, Result};
 
-/* The two waits after a launch, in order — because a daemon that ANSWERS is not yet a daemon that SERVES.
- *
- * First: /health responds at all. A container that starts but crash-loops (an overlay that breaks the
- * daemon) would otherwise read as success and time out silently in the setup wizard. Second: /health says
- * `"ready":true`. The daemon listens the moment the process can (so a restart never reads as an outage) and
- * converges its state behind a readiness gate, during which every route but /health and /events parks —
- * returning at the first 200 handed the user a prompt back and a browser that sat on its first click.
- *
- * Probed INSIDE the container (docker exec + the image's curl): a local check with no tunnel or DNS in the
- * loop, so a slow DNS propagation can neither fail nor poison it. */
+/* The two waits after a launch, in order — because a daemon that ANSWERS is not yet a daemon that SERVES. */
 
 pub fn wait_answering(container: &str, log: &Log, remedy: &str) -> Result<()> {
     for _ in 0..15 {

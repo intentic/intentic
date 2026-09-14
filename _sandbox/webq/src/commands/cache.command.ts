@@ -1,6 +1,4 @@
-/* `webq cache`: what the shared cache holds and the one switch that empties it. Small on purpose — the
- * cache self-expires by TTL at read time, so the only management a human ever needs is "how big is it"
- * and "start over". */
+/* `webq cache`: what the shared cache holds and the one switch that empties it. */
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { buildCommand, type CommandContext } from "@stricli/core";

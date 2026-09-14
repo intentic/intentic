@@ -7,9 +7,7 @@ import { listFiles } from "./store/index-store.js";
 import { makeFixtureWorkspace } from "./testing.js";
 import type { QueryRequest } from "./types.js";
 
-/* A one-shot engine in a workspace whose index is OWNED by another live process (in a sandbox: the daemon's
- * resident engine). It used to revalidate anyway and lose the write lock to that process's sweep, which is how
- * every `iq` call in a warm sandbox came back "Exit code 2: database is locked". */
+/* A one-shot engine in a workspace whose index is OWNED by another live process (in a sandbox: the daemon's resident engine). */
 
 let root: string;
 let cleanup: () => Promise<void>;

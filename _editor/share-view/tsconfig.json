@@ -1,10 +1,4 @@
-/* The published page. Same toolchain as the app it borrows its components from (Vite + vue-tsc, no emit,
- * Vite produces the artifact), and the same source-first paths, so a change in the chat's tool card is
- * type-checked here without a build in between.
- *
- * `@intentic/web/*` is this package's window onto the app's source. Deliberately narrow in what it is USED
- * for rather than in what it can reach: the page imports the chat's card and its surface, and nothing that
- * would drag a router or a daemon client into a bundle a stranger loads. */
+/* The published page. */
 {
     "compilerOptions": {
         "rootDir": "../..",

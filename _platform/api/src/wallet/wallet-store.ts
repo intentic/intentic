@@ -1,9 +1,7 @@
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 import type { CustodyGateway } from "./wallet-custody.js";
 
-/* THE WALLET ROW, shared by the two doors that can bring one into being: the sandbox's ensure (an address to
- * fund, over the connect token) and the owner's policy write (caps to hold it to, over a session). Either may
- * be first, and both must find the same wallet. */
+/* The wallet row is shared by sandbox funding and owner signing. */
 
 // The chains this signer will mint for, and the token it will mint for on each, the compliance surface as a
 // lookup: USDC only, `exact` scheme only, so every signature is a fixed-amount transfer of a dollar-pegged
@@ -22,10 +20,7 @@ export interface WalletRow {
 
 const select = { id: true, address: true, perPaymentMaxUsd: true, dailyCapUsd: true } as const;
 
-/* ONE WALLET PER ACCOUNT AND NETWORK, created on first ask with the schema's own default caps. `reference` is
- * the platform's stable id for member+network, which is what makes the provider's create idempotent (a retried
- * ensure returns the same wallet rather than minting a second one the owner would then have to fund twice), and
- * the row's unique key makes ours: a creator that loses the race to the other door reads the row it lost to. */
+/* ONE WALLET PER ACCOUNT AND NETWORK, created on first ask with the schema's own default caps. */
 export const ensureWallet = async (prisma: PrismaClient, gateway: CustodyGateway, ownerId: string, network: string): Promise<WalletRow> => {
     const key = { userId_network: { userId: ownerId, network } };
     const existing = await prisma.wallet.findUnique({ where: key, select });

@@ -101,22 +101,7 @@ const spawnHere = (logPath: string, launcher: CliLauncher, args: readonly string
     return child.pid;
 };
 
-/* Reads the pid the stub prints on stdout, since the stub's own pid belongs to a process that's already exited by the
- * time anything checks it. Stub failures are reported from its log and stderr.
- *
- * THE LINE IS THE ANSWER, NOT THE END OF THE PIPE, and the difference is the whole of this function. The stub prints a
- * pid and exits within milliseconds, but the pipes it was handed are INHERITABLE and the loop it starts inherits them
- * — CreateProcess copies every inheritable handle to the child, not only the three named in STARTUPINFO — so their
- * write end stays open for as long as the loop runs, which is forever by design. Waiting for stdio EOF (node's `close`
- * event, which is `exit` AND every stream ended) therefore waits for the resident loop to exit, and every `setup` on
- * Windows failed with "intentic-launch.exe did not answer within 10000ms" ten seconds after starting the loop
- * perfectly. Measured on Windows 11: pid on stdout at 21 ms, stub exited at 28 ms, stdout EOF only when the child died.
- *
- * So success is the first complete line, failure is a non-zero exit, and the pipes are dropped either way: a handle the
- * loop still owns would otherwise hold this process's event loop open after the stub has said all it has to say.
- *
- * Exported for its own tests: the stub path only runs on Windows in production, but a child that inherits the pipes is
- * every platform's behaviour, so a stand-in stub reproduces it in CI where no Windows runner is. */
+/* Read the first complete pid line because the stub exits before its child closes the inherited pipes. */
 export const spawnThroughStub = async (stub: string, logPath: string, launcher: CliLauncher, args: readonly string[]): Promise<number> => {
     const [command, ...rest] = stubCommand(stub, logPath, [...launcher, ...args]);
     const child = spawn(command, rest, { detached: true, stdio: ["ignore", "pipe", "pipe"] });

@@ -29,17 +29,14 @@ watch(
 <template>
     <Modal :open="open" size="sm" header="Export environment" @update:open="emit(`cancel`)">
         <div class="flex flex-col gap-4">
-            <!-- What goes in, and that the result arrives later: packing takes minutes, so closing this dialog must not read as nothing happened. -->
+            <!-- The dialog describes the bundle contents and delayed result. -->
             <p class="text-xs text-subtle">
                 Packs this sandbox's definition together with the bytes nothing can reference: transcripts, checkpoints, unpushed branches. It is
                 built on the sandbox and appears under <span class="font-medium text-content">Exports</span> when it is done, so you can close this
                 tab while it runs.
             </p>
 
-            <!--
-                Lock opens and turns warning-colored exactly when the bundle becomes unsafe to hand over. Bordered box, not a negative margin against
-                the modal's padding (PrimeVue's, not a number to assume).
-            -->
+            <!-- Lock opens and turns warning-colored exactly when the bundle becomes unsafe to hand over. -->
             <div class="overflow-hidden rounded-lg border border-line">
                 <Row
                     flush
@@ -67,10 +64,7 @@ watch(
 
         <template #footer>
             <Button label="Cancel" severity="secondary" :text="true" @click="emit(`cancel`)" />
-            <!--
-                Label mirrors the switch, so the confirm carries the choice too, not just the switch. `warn`, not `danger`: it destroys nothing, just
-                writes a file to handle like a key.
-            -->
+            <!-- Label mirrors the switch, so the confirm carries the choice too, not just the switch. -->
             <Button
                 :label="secrets ? `Export with secrets` : `Export`"
                 :severity="secrets ? `warn` : undefined"

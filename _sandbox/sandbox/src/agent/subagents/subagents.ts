@@ -132,10 +132,7 @@ export const listSubagentSessions = (): SubagentSession[] => {
         .toSorted((left, right) => Number(subagentRunning(right)) - Number(subagentRunning(left)) || right.activityAt - left.activityAt);
 };
 
-/**
- * Everything subagent-transcript.ts needs to read one child's transcript, nothing the wire carries. Undefined: no such
- * record (never started, or aged out).
- */
+/** Everything subagent-transcript.ts needs to read one child's transcript, nothing the wire carries. */
 export const subagentSource = (
     id: string,
 ):
@@ -170,10 +167,7 @@ export const subagentSource = (
     };
 };
 
-/**
- * Whether a live child is working in the parent's own checkout, the rebase gate's question: an SDK subagent edits it
- * directly, a spawned child has its own worktree.
- */
+/** Whether a live child is working in the parent's own checkout, the rebase gate's question: an SDK subagent edits it directly. */
 export const subagentInParentTree = (conversationId: string): boolean =>
     [...records.values()].some((record) => record.conversationId === conversationId && record.kind !== "spawned" && subagentRunning(record));
 
@@ -524,10 +518,7 @@ export const pairLiveSubagents = async (): Promise<void> => {
     await Promise.all([...unpaired].map(pair));
 };
 
-/**
- * Whether anything checked a child's work: the stamped verdict once it has ended, else the live standing (a foreground
- * child's result can reach its parent before the task stream marks it over).
- */
+/** Whether anything checked a child's work: the stamped verdict once it has ended. */
 export const subagentVerification = (id: string): SubagentVerification | undefined => records.get(id)?.verification ?? childVerification(id);
 
 export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
@@ -711,7 +702,7 @@ export const waitForSubagent = (conversationId: string, options: SubagentWaitOpt
             [...records.values()].filter(
                 (record) => record.conversationId === conversationId && (options.target === undefined || record.id === options.target),
             );
-        // oxlint-disable-next-line prefer-const -- assigned in a later branch and cleared in another; the declaration cannot be merged with either.
+        // oxlint-disable-next-line prefer-const -- A later branch assigns and clears this binding.
         let timer: ReturnType<typeof setTimeout> | undefined;
         const settle = (result: SubagentWaitOutcome): void => {
             waiters.delete(evaluate);

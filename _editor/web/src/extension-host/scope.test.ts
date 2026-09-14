@@ -1,12 +1,7 @@
 import { resetSandboxScope, sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { beforeEach, describe, expect, it } from "vitest";
 
-/* The extensions' state scope (extension-api/src/scope.ts), tested from here because the SDK ships no test
- * harness of its own: the same reason surface-guard.test.ts and permissions.conformance.test.ts live in this
- * directory rather than beside the package they hold to account.
- *
- * The rule under test is the one the reported bug broke: a rail badge filled from module state kept the
- * PREVIOUS sandbox's count after a switch, under the new sandbox's name. */
+/* The extensions' state scope (extension-api/src/scope.ts), tested from here because the SDK ships no test harness of its own. */
 
 // Every registration is permanent by design (a module registers once, at import), so the suite shares one
 // registry and simply resets between cases.

@@ -5,9 +5,7 @@ import { errorCode, routesClient } from "../../harness/route-client.testing.js";
 import { createAccountsRoutes } from "./accounts.routes.js";
 import type { AccountDoor } from "../providers/provider-module.js";
 
-/* The one route family over every account door: what these prove is the part no door owns. Which provider was
- * asked for and whether it has a door at all, how a door's own refusal reaches the wire, and the two answers a
- * finishing call can give. The doors themselves are tested where they live (claude/claude-accounts.test.ts). */
+/* The one route family over every account door: what these prove is the part no door owns. */
 
 const ROW: OauthAccount = { id: "a", label: "Work", connectedAt: 1 };
 

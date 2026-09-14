@@ -1,9 +1,6 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 
-/* Opinionated file nesting (VSCode's feature, minus the configuration): in any directory that contains a
- * package.json file, every OTHER file in that directory folds under package.json as a collapsible nest;
- * subdirectories stay ordinary siblings. One binary preference (useFileNesting) turns it on or off,
- * there are no per-pattern rules. */
+/* Opinionated file nesting (VSCode's feature, minus the configuration): in any directory that contains a package.json file. */
 
 export interface NestedEntry {
     readonly entry: WorkspaceTreeEntry;

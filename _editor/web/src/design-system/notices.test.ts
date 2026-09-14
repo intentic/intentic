@@ -2,9 +2,7 @@ import { type NoticeModel, rankNotices } from "@intentic/ui/notice";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { describe, expect, it } from "vitest";
 
-/* The two halves of "one voice per problem": what a caught thing turns into, and which of several the user
- * reads first. Both live in leaves: @intentic/ui ships no test runner (same reason as dagLayout.test.ts), and
- * useAsyncAction's helpers are pure functions over a caught value. */
+/* The two halves of "one voice per problem": what a caught thing turns into, and which of several the user reads first. */
 
 const notice = (tone: NoticeModel[`tone`], title: string, key?: string): NoticeModel => ({ tone, title, key });
 

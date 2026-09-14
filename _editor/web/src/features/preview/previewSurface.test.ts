@@ -1,10 +1,6 @@
 // @vitest-environment jsdom
 //
-/* THE WELCOME THAT MUST NOT BECOME A HABIT. A fresh sandbox arrives with a starter site already running, and
- * the first visit opens the preview on it, because a site nobody is shown is the same as no site. Every visit
- * after that belongs to the reader: whatever they last chose to look at, including nothing. The flag that draws
- * that line is STORED, so the reload a user does five seconds later does not count as a new first visit — the
- * regression this pins is the panel reappearing over whatever they had navigated to instead. */
+/* THE WELCOME THAT MUST NOT BECOME A HABIT. */
 import { beforeEach, expect, it, vi } from "vitest";
 
 const SANDBOX = `sbx-1`;

@@ -1268,12 +1268,7 @@ describe("agents registry", () => {
             expect(registry.get("c1")?.unfinished).toEqual({ at: 4_000, steps: { open: 1, total: 2, next: "Cover it with tests" } });
         });
 
-        /* A TURN THAT SAW NO LIST says something different depending on how it ended. Run to its own end, the list
-         * was out of reach (a fresh session after a hand-off starts its ids at 1; the old list reaches the agent only
-         * as prose), and the agent finishing on its own terms is the last word: the mark clears. Cut short, it never
-         * got to look, and the last measurement stands. This is what kept a landed session wearing "4 of 4 steps
-         * unfinished" from a turn the allowance refused: the successful retry ran in a new session and never touched
-         * the Task tools, so every later finish, the land included, copied the stale count forward. */
+        /* A turn that reaches its own end without a list clears the prior unfinished state. */
         it("clears through a turn that ran to its own end without a list in view", async () => {
             const registry = createAgentsRegistry(memoryStore(), standings(), presences());
             await registry.init();

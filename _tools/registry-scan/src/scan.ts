@@ -147,8 +147,7 @@ export const scanRegistry = async (file: RegistryFile, github: GithubReader, sca
     const found = await github.searchByTopic(REGISTRY_TOPIC);
     const foundByRepo = new Map(found.map((repo) => [repo.fullName.toLowerCase(), repo]));
 
-    // Every listed entry gets facts even if the topic search missed it, so a PR-only listing doesn't lose stars for
-    // that.
+    // Keep facts for every listed entry even when topic search misses it.
     const entries: RegistryFacts["entries"] = [];
     for (const [repoName, entry] of listed) {
         const repo = foundByRepo.get(repoName) ?? (await github.getRepo(repoName));

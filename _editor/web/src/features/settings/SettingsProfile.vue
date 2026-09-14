@@ -6,14 +6,11 @@ import { fileToSquareDataUrl } from "../../lib/imageDataUrl";
 import { useAuth } from "../auth/useAuth";
 import { useHostedPlan } from "./hosted-plan/useHostedPlan";
 
-/* Profile: display name + avatar, saved via Better Auth's update-user (useAuth.updateProfile). The avatar is a
- * live control (pick → save immediately, like the sandbox logo on /sandbox); the name is inline-editable with
- * the same pencil / check / cancel affordances as the sandbox name on that page. */
+/* Profile: display name + avatar, saved via Better Auth's update-user (useAuth.updateProfile). */
 
 const { user, updateProfile } = useAuth();
 
-/* The plan chip beside the name: the same derivation the account menu reads, so the two cannot disagree about
- * which lane this account is on. Absent where the platform sells no plan, like the Billing tab itself. */
+/* The plan chip beside the name: the same derivation the account menu reads, so the two cannot disagree about which lane this account is on. */
 const { planBadge } = useHostedPlan();
 
 const avatarInput = ref<HTMLInputElement | null>(null);
@@ -205,11 +202,7 @@ const saveName = async (): Promise<void> => {
                             </div>
                         </div>
 
-                        <!-- THE LANE THIS ACCOUNT IS ON, the same chip the account menu wears (hostedHours.ts),
-                             here because this is the page ABOUT the account and a plan is an attribute of it.
-                             After the rename control, not between the name and its pencil: those two are a pair.
-                             Inert, as it is in the menu — Billing is a tab away in the rail on the left, and a
-                             chip that navigated would be the row this replaced, wearing a different shape. -->
+<!-- THE LANE THIS ACCOUNT IS ON, the same chip the account menu wears (hostedHours.ts). -->
                         <StatusBadge
                             v-if="planBadge"
                             :variant="planBadge.variant"

@@ -78,8 +78,7 @@ describe(`readNotes`, () => {
         expect((await readNotes(root)).map((file) => file.path)).toEqual([`ada.md`]);
     });
 
-    /* A knowledge base synced from Obsidian carries the editor's own state, and one kept in git carries a checkout.
-     * Neither is knowledge, and reading them would put hundreds of non-notes in the panel's list. */
+/* A knowledge base synced from Obsidian carries the editor's own state, and one kept in git carries a checkout. */
     it(`walks past the editor's own folders and a checkout`, async () => {
         await put(`ada.md`, `---\ntype: person\n---\n`);
         await put(`.obsidian/workspace.md`, `# layout`);

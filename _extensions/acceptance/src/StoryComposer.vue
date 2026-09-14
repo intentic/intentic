@@ -40,7 +40,7 @@ const submit = (): void => {
     <div class="px-4 py-2.5">
         <div class="flex items-center gap-3">
             <Icon name="plus" class="shrink-0 text-subtle" />
-            <!-- min-h-11 fills the row rather than just one line's height, so the tappable area is the whole row, not a thin band in the middle. -->
+            <!-- The minimum height makes the whole row tappable. -->
             <input
                 v-model="title"
                 :placeholder="group === `` ? `New story, a title, or group/title to file it under one` : `New story in ${group}/, type a title`"

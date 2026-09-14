@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { dedupeByPath } from "./uploadChunking";
 
-/* Guards the upload queue's same-destination invariant: a single drop may contain two entries aimed at the same
- * path (same-named files dragged from different folders). If both reached the parallel XHR pool their offset
- * writes would interleave into one destination file: dedupeByPath must keep exactly one entry per path, and it
- * must be the LAST one (later write wins, matching overwrite intent). chunkItems is covered by
- * scripts/uploadChunking.check.mjs. */
+/* The upload queue rejects duplicate destination paths within one drop. */
 
 const entry = (path: string, tag: string) => ({ path, tag });
 

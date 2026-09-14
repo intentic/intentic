@@ -120,10 +120,7 @@ test("recency alone reorders toward the newer file", () => {
     expect(fuse([rrfOrder], { ...context, defBoost: false, pathBoost: false, recency: false, queryTokens: [], mtimes })[0]?.path).toBe("plain.ts");
 });
 
-/* The 200k is the point: it is past the argument limit that made the old spread-based fuse throw, so the
- * work is real CPU rather than the object-shuffling the 5s unit budget assumes, and on a runner building three
- * verify jobs at once it ran 25x its 203ms local time and tripped the hang detector. Stated at the test, per
- * the budget's own escape hatch: this bounds a hang, it does not measure the runner. */
+/* The 200k is the point: it is past the argument limit that made the old spread-based fuse throw. */
 const NO_STACK_OVERFLOW = 30_000;
 
 test(

@@ -539,8 +539,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                     { value: "wireguard", label: "Paste WireGuard configs" },
                 ],
             },
-            // Per-provider picker, sorted best-supplied first; the server itself is never asked for, the driver picks
-            // one.
+            // Sort provider choices by supplied headroom without requesting the provider itself.
             {
                 key: "country",
                 label: "Come out in",
@@ -577,8 +576,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 hint: "Empty means the first file above.",
                 when: "provider == 'wireguard'",
             },
-            // Off by default, opposite of the VPN card: an exit costs bandwidth, starts on demand when something needs
-            // it.
+            // Keep exit effects disabled by default until a consumer needs them.
             {
                 key: "autoStart",
                 label: "Start automatically",

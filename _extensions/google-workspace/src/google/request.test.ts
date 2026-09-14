@@ -22,8 +22,7 @@ describe("retryDelay", () => {
 describe("googleError", () => {
     const at = (service: string): string => `https://${service}.googleapis.com/v1/whatever`;
 
-    /* The single most common first failure: a project where nobody enabled the API. Google's own message
-     * describes the situation and never says the words that fix it, so this one names the console. */
+    /* A disabled API needs a console instruction, not Google's raw error. */
     it("turns a disabled API into the instruction that enables it", () => {
         const error = googleError(403, at("gmail"), {
             error: { message: "Gmail API has not been used in project 12345 before or it is disabled." },

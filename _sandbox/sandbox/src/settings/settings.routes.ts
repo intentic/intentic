@@ -52,12 +52,7 @@ export const createSettingsRoutes = (services: Services) => {
             const [declarations, settings] = await Promise.all([declaredRepoChecks(services.workspace.root), services.sandboxSettings.get()]);
             return { repos: summariesOf(declarations, settings.adoptedChecks) };
         }),
-        /* ADOPTION: the owner's answer to what a repository asks for, recorded against the fingerprint of what it asks
-         * for NOW — read here rather than taken from the caller, so the answer can only ever be about the file the
-         * daemon can see. A repository that declares nothing cannot be adopted, so a press on a stale row leaves
-         * nothing behind that would silently arm a file written afterwards. The write is a read-modify-write of the
-         * whole settings object, since that is the store's only verb; it carries the same last-writer-wins hazard as
-         * the settings screen's own saves. */
+/* ADOPTION: the owner's answer to what a repository asks for, recorded against the fingerprint of what it asks for NOW. */
         adoptRepoChecks: i.adoptRepoChecks.handler(async ({ input }) => {
             const settings = await services.sandboxSettings.get();
             const adopted = { ...settings.adoptedChecks };

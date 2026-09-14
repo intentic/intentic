@@ -3,24 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::docker;
 use crate::logfile::Log;
 
-/* TELLING THE SANDBOX THAT ITS NEXT UPDATE IS ALREADY DOWNLOADED.
- *
- * The daemon inside the container cannot see any of this by itself: it holds no host Docker socket, so it
- * cannot look at the host's images, and the channel record lives under the user's home on the HOST, which the
- * container never mounts. Left to itself all it can say is "a newer release exists" — which is what made every
- * update card quote a few minutes of downtime for what is really seconds of downtime behind a download.
- *
- * So the host tells it, in one small file, written the moment `ic sandbox prepare` finishes.
- *
- * WHY IT GOES ON THE HISTORY VOLUME. /history is daemon-owned and outside the agent's /work mount — the same
- * placement, for the same reason, as the activity ledger and the usage ledger. Put this under /work instead
- * and the file would be agent-writable, which would make "an update is ready to apply" a fact any agent in the
- * sandbox could assert about the host. It only drives card copy today, and that is exactly the kind of thing
- * that stops being true later.
- *
- * It is written and removed with `docker exec` rather than `docker cp` so the file is owned by the container's
- * own user throughout — a root-owned file dropped into a daemon-owned directory is a file the daemon may not
- * be able to replace. Temp-then-rename, like every other record this repo writes. */
+/* The daemon inside the container cannot see any of this by itself: it holds no host Docker socket, so it cannot look at the host's images. */
 
 /// Where the daemon looks. Its config takes an overridable `historyRoot` whose default this matches; the
 /// override exists for isolated turns, which are never the target of an update.

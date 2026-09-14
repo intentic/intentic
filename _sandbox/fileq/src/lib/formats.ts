@@ -102,11 +102,7 @@ export const isCandidatePath = (path: string): boolean => extname(path).toLowerC
 // Zip-underneath formats where magic can only say "zip"; the extension names the real container instead.
 const ZIP_CONTAINERS: ReadonlySet<Format> = new Set(["docx", "xlsx", "pptx", "odt", "epub"]);
 
-/**
- * Magic bytes first, extension only when magic says nothing or just "zip" where the extension claims an OOXML
- * container.
- * A magic verdict for a format not derived here answers undefined rather than falling back to a lying extension.
- */
+/** Magic bytes first, extension only when magic says nothing or just "zip" where the extension claims an OOXML container. */
 export const detectFormat = async (absPath: string): Promise<Format | undefined> => {
     const byExtension = EXTENSION_FORMAT[extname(absPath).toLowerCase()];
     const magic = await fileTypeFromFile(absPath).catch(() => undefined);

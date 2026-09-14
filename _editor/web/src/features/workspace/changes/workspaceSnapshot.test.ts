@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-/* Both halves of "where I was in the workspace" have the same contract: whatever is on disk, what comes back is
- * something the view can actually render: folders that are just paths, tabs that each name a real surface once,
- * and a focus that names one of them. Nothing here is checked against the filesystem (see workspaceSnapshot.ts);
- * a folder that has since been deleted restores as a path that matches no row, which renders as nothing. */
+/* Both halves of "where I was in the workspace" have the same contract: whatever is on disk, what comes back is something the view can actually render. */
 
 // The node test environment has neither storage.
 const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => {

@@ -4,13 +4,7 @@ import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
 import DocsLayout from "../../components/docs/DocsLayout.astro";
 import DocsRelated from "../../components/docs/DocsRelated.astro";
 
-/* THE LIST STEP, and only it.
- *
- * This page used to carry five jobs: how to list, what the installer sees, how updates behave, the trust model,
- * and money, which is why it ran to nine screens and why nobody could find "verified" in it. Four of those five
- * are somebody else's question and now live where that reader is: the installer's experience in /docs/extensions/,
- * the trust vocabulary on /developers/verify/, the release cycle on /developers/maintain/. What is
- * left is the one thing an author does here: get a pointer to their repository into a registry. */
+/* THE LIST STEP, and only it. */
 
 const registry = `{
     "name": "acme-extensions",
@@ -45,16 +39,7 @@ const sources = `// A repo of its own
 // A subdirectory: one repo, several extensions
 { "source": "git-subdir", "url": "https://github.com/acme/tools.git", "path": "ext/incidents", "sha": "9f2c1ab…" }`;
 
-/* THE SHAPE, DRAWN — two lanes, and which lane the code travels on is the entire argument.
- *
- * The top lane is metadata: a pull request puts a pointer in a registry, somebody reads that list. It is drawn
- * thin and grey because none of it is your extension. The bottom lane is the extension itself, one thick brand
- * line from your repo to their sandbox, routed UNDER the registry rather than through it — so a reader who never
- * reads a label still sees that the middle box is not in the path. That is what the three bullets beside it say
- * in prose, and it is why nobody has to trust a build service.
- *
- * The dashed card at the foot reuses ArchitectureFigure's grammar: what stands off the path is dashed, grey, and
- * touched by no arrow at all. Nothing connects to it because nothing does. */
+/* THE SHAPE, DRAWN — two lanes, and which lane the code travels on is the entire argument. */
 const SHAPE = { w: 640, h: 274 };
 // The two outer parties share a row; the registry is taller because it has to SHOW a pointer rather than claim one.
 const shapeSide = { y: 22, h: 74, w: 132 };
@@ -81,15 +66,7 @@ const shapeCode = [
     `L ${shapeSandbox.cx} ${shapeBottom + 8}`,
 ].join(` `);
 const shapeNever = { x: 110, y: 220, w: 420, h: 42 };
-/* THE ROUTE IN, DRAWN — one column, top to bottom, because getting listed is a funnel and not a topology.
- *
- * It flows DOWN where the figure above flows across, which is how the two stay legible on one page: this one is
- * a process, that one is a map. Two entrances converge on the same pull request — the automatic one and the
- * hand-written one — and the two reviewers sit SIDE BY SIDE inside one band, because they run independently and
- * both have to pass. Drawing them in sequence would imply an order and a hand-off that neither has.
- *
- * The band says what it refuses in the same breath as what it approves; the page's own honesty about failing
- * closed belongs on the picture, not only under it. */
+/* THE ROUTE IN, DRAWN — one column, top to bottom, because getting listed is a funnel and not a topology. */
 const ROUTE = { w: 640, h: 320 };
 const routeCol = { x: 180, w: 300, cx: 330 };
 const routeStages = [
@@ -132,8 +109,7 @@ const shapeParts = [
     </ul>
 
     <div class="docs-embed mt-6">
-        {/* Two lanes on wide screens: the thin grey one carries the listing, the thick one carries the code —
-            under the registry, not through it. */}
+        {/* Wide layout separates listing and source-code lanes. */}
         <figure class="relative hidden overflow-hidden border border-line bg-canvas/60 sm:block">
             <div class="wall"></div>
             <div
@@ -188,7 +164,7 @@ const shapeParts = [
                         a registry is discovery only: a repo URL and a sha install this without one
                     </text>
 
-                    {/* ── your repo, and their sandbox ────────────────────────────────────────────────── */}
+                    {/* Your repository and the installer's sandbox. */}
                     {
                         [
                             { cx: shapeRepo.cx, label: `YOUR REPO`, line: `acme/incidents`, sub: `@ 9f2c1ab, one commit`, mine: true },
@@ -349,8 +325,7 @@ const shapeParts = [
     </p>
 
     <div class="docs-embed mt-6">
-        {/* The funnel on wide screens. It carries NO phone fallback on purpose: the ordered list directly below
-            is already the same route in words, and a second copy of it above would be read twice. */}
+    {/* Wide layout shows the funnel; the ordered list is the phone fallback. */}
         <figure class="relative hidden overflow-hidden border border-line bg-canvas/60 sm:block">
             <div class="wall"></div>
             <div
@@ -375,7 +350,7 @@ const shapeParts = [
                         </marker>
                     </defs>
 
-                    {/* ── the two entrances, converging ──────────────────────────────────────────────── */}
+                    {/* The two entrances converge here. */}
                     {
                         routeStages.map((stage) => (
                             <Fragment>
@@ -480,7 +455,7 @@ const shapeParts = [
                     <path d={`M ${routeCol.cx} ${routeBand.y + routeBand.h + 2} L ${routeCol.cx} ${routeListed.y - 2}`} fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#route-arrow)" />
                     <text x={routeCol.cx + 12} y={routeBand.y + routeBand.h + 16} font-size="8.5" style="fill: var(--color-subtle)">both pass</text>
 
-                    {/* ── and out the bottom ──────────────────────────────────────────────────────────── */}
+                    {/* The route exits through the bottom. */}
                     <rect
                         x={routeCol.x}
                         y={routeListed.y}

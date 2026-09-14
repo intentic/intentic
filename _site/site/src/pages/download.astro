@@ -6,26 +6,11 @@ import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
 import { desktopPlatforms } from "../lib/desktop-downloads";
 
-/* THE DOWNLOAD PAGE: the answer to the one objection the quickstart raises.
- *
- * Setting a sandbox up means running a command in a terminal, and that is where the flow is most often
- * abandoned: not because the command does more than an installer would, but because it arrives with none of
- * an installer's affordances: no publisher, no preview, no file list, no uninstaller. The app is those
- * affordances, so this page's job is to say what it is, be honest that it is the same thing underneath, and
- * hand over a file.
- *
- * The URLs are the site worker's vanity paths (worker.ts): a locally-staged installer if one exists, else a
- * redirect to the newest release's asset. No version in the LINKS: one that needs a bump every release is
- * one that eventually 404s, but the version is stated beside them, because the two are not the same promise:
- * a stable link is how the page keeps working, and a stated version is how somebody knows what they are about
- * to install and whether this project shipped anything this year. It is read, never typed (latestRelease),
- * and the page renders without it rather than with a stale one. */
+/* THE DOWNLOAD PAGE: the answer to the one objection the quickstart raises. */
 
 const release = await latestRelease();
 
-/* Name, link and glyph come from the shared table, so this page and the hero's button can never drift into
- * pointing at different files. The wording below is this page's own: here there is room to say what the file
- * is and what running it costs. */
+/* Name, link and glyph come from the shared table, so this page and the hero's button can never drift into pointing at different files. */
 const downloads = [
     {
         ...desktopPlatforms.windows,
@@ -94,9 +79,7 @@ const does = [
                 }
             </div>
 
-            {/* The link sits at the END of the sentence on purpose: an anchor followed by punctuation puts the
-                closing tag and the full stop on separate lines once this file is formatted, and the browser
-                renders that gap as a space floating before the period. */}
+            {/* Keep the link before punctuation so formatting cannot add a visible gap. */}
             {
                 release !== null && (
                     <p class="mt-4 max-w-copy text-xs text-subtle">
@@ -123,9 +106,7 @@ const does = [
                 No macOS build yet. On a Mac, use the <a href="/docs/quickstart/" class="text-link hover:underline">one-line install</a>. It
                 does exactly the same thing.
             </p>
-            {/* The prior question, asked after the downloads rather than before them: this page's reader has
-                usually already decided the machine is theirs, and the ones who have not are better served by
-                a line they can follow than by a fork above the buttons they came for. */}
+            {/* The setup link follows downloads for readers who still need to choose a machine. */}
             <p class="mt-2 max-w-copy text-xs text-subtle">
                 The app is for running the sandbox on <strong class="text-muted">this</strong> computer. It can also run on a machine we
                 host: <a href="/where-it-runs/" class="text-link hover:underline">compare the two</a>.
@@ -145,13 +126,11 @@ const does = [
             </div>
         </section>
 
-        <!-- Said plainly rather than buried: someone who is weighing an .exe against a shell command deserves
-             to know they are the same thing, and that neither of them is a second product to learn. -->
+<!-- Said plainly rather than buried: someone who is weighing an .exe against a shell command deserves to know they are the same thing. -->
         <section class="mx-auto max-w-5xl px-6 pb-24">
             <div class="border border-line bg-surface p-6">
                 <h2 class="text-lg font-semibold text-content">The app runs the standard setup for you</h2>
-                {/* Two columns rather than one capped paragraph and half a card of nothing: a readable line is
-                    ~67 characters, this card is 976px wide, and the piece is exactly two paragraphs long. */}
+                {/* Two columns keep the card's paragraphs at a readable measure. */}
                 <div class="mt-3 grid gap-x-10 gap-y-3 sm:grid-cols-2">
                     <p class="max-w-copy text-sm text-muted">
                         The app runs the same script as the <a href="/docs/quickstart/" class="text-link hover:underline">one-line install</a>.

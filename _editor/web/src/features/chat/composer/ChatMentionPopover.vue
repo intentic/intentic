@@ -5,9 +5,7 @@ import { computed, ref, toRef } from "vue";
 import { useFuzzyFiles } from "../../workspace/search/useFuzzyFiles";
 import { basename, parentDir } from "@intentic/ui/path";
 
-/* The composer's @-mention picker: an inline panel above the textarea listing workspace files matching the
- * active token (client-ranked over the cached tree: the QuickOpen data path, useFuzzyFiles). The parent owns
- * the keyboard flow (the textarea keeps focus) and calls the exposed move/pickActive from its keydown handler. */
+/* The mention picker lists workspace files ranked against the cached tree. */
 
 const props = defineProps<{ query: string }>();
 const emit = defineEmits<{ pick: [path: string] }>();

@@ -1,7 +1,4 @@
-<!--
-    Nudges the user after inactivity on the run step — the only trigger available, since not running the command is silent. Renders in two places
-    (the `xl` reference column, or under the wait line below `xl`); exactly one is visible via `display:none`, per the page's own `variant`.
--->
+<!-- Nudges the user after inactivity on the run step — the only trigger available, since not running the command is silent. -->
 <script setup lang="ts">
 import { CopyButton, Notice } from "@intentic/ui";
 

@@ -303,9 +303,7 @@ test("run with no command configured starts nothing", async () => {
     expect((await check.state()).status).toBe("idle");
 });
 
-/* WHAT A REPOSITORY ASKS FOR ITSELF, at the one moment it matters: a push. Three facts, each of which was untrue while
- * one command in the settings stood for every repository in the workspace — it ran for pushes it had nothing to do
- * with, it ran from the workspace root, and it could not be written by the repository that owns the build. */
+/* WHAT A REPOSITORY ASKS FOR ITSELF, at the one moment it matters: a push. */
 
 // A workspace with one repository that declares a check of its own; the marker file is how a test proves WHERE a
 // command ran, since a `cd` in the wrong place is the failure this whole change is about.

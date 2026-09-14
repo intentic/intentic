@@ -352,10 +352,7 @@ const onEditorSave = (value: string): void =>
     <div class="flex h-full min-h-0 flex-col">
         <!-- Breadcrumb path + edit actions (text only); actions stay through the post-save refetch via `|| editingThis`. -->
         <FileBreadcrumb :path="path" :meta="meta">
-            <!--
-                Same Comments toggle as the diff surface, one habit across both; starts shown here, since opening a file
-                asks what it says.
-            -->
+<!-- Same Comments toggle as the diff surface, one habit across both; starts shown here, since opening a file asks what it says. -->
             <button
                 v-if="canHideComments"
                 type="button"
@@ -368,11 +365,7 @@ const onEditorSave = (value: string): void =>
                 <Icon :name="hideFileComments ? 'eye-slash' : 'eye'" class="text-2xs" />
                 <span class="max-md:hidden">Comments</span>
             </button>
-            <!--
-                Second reading of the same file, one click away: what a pdf, a spreadsheet or a picture becomes as text.
-                A chip rather than evidence, so it costs nothing until asked; the surface behind it says whether there is
-                any text yet and offers to make it.
-            -->
+<!-- Second reading of the same file, one click away: what a pdf, a spreadsheet or a picture becomes as text. -->
             <button
                 v-if="derivedOffered"
                 type="button"
@@ -385,10 +378,7 @@ const onEditorSave = (value: string): void =>
                 <Icon :name="textWanted ? 'file' : 'align-left'" class="text-2xs" />
                 <span class="max-md:hidden">Text</span>
             </button>
-            <!--
-                Tab row's chip says the view shows an agent's copy; this says this file specifically came from the shared
-                workspace.
-            -->
+<!-- Tab row's chip says the view shows an agent's copy; this says this file specifically came from the shared workspace. -->
             <span
                 v-if="workspaceAgent !== undefined && fromShared"
                 class="inline-flex shrink-0 items-center gap-1 rounded-md bg-overlay px-1.5 py-0.5 text-2xs text-muted"
@@ -457,10 +447,7 @@ const onEditorSave = (value: string): void =>
         </div>
 
         <div class="relative min-h-0 flex-1">
-            <!--
-                Ahead of every other surface, including the editor's: this is the reader's own choice for formats that
-                have another view, and the only thing to show for formats that don't.
-            -->
+<!-- Ahead of every other surface, including the editor's: this is the reader's own choice for formats that have another view. -->
             <DerivedTextView v-if="showDerived" :path="path" :downloadable="derivedDownloadable" @download="download" />
             <CodeView
                 v-else-if="editingThis"
@@ -490,10 +477,7 @@ const onEditorSave = (value: string): void =>
                     :scroll-to-line="line"
                     :hide-comments="hideFileComments"
                 />
-                <!--
-                    Seeded and re-keyed like the editable CodeView above: the surface owns its text after mount, replaced only
-                    by a reload, a clean external write, or a different file.
-                -->
+<!-- Seeded and re-keyed like the editable CodeView above: the surface owns its text after mount, replaced only by a reload, a clean external write. -->
                 <MarkdownViewer
                     v-else-if="open.kind === 'markdown' && text !== null"
                     ref="markdownView"
@@ -507,19 +491,13 @@ const onEditorSave = (value: string): void =>
                 />
                 <!-- Over the editable cap: windowed, read-only, seeded with the window the read above already got. -->
                 <BigTextView v-else-if="open.kind === 'big-text' && firstWindow" :path="path" :first="firstWindow" @download="download" />
-                <!--
-                    Extension-contributed viewer: gets the path plus exactly one content prop (the manifest's `fetch` kind,
-                    never the others as undefined). `download` is the host's authenticated fetch, shared with the fallback states below.
-                -->
+<!-- Extension-contributed viewer: gets the path plus exactly one content prop (the manifest's `fetch` kind, never the others as undefined). -->
                 <component :is="viewerComponent" v-else-if="viewerComponent" :path="path" v-bind="viewerContent" @download="download" />
                 <FileUnsupported v-else-if="open.kind === 'too-large'" mode="too-large" :size="meta?.size" @download="download" />
                 <FileUnsupported v-else-if="open.kind === 'empty'" mode="empty" />
                 <!-- Sandbox keeps this one to itself; resolveOpenFile knows from the path alone, no fetch needed. -->
                 <FileLocked v-else-if="open.kind === 'locked'" :path="path" />
-                <!--
-                    Everything left: a known binary, or the unreachable case of a viewer that resolved with no component; both
-                    just hand over bytes.
-                -->
+<!-- Everything left: a known binary, or the unreachable case of a viewer that resolved with no component; both just hand over bytes. -->
                 <FileUnsupported v-else mode="binary" @download="download" />
             </template>
         </div>

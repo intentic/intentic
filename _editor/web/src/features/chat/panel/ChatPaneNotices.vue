@@ -105,10 +105,7 @@ const activeAccountReauth = computed(() => {
 </script>
 
 <template>
-    <!--
-        This conversation's agent is off the board. Muted, not a warning: archiving loses nothing (branch, diff,
-        transcript, counters all stay). Sending from here un-archives it, deliberately, without sending anything yet.
-    -->
+<!-- This conversation's agent is off the board. -->
     <div v-if="activeArchived !== undefined" class="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2 text-2xs text-muted">
         <Icon name="box" class="shrink-0" />
         <span class="min-w-0 flex-1">Archived: off the board. Sending a message restores it.</span>
@@ -124,10 +121,7 @@ const activeAccountReauth = computed(() => {
         </Button>
     </div>
     <ChatAccountPanel />
-    <!--
-        The free lane's last hours: the meter's own line, amber, with the door to Billing. Same box as the trial strip
-        below, since both say what this chat runs on and for how much longer.
-    -->
+<!-- The free lane's last hours: the meter's own line, amber, with the door to Billing. -->
     <div
         v-if="hoursNotice"
         class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-left text-2xs text-warning"
@@ -136,26 +130,15 @@ const activeAccountReauth = computed(() => {
         <span class="min-w-[14rem] flex-1">{{ hoursNotice }}</span>
         <Button v-if="planOffered" :as="RouterLink" to="/settings/billing" size="small" severity="secondary" :text="true" class="shrink-0">Billing</Button>
     </div>
-    <!--
-        The trial's standing disclosure: the picker says it once at the moment of choosing, this says it for as long as
-        the choice holds (the typer may not be the picker). Exhausted, it becomes the signpost to the free Google
-        sign-in — and the only thing on screen, since a spent trial can't send.
-    -->
+<!-- The trial's standing disclosure: the picker says it once at the moment of choosing. -->
     <div
         v-if="trialNotice"
         class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line bg-card px-3 py-2 text-left text-2xs text-muted"
     >
         <Icon name="sparkles" class="shrink-0 text-link" />
-        <!--
-            A floor, not `min-w-0` (ChatContinueStrip's own lesson): every control beside this is `shrink-0`, so a
-            shrinkable sentence never triggers `flex-wrap` and the buttons can't drop to their own row.
-        -->
+<!-- A floor, not `min-w-0` (ChatContinueStrip's own lesson): every control beside this is `shrink-0`. -->
         <span class="min-w-[14rem] flex-1">{{ trialNotice }}</span>
-        <!--
-            The actions, one box, one baseline: they were siblings of the sentence (a kit button beside a hand-rolled link
-            chip, two sizes, three baselines) with nothing lined up. One kit control each, in one box, fixes alignment at
-            the source and keeps them together when the row wraps.
-        -->
+<!-- Notice actions share one button style and baseline. -->
         <div class="flex shrink-0 items-center gap-1">
             <Button
                 v-if="trialUnavailable"
@@ -168,15 +151,9 @@ const activeAccountReauth = computed(() => {
             >
                 Retry
             </Button>
-            <!--
-                The door the account gate used to hold, standing here while this strip does: spent, the model list is every
-                other way to send.
-            -->
+<!-- The door the account gate used to hold, standing here while this strip does: spent, the model list is every other way to send. -->
             <ChatChooseModelButton v-if="trialSpent" />
-            <!--
-                A place, so a link, drawn as a button: the sign-in has an address, and Ctrl/Cmd-click opens it in another tab
-                rather than losing this conversation. `as` keeps the anchor while the kit owns the pixels.
-            -->
+<!-- A place, so a link, drawn as a button: the sign-in has an address, and Ctrl/Cmd-click opens it in another tab rather than losing this conversation. -->
             <Button
                 :as="RouterLink"
                 :to="{ path: '/sandbox/agent', query: { connect: 'gemini' } }"
@@ -188,10 +165,7 @@ const activeAccountReauth = computed(() => {
             </Button>
         </div>
     </div>
-    <!--
-        Proactive re-auth: the credential exists but can no longer refresh, surfaced here (before an opaque mid-turn
-        failure) with a jump to reconnect.
-    -->
+<!-- Proactive re-auth: the credential exists but can no longer refresh, surfaced here (before an opaque mid-turn failure) with a jump to reconnect. -->
     <RouterLink
         v-if="activeAccountReauth"
         :to="{ path: '/sandbox/agent', query: { connect: provider } }"

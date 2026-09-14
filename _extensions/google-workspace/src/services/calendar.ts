@@ -23,8 +23,7 @@ interface CalendarEvent {
 
 const calendarId = (args: Args): string => flag(args, "calendar", "cal") ?? "primary";
 
-/* The calendar's own zone, which is what a naive `--start 14:00` means. Fetched rather than assumed, and
- * cached for the process: every time-taking command needs it, and it is one small request per `gw` run. */
+/* The calendar's own zone, which is what a naive `--start 14:00` means. */
 const zoneOf = (() => {
     const known = new Map<string, string>();
     return async (session: Session, id: string): Promise<string> => {

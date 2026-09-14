@@ -61,7 +61,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ── the shipped script ────────────────────────────────────────────────────────────────────────────────────────
+# the shipped script
 echo "==> extracting connect.sh from the installer"
 dpkg-deb --fsys-tarfile "$DEB" | tar -x -C "$WORK"
 SHIPPED="$(find "$WORK" -type f -path '*/scripts/connect.sh' -print -quit)"
@@ -71,10 +71,10 @@ if [ -z "$SHIPPED" ]; then
 fi
 echo "    ${SHIPPED#"$WORK"/}"
 
-# ── a clean Docker host ───────────────────────────────────────────────────────────────────────────────────────
+# a clean Docker host
 start_dind_host "$HOST_CONTAINER"
 
-# ── run the setup the app would run ───────────────────────────────────────────────────────────────────────────
+# run the setup the app would run
 # NOT /tmp: the dind entrypoint mounts a tmpfs over /tmp from INSIDE the container's mount namespace, and the
 # daemon serving `docker cp` writes through the container's rootfs on the host, underneath that mount. The copy
 # reports success (and `docker cp` reads it straight back), while every process in the container sees an empty
@@ -115,7 +115,7 @@ else
     exit 1
 fi
 
-# ── independent read-back ─────────────────────────────────────────────────────────────────────────────────────
+# independent read-back
 # connect.sh's success already implies a healthy daemon, so these assert the things its exit code does not: that
 # the container is named the way every later flow addresses it (recreate/cleanup/the launcher's docker reads all
 # key off `intentic-sandbox-<slug>`), and that the daemon identifies itself.

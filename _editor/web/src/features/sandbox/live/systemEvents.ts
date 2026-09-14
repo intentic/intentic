@@ -36,11 +36,7 @@ const refreshChanges = throttleTrailing(() => {
 // Used only to scope the storage sweep to the sandbox in view; the sweep itself runs for any sandbox's frame.
 const { activeSandboxId } = useSandbox();
 
-/**
- * Routes one typed `/events` frame to whatever it makes stale.
- * `sandboxId` is passed in rather than read live, so a frame in flight during a sandbox switch can't apply to the new
- * one.
- */
+/** Routes one typed `/events` frame to whatever it makes stale. */
 export const applySystemEvent = (event: SystemEvent, sandboxId: string): void => {
     switch (event.kind) {
         case `hello`: {

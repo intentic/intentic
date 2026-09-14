@@ -1,7 +1,4 @@
-/** Khmer-inspired navigation: stepped lintels, cut corners, lotus points and lozenge joints.
- * Drawn for small controls on a 24-unit grid. Keep the silhouette specific to the section, leave at least
- * two units between strokes, and use solid cuts only where an outlined detail would close up.
- * This family also supplies the matching controls throughout the app. */
+/** Khmer-inspired navigation: stepped lintels, cut corners, lotus points and lozenge joints. */
 import type { Glyph } from "./glyph.js";
 
 export const NAVIGATION_GLYPHS = {

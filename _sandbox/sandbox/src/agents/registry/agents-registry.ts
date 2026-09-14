@@ -194,14 +194,7 @@ const turnEndingOf = (state: RuntimeState | undefined): TurnEnding =>
 const leftAt = (entry: PersistedAgent, state: RuntimeState | undefined, now: number): number =>
     state?.checklist === undefined && state?.check === undefined ? (entry.unfinished?.at ?? now) : now;
 
-/* THE STEPS A TURN LEAVES, and why a list it never saw is not always the old list. The checklist is the harness's own
- * state (Claude Code's task store, keyed by session id), re-seeded into a resumed session and published on the
- * provider's first answer; a turn that resumes the same session sees it whether or not the agent touches it. A turn
- * that could not see it is one of two things. Cut short (a spent allowance, a crash, a Stop) it never got to look, and
- * the last measurement stands. Run to its own end, the list is genuinely out of reach: a fresh session after a
- * hand-off or a move to another account starts its ids at 1 and reads the old list only as prose in the hand-off note.
- * Carrying the old count through that turn is what left a landed session wearing "4 of 4 steps unfinished" from a
- * turn the allowance refused, for good, with nothing the agent or the owner could do to clear it. */
+/* THE STEPS A TURN LEAVES, and why a list it never saw is not always the old list. */
 const stepsLeft = (entry: PersistedAgent, state: RuntimeState | undefined, ending: TurnEnding): UnfinishedWork["steps"] => {
     if (state?.checklist !== undefined) {
         return openSteps(state.checklist);

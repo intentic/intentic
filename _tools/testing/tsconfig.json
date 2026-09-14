@@ -1,5 +1,4 @@
-/* Source-consumed by every package's suites (exports → ./src/index.ts), so there is nothing to emit; this
- * config exists for the standalone type check. */
+/* This package is consumed from source and never emits build artifacts. */
 {
     "compilerOptions": {
         "types": ["node"],

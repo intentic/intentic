@@ -77,14 +77,7 @@ export interface RunManifest {
     readonly targets: Readonly<Record<string, string>>;
     // Project instructions that shaped the turns, by repo; kept with the evidence so Retry reuses the same brief later.
     readonly notes: Readonly<Record<string, string>>;
-    /* WHAT EVERY SESSION IN THIS RUN OPENS ON, as the wire spells it (contract AgentRunPickSchema): the pair,
-     * and the account, harness, tier, thinking and speed the reader configured with it.
-     *
-     * RECORDED RATHER THAN HELD IN THE VIEW, because a run fans a session out PER STORY and Retry launches more
-     * of them later, quite possibly in a browser that has been reloaded since: a choice kept in memory would run
-     * the first story the way the reader asked and every later one on the sandbox's defaults. The whole pick and
-     * not merely the pair, for the same reason — a fan-out whose first session thinks at Max and whose rest take
-     * the model's default is not one run. */
+    /* WHAT EVERY SESSION IN THIS RUN OPENS ON, as the wire spells it (contract AgentRunPickSchema): the pair. */
     readonly pick: NonNullable<AgentRunPick>;
     readonly stories: readonly RunStory[];
     // A POST refused before a session registered; kept since roster absence alone can't distinguish never-launched from

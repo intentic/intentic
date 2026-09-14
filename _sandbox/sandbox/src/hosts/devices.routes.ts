@@ -7,23 +7,13 @@ import type { Services } from "../composition.js";
 import { runDeviceCommand } from "./device-commands.js";
 import { devices, manageDeviceSandbox, runDeviceAgentFlow } from "./device-reports.js";
 
-/* GET /system/devices. Every device on the other end of this sandbox, the volunteered reports and the ones
- * pulled through a host capability, merged (hosts/device-reports.ts). Readable by any collaborator, like
- * /system/sync beside it: the bearer middleware already blocked a non-member, and a member's own mirroring
- * machine appears here. Acting on one of those devices' sandboxes is `system.manageDeviceSandbox`
- * (createDeviceSystemRoutes below) rather than a plain route here: every op streams, because the slowest of
- * them takes minutes, and a hand-rolled SSE response beside the oRPC surface would be a second shape for the
- * browser to parse. */
+/* GET /system/devices. */
 export const createDevicesRoute =
     (services: Parameters<typeof devices>[0]) =>
     async (c: Context<AppEnv>): Promise<Response> =>
         c.json({ devices: await devices(services) });
 
-/* The `system.*Device*` procedures, implemented where the devices themselves live rather than in
- * system/system.routes.ts. They sit under the system contract because a device is something the system has,
- * but their bodies are hosts' own: keeping them here is what stops system and hosts from importing each
- * other's values (a cycle _tools/checks/daemon-boundaries.mjs refuses). router.ts, above both, merges this
- * object into the system routes — the wire shape is unchanged. */
+/* The `system.*Device*` procedures, implemented where the devices themselves live rather than in system/system.routes.ts. */
 export const createDeviceSystemRoutes = (services: Services) => {
     const i = implement(systemContract).$context<OrpcContext>();
     // Every door here is maintainer-floored, checked identically so all three refuse the same way.

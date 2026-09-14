@@ -1,7 +1,4 @@
-<!--
-    Dispatches one authored figure fence to the component that draws it. Nothing here reads colour or coordinates from the document, which is what
-    makes a figure data rather than HTML.
--->
+<!-- Dispatches one authored figure fence to the component that draws it. -->
 <script setup lang="ts">
 import { defineAsyncComponent } from "vue";
 import type { Figure } from "../../markdown/figures.js";
@@ -11,16 +8,12 @@ import StatStrip from "./StatStrip.vue";
 
 defineProps<{ figure: Figure }>();
 
-/* The dag is the one branch that is not imported with the rest: it draws on a graph canvas (Vue Flow, dagre and
- * a stylesheet), which is heavier than everything else on this page put together and which most documents never
- * ask for. Loaded on the first one that does: see DagFigure.vue, which also explains why nothing moves on the
- * page while it arrives. */
+/* The dag is the one branch that is not imported with the rest: it draws on a graph canvas (Vue Flow, dagre and a stylesheet). */
 const DagFigure = defineAsyncComponent(() => import("./DagFigure.vue"));
 </script>
 
 <template>
-    <!-- Mermaid draws itself, palette and all (mermaidTheme.ts): the only figure kind whose picture this file
-         does not compose, because the author wrote the diagram in a notation with its own renderer. -->
+<!-- Mermaid draws itself, palette and all (mermaidTheme.ts): the only figure kind whose picture this file does not compose. -->
     <MermaidDiagram v-if="figure.kind === `mermaid`" :code="figure.code" />
     <BarChart v-else-if="figure.kind === `bars`" :items="figure.items" :title="figure.title" />
     <StatStrip v-else-if="figure.kind === `stats`" :items="figure.items" />

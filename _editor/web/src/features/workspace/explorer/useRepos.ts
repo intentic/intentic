@@ -4,9 +4,7 @@ import { sandboxJson } from "../../sandbox/client/sandboxClient";
 import { GIT_REPOS } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 
-/* Every real git repo under /work, "root" (the /work repo itself, implicit) plus each discovered nested repo,
- * as root-relative dir ids. Drives the file tree's per-repo git-history affordance and the graph's repo
- * switcher. Distinct from useChanges (which lists only repos WITH uncommitted work), this lists them all. */
+/* Every real git repo under /work, "root" (the /work repo itself, implicit) plus each discovered nested repo, as root-relative dir ids. */
 
 export function useRepos() {
     const { query } = useSandboxQuery({

@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import { InfoDialog, InfoTable } from "@intentic/ui";
 
-/* The (i) beside the Agent tab's "Rules" group. Two things a person needs before writing one and cannot get
- * from the form: what each moment can actually DO, they differ, and the differences are not arbitrary, and
- * how several rules at one moment relate to each other, which is the only thing about this table that is
- * surprising. */
+/* The (i) beside the Agent tab's "Rules" group. */
 
 const MOMENTS = [
     [`After it edits a file`, `Run a command on that file; what it prints on failure goes back with the edit`, `Once per edited file`],
@@ -22,8 +19,7 @@ const MOMENTS = [
         </p>
         <InfoTable class="mt-2" :headers="[`Moment`, `What a rule can do there`, `How often it runs`]" :rows="MOMENTS" />
 
-        <!-- The one genuinely surprising thing: two moments here treat a list of rules differently, and the
-             difference follows from what the moment is for rather than from a setting. -->
+<!-- The one genuinely surprising thing: two moments here treat a list of rules differently. -->
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">When several rules match</h3>
         <div class="mt-2 grid gap-2 @lg:grid-cols-2">
             <div class="overflow-hidden rounded-lg border border-line">

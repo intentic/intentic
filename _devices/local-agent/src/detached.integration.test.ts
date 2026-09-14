@@ -37,10 +37,7 @@ describe("spawnDetached", () => {
     });
 });
 
-/* The stub path, which only Windows takes in production. What broke there is not Windows-specific: the loop inherits
- * the stub's pipes and holds them open for its whole life, so the stub's stdio never reaches EOF and anything waiting
- * for EOF waits forever. A `sh` stand-in reproduces that exactly, which is what lets CI hold the line without a Windows
- * runner; skipped ON Windows only because a shell script is not a program there. */
+/* The stub path, which only Windows takes in production. */
 describe.skipIf(process.platform === "win32")("spawnThroughStub", () => {
     const stubFile = (body: string): string => {
         const stub = join(mkdtempSync(join(tmpdir(), "stub-")), "launch.sh");

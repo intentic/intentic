@@ -1,6 +1,4 @@
-/* The two things every zip-of-XML deriver needs and no library is worth pulling in for: entity decoding for
- * text pulled out of XML by regex, and attribute reading off a tag's attribute string. Both are honest about
- * their scope — they read machine-written OOXML/ODF/OPF, never arbitrary markup. */
+/* The two things every zip-of-XML deriver needs and no library is worth pulling in for: entity decoding for text pulled out of XML by regex. */
 
 export const decodeEntities = (text: string): string =>
     text

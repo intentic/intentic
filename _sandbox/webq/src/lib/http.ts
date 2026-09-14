@@ -1,7 +1,4 @@
-/* The static fetch path — where every page starts, and where most docs pages end. Node's own fetch
- * (undici) with the three guards a crawler cannot skip: a deadline, a byte cap enforced WHILE streaming
- * (a Content-Length header is a claim, not a promise), and charset decoding from the header with a
- * meta-tag fallback, because a mislabeled legacy page decoded as UTF-8 turns into mojibake markdown. */
+/* The static fetch path — where every page starts, and where most docs pages end. */
 
 export interface HttpFetchOptions {
     readonly timeoutMs?: number;

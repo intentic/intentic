@@ -30,16 +30,10 @@ const hint = computed(() =>
 </script>
 
 <template>
-    <!--
-        `relative` so the dot rides the glyph's own corner; `inline-flex` keeps the span the glyph's size, not the line's.
-        Size comes from the host's text class on this root (the glyph is 1em), so the card and the header each keep their own.
-    -->
+<!-- `relative` so the dot rides the glyph's own corner; `inline-flex` keeps the span the glyph's size, not the line's. -->
     <span v-tooltip.top="hint" :aria-label="hint" role="img" class="relative inline-flex shrink-0 items-center">
         <Icon :name="meta.icon" :spin="meta.spin" :class="meta.class" aria-hidden="true" />
-        <!--
-            Ringed in the card's own fill so it reads as sitting on the glyph rather than touching it; the same cut-out
-            the presence avatars use.
-        -->
+<!-- Ringed in the card's own fill so it reads as sitting on the glyph rather than touching it; the same cut-out the presence avatars use. -->
         <span
             v-if="unfinished !== undefined"
             data-unfinished

@@ -4,17 +4,7 @@ import { gitStats } from "@intentic/astro-integrations";
 import Bullet from "./Bullet.astro";
 import Corners from "./Corners.astro";
 
-/* The four checkable claims, shared by the landing band and /about/.
- *
- * The third card carries the only number on the page that would rot: every land changes it. So it is
- * MEASURED from git during the build rather than authored, and when git cannot answer (a shallow CI
- * clone, a tarball), `gitStats()` returns null and the card falls back to its sentence without a
- * figure. It never renders a zero: an empty counter is the one thing in a trust section that costs
- * more than it buys, which the reference page we borrowed this shape from demonstrates at its own
- * foot with "0 TOTAL POPULATION".
- *
- * The fourth card is the admission, and it is not padding. A trust section with nothing conceded in it
- * reads as marketing, and every claim above it stops counting. */
+/* The four checkable claims, shared by the landing band and /about/. */
 
 const stats = gitStats();
 
@@ -25,9 +15,7 @@ interface Props {
 const { class: className } = Astro.props;
 ---
 
-{/* The lotus does the work an icon set used to. Four bespoke line glyphs beside four titles was a second
-    vocabulary running alongside the site's own, and the one it competed with is the mark every list here is
-    bulleted with. */}
+{/* Use the shared lotus mark instead of adding a second icon vocabulary. */}
 <div class:list={["grid gap-[1.1rem] md:grid-cols-2", className]}>
     {
         trustCards.map((card) => (
@@ -38,13 +26,7 @@ const { class: className } = Astro.props;
                     {card.title}
                 </h3>
 
-                {/* A FIGURE IS READ, NOT ADMIRED, so it takes the display face and a FLAT fill. It sits in
-                    the titling tier of the page's type — a 28px headline number belongs with the carved
-                    serif headings around it, not in the rounded mark face, whose fixed-width figures read
-                    as a terminal counter. What it must NOT take is the stone gradient the headings wear:
-                    that fades a number's lower third to brown, dimming exactly the strokes that tell 1,577
-                    and 1,775 apart. Display face for the theme, flat gold for legibility. Lining figures,
-                    so 1,579 and 1,777 differ by their shapes rather than by where they sit. */}
+                {/* Use flat display numerals with lining figures so stats remain legible. */}
                 {card.stat === "commits" && stats !== null && (
                     <p class="mt-[0.9rem] font-display text-[1.75rem] leading-[1.2] font-semibold text-gold-bright lining-nums tabular-nums">
                         {stats.agent.toLocaleString("en-US")} of {stats.total.toLocaleString("en-US")}

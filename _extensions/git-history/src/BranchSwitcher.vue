@@ -102,10 +102,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                 <p v-if="actionError" class="truncate text-2xs text-danger" v-tooltip.bottom.overflow="actionError">{{ actionError }}</p>
 
                 <div class="scrollbar-thin flex max-h-64 flex-col overflow-auto">
-                    <!--
-                        One row per line of work: `main` and `origin/main` share a row, named once with remote pills after it. No local branch means
-                        somebody else pushed it.
-                    -->
+                    <!-- One row per line of work: `main` and `origin/main` share a row, named once with remote pills after it. -->
                     <template v-for="branch in shown" :key="branch.name">
                         <div class="group/row flex items-center gap-1 rounded transition-colors hover:bg-overlay">
                             <button

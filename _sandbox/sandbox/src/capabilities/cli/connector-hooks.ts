@@ -5,9 +5,7 @@ import type { CapabilitiesStore } from "../capabilities-store.js";
 import { gitAccessHook } from "./git-access.js";
 import { npmAccessHook } from "./npm-access.js";
 
-// A connector's side effect beyond env+skill, run by cliHandler; can't be data, it shells with host credentials.
-// Keyed by provider name (the extension declares it, the daemon owns what it may do); only git providers and npm have
-// one.
+// Restrict connector hooks to providers with daemon-owned implementations.
 export interface ConnectorHook {
     readonly apply: (config: CliConfig, exec: ExecInTerminal) => Promise<string | undefined>;
     readonly remove: (config: CliConfig, exec: ExecInTerminal) => Promise<void>;

@@ -612,10 +612,7 @@ const DEMO_CATALOGS: Record<string, { models: Model[]; default: string }> = {
 // An empty rule table puts a finished agent in Ready to land, with nothing else deciding otherwise.
 const DEMO_SETTINGS = { rules: [], systemPromptMode: `intentic`, stableSystemPrompt: true, skills: [] };
 
-/* The checks each repository declares for itself (`<repo>/.intentic/checks.json`), one repository per state the group
- * can be in: `web` running, `api` declared and waiting on the owner, and the workspace's own held because the file
- * changed after it was adopted. A recording that showed only the happy one would be a demo of a feature nobody has to
- * decide anything about. */
+/* The checks each repository declares for itself (`<repo>/.intentic/checks.json`), one repository per state the group can be in: `web` running. */
 const DEMO_REPO_CHECKS: RepoChecksList = {
     repos: [
         {

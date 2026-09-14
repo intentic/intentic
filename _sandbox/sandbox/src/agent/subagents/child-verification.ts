@@ -54,10 +54,7 @@ export const noteChildWork = (event: AgentEvent, child: string | undefined): voi
     }
 };
 
-/**
- * Undefined means nothing of this child was ever seen (no tools used, or not ours); distinct from `no-code` and must
- * not render as a verdict.
- */
+/** Undefined means nothing of this child was ever seen (no tools used, or not ours); distinct from `no-code` and must not render as a verdict. */
 export const childVerification = (child: string): SubagentVerification | undefined => {
     const ledger = ledgers.get(child);
     if (ledger === undefined) {

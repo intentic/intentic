@@ -1,7 +1,4 @@
-/* `fileq sweep`: the whole workspace converged in one pass — every derivable file shadowed, every orphaned
- * shadow pruned. What the daemon runs when the sidecars setting turns on and after mass changes; also the
- * honest way to bootstrap a workspace that predates the feature. Prints a per-outcome line as it goes (a
- * sweep can take minutes on a document-heavy tree, and a silent minute reads as a hang), then the totals. */
+/* `fileq sweep`: the whole workspace converged in one pass — every derivable file shadowed, every orphaned shadow pruned. */
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { sweep } from "../lib/sweep.js";
 import { workspaceRoot } from "../lib/env.js";

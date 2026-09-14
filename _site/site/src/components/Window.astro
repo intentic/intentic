@@ -1,20 +1,5 @@
 ---
-/* ONE FRAME, AND EVERY SCREENSHOT ON THE SITE IS IN IT.
- *
- * The recipe is four things and none of them is optional: a gold hairline on all four sides, a ledge one
- * ornament deep across the top, a turned corner at each corner, and the shadow below. It was three
- * recipes once — a hero frame that turned all four corners, wings that turned the diagonal pair, and
- * cards that drew a third version at the fainter card hairline with no edge round the picture at all.
- * Side by side that reads as frames that sometimes have a border and sometimes only on one side, which is
- * exactly what it was.
- *
- * The rule now has no exceptions to remember: if the box holds a screenshot of the product, it is this
- * component. Cards that hold WORDS keep the quieter `.card` treatment — that difference is meaningful,
- * and it is the only one.
- *
- * Pass `href` and the frame becomes a link that lifts under the pointer, the way everything clickable
- * here answers one.
- */
+/* The recipe is four things and none of them is optional: a gold hairline on all four sides, a ledge one ornament deep across the top. */
 import Corners from "./Corners.astro";
 import Lotus from "./Lotus.astro";
 
@@ -25,11 +10,7 @@ interface Props {
     /** "all" (default), or "diag" for a frame sitting in a grid of its own kind. */
     corners?: "all" | "diag";
     href?: string;
-    /**
-     * The route the shot was taken on, set in the ledge. It sits at the RIGHT and stops an ornament's
-     * width short of the edge: the turned corner is drawn from the frame's corner inwards across the
-     * same strip, and a label under it read as two ornament systems piled in one small square.
-     */
+/** The route the shot was taken on, set in the ledge. */
     label?: string;
     /** Decorative frames (a wing of a collage) are hidden from a screen reader entirely. */
     "aria-hidden"?: "true";

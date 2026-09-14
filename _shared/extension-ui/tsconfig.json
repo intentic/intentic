@@ -1,5 +1,4 @@
-/* Source-only like @intentic/ui (exports → ./src/index.ts); this config exists for standalone
- * type-checking (vue-tsc resolves the .vue components the kit re-exports). */
+/* Source-only config for standalone type-checking of the UI kit's Vue components. */
 {
     "compilerOptions": {
         "noEmit": true,

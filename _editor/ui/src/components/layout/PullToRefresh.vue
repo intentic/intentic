@@ -1,6 +1,4 @@
-<!-- Pull-to-refresh scroll container. When its content is at the top and a touch drags down past the
-     threshold, releasing fires `onRefresh` and a spinner tracks the pull. Touch only: a mouse never triggers
-     it. Wrap a list's scroll area with this and pass the query's refetch. -->
+<!-- Pull-to-refresh scroll container. -->
 <script setup lang="ts">
 import { ref } from "vue";
 import Icon from "../primitives/Icon.vue";

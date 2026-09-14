@@ -23,8 +23,7 @@ const withWorkspace = async (files: Record<string, string>, check: (root: string
     }
 };
 
-/* The catalog is where nearly every version in a workspace like this one actually lives, and it is the one
- * place nothing that walks PACKAGES would ever see: a catalog entry is not a dependency of anything. */
+/* The catalog is where nearly every version in a workspace like this one actually lives, and it is the one place nothing that walks PACKAGES would ever see. */
 test("the pnpm catalog is read, since that is where a monorepo keeps its versions", async () => {
     await withWorkspace({ "pnpm-workspace.yaml": `packages:\n  - "app"\ncatalog:\n  typescript: 5.9.3\n  vue: 3.5.40\n` }, (root) => {
         const known = createWorkspacePins(root);
@@ -75,8 +74,7 @@ test.each(["workspace:*", "catalog:", "file:../thing", "*", "latest"])("a specif
     );
 });
 
-/* npm only. The catalog and the manifests this reads are npm's, and answering for PyPI out of them would
- * suppress a real notice on the strength of a name that happens to collide. */
+/* npm only. */
 test("another ecosystem is never answered for out of npm's manifests", async () => {
     await withWorkspace({ "pnpm-workspace.yaml": `packages: []\ncatalog:\n  requests: 2.20.0\n` }, (root) => {
         expect([...createWorkspacePins(root)("pypi", "requests")]).toEqual([]);

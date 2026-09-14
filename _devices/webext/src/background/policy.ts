@@ -1,9 +1,7 @@
 import type { WebExtGrant, WebExtScopes } from "@intentic/sandbox-contract";
 
 // The enforcement point: everything about what may happen in this browser is decided here. Three gates, only one
-// of which is ours: Chrome's host permissions (browser settings), the per-site read/act mode (this layer), and
-// the sandbox's global switches, cached from the socket. A refusal is a value, not an exception, naming what would fix
-// it.
+// Keep refusal messages as values so callers can explain the required fix.
 
 export class RefusedError extends Error {}
 

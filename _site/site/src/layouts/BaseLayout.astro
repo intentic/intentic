@@ -5,8 +5,7 @@ import { ORG_DESCRIPTION, ORG_NAME, ORG_TAGLINE, SITE_URL } from "@intentic/site
 import type { BreadcrumbEntry, FaqEntry } from "@intentic/site-content/structured-data";
 import { buildPageGraph } from "@intentic/site-content/structured-data";
 import { lastModForUrl } from "@intentic/astro-integrations";
-// The package's own `util.js` entry, not its root: the root pulls in the build hook, and with it satori and
-// resvg's native .node binary, which rollup then tries to bundle into the page. This subpath is pure path math.
+// Use the package's pure path-math subpath to avoid bundling native image dependencies.
 import { getImagePath } from "astro-opengraph-images/util.js";
 import LiveNotice from "../components/LiveNotice.astro";
 import PageBackdrop from "../components/PageBackdrop.astro";
@@ -15,35 +14,23 @@ interface Props {
     title?: string;
     description?: string;
     ogImage?: string;
-    /** The trail below Home. Present ⇒ the page emits a BreadcrumbList and og:type=article. */
+    /** Breadcrumbs emit BreadcrumbList metadata and mark the page as an article. */
     breadcrumbs?: BreadcrumbEntry[];
-    /* The day this page went up, for a page that is not in `page-meta.ts` because it is one of many built
-     * from one template. A blog post is the case: its date is in its own frontmatter, where whoever wrote
-     * the post put it, and there is nowhere else it could sensibly live. */
+/* Date published is for templated pages absent from page-meta.ts. */
     datePublished?: string;
-    /** `BlogPosting` for a post; the default suits documentation. Only read when the page is an article. */
+    /** Article type is used only when breadcrumbs mark the page as an article. */
     articleType?: "TechArticle" | "BlogPosting";
     faq?: FaqEntry[];
     extraJsonLd?: Record<string, unknown>[];
     noindex?: boolean;
-    /**
-     * The temple behind the page's first screen, which every page gets so the bar has the same thing
-     * behind it wherever you are. The home page opts out: its hero paints the same plate itself, sized to
-     * a composition the wings and the copy are placed against, and two of them would double the scrim.
-     */
+/** Whether the page receives the shared temple backdrop. */
     backdrop?: boolean;
 }
 
 const path = Astro.url.pathname.endsWith("/") ? Astro.url.pathname : `${Astro.url.pathname}/`;
 const meta = getPageMeta(path);
 
-/* NO PAGE MAY FALL BACK SILENTLY. /credits/ shipped with no entry in page-meta.ts, so it inherited the two
- * lines below: the brand line as its <title>, and ORG_DESCRIPTION — 285 characters about a different page —
- * as its description, on a URL the sitemap was handing to crawlers the whole time. Nothing failed, because a
- * fallback is indistinguishable from an answer, which is exactly why this is a build error now.
- *
- * A page that genuinely owns its own copy passes it as a prop and never reaches this. The 404 is the one page
- * with neither, and it says so with `noindex`: it is not in the sitemap and no search result should carry it. */
+/* Indexable pages require explicit metadata or a page-meta entry. */
 const authored = Astro.props.title !== undefined && Astro.props.description !== undefined;
 if (!authored && meta === undefined && Astro.props.noindex !== true) {
     throw new Error(
@@ -58,21 +45,13 @@ const description = Astro.props.description ?? meta?.description ?? ORG_DESCRIPT
 const datePublished = Astro.props.datePublished ?? meta?.datePublished;
 const dateModified = lastModForUrl(`${SITE_URL}${path}`) ?? undefined;
 
-// A page with a breadcrumb trail is a page inside the documentation, which is also what makes it an
-// article rather than a site page, so the two travel together instead of as two props that can disagree.
+// Breadcrumbs and article metadata are enabled together.
 const breadcrumbs = Astro.props.breadcrumbs;
 const isArticle = breadcrumbs !== undefined && breadcrumbs.length > 0;
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 
-// The card astro-opengraph-images will write for this page, named by the same function the integration uses to
-// find it: the two MUST agree or the build fails, which is the point: a page can no longer advertise an image
-// nobody generated. `path` rather than Astro.url so the name is the built (always-slashed) one in dev too.
-/* A card is generated for any page that HAS its own title and description, from `page-meta.ts` or from its
- * own props. It used to require the table, which meant a page owning its copy directly — every blog post —
- * advertised the generic logo card while the two lines that would have made a good one sat in its
- * frontmatter. `authored` is the same condition the build error above uses, so a page either has both and
- * gets a card, or has neither and does not build. */
+// Per-page OG cards require metadata and use the integration's path naming.
 const perPageOgAvailable = import.meta.env.PUBLIC_OG_PER_PAGE;
 const defaultOgPath = perPageOgAvailable && (meta || authored) ? getImagePath({ url: new URL(path, Astro.site), site: Astro.site }) : "/assets/intentic-logo-sized.png";
 const ogImage = new URL(Astro.props.ogImage ?? defaultOgPath, Astro.site);
@@ -106,19 +85,14 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
             content={Astro.props.noindex ? "noindex,follow" : "max-snippet:-1, max-image-preview:large, max-video-preview:-1"}
         />
 
-        <!-- All three are the same drawing — the lotus in the bar's top-left corner, on the site's own warm
-             ground — built by `scripts/icons.mjs` from the one definition in `components/ornaments.ts`.
-             The .ico is first and unsized so it stays the fallback: it is the file crawlers and feed
-             readers request at /favicon.ico by convention rather than by reading these tags. The SVG is
-             what a modern browser picks, at whatever size it happens to want. -->
+<!-- All icons use the shared lotus mark. -->
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="canonical" href={canonicalURL.href} />
         <link rel="sitemap" href="/sitemap-index.xml" />
-        {/* Sitewide, not only on /blog/: a feed reader's "subscribe" button reads this tag off whatever page
-            the reader happened to paste, which is almost never the index. */}
+        {/* RSS discovery is sitewide, not limited to the blog index. */}
         <link rel="alternate" type="application/rss+xml" title={`${ORG_NAME} blog`} href="/blog/rss.xml" />
 
         <meta property="og:type" content={isArticle ? "article" : "website"} />
@@ -141,8 +115,7 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         <meta name="twitter:image:alt" content={title} />
 
         <meta name="theme-color" content="#0c0907" />
-        {/* The one font warmed at highest priority: the reading face, which every page sets its running
-            copy in. The preload exists so the first paint is not a flash of the platform's fallback. */}
+        {/* Preload the reading face used by every page. */}
         <link rel="preload" as="font" type="font/woff2" href="/fonts/mukta-400-latin.woff2" crossorigin />
         <noscript>
             <style>
@@ -165,22 +138,15 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
             )
         }
     </head>
-    {/* `relative` gives the backdrop a containing block and `isolate` keeps its negative layer inside the
-        body, above the document's own background rather than behind it. */}
+    {/* Relative isolation keeps the backdrop inside the body stacking context. */}
     <body class="relative isolate flex min-h-screen flex-col">
-        {/* A DIRECT CHILD OF <body>, and first: the strip's own `:has(> .live-notice…)` rules move the bar
-            and the page down by its height, and a wrapper between the two would break both of them. */}
+        {/* LiveNotice stays the first direct body child so its layout rule can move the page. */}
         <LiveNotice />
         {Astro.props.backdrop !== false && <PageBackdrop />}
         <slot />
 
         <script>
-            /* THE SCROLL REVEAL, ONCE FOR THE WHOLE SITE. Seven pages each shipped their own copy of this
-               observer — the same twelve lines, with the same threshold, watching the same class — which is
-               seven bundles to download and seven places to fix a behaviour that has one definition. A band
-               now only has to wear `.fade-in`; where it lives is not this script's business.
-               `unobserve` on the way out: a band that has arrived never leaves again, so keeping it under
-               observation is a callback per scroll for a class that is already set. */
+            /* One observer reveals every fade-in element. */
             const reveals = document.querySelectorAll(".fade-in");
             if ("IntersectionObserver" in window) {
                 const observer = new IntersectionObserver(

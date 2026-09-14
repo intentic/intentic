@@ -72,10 +72,7 @@ export type Outcome =
     | { readonly kind: "removed"; readonly relPath: string; readonly sidecarPath: string }
     | { readonly kind: "skipped"; readonly relPath: string; readonly reason: string };
 
-/**
- * Converges a workspace file's sidecar with its source: derive when stale, reuse fresh, remove when gone.
- * Both the daemon's eager path and the CLI's lazy path call exactly this.
- */
+/** Converges a workspace file's sidecar with its source: derive when stale, reuse fresh, remove when gone. */
 export const ensureSidecar = async (workspaceRoot: string, absPath: string, now: () => Date = () => new Date()): Promise<Outcome> => {
     const relPath = relPathIn(workspaceRoot, absPath);
     if (relPath === undefined) {

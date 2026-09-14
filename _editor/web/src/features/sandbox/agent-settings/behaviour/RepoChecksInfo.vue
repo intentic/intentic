@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { InfoDialog } from "@intentic/ui";
 
-/* The (i) beside "Repository checks". Two things a reader needs and cannot get from the rows: where the file goes and
- * what it may say, and why switching one on is a decision rather than a formality. */
+/* The (i) beside "Repository checks". */
 
 const EXAMPLE = `{
   "checks": [

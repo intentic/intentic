@@ -1,7 +1,4 @@
-<!--
-    Copy-to-clipboard button with built-in "Copied" feedback. With `label`, a bordered chip; without one, a bare icon button (pass
-    `aria-label`/`v-tooltip`). `stretch` and `severity` are separate questions: width and tone.
--->
+<!-- Copy-to-clipboard button with built-in "Copied" feedback. -->
 <script setup lang="ts">
 import Button from "./Button.vue";
 import { computed, ref } from "vue";

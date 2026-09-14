@@ -1,7 +1,4 @@
-<!--
-    A persona's cartoon face, generated deterministically from its name via DiceBear's adventurer style. Renaming a persona changes its face;
-    upgrading DiceBear's variant lists repaints every face, since nothing is stored.
--->
+<!-- A persona's cartoon face, generated deterministically from its name via DiceBear's adventurer style. -->
 <script setup lang="ts">
 import { Avatar, Style } from "@dicebear/core";
 import definition from "@dicebear/styles/adventurer.json";
@@ -98,11 +95,7 @@ const svg = computed<string>(() => {
 </script>
 
 <template>
-    <!--
-        The name is only a lookup index, never markup, so nothing user-supplied is interpolated into what's rendered. A
-        background is needed since the style draws on transparency, or the round silhouette other avatars have would be
-        lost.
-    -->
+<!-- The name is only a lookup index, never markup, so nothing user-supplied is interpolated into what's rendered. -->
     <span
         class="flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-content/10"
         :style="{ width: `${size}px`, height: `${size}px` }"

@@ -19,11 +19,7 @@ export const deriveText = (path: string): Promise<WorkspaceDerived> => sandboxRp
 // shadow is worth more than its own bytes.
 const NOTEBOOK = /\.ipynb$/i;
 
-/**
- * Whether a derived reading of this file is worth offering at all.
- * No for source and prose, which are already the reading, and no for the two states with nothing behind them; yes for
- * every format that needs rendering — which is exactly where the viewer has something a reader cannot get otherwise.
- */
+/** Whether a derived reading of this file is worth offering at all. */
 export const mayHaveDerivedText = (path: string, kind: OpenFile["kind"]): boolean => {
     if (kind === `empty` || kind === `locked`) {
         return false;
@@ -31,9 +27,6 @@ export const mayHaveDerivedText = (path: string, kind: OpenFile["kind"]): boolea
     return kind === `code` || kind === `markdown` || kind === `big-text` ? NOTEBOOK.test(path) : true;
 };
 
-/**
- * Whether the derived text is this file's whole answer rather than a second view of it: a zip, a font, anything the
- * app can only otherwise offer as a download. Those open on the text, since the alternative is a dead end.
- */
+/** Returns whether derived text is the file's only readable representation. */
 export const derivedIsOnlyView = (path: string, kind: OpenFile["kind"]): boolean =>
     (kind === `binary` || kind === `too-large`) && mayHaveDerivedText(path, kind);

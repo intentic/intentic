@@ -442,9 +442,7 @@ async function* streamTurn(
             };
         } else if (event.type === "session.error") {
             const message = errorText(event.properties.error);
-            // Checked first: the refusal ends in "on this model", which would otherwise trip the model-invalid branch
-            // and drop a pinned model that was never at fault. Every routed provider shares the proxy that can produce
-            // it.
+            // Let the shared proxy handle provider-specific refusal text.
             yield isUnsentParameterRefusalText(message)
                 ? unsentParameterFrame(message)
                 : {

@@ -9,12 +9,7 @@ import { lendSite } from "./tools/lend.js";
 import { connectSite } from "./tools/session.js";
 import { listTabs, selectTab } from "./tools/tabs.js";
 
-/* THE TOOL SURFACE of a connected browser, served by the peer MCP server (sandbox-contract's peer-mcp-server.ts:
- * the dispatch, the "a failed tool is not a failed call" rule and the schema-once `tool()` builder are there).
- * What is here is what this extension can DO, and it matters more that it lives in the extension than it does
- * for a device: this artifact ships through a store review, on its own schedule, and a tool surface pinned to a
- * daemon release would mean waiting for both. A browser hands its tools nothing beside their arguments: the
- * grant is read from storage by the page tools themselves, because an MV3 worker holds no live state. */
+/* The peer MCP server dispatches the connected browser's tool surface. */
 
 const NO_ARGS = z.object({});
 const required = z.string().min(1);

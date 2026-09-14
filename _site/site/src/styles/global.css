@@ -1,51 +1,10 @@
 @import "tailwindcss";
-/* THE HOUSE METALS — carved stone, cast bronze, the cartouche kit, the ember glows. Shared with the app's
- * entry screens and the Sanctum skin, which paint the same objects: _shared/house-css/README.md. */
+/* House metals stay shared with the app entry screens and Sanctum skin. */
 @import "../../../../_shared/house-css/house.css";
 
-/* ═══════════════════════════════════════════════════════════════════════════════════════════════════
- * THE SITE, TOLD AS CARVED STONE.
- *
- * One design system, for every page here. It began as an alternative skin for the home page, scoped under
- * `.a-page` so it could be opinionated without leaking; it is now the site's own vocabulary, so the scope
- * and the `--a-` prefix are gone and every token below is the real one.
- *
- * The rules of the house, in one paragraph. Structure is GOLD — every rule, frame, corner and lozenge.
- * The brand's orange is EMBER and it is SPENT, never spread: one primary control, the full stop at the end
- * of a headline beat, a lotus bullet, a link. Nothing is rounded; a carved edge is square and its corners
- * are TURNED with an ornament instead. Ink is cream on a warm near-black, because white on this ground
- * reads as a hole cut in it.
- * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
+/* Site tokens and components use the shared carved-stone vocabulary. */
 
-/* ── THE THREE FACES, AND THE SIZE BAND EACH IS ALLOWED IN ──────────────────────────────────────────
- *
- * Playfair is a DISPLAY face: its whole character is the jump between a thick stem and a hairline, and a
- * hairline is a fraction of a pixel once the type is under about 20px. Below that it does not look
- * elegant, it looks broken — the strokes drop out, and BOLD makes it worse rather than better, because
- * weight is added to the stems the hairlines have to hold up.
- *
- * So the faces are split by JOB and each is fenced to a size band:
- *
- *   Playfair Display  — display only, and nothing under ~28px: page headlines and section headings.
- *                       This is where the contrast pays. Reached through `--font-display` / `.display`.
- *   Baloo 2           — the wordmark, the bar, and the titling tier from 13 to 24px: card headings, list
- *                       labels, menu rows, docs section headings. `--font-mark`, and the default for
- *                       every heading element on the site.
- *   Mukta             — running copy, all small print, AND EVERY BUTTON LABEL. `--font-sans`.
- *
- * If a new element is between 13 and 24px, it is `--font-mark`. That is the whole rule.
- *
- * BUTTONS ARE THE READING FACE, and that is a deliberate exception to the band above. A button label is
- * not titling — it is an instruction, read at a glance, in a box the eye has already decided to look at.
- * Set in a titling face they read as ornament rather than as something to press.
- *
- * THE READING FACE IS NOT INTER, and that was a decision rather than an oversight. Inter is what Stripe,
- * Linear and Vercel standardised on, which means it is what every template reaches for by default; on a
- * site whose argument is that it was made deliberately, the one face doing the most reading is the worst
- * place to look generic. Mukta is by Ek Type — the same foundry as Baloo 2 — so the titling face and the
- * reading face are drawn by one team to the same Latin proportions and set together rather than merely
- * coexisting. It is a humanist sans with open counters and a tall x-height, which is what small warm-grey
- * type on a near-black ground needs. */
+/* Display, body, and mono faces each have a defined size band. */
 
 @font-face {
     font-family: "Playfair Display";
@@ -66,8 +25,7 @@
         U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
-/* The brand face: the wordmark, the bar, and every title between 13 and 24px. 500 for the wordmark and
- * running labels, 600 where a row has to hold its own against a dark ground. */
+/* The brand face: the wordmark, the bar, and every title between 13 and 24px. */
 @font-face {
     font-family: "Baloo 2";
     font-style: normal;
@@ -105,8 +63,7 @@
         U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
-/* Three static weights of the reading face, and no more: 400 sets the body, 500 the control labels, 600
- * the small caps labels. A weight nothing sets is a download nobody needs. */
+/* Three static weights of the reading face, and no more: 400 sets the body, 500 the control labels, 600 the small caps labels. */
 @font-face {
     font-family: "Mukta";
     font-style: normal;
@@ -166,16 +123,11 @@
     --color-*: initial;
     --font-*: initial;
 
-    /* ── The metals ──────────────────────────────────────
-     * Two of them, and the site is built on the difference. GOLD is structure: every rule, frame, corner
-     * and lozenge. EMBER is the brand's own orange and it is spent, never spread — the one primary
-     * button, the full stop at the end of each headline beat, the lotus bullets, a link. It is why a page
-     * that is 90% brown does not read as muddy: the eye has one saturated thing to find per screen. */
+/* The site uses gold and bright-gold metal tones. */
     --color-gold: #c9a05c;
     --color-gold-bright: #e5c489;
 
-    /* The ember ramp. Named as a scale because the utilities that spend it are (`text-primary-400`,
-     * `bg-primary-500/12`), but there is only one colour here at five brightnesses. */
+/* The ember ramp. */
     --color-primary-200: #fbdcb8;
     --color-primary-300: #f8c288;
     --color-primary-400: #f59b3f;
@@ -183,39 +135,23 @@
     --color-primary-600: #c26619;
     --color-primary-700: #9c5013;
 
-    /* ── Ground ──────────────────────────────────────────
-     * Warm near-black: the temple plate's own darkest value, so a section with no plate behind it still
-     * belongs to the same wall as one that has. */
+    /* Ground uses the temple plate's warm near-black. */
     --color-canvas: #0c0907;
     --color-card: #15100b;
     --color-overlay: #1f1710;
-    /* One step BELOW the canvas, and the only thing under it: the footer, which has to read as the ground the
-       page is standing on rather than as one more band of it. Named for the same reason as the three above —
-       a colour spelled into a class is a colour this palette cannot reach, so a warmer or cooler ground would
-       have moved everything here and left the footer behind. */
+/* Ground sits below the canvas and contains the footer. */
     --color-ground: #090706;
 
-    /* ── The two panel washes ────────────────────────────
-     * A surface here is a shallow diagonal ramp rather than a flat fill, which is what stops a page of
-     * fifteen panels reading as fifteen identical rectangles. There are two, and the difference is what the
-     * panel is FOR: `--wash-panel` is the ordinary one, worn by `.card` and by any figure drawing a card;
-     * `--wash-ember` is what a CHOSEN panel wears — the column that is the answer in a comparison, the
-     * outcome at the end of a diagram — and it is the only place the accent is spread over an area rather
-     * than spent on a mark. Both are stated here because three files paint them and they must not drift. */
+/* Panel surfaces use shallow diagonal washes. */
     --wash-panel: linear-gradient(160deg, rgba(34, 25, 17, 0.6), rgba(18, 13, 9, 0.55));
     --wash-ember: linear-gradient(160deg, rgba(60, 36, 16, 0.5), rgba(20, 14, 9, 0.55));
 
-    /* ── Rules, in three weights ─────────────────────────
-     * Everything structural is one of these, and all three are gold at an alpha rather than a grey: a
-     * hairline on this ground has to read as metal catching light, not as a seam. */
+/* Structural rules use three gold alpha weights. */
     --color-line: rgba(201, 160, 92, 0.16);
     --color-line-strong: rgba(201, 160, 92, 0.3);
     --color-line-bright: rgba(201, 160, 92, 0.5);
 
-    /* ── Ink ─────────────────────────────────────────────
-     * Cream rather than white. The small print is #9c8b73: 6.0:1 on the canvas, which keeps a real margin
-     * wherever it lands, because almost nothing here sits on the bare canvas — captions and notes sit on a
-     * card wash or on the lit band of the wall, both lighter than the value a ratio is computed against. */
+    /* Ink is cream; small print uses the lower-contrast muted tone. */
     --color-content: #efe3cd;
     --color-muted: #b7a68d;
     --color-subtle: #9c8b73;
@@ -237,23 +173,11 @@
     --text-2xs: 0.6875rem;
     --text-2xs--line-height: 1rem;
 
-    /* ── Reading measure ─────────────────────────────────
-     * Column caps counted in characters rather than rem. A rem cap is a fixed pixel width, so one
-     * `max-w-3xl` box held 41 characters of a 36px heading and 143 of a 14px footnote : the same
-     * column, two and a half times the readable line length apart. `ch` follows the type size, so a
-     * cap means the same line length wherever it is used. Comfortable reading is 45–75 characters.
-     *
-     * Neither is named `prose`: Tailwind ships its own `max-w-prose`, and a token that silently
-     * loses to a built-in is worse than no token at all. */
+/* Reading columns use character-based caps. */
     --container-copy: 52ch; /* ~67 characters : body copy, leads, captions, small print */
     --container-longform: 58ch; /* ~75 characters : docs and legal, denser and read at length */
 
-    /* ── NOTHING IS ROUNDED ──────────────────────────────
-     * A carved edge is square, and its corners are turned with an ornament rather than filleted. The
-     * scale is kept — as zeroes — rather than deleted, because Tailwind's `rounded-*` utilities read
-     * these keys and a missing key is a silently ignored class rather than a square corner. `rounded-full`
-     * is unaffected: a circle is not a corner, so avatars, status dots and the composer's round controls
-     * stay round. */
+/* Carved edges stay square. */
     --radius-xs: 0;
     --radius-sm: 0;
     --radius-md: 0;
@@ -261,35 +185,10 @@
     --radius-xl: 0;
     --radius-2xl: 0;
 
-    /* THE TURNED CORNER'S REACH, and the depth of every frame's top ledge — one number, because they have
-     * to be the same one. The corner ornament is drawn from the frame's edge inwards; a ledge shallower
-     * than the ornament lets it cross into the screenshot below, which is what put a gold curl through the
-     * first row of every product frame. Matched, the ornament sits inside the ledge it belongs to and the
-     * picture starts on a clean line. */
+    /* Corner size must match the frame's top ledge. */
     --corner-size: 1.7rem;
 
-    /* ── THE BAR'S HEIGHT, AND WHY IT IS ONE NUMBER FOR THE WHOLE SITE ───────────────────────────────
-     *
-     * The navigation bar is furniture inside the plaque's carved top band. On the home page that band is
-     * really there — the plate is behind the bar — and on every other page it is the strip cut from the
-     * top of the same art (see `.bar` in Nav.astro). Either way the bar's content has to sit on the
-     * MIDDLE of that band, or the nav floats in a border it is supposed to be living in.
-     *
-     * Scanning the art's row luminance on a 1600×900 frame: the outer gold rule is a ridge at y=10, the
-     * ground runs flat to y≈70, and the inner rule is a ridge at y=74. The bar hangs from the plate's TOP
-     * rather than the band's, so for its content to land on the band it must be 90 art units tall — which
-     * clears the inner rule with a little wall under it.
-     *
-     * AND THE SCALE IS A SINGLE TERM, which is what lets this be a stylesheet value rather than something
-     * a script has to measure. The plate is laid across the full width at its own 16:9 ratio, so the art's
-     * scale is exactly `plateWidth / 1600` and nothing about a page's content height can move it:
-     * 90 ÷ 1600 = 5.625vw. (Under `cover` on a content-sized box it was `max(width/1600, height/900)`,
-     * which no stylesheet could name — hence the observer this replaced.)
-     *
-     * THE TWO STOPS ARE UI, NOT ARITHMETIC. Below ~970px the true band is under 55px, which is thinner
-     * than a touch target; above ~2020px it passes 114px, which is a bar tall enough to be furniture in
-     * the way. Outside the clamp the bar stops tracking the painted band, and that is the right trade:
-     * a bar that is the same on every page beats one that is exactly on a rule nobody is looking at. */
+    /* Bar height tracks the painted band within a bounded touch-safe range. */
     --bar-height: clamp(3.4rem, 5.625vw, 7.1rem);
 }
 
@@ -299,10 +198,7 @@
         background: var(--color-canvas);
         color: var(--color-content);
         scroll-behavior: smooth;
-        /* Every in-page jump — a fragment link, a table-of-contents click, a scrollIntoView — lands this far
-           below the top, so the fixed bar never sits over the heading you asked for. Without it a click in the
-           on-page nav parked the target under the bar, which read as the page throwing your place away. One
-           rule on the scroller covers native anchors and scripted scrolls alike, so no target needs its own. */
+/* Every in-page jump — a fragment link, a table-of-contents click, a scrollIntoView — lands this far below the top. */
         scroll-padding-top: calc(var(--bar-height) + 1rem);
     }
     body {
@@ -318,10 +214,7 @@
         border-color: var(--color-line);
     }
 
-    /* EVERY HEADING TAKES THE BRAND FACE, and the big ones opt up into the display face with `.display`.
-     * That split is the size band from the top of this file made structural: a rounded geometric is about
-     * as legible as small type gets, and a 17px card title or a 24px docs section heading is small type.
-     * Playfair is reached for deliberately, by a class, at the sizes it was drawn for. */
+/* EVERY HEADING TAKES THE BRAND FACE, and the big ones opt up into the display face with `.display`. */
     h1,
     h2,
     h3,
@@ -332,11 +225,7 @@
         font-weight: 600;
     }
 
-    /* Where the lines break. A heading laid out greedily fills line one and drops whatever is left
-       onto line two, which is how "An agent is only as useful as what it can" ended a line and
-       "reach." got one to itself. `balance` divides a heading evenly instead, and is the right
-       default rather than a class remembered per heading. Body copy gets `pretty`, which leaves the
-       line lengths alone and only refuses to end a paragraph on a single word. */
+/* Where the lines break. */
     h1,
     h2,
     h3,
@@ -357,34 +246,11 @@
 }
 
 @layer components {
-    /* ══ DISPLAY TYPE ═══════════════════════════════════════════════════════════════════════════════
-     * CARVED STONE, NOT POLISHED METAL — and the difference is texture, not colour. The material is
-     * `--house-stone-noise` / `--house-stone-ramp` / `--house-stone-bevel`, and house.css carries its whole
-     * argument: why the ramp stops short of white, why the mottle is a dual-scale composite, and why the
-     * bevel has to be a `filter`. What is below is this site's USE of it — the clip, the tracking and the
-     * descender clearance.
-     *
-     * DESCENDERS ARE STRUCTURAL HERE, NOT A LINE-HEIGHT SETTING. The letters are painted as a background
-     * clipped to their shape, and a background is painted across the element's PADDING box — so anything a
-     * glyph reaches below that box is simply not painted, and the tail of a "g" or "y" vanishes outright.
-     * Playfair's descenders are long, and every Tailwind size utility (`text-3xl` is 1.2, `text-4xl` is
-     * 1.111, `leading-none` is 1) beats this rule's own `line-height`, because a utility outranks a
-     * component layer. Relying on the leading therefore relied on every author remembering `leading-tight`
-     * at every call site, which is exactly how this regressed page after page.
-     *
-     * So the clearance is bought with padding instead, and taken straight back out with a matching negative
-     * margin: the painted box grows by the depth of a descender while the laid-out box does not move, and it
-     * holds at ANY leading, including 1. `line-height: 1.24` stays as the intended look, not as the fix.
-     * The pair must stay together — do not set `mb-*` on a `.display` element, it would cancel the takeback
-     * and leave a visible gap. */
+    /* DISPLAY TYPE CARVED STONE, NOT POLISHED METAL — and the difference is texture, not colour. */
     .display {
         font-family: var(--font-display);
         font-weight: 600;
-        /* Positive tracking, because Playfair at these sizes sets tight enough that adjacent letters kiss;
-           the stone fill makes any touching pair read as one blotched glyph, so the letters are given air.
-           `0.02em` alone scales with font size, so a page h1 at text-4xl lands at half the absolute spacing
-           the home hero gets at the same em value and reads tighter. The rem floor matches the hero's
-           tracking at display size (~1.44px) so every carved heading carries the same air. */
+/* Positive tracking, because Playfair at these sizes sets tight enough that adjacent letters kiss. */
         letter-spacing: max(0.02em, 0.09rem);
         line-height: 1.24;
         --display-descender: 0.2em;
@@ -403,8 +269,7 @@
         filter: var(--house-stone-bevel);
     }
 
-    /* The full stop that ends a headline beat, and often the only ember on the screen. Its own span, so it
-     * escapes the clipped gradient above. */
+    /* Each headline beat owns its stop span. */
     .stop {
         -webkit-text-fill-color: var(--color-primary-500);
         color: var(--color-primary-500);
@@ -413,9 +278,8 @@
         filter: var(--house-ember-stop-glow);
     }
 
-    /* ══ LABELS ═════════════════════════════════════════════════════════════════════════════════════ */
-    /* The band opener: spaced gold capitals trailing a hairline that fades out to the right. It marks a
-     * section's start without drawing a box round it. */
+    /* LABELS */
+    /* The band opener: spaced gold capitals trailing a hairline that fades out to the right. It marks. */
     .eyebrow {
         display: inline-flex;
         align-items: center;
@@ -438,42 +302,9 @@
         display: none;
     }
 
-    /* ══ BUTTONS ════════════════════════════════════════════════════════════════════════════════════
-     * CARTOUCHES WITH THE CORNERS CUT OUT OF THEM. The reference art's button is an octagon: two thin
-     * concentric gold rules, each with a 45-degree notch taken out of all four corners, like a corner
-     * chamfered off a stone slab.
-     *
-     * TWO PROPERTIES DRAW IT, and they have to agree.
-     *
-     *   `clip-path` cuts the octagon out of everything the element paints — the fill, and on the primary
-     *   the lit ember interior, which is the half that actually shows: a square corner glowing outside a
-     *   notched rule is the whole illusion gone.
-     *
-     *   `border-image` draws the two rules. Not a border and not a pseudo-element, because the corner is
-     *   the one part of this frame that must NOT stretch: a nine-slice keeps all four corner tiles at
-     *   their drawn size and stretches only the straight runs between them, so a 320px button and a 90px
-     *   button get the same notch. `border-width` stays 1px so layout reserves almost nothing, while
-     *   `border-image-width` paints 13px inward.
-     *
-     * The chamfer is set in two places that must match: the SVG's geometry and `--cut` for the clip.
-     *
-     * AND THE CHAMFER IS DRAWN HEAVIER THAN THE STRAIGHT RUNS, WHICH IS NOT A MISTAKE. A nine-slice
-     * corner tile is 13 source units painted into 13px, but the SVG is authored on a 40 unit grid, so the
-     * corner is resampled — and a 45-degree stroke loses far more to that resampling than a horizontal or
-     * vertical one, because a box filter smears a diagonal across twice the pixels. Measured: 63 units of
-     * luminance along the straight edges against 29 across the chamfers, so the outline visibly changed
-     * colour wherever it turned a corner. Each rule is therefore two paths — the four straight runs at
-     * their nominal weight, and the four diagonals at 1.95 times it, the reciprocal of the measured loss.
-     *
-     * WHY HOVER IS AN OPACITY CROSS-FADE AND NOTHING ELSE. A new `border-image-source` is a new image:
-     * the browser cannot interpolate between two images, so it decodes and repaints the frame on the
-     * first hovered frame and the bright state snaps in rather than arriving. A `background` that is a
-     * radial-gradient cannot interpolate either when its stops differ. So the lit state is a SECOND,
-     * COMPLETE FRAME stacked on top at `opacity: 0`. Both images decode when the page loads, and hover
-     * animates one compositor-friendly property. */
+    /* BUTTONS CARTOUCHES WITH THE CORNERS CUT OUT OF THEM. */
     .btn {
-        /* The clip must land just OUTSIDE the outer rule, never on it: the frame's diagonal sits at
-           x+y≈7.3 in the artwork's units, which map 1:1 to px here. */
+        /* Clipping keeps the diagonal outside the outer rule. */
         --cut: 7.3px;
 
         position: relative;
@@ -510,14 +341,11 @@
         );
         /* Colour is the only paint property that transitions here, and it interpolates cleanly. */
         transition: color 0.22s ease;
-        /* A stacking context, so the two overlay layers below can sit at `z-index: -1`: inside one, a
-           negative layer paints after the element's own background and border but BEFORE its inline
-           content. That is exactly where a wash belongs — over the frame, under the label. */
+/* Overlay layers require a stacking context for negative z-index. */
         z-index: 0;
     }
 
-    /* The lit frame, stacked and faded in. Inherits `--cut`, so its notch can never drift from the one the
-     * button is clipped to. `inset: -1px` because the frame is painted in the border box. */
+/* The lit frame, stacked and faded in. */
     .btn::before {
         content: "";
         position: absolute;
@@ -557,9 +385,7 @@
         color: #fff6e6;
     }
 
-    /* An icon inside a control is a FLEX ITEM, not a letter: `block` so it stops sitting on the text
-     * baseline with a descender's worth of space under it, and no shrinking, so a long label cannot
-     * squash it out of round. */
+/* An icon inside a control is a FLEX ITEM, not a letter: `block` so it stops sitting on the text baseline with a descender's worth of space under it. */
     .btn svg {
         display: block;
         flex: none;
@@ -571,21 +397,7 @@
         opacity: 0.85;
     }
 
-    /* ══ THE PRIMARY IS CAST BRONZE ══════════════════════════════════════════════════════════════════
-     *
-     * It was a panel of dark wood with an ember label, and as an object it was lovely. As the one thing on
-     * the page a reader is meant to press it failed, for a reason no amount of detail inside it could fix:
-     * a dark plate on a dark page is the same VALUE as everything around it. The eye finds edges of
-     * lightness before it finds anything else, and there were none — the button had a gold rule around it
-     * and so did every frame, every card and every ledge on the screen. Nothing said "this one".
-     *
-     * So the primary inverts. It is the only light-on-dark object on the site: a gilded plaque with the
-     * words cut INTO it, dark on metal, where everything else is cream on stone. One glance finds it from
-     * across the page, and it cannot be confused with a frame, because no frame here is filled.
-     *
-     * The metal itself is `--house-bronze-*`, and house.css carries the rest of the argument: why it is
-     * GOLD and not ember, why the grain is generated rather than drawn as striped gradients, and why the
-     * engraved label does not lighten under the pointer. */
+    /* THE PRIMARY IS CAST BRONZE It was a panel of dark wood with an ember label, and as an object it was lovely. */
     .btn-primary {
         color: var(--house-bronze-ink);
         font-weight: 600;
@@ -600,26 +412,22 @@
     .btn-primary::before {
         border-image-source: var(--house-cartouche-bronze-lit);
     }
-    /* Under the pointer the plate catches more of the same light rather than changing colour: one warm
-       sheen, one opacity, so the lift arrives as a single movement. */
+    /* Under the pointer the plate catches more of the same light rather than changing colour: one warm. */
     .btn-primary::after {
         background: var(--house-bronze-sheen);
     }
-    /* The label does not lighten on hover — it is cut into metal, and metal that brightens does not turn
-       its engraving pale. Only the plate moves. */
+    /* The label does not lighten on hover — it is cut into metal, and metal that brightens does not turn. */
     .btn-primary:hover,
     .btn-primary:focus-visible {
         color: var(--house-bronze-ink);
     }
 
-    /* The plain cartouche is already the secondary, so this only names it — every call site that says
-     * "btn btn-secondary" gets the stone frame and nothing extra. */
+    /* The plain cartouche is already the secondary, so this only names it — every call site that says. */
     .btn-secondary {
         color: var(--color-content);
     }
 
-    /* The compact cartouche, for the bar and for secondary rows. The notch shrinks with it: 15 units into
-     * 11px is 0.733px per unit, so the same 7.3-unit diagonal lands at 5.4px. */
+/* The compact cartouche, for the bar and for secondary rows. */
     .btn-sm {
         --cut: 5.4px;
         padding: 0.55rem 1.05rem;
@@ -632,12 +440,9 @@
         border-image-width: 11px;
     }
 
-    /* ══ FRAMES, CARDS AND WINDOWS ══════════════════════════════════════════════════════════════════ */
+    /* FRAMES, CARDS AND WINDOWS */
 
-    /* THE FRAME: a double rule with a lozenged corner turned into each of the four corners, and — where a
-     * caller asks for it — a lotus finial centred on the top rail. The corners are elements rather than a
-     * border-image because they must keep their drawn weight at any frame size; a stretched border-image
-     * goes soft on a wide window and heavy on a small card. */
+/* Frames use double rules, turned corners, and optional lotus finials. */
     .frame {
         position: relative;
         border: 1px solid var(--color-line-strong);
@@ -684,9 +489,7 @@
         transform: scale(-1);
     }
 
-    /* The finial. Sits astride the top rail, and carries NO plate of its own: a filled box behind it read
-     * as a black sticker punched through the temple wall the frame stands on. What separates it from the
-     * rail instead is a glow of its own colour, which the rail passes behind without being cut. */
+/* The finial. */
     .finial {
         position: absolute;
         top: 0;
@@ -698,9 +501,7 @@
         pointer-events: none;
     }
 
-    /* THE CARD: the frame at content scale — a single rule and a warm translucent panel. Cards that hold
-     * WORDS keep this quieter treatment; anything holding a screenshot of the product takes `.window`
-     * below. That difference is meaningful, and it is the only one. */
+/* THE CARD: the frame at content scale — a single rule and a warm translucent panel. */
     .card {
         position: relative;
         border: 1px solid var(--color-line);
@@ -716,9 +517,7 @@
         transform: translateY(-2px);
     }
 
-    /* THE WINDOW: ONE FRAME, AND EVERY SCREENSHOT ON THE SITE IS IN IT. The recipe is four things and
-     * none is optional: a `--color-line-strong` hairline on all four sides, a ledge one ornament deep
-     * across the top, a turned corner at each of the four corners, and the shadow below. */
+/* THE WINDOW: ONE FRAME, AND EVERY SCREENSHOT ON THE SITE IS IN IT. */
     .window {
         position: relative;
         background: #0f0b08;
@@ -734,14 +533,7 @@
         border-color: var(--color-line-bright);
         transform: translateY(-2px);
     }
-    /* THE RAIL IS A LEDGE, AND IT IS EMPTY. It has carried two things and lost both. An address pill went
-     * first: the screenshot under it already says which surface it is, in the product's own type. Three
-     * studs went next, and those were the harder call, because a row of dots is how a rectangle says
-     * "application window" — but the corner ornament is drawn from the corner inwards across the same
-     * 27px the studs sat in, so a reader met two ornament systems piled in one small square. The turned
-     * corner is this site's own and says frame just as clearly, so the ledge keeps its lip and its light
-     * and holds nothing. Its depth is the ornament's reach, which is what stops the elbow crossing into
-     * the picture. */
+/* THE RAIL IS A LEDGE, AND IT IS EMPTY. */
     .window-rail {
         display: flex;
         align-items: center;
@@ -752,8 +544,7 @@
         border-bottom: 1px solid var(--color-line);
         background: linear-gradient(180deg, rgba(46, 33, 21, 0.6), rgba(20, 14, 10, 0.6));
     }
-    /* Where the shot was taken. Monospaced and quiet: it is an address, not a title, and the picture
-       under it already says which surface it is in the product's own type. */
+/* Where the shot was taken. */
     .window-address {
         overflow: hidden;
         font-family: var(--font-mono);
@@ -769,9 +560,8 @@
         height: auto;
     }
 
-    /* ══ ORNAMENTS ══════════════════════════════════════════════════════════════════════════════════ */
-    /* The lotus — the site's bullet, its wordmark companion and the finial on every frame. One size class
-     * per job, so a caller never sets width and height by hand. */
+    /* ORNAMENTS */
+    /* The lotus — the site's bullet, its wordmark companion and the finial on every frame. One size class. */
     .lotus {
         display: inline-block;
         flex: none;
@@ -808,26 +598,7 @@
         color: var(--color-subtle);
     }
 
-    /* ── A MARK BESIDE A RUN OF TEXT ──────────────────────────────────────────────────────────────────
-     * The bullet of a list, the flower on a heading, the tick on a FAQ summary, a provider's logo in a
-     * row. One rule, because the alignment it does is the one thing nothing in flexbox can do for you.
-     *
-     * A MARK IS A BOX AND TEXT IS A BASELINE GRID, and there is no layout keyword that relates the two.
-     * `align-items: center` centres the mark on the whole flex line, which is right until the words wrap
-     * and then parks the bullet between line one and line two. `flex-start` puts the mark's top at the
-     * row's content edge, which is half the leading above where the letters start. So every caller
-     * reached for a hand-tuned `margin-top` instead, and every one of them tuned it against the type size
-     * it happened to be sitting next to: this site carried five different answers (0.2rem twice, 0.35rem,
-     * 0.15rem, and a `mt-1.5` that was 3.6px out on a 20px line), because the constant travels by
-     * copy-paste and the type context that justified it does not.
-     *
-     * ONE LINE TALL, WITH THE MARK CENTRED IN IT. `1lh` is whatever line-height this row inherits, so the
-     * mark lands on the middle of the FIRST line at every type size, wraps and all, and there is no
-     * number here to go stale when the text around it changes. The mark keeps its own size inside the box
-     * (`.lotus-sm`, `.lozenge`, an 18px logo); this only says where the box sits.
-     *
-     * The drawings are centred in their own viewBoxes (components/ornaments.ts), so the box's centre is
-     * the ink's centre. If a mark is ever redrawn off-centre, fix it there — not with a margin here. */
+    /* Mark boxes stay one line tall so wrapped text cannot misalign them. */
     .mark {
         display: grid;
         place-items: center;
@@ -835,24 +606,14 @@
         flex: none;
         block-size: 1lh;
     }
-    /* One point in a list: the mark and the words beside it. `--point-gap` because the gap is the only
-     * thing a list legitimately varies; the vertical relation is not the caller's to set. */
+/* One point in a list: the mark and the words beside it. */
     .point {
         display: flex;
         align-items: flex-start;
         gap: var(--point-gap, 0.625rem);
     }
 
-    /* ── THE WORDMARK LOCKUP ──────────────────────────────────────────────────────────────────────────
-     * The flower beside the word, in the bar and in the footer's first cell. A DIFFERENT relation from
-     * the one above and the reason it gets its own rule: here the mark is aligned on the LETTERS, not on
-     * the line box. Baloo 2 reserves descender room the word "intentic" never uses, so a box-centred
-     * flower reads visibly high against a word with no descenders in it.
-     *
-     * That offset is a metric of the typeface, so it is one number, in `em`, in one place. It was two —
-     * `-0.125rem` in the bar and `-0.09rem` in the footer — which is the same constant re-eyeballed at a
-     * second size, and the two disagreed by more than either was accurate to. In `em` it holds at every
-     * size a lockup is drawn at, so the mobile bar and the footer get it for free. */
+    /* THE WORDMARK LOCKUP The flower beside the word, in the bar and in the footer's first cell. */
     .lockup {
         --wordmark-size: 1.55rem;
         display: inline-flex;
@@ -883,11 +644,8 @@
         opacity: 0.85;
     }
 
-    /* ══ SURFACES ═══════════════════════════════════════════════════════════════════════════════════ */
-    /* THE WALL — what a band without a photograph behind it sits on. Not the plate again: a second full
-     * plate would compete with the first and there is nothing left to say with it. The geometry
-     * underneath it instead — a warm grid at the weight of a pencil line, masked so it never reaches an
-     * edge. */
+    /* SURFACES */
+/* THE WALL — what a band without a photograph behind it sits on. */
     .wall {
         position: absolute;
         inset: 0;
@@ -898,10 +656,7 @@
         mask-image: radial-gradient(ellipse 85% 62% at 50% 0%, rgba(0, 0, 0, 0.85), transparent 72%);
     }
 
-    /* THE FIRST THING UNDER A FIXED BAR has to clear it, and the bar's height is a function of the window
-     * — so the clearance has to be too. Every page here used to open on a literal `pt-28`, which is 112px
-     * against a bar that passes 112px at about 1990px wide: on a wide monitor the first heading ran under
-     * the lintel. This is that padding, plus a breath, measured from the bar itself. */
+/* THE FIRST THING UNDER A FIXED BAR has to clear it, and the bar's height is a function of the window — so the clearance has to be too. */
     .below-bar {
         padding-top: calc(var(--bar-height) + 2.5rem);
     }
@@ -911,21 +666,12 @@
         }
     }
 
-    /* THE PAGE HEAD — every page but the home page opens the same way: an eyebrow, a carved heading, a
-     * line of lede and sometimes two controls. What sits BEHIND them was, until this class existed, the
-     * same absolutely-positioned gradient div pasted into twelve pages, each one naming the same three
-     * colour stops; then it was a glow and a grid drawn here. It is neither now: the temple itself is
-     * behind it, from `PageBackdrop`, which is what makes the bar the same bar on every page. All this
-     * class still owes the band is a containing block for whatever it positions inside itself. */
+/* THE PAGE HEAD — every page but the home page opens the same way: an eyebrow, a carved heading, a line of lede and sometimes two controls. */
     .page-hero {
         position: relative;
     }
 
-    /* A section of the page. IT MUST BE POSITIONED, and that is not a detail: the wall texture and the
-     * plate inside it are `position: absolute; inset: 0`, so without a containing block here they escape
-     * to the nearest positioned ancestor and stretch over the whole document — one grid painted across
-     * every band instead of one per band. `overflow: hidden` is the other half: it is what crops the
-     * plate to the band it belongs to. */
+/* A section of the page. */
     .band {
         position: relative;
         overflow: hidden;
@@ -937,34 +683,13 @@
         border-image: linear-gradient(90deg, transparent, var(--color-line-strong) 22%, var(--color-line-strong) 78%, transparent) 1;
     }
 
-    /* THE SAME RULE, ON A SECTION THAT NAMES ITS OWN EDGE. `.band + .band` can only draw between two
-     * bands that are siblings; a page whose sections carry their own `border-t` or `border-b` says which
-     * edge it wants, and this supplies the fade for whichever one has a width.
-     *
-     * IT IS A FADE RATHER THAN A HAIRLINE because of what is behind it now. A flat `border-line` rule is
-     * a wall-to-wall line at 0.16 alpha, which over the temple is either invisible or a scratch across
-     * the stone depending on what it crosses. Fading out at both ends, and a touch stronger in the middle
-     * where the page's own column is, it reads as a carved division either way. */
+/* THE SAME RULE, ON A SECTION THAT NAMES ITS OWN EDGE. */
     .band-rule {
         border-color: transparent;
         border-image: linear-gradient(90deg, transparent, var(--color-line-strong) 22%, var(--color-line-strong) 78%, transparent) 1;
     }
 
-    /* ══ THE PLINTH ═════════════════════════════════════════════════════════════════════════════════
-     * A short full-bleed strip that is not prose — a row of measured figures, a ledger line — and has to
-     * read as its own register rather than as more page.
-     *
-     * IT IS MARKED WITH RULES AND A FEATHERED WASH, NOT A TINT, and that is the whole point of the
-     * recipe. Three bands on this site used to say "a section starts here" by laying a flat translucent
-     * colour across their whole box: `bg-overlay/15`, `bg-canvas/60`, an ember gradient. That works on a
-     * flat canvas and fails completely over a photograph, which is what every page now opens on — the
-     * wash cuts a hard horizontal line across the temple and the picture reads as half-coloured, like a
-     * printing plate that slipped.
-     *
-     * So the ground swells in the middle of the strip and dies to nothing at both edges. There is no line
-     * for it to cut, at any height, over any part of the art. What draws the boundary instead is the pair
-     * of gold rules — the same fading hairline the bands upstairs are divided by, which is how the rest
-     * of this site has always said "a new thing starts here". */
+    /* The plinth is a full-bleed strip for measured figures. */
     .plinth {
         position: relative;
         background: linear-gradient(
@@ -992,8 +717,7 @@
         bottom: 0;
     }
 
-    /* A translucent tint chip: a squared cartouche rather than a pill, because a pill is the one shape
-     * this vocabulary does not have. */
+    /* A translucent tint chip: a squared cartouche rather than a pill, because a pill is the one shape. */
     .chip {
         display: inline-flex;
         align-items: center;
@@ -1037,14 +761,7 @@
         text-decoration: underline;
     }
 
-    /* ── The product's chat surfaces (app _editor/web/src/chat/chat.css) ─────────────────────────
-     * The one figure that uses them (AppChat.astro) is a claim about a screen the visitor will see after
-     * signing up, so the shapes are the app's. Only the metal is this site's: a gold rule where the app
-     * draws a neutral one, and a warmed panel behind it.
-     *
-     * .chat-surface carries the user's prompt bubble and every decision card: a translucent wash with a
-     * border warmed a fraction toward the brand, which is what separates "something is being asked of
-     * you" from the agent simply talking. .chat-surface-assistant is that quieter answer. */
+    /* Product chat surfaces are reused by the site chat figure. */
     .chat-surface {
         background: rgba(31, 23, 16, 0.55);
         border: 1px solid rgba(224, 123, 39, 0.28);
@@ -1054,8 +771,7 @@
         border: 1px solid var(--color-line);
     }
 
-    /* The answer to a decision card — the app's ChatDecisionButton, whose two tones are WEIGHT rather
-     * than agreement: primary is the answer the card is asking for, secondary is everything else. */
+/* Decision buttons use tone for action weight, not agreement. */
     .chat-decision {
         display: inline-flex;
         align-items: center;
@@ -1078,8 +794,7 @@
         color: var(--color-content);
     }
 
-    /* The composer's two round controls. A turn parked on a card is still a LIVE turn, so the panel
-     * carries Stop beside Send — and Send is disabled, because the box is empty. */
+/* The composer's two round controls. */
     .composer-send {
         display: inline-flex;
         align-items: center;
@@ -1099,27 +814,7 @@
         color: var(--color-content);
     }
 
-    /* ── THE NAVIGATION'S ONE HOVER ──────────────────────────────────────────────────────────────────
-     *
-     * Every row a reader can travel to — the bar's menu panel, the phone overlay, a book's rail — answers the
-     * pointer with this and only this: a warm wash strongest where the row begins and gone by two thirds
-     * across. Light falling on stone from the side, which is the light the whole site is lit by.
-     *
-     * IT SAYS "THE POINTER IS HERE" AND NOTHING ELSE, and that restraint is the point of having it. The three
-     * surfaces used to answer hover three ways — the panel spent full ember on the wash, the label AND the
-     * icon, the overlay added a rule down the left edge, the rail moved a hairline and brightened the words —
-     * and the panel's answer was character-for-character its answer for the CURRENT PAGE, so the one question
-     * the menu is open to answer had no way to be answered. Ember and the left rule now belong to state (see
-     * the note in Nav.astro); this belongs to position. A reader who has learned one row has learned all of
-     * them, which is the same bargain the app's `ui-row-select` makes on its side of the product.
-     *
-     * A PSEUDO-ELEMENT SO IT CAN ACTUALLY FADE. Both call sites had written `transition: background`
-     * over a `linear-gradient`, which animates nothing — a gradient is a background IMAGE, not a colour — so
-     * the site's most-used moving part snapped on and off while two stylesheets claimed an ease. Opacity on a
-     * layer underneath is the cheap way to get the ease that was already being promised, and it composites.
-     *
-     * `isolation` keeps that layer inside the row: at `z-index: -1` without its own stacking context it
-     * escapes to the nearest one — for the menu panel, the whole carved surface — and paints under it. */
+    /* Navigation hover treatment is shared by desktop and mobile rows. */
     .nav-wash {
         position: relative;
         isolation: isolate;
@@ -1133,20 +828,14 @@
         opacity: 0;
         transition: opacity 0.18s ease;
     }
-    /* Focus takes it too. A keyboard reading a menu panel or a rail is a pointer by another name, and these
-       are the surfaces where a reader can be furthest from where they started. */
+/* Focus takes it too. */
     .nav-wash:hover::before,
     .nav-wash:focus-visible::before {
         opacity: 1;
     }
 
     /* ── Docs rail scroll edge ───────────────────────────── */
-    /* The rail scrolls inside itself, and its 27 rows overflow a 1366×768 laptop by about 260px : the whole
-       "Build on it" shelf. Nothing said so: no fade, no shadow, and an overlay scrollbar that appears only
-       once you are already scrolling, so a list that continues looked like a list that had ended.
-
-       The fade is on whichever edge has something behind it, which is why this is three rules and not one: a
-       permanent fade at the foot would dim the last row of a rail that is fully scrolled, and read as a bug. */
+/* The rail scrolls inside itself, and its 27 rows overflow a 1366×768 laptop by about 260px : the whole "Build on it" shelf. */
     [data-rail-scroll] {
         scrollbar-width: thin;
         scrollbar-color: var(--color-line-strong) transparent;
@@ -1166,16 +855,11 @@
 
     /* ── Docs prose (.docs-body) ─────────────────────────── */
 
-    /* Prose spans the full column, the same as tables and code: capping paragraphs at a reading measure
-       while code ran edge to edge split one page into two columns of unequal width, and the seam between
-       them read as a layout bug rather than a choice. */
+/* Prose, tables, and code share the full content column. */
     .docs-body {
         font-size: 0.95rem;
     }
-    /* A rule above every h2 rather than more space: on pages with a dozen sections, whitespace alone stopped
-       reading as a boundary and the page became one undifferentiated column. The line is what makes a section
-       scannable from a scroll. These headings are 24px and 18px, which is the titling band — the brand face,
-       not the display serif, which has no hairlines left to give at that size. */
+/* A rule above every h2 rather than more space: on pages with a dozen sections. */
     .docs-body h2 {
         margin-top: 3.5rem;
         margin-bottom: 1rem;
@@ -1200,10 +884,7 @@
         color: var(--color-content);
     }
 
-    /* ── Section anchors ─────────────────────────────────────
-       One per prose heading, added at render time (lib/docs-headings.ts). Hidden until the heading is hovered or
-       the anchor itself is focused: a permanent "#" beside twelve headings is noise, but a section nobody can
-       link to is worse : which is what 142 of the site's 148 headings were. */
+    /* Section anchors One per prose heading, added at render time (lib/docs-headings.ts). */
     .docs-body :is(h2, h3) > .docs-anchor {
         margin-left: 0.5rem;
         font-size: 0.8em;
@@ -1221,8 +902,7 @@
         color: var(--color-link);
         text-decoration: none;
     }
-    /* Confirmation that the link is on the clipboard. Rendered from the attribute the click handler sets, so
-       there is no second element to keep in sync. */
+    /* The copied confirmation appears only while the click handler sets the attribute. */
     .docs-body .docs-anchor[data-copied]::after {
         content: "Link copied";
         margin-left: 0.5rem;
@@ -1327,12 +1007,7 @@
         white-space: nowrap;
     }
 
-    /* ── FAQ disclosure ──────────────────────────────────
-     * The whole widget is native <details>; the only thing CSS adds is the mark. Safari still paints its
-     * own triangle for a summary that is display:flex, so the marker is killed both ways. The mark LEADS
-     * the line rather than trailing it: on the right it is a disclosure chevron in lozenge clothing, sat
-     * in its own column doing nothing until clicked; on the left it is the tick a register carries in its
-     * margin, and it puts the answer's indent and the question's own mark on one axis. */
+/* Native details supplies FAQ disclosure; CSS supplies the marker. */
     .faq-item summary::-webkit-details-marker {
         display: none;
     }
@@ -1356,8 +1031,7 @@
         color: var(--color-primary-500);
     }
 
-    /* Opt component blocks (cards, diagrams, steppers) out of prose spacing/typography : including the section
-       rule and anchor a prose h2 now carries, which on a card heading would draw a divider through the card. */
+/* Opt component blocks (cards, diagrams, steppers) out of prose spacing/typography : including the section rule and anchor a prose h2 now carries. */
     .docs-embed :is(h1, h2, h3, h4, p, ul, ol, li) {
         margin: 0;
         max-width: none;
@@ -1382,24 +1056,9 @@
     }
 }
 
-/* ══ THE PLATE ══════════════════════════════════════════════════════════════════════════════════════
- * The photographed temple wall. One element, three jobs, in this order: the photograph, the scrim that
- * holds it down, and the vignette. It is `position:absolute; inset:0` inside whatever band wants it, and
- * only two bands on the site do — the home page's first screen and its closing cartouche. Everywhere else
- * the wall above carries the texture.
- *
- * THE BACKGROUND IS THE HARD PART. The source art is a dark plate, but "dark" is not "safe to set text
- * on": its left third holds a lit devata, its lower half an entire temple, and its sky three glowing
- * mandalas — all in the same warm range as the cream a headline is set in. So the plate is never used
- * raw. It is laid down at `--plate-dim` opacity under a three-part scrim, and the numbers are set so that
- * the darkest cream on the page still clears 7:1 against the brightest pixel it can land on. Tune it with
- * the two variables rather than by editing the layers.
- *
- * The image is chosen by width rather than by `srcset`, because it is a background: three rungs, the
- * middle one carrying almost every laptop. */
+/* THE PLATE The photographed temple wall. */
 .plate {
-    /* `--plate-dim` — how much of the photograph survives at all.
-       `--plate-scrim` — the flat wash of canvas laid over whatever did. */
+    /* `--plate-dim` — how much of the photograph survives at all. */
     --plate-dim: 1;
     --plate-scrim: 0.12;
 
@@ -1407,8 +1066,7 @@
     inset: 0;
     overflow: hidden;
     pointer-events: none;
-    /* What shows below the plaque on a hero taller than the art. Set here rather than left transparent so
-       the strip is the page's own warm black and not the browser's white. */
+/* What shows below the plaque on a hero taller than the art. */
     background: var(--color-canvas);
 }
 .plate-img {
@@ -1416,18 +1074,7 @@
     top: 0;
     right: 0;
     left: 0;
-    /* THE BOX IS THE ART'S OWN SHAPE. That is the whole trick, and it is what makes the `cover` below an
-       exact fit rather than a crop: matching ratios leave nothing to cut on either axis.
-       The art is a framed plaque — a carved border on all four sides, a devata standing in each outer
-       third, and a deliberately empty middle for the copy. Sized against the hero's own box, `cover` would
-       crop whichever axis is spare, and on a hero whose height comes from its content that axis is the
-       WIDTH. The two figures, the one thing a reader remembers about the picture, would be the first thing
-       thrown away, and how much of them went would change with every window size.
-       Pinned to 16/9 the plaque is always whole across the screen. What runs out instead is the BOTTOM, on
-       any hero taller than 9/16 of its width — which is exactly where the product frames are stacked and
-       where the fade below is already waiting.
-       It also makes the scale a single term, `width / 1600`, which is what lets `--plate-band` be an
-       honest number rather than a guess. */
+/* THE BOX IS THE ART'S OWN SHAPE. */
     aspect-ratio: 16 / 9;
     background-image: url("/assets/angkor/temple-1600.avif");
     background-position: 50% 0%;
@@ -1435,10 +1082,7 @@
     background-repeat: no-repeat;
     opacity: var(--plate-dim);
 }
-/* THE CUT EDGE. On a hero taller than 9/16 of its width the plaque simply stops, and a carved gold rule
- * with flat canvas under it is a seam. This dissolves the last third of the art into that canvas so the
- * picture runs out instead of ending. On a hero SHORTER than the art the plate's own `overflow: hidden`
- * clips this away unseen, so it costs nothing in the case where it is not wanted. */
+/* THE CUT EDGE. */
 .plate-img::after {
     content: "";
     position: absolute;
@@ -1448,17 +1092,7 @@
     height: 38%;
     background: linear-gradient(180deg, transparent 0%, rgba(12, 9, 7, 0.55) 52%, var(--color-canvas) 100%);
 }
-/* THE SCRIM IS A WELL, not a ramp, and the symmetry of the art is why. A gradient run left to right would
- * darken one devata and leave the other lit, which reads as a lighting fault rather than as a treatment.
- * Sunk in the middle instead, it follows the copy and leaves both figures alone.
- *
- * Four layers, one paint:
- *   1. THE WELL — an ellipse of shadow centred where the headline sits.
- *   2. THE FLOOR — a bottom-up ramp. The art's brightest pixels are the ember glow along its lower edge,
- *      and that is precisely where the product windows are stacked; unchecked it reads through the gaps
- *      between them as a fire behind the UI.
- *   3. THE VIGNETTE — keeps the eye off the four corners.
- *   4. THE WASH — a flat pane of canvas over all of it. */
+/* THE SCRIM IS A WELL, not a ramp, and the symmetry of the art is why. */
 .plate::after {
     content: "";
     position: absolute;
@@ -1469,37 +1103,20 @@
         radial-gradient(128% 108% at 50% 40%, transparent 46%, rgba(9, 6, 4, 0.52) 100%),
         rgba(12, 9, 7, var(--plate-scrim));
 }
-/* THE BAND EVERY PAGE OPENS ON. `PageBackdrop` renders this at the top of the document, behind
- * everything, so the plate is under the bar on every page rather than only on the home page's hero.
- *
- * `z-index: -1` puts it behind the page's own content while staying inside the body's stacking context,
- * which is what keeps it above the document's background rather than under it. It never takes a pointer:
- * it is scenery, and the links it sits behind are the page's. */
+/* THE BAND EVERY PAGE OPENS ON. */
 .page-backdrop {
     position: absolute;
     top: 0;
     right: 0;
     left: 0;
-    /* The home page hero's own height, so the scrim's gradients — which are sized to their box — darken
-     * the art the same way here as they do there. The art itself runs out at 56.25vw (its own 16:9) and
-     * fades; the rest of this box is scrim over canvas, which costs nothing and paints nothing. */
+/* The home page hero's own height, so the scrim's gradients — which are sized to their box — darken the art the same way here as they do there. */
     height: 77vw;
     overflow: hidden;
     pointer-events: none;
     z-index: -1;
 }
 
-/* THE VEIL, AND WHY IT STARTS WHERE THE BAR ENDS.
- *
- * The home page's hero is composed against this art: the copy sits in the plaque's deliberately empty
- * middle, the product frames cover its lower half, and the two devatas are left alone in the outer
- * thirds because they are the picture. No other page is composed against anything — a docs page is a
- * rail of links down the left and prose down the middle, and both of those land straight on a devata.
- *
- * So the art is kept for the one place it is doing structural work — the carved band the bar lives in —
- * and veiled everywhere below it. The first stop is `--bar-height` exactly, so not one pixel of what the
- * bar shows is touched and the bar stays identical to the home page's. Under that it ramps over about a
- * bar's worth of distance and holds: the temple is still there, as depth rather than as subject. */
+/* The home page's hero is composed against this art: the copy sits in the plaque's deliberately empty middle, the product frames cover its lower half. */
 .page-backdrop-veil {
     position: absolute;
     inset: 0;
@@ -1513,10 +1130,7 @@
     );
 }
 
-/* The seam at the foot of a plated band: the photograph does not stop, it dissolves into the canvas.
- * Shallow and late, because the bottom eighth of the plate is where its temple and its carved lower
- * border are — a fade tall enough to be comfortable erased the one part of the art the first screen is
- * actually showing. It only has to swallow the last inch. */
+/* The seam at the foot of a plated band: the photograph does not stop, it dissolves into the canvas. */
 .plate-fade {
     position: absolute;
     right: 0;
@@ -1526,12 +1140,7 @@
     background: linear-gradient(180deg, transparent, rgba(12, 9, 7, 0.6) 55%, var(--color-canvas) 96%);
     pointer-events: none;
 }
-/* ON A PHONE THE ART IS CROPPED TO ONE FIGURE, and which one is not a free choice. The hero is twice as
- * tall as it is wide here, so the plaque either lies across the top as a 220px band over an ocean of
- * black, or it fills the box and the crop falls on the sides. Filling is the better picture — but this
- * composition is a wide empty middle with a devata standing in each outer third, and a CENTRED crop of it
- * at this width shows the empty middle and nothing else. 21% lands the left-hand devata just off the
- * centre line, with the wall and the spires running out to her right. */
+/* ON A PHONE THE ART IS CROPPED TO ONE FIGURE, and which one is not a free choice. */
 @media (max-width: 48rem) {
     .plate-img {
         aspect-ratio: auto;
@@ -1542,9 +1151,7 @@
     .plate-img::after {
         display: none;
     }
-    /* Below the columns break the copy takes the whole width, so the well has nothing left to spare and
-       becomes a plain top-down darkening, heavier at the foot where the product frame sits. Keep these
-       numbers low: the crop above is holding a figure rather than empty wall. */
+/* Below the columns break the copy takes the whole width, so the well has nothing left to spare and becomes a plain top-down darkening. */
     .plate::after {
         background:
             linear-gradient(180deg, rgba(10, 7, 5, 0.62) 0%, rgba(10, 7, 5, 0.5) 40%, rgba(10, 7, 5, 0.52) 66%, rgba(10, 7, 5, 0.86) 100%),
@@ -1557,7 +1164,7 @@
     }
 }
 
-/* ══ MOTION ═════════════════════════════════════════════════════════════════════════════════════════ */
+/* MOTION */
 
 /* Scroll reveal. The observer that adds `.visible` is in BaseLayout, so a band only has to wear the class. */
 .fade-in {
@@ -1572,13 +1179,7 @@
     transform: translateY(0);
 }
 
-/* Every screen a frame can show is stacked in the same box; exactly one carries `is-on`, and the swap is a
- * cross-fade rather than a cut so the frame reads as one window changing what it holds rather than as a
- * slideshow of pictures. The first is marked on in the markup, so the frame is correct before any script
- * runs and stays correct if none ever does.
- *
- * Keyed on `data-screen`, the attribute the cycling script walks, rather than on the class: some frames
- * hold a lone still that nothing ever turns, and on the class those would sit at zero opacity for good. */
+/* Every screen a frame can show is stacked in the same box; exactly one carries `is-on`. */
 .screen[data-screen] {
     opacity: 0;
     transition: opacity 0.7s ease;
@@ -1587,9 +1188,7 @@
     opacity: 1;
 }
 
-/* Under reduced motion the frames keep TURNING and only the fade becomes a cut — that is the whole of what
- * the preference costs the hero, because what those frames hold is three surfaces of the product, not
- * decoration, and a reader who asked the page to stop moving has not asked to be shown a third of it. */
+/* Under reduced motion the frames keep TURNING and only the fade becomes a cut — that is the whole of what the preference costs the hero. */
 @media (prefers-reduced-motion: reduce) {
     html {
         scroll-behavior: auto;

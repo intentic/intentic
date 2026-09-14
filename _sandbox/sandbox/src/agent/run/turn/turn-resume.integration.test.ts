@@ -1245,8 +1245,7 @@ test("a turn that ran before it was refused stops claiming nothing had been done
     await fireLimitResume(services, wake, "lim-4");
     await settle("lim-4");
 
-    // withResumeNote is idempotent: it replaces the note rather than stacking, so a changed reason still gets the right
-    // one.
+    // Keep resume notes idempotent so replacement reasons remain current.
     expect(turns[1]!.prompt).toMatch(/allowance ran out/i);
     expect(turns[1]!.prompt).not.toMatch(/no part of the request below/i);
     expect(turns[1]!.prompt).toContain("ship the parser");

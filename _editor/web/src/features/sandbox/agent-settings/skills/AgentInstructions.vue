@@ -86,11 +86,7 @@ const reachLine =
                 </template>
 
                 <template v-else>
-                    <!-- A PROMPT IS A DOCUMENT, and it was the worst-served one in the app: five monospace rows
-                         with no structure visible, onto a file that runs to twenty thousand characters. It is
-                         written on the same surface as the safety policy, a skill and a file in the workspace,
-                         under the same explicit save — this text is read at the start of every turn, so it
-                         waits to be told rather than going live mid-sentence. -->
+<!-- A PROMPT IS A DOCUMENT, and it was the worst-served one in the app: five monospace rows with no structure visible. -->
                     <div class="ui-field-shell max-h-[60dvh] overflow-auto p-3" style="--prose-measure: 72ch">
                         <MarkdownDocument
                             v-model="prompt"
@@ -149,10 +145,7 @@ const reachLine =
                 Either way, this app's own guidance about its question cards, checklist panel and browser tools is added on top; only a custom prompt
                 drops that.
             </p>
-            <!-- READ IT AS THE THING YOU WOULD BE FORKING. It was a `<pre>`: one grey monospace slab at 10px,
-                 which is the one way to read a 20,000-character document that tells you nothing about its
-                 shape. The same surface as the box behind this modal, with nothing to type into, so "View
-                 prompt" and "Edit a copy" are the same document twice rather than two different screens. -->
+<!-- READ IT AS THE THING YOU WOULD BE FORKING. -->
             <div class="mt-2 max-h-[55dvh] overflow-auto rounded-lg border border-line bg-canvas p-3" style="--prose-measure: 76ch">
                 <MarkdownDocument :model-value="builtinPrompts[viewingBase]?.text ?? ``" label="Built-in system prompt" />
             </div>

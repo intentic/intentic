@@ -1,11 +1,4 @@
-<!--
-    The line that turns a command block into a way out. Anything that has to happen outside this container — a
-    container restart, an image swap, a script in the checkout it was launched from — is ours to run only on a machine
-    connected as a device. When the machine holding this sandbox's sync pairing is not one, the command below is the
-    fallback and this says what would remove it.
-
-    Silent whenever there is nothing to offer: no such machine, or a platform with no card to connect it on.
--->
+<!-- The line that turns a command block into a way out. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import { hostCard } from "./deviceFacts";
@@ -27,9 +20,7 @@ const card = computed(() => (machine.value === undefined ? undefined : hostCard(
 
 <template>
     <p v-if="machine && card" class="text-2xs text-subtle">
-        <!--
-            Named, not "your machine": the reader has more than one, and this is the only one the sentence is true of.
-        -->
+        <!-- Use the device name because the user may have multiple machines. -->
         <span class="font-mono">{{ machine.label }}</span>
         syncs this sandbox but is not connected as a device.
         <RouterLink :to="{ name: `capabilities`, params: { card }, query: { device: machine.label } }" class="text-link hover:underline">

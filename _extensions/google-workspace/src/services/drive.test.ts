@@ -5,8 +5,7 @@ const DOC = "application/vnd.google-apps.document";
 const SHEET = "application/vnd.google-apps.spreadsheet";
 
 describe("driveQuery", () => {
-    /* Nobody types `fullText contains 'budget' and trashed = false`, and a tool that demanded it would go
-     * unused. A phrase is searched; a real query is respected. */
+    /* Phrase search stays simple; callers may still pass a real Drive query. */
     it("turns a phrase into a full-text search that skips the bin", () => {
         expect(driveQuery("quarterly budget")).toBe("fullText contains 'quarterly budget' and trashed = false");
     });

@@ -1,7 +1,4 @@
-<!--
-    Renames one capability connection. A dialog, not an inline edit, since the name is load-bearing (skill id, tool prefix, credential variable, ssh
-    alias) and the daemon repoints all of it rather than losing state. Applies the same cleanName rule as the add form.
--->
+<!-- Renames one capability connection. -->
 <script setup lang="ts">
 import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
@@ -51,8 +48,7 @@ const unchanged = computed(() => renamed.value === props.id);
                     <Icon name="exclamation-triangle" class="text-2xs" />
                     {{ problem }}
                 </span>
-                <!-- The repair, shown rather than performed silently: this line is the contract for what the
-                     button will rename to. -->
+                <!-- The preview states the exact name the button will apply. -->
                 <span v-else-if="preview" class="mt-1 flex items-center gap-1 text-2xs text-muted">
                     <Icon name="check" class="text-2xs text-success" />
                     Renamed to <span class="font-mono text-content">{{ preview }}</span>

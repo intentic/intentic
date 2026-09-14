@@ -5,9 +5,7 @@ import { WORKSPACE_HEALTH } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import type { ChurnWindow } from "./codebaseHealth";
 
-/* One repo's codebase health, read straight from the daemon's resident iq engine (GET /workspace/health),
- * churn × complexity per file, what the index holds, and the import graph's key modules. Parameterized by a
- * reactive repo + churn window so the panel's switchers re-key the query, the same shape as useGitLog. */
+/* Codebase health reads churn and complexity from the resident iq index. */
 
 export function useCodebaseHealth(repo: Ref<string>, window: Ref<ChurnWindow>) {
     const { query, error } = useSandboxQuery({

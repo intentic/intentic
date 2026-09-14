@@ -2,9 +2,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import type { PushNotificationsPlugin } from "../shell/window/capacitor";
 import { nativePushDriver } from "./nativePush";
 
-/* The native driver's own seams: the APNs token arrives as an EVENT the register() call does not answer, and
- * the relay's grant, not anything local: is what becomes the daemon's channel. Everything else (permission
- * states, the daemon round-trips) is the composable's flow and is tested there over the web driver. */
+/* The native driver's own seams: the APNs token arrives as an EVENT the register() call does not answer, and the relay's grant, not anything local. */
 
 const listeners = new Map<string, (payload: never) => void>();
 

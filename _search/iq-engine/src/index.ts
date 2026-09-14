@@ -411,7 +411,7 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
         markDirty() {
             invalidateHealth();
             dirtySeq += 1;
-            // oxlint-disable-next-line unicorn/require-post-message-target-origin -- worker_threads, not window: this postMessage takes no targetOrigin
+            // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Worker messages have no targetOrigin.
             worker.postMessage({ type: "dirty", seq: dirtySeq } satisfies IndexWorkerRequest);
         },
         warm: () => warmed,

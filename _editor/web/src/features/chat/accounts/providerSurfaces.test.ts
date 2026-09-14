@@ -80,12 +80,7 @@ it(`the free trial is not a native provider`, () => {
     expect(providerSpec(TRIAL_PROVIDER)).toBeUndefined();
 });
 
-/* WHICH PROVIDERS MAY BE OFFERED A SIGN-IN, asked of the spec table rather than by elimination.
- *
- * The account card used to ask it the other way round, "is this a translator subscription?", and treat every
- * other answer as a provider holding native accounts. A provider with no spec row is neither, and the free
- * trial is one: a fresh sandbox parks its first chat on it, the card followed the chat there, and drew
- * "endpoint/free-trial account · not connected" with a Connect button whose POST matched no route at all. */
+/* WHICH PROVIDERS MAY BE OFFERED A SIGN-IN, asked of the spec table rather than by elimination. */
 it.each(NATIVE_PROVIDERS)(`%s has a sign-in a card may offer`, (provider) => {
     expect(hasSignIn(provider), `${provider} has nothing to connect`).toBe(true);
 });

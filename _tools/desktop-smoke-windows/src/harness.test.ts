@@ -1,9 +1,7 @@
 import { expect, test } from "vitest";
 import { createHarness, type Harness } from "./harness.js";
 
-/* The polling loop's deadline arithmetic, asserted without spending real seconds, which is the whole reason
- * `now` and `sleep` are injected. A real timer would make these tests slow AND hide the case that matters:
- * whether the predicate is given its chance before the deadline is consulted. */
+/* The polling loop's deadline arithmetic, asserted without spending real seconds, which is the whole reason `now` and `sleep` are injected. */
 
 const collected = (): { harness: Harness; out: string[]; err: string[]; tick: (ms: number) => void } => {
     const out: string[] = [];

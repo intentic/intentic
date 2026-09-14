@@ -5,9 +5,7 @@ import { askRoleModel } from "../models/role-model.js";
 import { FENCE } from "@intentic/sandbox-contract";
 
 // Whether a command should run, judged by a model against the owner's policy. POLICY and FACTS are trusted
-// (owner-written, daemon-observed); PROGRAM is untrusted data, fenced, and the gated model contributes nothing about
-// its own intent. Friction, not a boundary: the hard rule before this call and tier 0 isolation are what actually bound
-// it.
+// Keep the safety boundary outside the model's self-reported intent.
 
 // Enough of the program to judge, well above a card's length: a truncated tail changes what the head means.
 const PROGRAM_CAP = 4_000;
@@ -112,9 +110,7 @@ const unquote = (text: string): string => (/^(["'`])(.*)\1$/u.exec(text)?.[2] ??
 // Past this many words the reply is a forbidden walkthrough, not a sentence; refusing it costs one rung.
 const SENTENCE_MAX_WORDS = 50;
 
-// An off-shape reply is a missing verdict, not a missing sentence: `recognised` marks that, so it costs the rung rather
-// than silently becoming `allow`. The parsed fallback is `ask`, the safer direction, if anything downstream misreads
-// it.
+// Parse malformed verdicts as ask rather than allow.
 interface JudgedReply {
     readonly verdict: SafetyVerdict;
     readonly recognised: boolean;

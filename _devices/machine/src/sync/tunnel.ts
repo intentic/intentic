@@ -185,7 +185,7 @@ export const createTunnelPool = (log: Log) => {
             for (const [sandboxId, held] of running) {
                 if (!wanted.has(sandboxId)) {
                     running.delete(sandboxId);
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- one listener at a time; the set is tiny and ordering keeps the log readable
+                    // oxlint-disable-next-line eslint/no-await-in-loop -- Listeners are released in order.
                     await held.stop();
                     log(`  sync transport for ${sandboxId} stopped: it is no longer paired`);
                 }
@@ -201,7 +201,7 @@ export const createTunnelPool = (log: Log) => {
                 // regardless.
                 if (held !== undefined) {
                     running.delete(target.sandboxId);
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- the old listener must release the port before the new one binds it
+                    // oxlint-disable-next-line eslint/no-await-in-loop -- The old listener must release the port first.
                     await held.stop();
                     log(`  sync transport for ${target.sandboxId} moving to ${target.base}`);
                 }

@@ -2,11 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../../config.js";
 import { hostedFleet, renderHostedFleet, stampHostedOwners, type HostedFleetRole } from "./hosted-fleet.js";
 
-/* WHAT THE FLY CONSOLE CANNOT SAY. The fleet view exists for exactly one confusion: a warm machine's app is
- * named `<prefix>-pool-<hex>` before anybody claims it, and Fly never lets a name change, so after a claim
- * that app is a person's sandbox still called `pool`. These pin the classification that fixes it, including
- * the two disagreements between Fly and the platform (an app with no row, a row with no app) that are the
- * only reasons an operator would go looking. */
+/* WHAT THE FLY CONSOLE CANNOT SAY. */
 
 const config = (): Config =>
     ({
@@ -36,10 +32,7 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-/* WHOSE MACHINE IS THIS, asked of the Fly console rather than of the database. Every other stamp is an id, so
- * reading a bill meant joining Fly's app list against the platform's rows; the owner's email is the one fact
- * that makes the list answer on its own. New machines carry it from their config, and this backfills the ones
- * built before it existed — which, being stopped, may never be re-configured at all. */
+/* WHOSE MACHINE IS THIS, asked of the Fly console rather than of the database. */
 describe(`stampHostedOwners`, () => {
     // Records every Fly write so the test can assert what was stamped, and on which machines.
     const stubFleetAndWrites = (names: string[]) => {

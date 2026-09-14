@@ -1,9 +1,7 @@
 import { nextTick, ref } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-/* Switching sandboxes as a change of SCREEN, not just of daemon: what each sandbox was last showing is what it
- * comes back to. The router is a stub: what is under test is which fullPath is filed under which sandbox and
- * what a switch does with it, and the real router would only add a history implementation to that. */
+/* Switching sandboxes as a change of SCREEN, not just of daemon: what each sandbox was last showing is what it comes back to. */
 
 // The node test environment has neither storage; windowStore itself is real (its own two-store rules are what
 // make a screen this window's own).

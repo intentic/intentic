@@ -4,10 +4,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { git, root } from "./repo.mjs";
 
-/**
- * Every tracked .vue file under `roots`, filtered to what still exists on disk (an unstaged deletion is still listed by
- * git).
- */
+/** Every tracked .vue file under `roots`, filtered to what still exists on disk (an unstaged deletion is still listed by git). */
 export const templatesUnder = (...roots) =>
     (git("ls-files", "-z", ...roots) ?? "").split(`\0`).filter((path) => path.endsWith(`.vue`) && existsSync(`${root}/${path}`));
 

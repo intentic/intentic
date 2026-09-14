@@ -38,10 +38,7 @@ const ROWS = [
                 <span class="skeleton h-4 w-4 shrink-0 rounded-full"></span>
                 <span class="skeleton h-6 w-6 shrink-0 rounded-full"></span>
 
-                <!--
-                    Line-box heights and gap copy the real headline (text-sm) and meta line (text-2xs, mt-0.5) exactly, so the row height matches and
-                    the list doesn't shuffle when runs arrive.
-                -->
+                <!-- Skeleton line heights and gaps match the real pipeline row. -->
                 <div class="min-w-40 flex-1">
                     <div class="flex h-5 items-center gap-2">
                         <span class="skeleton h-3.5 max-w-full" :class="row.headline"></span>

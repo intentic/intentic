@@ -1,8 +1,4 @@
-<!--
-    The editing half of <MarkdownDocument>: one `contenteditable` whose text is the markdown source (markdownSourceDom.ts), with markup characters
-    hidden until the caret enters their block. Every edit is read back as text and blocks rebuilt from it; undo and markup shortcuts are implemented
-    here, not by the browser.
--->
+<!-- The editing half of <MarkdownDocument>: one `contenteditable` whose text is the markdown source (markdownSourceDom.ts). -->
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { continueList, indentLines, insertLink, onListLine, outdentLines, type TextEdit, toggleWrap } from "../../markdown/edits.js";
@@ -549,10 +545,7 @@ defineExpose({ text, focus: (): void => host.value?.focus() });
 </script>
 
 <template>
-    <!--
-        No measure or centering of its own; the caller sets `--prose-measure` (`md-prose` reads it), so this surface
-        and the rendered half beside it always agree. Caller's `class` lands here through fallthrough.
-    -->
+<!-- The caller supplies the prose measure so both halves align. -->
     <div
         ref="host"
         class="md-prose md-editing"

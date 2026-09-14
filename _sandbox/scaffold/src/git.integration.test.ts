@@ -90,8 +90,7 @@ const failingGit = (code: number, message: string): GitRunner => async () => {
     throw Object.assign(new Error(message), { code, stdout: "", stderr: message });
 };
 
-/* `--ignore-errors` demotes a path git cannot stage from "the run dies" to "that path is skipped", and git
- * marks the difference in the exit code: 1 for paths skipped, 128 for a fault that staged nothing at all. */
+/* `--ignore-errors` demotes a path git cannot stage from "the run dies" to "that path is skipped", and git. */
 test("gitStageAll swallows the skipped-path exit and rethrows a genuine git fault", async () => {
     await expect(gitStageAll("/work/app", failingGit(1, "error: 'x/' does not have a commit checked out"))).resolves.toBeUndefined();
     await expect(gitStageAll("/work/app", failingGit(128, "fatal: not a git repository"))).rejects.toThrow("not a git repository");

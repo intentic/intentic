@@ -43,10 +43,7 @@ const mapReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.map
     <RowGroup label="Code search">
         <template #info><CodeSearchInfo /></template>
 
-        <!--
-            Loads the iq plugin so the assistant searches with the iq CLI instead of grep/find/glob. Opt-in per sandbox;
-            the browser Search box always uses iq.
-        -->
+<!-- Loads the iq plugin so the assistant searches with the iq CLI instead of grep/find/glob. -->
         <!-- `spine` hangs the measurement block off this row's name rather than the group's edge. -->
         <Row spine icon="search" title="iq code search" description="Use iq search CLI instead of grep/find/glob.">
             <template #control>
@@ -69,10 +66,7 @@ const mapReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.map
             </template>
         </Row>
 
-        <!--
-            Answers "what is this and where am I in it", one question earlier than search. Read off disk on each new
-            conversation rather than a maintained document, hence a switch rather than a file kept in sync by hand.
-        -->
+<!-- Answers "what is this and where am I in it", one question earlier than search. -->
         <Row spine icon="sitemap" title="Project map" description="Provide project structure overview to new conversations.">
             <template #control>
                 <ToggleSwitch
@@ -81,10 +75,7 @@ const mapReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.map
                     @update:model-value="(value: boolean) => patch({ workspaceMap: value })"
                 />
             </template>
-            <!--
-                The map changes a choice (list vs. search), not a quantity of searching, so the arms are read by whether the
-                opening turn lists a directory, not by search count. Full method lives in the info tooltip.
-            -->
+<!-- The map switches between list and document views. -->
             <template v-if="settings?.workspaceMap === true" #below>
                 <MeasurementPanel
                     :percent="mapHoldoutPercent"
@@ -97,10 +88,7 @@ const mapReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.map
             </template>
         </Row>
 
-        <!--
-            Background pass that pre-renders binary files (docx, pdf, images, audio) as markdown as they land, so a
-            later read is a file open, not a parse. Only gates background CPU spend; fileq itself is always available.
-        -->
+<!-- Background pass that pre-renders binary files (docx, pdf, images, audio) as markdown as they land, so a later read is a file open, not a parse. -->
         <Row
             icon="file"
             title="Document shadows"

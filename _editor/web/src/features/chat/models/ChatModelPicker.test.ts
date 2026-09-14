@@ -136,10 +136,7 @@ it(`says nothing at all when the runtime is the ceiling`, () => {
     expect(element.querySelector(`[tabindex="0"]`)).toBeNull();
 });
 
-/* THE CHIPS ARE THE SHARED CONTROL NOW (PickerRunSettings), and this is what "unified" has to mean on screen:
- * this panel's own two chips, drawn from one component, so the shell picker and the settings page ask with the
- * same instrument instead of a labelled row carrying a third stop. Thinking alone until the catalog publishes
- * a fast badge — a control that appears with the model beats one greyed under an explanation nobody reads. */
+/* THE CHIPS ARE THE SHARED CONTROL NOW (PickerRunSettings), and this is what "unified" has to mean on screen. */
 it(`asks the thinking question with the shared chip`, () => {
     const { element, conversation } = mount(CEILING);
 
@@ -171,9 +168,7 @@ it(`asks the speed question with the same chip, and writes the press through`, a
     expect(conversation.setFast).toHaveBeenCalledWith(true);
 });
 
-/* THE METER IS THE ONE CONTROL THIS PICKER LEAVES OUT (`effortRow`), and not a preference: ComposerEffort draws
- * it beside the model pill, an inch from the chevron that opens this panel, so the row would be the same
- * control twice on one surface. */
+/* THE METER IS THE ONE CONTROL THIS PICKER LEAVES OUT (`effortRow`), and not a preference: ComposerEffort draws it beside the model pill. */
 it(`leaves the reasoning-effort row to the meter beside the model pill`, () => {
     const { element, conversation } = mount(CEILING);
 
@@ -184,8 +179,7 @@ it(`leaves the reasoning-effort row to the meter beside the model pill`, () => {
     expect(element.textContent).not.toContain(`Reasoning effort`);
 });
 
-/* AND `hasContent` COUNTS THAT OMISSION, or the footer would draw its rule and its 12px of padding around
- * nothing: a provider with no Claude knobs and nothing to disclose has only the withheld meter to offer. */
+/* AND `hasContent` COUNTS THAT OMISSION, or the footer would draw its rule and its 12px of padding around nothing. */
 it(`draws no footer at all when the withheld meter was the only row left`, () => {
     expect(limitsOf(BARE)).toEqual([]);
 

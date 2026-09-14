@@ -3,9 +3,7 @@ import type { PlannedItem } from "./adapter-shared.js";
 import { parseJson5ish } from "./json5ish.js";
 import { detectOpenclaw, planOpenclaw } from "./openclaw.js";
 
-/* The OpenClaw adapter over a lived-in fixture home: the JSON5 config with the edits people actually make
- * (comments, trailing commas, an inline bot token), the relocatable workspace, the daily-diary memory shape,
- * and the structured cron store with all three schedule kinds. */
+/* The OpenClaw adapter over a lived-in fixture home: the JSON5 config with the edits people actually make (comments, trailing commas, an inline bot token). */
 
 const CONFIG = `{
     // hand-edited, as real ones are

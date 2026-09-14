@@ -35,20 +35,14 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
 
 <template>
     <div class="flex flex-col p-1">
-        <!--
-            An empty workspace is ordinary, not an error, so the sentence says what a loop and workflow ARE rather than
-            just reporting absence.
-        -->
+<!-- An empty workspace is ordinary, not an error, so the sentence says what a loop and workflow ARE rather than just reporting absence. -->
         <p v-if="empty" class="px-2.5 py-3 text-2xs text-subtle">
             Nothing saved yet. A <strong class="font-medium text-muted">loop</strong> sends your message over and over: fixing, checking, fixing:
             until something you can state is true. A <strong class="font-medium text-muted">workflow</strong> hands it to a design of several sessions
             instead of to this chat.
         </p>
 
-        <!--
-            The way back to an ordinary message; must be a row in this list, since the pill itself is just a badge. One
-            row clears both kinds at once.
-        -->
+<!-- The way back to an ordinary message; must be a row in this list, since the pill itself is just a badge. -->
         <button
             v-if="picked"
             type="button"
@@ -65,10 +59,7 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
             </span>
         </button>
 
-        <!--
-            Each section's heading is a sentence, not a label: it teaches the difference at the moment of choosing. A
-            heading hides with its section, so a workspace with only loops reads as a loop picker.
-        -->
+<!-- Each section's heading is a sentence, not a label: it teaches the difference at the moment of choosing. -->
         <template v-if="loops.length > 0">
             <p class="px-2.5 pt-2 pb-1 text-2xs font-medium text-subtle">Repeat it here, until it's done</p>
             <button
@@ -82,10 +73,7 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
                 <Icon name="repeat" class="mt-0.5 shrink-0 text-xs text-subtle" />
                 <span class="flex min-w-0 flex-col">
                     <span class="truncate text-sm text-content md:text-xs">{{ design.name }}</span>
-                    <!--
-                        How it ends and how far it may go, computed from the loop; a control starting paid work must
-                        say what stops it up front.
-                    -->
+<!-- How it ends and how far it may go, computed from the loop; a control starting paid work must say what stops it up front. -->
                     <span class="truncate text-2xs text-subtle">{{ loopDesignLine(design) }}</span>
                     <span v-if="design.description" class="line-clamp-2 text-2xs text-subtle">{{ design.description }}</span>
                 </span>
@@ -114,10 +102,7 @@ const empty = computed(() => loops.value.length === 0 && workflows.value.length 
             </button>
         </template>
 
-        <!--
-            The one door to the page that owns both kinds (and the long loop form). One row, not two, since the
-            Workflows page is where both are authored.
-        -->
+<!-- The one door to the page that owns both kinds (and the long loop form). -->
         <button
             type="button"
             class="ui-row-select mt-0.5 flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"

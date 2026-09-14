@@ -13,10 +13,7 @@ import Lotus from "./Lotus.astro";
 
 const year = 2026;
 
-/* The five columns, as data. They render through one loop because they are one thing: a labelled list of
- * links, some of which leave the site, and five hand-written copies of that markup is how the footer ended
- * up with the external mark on none of them. `external` is the whole switch: it opens the tab AND draws the
- * arrow, so the two can no longer disagree. */
+/* The five columns, as data. */
 const columns: { label: string; links: { href: string; label: string; external?: boolean }[] }[] = [
     {
         label: "Features",
@@ -33,28 +30,19 @@ const columns: { label: string; links: { href: string; label: string; external?:
         ],
     },
     {
-        /* The authoring book, named page by page rather than shelf by shelf: the opposite of the column above,
-         * on purpose. Its shelves are two, so shelf rows would be a column of two; and these are the pages
-         * people deep-link and search for by name. A footer column is a shortcut, and "Manifest reference" is a
-         * shortcut in a way that "Reference" is not. */
+/* The authoring book, named page by page rather than shelf by shelf: the opposite of the column above, on purpose. */
         label: "Developers",
         links: [
             { href: developersHref(""), label: "Extension API" },
             { href: developersHref("build"), label: "Build an extension" },
             { href: developersHref("publish"), label: "Publish & registries" },
             { href: developersHref("manifest"), label: "Manifest reference" },
-            /* The wire API's sitewide row, pointing OUT of this column into its own book. It sits here rather
-             * than getting a column of its own for the same reason the docs column is four destinations and
-             * not nineteen pages: a footer column is a shortcut. The one shortcut worth having into a book of
-             * 42 pages is its front door. */
+/* The wire API's sitewide row, pointing OUT of this column into its own book. */
             { href: referenceHref(""), label: "Sandbox API reference" },
         ],
     },
     {
-        /* The guides, named one by one rather than as a single hub row. These are the pages someone reaches
-         * from a question rather than from this site, so their job is to be findable at all: a sitewide link
-         * per guide is how each one gets crawled and re-crawled on its own, and the titles are the questions
-         * people actually type. The hub sits on top for the reader who wants the shelf. */
+/* The guides, named one by one rather than as a single hub row. */
         label: "Guides",
         links: [
             { href: guidesHref(""), label: "All guides" },
@@ -92,28 +80,7 @@ const columns: { label: string; links: { href: string; label: string; external?:
     },
 ];
 
-/* The comparison shelf, as a BAND rather than a sixth column, and GROUPED rather than flat.
- *
- * Every other column here is a handful of unlike things a reader picks between. This is twelve of one
- * thing, and as a column it stood four rows below its tallest neighbour, so the footer ended on a ragged
- * spike with a hole beside it. A band fixed the shape and left the real problem: twelve product names in
- * one undifferentiated run, which is a list you can only use if you already know the name you want. A
- * reader who does not — and that is most of them — cannot tell from "vs Hermes" whether Hermes is a rival,
- * a thing that runs inside this, or something else entirely.
- *
- * THE ANSWER WAS ALREADY WRITTEN, in `compare.ts`: the shelf's whole argument is that most of the tools
- * people name are NOT competitors, so every page is filed under one of five families, and each family
- * carries a three-word verdict — "intentic runs these", "keep yours", "the opposite trade". Those verdicts
- * are the most useful words on the shelf and the footer was throwing them away. Grouping by family puts
- * each name under the sentence that says what kind of thing it is, and the whole band becomes readable
- * without opening anything.
- *
- * NOT A FEATURE MATRIX, deliberately, and `compare.ts` says why at more length: a table where every row is
- * a tick for us is the fastest way to lose the credibility the rest of the site is built on. The families
- * are the honest compression — three of the five verdicts concede that the other tool is not competing.
- *
- * Families with no page of their own are dropped rather than rendered empty: `examples` names tools this
- * site has no page for, and a heading with nothing under it is a promise the footer cannot keep. */
+/* The comparison shelf, as a BAND rather than a sixth column, and GROUPED rather than flat. */
 const compareFamilyLinks = compareFamilies
     .map((family) => ({
         label: family.label,
@@ -132,23 +99,14 @@ const legalLinks = [
 ];
 ---
 
-{/* A ground a shade darker than the page, so the band reads as the END of it rather than as one more
-    section, with the same wall texture the bands upstairs carry. `mt-auto` keeps it at the bottom of a
-    short page. */}
+{/* Keep the footer distinct from the page and pinned to the bottom on short pages. */}
 <footer class="relative mt-auto overflow-hidden border-t border-line bg-ground pt-14 pb-10">
     <div class="wall" aria-hidden="true"></div>
 
-    {/* Six cells: the brand plus five columns, none taller than eight rows. The long tail that used to be a
-        sixth column is the band below.
-
-        One row of six only from xl, where 80rem gives each column ~178px and labels like "Sandbox API
-        reference" stay on one line. Below that the six split three and three rather than squeezing to 136px, which
-        is the width that had five labels wrapping. Two even rows beat one row of ragged ones. */}
+    {/* Use six columns only at xl; split them below xl to keep labels readable. */}
     <div class="relative mx-auto grid max-w-7xl grid-cols-2 gap-10 px-6 sm:grid-cols-3 xl:grid-cols-6 xl:gap-8">
         <div class="col-span-2 sm:col-span-1">
-            {/* The wordmark is DRAWN rather than an image here, the same pair the bar sets — and by the same
-                rule: `.lockup` in global.css owns the flower's relation to the letters, at whatever size
-                `--wordmark-size` says. This cell used to re-eyeball that offset for its own size. */}
+            {/* Keep wordmark spacing in `.lockup` and `--wordmark-size`. */}
             <div class="lockup">
                 <Lotus size="md" />
                 <span class="wordmark">intentic</span>
@@ -188,17 +146,11 @@ const legalLinks = [
         }
     </div>
 
-    {/* The comparison band, in the five families the shelf is actually organised in. Each family is a
-        heading, the verdict that family's page argues, and the tools this site has a page for — so a
-        reader scanning it learns what KIND of thing each name is before deciding whether to open it.
-        Three columns at xl, two on a tablet, one on a phone: the families are unlike each other, so they
-        read as a row of small headed lists rather than as one long run of names. */}
+    {/* Keep comparison families grouped by heading and responsive columns. */}
     <div class="relative mx-auto mt-12 max-w-7xl px-6">
         <div class="h-px bg-[linear-gradient(90deg,transparent,var(--color-line-strong)_20%,var(--color-line-strong)_80%,transparent)]" aria-hidden="true"></div>
         <div class="flex flex-col gap-5 pt-7 lg:flex-row lg:gap-8">
-            {/* The label column, and it carries the hub: "Compare" names the shelf, the link under it goes
-                to the page that answers the shelf's own question. `self-start` because an `.eyebrow` is an
-                inline-flex that would otherwise stretch to the grid's full height and centre itself. */}
+            {/* Keep the Compare label and hub link aligned at the start of the rail. */}
             <div class="flex shrink-0 flex-col items-start gap-2 self-start lg:w-32">
                 <h3 class="eyebrow eyebrow-bare">Compare</h3>
                 <a href={compareHref("")} class="link text-sm">Where intentic sits →</a>
@@ -209,8 +161,7 @@ const legalLinks = [
                         <div>
                             <div class="flex flex-wrap items-baseline gap-x-2">
                                 <span class="font-mark text-sm font-semibold text-content">{family.label}</span>
-                                {/* The three words that make the whole shelf worth reading: most of these
-                                    are not competitors, and the verdict is where that is said. */}
+                                {/* Keep each family's verdict beside its label. */}
                                 <span class="text-2xs text-gold">{family.verdict}</span>
                             </div>
                             <ul class="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
@@ -229,9 +180,7 @@ const legalLinks = [
         </div>
     </div>
 
-    {/* The legal bar sets its links in 12px type, which leaves a hit box a fingertip cannot land on: the one
-        row of this site that failed the 24px target floor WCAG 2.2 and Lighthouse both use. The type stays
-        12px and the wording is unchanged; each link just carries a 24px-high box under it. */}
+    {/* Keep legal links in 24px hit boxes even when their text is 12px. */}
     <div class="relative mx-auto mt-10 flex max-w-7xl flex-col items-center justify-between gap-2 px-6 text-xs text-subtle sm:flex-row">
         <span>© {year} {ORG_NAME}. Engine MIT licensed.</span>
         <span class="flex flex-wrap items-center justify-center gap-4">

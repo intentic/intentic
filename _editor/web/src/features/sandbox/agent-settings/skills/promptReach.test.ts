@@ -2,10 +2,7 @@ import { capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { promptReach, spokenList } from "./promptReach";
 
-/* The sentence under the System prompt control, asserted by SHAPE rather than by its words: what this has to
- * guarantee is that every provider the composer offers ends up named somewhere, because a provider missing from
- * the line is exactly the silence the setting used to have. A provider added next month must land in a group
- * without anybody editing this file, so a hardcoded expectation of today's five would repeat the miss. */
+/* The sentence under the System prompt control, asserted by SHAPE rather than by its words. */
 
 test("every provider the composer offers is named, and named once", () => {
     const { replaces, adds } = promptReach();

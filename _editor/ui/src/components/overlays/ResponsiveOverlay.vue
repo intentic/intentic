@@ -1,7 +1,4 @@
-<!--
-    The app's touch swap as one component: an anchored panel on desktop, a <BottomSheet> on phone, behind one `open` flag. Both hosts stay mounted;
-    only the content is conditional, so a picker's per-open reset still fires and AnchoredOverlay can measure once rendered.
--->
+<!-- The app's touch swap as one component: an anchored panel on desktop, a <BottomSheet> on phone, behind one `open` flag. -->
 <script setup lang="ts">
 import type { Cross, Side } from "../../lib/anchorPlacement.js";
 import { useDevice } from "../../composables/useDevice.js";

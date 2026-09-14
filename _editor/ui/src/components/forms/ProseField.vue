@@ -1,7 +1,4 @@
-<!--
-    The writing field for prose read in sentences, as opposed to `ui.input()`'s form fields: borderless until focused, always a textarea so long
-    lines wrap. Sizes to content via an invisible replica sharing the field's own typography variant.
--->
+<!-- Prose input uses a textarea so long lines wrap. -->
 <script setup lang="ts">
 import { computed, ref, useAttrs } from "vue";
 

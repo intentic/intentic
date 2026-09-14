@@ -141,10 +141,7 @@ describe(`the provisioning canary`, () => {
         expect(calls.some((entry) => entry.method === `DELETE`)).toBe(true);
     });
 
-    /* A WARM CLAIM ADOPTS THE POOL MACHINE'S IDENTITY (hosted.ts claimPoolMachine): the row's token, digest and
-     * tunnel id all move, and the address the edge serves moves with them. This run probed the id it minted,
-     * which by then named nothing, so every warm run failed on a sandbox that was serving fine — and on a
-     * platform that keeps stock, every run is a warm one. */
+/* A WARM CLAIM ADOPTS THE POOL MACHINE'S IDENTITY (hosted.ts claimPoolMachine): the row's token, digest and tunnel id all move. */
     it(`probes the address the row ends up with, not the one it was minted with`, async () => {
         const adopted = `99887766aabb`;
         const prisma = prismaWith(new Date());

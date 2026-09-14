@@ -20,10 +20,7 @@ export interface Harness {
     section: (description: string) => void;
     /** Verbatim diagnostic output (a log tail, a command's stderr), indented under the last line. */
     detail: (text: string) => void;
-    /**
-     * Polls `predicate` until it answers true or the deadline passes, then records one assertion either way. A
-     * predicate that throws counts as false: a failed command and a command that said no are the same answer here.
-     */
+/** Polls `predicate` until it answers true or the deadline passes, then records one assertion either way. */
     untilTrue: (seconds: number, description: string, predicate: () => boolean | Promise<boolean>) => Promise<boolean>;
     /** How many assertions have failed so far. */
     readonly failures: () => number;

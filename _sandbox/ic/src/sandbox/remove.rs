@@ -3,18 +3,7 @@ use crate::sandbox::{container_status, list_slugs, CONTAINER_PREFIX, DIND_PREFIX
 use crate::tty;
 use crate::util::{bail, Result};
 
-/* Remove sandboxes' Docker footprint on THIS machine, INCLUDING the named /work volumes — cleanup.sh's flow.
- *
- * Why removal is a flow at all: a sandbox's /work is a NAMED volume, and `docker rm -v` (and lazydocker's
- * "remove with volumes") prune only ANONYMOUS volumes — a named volume survives every container remove, so a
- * stale /work persists across re-runs and the daemon's boot gate then skips re-scaffolding.
- *
- * By DEFAULT this lists and lets the user PICK; it never wipes everything unless asked. Removing a sandbox
- * DELETES its data (/work + /history), so every removal is confirmed unless -y. Non-interactive runs with no
- * selection NEVER auto-remove: they print the list and stop.
- *
- * cleanup.sh stays shipped as-is beside this: removal is the flow you reach for when things are broken, and
- * it must not depend on a binary that might itself be what's broken. Keep the two in lockstep. */
+/* Remove sandboxes' Docker footprint on THIS machine, INCLUDING the named /work volumes — cleanup.sh's flow. */
 
 pub struct Args {
     pub slugs: Vec<String>,

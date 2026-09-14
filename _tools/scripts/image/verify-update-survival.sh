@@ -50,7 +50,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ── a clean Docker host (lib/dind-host.sh, shared with verify-desktop-setup.sh) ──────────────────────────────
+# a clean Docker host (lib/dind-host.sh, shared with verify-desktop-setup.sh)
 start_dind_host "$HOST_CONTAINER"
 
 echo "==> building ic from this checkout"
@@ -59,7 +59,7 @@ docker cp "$ROOT/_sandbox/ic/dist-bin/ic-linux-amd64" "$HOST_CONTAINER:/root/ic"
 in_host chmod +x /root/ic
 docker cp "$ROOT/_site/site/public/scripts/connect.sh" "$HOST_CONTAINER:/root/connect.sh"
 
-# ── 0. TWO DIFFERENT IMAGES TO MOVE BETWEEN ──────────────────────────────────────────────────────────────────
+# 0. TWO DIFFERENT IMAGES TO MOVE BETWEEN
 # `:stable` and `:latest` are the SAME image whenever main has published nothing since the last release
 # promoted one onto the other. That is a normal registry state, not a broken one, and `ic` reports it
 # correctly ("no newer sandbox image is available yet — your sandbox is already on the latest :stable it can
@@ -96,7 +96,7 @@ if [ "$(image_id_of "$START_IMAGE")" = "$(image_id_of "$UPDATE_IMAGE")" ]; then
     UPDATE_IMAGE="$DRILL_IMAGE"
 fi
 
-# ── 1. a user's sandbox: the published stable image ──────────────────────────────────────────────────────────
+# 1. a user's sandbox: the published stable image
 echo "==> connecting a sandbox on $START_IMAGE"
 in_host env \
     CONNECT_TOKEN="update-drill-token" \
@@ -139,11 +139,11 @@ sentinels_intact() {
 }
 image_of() { in_host docker inspect -f '{{.Image}}' "$CONTAINER"; }
 
-# ── 2. the user's data ───────────────────────────────────────────────────────────────────────────────────────
+# 2. the user's data
 in_host docker exec "$CONTAINER" sh -c "printf drill > /work/$SENTINEL && printf drill > /history/$SENTINEL"
 before="$(image_of)"
 
-# ── 3. update ────────────────────────────────────────────────────────────────────────────────────────────────
+# 3. update
 echo "==> ic sandbox update → $UPDATE_IMAGE"
 step "ic sandbox update refused to run at all" in_host env SANDBOX_IMAGE="$UPDATE_IMAGE" /root/ic sandbox update "$SLUG"
 check "the daemon answers /health on the new image" healthy
@@ -151,14 +151,14 @@ check "the sentinels survived the update (/work and /history)" sentinels_intact
 updated="$(image_of)"
 check "the container actually moved to a different image" test "$before" != "$updated"
 
-# ── 4. rollback ──────────────────────────────────────────────────────────────────────────────────────────────
+# 4. rollback
 echo "==> ic sandbox rollback"
 step "ic sandbox rollback refused to run at all" in_host /root/ic sandbox rollback "$SLUG"
 check "the daemon answers /health after rollback" healthy
 check "the sentinels survived the rollback" sentinels_intact
 check "rollback returned to the pre-update image" test "$(image_of)" = "$before"
 
-# ── 5. an update that fails must leave the sandbox it found ──────────────────────────────────────────────────
+# 5. an update that fails must leave the sandbox it found
 echo "==> ic sandbox update → $BROKEN_IMAGE (must fail AND restore)"
 if in_host env SANDBOX_IMAGE="$BROKEN_IMAGE" /root/ic sandbox update "$SLUG"; then
     echo "  ✗ ic reported success moving onto an image that cannot run the daemon" >&2

@@ -118,15 +118,9 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
 
 <template>
     <div class="flex flex-col gap-0.5">
-        <!--
-            Muted, not subtle: the target (a path, a command) is the one thing a folded card still says, and subtle sits
-            too close to the surface to read at a glance.
-        -->
+<!-- Folded cards keep their target visible in muted text. -->
         <div class="group/tool flex min-w-0 items-center gap-1.5 text-2xs text-muted">
-            <!--
-                Header doubles as the fold toggle when there's output, same chevron as the turn's Thinking block; an
-                output-less call keeps a plain header.
-            -->
+<!-- Header doubles as the fold toggle when there's output, same chevron as the turn's Thinking block; an output-less call keeps a plain header. -->
             <button
                 v-if="hasContent"
                 type="button"
@@ -139,10 +133,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
             </button>
             <template v-else>
-                <!--
-                    Kept as one protected flex item too: chat messages inherit `overflow-wrap: anywhere`, and without this a
-                    long target would shrink the name to a character per line.
-                -->
+<!-- Kept as one protected flex item too: chat messages inherit `overflow-wrap: anywhere`. -->
                 <span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
                     <Icon v-bind="statusIcon" class="text-2xs" />
                     <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
@@ -150,10 +141,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             </template>
             <!-- Who it delegated to and what it asked for, in the slot a path would take; a sentence, not mono. -->
             <span v-if="subagentTitle" class="min-w-0 truncate">{{ subagentTitle }}</span>
-            <!--
-                A document takes the same slot: its title is what the reader wants, while its path is a generated or
-                unbrowsed name (a click away in the document's own header).
-            -->
+<!-- Document cards show the title while keeping the path in the header. -->
             <span v-else-if="view.document" class="min-w-0 truncate">{{ view.document.title }}</span>
             <!-- Clickable only where there's a workspace to open it in; published to the public it's plain text. -->
             <button
@@ -170,19 +158,10 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             <span v-if="subagent?.background === true && subagentLive" class="ui-status-pill shrink-0 bg-overlay text-2xs text-subtle"
                 >background</span
             >
-            <!--
-                The delegate itself reports being stuck on a permission or question; the one live state worth shouting,
-                since the terminal button beside it is where to answer it.
-            -->
+<!-- The delegate itself reports being stuck on a permission or question; the one live state worth shouting. -->
             <span v-if="subagent?.status === `blocked`" class="ui-status-pill shrink-0 bg-overlay text-2xs text-warning">needs input</span>
-            <!--
-                The result phrase stays visible while collapsed, pushed right as a trailing annotation; a call that never
-                reported back says so via the clock in its place.
-            -->
-            <!--
-                What the child is doing and has spent, since its own result summary can't report the thing it's still
-                waiting on. Trailing slot while live, handed back to the ordinary summary once settled.
-            -->
+<!-- Collapsed calls keep their result or pending clock visible. -->
+<!-- What the child is doing and has spent, since its own result summary can't report the thing it's still waiting on. -->
             <span v-if="subagentFacts.length > 0 && subagentLive" class="ml-auto flex shrink-0 items-center gap-2 tabular-nums text-subtle">
                 <span v-for="fact in subagentFacts" :key="fact">{{ fact }}</span>
             </span>
@@ -190,10 +169,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             <span v-else-if="view.summary" class="ml-auto shrink-0 tabular-nums" :class="failed ? 'text-danger' : 'text-subtle'">{{
                 view.summary
             }}</span>
-            <!--
-                Attach to the command's shell while it's genuinely in flight ("what's it doing right now"), hover-only once
-                settled so a quiet transcript stays quiet.
-            -->
+<!-- Attach to the command's shell while it's genuinely in flight ("what's it doing right now"), hover-only once settled so a quiet transcript stays quiet. -->
             <button
                 v-if="agentTerminal && surface.watchTerminal"
                 type="button"
@@ -217,10 +193,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             >
                 <Icon name="globe" class="text-2xs" />
             </button>
-            <!--
-                The third door: the child's own transcript. Unlike the two above, not hover-only once settled — a finished
-                delegation's transcript is exactly what someone scrolling back wants.
-            -->
+<!-- The third door: the child's own transcript. -->
             <a
                 v-if="subagent && surface.subagentRoute"
                 :href="surface.subagentRoute(tool.id)"
@@ -233,11 +206,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             </a>
         </div>
         <template v-if="isOpen">
-            <!--
-                What the child concluded (its own last words, or the tail of what it printed), shown above the nested calls
-                since the answer matters more than the work behind it. The only report a backgrounded child has before its
-                result lands.
-            -->
+<!-- What the child concluded (its own last words, or the tail of what it printed). -->
             <p
                 v-if="subagent?.summary"
                 class="ml-4 whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs leading-relaxed"
@@ -250,17 +219,11 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 v-if="tool.thinking"
                 class="scrollbar-thin ml-4 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs italic leading-relaxed text-subtle"
                 >{{ tool.thinking }}</pre>
-            <!--
-                A sub-agent's nested transcript, indented under the delegation so the whole run reads as one unit; recursive,
-                since a delegating sub-agent nests one level deeper.
-            -->
+<!-- A sub-agent's nested transcript, indented under the delegation so the whole run reads as one unit; recursive. -->
             <div v-if="tool.children?.length" class="ml-4 flex flex-col gap-1">
                 <ChatToolCard v-for="child in tool.children" :key="child.id" :tool="child" :live="live" />
             </div>
-            <!--
-                What the agent produced or looked at; the surface decides where the bytes come from (re-minted from the
-                workspace in-app, a copy alongside a published page with nothing to open).
-            -->
+<!-- Agent output is re-minted from the workspace in-app when needed. -->
             <component
                 :is="openFile ? 'button' : 'div'"
                 v-for="image in view.images"
@@ -278,10 +241,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 />
                 <span v-else class="block px-2 py-1 font-mono text-2xs text-subtle">{{ image.path }}</span>
             </component>
-            <!--
-                What the call wrote for the reader, above the machine-facing halves: a whole markdown file is drawn as
-                prose, not as the diff it arrived as.
-            -->
+<!-- What the call wrote for the reader, above the machine-facing halves: a whole markdown file is drawn as prose, not as the diff it arrived as. -->
             <ChatDocumentBody v-if="view.document" :document="view.document" :titled="false" max-height="32rem" class="ml-4" />
             <ChatToolDiff
                 v-for="diff in view.diffs"
@@ -293,10 +253,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 :openable="openFile !== undefined"
                 @open="openFile?.(diff.path)"
             />
-            <!--
-                Body shape chosen by the registry: `command` shows the invocation above its output like a terminal; `files`
-                turns a path listing into navigable rows.
-            -->
+<!-- Body shape chosen by the registry: `command` shows the invocation above its output like a terminal; `files` turns a path listing into navigable rows. -->
             <div v-if="view.body?.kind === 'command'" class="ml-4 overflow-hidden rounded border border-line bg-canvas">
                 <div v-if="view.body.command" class="flex gap-1.5 border-b border-line px-2 py-1 font-mono text-2xs text-muted">
                     <span class="shrink-0 select-none text-subtle">$</span>

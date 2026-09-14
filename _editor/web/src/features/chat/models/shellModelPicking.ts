@@ -11,19 +11,7 @@ import { useChat } from "../run/useChat";
 // extension-host/apiImpl.ts is built on this, so a Fix button drawn by an extension and one drawn by the shell
 // must answer identically about which model a click spends.
 
-/* A (provider, model) pair, named the way the app names it — the ONE naming rule (providerCatalog.modelLabelFor),
- * shared with the composer's pill and the board's cards so no two surfaces can call the same pair different
- * things. An UNPINNED model has no catalog row to name it, and an empty label is the one thing this must never
- * return; that floor is the rule's own last rung, the provider's display name, since the provider is what will
- * resolve a model at run time.
- *
- * THE TIER IS NAMED HERE TOO, by the same argument: a run button that says "Opus 4.6" and spends X-High has told
- * the reader half of what the click costs, and the scale a tier is named against is the shell's (effortScale),
- * which neither the kit nor an extension can see. Read against the selection's OWN thinking, which is now a
- * thing a run pick can carry: absent (nobody touched it) keeps Max on the scale, because the turn then goes out
- * with no thinking field and the daemon names the reasoning that tier needs on the way; explicitly off takes it
- * away, because Claude refuses that pair — the same reading the daemon will make, so the word on the button is
- * the tier the run spends. */
+/* A (provider, model) pair, named the way the app names it — the ONE naming rule (providerCatalog.modelLabelFor). */
 const namedChoice = (selection: {
     readonly provider: AgentProvider;
     readonly model: string;
@@ -72,15 +60,11 @@ const roleModel = (role: string): RoleModel => {
 export const agentRunChoice = (role: string): AgentRunChoice => {
     const head = roleModel(role).choice.value;
     const chat = useChat();
-    /* THE COMPOSER FLOOR CONTRIBUTES ITS MODEL AND NOTHING ELSE. An empty list means nobody chose how this job
-     * should run, and the chat's own tier, thinking and speed are answers about the turn in front of you. */
+/* THE COMPOSER FLOOR CONTRIBUTES ITS MODEL AND NOTHING ELSE. */
     if (head === undefined) {
         return namedChoice({ provider: chat.provider.value, model: chat.model.value });
     }
-    /* THE WHOLE ENTRY OTHERWISE, so the caret opens on the run as the owner actually configured it rather than
-     * on a stripped version of it: a pin written at Fast, or with thinking off, or through the Claude Code loop,
-     * is a different and differently-priced run from the same model on its defaults, and a panel that opened on
-     * the defaults would have quietly offered to undo that setting the moment anybody pressed its button. */
+/* The picker preserves the entry's configured run settings. */
     return namedChoice({
         provider: head.provider,
         model: head.model,

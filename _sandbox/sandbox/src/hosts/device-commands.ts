@@ -115,15 +115,7 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
         timeoutMs: LONG_COMMAND_TIMEOUT_MS,
         mints: true,
     },
-    /* The dev OUTER loop: rebuild the image itself from the checkout, for a sandbox whose base was compiled there
-     * (`pnpm rebuild:sandbox`, which builds intentic-sandbox:dev and swaps this container onto it). Detached, with its
-     * output to a log beside ic's own, for two reasons: a cold build can run past any timeout a device command may
-     * have, and the swap at the end kills the daemon awaiting the answer anyway. So the call returns as soon as the
-     * build is under way, and `dev-rebuild-log` below is how anyone watches the rest of it.
-     *
-     * The build runs under its own `sh -c` SOLELY so the exit mark is appended by the same shell: the status has to be
-     * written by something that outlives the daemon, the container and the page, because all three are gone by the time
-     * a rebuild ends. Without it a finished build and a stalled one read identically from outside. */
+    /* Dev rebuilds run detached and record an exit mark for later polling. */
     "dev-rebuild": {
         done: "The rebuild is running on that device. Your sandbox restarts on the new image when it is built, and this page reconnects on its own.",
         line: (facts) =>
@@ -242,8 +234,7 @@ export const runDeviceCommand = async (services: Services, input: DeviceCommandI
                     : `"${input.id}" could not be reached: the device is asleep, offline, or its agent isn't running.`,
         });
     } finally {
-        // Clears the cache: a command that timed out here may still have completed there, so the next read must reflect
-        // it.
+        // Forget timed-out pulls so the next read cannot use stale state.
         forgetPull(input.id);
     }
 };

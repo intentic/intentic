@@ -1,8 +1,4 @@
-<!--
-    Whole window for a popped-out panel (/floating/chat, /floating/terminal, /floating/preview): boots its own auth and sandbox connection rather
-    than sharing the opener's. Publishes the panel's dock slot at full-window size and claims it with a heartbeat; losing the heartbeat frees the
-    claim, so no window can get stuck holding it.
--->
+<!-- Whole window for a popped-out panel (/floating/chat, /floating/terminal, /floating/preview). -->
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, useTemplateRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -91,10 +87,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <!--
-        The chat panel styles itself with `grid-area: chat`, so its slot's parent must be a grid with that area; the
-        other two fill a plain flex column.
-    -->
+<!-- The chat panel styles itself with `grid-area: chat`, so its slot's parent must be a grid with that area; the other two fill a plain flex column. -->
     <div
         v-if="panel === `chat`"
         class="chat-floating-root grid h-screen w-screen overflow-hidden"

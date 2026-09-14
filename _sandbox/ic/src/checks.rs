@@ -2,21 +2,7 @@ use serde::Serialize;
 
 use crate::docker;
 
-/* THE PREFLIGHT/DOCTOR CHECK ENGINE — every prerequisite verified, every failure reported at once.
- *
- * The flows in this binary used to answer "why did setup fail" one failure at a time: bail at the first
- * broken prerequisite, let the user fix it, re-run, hit the next. Each message was good; the experience was
- * a guessing loop. This module inverts it: a check RUNS TO AN OUTCOME instead of bailing, a runner executes
- * the whole list and prints each verdict as it lands, and the summary names every failure WITH its fix — so
- * one run of the command is one complete diagnosis of the machine.
- *
- * The same engine serves both moments that need it: preflight (connect, before anything is mutated — every
- * check here is read-only by construction) and the doctor (an existing sandbox that went dark — see
- * sandbox/doctor.rs). Decisions are pure functions over probed facts, tested without docker or a network;
- * the thin `check_*` wrappers beside them do the probing. Put new checks on that side of the line too.
- *
- * `Skip` is a real answer and not a pass: a probe that cannot run on this platform must say so rather than
- * claim the machine is fine — the same lesson the daemon's adapter health encodes with "unknown". */
+/* THE PREFLIGHT/DOCTOR CHECK ENGINE — every prerequisite verified, every failure reported at once. */
 
 pub enum Outcome {
     Pass,
@@ -146,9 +132,9 @@ pub fn wire_failures(findings: &[Finding]) -> Vec<WireFailure> {
         .collect()
 }
 
-// ───────────────────────────────────────────────────────────────────────────
+//
 // Docker — the one prerequisite every flow shares.
-// ───────────────────────────────────────────────────────────────────────────
+//
 
 /// The facts the docker probe gathers; classification over them is pure (and tested), the gathering is not.
 /// This owns the diagnoses' prose for every flow — docker::require_daemon is the bail-shaped reading of the
@@ -223,9 +209,9 @@ fn socket_needs_group() -> bool {
     false
 }
 
-// ───────────────────────────────────────────────────────────────────────────
+//
 // Disk space — the image is multi-GB, and docker's "no space left" arrives minutes into the pull.
-// ───────────────────────────────────────────────────────────────────────────
+//
 
 const DISK_FAIL_GIB: u64 = 5;
 const DISK_WARN_GIB: u64 = 15;
@@ -291,26 +277,11 @@ pub fn check_disk() -> Outcome {
     }
 }
 
-// ───────────────────────────────────────────────────────────────────────────
+//
 // Windows — the prerequisites Docker itself has, which on no other platform are a tree.
-// ───────────────────────────────────────────────────────────────────────────
+//
 
-/* THE SAME DIAGNOSIS THE INSTALLER MADE, ARRIVING WHERE THE USER ACTUALLY IS.
- *
- * `ic docker prepare` runs before this and fixes what it can, so on the ordinary path this check passes and
- * costs a second. It exists for the two paths where it does not:
- *
- *   • somebody running `ic sandbox connect` directly, who never went through the shim at all;
- *   • a machine that changed between the two — Docker Desktop stopped, a WSL update pending.
- *
- * And it exists because of WHERE a preflight failure goes. `findings_failed` posts these to the platform,
- * which the setup page renders while the user waits — so "virtualization is switched off in this PC's
- * firmware", with the walkthrough, reaches the browser tab of somebody who closed the terminal ten minutes
- * ago. That is the one surface the old shim's stderr could never reach.
- *
- * Every unmet requirement is folded into ONE finding rather than one each: the preflight's rows name AREAS of
- * a machine ("Docker", "Disk space"), and a Windows PC with four things wrong should not push the other
- * checks off the screen. The composed problem still names all four. */
+/* `ic docker prepare` runs before this and fixes what it can, so on the ordinary path this check passes and costs a second. */
 #[cfg(windows)]
 pub fn check_windows() -> Outcome {
     let facts = match crate::prepare::facts::probe() {
@@ -340,9 +311,9 @@ pub fn check_windows() -> Outcome {
     }
 }
 
-// ───────────────────────────────────────────────────────────────────────────
+//
 // Platform reachability — the claim, the announce, and the wizard all need this origin.
-// ───────────────────────────────────────────────────────────────────────────
+//
 
 pub enum ProbeResult {
     Status(u16),
@@ -378,9 +349,9 @@ pub fn check_platform(platform_url: &str) -> Outcome {
     platform_outcome(&result, platform_url)
 }
 
-// ───────────────────────────────────────────────────────────────────────────
+//
 // Cloudflare token — own-tunnel path only; the reachability fabric's credential.
-// ───────────────────────────────────────────────────────────────────────────
+//
 
 pub fn check_cloudflare(token: &str) -> Outcome {
     match crate::cloudflare::validate_token(token) {

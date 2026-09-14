@@ -7,10 +7,7 @@ import { CF_TOKEN_KEY, useCloudflareZones } from "../../features/extensions/useC
 import { useInventory } from "../../features/extensions/useInventory";
 import { useSecretKeys, useSecrets } from "../../features/capabilities/connect/useSecrets";
 
-/* The reusable "Connect Cloudflare" step. Collects a Cloudflare API token (unless the sandbox already has
- * one) plus the zone it manages, writes CLOUDFLARE_API_TOKEN to the sandbox .env and declares the
- * i.have.cloudflare("cf") backend with the chosen zone persisted on it, then emits `connected`. Used inline
- * by the Add service dialog and the Connections page so neither dead-ends the user into a separate flow. */
+/* The reusable "Connect Cloudflare" step. */
 
 const emit = defineEmits<{ connected: [] }>();
 

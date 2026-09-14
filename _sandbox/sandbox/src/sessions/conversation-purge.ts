@@ -31,10 +31,7 @@ const purgeClaudeSession = async (workspaceRoot: string, sessionId: string): Pro
     );
 };
 
-/* Remove only state whose ownership is explicit in the registry/transcript pair. Provider homes other than
- * Claude still mix credentials with native thread state, so this deliberately does not guess inside auth/.
- * Attachment UUID dirs are removed only when no retained transcript mentions the same dir; forks copy message
- * rows and can therefore share an attachment path with their source conversation. */
+/* Purge only state owned explicitly by the registry and transcript pair. */
 export const purgeConversationState = async (
     workspaceRoot: string,
     historyRoot: string,

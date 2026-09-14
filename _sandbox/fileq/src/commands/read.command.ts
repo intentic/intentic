@@ -1,7 +1,4 @@
-/* `fileq read <file>` (also the default command): one file as markdown — a capsule line saying what
- * happened, the content up to a token budget, and the sidecar path carrying the whole thing. The budget
- * exists because the reader is an agent's context window: a 300-page pdf printed whole is an attack on the
- * caller, so the tail lives in the sidecar and the cut is announced with the exact path to Read. */
+/* `fileq read <file>` (also the default command): one file as markdown — a capsule line saying what happened, the content up to a token budget. */
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
@@ -97,8 +94,7 @@ const fromOutcome = (outcome: Outcome): ReadResult | undefined => {
     }
 };
 
-/* Outside a workspace there is no sidecar tree; derive in memory and save the whole thing under the XDG
- * home (webq's out-dir convention, name slugged + hashed) so a budget cut still has a file to point at. */
+/* Outside a workspace there is no sidecar tree; derive in memory and save the whole thing under the XDG. */
 const readOutsideWorkspace = async (absPath: string): Promise<ReadResult | undefined> => {
     const format = await detectFormat(absPath).catch(() => undefined);
     if (format === undefined) {

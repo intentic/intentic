@@ -266,11 +266,7 @@ it("404s everything when no custody provider is configured", async () => {
     expect((await app({ prisma, config: off })(`/ensure`, { network: `eip155:8453` })).status).toBe(404);
 });
 
-/* THE SANDBOX CANNOT SET ITS OWN CEILING. The ensure used to carry the card's caps and write them onto the row,
- * over the connect token the daemon holds in its env, so a compromised sandbox raised its own caps to anything
- * and then asked for a signature under them. Now the ensure yields an address and nothing else: a wallet it
- * brings into being carries the schema's defaults, one that exists is returned as it is, and a body that still
- * carries a policy is answered without reading it. The caps are the owner's session's to state (wallet.orpc.ts). */
+/* THE SANDBOX CANNOT SET ITS OWN CEILING. The ensure used to carry the card's caps and write them onto the row. */
 it("creates one wallet per account and network, and a repeat ensure returns it without touching its caps", async () => {
     const { prisma, wallets } = fakePrisma();
     const request = app({ prisma });

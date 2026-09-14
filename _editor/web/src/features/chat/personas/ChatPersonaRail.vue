@@ -1,8 +1,4 @@
-<!--
-    Lists personas (Work, Inbox Manager, …) to chat with — the chat list's persona cut (chatGrouping.ts). Pressing a row opens the most recent chat
-    pinned to that persona, or starts a fresh one; opens ringed on whichever persona the current chat is already pinned to. No 'Anyone' row —
-    unpinned chats live in the Agents cut, not here.
--->
+<!-- Lists personas with pinned chats; unpinned chats stay in the Agents list. -->
 <script setup lang="ts">
 import { personaBounds, providerLabel } from "@intentic/sandbox-contract";
 import { ui, Icon, type IconName, PersonaFace, StatusBadge } from "@intentic/ui";
@@ -187,11 +183,7 @@ const sessionsOf = (row: PersonaRow) =>
 </script>
 
 <template>
-    <!--
-        The card is the app's one shared `.session-card`; it must never sit on the same `--color-card` ground, or it turns invisible. This grounds it
-        on canvas (not `.lane`'s 3%-mixed ground), matching the Agents view's card-over-canvas look; the well itself doesn't scroll, only its
-        contents, so the rounded corners stay in view.
-    -->
+    <!-- Card ground cannot match `--color-card`, or the card disappears. -->
     <div class="flex min-h-0 min-w-0 flex-col rounded-xl bg-canvas p-2">
         <div class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
         <template v-if="empty">
@@ -204,10 +196,7 @@ const sessionsOf = (row: PersonaRow) =>
 
         <template v-else>
             <template v-for="row in rows" :key="row.key">
-                <!--
-                    `status` and `live`+`tight` match the board's own arrangement, so a running persona actually looks different from an idle one.
-                    `now` is the column's shared tick, keeping the elapsed readout counting instead of frozen.
-                -->
+                <!-- Running personas expose status and live activity in the card. -->
                 <RailCard
                     :title="row.label"
                     :status="row.status"
@@ -220,15 +209,9 @@ const sessionsOf = (row: PersonaRow) =>
                     :aria-label="`Show ${row.label}'s chats`"
                     @click="toggleExpanded(row)"
                 >
-                    <!--
-                        The face leads at card height, since this list is scanned for a person before a name; generated from the persona's id, so it
-                        matches the composer's picker and the personas page.
-                    -->
+                    <!-- The persona face leads the card at its standard size. -->
                     <template #aside>
-                        <!--
-                            No explicit size: the face's own default sets the row's height (it's taller than the two text lines beside it), so sizing
-                            it from the card instead would depend on a height the card is still waiting on the face to set.
-                        -->
+                        <!-- The face's default size sets the row height. -->
                         <PersonaFace :persona="row" />
                     </template>
                     <!-- The clock rides the title line, so gaining one never changes the row's height. -->
@@ -237,26 +220,14 @@ const sessionsOf = (row: PersonaRow) =>
                             relativeTime(row.lastAt)
                         }}</span>
                     </template>
-                    <!--
-                        Composed into one flex child rather than several: letting the count or clock wrap onto a second line would grow the card
-                        under the cursor that just clicked it.
-                    -->
+                    <!-- Model, bounds, and activity share one non-wrapping metadata line. -->
                     <template #meta>
                         <span class="flex min-h-4 min-w-0 flex-1 items-center gap-2 overflow-hidden">
-                            <!--
-                                Model leads the line, matching the board's left-model/right-activity arrangement so the scanned fact sits at the same
-                                x on every row. It's the only child that truncates, keeping the line from wrapping.
-                            -->
+                            <!-- The model leads the metadata line. -->
                             <span v-if="row.model !== undefined" class="min-w-0 truncate text-subtle">{{ row.model }}</span>
-                            <!--
-                                What a bounded persona may reach; placed after the model since this is static configuration, unlike the rest of the
-                                line.
-                            -->
+                            <!-- Bounds follow the model as static configuration. -->
                             <StatusBadge v-if="row.bounds !== undefined" variant="neutral" size="xs">{{ row.bounds }}</StatusBadge>
-                            <!--
-                                Hidden at zero (a fresh persona is simply fresh). Plain text and a chevron now, not its own control: the whole card
-                                is the disclosure, so a second nested button here would only announce the same press twice.
-                            -->
+                            <!-- Hidden at zero (a fresh persona is simply fresh). -->
                             <span v-if="row.chats > 0" class="flex shrink-0 items-center gap-0.5 text-muted">
                                 {{ row.chats }} chat{{ row.chats === 1 ? `` : `s` }}
                                 <Icon :name="isExpanded(row) ? `chevron-up` : `chevron-down`" class="text-2xs" />
@@ -265,15 +236,9 @@ const sessionsOf = (row: PersonaRow) =>
                     </template>
                 </RailCard>
 
-                <!--
-                    The persona's own chats, indented under it: the same board card at rail width, carrying only what a one-line row can (which one,
-                    what it's doing, when).
-                -->
-                <!-- Indent lives on the group, not the cards: a `w-full` card with its own margin would push the whole run past the rail's edge. -->
-                <!--
-                    Chats share the same live readout as the persona row above, off the same turns, so the group can't disagree with what it just
-                    opened.
-                -->
+                <!-- Persona chats are grouped beneath the persona row. -->
+                <!-- Group indentation keeps full-width chat cards inside the rail. -->
+                <!-- Chat rows reuse the persona's live activity source. -->
                 <div v-if="isExpanded(row)" class="ml-5 flex min-w-0 flex-col gap-2">
                     <RailCard
                         v-for="entry in sessionsOf(row)"
@@ -295,10 +260,7 @@ const sessionsOf = (row: PersonaRow) =>
                             }}</span>
                         </template>
                     </RailCard>
-                    <!--
-                        Without this, a persona with existing chats has no way to start another one from here; it sits below them since that's the
-                        order the question arrives in.
-                    -->
+                    <!-- Existing chat groups always retain a start-chat action. -->
                     <button type="button" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)" @click="startAs(row)">
                         <Icon name="plus" class="text-2xs" />
                         New chat as {{ row.label }}

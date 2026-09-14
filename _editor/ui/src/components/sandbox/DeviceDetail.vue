@@ -1,8 +1,4 @@
-<!--
-    What one device is doing for a sandbox: synced folders, forwarded ports, containers, and whether the agent behind them is alive. Body only; the
-    caller frames it (a manager window section, an expanded row). One row per sandbox, container included, hairline-separated rather than boxed.
-    Shapes live in deviceDetail.ts, structurally typed rather than importing the sandbox contract.
--->
+<!-- A device's synced folders, ports, containers, and agent status. -->
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, useId, useSlots, watch } from "vue";
 import CopyButton from "../primitives/CopyButton.vue";
@@ -147,18 +143,11 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
 
 <template>
     <div class="flex flex-col gap-3">
-        <!--
-            Agent first: it decides whether everything below is still true (a dead loop means new ports and commits
-            stop appearing, with no other change on screen).
-        -->
+<!-- Agent status gates the machine details below. -->
         <div v-if="agent || $slots[`heading`]" class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <slot name="heading" />
             <div v-if="agent" class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                <!--
-                    Alive but not working: amber like stopped, since it's the same errand and the difference (a restart
-                    is
-                    owed despite nothing looking dead) isn't otherwise visible.
-                -->
+<!-- An alive but inactive agent uses the stopped-state colour. -->
                 <template v-if="agent.stalled === true">
                     <StatusBadge variant="warning" :dot="true" size="xs" label="agent stalled" />
                     <span class="text-xs text-warning">
@@ -175,11 +164,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                         Agent running
                     </span>
                     <span v-if="agent.pid !== undefined" class="font-mono text-2xs text-subtle">pid {{ agent.pid }}</span>
-                    <!--
-                        Working on a build this machine has already replaced; not a badge, since nothing is broken and
-                        only a
-                        restart is owed.
-                    -->
+<!-- Working on a build this machine has already replaced; not a badge, since nothing is broken and only a restart is owed. -->
                     <span v-if="agent.staleBuild !== undefined" class="text-xs text-warning">
                         <template v-if="agent.staleBuild.running">
                             on <span class="font-mono">{{ agent.staleBuild.running }}</span>, while
@@ -189,10 +174,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                         <template v-else>
                             on a build older than the <span class="font-mono">{{ agent.staleBuild.installed }}</span> installed here
                         </template>
-                        <!--
-                            The two commands stay whole across a wrap; this sentence is long enough to break
-                            mid-command otherwise.
-                        -->
+<!-- The two commands stay whole across a wrap; this sentence is long enough to break mid-command otherwise. -->
                         <!-- The colon hugs the word: a `<template>` boundary opening on the next line inserts a space before it. -->
                         — it keeps the build it started with, so it owes a restart<template v-if="!canRestart"
                             >: <span class="font-mono whitespace-nowrap">intentic-machine run --stop</span> then
@@ -224,15 +206,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                     flashing === blockId(group) ? `bg-warning/10` : ``,
                 ]"
             >
-                <!--
-                    The chevron and name are one button; verbs keep their own hit areas outside it. Not a
-                    <DisclosureRow>:
-                    this is a report entry inside an already-open row, so it takes no open-row wash of its own — only
-                    the
-                    chevron's angle and the block's indent show it's open. Matches <DisclosureRow>'s own spelling
-                    (rotation,
-                    aria-expanded/controls, indent) so the two read as one convention.
-                -->
+<!-- The chevron and name are one button; verbs keep their own hit areas outside it. -->
                 <div class="flex min-w-0 items-center gap-x-2">
                     <button
                         type="button"
@@ -247,10 +221,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                             :class="isOpen(group) ? `rotate-90` : undefined"
                             aria-hidden="true"
                         />
-                        <!--
-                            Running is a dot alone, the resting state of a healthy row; stopped keeps its word beside
-                            it.
-                        -->
+<!-- Running is a dot alone, the resting state of a healthy row; stopped keeps its word beside it. -->
                         <span
                             v-if="group.sandbox"
                             class="h-1.5 w-1.5 shrink-0 rounded-full"
@@ -261,29 +232,16 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                         ></span>
                         <Icon v-else name="box" class="shrink-0 text-2xs text-subtle" />
                         <span class="min-w-0 truncate text-xs font-semibold text-content">{{ group.title }}</span>
-                        <!--
-                            The exact id, kept and demoted: the title is the friendliest name available, and this is
-                            what gets
-                            typed into a terminal.
-                        -->
+<!-- The exact id, kept and demoted: the title is the friendliest name available, and this is what gets typed into a terminal. -->
                         <span v-if="group.subtitle" class="hidden shrink-0 truncate font-mono text-2xs text-subtle sm:inline">
                             {{ group.subtitle }}
                         </span>
-                        <!--
-                            Running is said by the dot; stopped needs the word, since a grey dot alone reads as nothing
-                            to see.
-                        -->
+<!-- Running is said by the dot; stopped needs the word, since a grey dot alone reads as nothing to see. -->
                         <span v-if="group.sandbox && !group.sandbox.running" class="shrink-0 text-2xs text-muted">stopped</span>
-                        <!--
-                            A pairing with no container: says so explicitly, rather than rendering a bare row with no
-                            state and no verbs.
-                        -->
+<!-- A pairing with no container: says so explicitly, rather than rendering a bare row with no state and no verbs. -->
                         <span v-else-if="!group.sandbox" class="shrink-0 text-2xs text-muted">not running here</span>
                         <slot name="badges" :group="group" />
-                        <!--
-                            What the closed line still answers: facts are counted and uncoloured, a warning is why the
-                            row unfolded itself.
-                        -->
+<!-- What the closed line still answers: facts are counted and uncoloured, a warning is why the row unfolded itself. -->
                         <span v-if="!isOpen(group)" class="ml-auto flex min-w-0 shrink items-center gap-x-2 pl-2">
                             <span v-for="fact in groupSummary(group).facts" :key="fact" class="shrink-0 text-2xs text-subtle">{{ fact }}</span>
                             <span v-for="warning in groupSummary(group).warnings" :key="warning" class="truncate text-2xs text-warning">
@@ -303,45 +261,29 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                     <template v-if="group.folder">
                         <span class="text-2xs text-subtle">Folder</span>
                         <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                            <!--
-                                The answer this whole view exists for: which folder on this device is this sandbox's
-                                /work.
-                            -->
-                            <!--
-                                Wraps rather than truncates: the end of a path is what identifies it, which an ellipsis
-                                would eat first.
-                            -->
+<!-- The answer this whole view exists for: which folder on this device is this sandbox's /work. -->
+<!-- Wraps rather than truncates: the end of a path is what identifies it, which an ellipsis would eat first. -->
                             <span v-if="group.folder.localDir" class="break-all font-mono text-xs text-content">{{ group.folder.localDir }}</span>
                             <span v-else-if="group.folder.mode === `mirror`" class="text-xs text-subtle">
                                 no folder: this device only mirrors ports
                             </span>
                             <span v-else class="text-xs text-subtle">no folder synced</span>
                             <CopyButton v-if="group.folder.localDir" :text="group.folder.localDir" v-tooltip.top="`Copy path`" />
-                            <!--
-                                Silent when healthy (`watching`): the machine's own "agent running" line already says
-                                the sync is alive.
-                            -->
+<!-- Silent when healthy (`watching`): the machine's own "agent running" line already says the sync is alive. -->
                             <StatusBadge
                                 v-if="folderState(group.folder) && !restingSync(group.folder)"
                                 :variant="folderTone(folderState(group.folder))"
                                 size="xs"
                                 :label="folderState(group.folder) ?? ``"
                             />
-                            <!--
-                                Silent when healthy, spoken when not: a stopped backup costs nothing until the sandbox
-                                is gone, so
-                                it's named rather than left to be noticed.
-                            -->
+<!-- Silent when healthy, spoken when not: a stopped backup costs nothing until the sandbox is gone, so it's named rather than left to be noticed. -->
                             <StatusBadge
                                 v-if="backupState(group.folder) && !restingBackup(group.folder)"
                                 :variant="backupTone(backupState(group.folder))"
                                 size="xs"
                                 :label="`backup: ${backupState(group.folder)}`"
                             />
-                            <!--
-                                Two-way-safe flags conflicts rather than clobbering; nothing else in the product has
-                                ever surfaced one waiting.
-                            -->
+<!-- Two-way-safe flags conflicts rather than clobbering; nothing else in the product has ever surfaced one waiting. -->
                             <StatusBadge
                                 v-if="group.folder.conflicts"
                                 variant="warning"
@@ -349,19 +291,10 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                 :label="`${group.folder.conflicts} ${group.folder.conflicts === 1 ? `conflict` : `conflicts`}`"
                             />
                         </div>
-                        <!--
-                            What a bare count can't say: what happened, what it costs (nothing overwritten, those paths
-                            just
-                            stopped syncing), and what ends it (make both copies agree). Placed under the path, since
-                            this is
-                            prose about the folder.
-                        -->
+<!-- The count expands to show sync impact and the recovery action. -->
                         <div v-if="conflicts.get(group.sandboxId)" class="col-start-2 flex min-w-0 flex-col gap-1">
                             <p class="text-xs text-muted">{{ conflicts.get(group.sandboxId)?.lead }}</p>
-                            <!--
-                                Each entry is a path plus what happened to it; a tight gap on a narrow card would run
-                                one entry into the next.
-                            -->
+<!-- Each entry is a path plus what happened to it; a tight gap on a narrow card would run one entry into the next. -->
                             <ul class="flex min-w-0 flex-col gap-1">
                                 <li
                                     v-for="row in conflicts.get(group.sandboxId)?.rows ?? []"
@@ -372,10 +305,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                     <span v-if="row.note !== ``" class="text-2xs text-subtle">{{ row.note }}</span>
                                 </li>
                             </ul>
-                            <!--
-                                Counted against the machine's own total, shown only under a real list; a too-old agent
-                                gets a note instead.
-                            -->
+<!-- Counted against the machine's own total, shown only under a real list; a too-old agent gets a note instead. -->
                             <p
                                 v-if="(conflicts.get(group.sandboxId)?.rows.length ?? 0) > 0 && (conflicts.get(group.sandboxId)?.more ?? 0) > 0"
                                 class="text-2xs text-subtle"
@@ -386,10 +316,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                 {{ conflicts.get(group.sandboxId)?.note }}
                             </p>
                         </div>
-                        <!--
-                            What to do about this folder, under it rather than in the row's own verbs, which act on the
-                            container.
-                        -->
+<!-- What to do about this folder, under it rather than in the row's own verbs, which act on the container. -->
                         <span
                             v-if="$slots[`folder`]"
                             class="empty:hidden col-start-2 -ml-2.5 flex flex-wrap items-center gap-x-1 gap-y-1"
@@ -398,43 +325,23 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                         </span>
                     </template>
 
-                    <!--
-                        Survives having no ports: an empty list has two causes (nothing served, or mirroring off), and
-                        only
-                        the second is worth a line explaining why localhost looks empty.
-                    -->
+<!-- Survives having no ports: an empty list has two causes (nothing served, or mirroring off). -->
                     <template v-if="group.ports.length > 0 || mirroringOff(group.folder)">
                         <span class="text-2xs text-subtle">Ports</span>
                         <div class="flex min-w-0 flex-col gap-1">
-                            <!--
-                                Said as a state, not a fault: quiet ink, no badge, since somebody threw this switch on
-                                purpose.
-                            -->
+<!-- Said as a state, not a fault: quiet ink, no badge, since somebody threw this switch on purpose. -->
                             <p v-if="mirroringOff(group.folder)" class="text-xs text-muted">
                                 Off: this device isn't putting this sandbox's ports on its own localhost. File syncing is unaffected.
                             </p>
-                            <!--
-                                One port per line in two aligned columns (address, then what's on it or why it never
-                                arrived); no
-                                fills, colour is reserved for a port that can't be reached.
-                            -->
-                            <!--
-                                Suppressed while mirroring is off: a stale `localhost:` reading here would contradict
-                                the sentence above it.
-                            -->
+<!-- Ports use aligned address and status columns; colour marks unreachable ports. -->
+<!-- Suppressed while mirroring is off: a stale `localhost:` reading here would contradict the sentence above it. -->
                             <div v-else class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1">
                                 <template v-for="port in group.ports" :key="`${port.port}:${port.state}`">
-                                    <!--
-                                        Only a port that reached localhost is prefixed with it; one that didn't is a
-                                        bare number.
-                                    -->
+<!-- Only a port that reached localhost is prefixed with it; one that didn't is a bare number. -->
                                     <span class="shrink-0 font-mono text-xs" :class="port.state === `mirrored` ? `text-content` : `text-warning`"
                                         >{{ port.state === `mirrored` ? `localhost:` : `` }}{{ port.port }}</span
                                     >
-                                    <!--
-                                        What's listening, named rather than quoted in full; the whole command line is
-                                        one hover away.
-                                    -->
+<!-- What's listening, named rather than quoted in full; the whole command line is one hover away. -->
                                     <span
                                         v-if="port.state === `mirrored`"
                                         class="min-w-0 truncate font-mono text-xs text-subtle"
@@ -443,11 +350,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                     >
                                     <span v-else class="min-w-0 text-xs text-muted">
                                         {{ portNote(port, portHolder(groups, port), shortCommand(port.command)) }}
-                                        <!--
-                                            Goes to the holder's own block, where its Stop button lives, rather than
-                                            naming a winner with nowhere
-                                            to go. Absent when the holder isn't on this report.
-                                        -->
+<!-- Goes to the holder's own block, where its Stop button lives, rather than naming a winner with nowhere to go. -->
                                         <button
                                             v-if="portHolder(groups, port)"
                                             type="button"
@@ -459,20 +362,14 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                     </span>
                                 </template>
                             </div>
-                            <!--
-                                Cancels the small text button's own padding, so its words land back in the block's one
-                                value column.
-                            -->
+<!-- Cancels the small text button's own padding, so its words land back in the block's one value column. -->
                             <span v-if="$slots[`ports`]" class="-ml-2.5 flex flex-wrap items-center gap-x-1 gap-y-1 empty:hidden">
                                 <slot name="ports" :group="group" />
                             </span>
                         </div>
                     </template>
 
-                    <!--
-                        Last, and quietest: the least-often-read fact, at the block's one value size rather than its
-                        own.
-                    -->
+<!-- Last, and quietest: the least-often-read fact, at the block's one value size rather than its own. -->
                     <template v-if="group.sandbox">
                         <span class="text-2xs text-subtle">Image</span>
                         <span class="truncate font-mono text-xs text-subtle" :title="group.sandbox.image">{{ group.sandbox.image }}</span>

@@ -1,12 +1,4 @@
-/* Tier 0 — foundational tokens + Tailwind reset.
- *
- * `--color-*: initial` / `--font-*: initial` drop Tailwind's built-in palettes and font
- * stacks so the only colors/fonts that exist are the ones we define on purpose. This file
- * is imported FIRST (before the primitive/semantic colors) so the reset runs before our
- * tokens are added.
- *
- * Everything here is a single source of truth: change a value, and every utility, PrimeVue
- * component, and design-system primitive that consumes it updates at once. */
+/* Tier 0 — foundational tokens + Tailwind reset. */
 @theme {
     --color-*: initial;
     --font-*: initial;
@@ -15,147 +7,68 @@
     --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji",
         "Segoe UI Emoji";
     --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
-    /* No ligatures in monospace. Mono here always renders characters that must be read literally — a shell
-     * command, a diff, a path, a secret — and JetBrains Mono's `calt` set turns `!=` into `≠` and `->` into an
-     * arrow, showing the user something other than what they typed. It is also a correctness fix: Chromium
-     * shapes an editable field incrementally, and appending a character after a ligature pair leaves the pair's
-     * FIRST glyph blank ("pnpm test &&" + space renders "pnpm test  &"), which no repaint recovers. */
+/* No ligatures in monospace. */
     --font-mono--font-feature-settings: "liga" 0, "calt" 0;
 
-    /* Leading is a RATIO on every step of this scale, never a length. A length stops tracking its own step the
-     * moment a surface rescales the scale — the popped-out transcript does exactly that (chat.css) — and the
-     * step then arrives with another tier's leading. Tailwind's own steps are written this way; these three
-     * are ours, and each ratio below is the rem it replaces, exactly. */
+/* Leading is a RATIO on every step of this scale, never a length. */
     --text-2xs: 0.6875rem;
     --text-2xs--line-height: calc(1 / 0.6875);
 
-    /* BELOW 2xs — the graph sizes. A commit lane, a branch chip and a stat cell are read in the corner of the
-     * eye beside something else, and the app had been spelling them as one-off `text-[0.6rem]`, `[0.65rem]`,
-     * `[0.55rem]`, `[0.5rem]` — five sizes inside one band, chosen a call site at a time, which is what a scale
-     * exists to stop. Two steps carry all of it. They are also what makes those screens PORTABLE: an arbitrary
-     * value cannot be promised to an extension (see extension-surface.css), and a named step can. */
+/* BELOW 2xs — the graph sizes. */
     --text-3xs: 0.625rem;
     --text-3xs--line-height: calc(0.875 / 0.625);
     --text-4xs: 0.5rem;
     --text-4xs--line-height: calc(0.75 / 0.5);
 
-    /* THE READING COLUMN, named. A paragraph of prose stops being readable somewhere past sixty characters, so
-     * every screen that shows writing — a draft, a story, a chore's explanation, a generated doc — had reached
-     * for `max-w-[64ch]`, `[68ch]`, `[70ch]`, `[80ch]`, `[60ch]` and `[calc(64ch+1rem)]`. That is one decision
-     * spelled six ways. `read` is the default column; `sm` is for a column sharing a row with something else,
-     * `lg` for a document given the whole pane, and `xs` for a label that must not push a row wide. */
+/* THE READING COLUMN, named. */
     --container-read-xs: 36ch;
     --container-read-sm: 60ch;
     --container-read: 68ch;
     --container-read-lg: 80ch;
 
-    /* THE FLOATING PANEL — a popover, a composer, a dropdown body. It wants a comfortable fixed width AND a
-       viewport cap, because it hangs off an absolutely-positioned parent and would otherwise run off the side
-       of a phone. The app had been writing that as a PAIR (`w-[26rem] max-w-[90vw]`), which is two chances to
-       forget the second half — and the half people forget is the one that only shows up on a small screen.
-       One token carries both, so `w-pop` is the whole decision. */
+/* THE FLOATING PANEL — a popover, a composer, a dropdown body. */
     --container-pop-sm: min(26rem, 90vw);
     --container-pop: min(28rem, 92vw);
     --container-pop-lg: min(46rem, calc(100vw - 6rem));
 
-    /* THE MODAL, in four widths — the same decision as `pop` above (a comfortable width AND the clamp, as ONE
-       token) for the box that is centred rather than hung off a trigger. A separate scale because the two want
-       different numbers: a popover is a menu and stays narrow, a modal holds a form and a modal holds a
-       scrollback viewer.
-       Seventeen dialogs had spelled their own width out — 22, 24, 26, 28, 30, 32, 34, 36, 38, 44, 48, 64 and
-       80rem, thirteen answers to one question — and exactly ONE of the seventeen carried the viewport clamp.
-       The other sixteen overflowed a 360px phone, silently, because a desktop never shows you that. The band
-       edges are where the old widths actually clustered, so no dialog moves more than 4rem.
-       `sm` is a confirm or a rename; the default holds a form; `lg` is a document; `xl` is a terminal
-       scrollback or an embedded browser, where the content IS the width. */
+/* Modal widths use four tiers with a clamped maximum. */
     --container-modal-sm: min(26rem, calc(100vw - 2rem));
     --container-modal: min(36rem, calc(100vw - 2rem));
     --container-modal-lg: min(48rem, calc(100vw - 3rem));
     --container-modal-xl: min(72rem, calc(100vw - 4rem));
-    /* `full` has no rem ceiling on purpose — it is for the modal whose content is a CANVAS (a job graph, an
-       embedded browser), where the useful width is however much screen there is and a cap just letterboxes it. */
+/* `full` has no rem ceiling on purpose — it is for the modal whose content is a CANVAS (a job graph, an embedded browser). */
     --container-modal-full: calc(100vw - 3rem);
 
-    /* THE PHONE VIEWPORT, as the preview reproduces it. Not a layout choice like the three scales above — it is
-       a DEVICE FACT the app measures itself against, which is exactly why it wants a name: written inline it
-       reads as somebody's opinion about how wide a panel should be, and the next person rounds it to a scale
-       step. 390px is the CSS viewport of the current iPhone class. It lives here rather than in the preview
-       because anything else that has to render "as a phone would" must agree with it by construction. */
+/* THE PHONE VIEWPORT, as the preview reproduces it. */
     --container-phone: 390px;
 
-    /* THE PANEL CEILING, named — for the same reason and out of the same spread (`max-h-[45dvh]`, `[55dvh]`,
-     * `[60dvh]`, `[60vh]`, `[72dvh]`). A list inside a dialog or a popped-out pane has to stop somewhere short
-     * of the viewport; `dvh` rather than `vh` so a phone's disappearing address bar does not clip the last row. */
+/* THE PANEL CEILING, named — for the same reason and out of the same spread (`max-h-[45dvh]`, `[55dvh]`, `[60dvh]`, `[60vh]`, `[72dvh]`). */
     --height-panel: 60dvh;
     --height-panel-lg: 72dvh;
-    /* The near-full-height step, for the surface that is MEANT to take the screen: a bottom sheet the thumb
-     * drags up, a job graph opened fullscreen. Both had written their own (`85dvh`, `88vh`) — one step for the
-     * pair, in dvh so a phone's disappearing address bar does not clip it. */
+/* The near-full-height step, for the surface that is MEANT to take the screen: a bottom sheet the thumb drags up, a job graph opened fullscreen. */
     --height-panel-xl: 85dvh;
-    /* A drawn figure — a graph, a chart — wants a share of the viewport AND a ceiling in absolute terms, or it
-       becomes a letterbox on a tall monitor. Hence the clamp rather than a plain `dvh`. */
+/* A drawn figure — a graph, a chart — wants a share of the viewport AND a ceiling in absolute terms, or it becomes a letterbox on a tall monitor. */
     --height-figure: min(26rem, 50dvh);
 
-    /* HOW MUCH PINNED CHROME SITS ABOVE A STICKY THING, on a page-scrolling surface. Zero here so every consumer
-       resolves on a surface that pins nothing; a surface that pins a bar over its content MEASURES it and
-       overrides this locally (see useStickyTop), because a filter bar's height is a fact about the width it was
-       given, not a constant anybody can write down. */
+/* HOW MUCH PINNED CHROME SITS ABOVE A STICKY THING, on a page-scrolling surface. */
     --pinned-top: 0px;
 
-    /* THE FACTS GRID — a column of labels sized to their own content beside a column of values that takes the
-       rest. Every `<dl>` of label→value in the app is this shape, and it had been spelled `grid-cols-[auto_1fr]`
-       and `grid-cols-[max-content_1fr]` — two spellings of one layout, neither of which can be promised to an
-       extension. <InfoTable> is the component answer when a screen wants the whole block; this is the token for
-       when it wants only the column rule. */
+/* THE FACTS GRID — a column of labels sized to their own content beside a column of values that takes the rest. */
     --grid-template-columns-facts: max-content 1fr;
 
-    /* Spacing base — the unit Tailwind multiplies for p-*, gap-*, m-*, etc.
-     * Nudge this to make the whole UI more or less dense in one place. */
+    /* Spacing base — the unit Tailwind multiplies for p-*, gap-*, m-*, etc. */
     --spacing: 0.25rem;
 
-    /* HOW ILLEGIBLE A HIDDEN VALUE IS. The masking strength for a secret the user has not chosen to reveal —
-     * a token because it is a POLICY, not a look: every field that hides something owes the same answer, and
-     * the answer is security-visible. Tailwind's own scale starts at `blur-xs` (4px), which is past the point
-     * where a long token's word shapes stop being guessable; 3px is where this app draws that line. Anyone
-     * tempted to snap it to the nearest step is making that call for every masked field at once, which is the
-     * conversation this name exists to force. */
+/* HOW ILLEGIBLE A HIDDEN VALUE IS. */
     --blur-mask: 3px;
 
-    /* THE HAIRLINE. A ring finer than the 1px every border on this surface draws, for the mark that has to read
-     * as an aside rather than as a control. Why it must be a PAINTED ring rather than a border, and what the
-     * padding gives back to pay for one, is at the only call site — ChatToolRun.vue — because that part is
-     * about the element; this is only the weight.
-     *
-     * SPELLED AT THE CALL SITE AS `ring-(length:--ring-hairline)`, which is ugly and is the honest option.
-     * Tailwind 4 has no `--ring-*` width namespace, so `ring-hairline` cannot be made to exist by naming a
-     * token; the alternative is a hand-written `.ring-hairline` that restates the four `--tw-*` private
-     * variables Tailwind's own ring expands to, and those are internals that change under a major without
-     * telling us. This way the number lives here, once, and the expansion stays Tailwind's problem. */
+/* THE HAIRLINE. */
     --ring-hairline: 0.5px;
 
-    /* THE EMPTY TRACK. ProgressRing's own track weight, restated as a painted ring for the marks on the agent
-     * board that have no arc to draw — a card with no context, a held wake, a workflow run. The two have to be
-     * the same number or a ringed card and a bare one beside it read as two sizes of mark in one lane, which is
-     * the bug AgentCard's comment argues at length; keep this in step with ProgressRing's `stroke` prop where
-     * those call sites pass it (`:stroke="1.5"`).
-     *
-     * SPELLED AT THE CALL SITE AS `ring-(length:--ring-track)`, for the reason --ring-hairline gives above:
-     * Tailwind 4 has no `--ring-*` width namespace, so the token cannot become a `ring-track` utility. */
+/* THE EMPTY TRACK. */
     --ring-track: 1.5px;
 
-    /* ── THE SHADOW SCALE, RESTATED SO IT CAN TAKE A COLOUR FROM THE SCHEME ────────────────────────────────
-     * Tailwind's own `shadow-*` values are pure black at a handful of alphas. Black is the right shade for a
-     * near-black interface and the wrong one for paper: a neutral shadow on a warm surface greys it, which is
-     * precisely the "washed out" look the light scheme was rebuilt to lose. The geometry and the alphas below
-     * are Tailwind's, untouched; only the shade is now a variable, and only the light scheme moves it (see
-     * `--ui-shadow-tint` in semantic-colors.css — dark sets `0 0 0` and renders exactly as before).
-     *
-     * `--ui-shadow-strength` is a multiplier rather than a second set of alphas because these numbers were
-     * chosen for a light background in the first place; a tinted shade at the same alpha darkens slightly less
-     * than black does, and the multiplier is what pays that back. Dark sets it to 1 and is unaffected.
-     *
-     * `var(--tw-shadow-color, …)` is kept in every slot: that is the hook `shadow-<colour>` utilities write to,
-     * and dropping it would silently turn those into no-ops. */
+    /* Shadows use theme tint and preserve Tailwind's geometry. */
     --shadow-2xs: 0 1px var(--tw-shadow-color, rgb(var(--ui-shadow-tint) / calc(0.05 * var(--ui-shadow-strength))));
     --shadow-xs: 0 1px 2px 0 var(--tw-shadow-color, rgb(var(--ui-shadow-tint) / calc(0.05 * var(--ui-shadow-strength))));
     --shadow-sm: 0 1px 3px 0 var(--tw-shadow-color, rgb(var(--ui-shadow-tint) / calc(0.1 * var(--ui-shadow-strength)))),
@@ -179,9 +92,7 @@
     --radius-2xl: 1.25rem;
 }
 
-/* Density tokens — consumed by the design-system primitives (ui-card, ui-page) and the
- * PrimeVue overrides. Adjust these to retune padding/sizing app-wide without touching
- * component templates. Defined on :root (not @theme) so they are plain custom properties. */
+/* Density tokens — consumed by the design-system primitives (ui-card, ui-page) and the PrimeVue overrides. */
 :root {
     --ui-radius: var(--radius-lg);
 
@@ -195,139 +106,35 @@
     --ui-control-padding-y: calc(var(--spacing) * 2);
     --ui-field-gap: calc(var(--spacing) * 2);
 
-    /* THE COMPACT FIELD, which is the same decision as `size="small"` on a button and lands on the same two
-     * numbers. 4px of block padding against a 16px line box is a 26px control, exactly the compact button's
-     * height, so a field and a button sharing a toolbar sit on one baseline instead of two pixels apart.
-     *
-     * IT EXISTS BECAUSE A THIRD OF THE FIELDS WERE ALREADY DRAWING IT. `ui.input()` shipped one size, and 33 of
-     * its 82 call sites passed geometry straight back in to get out of it — `text-xs` at 16, `py-1` at 7, `px-2`
-     * at 5, `py-1.5` at 4, plus `text-base`, `py-0.5` and a `min-h-[2.25rem]`. Seven spellings of "smaller than
-     * the form size", chosen by whoever was in the file. That is the buttons' `px-2.5 py-1 text-2xs` story
-     * verbatim (lib/ui.ts), and it has the same fix: the size is a name, so there is nothing left to shrink. */
+/* THE COMPACT FIELD, which is the same decision as `size="small"` on a button and lands on the same two numbers. */
     --ui-field-padding-x-sm: calc(var(--spacing) * 2);
     --ui-field-padding-y-sm: var(--spacing);
 
-    /* ── WHAT A FOCUSED FIELD LOOKS LIKE, ONCE, AND WHY IT IS DRAWN INSIDE THE BOX ────────────────────────
-     * The app had NINE answers to this across 128 fields, and the one on 90 of them —
-     * `focus:border-line-strong focus:outline-none` — is byte-identical to the same field's HOVER state while
-     * also throwing away the browser's own ring. A focused field and a pointed-at field were the same pixels,
-     * so the only thing telling a reader where their keystrokes were going was the caret. Eight more fields
-     * carried `focus:outline-none` with nothing put back at all, and nineteen had no focus rule whatsoever.
-     *
-     * THE RING IS `inset`, AND THAT IS THE LOAD-BEARING PART. Every ring in the tree before this — five
-     * hand-written `ring-1`s, and the skin's own `0 0 0 3px` — painted OUTSIDE the border box, which fails two
-     * ways and both were in the product. It lands on top of whatever sits a few pixels away in a tight flex
-     * row; and it is CUT OFF by any ancestor with `overflow: hidden` or `auto`, which is every scroll pane,
-     * every rounded card and every dialog body in the app. A half-drawn focus ring reads as a rendering bug,
-     * and the call site can never see the ancestor that clipped it.
-     *
-     * Drawn inward, the state costs zero pixels outside the element: correct in a scroller, correct flush
-     * against a panel edge, correct in a row of fields 4px apart, and it adds no layout size so nothing shifts
-     * when focus arrives. `check:inputs` enforces exactly that — no `ring-*`, no positive `outline-offset`, no
-     * outward `shadow-*` on a field — because it is the kind of rule that is invisible until somebody's screen
-     * is the one with the scroll parent.
-     *
-     * Three variables rather than a block, for the reason the button's disabled tokens are three: a skin has to
-     * answer this in its own material (Sanctum's is a gold rim in stone) by re-pointing them, not by copying
-     * the rule. The error state re-points the same two and needs no focus rule of its own. */
+    /* Focus rings are inset so ancestors cannot clip them. */
     --ui-field-focus-line: var(--color-primary-fill);
     --ui-field-focus-ring: color-mix(in srgb, var(--color-primary-fill) 22%, transparent);
     --ui-field-focus-inset: 2px;
 
-    /* A BUTTON IS WIDER THAN A FIELD AT THE SAME HEIGHT, and that is not a stylistic preference — it is the
-     * difference between the two controls. A text input is a container: its side padding is an inset before
-     * content that may be long, so 12px either side of a 38px box is right and more would just push the
-     * caret away from the edge the eye tracks. A button is a TARGET wrapped around a short label, and the
-     * label needs air on the axis it is read along, or the word collides with the rim and the control reads
-     * as cramped — which is exactly the report: the default-size buttons looked squeezed while the compact
-     * ones (10px against 4px, 2.5:1) looked fine.
-     *
-     * At 12px against 8px the default button was 1.5:1, tighter than the compact size it is supposed to be
-     * the roomier form of — the geometry inverted as the button grew. 16px against 8px is 2:1, which is
-     * where the label sits in the middle of its plate at both sizes and the two read as one control at two
-     * scales. Only the horizontal number moves: the 38px height is shared with the inputs beside it in a
-     * form row and must not drift. */
+/* A BUTTON IS WIDER THAN A FIELD AT THE SAME HEIGHT, and that is not a stylistic preference — it is the difference between the two controls. */
     --ui-button-padding-x: calc(var(--spacing) * 4);
 
-    /* ── WHAT "NOT RIGHT NOW" LOOKS LIKE, ONCE, FOR EVERY BUTTON IN THE APP ───────────────────────────────
-     * A disabled control was a FADE: PrimeVue's `opacity: 0.6` over whatever the tier had painted. That is the
-     * wrong instrument for this design system specifically, and the reason is arithmetic rather than taste.
-     * Every tier here is a TINT — `color-mix(… 10%, transparent)` — so 0.6 of a 10% wash is a 6% wash, which on
-     * canvas is nothing at all: the fill and the hairline both vanish and what is left is a dim word floating
-     * where a button was. The switch had this exact bug and was fixed the same way (theme.ts), and the note
-     * there is the general rule: hold the SHAPE and drop only the contrast, or a disabled control reads as a
-     * control that is missing.
-     *
-     * So a disabled button is a flat neutral plate: the same box, one ground for every tier — a disabled
-     * `danger` must not still be red, because a red thing that cannot be pressed is just an alarm nobody can
-     * answer.
-     *
-     * IT LOSES ITS RIM, AND THAT IS THE PART THAT DOES THE WORK. The first cut of this kept the hairline and
-     * only dropped the fill and the label a step, and the report was exactly right: it still looked pressable,
-     * and it was hard to tell apart from the quiet neutral tier. Of course it was — a fill a few per cent
-     * below `secondary`'s and a rim a few per cent below `secondary`'s is a description of `secondary`.
-     *
-     * EVERY LIVE TIER IN THIS SYSTEM DRAWS AN EDGE. Accent, secondary, danger, warn, success and loud all
-     * carry a 1px hairline; the two that do not (`text`, `link`) have no fill either. So a filled box with NO
-     * edge is a shape nothing live can wear, and it reads as unavailable before the eye has read a colour. The
-     * border is still declared, at `transparent`: the box keeps its exact size, so a control does not move by
-     * two pixels when it goes off.
-     *
-     * The fill goes UNDER the quietest live tier for the same reason (4% against `secondary`'s 8%) — a
-     * disabled control that is brighter than an enabled one is the fault this replaces, measured on Sanctum
-     * where the disabled ground had ended up a full step above the live neutral plate. And the label drops to
-     * `subtle`, the dimmest text role there is, which is the semantics exactly and still lands ~4.4:1.
-     *
-     * THREE VARIABLES RATHER THAN A BLOCK OF DECLARATIONS, because the skins have to be able to answer this in
-     * their own material — Sanctum sinks the plate into the wall, and can do it by re-pointing these instead of
-     * copying the rule per tier, which is what it used to do (four near-identical blocks, four hand-mixed hexes
-     * that could drift from each other and did). */
+    /* Disabled buttons keep size and use neutral, low-contrast tokens. */
     --ui-button-off-fill: color-mix(in srgb, var(--color-content) 4%, transparent);
     --ui-button-off-line: transparent;
     --ui-button-off-content: var(--color-subtle);
 
-    /* AND THE ONE FADE THAT IS STILL RIGHT, for the controls the design system does not paint: a list row, a
-     * tile, a menu line, a form field. There is no plate to repaint on those — a row's ground is the panel's,
-     * and a tile's fill is carrying its own meaning — so dimming the whole object is the honest instrument, and
-     * `.ui-off` (styles/utilities.css) is where it is spelled.
-     *
-     * IT IS A NUMBER BECAUSE IT HAS TO BE ONE NUMBER. The tree had four — 30, 40, 50 and 60 per cent, across 38
-     * call sites — chosen by whoever was in the file, so two disabled controls on one dialog faded by different
-     * amounts and the difference read as one of them being MORE unavailable than the other. Half is the middle
-     * of what was already there and keeps `muted` text legible on both schemes. */
+/* AND THE ONE FADE THAT IS STILL RIGHT, for the controls the design system does not paint: a list row, a tile, a menu line, a form field. */
     --ui-off-dim: 0.5;
 
-    /* THE TRANSIENT DIM, which is a different thing from the above and now says so. `v-action` fades a
-     * hand-styled control for the moment its press is still being answered (press.css); that IS a fade, because
-     * it is a beat long and lands on an element whose styling the design system does not own. It read
-     * `--p-disabled-opacity` before, which quietly tied "this row is busy" to "this button is unavailable" —
-     * two states that have no reason to move together, and one of which has just stopped being an opacity. */
+/* THE TRANSIENT DIM, which is a different thing from the above and now says so. */
     --ui-press-dim: 0.6;
 
-    /* Tooltip box (see tooltip.css). 17rem is measured, not guessed: across the app's longest labels it is the
-     * cap with BOTH the least ink and the fewest lines. Narrower (PrimeVue's old 12.5rem default) wraps the
-     * same sentence into a five-line column tall enough to cover the control it describes; wider only
-     * stretches those same lines. Lines are the backstop for copy that outgrew a tooltip and wants a panel. */
+/* Tooltip box (see tooltip.css). */
     --ui-tooltip-max-width: 17rem;
     --ui-tooltip-max-lines: 5;
 }
 
-/* ── BASE TEXT SIZE ────────────────────────────────────────────────────────────────────────────────────────
- * Ships at 100% (Compact), the same default VS Code and most desktop tools use — fixed density until the reader
- * opts into more. The interface was originally drawn at 110%; that size is `default` in Appearance, not the
- * shipped baseline. Because every size above is a rem, ONE declaration moves type, spacing, control heights,
- * radii and page widths together.
- *
- * A percentage, not a pixel count: it multiplies whatever the reader's browser calls normal text, so raising
- * that for readability still works.
- *
- * `--ui-scale` is the same number for code that has to think in pixels — a column width the reader dragged, an
- * editor's font size, a pop-out window's dimensions. Anything that must NOT take the app's bump divides by it,
- * which is how the navigation rail keeps today's footprint (see ShellDesktop) while everything beside it grows.
- *
- * Unlayered on purpose, like the theme blocks: these must beat the `base` layer's html rules.
- * The size is chosen in Appearance and restored before first paint by the inline script in index.html;
- * useTextSize.ts is the source of truth for which attribute goes on. */
+/* Compact text size is the default scale. */
 :root {
     font-size: 100%;
     --ui-scale: 1;
@@ -337,28 +144,7 @@
     --ui-scale: 1.1;
 }
 
-/* ── WEIGHT, PER SCHEME ────────────────────────────────────────────────────────────────────────────────────
- * Dark writes ~30 units lighter than light does, and the two then LOOK like the same weight. Light glyphs on a
- * dark ground bleed outward — halation — so identical stems read heavier; it is an effect in the eye and the
- * panel, which is why no rendering flag fixes it and why `-webkit-font-smoothing` (base.css) cannot: that one
- * is macOS-only and does nothing on Windows or Linux. A weight delta works in every engine on every platform.
- *
- * THIS IS THREE DECLARATIONS BECAUSE TAILWIND v4 COMPILES `font-medium` TO `font-weight: var(--font-weight-medium)`.
- * Redefining the three tokens re-weights all ~625 weight utilities in the app at once; there is no component to
- * edit, and adding a fourth weight to the app means adding it here too or it will not flip.
- *
- * IT REQUIRES THE VARIABLE FACE, AND THAT IS A CROSS-FILE CONTRACT. index.html must request Inter as a RANGE
- * (`wght@100..900`). A discrete request (`wght@400;500;600;700`) pins each @font-face to one weight, and every
- * value below then snaps to the nearest static instance — 470 renders as 500 — so this file goes silently inert
- * with nothing failing. The range costs no bytes: Google serves one variable file either way, and the discrete
- * form downloads that same file once per weight.
- *
- * `data-mode="dark"` covers the sanctum skin too, since turning a skin on forces the dark scheme (useSkin.ts).
- * Qualified with `html` so it beats Tailwind's `:root` theme output on specificity rather than on import order.
- *
- * The axis built for this job is GRAD, which regrades without touching advance widths; Inter has no GRAD, so a
- * small wght delta stands in for it. The cost is that widths move — about a third of a percent, sub-pixel per
- * word, visible only as a hairline reflow if a long line is on screen while the theme is toggled. */
+/* WEIGHT, PER SCHEME Dark writes ~30 units lighter than light does, and the two then LOOK like the same weight. */
 html[data-mode="dark"] {
     --font-weight-normal: 300;
     --font-weight-medium: 400;

@@ -1,8 +1,4 @@
-/* Where markdown lands and how it is named. A page's filename is its URL made readable plus a short hash:
- * readable so an agent scanning `ls` output can tell pages apart, hashed so two URLs that slug identically
- * (querystrings, trailing slashes) never overwrite each other, and slug-sanitized so no URL can spell a
- * path that escapes the output directory. Each file opens with front matter — the URL, title and fetch
- * time ride WITH the content, so a file found later (or by another agent) still says what it is. */
+/* Where markdown lands and how it is named. */
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";

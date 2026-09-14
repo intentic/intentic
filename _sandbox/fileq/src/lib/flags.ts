@@ -1,5 +1,4 @@
-/* Flag parsers shared across commands — declared once so the verbs cannot drift apart on options that mean
- * the same thing (webq's convention, kept). */
+/* Shared flag parsers keep command verbs consistent on equivalent options. */
 
 export const numberParser = (raw: string): number => {
     const value = Number(raw);

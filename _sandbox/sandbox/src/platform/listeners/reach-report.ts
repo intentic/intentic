@@ -39,21 +39,13 @@ export interface ReachState {
 }
 
 export interface ReachReporter {
-    /* WHETHER THERE IS ANYTHING TO WAIT FOR is the posture's to say (ingress-tunnel.ts), so it is asked for
-     * here rather than guessed at from config: the give-up window below is patience for a dial in flight, and
-     * a container that dials nothing has no dial to be patient about. */
+/* WHETHER THERE IS ANYTHING TO WAIT FOR is the posture's to say (ingress-tunnel.ts), so it is asked for here rather than guessed at from config. */
     readonly start: (posture: ReachPosture) => void;
     readonly stop: () => void;
     readonly status: () => ReachState;
 }
 
-/* WHICH LANE THE WORDS DESCRIBE, and getting this wrong is why a customer sat in front of a 502 for five
- * minutes and then pressed a button that could not help. A hosted sandbox (posture `direct`) dials NO TUNNEL
- * BY DESIGN: it is a Fly app the platform's edge replays requests to. Every failure below used to say "its
- * tunnel" regardless, so its owner read a sentence about a component their sandbox does not have, phrased as
- * something that was still coming up — and the only true remedy, rolling the edge, was nobody's to guess at
- * from that text. The daemon knows its own posture at the moment it starts probing, so it says which thing
- * is actually not answering. */
+/* Reach reports identify the lane described by the message. */
 type ProbeLane = "tunnel" | "direct";
 
 const wording = (lane: ProbeLane, publicUrl: string) =>
@@ -187,15 +179,7 @@ export const createReachReporter = (config: Config, logger: Logger, bootOf: () =
 
     return {
         start: (posture) => {
-            /* THE ONE VERDICT THAT IS SETTLED THE MOMENT IT IS ASKED, and getting it wrong cost somebody an
-             * evening. A container handed a public name but no grant and no edge to dial will not start
-             * answering there in five minutes or in five days — the values it needs ride in with a setup
-             * command, and until one does, every probe spends ten seconds to reprint the same 502. What the
-             * wizard read while that happened was "its tunnel has not come up", which is a sentence about
-             * waiting, so people waited; the daemon log said the same thing every thirty seconds and then
-             * fell silent, and the address kept being handed to device-pairing commands that could never
-             * work. `ic sandbox doctor` has drawn pending apart from settled for a while (doctor.rs's
-             * classify_public). This is the daemon drawing it too, at the one moment it is free to. */
+            /* THE ONE VERDICT THAT IS SETTLED THE MOMENT IT IS ASKED, and getting it wrong cost somebody. */
             if (posture.by === "loopback") {
                 const detail =
                     `nothing will answer at ${publicUrl}: this sandbox has no reachability — ${posture.reason} — so its daemon dials no edge. ` +

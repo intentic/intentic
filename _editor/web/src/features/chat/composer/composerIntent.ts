@@ -23,10 +23,7 @@ export interface PickUpSituation {
 export interface ComposerSituation {
     /** Words or files in the box: the ordinary reason a press sends anything at all. */
     readonly staged: boolean;
-    /**
-     * At least one file staged; an attachment is something the user hands over, so it refuses the agent's
-     * voice.
-     */
+/** At least one file staged; an attachment is something the user hands over, so it refuses the agent's voice. */
     readonly attached: boolean;
     /** A staged file whose bytes are still going up. */
     readonly uploading: boolean;

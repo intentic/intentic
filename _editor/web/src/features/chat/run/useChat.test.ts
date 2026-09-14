@@ -434,9 +434,7 @@ describe(`native account connection`, () => {
         expect(chat.accountBusy.value).toBeUndefined();
     });
 
-    /* THE CARD FOLLOWS THE CHAT ONLY ONTO A PROVIDER IT CAN CONNECT, which a fresh sandbox is the whole reason
-     * for: with nothing connected the first chat is parked on the free trial, and the card, pointed there on
-     * open, drew an empty "endpoint/free-trial account · not connected" row with a Connect beside it. */
+/* THE CARD FOLLOWS THE CHAT ONLY ONTO A PROVIDER IT CAN CONNECT, which a fresh sandbox is the whole reason for. */
     it(`keeps the account card on a connectable provider while the chat runs on the free trial`, async () => {
         const chat = useChat();
         await refreshConnections(true);
@@ -464,10 +462,7 @@ describe(`native account connection`, () => {
         expect(chat.managedProvider.value).toBe(`cursor`);
     });
 
-    /* AND A CALL THAT IS MADE STAYS ON ITS ROUTE. A provider id is an open vocabulary and some carry a slash;
-     * interpolated raw, that id adds a path SEGMENT, `{provider}` matches exactly one, and the request matched
-     * no route at all — a bare 404 the app could only report as "Request failed (404)", since there was no
-     * daemon sentence in it to quote. Encoded, the same call is refused in the daemon's own words. */
+/* AND A CALL THAT IS MADE STAYS ON ITS ROUTE. */
     it(`keeps an account route on its route for a provider id carrying a slash`, () => {
         expect(providerBase(TRIAL_PROVIDER)).toBe(`/accounts/${encodeURIComponent(TRIAL_PROVIDER)}`);
         expect(sandboxRouteName(`POST`, `${providerBase(TRIAL_PROVIDER)}/login/start`)).toBe(`accounts.start`);

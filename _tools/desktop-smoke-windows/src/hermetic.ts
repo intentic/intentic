@@ -35,10 +35,7 @@ const restore = (key: string, value: string | undefined): void => {
     process.env[key] = value;
 };
 
-/* The cold OS launch inherits this process's environment through PowerShell's Start-Process. That gives tier 1
- * a real link and real installed app without giving the setup it starts access to a real platform, Docker, or
- * CLI. The fake executables are deliberately failing after they prove the handoff happened: this tier owns the
- * window and packaging path; the nightly owns a successful sandbox setup with the real programs. */
+/* The cold OS launch inherits this process's environment through PowerShell's Start-Process. */
 export const prepareHermeticDesktop = async (configuredAppUrl: string | undefined): Promise<HermeticDesktop> => {
     let workspaceRequested = false;
     const server = createServer((request, response) => {

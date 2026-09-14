@@ -62,10 +62,7 @@ export const lineStat = (before: string, after: string): LineStat | undefined =>
     return { additions: added.length - common, deletions: removed.length - common };
 };
 
-/**
- * Reads one side with comments stripped; the app runs this in a worker, the daemon in-process. Undefined when there's
- * no grammar for the file.
- */
+/** Reads one side with comments stripped; the app runs this in a worker, the daemon in-process. */
 export type Analyze = (text: string, lang: string | undefined) => Promise<CodeAnalysis | undefined>;
 
 /** Same counts with every comment stripped from both sides, or undefined when the file can't be stripped. */

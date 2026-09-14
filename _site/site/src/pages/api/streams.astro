@@ -5,9 +5,7 @@ import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
 import ReferenceLayout from "../../components/ReferenceLayout.astro";
 import { openApiDocument } from "../../lib/api-reference";
 
-/* THE STREAMING ROUTES, FOUND RATHER THAN LISTED. A route becomes a stream by answering `text/event-stream`,
- * which is a fact the generated document already carries, so this table is a filter over it. The version of
- * this page that lived under /developers listed four by hand and had missed two by the time it was read. */
+/* THE STREAMING ROUTES, FOUND RATHER THAN LISTED. */
 const document = await openApiDocument();
 const paths = (document.paths ?? {}) as Record<string, Record<string, { operationId?: string; summary?: string; responses?: Record<string, { content?: Record<string, unknown> }> }>>;
 

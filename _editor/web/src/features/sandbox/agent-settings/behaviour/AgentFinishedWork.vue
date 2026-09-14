@@ -43,10 +43,7 @@ const RETENTION_OPTIONS = [
     <RowGroup label="Finished work">
         <template #info><FinishedWorkInfo /></template>
 
-        <!--
-            Daemon-side, not a browser preference, since automation-opened agents (Discord, webhooks, email) finish with
-            no browser present. Off by default; per-agent exceptions live on the review panel's hold toggle.
-        -->
+<!-- Daemon-side, not a browser preference, since automation-opened agents (Discord, webhooks, email) finish with no browser present. -->
         <Row
             icon="download"
             title="Land finished work automatically"
@@ -57,10 +54,7 @@ const RETENTION_OPTIONS = [
             </template>
         </Row>
 
-        <!--
-            The Finished lane has no other exit, so without a sweep the board and its worktrees grow indefinitely.
-            Archiving is lossless (diffs and history are kept); "Never" keeps every checkout instead.
-        -->
+<!-- The Finished lane has no other exit, so without a sweep the board and its worktrees grow indefinitely. -->
         <Row
             icon="box"
             title="Archive finished agents"

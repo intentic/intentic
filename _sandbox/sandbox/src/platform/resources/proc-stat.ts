@@ -1,13 +1,6 @@
 import { readFileSync } from "node:fs";
 
-/* Linux procfs's process identity and the fields this daemon reads from it, parsed once.
- *
- * A pid is only an address into the process table: after a container restart the sandbox daemon commonly gets
- * pid 7 again. The start-time tick is the kernel's identity for that occupant of the address, and is what makes
- * a persisted claim belong to one process rather than to every future process that reuses its pid.
- *
- * `comm` is parenthesized and may itself contain spaces or `)`, so fields are split only after its LAST closing
- * parenthesis. The returned indexes are Linux proc_pid_stat(5)'s fields 4, 5, 14+15 and 22. */
+/* Linux procfs's process identity and the fields this daemon reads from it, parsed once. */
 
 export interface ParsedProcStat {
     readonly ppid: number;

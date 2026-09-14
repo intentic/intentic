@@ -160,7 +160,7 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
                     </div>
 
                     <!-- Leaves a share of commands raw so savings are measured against a real baseline, not just estimated. -->
-                    <!-- Extra top margin here: what sits above is a grid of switches, not a short description, so it needs more separation. -->
+                    <!-- Extra margin separates output from the switch grid above. -->
                     <MeasurementPanel
                         class="mt-3"
                         :percent="holdoutPercent"
@@ -174,10 +174,7 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
             </template>
         </Row>
 
-        <!--
-            Hero figure with freshness and context under it, not run-on prose; the per-mechanism breakdown lives on the
-            Usage tab. Rendered as a `Verdict` in `#below`, not `#description`, so absence ("Nothing yet") reads as a state.
-        -->
+<!-- Hero figure with freshness and context under it, not run-on prose; the per-mechanism breakdown lives on the Usage tab. -->
         <Row spine icon="wave-pulse" title="Output savings">
             <template #below>
                 <div class="flex flex-col gap-3">
@@ -188,12 +185,7 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
                         :detail="savingsVerdict.detail"
                         :evidence="savingsVerdict.evidence"
                     />
-                    <!--
-                        Grouped by the command a handler would be written against and ranked by what those runs still cost, answering
-                        "what deserves a handler" rather than "biggest single run"; the count shows because cost across many runs is
-                        what justifies writing one. The figure is what reached the assistant, so a command the cap already emptied is
-                        absent rather than top of the list.
-                    -->
+                    <!-- Savings are grouped by command and ranked by total. -->
                     <div v-if="savings !== undefined && savings.input.gaps.length > 0" class="flex flex-col gap-1">
                         <div class="flex items-baseline justify-between gap-2">
                             <p class="text-2xs font-medium uppercase tracking-wide text-subtle">Un-cleaned (add a handler)</p>

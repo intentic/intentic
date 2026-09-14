@@ -19,9 +19,7 @@ describe(`lanesFor`, () => {
         expect(lanesFor({ address: no, hosted: hosting(1), hasMachine: false })).toEqual({ kind: `takeable` });
     });
 
-    /* A resumed hosted sandbox: the hardware exists, so what the platform says about NEW machines is beside the
-     * point. Reading the offers alone would tell somebody watching their own box boot that there is nothing to
-     * take. */
+/* A resumed hosted sandbox: the hardware exists, so what the platform says about NEW machines is beside the point. */
     test(`hardware already on the row outranks every offer`, () => {
         expect(lanesFor({ address: no, hosted: hosting(0), hasMachine: true })).toEqual({ kind: `takeable` });
         expect(lanesFor({ address: lost, hosted: lost, hasMachine: true })).toEqual({ kind: `takeable` });
@@ -36,8 +34,7 @@ describe(`lanesFor`, () => {
         expect(lanesFor({ address: no, hosted: hosting(0), hasMachine: false })).toEqual({ kind: `spent` });
     });
 
-    /* THE ONE THIS MODULE EXISTS FOR. A dropped request used to read as "this platform provisions nothing" and
-     * moved the reader onto the domain form. Not knowing is a retry. */
+/* THE ONE THIS MODULE EXISTS FOR. */
     test(`a read that failed is not a platform that said no`, () => {
         expect(lanesFor({ address: lost, hosted: lost, hasMachine: false })).toEqual({ kind: `unreachable` });
     });

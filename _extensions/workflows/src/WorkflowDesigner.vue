@@ -29,8 +29,7 @@ const settingsAnchor = ref<HTMLElement>();
 const settings = ref<InstanceType<typeof Popover>>();
 const gatePanel = ref<InstanceType<typeof Popover>>();
 
-// Resets the draft when `initial` changes, so reopening on a different workflow can't silently keep editing the last
-// one.
+// Reset the draft when the selected workflow changes.
 watch(
     () => initial,
     (next) => {

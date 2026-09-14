@@ -297,15 +297,7 @@ export const showActiveProvider = (): void => {
         return;
     }
     const target = active.value.provider.value;
-    /* AND ONLY ONTO A PROVIDER THE CARD MANAGES. The card is where a credential is added or dropped, and a
-     * provider that has no sign-in (an endpoint, an ACP agent) has neither: it carries its own credential, has
-     * no chip in the switcher and no label of its own there, so following a chat onto one leaves the card
-     * showing rows for a provider it cannot connect, under a raw id, with no chip lit.
-     *
-     * Which is the state a fresh sandbox opened in: nothing connected parks the first chat on the free trial
-     * (useChat-accounts' repoint pass), the card followed it, and the row it drew offered a sign-in that
-     * answers 404. Staying put leaves the card on the last provider it was pointed at, which resetChat seeds
-     * from the user's own remembered pick and is always one of the switcher's own. */
+    /* Connection changes apply only to providers managed by the card. */
     if (!hasSignIn(target)) {
         return;
     }

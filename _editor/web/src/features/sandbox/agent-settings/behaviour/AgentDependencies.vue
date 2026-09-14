@@ -5,13 +5,7 @@ import { computed } from "vue";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useSavings } from "../../usage/useSavings";
 
-/* WHAT THE ASSISTANT REACHES FOR WHEN IT ADDS A DEPENDENCY, and whether anything checks the version it picked
- * before it lands.
- *
- * It belongs in this group rather than beside the code-search rows because it is about the same moment those
- * are: the assistant is working, it needs a fact, and the question is whether it looks the fact up or recalls
- * it. Search is that question about the project's own code; this is it about everything the project depends
- * on, where a recalled answer carries the publication date of the model rather than of the registry. */
+/* WHAT THE ASSISTANT REACHES FOR WHEN IT ADDS A DEPENDENCY, and whether anything checks the version it picked before it lands. */
 
 const { settings, patch } = useSandboxSettings();
 const { savings } = useSavings({});
@@ -63,10 +57,7 @@ const verdict = computed(() => {
                     @update:model-value="(dependencyFreshness: string) => patch({ dependencyFreshness: dependencyFreshness as DependencyFreshness })"
                 />
             </template>
-            <!-- One line per state, saying what changes rather than repeating the label. The middle and right
-                 states differ in KIND, not in strength: one reports what a registry publishes, the other adds
-                 a judgement about which package to reach for, and a user picking between them deserves to be
-                 told that is the difference. -->
+<!-- One line per state, saying what changes rather than repeating the label. -->
             <template #below>
                 <div class="flex flex-col gap-3">
                     <p v-if="settings?.dependencyFreshness === `versions`" class="text-2xs text-muted">

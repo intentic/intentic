@@ -97,7 +97,7 @@ const write = (sandboxId: string, session: StoredSession, broadcast = true): voi
     sessions.value = { ...sessions.value, [sandboxId]: session };
     storeValue(storageKey(sandboxId), JSON.stringify(session));
     if (broadcast) {
-        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel, not window: this postMessage takes no targetOrigin
+        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin.
         channel?.postMessage({ kind: `write`, sandboxId, session } satisfies SessionMessage);
     }
 };
@@ -321,7 +321,7 @@ const invalidateSession = (sandboxId = activeSandboxId.value, broadcast = true):
     sessions.value = rest;
     removeStoredValue(storageKey(sandboxId));
     if (broadcast) {
-        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel, not window: this postMessage takes no targetOrigin
+        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin.
         channel?.postMessage({ kind: `invalidate`, sandboxId } satisfies SessionMessage);
     }
 };
@@ -349,7 +349,7 @@ const clearSessions = (broadcast = true): void => {
         removeStoredValue(key);
     }
     if (broadcast) {
-        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel, not window: this postMessage takes no targetOrigin
+        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin.
         channel?.postMessage({ kind: `clear` } satisfies SessionMessage);
     }
 };

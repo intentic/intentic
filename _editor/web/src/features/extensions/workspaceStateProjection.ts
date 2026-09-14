@@ -58,7 +58,7 @@ export const projectWorkspaceState = (graphRaw: unknown, statusRaw: unknown): Wo
     for (const step of status?.steps ?? []) {
         steps.set(step.id, step);
     }
-    // oxlint-disable-next-line oxc/no-map-spread -- builds a fresh immutable ResourceView per node; the conditional url spread creates a new object, not an in-place mutation
+    // oxlint-disable-next-line oxc/no-map-spread -- Each projection is a fresh immutable resource view.
     const resources: ResourceView[] = Object.values(graph.resources).map((node) => {
         const url = urlOf(node.inputs);
         const step = steps.get(node.id);

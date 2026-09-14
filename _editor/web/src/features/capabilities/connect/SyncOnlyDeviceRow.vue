@@ -1,8 +1,4 @@
-<!--
-    A machine this sandbox already reaches, listed on the card that would give it the door it lacks. It is not a
-    connection of this card — desktop sync grants no shell, and nothing here can run a command on it — so the row
-    carries no settings, no rename and no remove: only the one step it is missing.
--->
+<!-- A machine this sandbox already reaches, listed on the card that would give it the door it lacks. -->
 <script setup lang="ts">
 import { Button, Row, StatusBadge } from "@intentic/ui";
 import type { DeviceConnection } from "../model/deviceConnections";
@@ -22,11 +18,7 @@ const emit = defineEmits<{ connect: [] }>();
             </span>
         </template>
         <template #description>
-            <!--
-                One line that gives way in a deliberate order. The note is the whole reason this row is on this card,
-                so it is the part that must survive a narrow column; the detail is what shrinks, and a hostname stays
-                recognisable from its head with the rest one hover away.
-            -->
+<!-- One line that gives way in a deliberate order. -->
             <span class="flex min-w-0 items-baseline gap-1">
                 <span v-if="device.detail" class="min-w-0 truncate font-mono text-subtle" :title="device.detail">{{ device.detail }}</span>
                 <span v-if="device.detail" class="shrink-0 text-subtle">·</span>

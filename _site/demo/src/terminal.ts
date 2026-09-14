@@ -1,11 +1,7 @@
 import type { TerminalServerMessage } from "@intentic/sandbox-contract";
 import type { DemoSession, DemoSocket } from "./transport";
 
-/* THE TERMINAL, recorded. `/system/terminal` carries the pane's bytes as BINARY frames and everything the daemon
- * has to say as JSON (TerminalServerMessage), and xterm renders whatever bytes arrive, so a replay is
- * indistinguishable from a live pane as far as the panel is concerned, escape codes and all. This is the agent's
- * own tmux session for the featured turn: the test run its Bash tool call makes, as the visitor would have
- * watched it happen. */
+/* THE TERMINAL, recorded. */
 
 const BOLD = `\u001b[1m`;
 const DIM = `\u001b[2m`;

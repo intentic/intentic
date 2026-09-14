@@ -62,7 +62,7 @@ const flush = (): void => {
     const now = Date.now();
     const ready: RuntimeDomain[] = [];
     let soonest: number | undefined;
-    // oxlint-disable-next-line unicorn/no-useless-spread -- the loop body deletes from `pending`; the spread is the snapshot that makes iterating-while-removing obviously safe.
+    // oxlint-disable-next-line unicorn/no-useless-spread -- The spread snapshots pending before deletion.
     for (const domain of [...pending]) {
         const allowedAt = nextAllowedAt.get(domain) ?? 0;
         if (allowedAt > now) {
@@ -83,10 +83,7 @@ const flush = (): void => {
     }
 };
 
-/**
- * Reports a runtime domain moved; coalesced and rate-limited per domain, so a caller can publish on every mutation
- * without weighing the cost. Dropped, not queued, when nobody's connected, since a new connection re-asks everything.
- */
+/** Reports a runtime domain moved; coalesced and rate-limited per domain, so a caller can publish on every mutation without weighing the cost. */
 export const publishRuntimeChange = (...domains: readonly RuntimeDomain[]): void => {
     if (subscribers.size === 0) {
         return;
@@ -218,10 +215,7 @@ const sampler = createRuntimeSampler();
 // as anything is subscribed.
 let unwatchPrompts: (() => void) | undefined;
 
-/**
- * Subscribes a /events connection to the runtime feed. The sampled half runs only while at least one subscriber holds
- * it: no browser, no looking.
- */
+/** Subscribes a /events connection to the runtime feed. */
 export const subscribeRuntimeChanges = (listener: (domains: RuntimeDomain[]) => void): (() => void) => {
     subscribers.add(listener);
     sampler.start();

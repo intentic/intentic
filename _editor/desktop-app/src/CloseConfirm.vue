@@ -6,27 +6,7 @@ import { onMounted, onUnmounted, ref } from "vue";
 import { closeWorkspace, type CloseAction } from "./desktop";
 import { useFitToContent } from "./fitWindow";
 
-/* WHAT THE × DOES: asked before it does it.
- *
- * Closing this app's window does not close the app: it steps into the tray and keeps running, which is a fine
- * deal only if the user is in on it. They were not. The window vanished and an OS message box announced, after
- * the fact, that Intentic was "still running": a report with one button, and a native box whose icon is what
- * makes Windows play the alert chime at it. Nothing had gone wrong, and it sounded like something had.
- *
- * So: a question, before anything moves, in this app's own window (windows.rs, which is also the only way to
- * draw it without the chime). Two answers, both of them real, each saying what it costs. The lede is the fact
- * that makes the choice safe either way, and it is first because it is the thing nobody knew.
- *
- * The tray note is the whole reason the old notice existed, kept and moved to where it is useful: beside the
- * option it is about, at the moment that option is being chosen, rather than after the icon has already
- * disappeared into the overflow. Windows only: it is Windows that files new tray icons behind the arrow.
- *
- * AND IT IS A CARD, NOT A WINDOW. It used to open as an ordinary OS window: a title bar reading "Close
- * Intentic?" above a heading reading "Close Intentic?", and a frame sized by guesswork with room to spare at
- * the bottom. The window has no decorations now; this page draws the header (draggable, with its own small ×
- * that means cancel) and reports its height so the window is exactly as tall as the two answers
- * (fitWindow.ts, windows.rs `fit_to_content`).
- */
+/* WHAT THE × DOES: asked before it does it. */
 const remember = ref(false);
 const keep = ref<HTMLButtonElement | undefined>(undefined);
 const content = ref<HTMLElement | undefined>(undefined);
@@ -57,8 +37,7 @@ onUnmounted(() => window.removeEventListener(`keydown`, onKey));
 <template>
     <div class="h-dvh overflow-auto bg-canvas text-content">
         <div ref="content" class="flex flex-col gap-4 p-5">
-            <!-- The header is the title bar: the drag region, and the × that backs out. The text is inert to
-                 the pointer so a press anywhere on the row is a press on the row. -->
+            <!-- The header is the title bar, while its text cannot intercept row clicks. -->
             <header data-tauri-drag-region class="flex items-start gap-3 select-none">
                 <div class="pointer-events-none flex min-w-0 flex-1 flex-col gap-1">
                     <h1 class="text-base font-semibold">Close Intentic?</h1>
@@ -69,8 +48,7 @@ onUnmounted(() => window.removeEventListener(`keydown`, onKey));
                 </button>
             </header>
 
-            <!-- Two answers as two things to press, not a radio group and a confirm button: every extra step here
-                 is one taken by somebody who has already said what they want by clicking the ×. -->
+<!-- Two answers as two things to press, not a radio group and a confirm button. -->
             <div class="flex flex-col gap-2">
                 <button
                     ref="keep"
@@ -101,9 +79,7 @@ onUnmounted(() => window.removeEventListener(`keydown`, onKey));
                 </button>
             </div>
 
-            <!-- The one control that retires this dialog for good, which is what makes asking at all defensible.
-                 Cancelling is the header's × (and Escape): a third button for it was a second way to say the
-                 same thing, on a card whose whole point is being short. -->
+<!-- The one control that retires this dialog for good, which is what makes asking at all defensible. -->
             <label class="flex cursor-pointer items-center gap-2 text-2xs text-muted">
                 <Checkbox v-model="remember" :binary="true" />
                 <span>Always do this: don't ask again</span>

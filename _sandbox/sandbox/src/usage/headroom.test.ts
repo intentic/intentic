@@ -4,9 +4,7 @@ import { expect, test, vi } from "vitest";
 import type { AccountUsageStore } from "./account-usage.js";
 import { createHeadroomService, FRESH_MS, type HeadroomReading, type HeadroomSource, type HeadroomTarget } from "./headroom.js";
 
-/* WHEN A READING IS TAKEN, which is the whole of what this service decides: the readers are stood up as
- * counting stubs, and what is pinned is the freshness bound, the scope, the coalescing, the stay-away, and
- * the announcement every write makes. */
+/* WHEN A READING IS TAKEN, which is the whole of what this service decides: the readers are stood up as counting stubs. */
 
 const silent = pino({ level: "silent" });
 const NOW = 1_700_000_000_000;

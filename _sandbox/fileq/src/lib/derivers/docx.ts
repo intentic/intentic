@@ -3,10 +3,7 @@ import { bodyOf, parseHtml } from "@intentic/webq/dom";
 import { renderMarkdown } from "@intentic/webq/markdown";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
-/* Word documents: mammoth maps the docx to semantic HTML (headings, lists, tables — its whole reason to
- * exist), and webq's DOM → markdown writer takes it from there. Reusing that writer is deliberate: it is the
- * battle-tested "markdown for an agent reader" pen (no escaping noise, real tables, flow handling), and a
- * second pen here would drift from it one convention at a time. */
+/* Word documents: mammoth maps the docx to semantic HTML (headings, lists, tables — its whole reason to exist). */
 
 // mammoth emits a warning per construct it cannot map. On a heavily-styled corporate document that is dozens
 // of near-identical lines; a handful tells the reader the conversion was lossy, a wall of them buries it.

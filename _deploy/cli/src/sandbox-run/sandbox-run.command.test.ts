@@ -1,9 +1,7 @@
 import { expect, test } from "vitest";
 import { seeded } from "./sandbox-run.command.js";
 
-/* The seed protocol, as arithmetic on pairs: the probe container's own environment carries nothing the runner
- * did not put there, so each of the three names reads as one of three instructions. The spawn-driven sibling
- * (sandbox-run.command.integration.test.ts) proves the same thing through a real `-e`; this pins the rules. */
+/* The seed protocol, as arithmetic on pairs: the probe container's own environment carries nothing the runner did not put there. */
 
 const dumped: [string, string][] = [
     ["OWNER_EMAIL", "a@b.c"],
@@ -24,9 +22,7 @@ test("a seed with a value replaces the old pair: a fresh ask outranks what the c
     expect(pairs).toContainEqual(["SANDBOX_RUNTIME", "--privileged"]);
 });
 
-/* CLEARING is the shape only a deliberate `reshape … default` produces. The runners never forward a blank from
- * their own shell (ic drops one before it reaches the probe), so an empty value here is always an instruction:
- * back to the derived cap, no CPU ceiling, no owner directives. */
+/* Clearing removes empty seeded values; reshaping is explicit. */
 test("an empty seed clears the pair rather than reading as no seed", () => {
     const pairs = seeded(dumped, { SANDBOX_MEMORY: "", SANDBOX_RUNTIME: "   " });
     expect(pairs.map(([name]) => name)).not.toContain("SANDBOX_MEMORY");

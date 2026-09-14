@@ -66,14 +66,7 @@ export const hostedFleet = async (prisma: PrismaClient, config: Config): Promise
     return entries.toSorted((left, right) => ORDER[left.role] - ORDER[right.role] || left.appName.localeCompare(right.appName));
 };
 
-/* BACKFILLS THE OWNER STAMP onto machines that were created before the platform wrote one (fly.ts
- * FLY_META_OWNER). New and re-configured machines carry it already; a stopped machine nobody has claimed or
- * rebuilt since would otherwise never get one, which is precisely the fleet somebody is squinting at in the Fly
- * console asking whose each machine is.
- *
- * Writes one metadata key per machine, never a config: nothing restarts, nothing wakes, and a machine that is
- * already stamped is skipped so re-running this costs almost nothing. Best effort per machine — a Fly refusal on
- * one is reported and the rest still get stamped. */
+/* Backfill the owner stamp on machines created before it was written. */
 export const stampHostedOwners = async (
     prisma: PrismaClient,
     config: Config,

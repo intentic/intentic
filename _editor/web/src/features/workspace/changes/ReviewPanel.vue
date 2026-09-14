@@ -800,17 +800,7 @@ const stageHint = computed<string | undefined>(() => {
     return pushFlow.stage.value === `pushing` ? `Sending ${pushFlow.pending.value?.what ?? `your commits`} to the remote` : undefined;
 });
 
-/* WHAT A CLOSED CARD LEAVES BEHIND, on the control that raised it. Closing the card said "off my screen", not "that
- * never happened": the check still failed and the push still hasn't gone, so the block that spent three minutes
- * finding that out keeps saying it, and a press puts the whole card back at no cost. Without this the only route to
- * a verdict already reached is running the suite again to reach it a second time.
- *
- * The age is the point of the line. A verdict is about the files as they were, so "4m ago" is what makes it
- * trustworthy, and a tree written to since demotes it: still shown, no longer the answer.
- *
- * That demotion gets a LINE OF ITS OWN rather than a third clause, and this column is why: at 270px a third
- * clause truncates to "files c…", which is the one reading that says nothing at all. The stacked pair is the
- * shape the running state next door already uses for the same reason. */
+/* Closing a card hides its question but does not change the verdict. */
 const heldLine = computed<string | undefined>(() => {
     const held = pushFlow.held.value;
     return held === undefined ? undefined : `${held.question.title} · ${timeAgo(held.at, { now: now.value })}`;
@@ -912,15 +902,9 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
 
 <template>
     <div class="flex min-h-0 flex-1 flex-col">
-        <!--
-            No header row of its own: the mode switch above already reads "Changes" with the count. The panel's two
-            panel-wide actions (history, refresh) live on that switch's row instead (WorkspaceDesktop).
-        -->
+<!-- No header row of its own: the mode switch above already reads "Changes" with the count. -->
 
-        <!--
-            The one genuinely panel-wide failure: the review set itself couldn't be read, so nothing below is
-            trustworthy. Every other error belongs to a row or the commit box.
-        -->
+<!-- The one genuinely panel-wide failure: the review set itself couldn't be read, so nothing below is trustworthy. -->
         <div v-if="changes.error.value" :class="[NOTICE, 'mx-2 mt-2 shrink-0']">
             <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
             <div class="min-w-0 flex-1">
@@ -931,10 +915,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
 
         <!-- Commit box first (VSCode's placement). It records the index — staging is the selection. -->
         <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 p-2">
-            <!--
-                A textarea: a landed sentence's trailer, or a hand-typed body, needs somewhere to go. The placeholder answers
-                the click directly — a chip still drafting, or one with nothing coming, says so right where the sentence would land.
-            -->
+<!-- A textarea: a landed sentence's trailer, or a hand-typed body, needs somewhere to go. -->
             <textarea
                 ref="commitBox"
                 v-model="commitMessage"
@@ -944,11 +925,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 @keydown.ctrl.enter="doCommit"
                 @keydown.meta.enter="doCommit"
             ></textarea>
-            <!--
-                The draft's full report, one row per model, while a message is being written or after it fails; a draft that
-                ends well takes its report with it, since the message in the box is report enough. A table, not a paragraph, so status, clock and
-                reason each get their own column.
-            -->
+            <!-- Draft reports remain visible while a message is writing or failing. -->
             <div v-if="filterDraftRows.length > 0" class="flex flex-col gap-px rounded-md bg-overlay/60 px-1.5 py-1">
                 <div v-for="row in filterDraftRows" :key="row.key" class="flex min-w-0 items-center gap-1.5 leading-snug" v-tooltip.right="row.title">
                     <!-- Every glyph is one em square, so the column self-aligns with no width set on it. -->
@@ -958,10 +935,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         class="shrink-0 text-3xs"
                         :class="STEP_MARKS[row.status].tone"
                     />
-                    <!--
-                        The model stays ahead of the reason and is capped at the chips' own width, so a long tiered name can't push
-                        the reason (the part that differs row to row) off the edge; its full form is one tooltip away.
-                    -->
+<!-- The model stays ahead of the reason and is capped at the chips' own width. -->
                     <span
                         v-if="row.model !== undefined"
                         class="max-w-28 shrink-0 truncate text-2xs"
@@ -976,18 +950,12 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     <span class="w-7 shrink-0 text-right text-2xs tabular-nums text-subtle">{{ row.elapsed }}</span>
                 </div>
             </div>
-            <!--
-                What the commit will record, then the button that records it; no checkboxes, since the sentence is a readout of the index, not a
-                control.
-            -->
+            <!-- The commit summary is a readout, not a set of checkboxes. -->
             <div class="flex items-center gap-1">
                 <span v-if="blockedByConflicts" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-danger">
                     Resolve conflicts first
                 </span>
-                <!--
-                    Where the commit is happening — the one thing the button beside it can't say. Ahead of the staged count, which no longer applies
-                    mid-commit.
-                -->
+                <!-- Where the commit is happening — the one thing the button beside it can't say. -->
                 <span v-else-if="commitRunning" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">
                     Committing {{ committingNow.join(`, `) }}…
                 </span>
@@ -999,10 +967,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 >
                     {{ blockerNotice }}
                 </span>
-                <!--
-                    The lit chip's answer, for the one case the placeholder can't show: the box holds the user's own text.
-                    Ahead of the staged readout, since it explains a click that looked like it did nothing — the more urgent question.
-                -->
+<!-- The lit chip's answer, for the one case the placeholder can't show: the box holds the user's own text. -->
                 <span
                     v-else-if="boxIsYours && chipNotice"
                     class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted"
@@ -1016,7 +981,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     >
                     <template v-else>nothing staged</template>
                 </span>
-                <!-- Says so mid-commit rather than just going flat — the wait can include a stage, hooks, a re-read and a queued land. -->
+                <!-- The commit action reports progress while stages, hooks, and reads run. -->
                 <Button
                     size="small"
                     severity="success"
@@ -1038,10 +1003,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     <Icon :name="commitRunning ? `spinner` : `check`" :spin="commitRunning" />{{ commitRunning ? `Committing…` : commitLabel }}
                 </Button>
             </div>
-            <!--
-                A warning, not a gate — the commit is the user's to make, and `reset --soft` undoes it. What this adds is the
-                repos nobody is writing, committable in one click, without waiting on the ones that are.
-            -->
+<!-- A warning, not a gate — the commit is the user's to make, and `reset --soft` undoes it. -->
             <div v-if="atRisk.length > 0" :class="WARNING">
                 <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
                 <div class="min-w-0 flex-1">
@@ -1063,10 +1025,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     </Button>
                 </div>
             </div>
-            <!--
-                A different question from the write-race warning above: the index already froze these files; this just says the session has more
-                coming.
-            -->
+            <!-- This warning reports unfinished work after the index has already been frozen. -->
             <div v-if="unfinished.length > 0" :class="WARNING">
                 <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-warning" />
                 <p class="min-w-0 flex-1 break-words text-2xs text-warning">
@@ -1096,10 +1055,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             </div>
         </div>
 
-        <!--
-            One block, two states, never both: at rest the sync every repo needs, in flight the run in the button's own
-            place. The only place the remote is mentioned now — the per-row pills it replaced turned every row into a remote dashboard.
-        -->
+<!-- One block, two states, never both: at rest the sync every repo needs, in flight the run in the button's own place. -->
         <div
             v-if="outgoing !== undefined"
             class="relative flex shrink-0 items-center gap-1.5 px-2 py-1.5"
@@ -1117,10 +1073,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     <span class="truncate whitespace-nowrap text-2xs" :class="checkOverrun ? `text-content` : `text-muted`">{{ stageLine }}</span>
                     <span v-if="mobile && stageHint" class="truncate whitespace-nowrap font-mono text-3xs text-subtle">{{ stageHint }}</span>
                 </span>
-                <!--
-                    Drawn only where a terminal exists — a sandbox without the tmux wrapper ran the suite invisibly, and a button to nothing is worse
-                    than none.
-                -->
+                <!-- Show terminal controls only when a terminal exists. -->
                 <button
                     v-if="pushFlow.running.value && pushFlow.terminal.value !== undefined"
                     type="button"
@@ -1131,10 +1084,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 >
                     <Icon name="terminal" class="text-2xs" />
                 </button>
-                <!--
-                    Stopping the suite isn't cancelling the push — it settles as stopped and the push still waits on an answer.
-                    Wears this panel's own secondary-button shape rather than a bare word, so it's visibly pressable.
-                -->
+<!-- Stopping the suite isn't cancelling the push — it settles as stopped and the push still waits on an answer. -->
                 <Button
                     v-if="pushFlow.stage.value === `checking`"
                     size="small"
@@ -1146,11 +1096,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     Stop
                 </Button>
             </template>
-            <!--
-                The verdict the card was closed on, kept where the press that raised it lives. The line itself is the
-                way back into it: a separate "Show" button beside a Push that already reopens it would be two controls
-                for one thought, in a column that has room for neither.
-            -->
+<!-- The verdict the card was closed on, kept where the press that raised it lives. -->
             <template v-else-if="outgoing === `held`">
                 <Icon
                     name="exclamation-triangle"
@@ -1183,10 +1129,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             </template>
             <template v-else>
                 <span class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted" v-tooltip.right="syncHint">{{ syncSummary }}</span>
-                <!--
-                    Fetch lives with the number it refreshes, and there's one of it now: its scope is every repo with a remote,
-                    the only scope at which the count is worth trusting (a per-repo fetch left the rest of the summary just as stale).
-                -->
+<!-- Fetch lives with the number it refreshes, and there's one of it now: its scope is every repo with a remote. -->
                 <button
                     type="button"
                     :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
@@ -1197,19 +1140,13 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 >
                     <Icon name="sync" class="text-2xs" />
                 </button>
-                <!--
-                    No `running` in the disabled check anymore — the flow takes the whole block over, so there's no dead Push beside its own
-                    progress.
-                -->
+                <!-- The flow owns the block while running, so Push has no separate disabled state. -->
                 <Button size="small" :severity="syncSeverity" class="shrink-0 whitespace-nowrap" :disabled="changes.actionBusy.value" @click="doSync">
                     <Icon :name="syncMeta!.icon" />{{ syncMeta!.label }}
                 </Button>
             </template>
 
-            <!--
-                The block's own bottom edge doubles as the progress bar, so the wait is drawn in pixels the panel already
-                spends. Determinate against the remembered duration; a pulse when there's none yet; stops short of 100%.
-            -->
+<!-- The block's own bottom edge doubles as the progress bar, so the wait is drawn in pixels the panel already spends. -->
             <div v-if="pushFlow.stage.value === `checking`" class="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 overflow-hidden">
                 <div
                     v-if="checkFill !== undefined"
@@ -1238,10 +1175,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             </button>
         </div>
 
-        <!--
-            Whose work is in the tree, one line, only when an agent landed something; each chip is a filter. A chip is a
-            logo and a file count, not a title — the identity is a hover away, on the same card the file rows and chat tab strip raise.
-        -->
+<!-- Whose work is in the tree, one line, only when an agent landed something; each chip is a filter. -->
         <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 px-2 py-1.5">
             <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">From</span>
             <button
@@ -1261,24 +1195,15 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     originMark(entry.id) ? `, ${originMark(entry.id)!.label.toLowerCase()}` : ``
                 }${originDrafting(entry.id) ? `; its commit message is being written` : originTitle(entry.id) ? `; names the commit` : ``}`"
             >
-                <!--
-                    A dot before the logo means the session hasn't finished — its count above is an instalment, not a total.
-                    Placed before the 11px logo, since the logo itself has no room to carry a mark.
-                -->
+<!-- A dot before the logo means the session hasn't finished — its count above is an instalment, not a total. -->
                 <span v-if="originMark(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full" :class="originMark(entry.id)!.dot"></span>
-                <!--
-                    The same slot, spent on a different wait: the chip's commit-message sentence still being written. Pulses so it can't be mistaken
-                    for the static unfinished dot.
-                -->
+                <!-- The same slot, spent on a different wait: the chip's commit-message sentence still being written. -->
                 <span v-else-if="originDrafting(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60"></span>
                 <ProviderLogo v-if="originProvider(entry.id)" :provider="originProvider(entry.id)!" class="shrink-0 text-2xs" />
                 <Icon v-else name="sparkles" class="shrink-0 text-2xs" />
                 <span v-if="originFilter === entry.id" class="min-w-0 truncate">{{ originLabel(entry.id) }}</span>
                 <span class="shrink-0 opacity-70">{{ entry.files }}</span>
-                <!--
-                    The way out, drawn only on the chip that's hiding rows: a cross means "clear this" without a word, since
-                    dimming the others signals a filter is on but not how to end it.
-                -->
+<!-- The way out, drawn only on the chip that's hiding rows: a cross means "clear this" without a word. -->
                 <Icon v-if="originFilter === entry.id" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
             </button>
             <button
@@ -1295,22 +1220,18 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
         </div>
 
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
-            <!-- The wait before the first answer, and only that: a refresh over an answer already on screen keeps the answer, since a workspace
-                 being written to re-reads this list about once a second. An error above is the answer instead, so neither line shows under one. -->
+            <!-- Loading appears only before the first answer. -->
             <p v-if="!changes.loaded.value && !changes.error.value" class="px-3 py-2 text-2xs text-subtle">Loading changes…</p>
-            <!-- A clean tree says so explicitly, rather than leaving a mostly-empty column with nothing claiming the emptiness is the answer. -->
+            <!-- An explicitly clean tree distinguishes empty results from missing data. -->
             <p v-else-if="changes.loaded.value && changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">No uncommitted changes.</p>
             <!-- A lit chip over an empty list says so too — otherwise a filtered-to-nothing tree reads as having lost its files. -->
             <p v-else-if="dirty.length === 0 && filterLabel" class="px-3 py-2 text-2xs text-subtle">
                 Nothing from {{ filterLabel }} is left in the tree.
             </p>
 
-            <!--
-                Repos git refused to scan still get a row (with git's own reason), rather than silently disappearing; no actions, since there's
-                nothing to act on.
-            -->
+            <!-- Unscannable repositories remain visible with Git's reason and no actions. -->
             <div v-for="group in unscannable" :key="group.repo" class="mt-1 px-1 first:mt-0">
-                <!-- The triangle takes the chevron's slot, so an unreadable repo lines up with the readable ones instead of getting an extra glyph. -->
+                <!-- The warning icon occupies the chevron slot so rows stay aligned. -->
                 <div class="flex min-w-0 items-center gap-1.5 rounded-md py-1.5 pl-1 pr-1">
                     <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-danger" />
                     <span class="min-w-0 truncate text-xs font-medium text-content">{{ group.repo }}</span>
@@ -1323,36 +1244,27 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </div>
             </div>
 
-            <!--
-                A committing repo's rows stay listed (genuinely still uncommitted) but dim, since acting on them would just queue behind the daemon's
-                own repo lock.
-            -->
+            <!-- Committing repositories stay listed but dim while their lock is held. -->
             <div
                 v-for="group in dirty"
                 :key="group.repo"
                 class="group/repo mt-1 px-1 transition-opacity first:mt-0"
                 :class="changes.committing.value.includes(group.repo) && `pointer-events-none opacity-50`"
             >
-                <!--
-                    One row per repo, about the files under it: identity, then the sole side's rank/verb, then discard. Nothing
-                    about the remote anymore — ahead/behind, publish and fetch all moved to the outgoing block above the list.
-                -->
+<!-- One row per repo, about the files under it: identity, then the sole side's rank/verb, then discard. -->
                 <div class="ui-row-select flex items-center gap-1 rounded-md pr-1">
                     <button
                         type="button"
                         class="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pl-1 text-left max-md:min-h-11"
                         @click="toggleGroup(group.repo)"
                     >
-                        <!-- The chevron is the whole lead now; a repository glyph beside it said only what the panel itself already says. -->
+                        <!-- The chevron is the repository row's only leading icon. -->
                         <Icon class="shrink-0 text-2xs text-subtle" :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'" />
-                        <!--
-                            Both names truncate together, the branch three times as fast — it's the annotation, the repo is the heading,
-                            so a squeezed row still reads as two ordered facts rather than one fact beside a naked glyph.
-                        -->
+<!-- Both names truncate together, the branch three times as fast — it's the annotation, the repo is the heading. -->
                         <span class="min-w-0 truncate text-xs font-medium text-content" v-tooltip.top.overflow="group.repo">{{ group.repo }}</span>
                         <span v-if="group.branch !== undefined" class="flex min-w-0 max-w-24 shrink-3 items-center gap-0.5 text-2xs text-subtle">
                             <Icon name="fork" class="shrink-0 text-[0.6rem]" />
-                            <!-- Both names truncate and both say the rest on hover (`.overflow`, so the tooltip only fires when actually cut). -->
+                            <!-- Repository and branch names truncate and reveal their full text on hover. -->
                             <span class="min-w-0 truncate" v-tooltip.top.overflow="group.branch">{{ group.branch }}</span>
                         </span>
                     </button>
@@ -1412,10 +1324,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     </button>
                 </div>
 
-                <!--
-                    Why these files are conflicted, and the one way out: nothing this app runs leaves a repo mid-operation, so
-                    this is always something a terminal left behind. Above the sections, since it explains the whole repo, not one side.
-                -->
+<!-- Conflicts come from operations left by an external terminal. -->
                 <div v-if="group.operation" :class="[NOTICE, 'mb-1.5 mt-0.5 border-warning/40 bg-warning/10']">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
                     <div class="min-w-0 flex-1">
@@ -1439,10 +1348,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
 
                 <!-- No empty-repo guard needed here — `dirty` is the list, and a repo with no rows isn't in it. -->
                 <div v-if="!collapsed.has(group.repo)" class="pb-1 pl-1">
-                    <!--
-                        One block per git side (conflicts, staged, unstaged); the header's action is whole-side, ignoring selection.
-                        Drawn only when there's more than one side — with one, the repo row above already states it.
-                    -->
+<!-- One block per git side (conflicts, staged, unstaged); the header's action is whole-side, ignoring selection. -->
                     <template v-for="section in sidesOf(group)" :key="`${group.repo}/${section.side}`">
                         <div v-if="sidesSplit(group)" class="flex items-center gap-1 pl-2 pt-1">
                             <span
@@ -1450,19 +1356,16 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                 :class="section.side === 'conflicted' ? 'text-danger' : 'text-subtle'"
                                 >{{ section.label }}</span
                             >
-                            <!-- The side's real length: rows shown plus whatever didn't fit, since the button here acts on the side, not the listing. -->
+                            <!-- The side count includes visible rows and truncated rows. -->
                             <span class="shrink-0 text-2xs text-subtle">{{ sideTotal(group, section.side, section.changes.length) }}</span>
-                            <!-- The section's only module, said here instead of on its own row below it — see soleBucket. A label, not a control. -->
+                            <!-- The section's only module, said here instead of on its own row below it — see soleBucket. -->
                             <ModuleLabel
                                 v-if="soleBucket(group.repo, section.side)"
                                 :name="soleBucket(group.repo, section.side)!.name"
                                 :packaged="soleBucket(group.repo, section.side)!.packaged"
                             />
                             <span class="flex-1"></span>
-                            <!--
-                                Always drawn: what moves a row across the index stays on screen, what destroys work waits for a hover. A
-                                lit chip only changes what this button promises (see the tooltip), not whether it's visible.
-                            -->
+<!-- Always drawn: what moves a row across the index stays on screen, what destroys work waits for a hover. -->
                             <button
                                 type="button"
                                 :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
@@ -1476,19 +1379,12 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         </div>
 
                         <template v-for="bucket in viewOf(group.repo, section.side).buckets" :key="`${group.repo}/${section.side}/${bucket.key}`">
-                            <!--
-                                The module a run of rows belongs to, said once — the same ModuleLabel the agent review draws, so a module
-                                reads the same in both lists. Its own count is gone: a module bucket has no fold, so its rows are always on screen
-                                already.
-                            -->
+                                <!-- Each module label is shown once for its row group. -->
                             <div v-if="moduleRow(group, section.side)" class="flex items-center pt-2" :class="moduleIndent(group)">
                                 <ModuleLabel :name="bucket.name" :packaged="bucket.packaged" />
                             </div>
                             <template v-for="change in bucket.rows" :key="`${group.repo}/${section.side}/${change.path}`">
-                                <!--
-                                    Selection uses the app's primary-tint recipe, not this list's own hover colour, so a selected row can't be
-                                    mistaken for whatever the pointer happens to sit on. Hover keeps its own step above selection.
-                                -->
+                                <!-- Selection uses the primary tint instead of the row hover colour. -->
                                 <div
                                     class="group/file flex items-stretch gap-1 rounded transition-colors"
                                     :class="[
@@ -1500,10 +1396,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                         rowIndent(group, section.side),
                                     ]"
                                 >
-                                    <!--
-                                        Indent guide and origin rail share one column (railClass), stretched the row's full height so a run of one
-                                        agent's files reads as a single colour block rather than separate ticks.
-                                    -->
+                                    <!-- The indent guide and origin rail share one full-height column. -->
                                     <span class="w-0.5 shrink-0 self-stretch rounded-full" :class="railClass(group, change.path)"></span>
                                     <button
                                         type="button"
@@ -1518,11 +1411,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                             :label="changeLabel(group.repo, change)"
                                             :named="viewOf(group.repo, section.side).named"
                                         />
-                                        <!--
-                                            Provider chips (up to two, then a count); the name itself only once the panel is wide enough AND the file
-                                            has one owner — the path keeps first claim on the width. Silent under a filter that already names this
-                                            row's only origin.
-                                        -->
+                                        <!-- Provider chips show before the file name when the panel has room. -->
                                         <span
                                             v-if="showRowOrigins(group, change.path)"
                                             class="flex shrink-0 items-center gap-0.5"
@@ -1549,10 +1438,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                                 +{{ originsOf(group, change.path).length - 2 }}
                                             </span>
                                         </span>
-                                        <!--
-                                            `of` turns the badge into a size rail too, scaled to the panel's biggest addition, so the list can be
-                                            ranked by scanning.
-                                        -->
+                                        <!-- The `of` value scales the badge against the largest addition. -->
                                         <ReviewStat
                                             :code="change.code"
                                             :additions="change.additions"
@@ -1560,10 +1446,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                             :of="heaviest"
                                         />
                                     </button>
-                                    <!--
-                                        The index verb sits a step below the filename's own weight, so a hundred of them read as texture rather than
-                                        a hundred buttons; not tinted, since green/red are already load-bearing on this row.
-                                    -->
+                                    <!-- Index verbs stay quieter than file names so repeated rows read as texture. -->
                                     <button
                                         type="button"
                                         :class="
@@ -1576,10 +1459,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                     >
                                         <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />
                                     </button>
-                                    <!--
-                                        Held a finger's width from the index verb on touch only: Discard confirms first and Stage doesn't, so the
-                                        mis-tap that actually hurts is the one that lands on Stage instead of the trash.
-                                    -->
+                                    <!-- Touch spacing keeps Discard separate from the unconfirmed Stage action. -->
                                     <button
                                         type="button"
                                         :class="
@@ -1598,10 +1478,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                             </template>
                         </template>
                     </template>
-                    <!--
-                        The daemon's per-repo cap, said plainly so the list doesn't read as complete when it isn't. Every side/repo
-                        verb below already sends a scope the daemon resolves itself, so the cap limits what you can read here, not what you can do.
-                    -->
+                    <!-- The daemon's per-repo cap, said plainly so the list doesn't read as complete when it isn't. -->
                     <p v-if="truncatedTotal(group) > 0" class="py-1 pl-4 text-2xs text-subtle">
                         …and {{ truncatedTotal(group) }} more: showing the first {{ repoCount(group) - truncatedTotal(group) }}. Stage all, commit and
                         discard cover every file here, listed or not.
@@ -1609,22 +1486,19 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </div>
             </div>
 
-            <!-- What other sandboxes are holding: a ledger of exposure you can't act on here, kept below and separate from this workspace's own rows. -->
+            <!-- Other sandboxes' changes remain a separate read-only ledger. -->
             <OtherSandboxChanges />
         </div>
 
-        <!-- States the two outcomes separately, since they're genuinely different: tracked files can come back from git, untracked ones can't. -->
+        <!-- Tracked and untracked discard outcomes are reported separately. -->
         <Modal :open="pendingDiscard !== undefined" size="sm" header="Discard changes" @update:open="pendingDiscard = undefined">
             <template v-if="pendingDiscard">
                 <p class="break-words text-xs text-content">Discard {{ pendingDiscard.what }}?</p>
-                <!-- The counts below are a floor, said first: past the daemon's truncation this discard covers more than the dialog can list. -->
+                <!-- The counts are a floor when daemon truncation hides additional files. -->
                 <p v-if="pendingDiscard.partial" class="mt-2 text-xs text-warning">
                     More files are pending here than the panel is listing, and this covers all of them. The figures below count only the listed ones.
                 </p>
-                <!--
-                    The verb agrees with the count (`plural`), since a lone file misreading as plural is the one line here that must be read
-                    carefully.
-                -->
+<!-- The verb agrees with the count (`plural`), since a lone file misreading as plural is the one line here that must be read carefully. -->
                 <p v-if="pendingDiscard.restores > 0" class="mt-2 text-xs text-muted">
                     {{ pendingDiscard.partial ? `At least ` : `` }}{{ plural(pendingDiscard.restores, "file") }}
                     {{ pendingDiscard.restores === 1 ? `returns` : `return` }} to their last committed state.

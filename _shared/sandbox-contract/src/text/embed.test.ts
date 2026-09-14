@@ -42,11 +42,7 @@ test("a JSON fetch answers the body or throws the refusal", async () => {
     vi.unstubAllGlobals();
 });
 
-/* The one test that pays for real work: 12 bits is ~900 awaited digests, which is what carries the solver past
- * its 512-nonce batch and through the yield the page needs to keep painting. Every digest is a round trip to
- * the platform's crypto, so what that costs is set by how loaded the machine is and never by this code: hence
- * a budget that bounds a hang instead of the suite's 5s hang detector for in-memory work, which a busy runner
- * beat. The other two prove things that need no work at all, and are cheap on purpose. */
+/* The one test that pays for real work: 12 bits is ~900 awaited digests. */
 test("the answer really clears the difficulty, and carries the salt back for the daemon to re-derive", async () => {
     const answer = await solveProofOfWork({ salt: "abc123", difficulty: 12 }, "needs https");
     expect(answer.startsWith("abc123:")).toBe(true);

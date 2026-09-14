@@ -1,6 +1,4 @@
-<!-- Status pill: the app-wide chrome for state labels (active/error/pending/…). Views map their own
-     domain states to a variant; this component owns the colors, pill shape, and lowercase label casing,
-     so every view's badges stay visually identical. Default slot wins over `label` for icon+text bodies. -->
+<!-- Status pill: shared chrome for active, error, and pending states. -->
 <script lang="ts">
 export type StatusVariant = `success` | `danger` | `warning` | `info` | `neutral` | `primary`;
 

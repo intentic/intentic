@@ -1,14 +1,7 @@
 <script setup lang="ts">
 import { InfoDialog, InfoTable } from "@intentic/ui";
 
-/* The (i) beside the Agent tab's "Finished work" group: what happens to an agent's work once it stops, and to
- * the agent itself. Both settings spend something real if you leave them alone: one leaves finished work
- * waiting for you, the other keeps a whole checkout of your repository per agent, forever.
- *
- * Archiving gets a lifecycle strip rather than prose because it IS a lifecycle, and then the kept/released
- * split, which is the only fact that makes an automatic sweep acceptable at all.
- *
- * Defaults quoted here come from SandboxSettingsSchema: off / 3 days. */
+/* The (i) beside the Agent tab's "Finished work" group: what happens to an agent's work once it stops, and to the agent itself. */
 
 const AT_A_GLANCE = [
     [`Land finished work automatically`, `Whether clean work reaches your workspace by itself`, `Off`],
@@ -21,9 +14,7 @@ const AT_A_GLANCE = [
         <p class="text-sm text-muted">What happens after an agent stops: to its work, and to the agent.</p>
         <InfoTable class="mt-2" :headers="[`Setting`, `What it changes`, `Default`]" :rows="AT_A_GLANCE" />
 
-        <!-- ① Landing: the difference is who moves the work, and the honest framing is that OFF is a queue you
-             have to visit. Neither is the safe option: one applies work you haven't read, the other lets it
-             pile up on branches. -->
+<!-- ① Landing: the difference is who moves the work, and the honest framing is that OFF is a queue you have to visit. -->
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Land finished work automatically</h3>
         <p class="mt-1.5 text-2xs text-muted">
             An agent works on its own branch, in its own checkout. Landing is the step that brings that work back to your workspace as uncommitted

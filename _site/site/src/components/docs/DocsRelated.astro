@@ -1,19 +1,5 @@
 ---
-/* The curated "and now this" list at the foot of a page.
- *
- * WHY IT IS NOT CALLED "NEXT" ANY MORE. Ten pages ended with a `## Next` list, and every page already ends with an
- * automatic previous/next footer underneath it. So two things called "next" sat one above the other, naming
- * different pages. They are different things and both are wanted: the footer walks the SHELF in order, and this
- * one crosses shelves for a reason ("connect the system whose events you want to wake on"). Only the label was
- * lying, so the label changed.
- *
- * WHY THE HEADING CARRIES A CLASS. That is the signal docs-headings.ts reads to leave a heading out of the section
- * rail: this is furniture at the end of a page, not a section of it, and "Next" was the one rail entry on those
- * pages that described no content. It keeps its rule and its size, so a reader still sees a boundary.
- *
- * WHY A COMPONENT rather than ten hand-written lists: it was ten hand-written lists, which is how the same idea
- * came to be called "Next" on nine pages and "Where to go next" on the tenth.
- */
+/* The curated "and now this" list at the foot of a page. */
 
 export interface DocsRelatedLink {
     /** Absolute path, with an anchor where the reason points at one section. */

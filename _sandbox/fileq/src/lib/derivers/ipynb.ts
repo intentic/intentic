@@ -1,11 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
-/* Jupyter notebooks: JSON whose cells ARE the document. Markdown cells pass through as they are, code cells
- * become fences in the kernel's language, and each cell's outputs follow it — the text ones, capped, because
- * a training loop that printed forty thousand lines is not what a reader of the notebook came for. Rich
- * outputs (images, HTML widgets) are counted and named, never inlined: a base64 PNG in a sidecar is a
- * megabyte that says nothing to a text reader, and a model with vision opens the notebook's own files. */
+/* Jupyter notebooks: JSON whose cells ARE the document. */
 
 const MAX_OUTPUT_LINES = 40;
 

@@ -173,10 +173,7 @@ const panes = computed(() =>
                 class="flex min-h-0 min-w-0 flex-1 flex-col"
                 :class="split && index > 0 ? 'border-line md:border-l' : index > 0 ? 'border-t border-line' : ''"
             >
-                <!--
-                    Side label, picture dimensions, and file size; dimensions matter most, since that's what tells two same-sized
-                    screenshots apart. After side also states the delta.
-                -->
+<!-- Side label, picture dimensions, and file size; dimensions matter most, since that's what tells two same-sized screenshots apart. -->
                 <div class="flex h-7 shrink-0 items-center gap-1.5 border-b border-line/60 px-2">
                     <span class="text-2xs font-medium uppercase tracking-wide" :class="pane.key === 'before' ? 'text-danger' : 'text-success'">
                         {{ pane.label }}
@@ -213,10 +210,7 @@ const panes = computed(() =>
                         <Icon name="exclamation-triangle" class="text-2xl text-danger" />
                         <p class="text-xs text-danger">{{ pane.side.error }}</p>
                     </div>
-                    <!--
-                        Shared view: zooming or panning either pane moves the other to match, the only way to compare two similar
-                        pictures by eye.
-                    -->
+<!-- Shared view: zooming or panning either pane moves the other to match, the only way to compare two similar pictures by eye. -->
                     <ImageView
                         v-else-if="renderable && pane.side.url"
                         :src="pane.side.url"

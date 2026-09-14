@@ -62,10 +62,7 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
 <template>
     <!-- Not selectable like the job rows: this row is the whole group, so `#below` needs no click guarding. -->
     <Row :spine="pinned || $slots[`note`] !== undefined" :description="jobs">
-        <!--
-            Sized from the tier's own `mark`, not a literal number, so the text column doesn't shift between views. `boxes` is the plural glyph for a
-            set of jobs.
-        -->
+        <!-- Sized from the tier's own `mark`, not a literal number, so the text column doesn't shift between views. -->
         <template #lead="{ mark, iconClass }">
             <span class="flex shrink-0 items-center justify-center" :style="{ width: `${mark}px`, height: `${mark}px` }">
                 <Icon name="boxes" aria-hidden="true" class="text-muted" :class="iconClass" />
@@ -90,10 +87,7 @@ const chip = computed<{ readonly label: string; readonly hint: string } | undefi
 
         <template v-if="pinned || $slots[`note`]" #below>
             <div class="flex flex-col gap-2">
-                <!--
-                    Same list and gestures as the per-job rows; each write lands the whole order into every job in the block. `noteThinking` is set
-                    for one-shots, where reasoning adds latency to a job meant to land immediately.
-                -->
+                <!-- Same list and gestures as the per-job rows; each write lands the whole order into every job in the block. -->
                 <ModelPinList
                     v-if="pinned"
                     :entries="list.entries.value"

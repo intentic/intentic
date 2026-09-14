@@ -7,9 +7,7 @@ import ChatToolCard from "./ChatToolCard.vue";
 import { type ToolGroup, groupDiffSummary } from "./toolGrouping";
 import { present } from "./toolPresentation";
 
-/* A collapsed run of consecutive same-name+same-target tool calls. The header reads like a single ChatToolCard
- * row (same icon, same target chip, same right-aligned summary) with a count badge and aggregated stats.
- * Expanding reveals the individual cards, indented like a sub-agent's nested transcript. */
+/* A collapsed run of consecutive same-name+same-target tool calls. */
 
 const props = defineProps<{
     group: ToolGroup;

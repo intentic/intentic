@@ -8,19 +8,7 @@ import Nav from "../../components/Nav.astro";
 import type { RegistryEntry } from "@intentic/registry";
 import { loadGallery, markArtUrl, markInitials, markLogoUrl, sourceHref } from "../../lib/registry";
 
-/* The extension gallery: the official registry repository, rendered. Built from its two JSON files at build
- * time (src/lib/registry.ts), so this page has no backend behind it: curation is pull requests over there
- * and a deploy is how the result reaches the web.
- *
- * A DISCOVERY SURFACE, and the layout now says so: the listings come first. This page used to open with the
- * site's heaviest economics: the spend diamond, two spend cards, the revenue ring: before showing a single
- * listing, which put the marketplace below the fold of its own page. Nothing here is priced;
- * what stays here is one band of headline figures and the lifecycle strip, each linking out, and both sit at
- * the foot: the hero hands straight over to the gallery, so the listings and the diagram share one screen.
- *
- * Verified leads and stars rank within it, which is what compareEntries already decided; the page just says
- * out loud what that ordering does and does not claim, because a gallery sorted by a number readers know is
- * purchasable will otherwise be read as a ranking of quality. */
+/* Extension gallery renders the official registry. */
 
 const { entries, scannedAt, stale } = await loadGallery();
 
@@ -42,10 +30,7 @@ const groups = [
     },
 ].filter((group) => group.entries.length > 0);
 
-/* The nightly scan's cold answer at the pinned commit, folded to a browser's one question: will it load?
- * Absent checks say nothing: a listing repointed since last night, or a registry with no scanner, and the
- * card renders as it always did. This is evidence, not endorsement: "loads" and "somebody read it" are
- * different claims, made by different parties, and the page keeps them apart. */
+/* Registry scan reports whether each pinned extension loads. */
 const loadsProblem = (entry: RegistryEntry): string | undefined => {
     if (entry.checks === undefined) {return undefined;}
     if (entry.checks.manifest !== "ok") {return `At the pinned commit, ${entry.checks.manifest}`;}
@@ -53,7 +38,7 @@ const loadsProblem = (entry: RegistryEntry): string | undefined => {
 };
 const loadsOk = (entry: RegistryEntry): boolean => entry.checks !== undefined && loadsProblem(entry) === undefined;
 
-// Built as one string rather than interpolated across template lines, where the newlines become stray spaces.
+// Scanned notes stay one string so template whitespace cannot alter them.
 const scannedNote =
     scannedAt === undefined
         ? undefined
@@ -68,10 +53,7 @@ const publishSteps = [
     { title: "Get listed", body: "The registry bot opens a listing pull request for you." },
 ];
 
-/* The lead figure: what an extension actually is, and how it meets the core. Drawn as a vertical architecture
- *: one extension is a container that bundles any of four contribution surfaces (Capabilities, UI, Automations,
- * Backend) and plugs, through one public interface, into the kernel every sandbox already has (Files, Events,
- * Agents, Secrets, Processes). Glyph paths are shared and positioned by gGlyph. */
+/* Lead figure shows extensions connecting to the core. */
 const gGlyph = (paths: string, x: number, y: number, size = 18) =>
     `<svg x="${(x - size / 2).toFixed(1)}" y="${(y - size / 2).toFixed(1)}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 
@@ -90,11 +72,11 @@ const buildingBlocks = [
     { name: "Backend", d: '<rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/>' },
 ];
 
-// horizontal architecture: several extensions, each bundling some surfaces, plug into the one core below
+// Extensions connect their contributed surfaces to one core.
 const EXT_W = 150;
 const EXT_H = 104;
 const EXT_Y = 16;
-// each extension carries a couple of the four surfaces; across the three, all four appear
+// The extension set covers all four surfaces.
 const extensions = [
     { x: 12, surfaces: [buildingBlocks[0], buildingBlocks[1]] },
     { x: 185, surfaces: [buildingBlocks[2], buildingBlocks[3]] },
@@ -103,9 +85,7 @@ const extensions = [
 const CORE = { x: 12, y: 170, w: 496, h: 68 };
 const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90, y: CORE.y + 36 }));
 
-/* THE CHIPS ARE LINKS, and they come from the docs tree rather than from a string array here: the same list
- * drives this strip and the API overview's, so the two cannot drift. Maintain at the end is what makes the
- * strip a cycle rather than a line. */
+/* Chips link to the corresponding documentation pages. */
 ---
 
 <BaseLayout
@@ -174,15 +154,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                             {group.entries.map((entry) => (
                                 <article class="card flex flex-col gap-3 p-6">
                                     <div class="flex items-center gap-3">
-                                        {/* The author's mark over its initials: see markInitials for why this
-                                            page draws three tiers where the app draws four. The image sits OVER
-                                            the letters rather than instead of them, so a slug that 404s at
-                                            build time reveals the tier below instead of a hole.
-
-                                            Artwork is the one tier that fills the plate rather than sitting on
-                                            it — an app icon is its whole square — so where a row has drawn its
-                                            own, the neutral plate underneath is dropped rather than framing it
-                                            in a ring of grey. */}
+                                        {/* Author marks use initials over the neutral plate. */}
                                         <span
                                             class:list={[
                                                 "relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden border border-line text-xs font-semibold text-muted",
@@ -229,9 +201,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                                             </a>
                                         )}
                                     </div>
-                                    {/* The sha is the product. It is what you approve, what runs, and what a
-                                        force-push upstream cannot change, so it is on the card rather than a
-                                        click away, ready to paste into the install form. */}
+                                    {/* The pinned SHA identifies the approved and runnable extension. */}
                                     {entry.install?.ref && (
                                         <code class="overflow-x-auto border border-line bg-canvas px-2.5 py-1.5 font-mono text-2xs whitespace-nowrap text-subtle">
                                             {entry.install.ref}
@@ -261,7 +231,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                             role="img"
                             aria-label="Several extensions bundle Capabilities, UI, Automations or Backend surfaces and plug into the core every sandbox has: Files, Events, Agents, Secrets and Processes."
                         >
-                            {/* ===== the core: the kernel every sandbox has ===== */}
+                            {/* Core shared by every sandbox. */}
                             <rect x={CORE.x} y={CORE.y} width={CORE.w} height={CORE.h} rx="16" fill="color-mix(in srgb, var(--color-content) 4%, transparent)" stroke="var(--color-line-strong)" stroke-width="1.5" />
                             <text x={CORE.x + 20} y={CORE.y + 17} text-anchor="start" dominant-baseline="central" font-size="11" font-weight="700" letter-spacing="1" style="fill: var(--color-content)">CORE</text>
                             <g style="color: var(--color-muted)">
@@ -275,18 +245,18 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                                 }
                             </g>
 
-                            {/* ===== each extension: a container of surfaces, plugged into the core ===== */}
+                            {/* Extension container connected to the core. */}
                             {
                                 extensions.map((e) => {
                                     const cx = e.x + EXT_W / 2;
                                     return (
                                         <g>
-                                            {/* plug: two pins seated into sockets on the core rim */}
+                                            {/* Two pins connect the extension to the core. */}
                                             <rect x={cx - 13} y={EXT_Y + EXT_H} width="6" height="54" rx="1.5" fill="color-mix(in srgb, var(--color-primary-500) 55%, transparent)" />
                                             <rect x={cx + 7} y={EXT_Y + EXT_H} width="6" height="54" rx="1.5" fill="color-mix(in srgb, var(--color-primary-500) 55%, transparent)" />
                                             <rect x={cx - 15} y={CORE.y - 4} width="10" height="6" rx="1" fill="var(--color-canvas)" stroke="var(--color-line-strong)" stroke-width="1" />
                                             <rect x={cx + 5} y={CORE.y - 4} width="10" height="6" rx="1" fill="var(--color-canvas)" stroke="var(--color-line-strong)" stroke-width="1" />
-                                            {/* the container */}
+                                            {/* Extension surface container. */}
                                             <rect x={e.x} y={EXT_Y} width={EXT_W} height={EXT_H} rx="14" fill="color-mix(in srgb, var(--color-primary-500) 9%, transparent)" stroke="color-mix(in srgb, var(--color-primary-500) 46%, transparent)" stroke-width="1.5" />
                                             <text x={cx} y={EXT_Y + 16} text-anchor="middle" dominant-baseline="central" font-size="10" font-weight="700" letter-spacing="1" style="fill: var(--color-link)">EXTENSION</text>
                                             {
@@ -314,7 +284,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
             <section aria-labelledby="lifecycle-heading">
                 <h2 id="lifecycle-heading" class="text-lg font-semibold tracking-tight text-content">From your repo to an install, and around again</h2>
 
-                {/* The whole cycle as chips. Every chip goes to the page that explains it. */}
+                {/* Each cycle chip links to its explanatory page. */}
                 <div class="mt-6 flex flex-wrap items-center gap-x-2 gap-y-2">
                     {
                         extensionLifecycle.map((stage, i) => (

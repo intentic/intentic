@@ -3,8 +3,7 @@ import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
 import DocsLayout from "../../components/docs/DocsLayout.astro";
 import DocsRelated from "../../components/docs/DocsRelated.astro";
 
-/* Three mechanisms that get confused for each other, on one page precisely so the differences are visible.
- * "6 · Make it autonomous" in the autonomous-employees guide is the narrative version; this is the reference. */
+/* Three mechanisms that get confused for each other, on one page precisely so the differences are visible. */
 
 // The token is a query parameter and the BODY is the payload, verbatim: the daemon reads it as text and hands
 // it to the guard and the prompt, so it does not have to be JSON.
@@ -45,9 +44,7 @@ const triggers = [
     heading="Automations, workflows & loops"
     lead="Three ways an agent does work you aren't sitting there for: something outside wakes it, a design runs several agents in order, or one agent repeats until the goal is actually met."
 >
-    {/* A HEADING, though it opens the page. This table is the most useful thing here: three words readers
-        routinely swap for one another, and without a heading it was in no table of contents, had no anchor, and
-        could not be linked to by anyone answering "what's the difference?". */}
+    {/* Keep this heading so the comparison table appears in the docs table of contents. */}
     <h2>Automation, workflow or loop?</h2>
     <p>They get mistaken for each other, so the distinction first:</p>
     <table>

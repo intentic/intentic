@@ -61,9 +61,7 @@ describe(`hostedWaitView`, () => {
         expect(view.failure?.action).toBe(`reboot`);
     });
 
-    /* THE FIVE MINUTES OF BARE SPINNER THIS CARD USED TO KEEP. The daemon says why its own address did not
-     * answer on every probe, and the card held all of it back until its own clock ran out — which is what an
-     * owner was reading while the lane was down. Quoted as progress, not as a verdict: the probe is running. */
+/* THE FIVE MINUTES OF BARE SPINNER THIS CARD USED TO KEEP. */
     it(`quotes the sandbox's own reason while the probe is still running`, () => {
         const detail = `https://sandbox-abc.sbx.test answered 502 instead of this sandbox: the platform's edge is not routing to this machine.`;
         const probing = wait({ machine: `started`, announced: true, boot: boot(`unreachable`, detail, true), waitedMs: 90_000 });
@@ -108,10 +106,7 @@ describe(`hostedWaitView`, () => {
         expect(hostedWaitView(wait({ machine: `stopped` })).failure?.action).toBe(`reboot`);
     });
 
-    /* THE LOOP THIS CARD USED TO PUT PEOPLE IN. Every lane passes through a stopped machine — a warm claim
-     * starts from one, and the card's own "start it over" stops the machine before starting it — so acting on
-     * the first such reading told people their machine was broken while the platform was starting it, and the
-     * only button offered issued another stop. It is a verdict only once it has held. */
+/* THE LOOP THIS CARD USED TO PUT PEOPLE IN. */
     it(`waits out a stopped machine before calling it one, since a boot passes through one`, () => {
         const stopping = wait({ machine: `stopped`, downForMs: 6_000 });
         expect(hostedWaitView(stopping).failure).toBeUndefined();

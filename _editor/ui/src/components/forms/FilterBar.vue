@@ -1,15 +1,8 @@
-<!--
-    The instrument above a list: free text on the left, narrowing controls on the right, a bare action furthest right. The field takes the row's
-    slack so the bar spans the list's full width.
--->
+<!-- The instrument above a list: free text on the left, narrowing controls on the right, a bare action furthest right. -->
 <script setup lang="ts">
 import SearchBar from "./SearchBar.vue";
 
-/* `busy` and `clearable` are the field's own two states, forwarded rather than re-implemented. They ship
- * because the first bar over a SERVER-backed list (the knowledge base's search) had both and this component
- * had neither, so adopting it would have cost a spinning magnifier and an Escape-to-clear, and a shared
- * component you have to give something up to use is one the next view hand-rolls instead. Neither is a style
- * fork: they say what the field is DOING, which only the caller knows. */
+/* `busy` and `clearable` are the field's own two states, forwarded rather than re-implemented. */
 const {
     placeholder = `Filter…`,
     busy = false,

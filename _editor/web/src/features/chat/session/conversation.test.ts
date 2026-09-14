@@ -1146,8 +1146,7 @@ describe(`Conversation`, () => {
             attachments: [`.intentic/records/artifacts/attachments/u1/shot.png`],
             editorContext: { file: `src/app.ts` },
         });
-        // The bubble carries the attachments too; the chip is named from the path the frame carries, as a restored one
-        // is.
+        // Name attachment chips from the restored frame path.
         await vi.waitFor(() =>
             expect(conversation.messages.value.at(-1)).toMatchObject({
                 role: `user`,
@@ -1449,9 +1448,7 @@ describe(`Conversation`, () => {
 
         const paths = sandboxRequestMock.mock.calls.map(([path]) => path);
         expect(paths).toContain(`/agent/reply`);
-        // One request does both halves: the daemon ends the turn where the dismissal lands, with no separate stop
-        // behind
-        // it.
+        // The dismissal request ends the turn without a separate stop request.
         expect(paths).not.toContain(`/agent/stop`);
         expect(conversation.messages.value.find((message) => message.question !== undefined)!.question).toMatchObject({ status: `cancelled` });
         expect(conversation.streaming.value).toBe(false);
@@ -1738,8 +1735,7 @@ describe(`Conversation`, () => {
         }
     });
 
-    // Arming auto-continue in front of an already-stopped turn takes that stop too, rather than waiting for the next
-    // one.
+    // Carry an already-stopped turn into auto-continue.
     it(`takes the stop it was armed in front of`, async () => {
         vi.useFakeTimers();
         try {
@@ -2175,9 +2171,7 @@ describe(`Conversation`, () => {
             conversationId: `c1`,
             routing: { agent: `claude`, harness: `native`, account: `with-room`, model: `opus` },
         });
-        // A session belongs to the credential that minted it; switching accounts drops it so the daemon can seed a
-        // fresh
-        // one.
+        // Reset the session when the credential changes so the daemon can seed a fresh one.
         expect(conversation.session.value).toBeUndefined();
         // Still one turn and one user row: a press is the same request again, not a new message.
         expect(turnBodies()).toHaveLength(1);
@@ -3121,14 +3115,7 @@ describe(`Conversation`, () => {
         ]);
     });
 
-    /* THE WHOLE CHAT, TWICE, AND THEN FIVE TIMES. What a window holds for a run is remembered by RUN ID, and
-     * three ordinary things drop that memory while keeping the messages: the mirror paint (transcriptClock's
-     * adopt), a redraw from the daemon's record (rebuild), and a window that simply never attached to this run
-     * before, which is every popped-out window. The rows then arrive from a run this state has no base for, so
-     * they land at the END of a transcript that is already showing them.
-     *
-     * A single-turn conversation is where it reads worst, because that run's rows ARE the whole chat: the
-     * prompt and every answer under it, drawn again below itself, once per hydrate that got in. */
+/* THE WHOLE CHAT, TWICE, AND THEN FIVE TIMES. */
     it(`reattach reclaims the rows already on screen instead of drawing the run a second time`, async () => {
         const conversation = new Conversation(`c1`);
         const rows: TranscriptRow[] = [userRow(`fix the limit reset`, 1_000, []), { role: `assistant`, text: `Tracing the retries.` }];
@@ -3143,8 +3130,7 @@ describe(`Conversation`, () => {
         ]);
     });
 
-    /* And the same run STILL GOING: the record holds what settled, the head carries that plus what has landed
-     * since, so the reclaim has to take the tail it recognises and let the rest through. */
+/* And the same run STILL GOING: the record holds what settled, the head carries that plus what has landed since. */
     it(`reattach draws only the part of the run the transcript is not already showing`, async () => {
         const conversation = new Conversation(`c1`);
         const shown: TranscriptRow[] = [userRow(`fix the limit reset`, 1_000, []), { role: `assistant`, text: `Tracing the retries.` }];
@@ -3162,9 +3148,7 @@ describe(`Conversation`, () => {
         ]);
     });
 
-    /* The daemon refused the turn before running any of it, so the message was never part of the conversation.
-     * It comes back OUT of the transcript and into the queue, which is what makes reconnecting replay it,
-     * rather than leaving the user to retype it into every chat the revocation hit. */
+/* The daemon refused the turn before running any of it, so the message was never part of the conversation. */
     it(`holds an undelivered message in the queue when the Claude credential is revoked`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(

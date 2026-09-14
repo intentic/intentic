@@ -43,21 +43,14 @@ const autoRunLabel = computed(() => {
         :class="[dense ? 'gap-2 p-3.5' : 'gap-2.5 p-4', busy ? 'pointer-events-none opacity-60' : '']"
     >
         <div class="flex items-center gap-2.5">
-            <!--
-                Pause glyph where an agent card has its identity tile: a held wake, not a session, nothing running
-                yet. Two boxes for the same reason the workflow run's mark has two — a 22px disc centred in the 28px
-                slot the agent tile's context ring occupies (AgentCard argues the proportion), so the titles in this
-                lane start on one axis and every mark in the lane is the same shape and size.
-                It wears the empty rim for that reason too: a bare disc beside a ringed card reads a size smaller.
-            -->
+<!-- Pause glyph where an agent card has its identity tile: a held wake, not a session, nothing running yet. -->
             <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-(length:--ring-track) ring-inset ring-content/12">
                 <span class="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full bg-warning/15">
                     <Icon name="pause" class="text-2xs text-warning" />
                 </span>
             </span>
-            <!-- A hold only ever sits in Attention, so off the stacked board it is always drawn at the live card's weight (AgentCard's `live`). -->
-            <!-- `break-words` for the reason AgentCard's title states: a clamp only ellipsises a VERTICAL overrun, and an
-                 automation id is exactly the unbreakable run that overruns sideways instead. -->
+            <!-- Holds use the live card's weight outside the Attention lane. -->
+<!-- `break-words` for the reason AgentCard's title states: a clamp only ellipsises a VERTICAL overrun. -->
             <span
                 class="min-w-0 flex-1 font-semibold text-content"
                 :class="dense ? 'truncate text-xs' : 'line-clamp-2 break-words text-sm leading-snug'"
@@ -71,12 +64,7 @@ const autoRunLabel = computed(() => {
             <span class="min-w-0 flex-1 truncate text-2xs text-subtle">
                 {{ autoRunLabel ?? `waiting for you` }} · {{ timeAgo(entry.createdAt) }}
             </span>
-            <!--
-                Visually small (22px) buttons deciding what an agent may do; `touch-target` grows the tappable area to
-                44px on a coarse pointer without changing the visual size.
-                The row's gap keeps the two enlarged tap targets from overlapping, since a mis-tap here runs an
-                automation.
-            -->
+<!-- Compact action buttons use a 44px touch target on coarse pointers. -->
             <Button
                 size="small"
                 severity="danger"

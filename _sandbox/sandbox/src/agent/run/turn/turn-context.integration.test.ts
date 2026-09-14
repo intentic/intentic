@@ -150,8 +150,7 @@ test("a failed retrieval costs the note and nothing else", async () => {
         depsOf(() => Promise.reject(new Error("index corrupt"))),
         "how does the daemon decide which runtime serves a turn?",
     );
-    // The turn proceeds regardless: failing it over an unrequested search would make the feature worse than not having
-    // it.
+    // Do not fail a turn because its optional search was unrequested.
     expect(result).toMatchObject({ skipped: "failed" });
     expect(warn).toHaveBeenCalledOnce();
 });

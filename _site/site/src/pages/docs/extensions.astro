@@ -2,17 +2,7 @@
 import DocsLayout from "../../components/docs/DocsLayout.astro";
 import DocsRelated from "../../components/docs/DocsRelated.astro";
 
-/* THE INSTALLER'S HALF of the extension lifecycle: discover and install, and a page that did not exist.
- *
- * Everything on it was previously written inside the PUBLISHING guide, under headings addressed to an author:
- * "what the person installing sees", "updates". So the reader doing the most common thing anybody does with an
- * extension had to open a page about registry pull requests to find out what the dialog in front of them meant.
- * Authoring is the other half, and it is /developers.
- *
- * WRITTEN AS A DECISION, not as a feature list. The order is the order the reader meets it: where these come
- * from, what the dialog is telling them, how to read a listing, then living with one: updates, withdrawal,
- * money. Every section that describes a protection also says what it does not protect against, because the one
- * failure this page could cause is a reader installing something on the strength of a feeling. */
+/* THE INSTALLER'S HALF of the extension lifecycle: discover and install, and a page that did not exist. */
 
 const contributions = [
     { line: `Adds a tile to your rail`, means: `A screen of its own, in the left-hand strip, alongside the built-in ones.` },

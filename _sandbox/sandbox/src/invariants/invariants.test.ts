@@ -2,8 +2,7 @@ import pino from "pino";
 import { expect, test, vi } from "vitest";
 import { createInvariantRegistry, type InvariantCheck } from "./invariants.js";
 
-/* The registry's own promise: a check may say the daemon is wrong, and a check may itself be wrong, and NEITHER
- * of those is allowed to reach the daemon. Everything below is a variation on that. */
+/* The registry's own promise: a check may say the daemon is wrong, and a check may itself be wrong, and NEITHER of those is allowed to reach the daemon. */
 
 const silent = () => pino({ level: "silent" });
 

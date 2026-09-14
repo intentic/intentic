@@ -1,7 +1,4 @@
-<!--
-    N row-shaped loading placeholders for a <RowGroup>, built from real <Row> slots so padding/gap/density inherit and match the eventual list
-    exactly. Density comes from the enclosing <RowGroup>. Bars are `aria-hidden`; the caller owns the `role="status"`.
--->
+<!-- N row-shaped loading placeholders for a <RowGroup>, built from real <Row> slots so padding/gap/density inherit and match the eventual list exactly. -->
 <script setup lang="ts">
 import Row from "../rows/Row.vue";
 import { type RowDensity, useRowDensity } from "../rows/row.js";

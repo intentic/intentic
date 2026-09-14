@@ -13,54 +13,11 @@ use crate::commands::SetupReport;
 use crate::setup_link::{parse_link, Link, SetupArgs, Source, WindowVerb};
 use crate::state::CloseAction;
 
-/* ONE WINDOW ON SCREEN, EVER — these two labels are two FACES of it, not two windows, and there is no
- * exception to that any more.
- *
- * There have to be two webviews. The workspace face is remote content (the hosted SPA) and gets no IPC at all;
- * the launcher face is local content holding this app's entire command surface. Tauri scopes capabilities by
- * window LABEL, so merging them into one label would hand app.intentic.dev the launcher's permissions — the one
- * thing this app's design exists to refuse.
- *
- * What the user is owed is not one webview but one WINDOW, and that is what `swap_in` enforces: whichever face
- * is being shown first takes the other's frame — same position, same size — and the other steps aside. Only
- * the title changes, because it is the label on a taskbar entry and ought to say which screen is up. So a
- * screen change reads as the window moving on rather than as a second app arriving on top of the first.
- *
- * THE SETUP SCREEN USED TO BE EXEMPT, on the argument that an install is not somewhere the user went but
- * something happening to the app they are in — so the launcher came up IN FRONT of the workspace instead of
- * replacing it. Whatever that argument was worth on paper, what it produced was two Intentic windows, two
- * taskbar buttons and two alt-tab stops at the exact moment a first-time user has the least idea what this
- * app is: the reported complaint was "I end up with two windows and I don't know which one is the product".
- * An install is a SCREEN of this app now, and it arrives the way every other screen does. */
+/* ONE WINDOW ON SCREEN, EVER — these two labels are two FACES of it, not two windows, and there is no exception to that any more. */
 pub const WORKSPACE: &str = "workspace";
 pub const LAUNCHER: &str = "launcher";
 
-/* THE LOCAL NETWORK GATE, ANSWERED AT INSTALL TIME INSTEAD OF BY THE USER, FOREVER.
- *
- * Chrome 142 made a request from a public origin to loopback a permission, collected with a dialog about
- * "devices on your local network". The SPA reaches loopback for one reason — the sandbox on this machine
- * answers there, a hop away instead of a round trip to a Cloudflare edge and back — and in a browser it has to
- * explain that dialog before Chrome raises it (the web app's localShortcut.ts). Inside THIS window it does not,
- * because the question is already settled: somebody installed an app whose stated purpose is running a sandbox
- * on this computer, and this webview loads exactly one origin — `stays_in_webview` keeps every other URL out
- * and `on_new_window` denies the rest — so the check is guarding our own page against reaching our own daemon.
- *
- * WINDOWS ONLY, IN EFFECT. `additional_browser_args` is a no-op anywhere else, and needs to be: macOS and Linux
- * run this webview on WebKit, which has no such permission to disable.
- *
- * WRY'S OWN DEFAULT IS CARRIED HERE. Setting this REPLACES `--disable-features=msWebOOUI,msPdfOOUI,
- * msSmartScreenProtection` rather than adding to it, and Chromium honours only the last `--disable-features`,
- * so there is one list and it has to hold everything. Dropping those three would bring back the mini menu and
- * SmartScreen inside the app.
- *
- * ALL THREE WINDOWS, IDENTICALLY. These arguments configure the WebView2 ENVIRONMENT, which is created once per
- * user data folder by whichever webview is built first — so a launcher built with different arguments than the
- * workspace decides the workspace's, silently, depending on which screen the app opened on. The two local faces
- * gain nothing from the flag; they carry it so there is only ever one answer to configure.
- *
- * IT IS PAIRED WITH A CLAIM THE PAGE READS. `workspace_init_script` tells the SPA this window does not gate the
- * reach, and the SPA skips its card on the strength of it. Change one and the other is a lie: the user gets
- * Chrome's dialog with nothing on screen to explain it. */
+/* Chrome 142 made a request from a public origin to loopback a permission, collected with a dialog about "devices on your local network". */
 const BROWSER_ARGS: &str = concat!(
     "--disable-features=",
     "msWebOOUI,msPdfOOUI,msSmartScreenProtection,",
@@ -82,26 +39,7 @@ pub const CONFIRM_CLOSE: &str = "confirm-close";
 const DEFAULT_SIZE: (f64, f64) = (1440.0, 900.0);
 const MIN_SIZE: (f64, f64) = (900.0, 600.0);
 
-/* THE APP'S OWN SCREENS ARE A CARD, NOT A CANVAS.
- *
- * The launcher used to take the workspace's whole frame: the same 1440×900 window, wearing the OS title bar,
- * with one setup card at the top of it and a dark void under. That is the shape "one window, two faces"
- * produced while a face was a full window, and the report of it was exact: "a standard Windows window with a
- * large header instead of a thinner overlay, a lot of extra empty space with dark background, looks
- * unprofessional". The setup screen has one card's worth of content and was drawn as a monitor's worth of
- * window.
- *
- * So a face is now sized like what is on it. No decorations: the card draws its own header, with a drag
- * region and a small × of its own (App.vue, CloseConfirm.vue), so there is no title bar over it. A fixed
- * width, because a card has one. A height that follows the content, reported by the page itself as its rows
- * arrive (`fit_to_content`): a requirements list that grows makes the window grow, up to what the screen can
- * show, and the page scrolls inside from there. And it is placed in the middle of the workspace's frame
- * rather than given the whole of it, so it reads as a sheet the product put up rather than a second app.
- *
- * STILL ONE WINDOW. The workspace steps aside while a face is up, exactly as before (`swap_in`): a card over
- * a MAPPED workspace is two Intentic windows, two taskbar buttons and two alt-tab stops during the one flow
- * where a new user knows least which of them is the product, which is the model both smoke tiers assert by
- * counting. What changed is the frame a face wears, not how many there are. */
+/* The launcher used to take the workspace's whole frame: the same 1440×900 window, wearing the OS title bar. */
 const LAUNCHER_WIDTH: f64 = 620.0;
 /// What a launcher opens at before its page has measured anything: close to a setup card's first frame, so
 /// the window does not appear as a strip and then jump to size.
@@ -112,27 +50,7 @@ const CONTENT_MARGIN: f64 = 24.0;
 /// The least a face is ever fitted to: an empty manager still has its header and its one sentence.
 const CONTENT_MIN_HEIGHT: f64 = 120.0;
 
-/* THE SIZE TO OPEN AT, given what this screen can actually show.
- *
- * `DEFAULT_SIZE` is 1440×900 and was treated as if it always fits. It is LOGICAL, so at the 150% scale most
- * laptops are sold at it is 2160×1350 physical — on a panel with 1080 physical rows. The first window a new
- * user ever sees opened a third taller than their display, with its bottom edge and everything near it off
- * the screen entirely. This is the WORKSPACE's arithmetic: a launcher card is sized by what is on it
- * (`fitted_height`) and never asks for `DEFAULT_SIZE`.
- *
- * NOTHING IS RESERVED OUTSIDE THE SIZE ASKED FOR ANY MORE. This used to subtract a `FRAME_ALLOWANCE` of 16×48
- * logical units, because every size here is an INNER one and the platform added a title bar and a border back
- * outside it — so a window asked for exactly the work area's height opened exactly a title bar taller than the
- * screen could show. The workspace is undecorated now too (see `show_workspace_at`; the card already was), and
- * an undecorated window's outer rectangle is its client area plus, on Windows, the single pixel of border that
- * carries the shadow. Reserving 48 rows for a title bar that is not there is 48 rows of somebody's screen
- * given back to nothing.
- *
- * Pure and separate from the monitor lookup so it can be tested against the numbers that actually break, and
- * fitted rather than merely capped: the preference wins whenever it fits, the screen wins whenever it does
- * not. A screen smaller than `MIN_SIZE` is not a reason to open something bigger than the screen — the
- * minimum comes down too, because a floor above the ceiling is a window that cannot be resized onto its own
- * display. */
+/* THE SIZE TO OPEN AT, given what this screen can actually show. */
 fn fit_to_screen(preferred: (f64, f64), available: (f64, f64)) -> (f64, f64) {
     // Never zero, whatever a desktop reports: a monitor unplugged mid-session can answer with an area of
     // nothing at all, and a window asked for 0×0 is one nobody can grab.
@@ -162,27 +80,7 @@ struct WorkArea {
     scale: f64,
 }
 
-/* WHERE A COLD-START WINDOW OPENS — the half of the fit that was missing, and the half the user meets first.
- *
- * `fit_to_screen` stopped this app asking for a window taller than the display. It did not put the window
- * anywhere, and an unplaced window is not a centred one: Tauri leaves the position to the platform, and the
- * platform's answer on Windows is `CW_USEDEFAULT` — the cascade, which steps each new window down and to the
- * right of the last. Fit a window to the full height of the work area and then let the cascade push it down,
- * and its bottom edge is under the taskbar. On a first run that is exactly the strip the chat composer lives
- * in: the one control the whole screen exists for, missing, in the first impression the app ever makes.
- *
- * Centring is the placement that cannot do that, and it is what a window with nothing remembered about it is
- * expected to do anyway. Two details are load-bearing:
- *
- * - It centres on the WORK AREA, not on the monitor — which is why this is arithmetic here rather than
- *   Tauri's own `center()`. That one centres on the full screen, so with a taskbar at the bottom it hands
- *   back half a taskbar of the very overhang this exists to remove.
- * - It centres the rectangle the window actually occupies, which for an undecorated window is the size asked
- *   for. While these windows wore a platform frame that was NOT the same rectangle, and centring the inner
- *   size left the title bar over the top edge of the screen and the same distance of window past the bottom.
- *
- * Never negative: a window bigger than the work area starts AT the origin, where the part of it that is on
- * screen is the top-left — the corner carrying the bar to drag it by and the edge to resize it. */
+/* WHERE A COLD-START WINDOW OPENS — the half of the fit that was missing, and the half the user meets first. */
 fn opening_position(work: WorkArea, inner: (f64, f64)) -> (f64, f64) {
     let offset = |available: f64, outer: f64| ((available - outer) / 2.0).max(0.0);
     (
@@ -191,14 +89,7 @@ fn opening_position(work: WorkArea, inner: (f64, f64)) -> (f64, f64) {
     )
 }
 
-/* The work area of the screen a window is about to open on — its usable rectangle rather than its full size,
- * so a taskbar, a dock or a panel is space this app neither sizes into nor places into.
- *
- * `None` when the platform will not say, which is a real answer on a headless or freshly-plugged display and
- * is read as "no reason to shrink the preference, and no better guess than the platform's own placement".
- *
- * The PRIMARY monitor, because a window that does not exist yet is not on any of them — which is the same
- * assumption the OS makes when it places an unplaced window, so the two agree on which screen this is about. */
+/* The work area of the screen a window is about to open on — its usable rectangle rather than its full size, so a taskbar. */
 fn work_area(app: &AppHandle) -> Option<WorkArea> {
     work_area_of(app.primary_monitor().ok().flatten())
 }
@@ -272,15 +163,7 @@ fn kept_on_screen(top: f64, height: f64, work: WorkArea) -> f64 {
     top.min(lowest_top).max(work.origin.1 + CONTENT_MARGIN)
 }
 
-/* THE PAGE SAYS HOW TALL IT IS, AND THE WINDOW FOLLOWS. Called by both of this app's local faces (fitWindow.ts)
- * whenever their content changes size, which is how a setup card with ten plan rows and a requirements list
- * above them gets a window exactly that tall, and the close confirmation one exactly as tall as its two
- * answers. The window is the CALLER's own — Tauri hands the command the webview that invoked it — so remote
- * content, which has no IPC at all, can never size anything.
- *
- * The launcher keeps its top edge (see `kept_on_screen`) and the dialog is re-centred over the window it is
- * about, being a dialog. Both are clamped to the work area of the screen they are on, and a page taller than
- * that scrolls inside its window. */
+/* THE PAGE SAYS HOW TALL IT IS, AND THE WINDOW FOLLOWS. */
 pub fn fit_to_content(app: &AppHandle, window: &WebviewWindow, content_height: f64) {
     let width = match window.label() {
         LAUNCHER => LAUNCHER_WIDTH,
@@ -445,17 +328,10 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         .title("Intentic")
         .inner_size(size.0, size.1)
         .min_inner_size(min.0, min.1)
-        /* NO PLATFORM TITLE BAR ON EITHER FACE — see [`WindowVerb`] for the bar the page draws in its place,
-         * and `arm_frame_fallback` below for what this window does when no page ever draws one. `shadow` is
-         * what keeps an undecorated window looking like a window on Windows: the drop shadow, the 1px border
-         * and, on Windows 11, the rounded corners. */
+/* NO PLATFORM TITLE BAR ON EITHER FACE — see [`WindowVerb`] for the bar the page draws in its place. */
         .decorations(false)
         .shadow(true)
-        /* Tauri's native drag-drop handler and the webview's HTML5 drag-drop API are mutually exclusive on
-         * Windows (and the same on Linux): with the handler on, OS files never reach the SPA's drop handlers
-         * (WorkspaceDesktop.vue, WorkspaceTree.vue), so drag-and-drop from Explorer works in the browser but
-         * not here. The workspace upload pipeline is built on DataTransfer/webkitGetAsEntry, so the handler
-         * stays off on this window. */
+/* Windows uses either Tauri drag-drop or HTML5 drag-drop, never both. */
         .disable_drag_drop_handler()
         // The one window this is actually for — see BROWSER_ARGS, and `loopbackUngated` below, which tells the
         // page it was done.
@@ -508,10 +384,7 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
                     api.prevent_close();
                     request_close(&handle);
                 }
-                /* WHAT THE PAGE'S MAXIMISE BUTTON DRAWS FOLLOWS THE WINDOW, NOT THE PRESS. Half the ways a
-                 * window gets maximised never touch that button — Win+↑, a drag to the top edge, a snap
-                 * layout, the platform's own restore — and a glyph that only tracked presses would be wrong
-                 * after every one of them. */
+/* WHAT THE PAGE'S MAXIMISE BUTTON DRAWS FOLLOWS THE WINDOW, NOT THE PRESS. */
                 WindowEvent::Resized(_) => {
                     if let Some(window) = handle.get_webview_window(WORKSPACE) {
                         announce_frame(&window, false);
@@ -536,13 +409,7 @@ pub fn show_workspace(app: &AppHandle) {
     show_workspace_at(app, None);
 }
 
-/* ------------------------------------------------------------------------------------------------------
- * THE TITLE BAR THE PAGE DRAWS, AND THE FRAME THAT COMES BACK IF IT DOES NOT.
- *
- * There is one window, so these are two bits rather than a struct in the app's state: whether the page has
- * ever said its own bar is up, and what this window last told the page about being maximised. The second is
- * what keeps a resize drag from firing one `eval` into the webview per frame.
- * ------------------------------------------------------------------------------------------------------ */
+/* THE TITLE BAR THE PAGE DRAWS, AND THE FRAME THAT COMES BACK IF IT DOES NOT. */
 static CHROME_READY: AtomicBool = AtomicBool::new(false);
 static ANNOUNCED_MAXIMIZED: AtomicBool = AtomicBool::new(false);
 
@@ -551,21 +418,7 @@ static ANNOUNCED_MAXIMIZED: AtomicBool = AtomicBool::new(false);
 /// nothing is returned and nothing becomes callable.
 const FRAME_EVENT: &str = "intentic-desktop-window";
 
-/* HOW LONG A COLD START MAY GO WITHOUT A TITLE BAR BEFORE THE PLATFORM'S COMES BACK.
- *
- * The app and the SPA ship separately — a binary somebody installed once, against a page deployed
- * continuously — so an app that opens a frameless window for a page which draws no controls is a state to
- * survive rather than one to declare impossible. It is not only version skew: a page that fails to load at
- * all (no network on a cold start, the platform down, an error page in the webview) draws nothing either, and
- * that window would have no bar, no ×, and no way to be moved off the corner it opened on.
- *
- * Chosen against the slow end of a working load rather than the median one — and against the page's `load`
- * event, not its first paint: the page announces itself only once the document has finished loading, because
- * an `intentic://` navigation started any earlier aborts what the document is still fetching and leaves the
- * page's renderer in its loading regime for good (environments/desktop.ts `openDesktopLink`). Fonts and the
- * sign-in script are in that wait. A page that announces itself after the fallback has fired takes the frame
- * straight back off (`chrome_is_up`), so a bad connection costs a flicker; silence costs nothing at all,
- * because the frame is what the user gets. */
+/* The app and the SPA ship separately — a binary somebody installed once, against a page deployed continuously. */
 const CHROME_GRACE: Duration = Duration::from_secs(8);
 
 /// Hand the platform's frame back if nothing draws a bar in time. Armed once, when the window is built.
@@ -607,11 +460,7 @@ fn announce_frame(window: &WebviewWindow, always: bool) {
     ));
 }
 
-/* A PRESS ON THE PAGE'S OWN TITLE BAR. One verb per press, always about the workspace window, and every one
- * of them a link the window intercepted rather than a command the page can call (setup_link.rs [`WindowVerb`]).
- *
- * The × is the interesting one: it does not close anything here. It asks the window to close, exactly as the
- * platform's × did, so the question about the tray is asked in the one place that has ever asked it. */
+/* A PRESS ON THE PAGE'S OWN TITLE BAR. */
 fn work_the_window(app: &AppHandle, verb: WindowVerb) {
     let Some(window) = app.get_webview_window(WORKSPACE) else {
         return;
@@ -640,23 +489,7 @@ fn work_the_window(app: &AppHandle, verb: WindowVerb) {
     }
 }
 
-/* THE × IS A QUESTION, ASKED BEFORE ANYTHING HAPPENS — and asked in this app's own voice.
- *
- * A window that disappears into a tray icon is only a good deal if the user can find the icon, and on Windows
- * they often cannot: new tray icons are filed behind the overflow arrow by default, and nothing an app can do
- * promotes itself out of there. That is how this app came to be met as the uninstaller's "Intentic is running"
- * prompt — a process nobody could see, announcing itself at the worst possible moment.
- *
- * The first answer to that was a notice AFTER the fact: the window vanished, and an OS message box said where
- * it had gone. Two things were wrong with it and both were the same thing. It reported rather than asked, so
- * the one gesture it left was "OK" to something already done — and every native message box carries an icon,
- * which is what makes Windows play the alert chime at it. A window closing the way its author intended is not
- * an event that should sound like a fault.
- *
- * So the close asks first, offers the two answers that actually exist, and is drawn by this app rather than by
- * the platform — which is also the only way to draw it silently. Answer it once with "always do this" and the
- * question is gone for good (`AppState::close_action`).
- */
+/* THE × IS A QUESTION, ASKED BEFORE ANYTHING HAPPENS — and asked in this app's own voice. */
 fn request_close(app: &AppHandle) {
     match app.state::<crate::state::AppState>().close_action() {
         Some(action) => apply_close(app, action),
@@ -819,11 +652,7 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
         .decorations(false)
         .shadow(true)
         .maximizable(false)
-        /* The frame between "window mapped" and "webview painted", which is white by default and reads as a
-         * flash on a dark screen — and this window maps at the exact moment the workspace steps aside, so a
-         * white frame here is a white flash in the middle of somebody's app. Mirrors `--color-canvas` in dark
-         * mode (@intentic/ui semantic-colors.css), which index.html pins — the same colour the confirmation
-         * dialog paints for the same reason. */
+/* The frame between "window mapped" and "webview painted", which is white by default and reads as a flash on a dark screen. */
         .background_color(tauri::window::Color(15, 13, 10, 255))
         // Same reason as the confirmation dialog's: one environment, one set of arguments (BROWSER_ARGS).
         .additional_browser_args(BROWSER_ARGS)
@@ -857,17 +686,7 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
     }
 }
 
-/* THIS APP'S OWN FACE, IN THE WORKSPACE'S PLACE — for BOTH of the screens it draws.
- *
- * There is one entry point because there is one gesture: the window stops showing the hosted product and
- * starts showing this app, at the same size, in the same spot, under a title that says which screen it is on.
- * WHICH screen is App.vue's business, not this file's (a setup can arrive at a manager window, and a finished
- * one hands the window back), and the frame is identical either way, so there is nothing here to choose.
- *
- * The setup screen used to have a second entry point and a frame of its own — a small window centred on the
- * workspace, with that window left mapped behind it. It was defended as "an install is not somewhere you go",
- * and the user it was for saw two Intentic windows during the one flow where they know least about the app.
- * A screen of this app is a screen of this app. */
+/* THIS APP'S OWN FACE, IN THE WORKSPACE'S PLACE — for BOTH of the screens it draws. */
 pub fn show_launcher(app: &AppHandle) {
     if let Some(window) = launcher(app) {
         let workspace = app.get_webview_window(WORKSPACE);
@@ -876,25 +695,7 @@ pub fn show_launcher(app: &AppHandle) {
     }
 }
 
-/* A RUN THAT STOPPED HAS TO REACH THE PERSON WHO STARTED IT.
- *
- * An install runs for minutes, and this window is deliberately minimisable and deliberately never topmost,
- * because taking someone's screen for those minutes would be indefensible. The cost of that is the case this
- * exists for: a setup that fails while the window is minimised, or while the user has gone back to their
- * workspace, changes only pixels nobody is looking at. "The error did not surface and did not notify user"
- * is precisely that.
- *
- * `request_user_attention` is the OS's own way to point at a window — a flashing taskbar button on Windows,
- * the equivalent hint on Linux — and it is the polite one: it does not steal focus, it waits to be noticed.
- * The unminimise and the show are what make there be something to notice.
- *
- * IT SWAPS WHEN, AND ONLY WHEN, THE WORKSPACE HAS THE FRAME. Walking away from a running install hands the
- * window back, and a bare `show()` from there would put this face up BESIDE the workspace — reintroducing the
- * second window at the worst possible moment, on the one screen that exists to be read carefully. That case
- * has to take focus, because the window the user was looking at is the one stepping aside. Every other case
- * does not, so it stays a show and a hint: raising a window somebody is not looking at over the application
- * they moved on to is exactly what `request_user_attention` exists to avoid.
- */
+/* An install runs for minutes, and this window is deliberately minimisable and deliberately never topmost. */
 pub fn alert_setup(app: &AppHandle) {
     let Some(window) = app.get_webview_window(LAUNCHER) else {
         return;
@@ -915,18 +716,7 @@ pub fn alert_setup(app: &AppHandle) {
     let _ = window.request_user_attention(Some(tauri::UserAttentionType::Critical));
 }
 
-/* THE INSTALL'S PROGRESS, TOLD TO THE WORKSPACE IT WAS STARTED FROM.
- *
- * "Back to your workspace" hands the frame back to the SPA's setup page, and that page used to know nothing
- * from then on: it sat on "Handed to the app. Follow it in the Intentic window" about a window that had just
- * stepped aside, so the user could not tell whether leaving had stopped the install or how far it had got.
- * So the launcher reports every change of its own progress bar here, and this dispatches it into the
- * workspace page the way the update announcement travels (update.rs `announce_to_workspace`): one way, an
- * event and nothing callable, carrying an object serde wrote rather than strings this file interpolated. The
- * page draws the same bar and offers the way back (`intentic://launcher`).
- *
- * Every tick, because the estimate moves every second and a strip that reads "about 3 min left" for four
- * minutes is the frozen screen this exists to replace. A workspace webview that is not there costs nothing. */
+/* "Back to your workspace" hands the frame back to the SPA's setup page, and that page used to know nothing from then on: it sat on "Handed to the app. */
 pub fn announce_setup(app: &AppHandle, report: &SetupReport) {
     let Some(window) = app.get_webview_window(WORKSPACE) else {
         return;
@@ -1007,22 +797,7 @@ fn park_setup(app: &AppHandle, args: SetupArgs) {
     let _ = tauri::Emitter::emit(app, "desktop://pending-setup", ());
 }
 
-/* A SETUP THIS APP NEVER SAW ITS OWN WINDOW ASK FOR — so ask, before anything runs.
- *
- * A parked setup runs immediately, and the consent for that is having installed, opened and signed into this
- * app to run a sandbox on this device: its setup page hands the code over on arrival rather than asking
- * again (setupArrival.ts). That argument holds for exactly one of the three directions a link arrives from,
- * the app's own window. An `intentic://setup` from the OS is a link ANY page can navigate to, and all the
- * user was shown before it got here is the browser's "Open Intentic?" — a question about opening an app,
- * answered by someone who is about to get a container, a tunnel putting it on the internet, and (with
- * `syncDir`) a folder of theirs mirrored into it.
- *
- * So this says those things out loud and defaults to no. It is the same shape as the `state` nonce on an auth
- * handoff (auth.rs): a request this process cannot tie to something it started is not one it acts on.
- *
- * Non-blocking, like the tray notice and for the same reason: links reach here from the deep-link callback
- * and from a second instance's argv, either of which can be the main thread — and waiting there for an answer
- * waits on the thread that has to draw it. */
+/* A SETUP THIS APP NEVER SAW ITS OWN WINDOW ASK FOR — so ask, before anything runs. */
 fn confirm_setup(app: &AppHandle, args: SetupArgs) {
     let sync = match args.sync_dir.as_deref() {
         Some(dir) => {
@@ -1052,9 +827,7 @@ fn confirm_setup(app: &AppHandle, args: SetupArgs) {
         });
 }
 
-/* THE PAIR THAT HAS TO STAY A PAIR: the flag that stops the webview gating loopback, and the claim the page
- * believes about it. Asserted on the strings because neither can be observed anywhere else — the arguments
- * reach a WebView2 environment that only exists on Windows at runtime, and the script runs in a webview. */
+/* THE PAIR THAT HAS TO STAY A PAIR: the flag that stops the webview gating loopback, and the claim the page believes about it. */
 #[cfg(test)]
 mod loopback_tests {
     use super::*;
@@ -1091,10 +864,7 @@ mod loopback_tests {
         assert!(script.contains("loopbackUngated: true"), "{script}");
     }
 
-    /* THE OTHER PAIR THAT HAS TO STAY A PAIR: this window opens with no platform frame, and the page is told
-     * so — that word is the whole of what makes it draw a title bar (WindowControls.vue). Say it without
-     * building the window undecorated and the user gets two sets of buttons; build it undecorated without
-     * saying it and they get none, on a window they cannot move. */
+/* THE OTHER PAIR THAT HAS TO STAY A PAIR: this window opens with no platform frame, and the page is told so. */
     #[test]
     fn the_page_is_told_the_window_has_no_frame_of_its_own() {
         let script = workspace_init_script("install-1", None);
@@ -1307,12 +1077,7 @@ mod frame_tests {
         );
     }
 
-    /* THE BUG AS REPORTED, which the fit alone did not cover: the window opened with its bottom edge — and the
-     * chat composer in it — under the taskbar. Sizing it to the screen was never enough on its own, because
-     * nothing then said where it went, and Windows' answer to that is a cascade DOWN from the top-left.
-     *
-     * The numbers are the ones off the screenshot: a work area 1531×883 logical, which is a 2297×1324 pixel
-     * usable rectangle at the 150% scale the display was running. */
+/* THE BUG AS REPORTED, which the fit alone did not cover: the window opened with its bottom edge — and the chat composer in it — under the taskbar. */
     #[test]
     fn a_cold_start_window_opens_fully_inside_the_work_area() {
         let work = screen((1531.0, 883.0));

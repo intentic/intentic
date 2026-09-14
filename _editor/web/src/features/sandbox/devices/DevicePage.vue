@@ -151,18 +151,12 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                 </template>
             </Row>
 
-            <!--
-                What this device is doing for the sandbox: the one thing anybody opened the machine to read.
-                Warning ink when the enrollment has stopped checking in.
-            -->
+<!-- What this device is doing for the sandbox: the one thing anybody opened the machine to read. -->
             <p v-if="syncNote(device, readAt)" class="min-w-0 text-xs" :class="syncStopped(device, readAt) ? `text-warning` : `text-muted`">
                 {{ syncNote(device, readAt) }}
             </p>
 
-            <!--
-                Everything the machine wants, in one place and one visual language, each sentence beside its own
-                remedy. A healthy device draws none of this.
-            -->
+<!-- Everything the machine wants, in one place and one visual language, each sentence beside its own remedy. -->
             <Notice v-for="concern in concerns" :key="concern.key" :tone="concern.tone">
                 <span class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                     <span class="min-w-0">
@@ -184,10 +178,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                     >
                         <template #icon><Icon name="arrow-up-right" /></template>
                     </Button>
-                    <!--
-                        Not gated on `ops.working`, unlike every button above: this one runs nothing on the machine,
-                        it only asks this sandbox for a command to carry there.
-                    -->
+                    <!-- Connect actions request a command for the machine without running one locally. -->
                     <Button
                         v-else-if="concern.fix?.kind === `connect`"
                         size="small"
@@ -245,10 +236,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                 </div>
             </RowNote>
 
-            <!--
-                Both ops take their own connection down (the loop being restarted carries the request), so the
-                stream always stops mid-sentence with no outcome to report.
-            -->
+            <!-- Agent operations report status and output in one block. -->
             <RowNote
                 v-if="
                     ops.agentWaiting.value ||
@@ -274,15 +262,9 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             </RowNote>
         </RowGroup>
 
-        <!--
-            One row per sandbox, the page's only disclosure: a row is a summary and its folder, ports, image and
-            share are the evidence. Only a machine that reported can say any of it.
-        -->
+<!-- One row per sandbox, the page's only disclosure: a row is a summary and its folder, ports, image and share are the evidence. -->
         <RowGroup v-if="device.report" label="Sandboxes on this device" :count="row.groups.length">
-            <!--
-                The same two commands the pairing rows carry, run bare (every sandbox this machine pairs) — the
-                switch reached for when working on something else on this laptop. Above the list it acts on.
-            -->
+<!-- The same two commands the pairing rows carry, run bare (every sandbox this machine pairs). -->
             <RowNote v-if="switches.length > 0" variant="block">
                 <div class="flex flex-col gap-2">
                     <div v-for="half in switches" :key="half.label" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
@@ -318,10 +300,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             </RowNote>
 
             <RowNote variant="block">
-                <!--
-                    No `agent` prop, deliberately: that state is the strip above, not a second liveness statement
-                    riding this list. Hairlines are its own now that the list is a group's surface, not rail content.
-                -->
+<!-- No `agent` prop, deliberately: that state is the strip above, not a second liveness statement riding this list. -->
                 <DeviceDetail
                     :pairings="device.report.pairings"
                     :ports="device.report.ports"
@@ -343,16 +322,10 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                             @act="(verb) => ops.act(group, verb)"
                         />
                     </template>
-                    <!--
-                        Controls for this pairing's files, under the folder rather than up with the container verbs:
-                        Pause stops no container, only the file movement.
-                    -->
+<!-- Controls for this pairing's files, under the folder rather than up with the container verbs: Pause stops no container, only the file movement. -->
                     <template #folder="{ group }">
                         <div class="mt-1 flex flex-wrap items-center gap-2">
-                            <!--
-                                First, since a row with conflicts is open because of them; starts a turn rather than a
-                                command, because choosing between two edited copies is per-file judgement (sync/conflictAsk.ts).
-                            -->
+<!-- First, since a row with conflicts is open because of them; starts a turn rather than a command. -->
                             <Button
                                 v-if="fixable(device, group)"
                                 size="small"
@@ -384,10 +357,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                                     )
                                 "
                             />
-                            <!--
-                                The one control here nothing undoes in a click. Asks the machine to unpair, so its agent
-                                tears down its own sessions and self-revokes.
-                            -->
+<!-- The one control here nothing undoes in a click. -->
                             <Button
                                 v-if="commandable(device, group)"
                                 size="small"
@@ -401,10 +371,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                             />
                         </div>
                     </template>
-                    <!--
-                        The switch that clears the user's own localhost, under the ports it's about rather than with the
-                        container verbs; its label points whichever way the machine currently says.
-                    -->
+<!-- The switch that clears the user's own localhost, under the ports it's about rather than with the container verbs. -->
                     <template #ports="{ group }">
                         <div class="mt-1 flex flex-wrap items-center gap-2">
                             <Button
@@ -441,16 +408,10 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             </RowNote>
         </RowGroup>
 
-        <!--
-            What this sandbox keeps here, as opposed to what the person does: runners it can hand a conversation to.
-            Outside the report gate, since a device that never reported may still hold one.
-        -->
+<!-- What this sandbox keeps here, as opposed to what the person does: runners it can hand a conversation to. -->
         <DeviceRunners :device="device" />
 
-        <!--
-            Cutting this device off entirely, in a group of its own at the bottom: it ends everything above it at
-            once, so it does not sit at the same weight as the switches that are all reversible.
-        -->
+<!-- Cutting this device off entirely, in a group of its own at the bottom: it ends everything above it at once. -->
         <RowGroup v-if="device.sync && isOwner" label="Danger zone">
             <Row icon="times" tone="danger" title="Revoke this device's access">
                 <template #description>
@@ -474,12 +435,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             <RowNote v-else-if="ops.outcome.value?.key === ops.accessKey.value">{{ ops.outcome.value.message }}</RowNote>
         </RowGroup>
 
-        <!--
-            The machine's own pairing dialog, the one its capability card opens, mounted where its silence is read:
-            a fresh single-use command to run out there, which flips to a confirmation by itself the moment the
-            machine dials back in. Only ever for a machine that is a connected device — a sync-only enrollment has
-            no host capability to re-pair.
-        -->
+<!-- The machine's own pairing dialog, the one its capability card opens, mounted where its silence is read: a fresh single-use command to run out there. -->
         <HostConnectDialog
             v-if="device.hostId !== undefined"
             :id="device.hostId"
@@ -504,10 +460,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             </p>
         </ConfirmDialog>
 
-        <!--
-            The sandbox's share of its machine, as the kit's form: current caps, the engine's size for the rails, and
-            whether this row is the sandbox serving the page.
-        -->
+<!-- The device form shows caps, rail size, and serving state. -->
         <SandboxResourcesDialog
             :open="ops.reshaping.value !== undefined"
             :name="ops.reshaping.value?.group.title ?? ``"

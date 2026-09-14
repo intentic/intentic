@@ -2,8 +2,7 @@ import { expect, test } from "vitest";
 import type { CursorHookService } from "./cursor-hooks.js";
 import { checks } from "./invariant.js";
 
-/* Three links, each a path another daemon can rewrite after this one said `ready`. Each is broken in turn
- * below, and the socket one by the only means that can see it: asking who is listening. */
+/* Three links, each a path another daemon can rewrite after this one said `ready`. */
 
 const fail = (message: string): never => {
     throw new Error(message);

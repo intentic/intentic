@@ -26,10 +26,7 @@ test("boot sweep empties tmp/ but keeps the directory for the next writer", asyn
     expect(await readdir(join(root, ".intentic/local/tmp"))).toEqual([]);
 });
 
-/* THE SWEEP DELETES WHAT THE TABLE CLASSES AS DISPOSABLE, AND NOTHING ELSE. Every rule it has is derived from
- * a class, so a tree the table has no name for is not the janitor's to touch: "I don't recognise this" is the
- * one input that must never resolve to `rm -rf`, because it is exactly what a store added tomorrow, and a
- * directory an owner put there by hand, both look like. */
+/* THE SWEEP DELETES WHAT THE TABLE CLASSES AS DISPOSABLE, AND NOTHING ELSE. */
 test("boot sweep leaves declared state and undeclared trees alike alone", async () => {
     const root = await workspace();
     await mkdir(join(root, ".intentic/local/tmp"), { recursive: true });

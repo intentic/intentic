@@ -408,10 +408,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 
 <template>
     <!-- Delegated markdown controls (copy buttons, file links), since both live inside v-html. -->
-    <!--
-        A folded message renders like any other row: no pin, no extra inset. An acknowledgment keeps the user's alignment; an errand sits left with
-        the machinery.
-    -->
+    <!-- A folded message renders like any other row: no pin, no extra inset. -->
     <!-- Blocks within a message share the transcript's own gap (.chat-stack, --chat-gap). -->
     <div
         ref="row"
@@ -435,7 +432,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <p class="whitespace-pre-wrap">{{ message.text }}</p>
         </ChatFold>
         <div v-else-if="message.role === 'user'" class="group relative flex max-w-[85%] flex-col items-end gap-1.5">
-            <!-- Stacked attachment row above the prompt: used on narrow panels, during edit, or whenever attachmentsAside doesn't apply. -->
+            <!-- Attachments stack above the prompt when they cannot fit beside it. -->
             <ChatAttachmentStrip
                 v-if="attachmentThumbs.length"
                 :attachments="attachmentThumbs"
@@ -443,12 +440,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 :class="attachmentsAside && '@lg:hidden'"
             />
             <div class="flex items-center gap-1">
-                <!--
-                    Beside-prompt thumbnail once the panel is wide enough (attachmentsAside gates it): costs only the taller element. Queried against
-                    the transcript column.
-                -->
+                <!-- Beside-prompt thumbnail once the panel is wide enough (attachmentsAside gates it): costs only the taller element. -->
                 <ChatAttachmentStrip v-if="attachmentsAside" :attachments="attachmentThumbs" class="mr-1 hidden shrink-0 self-start @lg:flex" />
-                <!-- `relative` belongs on the frame, not the scroller, so the fade and toggle chip don't scroll away with the clamped text. -->
+                <!-- The frame owns positioning for the fade and toggle chip. -->
                 <div v-if="message.text" class="chat-surface relative rounded-lg" :class="{ 'chat-prompt-clamped': overflowing && !expanded }">
                     <div
                         ref="bubble"
@@ -459,7 +453,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     >
                         {{ message.text }}
                     </div>
-                    <!-- Shown only when the clamp cut the text. Expanding doesn't unpin: past the cap the open bubble scrolls internally. -->
+                    <!-- Shown only when the clamp cut the text. -->
                     <button
                         v-if="overflowing"
                         type="button"
@@ -472,20 +466,14 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     </button>
                 </div>
             </div>
-            <!--
-                Sent-time label sits in the margin beside the bubble, visible only on hover, so it costs no row height. Centered on the message via
-                `inset-y-0` plus flex, not a transform.
-            -->
+            <!-- Sent-time label sits in the margin beside the bubble, visible only on hover, so it costs no row height. -->
             <span
                 v-if="sentClock"
                 v-tooltip.top="sentExact"
                 class="absolute inset-y-0 right-full mr-2 flex items-center text-2xs whitespace-nowrap tabular-nums text-subtle opacity-0 transition-opacity group-hover:opacity-100"
                 >{{ sentClock }}</span
             >
-            <!--
-                Edit pencil sits in the gutter's own column (the fork mark's lane), costing no width. Pinned to the message's top, not centered,
-                since it acts on the first line.
-            -->
+            <!-- Edit pencil sits in the gutter's own column (the fork mark's lane), costing no width. -->
             <button
                 v-if="editable"
                 type="button"
@@ -502,12 +490,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             v-else-if="message.role === 'notice' && message.text !== ''"
             class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs text-subtle"
         >
-            <!--
-                Mark, sentence and clock are one non-wrapping group inside the wrapping row: a sentence wider than the
-                pane must wrap inside its own span, and as three siblings of a `flex-wrap` row it would instead take a
-                line of its own and strand the mark above it and the clock below. The offers below stay siblings, since
-                wrapping is exactly what they want.
-            -->
+<!-- Mark, sentence and clock are one non-wrapping group inside the wrapping row: a sentence wider than the pane must wrap inside its own span. -->
             <span class="flex min-w-0 items-center gap-x-2">
                 <!-- Spins and shows elapsed time while the notice's wait runs, then settles to a plain line (ChatMessage.noticeWait). -->
                 <Icon v-if="pendingWait" name="spinner" spin class="shrink-0 text-2xs text-info" />
@@ -540,7 +523,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <!-- Shared with the Subagents area: a delegated agent's reasoning reads the same as this turn's own. -->
             <ChatThinking v-if="message.thinking" :thinking="message.thinking" :streaming="streaming" />
 
-            <!-- `live` marks the bubble the turn is currently writing into; elsewhere tool calls and todos are a frozen record and must not animate. -->
+            <!-- Live marks the bubble currently receiving streamed text. -->
             <div v-if="message.tools?.length" class="flex w-full flex-col gap-1">
                 <ChatToolRows v-if="showToolCalls" :tools="message.tools" :live="streaming" />
                 <ChatToolRun v-else :tools="message.tools" :live="streaming" />
@@ -548,10 +531,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 
             <ChatTodoList v-if="message.todos?.length" :todos="message.todos" :live="streaming" />
 
-            <!--
-                Rendered as useMarkdown's parts (prose runs, figures), so a settled run's DOM stays untouched while only the tail re-renders.
-                `.md-part` uses display:contents to keep prose a direct child of `.chat-markdown`.
-            -->
+            <!-- Markdown parts preserve settled DOM while the live tail updates. -->
             <div v-if="message.text" class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5">
                 <template v-for="(part, index) in body" :key="index">
                     <div v-if="part.kind === `html`" class="md-part" v-html="part.html"></div>
@@ -581,10 +561,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         <MarkdownFigure v-else :figure="part.figure" />
                     </template>
                 </div>
-                <!--
-                    Shown only when the model wrote the plan to a file and summarized it in the adjacent prose (agent.ts). Height is
-                    viewport-relative, capped at 40rem.
-                -->
+<!-- Shown only when the model wrote the plan to a file and summarized it in the adjacent prose (agent.ts). -->
                 <ChatDocumentBody
                     v-if="message.plan.document"
                     :document="message.plan.document"
@@ -690,7 +667,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </template>
             </ChatCard>
 
-            <!-- The agent's terminal needs a person at a prompt it can't answer; the browser card's twin, navigating to the terminal panel. -->
+            <!-- Terminal offers appear as cards that link to the terminal view. -->
             <ChatCard
                 v-if="message.terminalHelp"
                 icon="terminal"
@@ -712,10 +689,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </template>
             </ChatCard>
 
-            <!--
-                USDC spend gate: every figure comes from the endpoint's 402 challenge and the wallet ledger, never the model; only `why` is the
-                agent's words.
-            -->
+            <!-- Payment figures come from the endpoint challenge and wallet ledger. -->
             <ChatCard
                 v-if="message.paymentOffer"
                 icon="credit-card"
@@ -744,7 +718,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     </span>
                 </div>
 
-                <!-- From the endpoint's own settlement answer; an unsettled payment spends nothing, since the authorization simply expires. -->
+                <!-- A receipt is shown only after the endpoint settles the payment. -->
                 <div v-if="message.paymentOffer.receipt" class="chat-card-row">
                     <span v-if="message.paymentOffer.receipt.outcome === 'paid'" class="truncate font-mono text-2xs text-muted"
                         >Paid ${{ message.paymentOffer.receipt.amountUsd
@@ -764,10 +738,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </template>
             </ChatCard>
 
-            <!--
-                The only card addressed to named approvers, not whoever's reading: the daemon verifies identity against that list
-                (secrets/credential-gate.ts).
-            -->
+<!-- The only card addressed to named approvers, not whoever's reading: the daemon verifies identity against that list (secrets/credential-gate.ts). -->
             <ChatCard
                 v-if="message.credentialOffer"
                 icon="key"
@@ -831,10 +802,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </template>
             </ChatCard>
 
-            <!--
-                Title and id come from the daemon-validated catalog, never the model. Connect is both a decision and a navigation to the Capabilities
-                page.
-            -->
+            <!-- Title and id come from the daemon-validated catalog, never the model. -->
             <ChatCard
                 v-if="message.capabilityOffer"
                 icon="bolt"
@@ -890,12 +858,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         >
     </div>
 
-    <!--
-        One line naming each note the daemon prepended, opening to the exact text. Its own row outside `.chat-prompt`, so it doesn't ride the pinned
-        band.
-    -->
+    <!-- One line naming each note the daemon prepended, opening to the exact text. -->
     <div v-if="message.notes?.length" class="chat-message chat-stack flex flex-col" :class="{ 'chat-doomed': doomed }">
-        <!-- `align-left`, not `file` or `paperclip`: what's hidden is words the app added, not a file the user attached (those carry `file`). -->
+        <!-- Notes use a text icon because they are app-added words, not attachments. -->
         <ChatFold icon="align-left" label="Sent with your message" :detail="noteTitles">
             <div class="flex flex-col gap-2">
                 <div v-for="note in message.notes" :key="note.title" class="flex flex-col gap-0.5">

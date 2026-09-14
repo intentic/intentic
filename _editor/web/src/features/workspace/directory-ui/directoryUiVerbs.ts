@@ -1,8 +1,4 @@
-/* The directory-UI bridge allowlist, pure, no imports, so it's unit-testable without the sandbox/env stack.
- * This IS the security boundary: a directory UI (rendered in a sandboxed srcdoc iframe) may invoke only the
- * verbs here, each mapping its args to exactly one daemon call. Unknown verbs throw; ids are encoded into the
- * path so a crafted id can't escape its route. Adding a verb is a deliberate app change, a UI can't grant
- * itself more. The transport + postMessage wiring lives in useDirectoryUi.ts. */
+/* The directory-UI bridge allowlist, pure, no imports, so it's unit-testable without the sandbox/env stack. */
 
 export interface BridgeCall {
     readonly path: string;

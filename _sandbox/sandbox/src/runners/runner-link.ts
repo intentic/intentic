@@ -8,11 +8,7 @@ import { version } from "../version.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 import { createRunnerService } from "./runner-service.js";
 
-/* THE ONE SOCKET a runner holds to its parent: the peer dial (sandbox-contract's peer-dial.ts, the same loop
- * the machine agent and the browser extension run) inside the daemon. Outbound only: the runner has no tunnel
- * and no public name, so it can only ever be the side that dials, and everything the parent asks arrives on
- * this socket as oRPC against runnerContract. What is the runner's own is its hello, which carries the parity
- * claim (runner-protocol.ts says what the parent does with it). */
+/* A runner holds one parent socket through the sandbox-contract peer dial. */
 export const startRunnerLink = (services: Services, identity: RunnerIdentity): PeerLink => {
     const handler = new RPCHandler(createRunnerService(services, identity));
     return dialPeer<WebSocket>({
@@ -35,9 +31,7 @@ export const startRunnerLink = (services: Services, identity: RunnerIdentity): P
         },
         attach: (ws) => handler.upgrade(ws as Parameters<RPCHandler<object>["upgrade"]>[0]),
         backoff: createBackoff(PEER_LINK_BACKOFF),
-        /* A parent that went away without closing this socket leaves a runner that looks attached and answers
-         * nothing — and unlike a device, nobody is watching a card for it, so silence is the only signal there
-         * is. Timed off the parent's own heartbeat. */
+        /* A silent parent socket must expire so a runner cannot remain falsely attached. */
         silenceMs: peerLinkSilenceMs(RUNNER_HEARTBEAT_MS),
         log: (message) => services.logger.info({ parent: identity.parentUrl, id: identity.id }, `runner link: ${message}`),
         revoked: () =>

@@ -18,9 +18,7 @@ export const intent = defineIntent((i) => {
         apiToken: env("CLOUDFLARE_API_TOKEN"),
     });
 
-    // Discord bot as intentic's back-channel: intentic owns the full server structure (categories, channels, webhooks);
-    // only the bot token is supplied. CI/CD notifications and reconcile summaries post automatically for apps that wire
-    // it.
+    // Post notifications only when the configured app wires the bot.
     const discord = i.have.discord("discord", {
         botToken: env("DISCORD_BOT_TOKEN"),
     });

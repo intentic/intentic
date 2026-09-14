@@ -11,11 +11,7 @@ interface Props {
 
 const { doc, eyebrow } = Astro.props;
 
-/* A document with a table gets a wider column. Four columns of prose inside the 2xl reading measure leaves
- * each one about 140px, which is where "Data Privacy Framework and Standard Contractual Clauses" becomes a
- * five-line stack and the table stops being scannable — and scanning is the entire use of the sub-processor
- * page. Prose is unaffected either way: paragraphs and list items carry their own max-w-longform, so they
- * keep their measure inside the wider container. */
+/* A document with a table gets a wider column. */
 const measure = doc.sections.some((section) => section.table !== undefined) ? "max-w-4xl" : "max-w-2xl";
 ---
 
@@ -42,9 +38,7 @@ const measure = doc.sections.some((section) => section.table !== undefined) ? "m
                                     ))}
                                 </ul>
                             )}
-                            {/* Scrolls rather than wraps to nothing: the sub-processor table has four columns of
-                                prose, and squeezing them into a phone's width makes the safeguard column
-                                unreadable, which is the column a reader came for. */}
+                            {/* Allow wide legal tables to scroll instead of becoming unreadable. */}
                             {section.table && (
                                 <div class="mt-4 overflow-x-auto">
                                     <table class="w-full min-w-lg border-collapse text-left text-sm">

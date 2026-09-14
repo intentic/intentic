@@ -16,11 +16,7 @@ const localPart = (label: string): string => {
     return at > 0 ? label.slice(0, at) : label;
 };
 
-/**
- * Account name as the card prints it: domain dropped when the local half is unique among `among` (every account
- * connected for that provider).
- * Clipped from the end to the budget.
- */
+/** Account name as the card prints it: domain dropped when the local half is unique among `among` (every account connected for that provider). */
 export const shortAccount = (label: string, among: readonly string[]): string => {
     const local = localPart(label);
     const ambiguous = among.filter((other) => localPart(other) === local).length > 1;

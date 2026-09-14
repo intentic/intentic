@@ -1,6 +1,4 @@
-/* WHEN A VENDOR NAMES TWO MODELS THE SAME. Cursor's catalog publishes `auto` and `auto-smart` (Cursor Router)
- * both as "Auto", which reached the picker as two identical rows: the same choice offered twice, with nothing
- * on either row saying which router a pick would run on. */
+/* WHEN A VENDOR NAMES TWO MODELS THE SAME. */
 import { beforeEach, expect, it } from "vitest";
 import { modelOptionsFor, perProvider, providerModels } from "../accounts/providerCatalog";
 

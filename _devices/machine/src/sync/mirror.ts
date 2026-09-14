@@ -450,7 +450,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         for (const { pairing, base } of dialed) {
             let pausedThisPass = false;
             try {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox at a time keeps the log readable and the tunnels unhammered
+                // oxlint-disable-next-line eslint/no-await-in-loop -- One sandbox at a time keeps tunnel state ordered.
                 const mirrored = await servePairing(mutagen, pairing, base, claimedBy, log);
                 rejectedPolls.delete(pairing.sandboxId);
                 unreachablePolls.delete(pairing.sandboxId);

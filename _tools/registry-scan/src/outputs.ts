@@ -3,12 +3,7 @@ import { dirname, join } from "node:path";
 import { REGISTRY_FACTS_FILE, type RegistryFile } from "@intentic/registry";
 import type { ListingProposal, ScanResult } from "./scan.js";
 
-/* Everything the scan leaves on disk for the workflow to pick up.
- *
- * Everything that needs to understand JSON happens here; the workflow that calls it only moves files and
- * talks to `gh`. So a proposal is materialised as a COMPLETE candidate marketplace.json with exactly one
- * entry added, next to the pull request's title and body, the workflow copies the file over, commits, opens
- * the pull request, and never has to edit JSON in bash. */
+/* Everything the scan leaves on disk for the workflow to pick up. */
 
 const OUT_DIR = ".scan";
 const INDENT = 4;

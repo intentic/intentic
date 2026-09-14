@@ -55,10 +55,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 /** A string, trimmed and length-capped, or "" for anything that is not one. Never throws, never returns null. */
 const text = (value: unknown, max: number): string => (typeof value === "string" ? value.trim().slice(0, max) : "");
 
-/**
- * Booleans only; a missing or non-boolean flag takes the fallback instead of being coerced (a "false" string is
- * truthy).
- */
+/** Booleans only; a missing or non-boolean flag takes the fallback instead of being coerced (a "false" string is truthy). */
 const flag = (value: unknown, fallback: boolean): boolean => (typeof value === "boolean" ? value : fallback);
 
 const link = (value: unknown): string => {

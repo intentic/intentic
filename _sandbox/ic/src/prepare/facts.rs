@@ -5,15 +5,7 @@ use super::plan::Facts;
 #[cfg(windows)]
 use super::shell;
 
-/* READING THE MACHINE — once, read-only, in one call.
- *
- * Twelve facts, twelve `powershell.exe` launches, on the slowest process-spawn platform there is: that is the
- * version of this that never got written. PowerShell costs the better part of a second to start, and a
- * checklist that takes fifteen seconds to appear is one people interrupt.
- *
- * So the probe is ONE script that answers everything and prints one line of JSON. Nothing here decides
- * anything — the reading is plan.rs's job — and nothing here writes: every statement below is a query, which
- * is what makes it safe to run before consent has been asked for anything. */
+/* READING THE MACHINE — once, read-only, in one call. */
 
 /// The probe. ASCII on purpose (see shell.rs), PowerShell 5.1 on purpose — `powershell.exe` is still the
 /// default on every Windows 10 and 11, and a script that needs 7.x is a script that needs an install first.
@@ -182,10 +174,7 @@ mod tests {
     use super::*;
     use crate::prepare::plan::{requirements, ARCH_X64};
 
-    /* THE PROBE'S OUTPUT, AS THE PROBE ACTUALLY PRINTS IT. Captured from a real Windows 11 machine and
-     * trimmed to one line, because the failure this guards against is silent: a key renamed on either side
-     * leaves serde filling every field with its default, and a machine that is completely fine then reports
-     * no Docker, no WSL and no virtualization. */
+/* THE PROBE'S OUTPUT, AS THE PROBE ACTUALLY PRINTS IT. */
     const REAL: &str = r#"{"build":22631,"displayVersion":"23H2","productName":"Windows 11 Pro","editionId":"Professional","arch":9,"hypervisorPresent":true,"virtualizationFirmware":false,"slat":true,"vmHint":"asus system product name","serviceVmcompute":true,"serviceWsl":true,"wslStatusOk":true,"wslStatus":"Default Version: 2","wslVersion":"WSL version: 2.2.4.0","rebootPending":false,"elevated":false,"winget":true,"dockerDesktopPath":"C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe","dockerDesktopVersion":"4.34.0","inDockerUsers":true,"inDockerUsersGroup":true,"freeGib":412,"user":"radarsu","userQualified":"omen\\radarsu"}"#;
 
     #[test]
@@ -221,15 +210,7 @@ mod tests {
         );
     }
 
-    /* A SECOND REAL MACHINE, AND THE ONE THAT PAID FOR THIS TEST. Windows 11 25H2, an i9-11900H, WSL 2.7 with a
-     * distro running and Docker Desktop 4.82 working — captured verbatim from the probe, `\r\n` and all.
-     *
-     * Read the flags: `slat` false and `virtualizationFirmware` false on a machine that is, at that moment,
-     * running Linux containers. That is what `Win32_Processor` says once Hyper-V owns the CPU. An earlier draft
-     * of this module believed it, and told this PC its processor was too old for Docker.
-     *
-     * Note `productName` too: "Windows 10 Pro" on a Windows 11 machine. That registry value was never updated
-     * for 11, which is why nothing here decides anything from it and the build number is the version of record. */
+/* A SECOND REAL MACHINE, AND THE ONE THAT PAID FOR THIS TEST. */
     const OMEN: &str = r#"{"winget":true,"productName":"Windows 10 Pro","freeGib":402,"inDockerUsers":true,"inDockerUsersGroup":true,"wslVersion":"WSL version: 2.7.11.0\r\nKernel version: 6.18.33.2-2\r\n","arch":9,"dockerDesktopVersion":"4.82.0","build":26200,"user":"radar","displayVersion":"25H2","rebootPending":false,"dockerDesktopPath":"C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe","virtualizationFirmware":false,"userQualified":"radarsu-omen17\\radar","editionId":"Professional","wslStatus":"Default Distribution: archlinux\r\nDefault Version: 2\r\n","wslStatusOk":true,"hypervisorPresent":true,"slat":false,"serviceVmcompute":true,"vmHint":"hp omen by hp laptop 17-ck0xxx","serviceWsl":true,"elevated":false}"#;
 
     /// The regression that matters most: a working PC must never be told its hardware is unsupported.
@@ -296,10 +277,7 @@ mod tests {
         assert_eq!(facts.wsl_status, "x");
     }
 
-    /* THE MACHINE THAT REPORTED THIS. Docker Desktop had just been installed — its own installer adds
-     * whoever ran it to `docker-users` — so the ROSTER says yes and the login token, issued at sign-in
-     * before any of that, says no. The probe has to carry both, because they are the difference between
-     * "ask for administrator" and "sign out", and only one of those can possibly work here. */
+/* THE MACHINE THAT REPORTED THIS. */
     #[test]
     fn the_group_roster_and_the_login_token_are_reported_separately() {
         let json = r#"{"inDockerUsers":false,"inDockerUsersGroup":true,"user":"radar"}"#;
@@ -328,10 +306,7 @@ mod tests {
         assert!(parse("").is_err());
     }
 
-    /* The probe is also a PowerShell script this repo ships inside a binary, and it is subject to the same
-     * rule every .ps1 here is (desktop-app/src-tauri/src/scripts.rs): no byte above 0x7F. It travels as
-     * UTF-16 through -EncodedCommand so the code page cannot reach it, but it is READ by people, and the one
-     * habit that keeps this whole class of bug away is not typing the characters at all. */
+/* The probe is also a PowerShell script this repo ships inside a binary. */
     #[test]
     fn the_probe_is_ascii_and_asks_for_nothing_it_should_not() {
         assert!(

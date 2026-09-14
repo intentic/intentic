@@ -48,9 +48,7 @@ export const postEdit = (
     return headlined ? { content: next.content, title } : { content: next.content };
 };
 
-// Where a post is going, in the platform's own words: a place already recognisable, a reply URL, or free text a
-// connector made up. Only a URL needs help; a reddit comment vs thread is a different decision, so the label states
-// which.
+// Label destination text according to the URL or free-text target.
 export interface Destination {
     /** What the reader sees: a place on the platform, or the host when that is all the URL tells us. */
     readonly label: string;

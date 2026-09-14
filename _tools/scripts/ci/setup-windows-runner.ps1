@@ -112,7 +112,7 @@ if (-not $Repair -and (-not $Url -or -not $Token)) {
     Die 'need -Url and -Token to register a new runner, or -Repair to fix an existing one.'
 }
 
-# ── where the runner actually is ─────────────────────────────────────────────────────────────────────────────
+# where the runner actually is
 # $RunnerRoot's default is THIS SCRIPT'S convention, and the machine -Repair exists for — one somebody
 # registered the ordinary way, as a service — is exactly the machine that never followed it. The Windows runner
 # was configured at C:\runner, so the bare `-Repair` that `doctor` prints on finding session 0 died on "no
@@ -163,7 +163,7 @@ if (-not $PSBoundParameters.ContainsKey('RunnerRoot')) {
     }
 }
 
-# ── the runner package ───────────────────────────────────────────────────────────────────────────────────────
+# the runner package
 if (-not (Test-Path (Join-Path $RunnerRoot 'run.cmd'))) {
     if ($Repair) {
         Die "no runner to repair: nothing at $RunnerRoot, and no service, listener or '$TaskName' task on this machine pointed anywhere else. Pass -RunnerRoot if it is installed somewhere this could not see."
@@ -179,7 +179,7 @@ if (-not (Test-Path (Join-Path $RunnerRoot 'run.cmd'))) {
     Expand-Archive -Path $zip -DestinationPath $RunnerRoot -Force
 }
 
-# ── is this runner in the middle of somebody's CI run? ───────────────────────────────────────────────────────
+# is this runner in the middle of somebody's CI run?
 # ASKED BEFORE ANYTHING IS TOUCHED, because every destructive step below — removing the service, re-registering
 # the task, replacing the listener — takes down a job in flight, and the way that surfaces is the problem: the
 # job's current step dies, so the Actions page shows a step failing after every assertion in it passed, with a
@@ -198,7 +198,7 @@ if ($working.Count -gt 0) {
     Step 'a job is in flight and -Force was given: it will fail, and be retried against the runner that comes back.'
 }
 
-# ── reconcile: the service registration this script exists to replace ────────────────────────────────────────
+# reconcile: the service registration this script exists to replace
 # `svc.cmd` is only present when config.cmd created the service, and a machine can carry the service without it
 # — so the service is addressed directly, which works either way.
 $service = Get-Service -Name 'actions.runner.*' -ErrorAction SilentlyContinue
@@ -215,7 +215,7 @@ if ($service) {
     & icacls $RunnerRoot /grant "$($env:USERNAME):(OI)(CI)F" /T /C 2>&1 | Out-Null
 }
 
-# ── register ─────────────────────────────────────────────────────────────────────────────────────────────────
+# register
 if (-not $Repair) {
     Step "registering as '$Name' with labels '$Labels'..."
     Push-Location $RunnerRoot
@@ -226,7 +226,7 @@ if (-not $Repair) {
     if (-not $configured) { Die 'the runner refused to configure — check the URL scope and that the token is fresh.' }
 }
 
-# ── the windowless launcher ──────────────────────────────────────────────────────────────────────────────────
+# the windowless launcher
 # What the task's action actually executes. Fetched from the latest release on every run, like every other
 # intentic binary a machine downloads, so a -Repair also picks up a newer one, and renamed rather than
 # overwritten because on a machine being repaired the previous copy is the live task's own action process.
@@ -249,13 +249,11 @@ try {
     Die "could not install intentic-launch.exe into $RunnerRoot ($($_.Exception.Message)). Without it the listener runs in a visible Terminal window on this machine's desktop, which is the one thing this task exists to avoid."
 }
 
-# ── the session ──────────────────────────────────────────────────────────────────────────────────────────────
+# the session
 Step "registering a logon task that runs the listener in $Account's own desktop session..."
 
 # NO WINDOW ON THE DESKTOP. `run.cmd` is a console program, so a task that executes it directly puts a cmd
-# window on the session's desktop for as long as the runner lives — and that window becomes the runner as far as
-# anybody looking at the machine is concerned: closing it stops CI, and a person who does not know that closes
-# it.
+# Keep the runner console visible because closing it stops CI.
 #
 # THIS USED TO BE A HIDDEN POWERSHELL HOST, and the claim written here was that "the console is never mapped".
 # It is not true on a current Windows 11, where Windows Terminal is the default console host: `-WindowStyle
@@ -385,7 +383,7 @@ if ($KeepAwake) {
     }
 }
 
-# ── one listener, and it is the task's ───────────────────────────────────────────────────────────────────────
+# one listener, and it is the task's
 # The machine this repairs is usually one where somebody started the runner BY HAND — `run.cmd` in a console
 # window, which is what makes "is CI working?" a question about whether a window is still open somewhere. That
 # listener holds the registration, and GitHub allows one session per registered runner: leave it alive and the
@@ -431,7 +429,7 @@ Step 'starting it...'
 Start-ScheduledTask -TaskName $TaskName
 Start-Sleep -Seconds 15
 
-# ── verify the properties that matter ────────────────────────────────────────────────────────────────────────
+# verify the properties that matter
 $listener = Get-CimInstance Win32_Process -Filter "Name='Runner.Listener.exe'" -ErrorAction SilentlyContinue
 if (-not $listener) {
     Die "the listener did not start. Run $RunnerRoot\run.cmd by hand to see what it says."

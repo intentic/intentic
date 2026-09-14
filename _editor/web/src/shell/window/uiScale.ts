@@ -4,10 +4,7 @@ import { useTextSize } from "@intentic/ui/text-size";
 // pixels, pixels at the base text size, so a column keeps its character count across text sizes. Screen pixels appear
 // only at the pointer and at the platform boundary (window.open sizing); convert only there.
 
-/**
- * A stored width as CSS `calc()`, not a plain number, so the browser re-resolves it when the text size changes without
- * recomputation.
- */
+/** A stored width as CSS `calc()`, not a plain number, so the browser re-resolves it when the text size changes without recomputation. */
 export const uiLength = (appPx: number): string => `calc(${appPx}px * var(--ui-scale))`;
 
 /**

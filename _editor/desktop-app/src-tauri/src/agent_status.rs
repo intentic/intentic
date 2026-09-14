@@ -5,20 +5,7 @@ use tauri::{AppHandle, Manager, Wry};
 
 use crate::scripts;
 
-/* THE MACHINE AGENT'S OWN ROW IN THE TRAY — whether this device's `intentic-machine` loop is alive, and what
- * it is serving, on the one surface that is there when no window is.
- *
- * The agent runs headless and invisible on purpose (its logon entry maps no window, by design), which leaves it
- * with no face at all: a stopped sync or a disconnected device was discoverable only by opening a terminal or
- * noticing that files had quietly stopped moving. This app already sits in the tray on the same machine, so the
- * agent's one-line status belongs here, always present and always true, on the same reasoning as the update row
- * above it — a menu that changes shape is a menu nobody learns.
- *
- * THE SENTENCE IS THE AGENT'S, NOT OURS. `intentic-machine status --json` carries a `summary` field composed
- * beside every other sentence that command prints, so the tray and the terminal cannot drift apart; this module
- * reads that one string and displays it. Parsing the whole status into Rust types would be a second copy of a
- * TypeScript shape — the exact lockstep this app's header forswears — so the one field is read dynamically and
- * anything unexpected degrades to a plain "installed" rather than an error. */
+/* THE MACHINE AGENT'S OWN ROW IN THE TRAY — whether this device's `intentic-machine` loop is alive, and what it is serving. */
 pub struct TrayAgent(pub MenuItem<Wry>);
 
 /// How often the row is refreshed. Status is a local process spawn (the agent asks Mutagen about its sessions),

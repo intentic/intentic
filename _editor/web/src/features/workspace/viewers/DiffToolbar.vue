@@ -38,21 +38,12 @@ const LAYOUT_OPTIONS: { label: string; value: DiffLayout }[] = [
 </script>
 
 <template>
-    <!--
-        @container: what fits is a fact about the viewer's own width, not the viewport. `max-md:` is only touch-target
-        height, not layout.
-    -->
+<!-- @container: what fits is a fact about the viewer's own width, not the viewport. -->
     <div class="@container flex h-8 shrink-0 items-center gap-1.5 border-b border-line px-2 max-md:h-12">
         <slot name="lead" />
         <ChangeStatusMark v-if="status !== undefined" :status="status" />
-        <!--
-            Directory dimmed and leading, basename legible: matches the review row's reading order. Only the directory
-            truncates, or the bar would ellipsize the more useful half of the path.
-        -->
-        <!--
-            Tooltip sits on the directory span, the element that actually truncates; on the flex wrapper it never fires,
-            since the wrapper itself never overflows.
-        -->
+<!-- Directory dimmed and leading, basename legible: matches the review row's reading order. -->
+<!-- Tooltip sits on the directory span, the element that actually truncates; on the flex wrapper it never fires, since the wrapper itself never overflows. -->
         <span class="flex min-w-0 flex-1 items-baseline text-2xs max-md:text-xs">
             <span v-if="parentDir(path) !== ''" class="min-w-0 truncate text-subtle" v-tooltip.bottom.overflow="path">{{ parentDir(path) }}/</span>
             <span class="shrink-0 font-medium text-content">{{ basename(path) }}</span>

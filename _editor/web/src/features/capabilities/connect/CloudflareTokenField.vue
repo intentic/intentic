@@ -45,10 +45,7 @@ const token = computed({ get: () => cf.cfToken.value, set: cf.setToken });
         />
         <span class="text-xs text-muted">This token can reach several domains. Choose which one to use.</span>
     </label>
-    <!--
-        Confirms the zone even with only one, since a token might resolve to a domain other than the one the user
-        expected.
-    -->
+<!-- Confirms the zone even with only one, since a token might resolve to a domain other than the one the user expected. -->
     <slot name="zone-confirmed" />
 
     <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">

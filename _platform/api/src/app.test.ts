@@ -463,9 +463,7 @@ describe(`GET /api/reachability/:sandboxId`, () => {
     });
 });
 
-/* THE BODY IS BOUNDED BEFORE ANY ROUTE READS IT. The sessionless routes parse their JSON before they look
- * anything up, so without a ceiling a client could hand this process as much heap as it cared to send, one
- * request at a time, with no token. Refused as 413 with nothing looked up. */
+/* THE BODY IS BOUNDED BEFORE ANY ROUTE READS IT. */
 describe(`request body limit`, () => {
     it(`413s an oversized body before the route runs`, async () => {
         const findUnique = vi.fn();

@@ -4,22 +4,7 @@ import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
 import DocsLayout from "../../components/docs/DocsLayout.astro";
 import DocsRelated from "../../components/docs/DocsRelated.astro";
 
-/* THE PAGE THE DOCS DID NOT HAVE.
- *
- * An audit searched this site for "troubleshoot" and for "not working" and got nothing back, on a product whose
- * hard parts are Docker, a tunnel and somebody else's credentials. All the failure-mode writing that existed was
- * one paragraph on the Front Desk page, and it is the best paragraph on the site. This page follows its shape:
- * SYMPTOM as the heading, in the words a reader would use; the cause in a sentence; the fix;
- * and where the product already says so, because most of these announce themselves and the reader has not
- * necessarily looked.
- *
- * NOTHING HERE IS INVENTED. Every entry is a failure this product's own docs or run contract describe. A guess in
- * a troubleshooting page is worse than a gap: it sends someone to rebuild a container over a problem they did not
- * have.
- *
- * SYMPTOM HEADINGS, not causes ("The workspace never opens", not "Tunnel misconfiguration"). A reader arriving
- * here cannot name the cause: that is the whole reason they are here, and the section rail and the search index
- * both read these headings. */
+/* An audit searched this site for "troubleshoot" and for "not working" and got nothing back, on a product whose hard parts are Docker. */
 
 const twoContainers = `# Both should be "Up". Two per sandbox, always.
 docker ps -a --filter name=intentic-sandbox
@@ -231,10 +216,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
         API and in the desktop app. Your files are never the thing at risk while you dig: <code>/work</code> and your history are named Docker
         volumes, and removing, updating or rebuilding a container does not touch them.
     </p>
-    {/* The real end of the page, and the one moment on this site where a human is worth more than another
-        document: a reader who has walked every symptom above and matched none of them has nowhere left to
-        click. Discord first because most of what lands here is a question someone has already answered
-        once; Issues second, for the failure that reproduces and should therefore leave a record. */}
+    {/* Send unresolved questions to Discord and reproducible failures to Issues. */}
     <p>
         And if none of it says anything either: bring the symptom to the <a href={discordUrl}>Discord community</a>: most of what reaches
         this page is something somebody has already hit, or <a href={githubIssuesUrl}>open an issue</a> if you can make it happen twice.

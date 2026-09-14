@@ -1,7 +1,4 @@
-<!--
-    The app's colour picker: a fixed row of swatches, not a wheel or hex field, since the accent is always used at one fixed lightness
-    (themeColor.ts). Swatch order runs the hue wheel from the default; grey ends the row.
--->
+<!-- The app's colour picker: a fixed row of swatches, not a wheel or hex field, since the accent is always used at one fixed lightness (themeColor.ts). -->
 <script setup lang="ts">
 import { type Accent, accentHex } from "../../lib/themeColor.js";
 
@@ -29,8 +26,7 @@ const presets = PRESETS.map((preset) => ({ label: preset.label, hex: accentHex(p
 </script>
 
 <template>
-    <!-- A radiogroup rather than a row of toggles: this is one exclusive choice, and every swatch is focusable
-         so it can be reached and taken without a pointer. -->
+    <!-- The swatches form one exclusive, keyboard-focusable choice. -->
     <div role="radiogroup" aria-label="Accent colour" class="flex flex-wrap items-center gap-2.5">
         <button
             v-for="preset in presets"

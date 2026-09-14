@@ -139,10 +139,7 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                 `The CI failure on "${input.repo}" ${where} is still open, and this conversation is the attempt at it. Your earlier turn ended without landing a fix.`,
                 `Carry on from where you left off; the failed job logs earlier in this conversation are still the evidence. You are in an isolated worktree: commit your fix and it goes through review.`,
             ].join("\n\n");
-            /* ONE FAILURE, MANY ATTEMPTS (fix-attempts.ts): the id is derived from the run, not minted, so the board
-             * can tell an agent is on this failure; a press continues an ended attempt, opens the next one, or is
-             * refused while one is in play, by the same rule the browser's push card reads. The daemon's doors: a
-             * running attempt is stopped and joined before the archive will take it. */
+            /* Fix attempts share an id derived from the failing run, so the board groups them. */
             const outcome = await startFixAttempt(
                 {
                     roster: () => services.agents.list(),

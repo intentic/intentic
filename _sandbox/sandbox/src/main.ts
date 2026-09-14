@@ -343,23 +343,8 @@ const main = async (): Promise<void> => {
     previewProxy?.listen(config.preview.port, host);
     shutdown.push(() => previewProxy?.close());
 
-    /* HOW THE WORLD REACHES THIS SANDBOX: one outbound dial (platform/ingress-tunnel.ts), or nothing at all.
-     *
-     * It lives HERE, in the daemon, rather than in the entrypoint that used to arrange it, and that move is
-     * the whole shape of the change: reachability stopped being state somebody provisions before the process
-     * starts (an account, a claimed name, a bound share, a predecessor to evict) and became a signature this
-     * container was handed and presents. Nothing is created, so nothing leaks and nothing has to be reclaimed.
-     *
-     * A hosted machine (SANDBOX_VM) dials nothing: it is a Fly app the platform's edge replays requests to,
-     * and Fly's proxy delivers them to the preview proxy above, the same front door a tunnel would land on.
-     *
-     * Gated on the front door existing, not merely on the config: the tunnel forwards every hostname to the
-     * preview proxy, so without one there is nowhere to forward to. A daemon with no grant, no edge or no
-     * proxy is simply loopback-only — a test, a `local` profile, a platform running no fabric — which is a
-     * posture, never a failure. */
-    /* HOW THIS SANDBOX IS REACHED, asked once here because two things downstream need the same answer: the
-     * tunnel that may have to be dialled, and the reporter that tells the setup screen whether anybody can
-     * get here at all. Both read `reachPosture`, so neither can hold an opinion the other does not. */
+    /* HOW THE WORLD REACHES THIS SANDBOX: one outbound dial (platform/ingress-tunnel.ts), or nothing at all. */
+    /* HOW THIS SANDBOX IS REACHED, asked once here because two things downstream need the same answer:. */
     const reach = reachPosture({ url: config.ingress.url, grant: config.sandbox.grant, frontDoor: traits.extraListeners, vm: config.sandbox.vm });
     const ingressTunnel = startIngressTunnelWhenConfigured({
         url: config.ingress.url,
@@ -376,11 +361,7 @@ const main = async (): Promise<void> => {
     if (config.platform.url !== "" && config.sandbox.publicUrl !== "" && config.connectToken !== "") {
         if (role.container) {
             services.announcer.start();
-            /* And immediately: does that public URL actually answer? Started here rather than after the boot
-             * chain for the same reason the announce is, a waiting browser is reading exactly this, and it
-             * has to hear "checking" while the tunnel comes up rather than nothing at all. The two are
-             * separate claims deliberately (see reach-report.ts); registering says the daemon exists,
-             * this says somebody can get to it. */
+            /* And immediately: does that public URL actually answer? Started here rather than after the boot. */
             services.reach.start(reach);
         }
     }

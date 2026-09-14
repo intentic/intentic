@@ -123,7 +123,7 @@ export const githubApi: GitHubApi = {
         // Dynamic import of libsodium-wrappers (optional peer dep). The eslint-disable is intentional:
         // Runtime-optional dependency; may not have type declarations installed.
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        // oxlint-disable-next-line typescript/no-explicit-any -- the module has no types (see core/libsodium-wrappers.d.ts); the `any` is the library, not a shortcut.
+        // oxlint-disable-next-line typescript/no-explicit-any -- The dependency has no usable type declaration.
         const sodium: any = await import(/* webpackIgnore: true */ "libsodium-wrappers").then(
             // oxlint-disable-next-line typescript/no-explicit-any -- same untyped module as the line above.
             (m: any) => m.default ?? m,

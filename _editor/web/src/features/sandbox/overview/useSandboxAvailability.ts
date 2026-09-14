@@ -5,9 +5,7 @@ import { sandboxAvailability, type SandboxAvailability } from "./availability";
 import { useSandbox } from "../client/useSandbox";
 import { daemonReady } from "./useDaemonBoot";
 
-/* Component-scoped because useNow registers disposal with the caller's Vue scope. The shared clock underneath
- * still means ten consumers cost one interval. `established` may include a restored query snapshot: after a
- * reload, cached workspace data earns the same stale-while-revalidate behavior as a frame seen this session. */
+/* Component-scoped because useNow registers disposal with the caller's Vue scope. */
 export const useSandboxAvailability = (established?: MaybeRefOrGetter<boolean>): ComputedRef<SandboxAvailability> => {
     const { active, connection } = useSandbox();
     const hasEstablishedView = computed(() => connection.value.everOnline || (established !== undefined && toValue(established)));

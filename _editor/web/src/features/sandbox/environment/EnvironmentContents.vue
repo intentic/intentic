@@ -91,10 +91,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
     <div class="flex flex-col gap-5">
         <!-- `flat`: this list already sits inside the Environment group's own frame. -->
         <RowGroup v-for="group in rowGroups" :key="group.origin" flat undivided :label="group.label" :count="countLabel(group)">
-            <!--
-                The chevron sits in `#lead`, with the app's other expandable rows; `disabled` removes the arrow, hover and tab stop when nothing is
-                expandable. The inner 'Show more' keeps its own chevron swap, since that's a text clamp, not this disclosure.
-            -->
+            <!-- Expandable rows keep their disclosure control in the lead slot. -->
 
             <DisclosureRow
                 v-for="item in group.items"
@@ -114,18 +111,12 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                         :idle="item.state !== `active`"
                     />
                 </template>
-                <!-- Name, versions and sentence share one line: versions ride the name they version, the sentence takes what's left and truncates. -->
+                <!-- Names, versions, and purpose share one title line. -->
                 <template #title>
-                    <!--
-                        Clips the whole line so nothing overflows into the trailing facts: the name never yields, versions truncate past half the
-                        line, the sentence yields first.
-                    -->
+                    <!-- The title line clips overflow while keeping the name visible. -->
                     <span class="flex min-w-0 items-center gap-3 overflow-hidden">
                         <span class="shrink-0">{{ item.name }}</span>
-                        <!--
-                            Mono against the name's sans; truncates past half the row rather than clipping, since a clipped version number (`24.18`
-                            for `24.18.0`) reads as a complete, different one.
-                        -->
+                        <!-- Versions use monospace and occupy at most half the row. -->
                         <span v-if="item.tools.length > 0" class="min-w-0 max-w-[50%] shrink-0 truncate font-mono text-2xs font-normal tabular-nums">
                             <span v-for="tool in shownTools(item)" :key="tool.name" v-tooltip.bottom="provenance(tool)" class="mr-3 last:mr-0">
                                 <span v-if="toolLabel(item, tool) !== ``" class="text-muted">{{ toolLabel(item, tool) }}&nbsp;</span>
@@ -159,10 +150,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                 </template>
                 <!-- The slot itself must be conditional, not just its contents, or every closed row still gets the gap above it. -->
                 <template #below>
-                    <!--
-                        No `@click.stop` needed: the disclosure's hit area is the header button, a sibling of this block, so nested clicks can't
-                        bubble up to it.
-                    -->
+                    <!-- The disclosure header owns the hit area; the expanded body has no nested toggle. -->
                     <div class="flex flex-col gap-3">
                         <!-- Rendered as prose, not code: it was written to be read. -->
                         <p class="whitespace-pre-line text-xs leading-relaxed text-muted">
@@ -190,17 +178,11 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
 
         <!-- The staples as a strip: many names and versions in a few lines instead of one row each. -->
         <RowGroup v-if="staples !== undefined" flat :label="staples.label" :count="countLabel(staples)">
-            <!--
-                Strip and sentence share one child so the group's divider doesn't fall between a pill and its own sentence; aligned via the group's
-                own tier, not repeated padding.
-            -->
+            <!-- The strip and its description stay within one group note. -->
             <RowNote variant="block">
                 <div class="flex flex-col gap-2">
                     <div class="flex flex-wrap gap-1.5">
-                        <!--
-                            The one filled capsule on the tab, meaning 'click me'; tinted rather than outlined so it steps off the surface instead of
-                            framing a hole in it.
-                        -->
+                        <!-- The active staple is the tab's sole filled capsule. -->
                         <button
                             v-for="item in staples.items"
                             :key="item.id"
@@ -230,10 +212,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
             </RowNote>
         </RowGroup>
 
-        <!--
-            The loading state is drawn as the real shape (labelled sections then the staples strip), not a spinner, since this read is the slowest in
-            the hub and its shape is highly predictable.
-        -->
+        <!-- Loading mirrors the loaded sections and staples strip. -->
         <div v-if="loading && outline" class="flex flex-col gap-5" role="status" aria-busy="true">
             <span class="sr-only">Checking installed versions…</span>
             <!-- Two sections, not three: a sandbox may have no capability group, and an extra one would over-promise height. -->

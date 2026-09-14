@@ -119,8 +119,7 @@ describe(`the landing verdict`, () => {
         expect(landingVerdict(rules, { paths: [`docs/intro.md`] }, undefined).land).toBe(true);
     });
 
-    /* A red check holds against everything that was decided before the check ran: the unconditional allow rule,
-     * and the owner's own press on the card. The one thing written ABOUT red work is a rule naming it. */
+/* A red check holds against everything that was decided before the check ran: the unconditional allow rule, and the owner's own press on the card. */
     test(`a turn whose own check failed is held, whatever an unconditional rule or the override says`, () => {
         const facts = { outcome: `checks-failed` as const };
         expect(landingVerdict([verdict(`land-everything`, `allow`)], facts, undefined)).toEqual({ land: false, held: `checks-failed` });

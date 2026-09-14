@@ -5,11 +5,7 @@ import { ScopeError } from "../policy.js";
 import { fakeDesktop } from "../testing.js";
 import { act, describeAction } from "./device.js";
 
-/* The policy half of GUI control, driven against a fake desktop.
- *
- * This is the whole reason the mechanics live in their own package: a real click cannot be asserted on, but
- * "was the click refused", "did the coordinate get checked against the frame" and "did the right method get
- * called" are the parts that decide whether someone's machine does the wrong thing, and they are all here. */
+/* The policy half of GUI control, driven against a fake desktop. */
 
 const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
     shell: "on",
@@ -60,8 +56,7 @@ test("each action reaches the matching desktop method", async () => {
     ]);
 });
 
-/* Refused, not clamped. A click 200px past the right edge means the model misread the screenshot; landing it on
- * the edge instead turns a visible mistake into a mysterious one: something got clicked, just not that. */
+/* Refused, not clamped. */
 test("a coordinate outside the screen is refused, and says how big the screen is", async () => {
     const { desktop, calls } = fakeDesktop();
     await expect(act(desktop, { action: "left_click", coordinate: [1920, 500] }, scopes())).rejects.toThrow(/outside the screen.*1920×1080/s);

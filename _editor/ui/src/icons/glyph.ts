@@ -1,5 +1,4 @@
-/** Source drawings for Intentic's icon pack. Two-unit strokes, square ends, cut corners, open interiors.
- * Ornament belongs in the silhouette; controls must still read at 12–16px. All geometry uses a 24-unit grid. */
+/** Source drawings for Intentic's icon pack. */
 export interface Glyph {
     readonly outline: string;
     readonly solid?: string;

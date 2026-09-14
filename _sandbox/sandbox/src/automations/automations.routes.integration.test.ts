@@ -26,10 +26,7 @@ test("run now refuses a chat listener: by hand there is no message, which is the
     const services = fakeServices(mkdtempSync(join(tmpdir(), "routes-")));
     await services.automations.upsert(automation("chat", { kind: "listener", provider: "discord" }));
     const routes = createAutomationsRoutes(services);
-    /* Firing this by hand could only wake an agent told to handle the events riding with it and handed none:
-     * and that pointless turn would hold the automation's one slot against the real mention arriving behind it,
-     * which is exactly how a tested-by-hand listener came to look broken. The sentence names the way to test
-     * one instead. */
+    /* Firing this by hand could only wake an agent told to handle the events riding with it and handed none. */
     await expect(call(routes.run, { id: "chat" }, { context })).rejects.toThrow(/real message/);
     expect((await services.automations.get("chat"))?.runs).toEqual([]);
 });

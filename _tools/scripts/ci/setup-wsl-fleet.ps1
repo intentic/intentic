@@ -178,9 +178,7 @@ if ($installed -notcontains $Distro) {
 
 # -- the units, read off the distro rather than counted from the docs -----------------------------------------
 # docs/ci-runner.md says six, and it says to re-derive that number rather than trust it. The same applies here
-# with more force: this list is what the watchdog will hold up every three minutes for the life of the machine.
-# Starting the distro to ask is not a side effect worth avoiding -- it is the first half of what this script is
-# for.
+# Start the distro before checking its runner units.
 Step "asking $Distro which runner units it carries..."
 $unitList = & wsl.exe -d $Distro -e systemctl list-unit-files $UnitPattern --no-pager --plain --no-legend 2>$null
 $units = @($unitList | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ } |
@@ -634,9 +632,7 @@ if ($Check) {
     Step 'check only -- nothing was registered or changed.'
     $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     if ($task) { Step "the '$TaskName' task is registered." } else { Warn "the '$TaskName' task is NOT registered -- nothing starts this fleet after a reboot." }
-    # THE QUESTION A RED PIPELINE ASKS, and the only one here that is about the work rather than the listeners:
-    # can a container job start at all. Read-only, so it belongs in -Check; the repair for a no is a run without
-    # it.
+    # Check whether a container job can start before attempting repair.
     $server = (& wsl.exe -d $Distro -e /bin/sh -c 'docker version --format {{.Server.Version}}' 2>$null |
         ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ }) -join ''
     if ($server) { Step "the fleet's own docker answers in ${Distro}: server $server." }

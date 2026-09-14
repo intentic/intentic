@@ -54,10 +54,7 @@ export const connect = (config: HostLink, version: string, log: Log, dial: Dial 
         hello: () => ({ type: "hello", token: config.token, version }),
         attach: (ws) => handler.upgrade(ws),
         backoff: createBackoff(PEER_LINK_BACKOFF),
-        /* The deadline that makes a dead link NOTICEABLE, and on this door it is the one that matters most:
-         * the address resolved above is often a loopback hop through a port relay that outlives the container
-         * behind it, which is precisely the socket that dies without a close frame (peer-dial.ts says what that
-         * cost). Timed off the sandbox's own heartbeat, so silence here means the sandbox, not the network. */
+/* The deadline that makes a dead link NOTICEABLE, and on this door it is the one that matters most. */
         silenceMs: peerLinkSilenceMs(HOST_HEARTBEAT_MS),
         log,
         revoked: () =>

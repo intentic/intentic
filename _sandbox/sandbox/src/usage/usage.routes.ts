@@ -19,12 +19,7 @@ export const createUsageRoutes = (services: UsageRoutesDeps) => {
             await services.headroom.refresh({ ...(input.force ? { maxAgeMs: 0 } : {}), withinMs: FORCED_WAIT_MS });
             return { ok: true } as const;
         }),
-        /* The way past a spent session window that is not waiting for it (claude-limit-reset.ts next door holds
-         * the whole mechanism, and why the probe is asked rather than polled).
-         *
-         * Claude's store answers for an account it does not hold exactly as it answers for one with no grant:
-         * nothing available. So a caller may ask about any account it can name without first working out which
-         * provider grants one, and no provider needs a row here until it grows the same idea. */
+/* A spent session window can continue through the Claude reset mechanism. */
         limitReset: i.limitReset.handler(async ({ input }) => {
             const status = await readLimitReset(services.claudeStore, input.account);
             if (status === undefined) {

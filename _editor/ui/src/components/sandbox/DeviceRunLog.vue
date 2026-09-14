@@ -1,7 +1,4 @@
-<!--
-    A device's live output while it updates, verbatim and unsummarised, plus the tail once it's done. Follows the tail while running; stops the
-    moment the reader scrolls up.
--->
+<!-- A device's live output while it updates, verbatim and unsummarised, plus the tail once it's done. -->
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
 

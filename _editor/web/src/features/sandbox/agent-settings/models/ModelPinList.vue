@@ -43,10 +43,7 @@ const emit = defineEmits<{ promote: [number]; remove: [number]; edit: [number, H
             </button>
             <!-- Stays listed rather than dropped: the resolver skips it at runtime, but hiding it would look like a lost setting. -->
             <span v-if="!entry.ready" class="shrink-0 text-2xs text-warning">Not connected</span>
-            <!--
-                Flags a one-shot pin that reasons before answering, since routed ids (e.g. `...-flash-high`) look like ordinary models and are easy
-                to pick by mistake. A note, not a warning: these pins run exactly as chosen.
-            -->
+            <!-- A one-shot pin reasons before answering; routed ids do not show native account controls. -->
             <span
                 v-else-if="noteThinking && entry.choice && namesThinking(entry.choice.model)"
                 class="shrink-0 text-2xs text-subtle"

@@ -21,7 +21,7 @@ const nameserversFor = async (recordName: string): Promise<string[]> => {
     const labels = recordName.split(".");
     // Stops before the last label: a TLD's nameservers know the delegation, not what's inside it.
     for (let index = 0; index < labels.length - 1; index += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a search, not a batch: each answer decides whether the next query is asked at all
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Each answer decides whether the next query runs.
         const nameservers = await resolver.resolveNs(labels.slice(index).join(".")).catch(() => []);
         if (nameservers.length > 0) {
             return nameservers;

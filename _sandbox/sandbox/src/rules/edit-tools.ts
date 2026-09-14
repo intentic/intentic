@@ -1,10 +1,4 @@
-/* THE TOOLS THAT WRITE A FILE, as one matcher and one reader, shared by every hook set that listens for an
- * edit: the diagnostics after it (agent/agent-diagnostics.ts), the rules that run on it (file-edited.ts), and
- * the ledgers the Stop reads (turn-ending.ts).
- *
- * The hashline pair belongs here because turning `hashlineEdits` on DISABLES the native Edit and Write
- * (hashline/hashline-tools.ts): a matcher naming only those two goes quiet in exactly the configuration a user
- * chooses for heavy editing, so every listener below would have recorded nothing and said so confidently. */
+/* THE TOOLS THAT WRITE A FILE, as one matcher and one reader, shared by every hook set that listens for an edit. */
 export const EDIT_TOOLS = "Edit|Write|NotebookEdit|mcp__hashline__edit|mcp__hashline__write";
 
 // The native tools name it `file_path`, NotebookEdit `notebook_path`, the hashline ones `path`. One reader over

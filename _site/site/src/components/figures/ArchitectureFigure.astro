@@ -1,30 +1,5 @@
 ---
-/* WHAT INTENTIC IS, IN ONE PICTURE: you, a tunnel, and a machine you own — with the platform standing beside
- * the path rather than on it.
- *
- * THE ARGUMENT IS CARRIED BY TWO INKS, not by the labels. Everything on the command path — your browser, the
- * tunnel, your machine, the sandbox inside it — is drawn solid, in the brand colour. Everything to do with the
- * platform is drawn grey and dashed. A reader who never reads a word still sees one unbroken orange spine from
- * the person to their own hardware, and a grey box hanging off the side of it. That is the security story and
- * the product story at once.
- *
- * The arrows into the platform say what actually crosses that gap, and nothing else does: your browser signs
- * in, and the sandbox announces its URL when it boots. No arrow leaves the platform toward the sandbox,
- * because nothing does.
- *
- * TWO LAYOUTS, ONE SOURCE, for the same reason every wide figure here has two. A 640-wide viewBox
- * squeezed onto a phone renders its labels at six pixels, which is a diagram nobody can read pretending to be
- * one they can. So the geometry is data, stated twice at two aspect ratios, and the markup below is written
- * once against it: the narrow variant re-flows the canvas instead of shrinking the type, so an 11pt label
- * lands at 11 real pixels on a phone and 11 on a desktop.
- *
- * The two differ in more than scale, because at 342 pixels the side-by-side of the wide canvas stops fitting.
- * There, your machine takes the full width and the platform sits in the corner ABOVE it — still off the spine,
- * which is the part that may not change, since a platform stacked in line with the sandbox would read as
- * another step in the chain. What the narrow variant gives up is only ornament: the two connector captions,
- * and the aside naming what "your machine" might be. Every box, every arrow and every item survives.
- *
- * Only one variant is ever visible; the other costs a few hundred bytes of inline path data and no request. */
+/* Architecture figure shows browser, tunnel, machine, and platform boundaries. */
 
 interface Box {
     readonly x: number;
@@ -35,7 +10,7 @@ interface Box {
 
 type Point = readonly [number, number];
 
-/** A cubic leaving one box's edge and landing on another's, stated as its four control points. */
+/** Curve stores four control points between boxes. */
 interface Curve {
     readonly from: Point;
     readonly c1: Point;
@@ -45,27 +20,26 @@ interface Curve {
 
 interface Variant {
     readonly id: string;
-    // Which width this one is for.
+    // Variant selects the responsive layout.
     readonly cls: string;
     readonly w: number;
     readonly h: number;
     readonly pad: number;
     readonly browser: Box;
-    // The tunnel's badge, drawn over the spine so the two read as one line interrupted by a label.
+    // Chip labels the tunnel spine.
     readonly chip: Box;
     readonly chipText: string;
     readonly machine: Box;
     readonly sandbox: Box;
-    // The four things inside the sandbox: one tile's size, and how many sit per row.
+    // Tile defines sandbox grid size and columns.
     readonly tile: Box & { readonly cols: number; readonly gapX: number; readonly gapY: number };
     readonly platform: Box;
-    // Rows inside the platform card, as offsets from its top edge.
+    // Platform rows store offsets from the card's top edge.
     readonly platformRows: { readonly eyebrow: number; readonly body: number; readonly rule: number; readonly punch: number };
     readonly platformBody: readonly string[];
     readonly signIn: Curve;
     readonly announce: Curve;
-    /* Wide captions its two grey arrows and names what your machine might be; narrow has room for neither, and
-     * says so by leaving them out rather than by setting them at a size nobody reads. */
+/* Narrow variants omit connection captions. */
     readonly captions: boolean;
     readonly font: { title: number; sub: number; eyebrow: number; chip: number; item: number; itemSub: number; note: number };
 }
@@ -113,8 +87,7 @@ const VARIANTS: readonly Variant[] = [
     },
 ];
 
-/* What a sandbox is made of. `sub` is the wide variant's detail line; `subTight` is the narrow one's, shortened
- * to fit a 136-wide tile rather than be clipped by the renderer. */
+/* Sandbox contents are rendered as tiles. */
 const CONTENTS = [
     {
         label: `Agent`,
@@ -154,7 +127,7 @@ const glyph = (paths: string, x: number, y: number, size: number) =>
 
 const curve = (c: Curve) => `M ${c.from[0]} ${c.from[1]} C ${c.c1[0]} ${c.c1[1]} ${c.c2[0]} ${c.c2[1]} ${c.to[0]} ${c.to[1]}`;
 
-/** One tile's box, from its index and the variant's grid. */
+/** Tile position is derived from its index and grid. */
 const tileBox = (v: Variant, i: number): Box => ({
     x: v.tile.x + (i % v.tile.cols) * (v.tile.w + v.tile.gapX),
     y: v.tile.y + Math.floor(i / v.tile.cols) * (v.tile.h + v.tile.gapY),
@@ -175,16 +148,11 @@ const label =
         const machineRight = v.machine.x + v.machine.w;
         const rows = v.platformRows;
 
-        /* BOTH variants carry the description, and neither is marked aria-hidden. The one that is not for this
-         * width is `display: none`, which already drops it out of the accessibility tree, so there is no double
-         * announcement to prevent — and hiding the narrow one from assistive tech by hand is how a phone reader
-         * ends up with a figure that says nothing at all. */
+        /* Both variants expose the same accessible description. */
         return (
             <svg viewBox={`0 0 ${v.w} ${v.h}`} class={`mx-auto h-auto w-full text-link ${v.cls}`} role="img" aria-label={label}>
                 <defs>
-                    {/* Two arrowheads, because the two inks never mix: the spine's resolves against the root's
-                        brand colour, the connectors' is stated grey. `auto-start-reverse` lets the sign-in line
-                        carry one at each end from a single definition. */}
+                    {/* Arrowheads distinguish spine and connector lines. */}
                     <marker id={`arch-lead-${v.id}`} viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
                         <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
                     </marker>
@@ -201,7 +169,7 @@ const label =
                     </marker>
                 </defs>
 
-                {/* ── the platform, drawn first so the spine always wins an overlap ───────────────── */}
+                {/* Platform is drawn first so the spine wins overlaps. */}
                 <rect
                     x={v.platform.x}
                     y={v.platform.y}
@@ -251,7 +219,7 @@ const label =
                     No code or commands
                 </text>
 
-                {/* ── what crosses to it, and nothing else ────────────────────────────────────────── */}
+                {/* Only the declared connection crosses this boundary. */}
                 <path
                     d={curve(v.signIn)}
                     fill="none"
@@ -269,10 +237,7 @@ const label =
                     stroke-dasharray="4 3"
                     marker-end={`url(#arch-tick-${v.id})`}
                 />
-                {/* Captions sit in the gutter each curve leaves from, not along it: the run between the browser
-                    and the platform is seventy pixels, and a caption worth reading does not fit there without
-                    landing on the card it points away from. What the platform HOLDS is written inside the
-                    platform, so the arrows only have to say who speaks. */}
+                {/* Connection captions stay in the gutter rather than on the paths. */}
                 {v.captions && (
                     <Fragment>
                         <text
@@ -298,7 +263,7 @@ const label =
                     </Fragment>
                 )}
 
-                {/* ── you ─────────────────────────────────────────────────────────────────────────── */}
+                {/* The user's browser. */}
                 <rect
                     x={v.browser.x}
                     y={v.browser.y}
@@ -332,7 +297,7 @@ const label =
                     {v.captions ? `chat · files · editor · terminals` : `chat · files · editor`}
                 </text>
 
-                {/* ── the one path that matters, badged with what makes it safe ───────────────────── */}
+                {/* The spine marks the protected path. */}
                 <path
                     d={`M ${spine} ${v.browser.y + v.browser.h} L ${spine} ${v.machine.y - 3}`}
                     stroke="currentColor"
@@ -363,7 +328,7 @@ const label =
                     {v.chipText}
                 </text>
 
-                {/* ── your hardware, and the sandbox that is the product ──────────────────────────── */}
+                {/* Machine and sandbox share the hardware boundary. */}
                 <rect
                     x={v.machine.x}
                     y={v.machine.y}

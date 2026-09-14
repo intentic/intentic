@@ -5,14 +5,7 @@ import { type ComponentPublicInstance, computed, ref } from "vue";
 import { shellModelPicking } from "../../features/chat/models/shellModelPicking";
 import { usePushFlow } from "../../features/workspace/push/usePushFlow";
 
-/* WHAT THE PUSH QUESTION CARRIES THAT TWO STRINGS CANNOT: the command in monospace,
- * and the way back to the terminal it all came out of.
- *
- * The question itself — its sentence, its tone, its dismiss — is a notification like any other
- * (composables/notificationSources.ts). This is only the part of it that has to be markup, mounted by the lane
- * as the card's body. Splitting it that way is what lets the most complicated thing this app floats use the
- * same box as "3 files deleted". The answers are here rather than in the lane's action row, so that they
- * sit on one row together; see the row itself. */
+/* WHAT THE PUSH QUESTION CARRIES THAT TWO STRINGS CANNOT: the command in monospace, and the way back to the terminal it all came out of. */
 
 const pushFlow = usePushFlow();
 // The attempt already on this failure rides into the picker, so its bar ends in Continue / Start over.
@@ -24,11 +17,7 @@ const fixModel = useAgentRunPick(
 
 const pushAnywayLabel = computed(() => (pushFlow.question.value?.kind === `push` ? `Try again` : `${pushFlow.pending.value?.verb ?? `Push`} anyway`));
 
-/* A CARD THAT IS NOT NEWS SAYS SO. This one is raised twice for the same failure: once when the suite settles, and
- * again whenever the reader comes back to a verdict they closed rather than answered — which is the point, since the
- * alternative was spending the suite again to be told the same thing. Reprinted, it dates itself and says whether the
- * tree has moved under it, because a verdict is about the files as they were and nothing else on the card says when
- * that was. Its own clock, ticking only while such a card is up. */
+/* A CARD THAT IS NOT NEWS SAYS SO. This one is raised twice for the same failure: once when the suite settles,. */
 const clock = useNow(() => pushFlow.fromMemory.value);
 const memoryLine = computed<string | undefined>(() => {
     const at = pushFlow.verdictAt.value;
@@ -44,11 +33,7 @@ const memoryLine = computed<string | undefined>(() => {
 // truth, not one of the three answers to the question.
 const canRerun = computed(() => pushFlow.question.value?.kind === `checks` && pushFlow.command.value !== ``);
 
-/* ONE SLOT FOR THE AGENT, in three shapes, after the pipelines board's own (PipelineRunRow.vue): no attempt, or
- * a landed one, is a plain "Fix with agent"; an attempt still in play is a chip that opens it, beside a quiet
- * "Start over" that only opens the picker (no one-click path files a working agent away); an attempt that ENDED
- * is "Continue", whose caret also offers Start over. The words are the contract's `fixStance`, the same the
- * board and the fleet use, so the same agent is never described two ways one click apart. */
+/* ONE SLOT FOR THE AGENT, in three shapes, after the pipelines board's own (PipelineRunRow.vue): no attempt,. */
 const attempt = computed(() => pushFlow.attempt.value);
 const look = computed(() => (attempt.value === undefined ? undefined : fixStanceLook(attempt.value.stance.kind)));
 const inPlay = computed(() => attempt.value !== undefined && attempt.value.stance.ongoing);
@@ -78,9 +63,7 @@ const openStartOver = (): void => {
 </script>
 
 <template>
-    <!-- ONE UNCONDITIONAL ROOT ELEMENT, so the lane's own class lands somewhere: a `v-if` here would render a
-         comment node for the tick between the question clearing and the card retiring, and an attribute has
-         nothing to fall through to on a comment. -->
+<!-- ONE UNCONDITIONAL ROOT ELEMENT, so the lane's own class lands somewhere. -->
     <div>
         <!-- The command that failed in a 1-line syntax-highlighted code block. -->
         <div v-if="pushFlow.question.value" class="flex flex-col gap-1.5">
@@ -94,22 +77,7 @@ const openStartOver = (): void => {
             <p v-if="memoryLine" class="break-words text-2xs text-subtle">{{ memoryLine }}</p>
         </div>
 
-        <!-- ONE ROW FOR ALL ANSWERS: the way back to the output on the left, the actions on the right.
-             The override is the card's own decision and used to be a notification action, which put it on a row
-             of its own under this one — two strips of chrome, 40px of card, to hold one link and one button that
-             read as a pair. It lives here instead, so the lane renders no action row for this question at all
-             (composables/notificationSources.ts).
-
-             The terminal link appears only where there is a terminal to go to: without the tmux wrapper the
-             suite ran in an invisible shell, and a button that opens an empty panel is worse than none. It holds
-             no output itself for the same reason — the whole of it is one press away, in colour. `mr-auto` on
-             the group rather than `justify-between`, so the buttons keep the right edge whether or not either
-             link is there.
-
-             IT WRAPS, because on a phone the lane's card is the viewport's width and four controls do not fit
-             one line of it: unwrapped, the last of them (the override, the one press that matters most here) is
-             squeezed to three letters and painted past the card's own edge. Wrapped, the links take the first
-             line and the buttons keep the right edge of the second. -->
+<!-- ONE ROW FOR ALL ANSWERS: the way back to the output on the left, the actions on the right. -->
         <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
             <!-- Ways back to the truth, not answers to the question: what actually happened, and measuring it again. -->
             <div class="mr-auto flex items-center gap-3">
@@ -135,13 +103,9 @@ const openStartOver = (): void => {
                 </button>
             </div>
 
-            <!-- Hand the failure to an agent. Absent for a check that could not run and for one the user stopped:
-                 nothing was learned about the code either way, so an agent sent after it would be hunting a bug
-                 that isn't there. -->
+<!-- Hand the failure to an agent. -->
             <template v-if="pushFlow.proposedFix.value && attempt && look && inPlay">
-                <!-- The kit's chip, which is what this is: state, not rank (ui.ts's vocabulary). It owns the box, the
-                     thumb target, the focus ring and the disabled answer; the stance owns the ink and the rim, and
-                     those land in the utilities layer, above the recipe's, so they still win. -->
+<!-- The kit's chip, which is what this is: state, not rank (ui.ts's vocabulary). -->
                 <button
                     type="button"
                     class="ui-chip shrink-0 rounded px-2 py-1 text-xs font-medium"
@@ -176,10 +140,7 @@ const openStartOver = (): void => {
                 @run="startFix"
             />
 
-            <!-- Push anyway, and it never asks twice. The user knows things the check does not: that this IS the
-                 fix for the failure, that the suite is flaky, that they want it on a branch to look at in CI.
-                 After a failed PUSH there is nothing to override — the send itself is what refused — so the same
-                 button becomes the retry, which is the only useful thing left. -->
+<!-- Push anyway, and it never asks twice. -->
             <Button size="small" severity="warn" :label="pushAnywayLabel" @click="pushFlow.pushAnyway" />
         </div>
         <!-- Why the last press started nothing, in the daemon's words; the question stays up above it. -->

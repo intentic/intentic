@@ -23,10 +23,7 @@ const CATEGORIES: readonly { readonly id: string; readonly label: string; readon
 // Declared nothing, or a category this build doesn't know; a real section, not a silent drop.
 const OTHER: { readonly id: string; readonly label: string; readonly caption?: string } = { id: `other`, label: `Other` };
 
-/**
- * Tab's sections in render order, holding their rows; empty sections are omitted so a filter doesn't leave a bare
- * heading.
- */
+/** Tab's sections in render order, holding their rows; empty sections are omitted so a filter doesn't leave a bare heading. */
 export const sectionsOf = (entries: readonly ExtensionEntry[]): ExtensionSection[] => {
     const known = new Set(CATEGORIES.map((category) => category.id));
     const buckets = new Map<string, ExtensionEntry[]>();

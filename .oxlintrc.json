@@ -27,7 +27,7 @@
         "perf": "error"
     },
     "rules": {
-        // ── Repo-specific ────────────────────────────────────────────────────────────────────────────────
+        // Repo-specific
         "typescript/no-extraneous-class": ["error", { "allowWithDecorator": true }],
         "import/no-unassigned-import": [
             "error",
@@ -62,7 +62,7 @@
         // deleting a binding can delete an initialiser's side effect with it.
         "no-unused-vars": ["error", { "args": "none", "varsIgnorePattern": "^_", "fix": { "imports": "safe-fix", "variables": "off" } }],
 
-        // ── Turned off on purpose ────────────────────────────────────────────────────────────────────────
+        // Turned off on purpose
         // Each of these fires in the hundreds or thousands here and is wrong, not merely unmet. Left on, they
         // would be the noise an agent learns to reach past — and the disable comment it writes to get past
         // them is worth less than the rule was.
@@ -101,7 +101,7 @@
         // setup must not carry.
         "unicorn/prefer-dom-node-append": "off",
 
-        // ── Off on the merits, after measuring what they would actually change ─────────────────────────
+        // Off on the merits, after measuring what they would actually change
         // Every one of these was sampled at its own call sites before being switched off. The test each had
         // to pass is not "is the rule reasonable in the abstract" but "is the code it flags here worse than
         // the code it would produce".
@@ -157,7 +157,7 @@
         // try/catch block around a single call, which is longer and says less.
         "promise/no-nesting": "off", // 9
 
-        // ── Debug residue and agent leftovers ────────────────────────────────────────────────────────────
+        // Debug residue and agent leftovers
         // console.warn/error are real product behaviour; console.log is something left behind.
         "no-warning-comments": ["error", { "terms": ["@nocommit", "FIXME"] }],
         // THE LOAD-BEARING ONE. Without it the cheapest way for an agent to make the linter quiet is a blanket
@@ -167,7 +167,7 @@
         "vitest/no-disabled-tests": "error",
         "vitest/no-identical-title": "error",
 
-        // ── What an assertion is allowed to be ───────────────────────────────────────────────────────────
+        // What an assertion is allowed to be
         // The only part of test QUALITY a linter can actually decide, and it is worth being precise about why
         // it is this small.
         //
@@ -183,23 +183,7 @@
         // `""`, `false` and every object ever constructed; it is what a model writes when it does not know
         // what the value should be. That is a shape, and a shape is something a linter can see.
         //
-        /* THE BACKLOG WAS 328 AND IS NOW ZERO, so this is an ordinary rule rather than an authoring-side one.
-         * It started in .oxlintrc.agent.json (toBeDefined 254, toHaveBeenCalled 46, toBeTruthy 18, toBeFalsy 5,
-         * resolves.not.toThrow 1) and moved here once every site had been given the assertion it should have
-         * had. What the sweep actually produced, in case the next one is tempted to do it by hand:
-         *
-         *   - Most `toBeDefined` sites were a NARROWING GUARD with the real assertion on the next line. Those
-         *     collapse into one `toMatchObject`, which is shorter and cannot pass on undefined either.
-         *   - The rest were rewritten from the TYPE: strip `undefined` off what the checker already knows and
-         *     assert the arm that is left (`expect.any(String)`, `Array`, `Function`, …). "Not undefined" and
-         *     "is a string" fail on exactly the same value, and the second one also fails on the wrong shape.
-         *   - `expect(bag[key]).toBeDefined()` became `expect(Object.keys(bag)).toContain(key)`, which prints
-         *     the keys that ARE there instead of the word "undefined".
-         *
-         * Three of them found real bugs, which is the argument for the rule in one line: a `features` set that
-         * arrives as an array and would have satisfied any presence check as `{}`; a rank test that computed an
-         * unused baseline and so never made the comparison its name promised; and a window.open spy that was
-         * never cleared between tests, so half a suite's counts depended on file order. */
+/* THE BACKLOG WAS 328 AND IS NOW ZERO, so this is an ordinary rule rather than an authoring-side one. */
         "jest/no-restricted-matchers": [
             "error",
             {
@@ -216,7 +200,7 @@
         // Belt and braces on the same zero: if a snapshot ever does land, it cannot be a 200-line one that
         // nobody reads and everybody re-records. maxSize is lines.
         "jest/no-large-snapshots": ["error", { "maxSize": 12 }],
-        // ── The jest twins, off ──────────────────────────────────────────────────────────────────────────
+        // The jest twins, off
         // Each of these is the same rule as the `vitest/` entry decided elsewhere in this file, in the other
         // namespace. Leaving them on reports every finding twice and puts two identical diagnostics on one
         // line, which is how a fix loop starts oscillating. The vitest copy wins in every pair, because that
@@ -232,7 +216,7 @@
         "jest/no-identical-title": "off", // twin
         "jest/no-standalone-expect": "off", // twin
 
-        // ── Type honesty (no checker needed) ─────────────────────────────────────────────────────────────
+        // Type honesty (no checker needed)
         "typescript/no-empty-object-type": "error",
         "typescript/no-unsafe-function-type": "error",
         "typescript/no-wrapper-object-types": "error",
@@ -253,7 +237,7 @@
         "typescript/no-namespace": "error",
         "typescript/ban-ts-comment": "error",
 
-        // ── Core correctness and intent ──────────────────────────────────────────────────────────────────
+        // Core correctness and intent
         "eqeqeq": ["error", "always", { "null": "ignore" }],
         // NESTING, which is the part of "complex" a reader actually feels. Cyclomatic complexity counts every
         // branch the same, so a flat thirty-case dispatch scores worse than five levels of nested ifs; depth is
@@ -300,14 +284,14 @@
         "prefer-template": "error",
         "radix": "error",
 
-        // ── Promises ─────────────────────────────────────────────────────────────────────────────────────
+        // Promises
         "promise/no-return-wrap": "error",
         "promise/no-new-statics": "error",
         "promise/valid-params": "error",
         "promise/no-return-in-finally": "error",
         "promise/spec-only": "error",
 
-        // ── Modern built-ins ─────────────────────────────────────────────────────────────────────────────
+        // Modern built-ins
         "unicorn/throw-new-error": "error",
         "unicorn/new-for-builtins": "error",
         "unicorn/no-instanceof-builtins": "error",
@@ -335,7 +319,7 @@
         "unicorn/prefer-optional-catch-binding": "error",
         "unicorn/prefer-import-meta-properties": "error",
 
-        // ── Imports ──────────────────────────────────────────────────────────────────────────────────────
+        // Imports
         "import/no-duplicates": "error",
         "import/no-self-import": "error",
         "import/no-empty-named-blocks": "error",
@@ -346,7 +330,7 @@
         "node/no-exports-assign": "error",
         "node/no-new-require": "error",
 
-        // ── Type-aware ───────────────────────────────────────────────────────────────────────────────────
+        // Type-aware
         // These need a checker and only run under `pnpm lint:types` (oxlint --type-aware, backed by
         // oxlint-tsgolint). Plain `pnpm lint` ignores them at no cost, so they are declared here — one place
         // where the standard lives — rather than in a separate file.
@@ -402,7 +386,7 @@
         "typescript/prefer-reduce-type-parameter": "error",
         "typescript/prefer-return-this-type": "error",
 
-        // ── Type-aware rules deliberately NOT enabled ────────────────────────────────────────────────────
+        // Type-aware rules deliberately NOT enabled
         // Duplicates of cheaper rules above. Two diagnostics on one line with two different remedies is how a
         // fix loop starts oscillating, so in each pair the always-on rule wins and the type-aware twin is off.
         "typescript/only-throw-error": "off", // duplicate of no-throw-literal
@@ -416,7 +400,7 @@
         // prefer-readonly-parameter-types wants deep-readonly signatures across the whole codebase.
         "typescript/strict-boolean-expressions": "off",
         "typescript/prefer-readonly-parameter-types": "off",
-        // ── Was the backlog, now simply the standard ──────────────────────────────────────────────────
+        // Was the backlog, now simply the standard
         // These 21 rules were listed here as violated-by-main, with counts, and enforced only on files an
         // agent touched. The count reached zero, so they are ordinary rules now and the second config that
         // carried them is gone. Anything added here in future that main does not yet satisfy belongs in the

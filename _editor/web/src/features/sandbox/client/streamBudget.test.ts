@@ -91,8 +91,7 @@ describe(`acquireStreamSlot`, () => {
     });
 
     it(`serves waiters in the order they asked, the order Web Locks grants in`, async () => {
-        // One queueing policy regardless of the browser's primitive; the order itself isn't the point, having just one
-        // is.
+        // Use one queueing policy regardless of the browser primitive.
         setStreamCapacity(() => 1);
         const held = await take();
         const order: string[] = [];

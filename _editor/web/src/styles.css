@@ -1,85 +1,39 @@
-/* Establish the cascade-layer order BEFORE Tailwind/PrimeVue declare theirs. Tailwind's
- * `@import "tailwindcss"` emits `@layer theme, base, components, utilities` and PrimeVue's
- * runtime config (installUi cssLayer) wants `primeng` between base and components —
- * but the linked stylesheet is parsed before PrimeVue's JS runs, so without this line
- * `primeng` is introduced last (after `utilities`) and PrimeVue wins over Tailwind utilities.
- * Declaring the full order here first fixes the position deterministically. */
+/* Establish the cascade-layer order BEFORE Tailwind/PrimeVue declare theirs. */
 @layer theme, base, primeng, components, utilities;
 
 @import "tailwindcss";
 
-/* Design system: tokens + colors + PrimeVue tuning + utilities, then base resets. The
- * order is load-bearing — see _editor/ui/src/styles/index.css. */
+/* The design-system stylesheet loads after the cascade-layer order is declared. */
 @import "../../../_editor/ui/src/styles/index.css";
 
-/* THE HOUSE METALS — carved stone, cast bronze, the cartouche frame kit and the ember glows, as `--house-*`
- * properties on `:root`. Not part of the design system and deliberately not accent-aware: it is the material
- * the marketing site is built out of, and the two places in this app that wear the site's look read it from
- * there rather than each keeping a copy. Both consumers are below — `./skins/sanctum.css` and
- * `./styles/entry.css`. See _shared/house-css/README.md. */
+/* THE HOUSE METALS — carved stone, cast bronze, the cartouche frame kit and the ember glows, as `--house-*` properties on `:root`. */
 @import "../../../_shared/house-css/house.css";
 
-/* The class surface this app PROMISES to extension bundles — see the note where the extension `@source` used
- * to be, below. It lives in the design system because that is whose surface it is, and is imported here
- * because only the app that loads extension bundles has to pay for it. */
+/* The class surface this app PROMISES to extension bundles — see the note where the extension `@source` used to be, below. */
 @import "../../../_editor/ui/src/styles/opt-in/extension-surface.css";
 
-/* Rendered markdown, then the conversation column that is its biggest consumer. Both are unlayered on
- * purpose (they must beat the `components` layer), and both load here rather than from a component's
- * <style> because neither is scoped to one component: prose.css styles v-html output shared by the chat,
- * the workspace preview and every extension view rendering <Markdown>, and chat.css holds the chat's type
- * scale plus the class names its components pass between each other. Order matters — chat.css tunes
- * prose.css's tokens, so prose.css loads after the design system's own sheets rather than inside them. */
+/* Rendered markdown, then the conversation column that is its biggest consumer. */
 @import "../../../_editor/ui/src/styles/opt-in/prose.css";
-/* The WRITING half of the same picture, and it loads on the same terms and for the same reason. `md-editing`
- * adds nothing to prose.css's type rules — it only hides the markup characters that are in the DOM, hangs a
- * block's opening markers in the gutter, and lights the block holding the caret — so an app that has one sheet
- * and not the other shows a markdown editor with every `##` and `- ` on screen. Opt-in beside prose.css rather
- * than imported by <MarkdownDocumentSurface> itself, so the two halves of one surface are turned on in one
- * place instead of one of them arriving invisibly with a component. */
+/* The WRITING half of the same picture, and it loads on the same terms and for the same reason. */
 @import "../../../_editor/ui/src/styles/opt-in/markdown-editing.css";
 @import "./features/chat/panel/chat.css";
 
-/* SKINS — whole-interface looks, each scoped to a `data-skin` attribute on <html> and therefore inert until one
- * is selected in Appearance. Late on purpose: a skin restates the design system's own tokens (the surface ramp,
- * the role tokens, the radius scale) at equal specificity, so source order is what lets it win. Everything about
- * the feature, including how to remove it, is in ./skins/README.md. */
+/* SKINS — whole-interface looks, each scoped to a `data-skin` attribute on <html> and therefore inert until one is selected in Appearance. */
 @import "./skins/sanctum.css";
 
-/* THE ENTRY SCREENS' OWN MATERIAL — the site's metals, ground, frame kit and two button plaques, scoped to
- * `.entry` and therefore inert everywhere but `/login` and `/setup`. Its header carries the whole argument,
- * including why it names `--color-*` rather than `--role-*`.
- *
- * LAST, AFTER THE SKINS, and that is the same source-order argument one line further along. A skin's rules are
- * `[data-skin=…] .p-button…` — an attribute plus a class, which weighs exactly what `.entry .p-button…` weighs
- * — so whichever sheet is read second wins the tie. These two screens are the ONE place a selected skin must
- * not reach: they are dressed as the marketing site the visitor just came from, not as the workspace they have
- * not seen yet, and a reader arriving on them has picked no skin anyway. (Specificity cannot settle the skins'
- * route-element backdrop, which is written with an id; the skin excludes `.entry` from it by name instead.) */
+/* THE ENTRY SCREENS' OWN MATERIAL — the site's metals, ground, frame kit and two button plaques. */
 @import "./styles/entry.css";
 
-/* Scan the @intentic/ui library's source for class names (it lives outside this app's tree,
- * so Tailwind won't auto-detect it). */
+/* Tailwind scans the UI kit explicitly because it lives outside this app's tree. */
 @source "../../../_editor/ui/src/**/*.{ts,html,vue}";
 
-/* And this app's own — named rather than left to auto-detection, which is rooted at the BUILD's root, not at
- * this stylesheet. That is the app's directory when the app builds itself and the demo package's directory when
- * @intentic/demo builds the same source, so relying on it produced a demo with most of its utilities
- * missing: real markup, three-quarters of a design system. Naming it makes one stylesheet true for both. */
+/* This stylesheet explicitly names the app's own source for Tailwind scanning. */
 @source "./**/*.{ts,html,vue}";
 @source "../index.html";
 
-/* EXTENSIONS ARE NOT SCANNED, and that absence is deliberate. There used to be a
- * `@source "../../../_extensions/*/src/**"` here, which worked only because the first-party extensions happen
- * to be built by this repo. Nothing scans an extension that lives in its own repository — a bundle we do not
- * build cannot be read for class names — so a screen styled by being scanned is a screen that can never leave.
- * The classes an extension may use are DECLARED instead, by extension-surface.css imported above. Everything
- * that reaches an extension's markup comes from that promise or from the kit's own components, both of which
- * travel with the host. */
+/* Extensions are not scanned; their allowed classes come from extension-surface.css. */
 
-/* Mobile base: kill the gray tap flash (active: classes provide press feedback instead) and the
- * browser's own pull-to-refresh / scroll chaining on the app shell — inner scrollers opt back in
- * with their own overscroll-behavior. */
+/* Mobile base disables tap flash, pull-to-refresh, and scroll chaining. */
 @layer base {
     * {
         -webkit-tap-highlight-color: transparent;
@@ -90,16 +44,14 @@
     }
 }
 
-/* Tighten the page gutter on phones — the desktop `--ui-page-padding` (up to 2rem/side) eats a third of a
- * 375px screen. max-width already collapses to 100% here, so only the padding needs trimming. */
+/* Tighten the page gutter on phones — the desktop `--ui-page-padding` (up to 2rem/side) eats a third of a 375px screen. */
 @media (max-width: 767.98px) {
     :root {
         --ui-page-padding: 1rem;
     }
 }
 
-/* Narrow desktop: tablet band where the desktop shell is active but the window is laptop-sized. Trim card and
- * page padding so the three-column chrome (rail + workspace + chat) keeps more room for content. */
+/* Narrow desktop: tablet band where the desktop shell is active but the window is laptop-sized. */
 @media (max-width: 1279.98px) and (min-width: 768px) {
     :root {
         --ui-page-padding: calc(var(--spacing) * 4);
@@ -107,11 +59,7 @@
     }
 }
 
-/* Mobile dialogs: every PrimeVue Dialog carries a desktop inline width (e.g. `26rem`/`40rem`) that overflows
- * a phone. Cap width/height to the viewport (minus a margin) with `!important` — it beats the non-important
- * inline width — and let the content region scroll. On a 375px screen this makes big dialogs near-full-screen
- * while small confirmations stay appropriately sized. One rule covers ManageAccess/SandboxSettings/Upgrade/
- * ImportMemory and the workspace confirms at once, so no per-Dialog pt is needed. */
+/* Mobile dialogs override the desktop inline width. */
 @media (max-width: 767.98px) {
     .p-dialog {
         max-width: calc(100vw - 1.5rem) !important;
@@ -122,39 +70,14 @@
     }
 }
 
-/* THE ATTENTION EDGE — the colour of the bar down the left of a card that is waiting on you, worn by the
- * board's AgentCard, its dashed WorkflowRunCard and the rail's RailCard. One value for all three because they
- * are one card in three frames, and each draws the bar with the mechanism its own states need (a border on the
- * board, a slot in the rail's box-shadow list) — the geometry can differ, the colour cannot.
- *
- * WARNING, SETTLED INTO THE CARD IT LIES ON, rather than the undiluted role colour. A lane stacks these cards
- * six pixels apart, so at full strength the bars stopped reading as one mark per card and started reading as a
- * single ragged stripe down the column — the loudest thing on a board where the lane header, the reason chip
- * and the status glyph have all already said the same thing. Mixing into `--color-card` covers both schemes
- * with one formula: it settles the bright amber of the dark scheme and lifts the deep amber of the light one,
- * each toward the surface the bar is drawn on. The chip keeps the undiluted colour, so the two are ordered —
- * the one that says WHY is the brighter. */
+/* THE ATTENTION EDGE — the colour of the bar down the left of a card that is waiting on you, worn by the board's AgentCard. */
 :root {
     --color-attention-edge: color-mix(in srgb, var(--color-warning) 80%, var(--color-card));
 
-    /* Room for an h-7 (1.75rem) icon button with air above and below, once the 1px border is taken out. It is a
-     * variable rather than a number in one rule because the desktop app's window buttons stand in this row and
-     * have to be exactly as tall as it (shell/window/WindowControls.vue). */
+/* Room for an h-7 (1.75rem) icon button with air above and below, once the 1px border is taken out. */
     --bar-height: 2.25rem;
 
-    /* WHAT THE TOP-RIGHT BAR GIVES UP TO THE WINDOW'S OWN BUTTONS, and zero everywhere the window has a title
-     * bar of its own — which is every browser, and an older build of the desktop app. Inside the app's
-     * frameless window (desktop-app windows.rs) this row IS the title bar, so the bar that ends at the window's
-     * right edge reserves this much and the buttons are drawn over it (titleBar.ts finds that bar, and it is
-     * a different one in each layout; a screen with no bar in its top row gets a strip in their place, which
-     * has nothing in it to make room for).
-     *
-     * Wider than the buttons on purpose: the gap is bar background, which is what the window is dragged by.
-     * Without it a chat column whose switcher fills its bar would have no draggable pixel in the whole row.
-     *
-     * The number is three of WindowControls.vue's own buttons: a reserve smaller than they are would put the ×
-     * over the last control of the bar underneath. Both are kept deliberately narrow, because in the default
-     * layout the bar paying for this is a 22rem chat column. */
+/* WHAT THE TOP-RIGHT BAR GIVES UP TO THE WINDOW'S OWN BUTTONS, and zero everywhere the window has a title bar of its own — which is every browser. */
     --window-controls-buttons: 7.5rem;
     --window-controls-width: 0px;
 }
@@ -163,28 +86,9 @@
     --window-controls-width: calc(var(--window-controls-buttons) + 0.75rem);
 }
 
-/* THE TITLE FILL — what makes the top row READ as the top of a window once the platform's own bar is gone.
- *
- * With the frame off, the columns' bars were the title bar in function and nothing else: the explorer's on
- * canvas, the editor's on card, the chat's on canvas again, and on a screen with no bar at all (the login
- * page) three buttons floating over artwork. A title bar is the one surface in a window that is allowed to be
- * darker than everything under it, and that is the whole treatment here: a fill mixed DOWN from the canvas
- * toward black, so it keeps the scheme's warmth rather than going to a flat #000, and a soft shadow onto the
- * content below, which is what says "this sits on top of that" without a second line.
- *
- * Two mixes because the two schemes want different distances. Dark canvas is already near black, so a title
- * bar that reads darker has to go most of the way there; a light canvas only needs to be taken down a step,
- * the way every light desktop's title bars are a shade greyer than the document under them.
- *
- * WHO WEARS IT IS DECIDED AT RUNTIME (shell/window/WindowControls.vue): the bars standing in the window's top
- * row get `data-title-bar` — never the terminal panel's bar at the bottom or a detail row halfway down, which
- * wear `.view-header` too — and a screen with no such bar gets a strip drawn in their place. Both paint from
- * these two properties, which is what keeps the strip on the login page and the row in the workspace the same
- * object. The skin sets the shadow in its own key (skins/sanctum.css). */
+/* THE TITLE FILL — what makes the top row READ as the top of a window once the platform's own bar is gone. */
 :root {
-    /* Down a step, and toward the deep end of the BRAND rather than toward black: mixing a warm ground with a
-     * neutral shade greys it, and a grey bar over cream paper is the one seam in the window the eye reads as a
-     * mistake. The drop takes the scheme's own shade (semantic-colors.css) for the same reason. */
+/* Down a step, and toward the deep end of the BRAND rather than toward black: mixing a warm ground with a neutral shade greys it. */
     --title-bar-fill: color-mix(in oklab, var(--color-canvas) 88%, var(--color-brand-950));
     --title-bar-shadow: 0 4px 12px -4px rgb(var(--ui-shadow-tint) / 0.22);
 }
@@ -193,11 +97,7 @@
     --title-bar-shadow: 0 4px 14px -4px rgb(0 0 0 / 0.7);
 }
 
-/* Unlayered on purpose: the bars pick their own background with a utility (`bg-card` on the editor's tab
- * row), and utilities live in a layer, so the fill has to sit outside every layer to win. `background-image:
- * none` for the same reason — the skin textures `.bg-card` with an image, and a weave on a near-black bar reads
- * as dirt. `position: relative` + `z-index: 1` are what let the shadow fall ONTO the content below: without
- * them the column's body, painted later, would cover it. */
+/* Unlayered on purpose: the bars pick their own background with a utility (`bg-card` on the editor's tab row), and utilities live in a layer. */
 [data-frameless] .view-header[data-title-bar] {
     position: relative;
     z-index: 1;
@@ -206,36 +106,20 @@
     box-shadow: var(--title-bar-shadow);
 }
 
-/* The bar at the top of a shell column: the workspace's explorer switch and its file-tab row, the fleet board's
- * title row, an agent's detail row, the chat's switcher bar. The desktop shell stands those columns side by side,
- * so their bottom borders read as ONE line across the window — which only holds while every bar is exactly as
- * tall as its neighbours, border included. That invariant lived nowhere before (each view picked its own h-8 /
- * h-9 / py-1.5 and they drifted a few pixels apart), so it lives here now: one height, one class, every bar.
- * The class owns nothing else — padding, background and the border itself stay with each view. */
+/* The bar at the top of a shell column: the workspace's explorer switch and its file-tab row, the fleet board's title row, an agent's detail row. */
 @layer components {
     .view-header {
         height: var(--bar-height);
         /* Never stretched or squeezed by the column it sits in — a shrunk bar is a broken line. */
         flex: none;
     }
-    /* The one bar whose content is a LIST that may not fit: the fleet board's filter row, which wraps rather
-     * than shaving its controls down to unreadable slivers. The unified height still governs the common case —
-     * one row is exactly a .view-header, so the line across the window is unbroken — and only a bar that has
-     * actually wrapped stands taller than its neighbours. (The chat's bar was the other user of this until it
-     * stopped being a wrapping tab strip; it is a single switcher line now, so it is a plain .view-header.) */
+/* The fleet filter row wraps when its controls cannot fit. */
     .view-header-wrap {
         height: auto;
         min-height: var(--bar-height);
     }
 
-    /* A session card's identity tile, tinted by what KIND of work the session is (categoryHue): the wash and
-     * the glyph both take the category's hue, at the volume of the app's chips (bg-warning/15 + text-warning)
-     * rather than as a solid fill — a lane of solid saturated squares was the loudest thing on screen, and the
-     * tile is a cross-reference, not an alert. AgentCard (the fleet board) and ChatTabList (the rail, the
-     * docked sheet) both wear it, which is why it lives here and not in either one's scoped styles: the two
-     * cards are one card in two frames, and this is the line that keeps their colour formulas from drifting.
-     * The ink flips with the scheme the way role tokens do — deep ink on the light wash, bright ink on the
-     * dark one — parameterised on the one custom property (`--tile-hue`) the card sets inline. */
+/* A session card's identity tile, tinted by what KIND of work the session is (categoryHue): the wash and the glyph both take the category's hue. */
     .category-tile {
         background: hsl(var(--tile-hue) 60% 45% / 0.16);
         color: hsl(var(--tile-hue) 55% 34%);
@@ -245,63 +129,26 @@
         color: hsl(var(--tile-hue) 70% 72%);
     }
 
-    /* A LANE — the kanban column the fleet board is read as, and the same slab in the chat rail's one-card
-     * width. It is a SURFACE the lane's cards lie on, not a heading over loose cards, and that is what the
-     * rail was missing: with the cards drawn straight on canvas, a pinned header was a black rectangle with a
-     * hard edge butting into the first card, and the eye had nothing telling it where a lane began or ended
-     * except that rectangle. A slab answers both — the header is the slab's cap rather than a band, the gaps
-     * between cards are the slab showing through, and the group is bounded by a rounded edge instead of by a
-     * colour change.
-     *
-     * ONE FILL, mixed from the ink into the ground rather than named as a token, so it holds in both schemes
-     * without a second rule: 4% of content over canvas lifts a dark ground and settles a light one, and it
-     * lands between canvas and `--color-card` in both — which is the whole contract, since a card has to stay
-     * a step LIGHTER than the lane it sits on to read as an object (see .session-card).
-     *
-     * The header inherits `--lane-fill` rather than re-deriving it: it has to be OPAQUE to occlude the cards
-     * that scroll under it while pinned, and a header a shade off its own lane is a seam across the slab. */
+/* A LANE — the kanban column the fleet board is read as, and the same slab in the chat rail's one-card width. */
     .lane {
         --lane-fill: color-mix(in srgb, var(--color-content) 3%, var(--color-canvas));
         background: var(--lane-fill);
     }
-    /* WHAT THE SLAB LIES ON, declared by whoever paints it rather than guessed at by the lane. Only one thing
-     * reads it — the pinned cap's corners, below — but that one thing cannot be right without it. Canvas is
-     * the default because most surfaces paint canvas; the two that ground lanes on the card surface say so
-     * beside their own `bg-card`. It inherits, so it is set once per surface and not once per lane. */
+/* WHAT THE SLAB LIES ON, declared by whoever paints it rather than guessed at by the lane. */
     :root {
         --lane-ground: var(--color-canvas);
     }
     .lane-ground-card {
         --lane-ground: var(--color-card);
     }
-    /* …and back again, for the one surface that paints canvas INSIDE a card-ground host: the docked chat's
-       sheet, which is a canvas box floating over a card-ground panel (ChatTabs). */
+/* . */
     .lane-ground-canvas {
         --lane-ground: var(--color-canvas);
     }
     .lane-header {
         background: var(--lane-fill);
     }
-    /* THE PINNED CAP KEEPS ITS ROUNDED CORNERS. A radius shows what is BEHIND it, and the moment a lane scrolls
-     * under its own cap what is behind the cap is the lane's own fill: the corners fill in with the header's
-     * exact colour and the slab reads as a hard rectangle butting into the top of the list. Reported from the
-     * floating chat, which is where a rail is tall enough to scroll a lane under its cap in the first place.
-     *
-     * The corners are painted back on: one wedge per top corner, cut to the radius the cap itself is cut to.
-     * At rest they land exactly on the lane's own corners, where the same ground already shows, and change
-     * nothing; pinned, they are the whole cap.
-     *
-     * THE COLOUR IS `--lane-ground`, NOT CANVAS, and that distinction is the entire bug this went through once
-     * already. A lane is mixed FROM canvas, so it is tempting to read canvas as what surrounds one — but that
-     * is only true of the docked sheet. The floating chat's rail and /subagents both stand on the CARD surface,
-     * where the same slab reads as a trough rather than a step up (Subagents.vue argues it), and a cap painting
-     * canvas into its corners there paints a hole a shade darker than the lane it is capping. So the ground is
-     * declared by whoever paints it and inherits down: `lane-ground-card` on the two card-ground hosts, canvas
-     * everywhere else. A host that grounds lanes on some third surface restates it or gets canvas corners.
-     *
-     * Cutting the corner at the SCROLLER instead — a radius on the scroll box, no colour to know — cannot do
-     * it: a classic scrollbar takes its width out of that box, so the clip lands ten pixels right of the lane's
-     * own edge and rounds the wrong corner while leaving the lane's square. */
+/* THE PINNED CAP KEEPS ITS ROUNDED CORNERS. */
     .lane-header::before,
     .lane-header::after {
         content: "";
@@ -320,25 +167,7 @@
         background: radial-gradient(circle at 0 100%, transparent var(--radius-xl), var(--lane-ground) 0);
     }
 
-    /* A SESSION CARD — the one surface the fleet board (AgentCard), the workflow row (WorkflowRunCard) and
-     * every rail row (RailCard: the floating chat's open chats, the Subagents list) are all drawn on. It
-     * lives here rather than in any one of them because those lists are read minutes apart by the same eye:
-     * a board card and a rail row are ONE card in two frames, and every time the skin was written twice the
-     * two drifted — different fills, different selection metal, a left edge that stood down on one and stacked
-     * on the other. A component that wants a card writes `session-card` and stops choosing.
-     *
-     * EVERY STATE IS A VARIABLE, not a property. Written as plain properties, `:hover` (a class AND a
-     * pseudo-class) outranks `.session-card-on` (one class), so putting the pointer on the SELECTED card
-     * repainted its accent border grey. Through variables the states can be ordered after hover and win the
-     * tie, and hover keeps a channel of its own on a card that already wears the accent: the halo, rather than
-     * a second opinion about the edge.
-     *
-     * FIVE SHADOW SLOTS, because a second box-shadow rule REPLACES the first and these marks are independent:
-     * the attention bar (left edge), the selection ring, the skin's ledge, the selection lift and the skin's
-     * drop. A SKIN sets the two it owns (see skins/*.css) and never touches the three the app does.
-     * All five keep their INSET-NESS across every state (`inset 0 0 #0000` in the inset slots), because
-     * box-shadow only interpolates between lists that agree on it and a transition that cannot interpolate
-     * snaps. */
+/* Agent cards, workflow rows, and chat rail cards share one session-card surface. */
     .session-card {
         color: var(--color-muted);
         cursor: pointer;
@@ -352,8 +181,7 @@
         --card-lift: 0 0 #0000;
         --card-drop: 0 0 #0000;
         box-shadow: var(--card-accent), var(--card-ring), var(--card-ledge), var(--card-lift), var(--card-drop);
-        /* The shadows transition WITH the colours: selecting a card used to fade its border over 150ms while
-           the ring snapped in on the first frame — one gesture arriving as two. */
+/* The shadows transition WITH the colours: selecting a card used to fade its border over 150ms while the ring snapped in on the first frame. */
         transition:
             color 150ms cubic-bezier(0.4, 0, 0.2, 1),
             background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
@@ -365,77 +193,33 @@
         --card-border: var(--color-line-strong);
         --card-fill: var(--color-overlay);
     }
-    /* THE SELECTION RING IS INSET, and that is what keeps it whole. Drawn outwards it lies OUTSIDE the card's
-     * box, where two things ate it: the lane's pinned header, which is opaque and painted over the top of the
-     * first card in every lane, and the gap between cards, which a ring on each neighbour closed to nothing.
-     * Inside the box nothing can clip it, it follows the card's radius exactly, and the accent is one even
-     * weight the whole way round. A hairline against a border of the same colour, so the edge reads as a solid
-     * 2px of accent rather than as a line under a translucent wash. */
+/* THE SELECTION RING IS INSET, and that is what keeps it whole. */
     .session-card.session-card-on {
         color: var(--color-content);
         --card-border: var(--color-primary-500);
         --card-fill: var(--color-overlay);
         --card-ring: inset 0 0 0 1px var(--color-primary-500);
-        /* Offset down and pulled in by its spread, so it is a shadow UNDER the card rather than a glow around
-           it: it reaches barely a pixel above, which is the one direction a pinned lane header can cover. */
+/* Offset down and pulled in by its spread, so it is a shadow UNDER the card rather than a glow around it: it reaches barely a pixel above. */
         --card-lift: 0 1px 3px -1px color-mix(in srgb, var(--color-primary-500) 28%, transparent);
     }
-    /* Hover on a card that already wears the accent deepens the halo instead of recolouring the edge. Its fill
-       is already the hover fill, so without this the selected card is the one row that answers the pointer
-       with nothing at all. */
+/* Hover on a card that already wears the accent deepens the halo instead of recolouring the edge. */
     .session-card.session-card-on:hover {
         --card-lift: 0 1px 6px -1px color-mix(in srgb, var(--color-primary-500) 45%, transparent);
     }
-    /* NO RULE HERE REPAINTS A CHIP ON A SELECTED CARD, and that absence is the fix rather than the gap in it.
-     * A card's fill is a SURFACE token, so any chip that names another surface token to look inset is a chip
-     * that only works on one of the fills its host can wear: `bg-overlay` reads as a pill on the resting card and
-     * vanishes the moment selection moves that card TO overlay — in either scheme, and in the light one it used
-     * to vanish at rest as well, back when `--role-overlay` and `--role-card` were the same white (they are two
-     * tones apart now; see semantic-colors.css). A `.session-card-on .bg-overlay`
-     * override cannot rescue it either: `bg-overlay` is emitted into Tailwind's `utilities` layer and this
-     * sheet's rules are `components`, so the layer order settles it before specificity is ever consulted.
-     * The chips take a tint of the INK instead (`bg-content/10`, the recipe PlanLimitsPanel already uses),
-     * which is a step off whatever it is laid on: card, overlay or selection. See AgentCard's reason chip. */
-    /* THIS CARD IS WAITING ON YOU: a bar down the left edge, as an inset shadow rather than a wider border, so
-     * nothing shifts and a lane's cards keep their text on one axis. It STACKS with selection and paints over
-     * the ring (first in the list): opening the card that needs you must not erase the reason it is in the
-     * lane. A hairline-and-a-half in a settled amber, not 3px of the full role colour — these cards stack a few
-     * pixels apart, and at that spacing the bar reads as one ragged stripe down the lane rather than as a mark
-     * on each card. */
+/* NO RULE HERE REPAINTS A CHIP ON A SELECTED CARD, and that absence is the fix rather than the gap in it. */
+/* THIS CARD IS WAITING ON YOU: a bar down the left edge, as an inset shadow rather than a wider border. */
     .session-card-attention {
         --card-accent: inset 2px 0 0 0 var(--color-attention-edge);
     }
 }
 
-/* GSI injects its One Tap / verifying prompt iframe at body level. Match its light color-scheme
- * so the browser paints no opaque (white) canvas behind it in dark mode — same trick as the
- * rendered button in GoogleSigninGate.vue. */
+/* GSI injects its One Tap / verifying prompt iframe at body level. */
 #credential_picker_container,
 #credential_picker_iframe {
     color-scheme: light;
 }
 
-/* THE WORKSPACE IS SHOWING SOMEBODY ELSE'S COPY, said by the surface instead of by a strip above it.
- *
- * This is the private-browsing answer, and it is right for the same reason: a mode is a STATE of the container,
- * not an event inside it, so the container is what should look different. A sentence narrating it is read once
- * and then becomes furniture — worst at the hour it starts mattering, when somebody has forgotten why the
- * README in front of them looks wrong. A room that is a different colour cannot stop being a different colour.
- * WHOSE copy is the half a colour cannot say, and that is the chip in the tab row (WorkspaceScopeChip).
- *
- * Costs no layout: an inset shadow, so nothing moves when the scope changes and there is no band to animate in
- * or out. Global rather than scoped to one view because both workspaces wear it — the desktop's split and the
- * phone's drill-down — and whose copy you are in is not a fact about a form factor.
- *
- * UNLAYERED, DELIBERATELY, and this is the whole reason these two rules are not up in @layer components with
- * .view-header itself. The bars carry `bg-card`, a Tailwind UTILITY, and utilities are the last layer in the
- * cascade (see the @layer statement at the top of this file): a component-layer rule loses to them however
- * specific it is. An unlayered rule beats every layered one, which is exactly the standing this needs — it is
- * not styling a component, it is overruling the component's own background for as long as the view is somewhere
- * it does not normally go.
- *
- * `background-color` rather than the shorthand, so it composes with the skin, which paints these same bars with
- * `background-image` (see sanctum.css) instead of one of the two silently winning. */
+/* THE WORKSPACE IS SHOWING SOMEBODY ELSE'S COPY, said by the surface instead of by a strip above it. */
 .ws-scoped {
     box-shadow: inset 0 2px 0 var(--color-primary-500);
 }

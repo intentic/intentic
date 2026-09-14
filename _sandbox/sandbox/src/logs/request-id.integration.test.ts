@@ -5,11 +5,7 @@ import { createPerfTracker, type PerfFields } from "../platform/resources/perf.j
 import { services } from "../harness/route-services.testing.js";
 import { pino } from "pino";
 
-/* THE CORRELATION, ACROSS THE WIRE. Both halves of a slow interaction were already measured and could not be
- * put together: the browser times what the user waited for, the daemon times what it served, and on a sandbox
- * answering several calls a second the only way to pair them was by timestamp and hope.
- *
- * Driven over the real HTTP surface, because the thing under test is a header surviving the trip. */
+/* THE CORRELATION, ACROSS THE WIRE. */
 
 const spanning = () => {
     const spans: { op: string; fields: PerfFields }[] = [];

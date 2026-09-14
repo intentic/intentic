@@ -5,9 +5,7 @@ import { jsonFile } from "../../store/json-file.js";
 import { discoverGeminiModels, type GeminiModel, SEED_GEMINI_MODELS } from "./gemini-models.js";
 
 // Google-channel model catalog on the shared ladder; account-only, no API-key fallback, so the SEED_GEMINI_MODELS floor
-// shows until the translator's account connects. Labels and input modalities are persisted alongside ids, never
-// re-derived; a persisted entry missing modalities reads as absent, not text-only, until the next discovery rewrites
-// it.
+// Persist model metadata and treat missing modalities as undiscovered.
 export interface GeminiCatalog {
     // Google-channel models plus the default id, never empty.
     readonly models: () => Promise<{ models: GeminiModel[]; default: string }>;

@@ -1,11 +1,4 @@
-/* ═══════════════════════════════════════════════════════════════════════════════════════════════════
- * THE HOME PAGE'S OWN LAYOUT.
- *
- * Everything the whole site shares — the metals, the type tiers, the cartouche button, the frame, the
- * card, the plate — is in `global.css`. What is here is only the arrangement of THIS page: how wide the
- * hero's three frames are, where its two wings hang, how the comparison and the getting-started plan are
- * laid out. Every rule is under `.home`, so nothing here can reach the other sixty-odd pages.
- * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
+/* THE HOME PAGE'S OWN LAYOUT. */
 
 /* ── The shell every band shares ─────────────────────── */
 .home .shell {
@@ -16,16 +9,11 @@
 }
 
 .home .h2 {
-    /* The bottom margin is NEGATIVE on purpose, and it is not a spacing choice: `.display` pays for its
-       descenders with `padding-block-end` (a clipped background is not painted past the padding box, so the
-       tail of a "g" would go missing) and takes that padding back out with a matching negative margin. A
-       plain `0` here would win over it and leave the padding standing as a visible gap. Any rule that sets
-       the bottom margin of a `.display` element has to carry the takeback with it. */
+/* The bottom margin is NEGATIVE on purpose, and it is not a spacing choice. */
     margin: 0.9rem 0 calc(-1 * var(--display-descender));
     max-width: 24ch;
     font-size: clamp(1.9rem, 3.2vw, 2.75rem);
-    /* 1.24, not the 1.16 this used to run: Playfair's content box is ~1.33em, and set tighter than ~1.2 the
-       lines crowd. The descenders themselves no longer depend on this number. */
+/* 1.24, not the 1.16 this used to run: Playfair's content box is ~1.33em, and set tighter than ~1.2 the lines crowd. */
     line-height: 1.24;
 }
 .home .lede {
@@ -42,22 +30,12 @@
     font-weight: 500;
 }
 
-/* ── 1 · The first screen ──────────────────────────────
-   SYMMETRIC, because the picture behind it is. The art is a framed plaque with a devata standing in each
-   outer third and a deliberately empty middle; the copy sits in that middle, on the axis, and the product
-   is spread underneath it in three frames — one wide one on the centre line and a narrower one leaning in
-   from either side. An off-centre column over this plate reads as a misprint. */
+/* The first screen shares its plate's symmetry. */
 .home .hero {
     position: relative;
     overflow: hidden;
 }
-/* THE ONLY BAND ON THE PAGE WITH NO MEASURE OF ITS OWN, and the picture behind it is why. Every other band
-   stops at 84rem because a column of words has a width past which it stops being readable. This one is not
-   a column of words: it is a plaque with two figures standing in its outer thirds, and where those figures
-   land is decided by the plate's width — which is the window's. Cap the band and the product frames stay
-   put while the figures walk outwards, until on a wide screen they are out at the edges with an acre of
-   empty wall between them.
-   The COPY still has a measure — 44rem — because that part of the band really is a column of words. */
+/* THE ONLY BAND ON THE PAGE WITH NO MEASURE OF ITS OWN, and the picture behind it is why. */
 .home .hero-grid {
     position: relative;
     padding: 7rem 2rem 3rem;
@@ -70,8 +48,7 @@
     text-align: center;
 }
 
-/* THE GREETING, FLANKED RATHER THAN UNDERLINED. Every other eyebrow trails a fading hairline to the right,
-   which opens a left-set band and tilts a centred one. Here the same lozenge stands on either side. */
+/* THE GREETING, FLANKED RATHER THAN UNDERLINED. */
 .home .hero-eyebrow {
     display: flex;
     align-items: center;
@@ -91,18 +68,7 @@
     opacity: 0.9;
 }
 
-/* Sized against the full width of the screen rather than a column, because on this layout it has one.
-   THE LEADING IS 1.24, NOT THE 1.04 A DISPLAY SETTING USUALLY WANTS, for two reasons that pull the same
-   way. These are three SENTENCES rather than three lines of one: each ends on its own full stop and is a
-   separate claim, so they need the air between them that a paragraph break would give — set solid they
-   read as one phrase that happens to have wrapped, and the ember stops lose their beat. And the clipped
-   background fill means a too-short line box simply does not paint a descender.
-
-   THE FAMILY IS DECLARED ON THE <h1> ITSELF, not only on the spans that carry the stone texture. Visually
-   this changes nothing — each beat is already wrapped in `.display`. It matters because the h1 is the
-   element every outside reader inspects: search previews, reader modes and audit tools all ask the HEADING
-   what it is set in, and they got the inherited body sans, because the only thing directly inside the h1
-   was a wrapper span. */
+/* Hero sizing uses the full viewport width. */
 .home .headline {
     margin: 0;
     font-family: var(--font-display);
@@ -114,16 +80,12 @@
     display: block;
     white-space: nowrap;
 }
-/* A little more air between the three beats than the line-height alone gives, set on the sibling join so
-   the first beat keeps its distance from the eyebrow and the last from the subhead. */
+/* A little more air between the three beats than the line-height alone gives. */
 .home .headline-line + .headline-line {
     margin-top: 0.14em;
 }
 
-/* THE LINE UNDER THE HEADLINE. The colour is sampled off the reference art rather than picked: a
-   near-white here (#e4d3b6) reads as paper laid over stone on a wall this warm, while the amber below is
-   several steps warmer and one step darker, so it separates from the cream headline by TEMPERATURE as much
-   as by brightness. `balance` splits the sentence on its own clause rather than filling the measure. */
+/* THE LINE UNDER THE HEADLINE. */
 .home .hero-sub {
     margin: 1.4rem auto 0;
     max-width: 36ch;
@@ -144,29 +106,18 @@
     margin-top: 2.1rem;
 }
 
-/* ── The product, in three frames on one axis ─────────
-   The workspace sits on the centre line and a narrower surface leans in from either side, overlapping its
-   edges: one near thing in the middle, two at middle distance. Only the centre frame is in flow — it sets
-   the block's height — and the two wings hang off their own edges of the same span, so the composition
-   holds its proportions at every width without a media query per frame.
-   All three CROP their screenshot from the top-left rather than fitting it. A whole screen shrunk into a
-   370px wing is a grey rectangle; its top-left corner at full size is still a readable list. */
+/* The product uses three frames on one horizontal axis. */
 .home .hero-visual {
     position: relative;
     margin: 2.6rem 0 0;
 }
-/* THE STACK TAKES A CEILING, so the three frames stop filling the whole window on a wide screen.
-   Uncapped, the workspace and its two wings grew with the viewport until they ran off both edges and
-   swamped the copy above them. The centre is 62% of this box and each wing a fifth of it, so capping the
-   box and centring it shrinks all three together and holds every overlap exactly as it was. */
+/* THE STACK TAKES A CEILING, so the three frames stop filling the whole window on a wide screen. */
 .home .hero-stack {
     position: relative;
     max-width: 74rem;
     margin-inline: auto;
 }
-/* The centre frame is the only one in flow, so it sets the block's height, and it carries a deeper shadow
-   than the shared frame style gives it: it is standing ON the two wings rather than beside them, and that
-   is the one place on this page where a cast shadow has real work to do. */
+/* The centre frame is the only one in flow, so it sets the block's height, and it carries a deeper shadow than the shared frame style gives it. */
 .home .window-app {
     position: relative;
     z-index: 2;
@@ -177,15 +128,7 @@
         0 0 2.5rem 0.4rem rgba(0, 0, 0, 0.6),
         0 2rem 4.5rem -0.8rem rgba(0, 0, 0, 0.9);
 }
-/* THE WINGS RISE INTO THE FIGURES, and that is the point of them. Each stands in the outer third of the
-   plate, which is exactly where the art puts a devata, and each is pulled up until its top rail crosses
-   her lower body. That overlap is what binds the product to the wall: level with the centre frame the
-   three read as a row of thumbnails sitting ON a picture, climbing into it they read as one arrangement
-   standing IN it. They rise by different amounts so the pair is not a mirror.
-   BOTH SIT BEHIND THE CENTRE, and that is a layering decision rather than a stacking accident. One wing in
-   front and one behind reads as depth until you put a control on the middle frame: anything in that
-   frame's own corner is then paintable over by the wing above it, and the demo press ended up half under a
-   conversation panel. */
+/* THE WINGS RISE INTO THE FIGURES, and that is the point of them. */
 .home .window-plan,
 .home .window-chat {
     position: absolute;
@@ -207,14 +150,11 @@
     position: relative;
     overflow: hidden;
 }
-/* One crop shape per surface, each cut to end on a horizon in the screenshot rather than through the
-   middle of a row: the workspace on its table of runs, the plan on its checklist, the chat on a reply. */
+/* Each surface uses a crop that ends at a screenshot horizon. */
 .home .window-crop-app {
     aspect-ratio: 16 / 9;
 }
-/* The wings are PORTRAITS. They are half the centre's width and have to reach from a figure's waist down
-   to near the centre frame's foot, and a landscape crop that tall would be a letterbox with a margin.
-   Portrait also suits what is in them: a plan is a list and a conversation is a column. */
+/* The wings are PORTRAITS. */
 .home .window-crop-plan {
     aspect-ratio: 1 / 2;
 }
@@ -227,16 +167,11 @@
     left: 0;
     max-width: none;
 }
-/* The centre frame is wide enough to hold its screenshot at close to true size; the two wings are not, so
-   they are drawn a third over and crop harder. A wing set at the centre's scale is a grey mosaic — the
-   point of a surface at middle distance is that you can still tell what it is. */
+/* The centre frame is wide enough to hold its screenshot at close to true size; the two wings are not, so they are drawn a third over and crop harder. */
 .home .screen-app {
     width: 112%;
 }
-/* Each wing is drawn wide enough to FILL its portrait crop, and the two need very different amounts. The
-   plan's source is already a tall column, so a third over is enough. The chat's is a landscape panel split
-   into a list and a conversation, and 222% is not a round number: it is the width that lands the crop's
-   right edge ON the seam between those two panes. */
+/* Each wing is drawn wide enough to FILL its portrait crop, and the two need very different amounts. */
 .home .screen-plan {
     width: 135%;
 }
@@ -244,11 +179,7 @@
     width: 222%;
 }
 
-/* ── The press into the demo ──────────────────────────
-   It covers the whole centre frame so the whole picture is the target, and carries its own label in the
-   bottom-centre. The scrim it lays down is nearly nothing at rest and a real veil under the pointer,
-   which is what makes the frame feel like something you can open rather than a picture of one.
-   `inset` starts below the ledge so the ornament and the label never share a corner. */
+/* The demo press covers the complete centre frame. */
 .home .play {
     position: absolute;
     inset: var(--corner-size) 0 0;
@@ -264,9 +195,7 @@
 .home .play:focus-visible {
     background: rgba(10, 7, 5, 0.42);
 }
-/* THE PRESS IS THE SITE'S OWN SMALL BUTTON, borrowed whole. What is left here is only what a button ON A
-   PICTURE needs that one on the page does not: the whole frame is the target, so the anchor covers it, and
-   hovering anywhere on the picture has to light the button even though the pointer is nowhere near it. */
+/* THE PRESS IS THE SITE'S OWN SMALL BUTTON, borrowed whole. */
 .home .play:hover .btn::before,
 .home .play:hover .btn::after,
 .home .play:focus-visible .btn::before,
@@ -278,17 +207,7 @@
     color: #fff6e6;
 }
 
-/* ── 2 · The build ─────────────────────────────────────
-   ONE DRAWING, AT THE SAME WIDTH AS THE PHOTOGRAPHS BELOW IT, which is the only thing this band needs from
-   the stylesheet: `TempleFigure.astro` owns every rule inside the plate and arranges itself from the
-   plate's own width rather than the window's. So this band borrows `.stage` from the verbs section further
-   down — the measure, the gutters and `--stage-bleed` are defined there — and spends its own rules on the
-   vertical rhythm, which is not a verb stage's. A stage is a screenful with a screenful's air around it;
-   this is a heading and the picture that finishes its sentence, so the two sit close.
-
-   THE PLATE IS A `.card`, NOT A `.window`, and that difference is load-bearing on this site: a window means
-   "this is a photograph of the product", and a subscription, a fleet of agents and a shipped release could
-   never be photographed together. */
+/* The build section uses one drawing width. */
 .home .shell.build-open {
     padding-bottom: 0;
 }
@@ -297,45 +216,9 @@
     padding-bottom: clamp(2.5rem, 5vh, 4rem);
 }
 
-/* ── 3 · The verbs, a screenful each ─────────────────────
-   THE SHOWCASE. Five stages down the page, and each one is a title, a line and then the screen itself,
-   a little wider than the column the title sits in. Two rules decide the whole shape of it.
-
-   FIRST: THE WORDS TAKE THE SHELL'S MEASURE AND THE PICTURE STEPS PAST IT — the verb, its line and its
-   link stay in the same 84rem column every other band on the page stops at, and the frame alone leans out
-   of it on both sides. That difference is the point: a picture set to exactly the width of the paragraph
-   above it reads as an illustration IN the column, and the same picture a few rem wider reads as the
-   thing the column is captioning. It takes very little to land — 4.5rem a side at most, so the words end
-   at 81rem and the frame at 90rem.
-
-   A CAP, THOUGH, AND A SMALL ONE. This band was 116rem for a while — frames that broke the page's column
-   and ran to the window's edges, on the theory that a photograph of a screen has no reading width the way
-   a column of words does. It does not, but the PAGE does: five frames wider than every heading above and
-   below them do not read as a generous showcase, they read as a section that has come loose. Leaning out
-   by a few rem says the same thing without spending the page's alignment to say it.
-
-   AND THE BLEED IS COMPUTED, NOT CHOSEN, which is what keeps it out of trouble on a narrow window. See
-   `--stage-bleed` below: it is half of whatever space the window has left over beside the shell, so it is
-   exactly zero until the window is wider than the shell has any use for, and no breakpoint has to be
-   remembered for it.
-
-   SECOND: EVERY FRAME IS 16:9 AND EVERY SHOT FILLS IT, because the shots are TAKEN at 16:9. That is the
-   only arrangement of this section that works, and it took three tries to get there. The captures the
-   feature pages use are framed to their surface and trimmed to where its content stops, so they arrive
-   between 1.42:1 (the capability catalogue) and 3.65:1 (the diff) — and a frame can meet a set like that
-   two ways, both bad. Take each shot's own proportion and the section is five silhouettes down one page,
-   the widest of them a mail slot 1294 by 354. Hold one ratio and the wide ones letterbox, which no amount
-   of mount texture rescues: 250 pixels of almost-nothing reads as almost-nothing.
-   So the shape moved upstream. `_tools/e2e/shots/capture.mts` shoots the four `stage-*` captures at
-   1760×990 — the whole app window, chat included, 16:9 to the pixel — and this stylesheet does nothing to
-   them but scale. Nothing is cropped, nothing is padded, and there is no per-shot anything here. `cover`
-   below is only there to eat a rounding error. */
+/* 3 · The verbs, a screenful each ───────────────────── THE SHOWCASE. */
 .home .shell.verbs-open {
-    /* The eyebrow and the first stage's verb belong to one screenful: a reader coming off the hero should
-       meet the section label, Run and a picture, in that order, without scrolling twice. Only an eyebrow
-       lives here now — no carved heading beneath it — so the shell's default top padding is more than
-       this label needs. It names `.shell` as well as the modifier so it outranks the phone rule at the
-       foot of this file that resets every shell's vertical padding to 4rem. */
+/* The first stage keeps its label, action, and image in one screenful. */
     padding-top: clamp(3rem, 5vh, 4rem);
     padding-bottom: 0;
 }
@@ -346,46 +229,28 @@
     padding-top: 1.5rem;
 }
 
-/* The shell's own measure and gutters, so a stage's words line up with the heading above it and with
-   every other band's card. Only the vertical rhythm is the stage's own: a screenful apart, not a card's
-   gap, which is what makes the section read one picture at a time. */
+/* The shell's own measure and gutters, so a stage's words line up with the heading above it and with every other band's card. */
 .home .stage {
     max-width: 84rem;
     margin: 0 auto;
     padding: clamp(2.5rem, 6vh, 4.5rem) 1.5rem;
 
-    /* WHAT THE WINDOW HAS LEFT OVER beside the shell, on one side. Zero until the window is wider than
-       84rem, because until then the shell IS the window and there is nothing to lean into. */
+/* WHAT THE WINDOW HAS LEFT OVER beside the shell, on one side. */
     --stage-room: max(0rem, (100vw - 84rem) / 2);
-    /* HALF OF IT, AND NEVER MORE THAN 4.5REM. Half rather than all of it is the rule that keeps this safe
-       at every width without a media query: whatever the frame takes, at least as much is left standing as
-       page margin outside it, so the picture can never end up pinned to the edge of the window on the
-       laptop widths where the leftover space is only a few dozen pixels. The cap lands the frame on 90rem
-       — 3rem past the shell's edge on each side, 4.5rem past the words — and a 102rem window reaches it.
-       `100vw` INCLUDES THE SCROLLBAR, and that is the one way a rule like this overflows a page. It cannot
-       here: the term is halved and the stage's own 1.5rem gutters are wider than any scrollbar, so on a
-       window narrower than the shell the bleed is at most a few px against 24px of gutter to spend it in,
-       and above the shell it is bounded by the real space beside it. */
+/* HALF OF IT, AND NEVER MORE THAN 4.5REM. */
     --stage-bleed: min(4.5rem, var(--stage-room) / 2);
 }
-/* THE STEP OUT OF THE COLUMN, and everything a stage can carry takes it: the four screenshots, the plate
-   Automate draws its machine on, and the build scene in the band above. If only the frames leaned out, the
-   fifth stage would read as the one that missed — the rhythm of this band is five visuals on one measure,
-   whatever is inside them, and the page has ONE picture width from the first band to the last. */
+/* THE STEP OUT OF THE COLUMN, and everything a stage can carry takes it: the four screenshots, the plate Automate draws its machine on. */
 .home .stage-frame,
 .home .stage-machine,
 .home .build-plate {
     margin-inline: calc(-1 * var(--stage-bleed));
 }
-/* STACKED, and the link is the third line of it rather than the far end of a row. It was a row once, the
-   shape the old lead verb used: title and line at one end, "See it" pushed to the other. At card width
-   that reads as a header; across the whole column the two ends stop looking like one thought. */
+/* STACKED, and the link is the third line of it rather than the far end of a row. */
 .home .stage-head {
     margin-bottom: clamp(1.5rem, 3vh, 2.25rem);
 }
-/* The verb, and it stays in the body sans. The band's eyebrow is the chapter's label, once — five stone
-   headings down one section is a mason's sampler, and each of these is the caption on a picture that is
-   about to take the rest of the screen. */
+/* The verb, and it stays in the body sans. */
 .home .stage-verb {
     display: flex;
     align-items: center;
@@ -409,15 +274,7 @@
     font-size: 0.9375rem;
 }
 
-/* THE BOX IS 16:9 AT EVERY WIDTH. What changes on a phone is the ZOOM, not the shape.
-   A 325px column makes a 16:9 frame 183px tall, and a whole 1760-px app window fitted into that is a
-   picture of a screenshot rather than of the product — nothing in it can be read. So a phone gets the
-   answer the hero already gives it: the screen drawn at nearly three times the frame and anchored at its
-   top-left corner, cropped by the box, so a reader sees the legible top-left of a real surface.
-   275% rather than the 205% this used to run, and the captures are why. They were shot of the workspace
-   pane alone — 1322 CSS px — and are now shot of the whole window at 1760, so the same percentage draws the
-   app a quarter smaller. This is the number that puts the app's own type back at the size a phone could read
-   it at before. */
+/* THE BOX IS 16:9 AT EVERY WIDTH. */
 .home .stage-crop {
     overflow: hidden;
     aspect-ratio: 16 / 9;
@@ -428,20 +285,9 @@
     max-width: none;
     height: auto;
 }
-/* THE 16:9 BOX TAKES OVER AT 48rem, which is also where `STAGE_SIZES` in `Landing.astro` stops asking for
-   a rung sized to the 275% crop and starts asking for one sized to the frame. The two have to switch on
-   the same number or there is a viewport where the stylesheet paints at twice the width `sizes` budgeted
-   for and the browser hands back a picture at half the resolution it is being drawn at. The same goes for
-   the two numbers the bleed above is built from: `sizes` carries them back as its own top two terms.
-   THE SHOT SITS FLUSH TO THE FRAME, as it does in every other frame on this site (`.window-full`). There
-   is no mount and no padding here, because there is nothing to mount: the capture already is the frame's
-   shape. An earlier version of this band had both, and they existed only to make a letterbox look
-   deliberate. */
+/* The 16:9 stage layout starts at 48rem. */
 @media (min-width: 48rem) {
-    /* THE WHOLE SHOT, FILLING THE WHOLE BOX. `cover` never actually crops here: the capture is 16:9 and so
-       is the box, so the two agree to within the sub-pixel the column's own width leaves. `cover` is what
-       makes that sub-pixel a rounding error rather than a hairline of frame showing along one edge — which
-       `contain` would do, and which on a near-black picture in a near-black frame reads as a seam. */
+/* THE WHOLE SHOT, FILLING THE WHOLE BOX. */
     .home .stage-shot {
         width: 100%;
         height: 100%;
@@ -450,19 +296,13 @@
     }
 }
 
-/* AUTOMATE'S STAGE IS THE ONE WITH NO SCREENSHOT ON IT, so it carries the machine: three stations on a rail,
-   drawn by `AutomateFigure.astro`, which owns every rule inside this plate and arranges itself from the plate's
-   OWN width rather than the window's — it is the same drawing at half the size on /features/automate/.
-   All that is left here is the plate: the quiet `.card` treatment rather than a `.window`, because on this site
-   a window means "this is a photograph of the product" and it would be lying here. */
+/* AUTOMATE'S STAGE IS THE ONE WITH NO SCREENSHOT ON IT, so it carries the machine: three stations on a rail, drawn by `AutomateFigure.astro`. */
 .home .stage-machine,
 .home .build-plate {
     padding: clamp(1.5rem, 3vw, 2.5rem);
 }
 
-/* ── 4 · The comparison ────────────────────────────────
-   Two columns of nouns, and the asymmetry between them is the whole argument — so the heavy side is a lit
-   cartouche and the light one a dashed outline. */
+/* The comparison uses two noun columns. */
 .home .compare {
     display: grid;
     align-items: start;
@@ -564,11 +404,7 @@
     padding: 0;
     list-style: none;
 }
-/* HUNG FROM THE ROW'S FIRST LINE, not centred in it. This row wraps: below ~30rem the detail takes two lines
-   while the logo and the name take one, and `center` then drops the name (and only the name) half a line, which
-   leaves the logo — placed on the first line, as every mark is — six pixels above the word it labels. Hanging
-   from the top is the arrangement that stays true at both widths. The chip keeps its own centring below, since
-   it is a box beside the text rather than a line of it. */
+/* HUNG FROM THE ROW'S FIRST LINE, not centred in it. */
 .home .accounts li {
     display: flex;
     flex-wrap: wrap;
@@ -592,9 +428,7 @@
     font-size: 0.75rem;
     color: var(--color-subtle);
 }
-/* Centre the caps in the bordered box. Left inline with the inherited 1.5 line-height, the tag's letters
-   sat visibly high — all-caps has no descenders, so the leading reserved below the baseline was empty and
-   pushed the word up. */
+/* Centre the caps in the bordered box. */
 .home .account-tag {
     display: inline-flex;
     align-items: center;
@@ -643,18 +477,7 @@
     color: var(--color-subtle);
 }
 
-/* ── 7 · Getting started ─────────────────────────────────
-   TWO PLACES AND THE SEAM BETWEEN THEM. The band is a plan rather than a list: the left zone is what
-   happens in a browser on our side, the right is what happens on the reader's own machine, and the rule
-   down the middle is the boundary the whole product argument rests on.
-
-   What stood here was 01 / 02 / 03 in three columns — the shape every landing page uses, and the shape
-   that carries no information: the reader already knows a list is ordered. Worse, "Your sandbox is
-   waiting" is not a step anybody performs; it is something that has already happened by the time you read
-   it, and numbering it 02 dressed a fact as a chore.
-
-   Stacked below 60rem, where a vertical seam has no width to divide and each zone's own ruled heading does
-   the separating instead. */
+/* Getting started spans the browser and machine stages. */
 .home .flow {
     display: grid;
     gap: 2.5rem;
@@ -667,9 +490,7 @@
         align-items: start;
     }
 }
-/* The zone's name, and it is SENTENCE CASE on a page whose every other label is spaced capitals. That is
-   deliberate: these two read as annotations on a drawing — the hand-lettered "here" and "there" on an
-   elevation — and small caps would make them section eyebrows, of which this band already has one. */
+/* The zone's name, and it is SENTENCE CASE on a page whose every other label is spaced capitals. */
 .home .flow-where {
     margin-bottom: 1.5rem;
     padding-bottom: 0.7rem;
@@ -679,8 +500,7 @@
     font-weight: 600;
     color: var(--color-gold-bright);
 }
-/* THE BOUNDARY. A single rule, and a lozenge cut into it at the crossing point — the one place on this
-   page where something passes from our side to the reader's. It stretches to the taller zone. */
+/* THE BOUNDARY. */
 .home .flow-seam {
     position: relative;
     align-self: stretch;
@@ -704,15 +524,7 @@
     background: var(--color-canvas);
     border: 1px solid var(--color-line-bright);
 }
-/* A station on the plan: a lotus in the margin where the numeral used to be, and the beat hung off it. The
-   marker is the same one the page sets every bullet with, so a step reads as one more item in the page's
-   own vocabulary rather than as a counter with a typeface of its own.
-
-   The mark lives INSIDE the heading it marks, hung back into the station's indent, rather than absolutely
-   positioned over it. Absolute wanted a `top` in the station's line-height while the thing it had to line
-   up with was the h3's — two type contexts, joined by a constant that was right for neither. As a child of
-   the h3 it is on that heading's own line box (`.mark`), and the indent is arithmetic anyone can check:
-   1.7rem of padding, pulled back by the same 1.7, is a 0.95rem mark and a 0.75rem gap. */
+/* A station on the plan: a lotus in the margin where the numeral used to be, and the beat hung off it. */
 .home .station {
     padding-left: 1.7rem;
 }
@@ -741,8 +553,7 @@
     border-bottom: 1px solid var(--color-line);
     padding: 0.7rem 1.2rem;
 }
-/* The surface the line is typed into, named in the same hand as the zone above it — the zone says whose
-   machine, this says where on it. */
+/* The command surface identifies the user's machine. */
 .home .command-where {
     font-family: var(--font-mark);
     font-size: 0.8125rem;
@@ -794,25 +605,7 @@
     color: var(--color-muted);
 }
 
-/* ── 8 · FAQ ─────────────────────────────────────────────
-   THREE REGISTERS SIDE BY SIDE, rather than three stacked down one column.
-
-   The questions were always an accordion — fifteen native <details>, every one shut. What made the section
-   the second tallest on the page was not the answers, it was the ARRANGEMENT: three groups stacked, each
-   opening a fresh 3.25rem gap, each with a 15rem margin column holding a two-line rubric and then nothing
-   for the rest of its height. Fifteen one-line questions occupied 1328px, and about a third of the band's
-   width was permanently empty.
-
-   Standing the groups side by side spends that width instead of leaving it. The tallest column sets the
-   height, so the section costs six rows rather than fifteen; the three subjects are legible in one glance
-   across rather than one scroll down, which is what a set of rubrics is FOR; and each keeps its own spine,
-   so the columns read as three registers rather than as a table.
-
-   The rubric comes out of the margin and sits over its own list. It said the same thing there and cost
-   15rem to say it, which also squeezed the questions into a measure narrow enough to wrap them — the
-   arrangement was paying twice.
-
-   Two columns from 52rem where three would wrap every question, one below that. */
+/* 8 · FAQ THREE REGISTERS SIDE BY SIDE, rather than three stacked down one column. */
 .home .faq {
     display: grid;
     gap: 2.25rem 2.75rem;
@@ -836,8 +629,7 @@
     margin-top: 0.35rem;
     line-height: 1.55;
 }
-/* THE SPINE. One rule, the page's lightest, down the left of each register — what separates the three
-   columns from each other without drawing a box around any of them. */
+/* THE SPINE. */
 .home .faq-list {
     border-left: 1px solid var(--color-line);
     padding-left: 1.4rem;
@@ -873,8 +665,7 @@
 .home .faq summary:hover {
     color: var(--color-primary-400);
 }
-/* The answer hangs under its question rather than under the mark: indented by the mark's width plus its
-   gap, so the first word of the answer starts on the same axis as the first word of the question. */
+/* The answer hangs under its question rather than under the mark: indented by the mark's width plus its gap. */
 .home .faq-answer {
     padding: 0 0 1rem 1.45rem;
 }
@@ -894,9 +685,7 @@
     font-size: 0.875rem;
 }
 
-/* ── 9 · The closing cartouche ─────────────────────────
-   The plate returns, cropped to its foot — the temple and the lotus at the bottom of the art, which is the
-   half the first screen never shows because the windows cover it. */
+/* The closing cartouche returns the plate at the artwork's foot. */
 .home .final {
     border-top: 1px solid var(--color-line);
 }
@@ -925,8 +714,7 @@
 .home .final-heading span {
     display: block;
 }
-/* The rule under "forever": its own element, so it can be gold, sit where a drawn underline sits rather
-   than where the font's metrics put one, and keep its weight when the heading scales. */
+/* The forever rule is a separate gold underline. */
 .home .final-forever {
     position: relative;
     width: fit-content;
@@ -962,13 +750,7 @@
         padding-top: 4rem;
         padding-bottom: 4rem;
     }
-    /* THE WINGS STOP CLIMBING HERE, and the reason is that the two things they are measured against shrink
-       at different rates. The plate is 16/9 of the window's width, so the figures on it rise as the window
-       narrows; the copy above is words, and words get TALLER as their column narrows. Below about a
-       thousand pixels the figures have already passed above the buttons, so a wing pulled up far enough to
-       reach them is a wing standing beside the call to action. It stays put instead.
-       They widen at the same time: a fifth of a narrow window is 180px, which is a thumbnail rather than a
-       surface, and the centre gives up the width to pay for it. */
+/* THE WINGS STOP CLIMBING HERE, and the reason is that the two things they are measured against shrink at different rates. */
     .home .window-app {
         width: 56%;
     }
@@ -984,9 +766,7 @@
         width: 138%;
     }
 }
-/* THE WINGS COME OFF ON A PHONE. Overlapped across 380px the three frames hide most of each other and none
-   of them is readable; the workspace alone, full width and cropped harder, carries the same point. Both
-   wings are decoration a screen reader never sees, so only the arrangement is lost. */
+/* THE WINGS COME OFF ON A PHONE. */
 @media (max-width: 48rem) {
     .home .hero-visual {
         margin-top: 2.75rem;

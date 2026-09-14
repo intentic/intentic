@@ -1,7 +1,4 @@
-<!--
-    Renders the post text under review via the shared <Markdown> component, so approvals see the same formatting the platform will. Column width is
-    capped in `ch` to keep lines readable. Posts longer than LONG_POST clamp with a fade and a toggle.
--->
+<!-- Renders the post text under review via the shared <Markdown> component, so approvals see the same formatting the platform will. -->
 <script setup lang="ts">
 import type { PostApprovalSummary } from "@intentic/sandbox-contract";
 import { ui, Markdown } from "@intentic/extension-ui";
@@ -28,9 +25,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
 
 <template>
     <div :class="tone === `full` ? `max-w-read` : `max-w-read-lg`">
-        <!-- Quiet sections show the opening of the post, not the post: the decision there is already made, so
-             a couple of lines are enough to tell one row from another. Still legible text: this is the line
-             that had faded to 11px of the page's faintest grey in the done list. -->
+<!-- Quiet sections show only enough post text to identify the row. -->
         <template v-if="tone === `quiet`">
             <p v-if="title" class="truncate text-sm font-medium text-content">{{ title }}</p>
             <div class="max-h-10 overflow-hidden" :class="title ? `mt-0.5` : ``">
@@ -61,8 +56,7 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
                 <Icon :name="expanded ? `chevron-up` : `chevron-down`" />
             </button>
 
-            <!-- What goes out WITH the words. An image attached by mistake cannot be caught by re-reading the
-                 caption, so attachments are shown rather than counted. -->
+            <!-- Display attachments because captions cannot describe them reliably. -->
             <div v-if="post.media && post.media.length > 0" class="mt-3 flex flex-wrap items-center gap-2">
                 <template v-for="path in post.media" :key="path">
                     <img

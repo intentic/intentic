@@ -1,6 +1,4 @@
-/* Gmail's list endpoints hand back ids and nothing else, so every listing is one request plus one per result.
- * Serially that is a two-second `gw mail search`; unbounded it is a burst Google rate-limits and then a
- * listing that fails for having been too eager. A small fixed window is the whole answer. */
+/* Gmail's list endpoints hand back ids and nothing else, so every listing is one request plus one per result. */
 export const mapLimit = async <T, R>(items: readonly T[], concurrency: number, run: (item: T, index: number) => Promise<R>): Promise<R[]> => {
     const results: R[] = Array.from({ length: items.length });
     let next = 0;

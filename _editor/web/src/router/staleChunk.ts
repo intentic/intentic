@@ -8,10 +8,7 @@ const STALE_CHUNK_MESSAGE =
 
 export const isStaleChunkError = (error: unknown): boolean => STALE_CHUNK_MESSAGE.test(String(error));
 
-/**
- * Answers a dead chunk with one reload landed on `target`. Returns false if this destination already
- * got its reload, or if storage is unavailable and the guard can't hold.
- */
+/** Answers a dead chunk with one reload landed on `target`. */
 export const recoverStaleChunk = (target: string): boolean => {
     try {
         if (sessionStorage.getItem(CHUNK_RELOADED_KEY) === target) {
@@ -25,10 +22,7 @@ export const recoverStaleChunk = (target: string): boolean => {
     return true;
 };
 
-/**
- * Clears the guard once a chunk resolves, since this window's chunks evidently exist again. Not on
- * navigation landing: asyncView lands every navigation regardless of chunk, so arrival isn't evidence.
- */
+/** Clears the guard once a chunk resolves, since this window's chunks evidently exist again. */
 export const clearStaleChunkReload = (): void => {
     try {
         sessionStorage.removeItem(CHUNK_RELOADED_KEY);

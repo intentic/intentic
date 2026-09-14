@@ -1,7 +1,4 @@
-<!--
-    Editable counterpart to <DagGraph>; both share dagLayout.ts so they draw the same graph. Adds edge-drag handles, selectable nodes/edges and an
-    add affordance; node position stays derived from dagre and is not draggable. Caller must size this component (h-full w-full).
--->
+<!-- Editable counterpart to <DagGraph>; both share dagLayout.ts so they draw the same graph. -->
 <script setup lang="ts" generic="T">
 import { Handle, Panel, Position, VueFlow } from "@vue-flow/core";
 import type { Connection, Edge, Node, VueFlowStore } from "@vue-flow/core";
@@ -186,13 +183,7 @@ const fit = (): void => void flow.value?.fitView(FIT);
                     data.dimmed === true ? `opacity-30` : ``,
                 ]"
             >
-                <!--
-                    `relative` and rounded are load-bearing: without `relative`, a slotted descendant (e.g. a status
-                    stripe) clips
-                    against the frame instead of this box, escaping the rounded corner. Radius is derived (frame's
-                    radius minus the
-                    1px border), not a literal value, so it stays correct if either token changes.
-                -->
+<!-- The node frame owns the rounded clipping context for slotted descendants. -->
                 <button
                     type="button"
                     v-tooltip.top="data.tooltip"
@@ -203,13 +194,7 @@ const fit = (): void => void flow.value?.fitView(FIT);
                 </button>
                 <Handle type="target" :position="targetPosition" class="dag-editor-handle" />
                 <Handle type="source" :position="sourcePosition" class="dag-editor-handle" />
-                <!--
-                    Painted in the action colour for contrast, not decoration: neutral tokens topped out at ~2:1
-                    against this
-                    surface (WCAG needs 3:1 for a control boundary), and hover-only reveal left it unreachable by
-                    keyboard. 24px for
-                    the same reason on touch-target size; visible on focus as well as hover.
-                -->
+<!-- Graph action colour provides the required control-boundary contrast. -->
                 <button
                     v-if="addLabel !== undefined"
                     type="button"
@@ -263,11 +248,7 @@ const fit = (): void => void flow.value?.fitView(FIT);
     stroke-opacity: 1;
     stroke-width: 2;
 }
-/*
- * Handles are grab targets (unlike DagGraph's inert ones), shown only on hover so the canvas doesn't read as a
- * circuit diagram. Solid `subtle` fill, not a hollow ring, since the ring's outline fell under WCAG's 3:1
- * control-boundary floor.
- */
+/* DagEditor handles appear on hover; DagGraph handles remain inert. */
 .dag-editor .vue-flow__handle {
     height: 8px;
     width: 8px;

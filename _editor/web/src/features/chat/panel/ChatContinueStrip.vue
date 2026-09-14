@@ -225,19 +225,9 @@ const autoContinueLine = computed(() =>
         class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-card px-3 py-2 text-2xs text-muted"
     >
         <Icon :name="ready ? `pause` : `clock`" class="shrink-0" />
-        <!--
-            A floor, not `min-w-0`: every other control is `shrink-0`, so without one the status text absorbs all
-            overflow
-            into wrapped words instead of the buttons dropping to their own row. This is a status now, so the floor
-            fits one
-            line of it rather than reading well.
-        -->
+<!-- Status text has a minimum width beside shrinkable controls. -->
         <span class="min-w-[11rem] flex-1">{{ status }}</span>
-        <!--
-            This ending's wait: one slot, four possible fillings, never two at once. The way out comes first when
-            already
-            armed, the way in otherwise.
-        -->
+<!-- This ending's wait: one slot, four possible fillings, never two at once. -->
         <Button
             v-if="outage?.automatic !== undefined"
             size="small"
@@ -250,11 +240,7 @@ const autoContinueLine = computed(() =>
         >
             Stop
         </Button>
-        <!--
-            The words say what the press does ("this chat", "keep going"), not the setting's name — naming the blast
-            radius
-            up front rather than in a parenthesis nobody reads.
-        -->
+<!-- The words say what the press does ("this chat", "keep going"), not the setting's name. -->
         <Button
             v-else-if="outage !== undefined"
             size="small"
@@ -267,10 +253,7 @@ const autoContinueLine = computed(() =>
         >
             Keep this chat going
         </Button>
-        <!--
-            The allowance's own pair, same slot and order; named as an appointment (fires once, at the published hour)
-            rather than a retry.
-        -->
+<!-- The allowance's own pair, same slot and order; named as an appointment (fires once, at the published hour) rather than a retry. -->
         <Button
             v-else-if="limitWait?.automatic !== undefined"
             size="small"
@@ -295,19 +278,9 @@ const autoContinueLine = computed(() =>
         >
             Send it when it's back
         </Button>
-        <!--
-            The press and its variants: the reset when offered, Continue, inline Auto-continue in the two-action case,
-            or a
-            caret menu otherwise.
-        -->
+<!-- The press and its variants: the reset when offered, Continue, inline Auto-continue in the two-action case, or a caret menu otherwise. -->
         <div ref="waysAnchor" class="flex shrink-0 items-center gap-1">
-            <!--
-                What the press spends, said on the control that spends it: a once-a-week grant, worth telling the user
-                about
-                before it's gone. The weekly allowance stays untouched, which is why this is worth pressing while it
-                still has
-                room.
-            -->
+<!-- What the press spends, said on the control that spends it: a once-a-week grant, worth telling the user about before it's gone. -->
             <Button
                 v-if="canReset"
                 size="small"
@@ -347,23 +320,13 @@ const autoContinueLine = computed(() =>
                 <Icon name="chevron-down" class="text-2xs" />
             </Button>
         </div>
-        <!--
-            What came back when the reset changed nothing, on its own line (`basis-full`, not a row slot): these are
-            full
-            sentences, and inline they push the status past its floor and wrap. Sits below the controls, in reading
-            order,
-            since it reports what just happened.
-        -->
+<!-- What came back when the reset changed nothing, on its own line (`basis-full`, not a row slot): these are full sentences. -->
         <span v-if="resetNote !== undefined" class="basis-full text-2xs text-subtle">{{ resetNote }}</span>
     </div>
     <!-- The press's variants, shown in the dropdown when more than one alternative way on exists. -->
     <ResponsiveOverlay v-model="waysOpen" :anchor="waysAnchor" cross="end" header="Other ways on" panel-class="w-80 p-1">
         <div class="flex flex-col p-1">
-            <!--
-                The other account, twice when the session is worth carrying: same press, two prices, so the reader
-                picks
-                between fidelity and tokens rather than two look-alike buttons.
-            -->
+<!-- The other account, twice when the session is worth carrying: same press, two prices. -->
             <button
                 v-if="fallback !== undefined && canCarry"
                 type="button"
@@ -402,10 +365,7 @@ const autoContinueLine = computed(() =>
             </button>
         </div>
     </ResponsiveOverlay>
-    <!--
-        What an armed chat looks like while it waits on itself; stays on screen for as long as the automation runs,
-        since a switch with no off is a trap.
-    -->
+<!-- What an armed chat looks like while it waits on itself; stays on screen for as long as the automation runs, since a switch with no off is a trap. -->
     <div
         v-if="autoContinueStrip"
         class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-card px-3 py-2 text-2xs text-muted"

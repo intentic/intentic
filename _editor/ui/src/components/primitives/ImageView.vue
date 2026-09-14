@@ -317,11 +317,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
     >
         <img :src="src" alt="" draggable="false" class="absolute left-0 top-0 max-w-none origin-top-left" :style="imageStyle" @load="onLoad" />
 
-        <!--
-            Dimmed until the pointer is in the pane, so the controls never compete with the picture. `pointerdown.stop`
-            keeps a click on them from starting a pan; `mousedown.prevent` keeps focus on the surface so keys still
-            work.
-        -->
+<!-- Dimmed until the pointer is in the pane, so the controls never compete with the picture. -->
         <div class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-2">
             <div
                 v-if="natural"

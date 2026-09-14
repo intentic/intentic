@@ -2,11 +2,7 @@ import { type AgentEvent, type AgentReply, type AttachFrame, isTurnFact } from "
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import type { DaemonClient } from "../daemon-client.js";
 
-/* An in-memory DaemonClient double: scenario-driven canned AgentEvent streams per prompt keyword, folded into
- * the attach stream by the daemon's own fold (the contract's transcript-fold.ts, which is what the real daemon
- * runs), recording every reply post. The bridge under test is the real one (real SDK JSON-RPC via in-process
- * app composition); only the HTTP layer is faked. The HTTP layer itself (SSE framing, auth statuses) has its
- * own test over a real node:http server in daemon-client.test.ts. */
+/* An in-memory DaemonClient double: scenario-driven canned AgentEvent streams per prompt keyword. */
 
 export interface FakeDaemon {
     readonly client: DaemonClient;

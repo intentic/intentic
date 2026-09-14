@@ -90,12 +90,7 @@ watch(
 
 <template>
     <div class="flex flex-col gap-4">
-        <!--
-            ABOVE BOTH SCREENS, because it is the one thing here that is not a state to read but a fault to act
-            on: this sandbox was set up before something it now needs, and no verb below can give it back (each
-            recreates the container out of what that container already carries). Draws nothing at all on a healthy
-            sandbox, which is nearly all of them.
-        -->
+<!-- Setup faults qualify both device and sandbox screens. -->
         <ContainerHealthCard />
 
         <DevicePage

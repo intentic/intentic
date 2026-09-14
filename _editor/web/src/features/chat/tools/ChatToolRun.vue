@@ -30,10 +30,7 @@ const hint = computed(() => {
 
 <template>
     <div v-if="run" class="flex w-full flex-col">
-        <!--
-            The whole join is the hit target, not just the end mark, since a badge-sized area between paragraphs is easy
-            to miss. Layout, and what happens when it opens, is chat.css's.
-        -->
+<!-- The whole join is the hit target, not just the end mark, since a badge-sized area between paragraphs is easy to miss. -->
         <button
             type="button"
             class="chat-run-bar group/run relative flex w-full items-center justify-end"
@@ -59,10 +56,7 @@ const hint = computed(() => {
                 {{ run.count }}
             </span>
         </button>
-        <!--
-            Grows into place rather than popping in, so it doesn't jump the text below mid-read; still `v-if`, not
-            hidden, since only the opened run belongs in the DOM. The grid wrapper animates to an unknown content height.
-        -->
+<!-- Opened runs use an in-flow transition and remain absent when closed. -->
         <Transition name="chat-run-reveal">
             <div v-if="expanded" class="grid">
                 <div class="min-h-0 overflow-hidden">

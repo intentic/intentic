@@ -1,13 +1,7 @@
 import { expect, test, vi } from "vitest";
 import type { WebEnvironment } from "./environment";
 
-/* The sync handoff's whole payload is two sender-chosen values the Rust side trusts only from the app's own
- * window (setup_link.rs), so what this file owes is exactness: every value URL-encoded, the flags spelled the
- * way the parser reads them (`present` = true), and no folder ever riding the link — the app collects that in
- * a system dialog, which is the reason the link exists.
- *
- * Deferred import for the same reason scriptCommand.test.ts defers: environment.ts reads window.env at module
- * scope, and this suite runs under the node environment where no setup file has seeded one. */
+/* The sync handoff's whole payload is two sender-chosen values the Rust side trusts only from the app's own window (setup_link.rs). */
 const load = async (): Promise<typeof import("./desktop")> => {
     vi.resetModules();
     (globalThis as { window?: { env: WebEnvironment } }).window = {
@@ -40,8 +34,7 @@ test("flags ride only when set, and a folder never does", async () => {
     expect(full.searchParams.get(`mirror`)).toBe(`1`);
 });
 
-/* The app's progress announcement, read back off a detail that crossed a process boundary: the fields the strip
- * draws survive, anything the page did not ask for is dropped, and a shape it has no screen for is nothing. */
+/* The app's progress announcement, read back off a detail that crossed a process boundary: the fields the strip draws survive. */
 test("a setup report is read back with its figures and without anything unexpected", async () => {
     const { readDesktopSetupReport } = await load();
     expect(

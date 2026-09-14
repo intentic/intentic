@@ -202,10 +202,7 @@ const submit = async (): Promise<void> => {
                 <!-- Placement is derived (single host, single Cloudflare); only a genuine choice is asked. -->
                 <label v-if="hostOptions.length > 1" class="ui-field">
                     <span class="ui-field-label">Server</span>
-                    <!--
-                        `on` holds `` for "none yet" (Picker's empty state), never undefined: explicit binding, not
-                        v-model.
-                    -->
+<!-- `on` holds `` for "none yet" (Picker's empty state), never undefined: explicit binding, not v-model. -->
                     <Picker
                         :model-value="on === `` ? undefined : on"
                         :options="hostPickerOptions"

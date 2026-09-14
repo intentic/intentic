@@ -83,10 +83,7 @@ const DOT_TONE: Record<string, string> = {
             <span class="flex min-w-0 flex-wrap items-center gap-x-2.5" :class="state === `add` ? `text-muted` : ``">
                 <span class="flex w-[1.125rem] shrink-0 justify-center">
                     <Icon v-if="state === `add`" name="plus" class="text-2xs" />
-                    <!--
-                        Ring replaces the dot when headroom is known, using the same green/yellow/red system. Its hover card spills
-                        left into the gutter, keeping the row's name/state/buttons to the right clear.
-                    -->
+<!-- Ring replaces the dot when headroom is known, using the same green/yellow/red system. -->
                     <UsageRing v-else-if="headroom" :headroom="headroom" :activity="activity" flank="left" />
                     <span v-else class="h-1.5 w-1.5 rounded-full" :class="DOT_TONE[state]" />
                 </span>
@@ -102,10 +99,7 @@ const DOT_TONE: Record<string, string> = {
                     @keydown.esc="cancel"
                     @blur="commit"
                 />
-                <!--
-                    Pencil stays visible at half opacity (hover-only is undiscoverable on touch); the "Rename" tooltip rides the
-                    pencil, not the name, so hovering the name still offers the overflow tooltip instead.
-                -->
+<!-- Pencil stays visible at half opacity (hover-only is undiscoverable on touch); the "Rename" tooltip rides the pencil, not the name. -->
                 <button
                     v-else-if="renamable"
                     type="button"
@@ -125,10 +119,7 @@ const DOT_TONE: Record<string, string> = {
                 </span>
             </span>
         </template>
-        <!--
-            Indented to the title's x, not the glyph's. A placeholder bar holds the line's height while its read is still
-            out, so the row is full height from the first frame.
-        -->
+<!-- Indented to the title's x, not the glyph's. -->
         <template v-if="description || descriptionPending" #description>
             <span v-if="descriptionPending" class="flex min-h-[1lh] items-center pl-7" aria-hidden="true">
                 <span class="skeleton block h-2.5 w-56" />

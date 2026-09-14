@@ -3,17 +3,7 @@ import { docsHref, docsSections } from "@intentic/site-content/docs";
 import ArchitectureFigure from "../../components/figures/ArchitectureFigure.astro";
 import DocsLayout from "../../components/docs/DocsLayout.astro";
 
-/* The overview's job is to ROUTE, not to summarise.
- *
- * It used to end in thirteen cards: one per page in the tree, each captioned with that page's meta description.
- * That was the longest thing on the page, it restated the sidebar sitting three inches to its left, and the
- * captions were written for search results rather than for someone choosing. A reader scrolled a wall to learn
- * what a glance at the rail already told them.
- *
- * What replaces it is the four shelves as four QUESTIONS, because a visitor arrives holding a question, not a
- * shelf label. Each row names the shelf's first stop and the pages behind it, and nothing here is a card grid:
- * the rail is the tree, and this page is the sentence that tells you which branch is yours.
- */
+/* The overview's job is to ROUTE, not to summarise. */
 
 // The install decision, in the order a reader eliminates them: least typing first.
 const paths = [
@@ -43,10 +33,7 @@ const paths = [
     },
 ];
 
-/* The question each shelf answers, in the reader's own words. Authored rather than reusing `audience`: the
- * sidebar's line describes the shelf to someone already browsing it, and this one has to catch someone who has
- * not started looking. Keyed by shelf label, and asserted below, so a renamed or added shelf fails the build
- * rather than quietly rendering a shelf with no question. */
+/* The question each shelf answers, in the reader's own words. */
 const questions: Record<string, string> = {
     Understand: `"What actually is this, and is it built the way I'd want?"`,
     "Run a sandbox": `"I want one running on my hardware, kept up to date, shared with my team."`,
@@ -79,8 +66,7 @@ const contentsOf = (label: string): string[] => {
         credentials and instructions needed for a job. You control it from a browser, but the work continues inside the container when the
         browser closes.
     </p>
-    {/* The whole product in one look, before the prose names its parts: a reader who scrolls past everything
-        else should still leave knowing where their code sits and what the platform can reach. */}
+    {/* Keep the product overview before its explanatory prose. */}
     <div class="docs-embed my-8">
         <ArchitectureFigure />
     </div>
@@ -154,16 +140,13 @@ const contentsOf = (label: string): string[] => {
                         <span class="text-sm font-semibold text-content transition-colors group-hover:text-link">{section.label}</span>
                         <span class="text-sm text-muted">{questions[section.label]}</span>
                     </div>
-                    {/* The shelf's contents as a plain line rather than a nested card grid: it tells the reader
-                        what is behind the row, at a size that does not compete with the question above it. */}
+                    {/* Keep each section's contents as a compact line below its question. */}
                     <p class="mt-2 text-xs leading-relaxed text-subtle">{contentsOf(section.label).join(` · `)}</p>
                 </a>
             ))
         }
     </div>
-    {/* The other book, as a row of its own rather than a fifth shelf: it is a different reader, and the whole
-        reason the two are separate is that the person building against intentic should not have to scroll past
-        install instructions to reach a manifest field. */}
+    {/* Keep developer documentation separate from the user documentation shelves. */}
     <div class="docs-embed mt-3">
         <a href="/developers/" class="group card block border-primary-600/25 p-5 no-underline transition-colors hover:border-primary-600/50">
             <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">

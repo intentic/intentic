@@ -319,10 +319,7 @@ const revoke = async (target: string): Promise<void> => {
                     </template>
                 </div>
                 <Row v-for="member in members" :key="member.email" icon="user" :title="member.email">
-                    <!--
-                        Status is a fact, not an action, so it's in #meta, not #control, muted and unfocusable; it also lands ahead of the buttons,
-                        keeping one column of states down the list.
-                    -->
+                    <!-- Status belongs in metadata, not the action slot. -->
                     <template #meta>
                         <StatusBadge
                             :variant="STATUS[member.status].variant"
@@ -332,10 +329,7 @@ const revoke = async (target: string): Promise<void> => {
                         />
                     </template>
                     <template #control>
-                        <!--
-                            Changeable in place, since a re-grade is routine and shouldn't cost a revoke + re-invite. Ghost, not boxed: the row
-                            already carries an address, a pill and two buttons.
-                        -->
+                        <!-- Changeable in place, since a re-grade is routine and shouldn't cost a revoke + re-invite. -->
                         <Picker
                             :model-value="member.role"
                             :options="ROLE_OPTIONS"
@@ -364,15 +358,12 @@ const revoke = async (target: string): Promise<void> => {
                 <!-- Invite affordance as the group's footer row (mirrors the Secrets \"add\" pattern). -->
                 <RowNote variant="block">
                     <div class="flex flex-col gap-2">
-                        <!-- Link goes in the slot, not the model, so it wraps instead of overflowing; the one thing here copied by hand. -->
+                        <!-- Links use the slot so long values can wrap. -->
                         <Notice v-if="notice" :of="notice">
                             <span v-if="handover" class="mt-1 block break-all font-medium">{{ handover }}</span>
                         </Notice>
                         <form class="flex flex-col gap-1.5" @submit.prevent="invite">
-                            <!--
-                                Address first, role beside Invite, since inviting is the primary action and the tier a refinement. Sized to the
-                                list's compact tier (ui.inputSm/ui-field-sm) so the three controls align with the roster's own rows.
-                            -->
+                            <!-- Address first, role beside Invite, since inviting is the primary action and the tier a refinement. -->
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
                                 <input
                                     v-model="email"
@@ -429,16 +420,10 @@ const revoke = async (target: string): Promise<void> => {
             </template>
         </RowGroup>
 
-        <!--
-            Programs, after people: every scope is mintable here, and every token against this sandbox is listed here regardless of where it was
-            minted.
-        -->
+        <!-- Program credentials follow people and include every sandbox token. -->
         <ControlTokensSection />
 
-        <!--
-            Credential kill switch, separate from the member list: answers "is anything still holding a way in", not "who's allowed in". Three rows,
-            not a bare button, since no roster can exist: what's signed in, why the rest aren't listed, and what pressing this does.
-        -->
+        <!-- Credential revocation answers whether any access remains active. -->
         <RowGroup v-if="isOwner" label="Signed-in browsers">
             <!-- The one signed-in browser the app can name, because it is running in it. -->
             <Row icon="desktop" title="This browser" :description="thisBrowser">
@@ -490,7 +475,7 @@ const revoke = async (target: string): Promise<void> => {
             </Row>
         </RowGroup>
 
-        <!-- Every other way in: doors a machine uses that are neither a sign-in nor a control token, counted here but managed where each lives. -->
+        <!-- Machine access other than sign-ins and tokens is listed separately. -->
         <RowGroup v-if="isOwner" label="Other ways in">
             <div v-if="inventoryLoading" role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
             <template v-else>

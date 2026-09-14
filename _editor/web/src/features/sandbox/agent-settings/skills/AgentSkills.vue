@@ -155,10 +155,7 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
             </template>
         </DisclosureRow>
 
-        <!--
-            Hidden while a row is open, so only one skill is written or read at a time. RowNote reads its position and
-            size from <DisclosureRow>'s own chevron, so it stays aligned if that moves.
-        -->
+<!-- Hidden while a row is open, so only one skill is written or read at a time. -->
         <RowNote v-else-if="openId === undefined" variant="action" label="Write a skill" @click="startAdd" />
 
         <!-- Borrowed skills come last, inside the same list rather than a separate section. -->

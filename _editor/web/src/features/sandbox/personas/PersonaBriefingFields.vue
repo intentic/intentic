@@ -47,7 +47,7 @@ const showFixtures = ref(false);
                 <span class="min-w-0 flex-1 text-sm text-content">{{ note.label }}</span>
                 <ToggleSwitch :model-value="sends(note.id)" @update:model-value="(on: boolean) => setSends(note.id, on as boolean)" />
             </span>
-            <!-- When it rides while it is on; what the turn loses once it is off. The consequence appears only once it is the one you chose. -->
+            <!-- When it rides while it is on; what the turn loses once it is off. -->
             <span v-if="sends(note.id)" class="text-xs text-subtle">{{ note.when }}</span>
             <span v-else class="text-xs text-warning">{{ note.cost }}</span>
         </label>
@@ -61,7 +61,7 @@ const showFixtures = ref(false);
                 <Icon :name="showFixtures ? `chevron-down` : `chevron-right`" class="text-2xs" />
                 {{ TURN_BRIEFING_FIXTURES.length }} more are always sent
             </button>
-            <!-- Named rather than hidden: without this the list above reads as arbitrary, and the ones missing from it are the ones that matter most. -->
+            <!-- Omitted notes are named so the visible briefing list is unambiguous. -->
             <dl v-if="showFixtures" class="flex flex-col gap-1 pl-5">
                 <div v-for="fixture in TURN_BRIEFING_FIXTURES" :key="fixture.label" class="flex flex-col">
                     <dt class="text-xs text-muted">{{ fixture.label }}</dt>

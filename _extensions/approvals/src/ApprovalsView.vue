@@ -341,17 +341,14 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
             </Notice>
         </template>
 
-        <!--
-            The rail narrows rather than selects, so it folds above the queue on a phone instead of covering it. Hidden on an empty queue: a column
-            of nothing pointing at nothing.
-        -->
+        <!-- The rail narrows rather than selects, so it folds above the queue on a phone instead of covering it. -->
         <template v-if="!isEmpty" #rail>
             <ApprovalRail v-model="railScope" :all="allScope" :scopes="scopes" />
         </template>
 
         <template #detail>
             <div class="flex flex-col">
-                <!-- Loading looks like empty otherwise, and the empty-state text would be an unverified claim; skeleton rows stand in instead. -->
+                <!-- Skeleton rows distinguish loading from an empty approvals queue. -->
                 <template v-if="isLoading">
                     <RowGroup v-if="outline" role="status" aria-busy="true">
                         <template #label><span class="skeleton block h-2.5 w-20" aria-hidden="true" /></template>
@@ -376,7 +373,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                             </template>
                             <template #description><ApprovalMeta :name="nameOf(item)" :target="targetOf(item)" :acts-as="item.actsAs" /></template>
                             <template #control>
-                                <!-- A too-long post can only be retried at the length that failed unless it's edited, so the pencil is here too. -->
+                                <!-- Retry preserves the failed post; edit changes its length before retrying. -->
                                 <button
                                     v-if="canShip && isPost(item)"
                                     type="button"
@@ -423,10 +420,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                         <PostBody v-else :post="item" />
                                     </template>
                                     <ActionBody v-else :action="item" />
-                                    <!--
-                                        The failure reason, in the row: the one state whose whole content is an explanation, not hidden behind a
-                                        hover.
-                                    -->
+                                    <!-- Failed rows show their reason as the primary content. -->
                                     <Notice :of="noticeOf(item.error ?? `The run did not say why.`)" class="mt-3 max-w-read" />
                                     <div v-if="lengthOf(item)" :class="FACTS">
                                         <span :class="isOver(item) ? `text-danger` : ``">{{ lengthOf(item) }}</span>
@@ -463,10 +457,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     :note="item.createdAt === undefined ? undefined : `proposed ${timeAgo(item.createdAt)}`"
                                 />
                             </template>
-                            <!--
-                                Edit, reject, approve, in escalating order; none moves or hides when the editor opens. Approving mid-edit is safe:
-                                the click flushes pending keystrokes first (`settled`).
-                            -->
+                            <!-- Edit, reject, approve, in escalating order; none moves or hides when the editor opens. -->
                             <template #control>
                                 <button
                                     v-if="canShip && isPost(item)"
@@ -495,10 +486,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                             </template>
                             <template #below>
                                 <div :class="POST_COLUMN">
-                                    <!--
-                                        The body, or the same post with a caret in it: same column and measure either way, unclamped, since the words
-                                        are what the decision is about.
-                                    -->
+                                    <!-- Read-only and edited bodies share the same column and measure. -->
                                     <template v-if="isPost(item)">
                                         <PostEditor
                                             v-if="edit.isEditing(item)"
@@ -512,10 +500,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     </template>
                                     <ActionBody v-else :action="item" />
 
-                                    <!--
-                                        Facts that decide the item, not describe it: when it runs, and whether a post fits. Unmoved by the edit
-                                        toggle; the count just follows the keystrokes.
-                                    -->
+                                    <!-- Facts that decide the item, not describe it: when it runs, and whether a post fits. -->
                                     <div :class="FACTS">
                                         <ScheduleControl
                                             :at="item.scheduledAt"
@@ -531,10 +516,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                         </Row>
                     </RowGroup>
 
-                    <!--
-                        One section for both hold shapes, since the reader's question is the same: run it, or not? A deadline-less hold waits for a
-                        yes; a countdown hold offers start-now or cancel.
-                    -->
+                    <!-- One section for both hold shapes, since the reader's question is the same: run it, or not? -->
                     <RowGroup v-if="heldVisible.length > 0" label="Automations held for you" :count="heldVisible.length">
                         <Row v-for="wake in heldVisible" :key="wake.id" :title="wakeName(wake)">
                             <template #lead>
@@ -581,10 +563,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                         </Row>
                     </RowGroup>
 
-                    <!--
-                        Sits right under the review queue since that's where an approved row lands, reading as one step along rather than a page
-                        rearrange. One labelled Stop button, unlike its quiet neighbors: urgent and singular.
-                    -->
+                    <!-- Approved rows remain directly below the review queue. -->
                     <RowGroup v-if="goingAhead.length > 0" label="Going ahead" :count="goingAhead.length">
                         <Row v-for="item in goingAhead" :key="item.id" density="compact">
                             <template #lead>
@@ -593,7 +572,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                             </template>
                             <template #description><ApprovalMeta :name="nameOf(item)" :target="targetOf(item)" :acts-as="item.actsAs" /></template>
                             <template #meta>
-                                <!-- Mid-run: nothing left to stop, so the row says so instead of offering a button that would lose the race. -->
+                                <!-- A running approval has no cancel action after dispatch. -->
                                 <StatusBadge v-if="item.status === `running`" variant="info" label="in progress" size="xs" :dot="true" />
                                 <span v-else class="tabular-nums text-warning">{{ countdownWords((item.scheduledAt ?? 0) - now) }}</span>
                             </template>

@@ -56,10 +56,7 @@ const setIn = (situation: ComposerControlSituation): Record<ComposerControl, boo
     voice: situation.voiceAgent,
 });
 
-/**
- * Controls that ride the row as chips: offered and set to something other than default. Every other
- * offered control is a row in {@link overflowRows}; the two never overlap.
- */
+/** Controls that ride the row as chips: offered and set to something other than default. */
 export const ridesRow = (situation: ComposerControlSituation): Record<ComposerControl, boolean> => {
     const offered = offeredIn(situation);
     const set = setIn(situation);
@@ -87,10 +84,7 @@ const rowFor = (control: ComposerControl, situation: ComposerControlSituation): 
     }
 };
 
-/**
- * Every offered control at its default, in the row's own order. Empty is real: with all four set, the
- * composer drops the overflow button entirely.
- */
+/** Every offered control at its default, in the row's own order. */
 export const overflowRows = (situation: ComposerControlSituation): ComposerMoreRow[] => {
     const offered = offeredIn(situation);
     const set = setIn(situation);

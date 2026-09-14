@@ -3,8 +3,7 @@ import { APPROVAL_HOLD_MS } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { withApprovalHold } from "./approvals.routes.js";
 
-/* The hold is the one thing approval WRITES, so it is the one thing worth pinning: an approved item with no
- * date gets exactly one hold from now, and nothing else about the record is touched. */
+/* The hold is the one thing approval WRITES, so it is the one thing worth pinning: an approved item with no date gets exactly one hold from now. */
 
 const NOW = 1_700_000_000_000;
 const post = (overrides: Partial<PostApprovalSummary>): PostApprovalSummary => ({

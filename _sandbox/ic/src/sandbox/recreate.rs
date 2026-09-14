@@ -9,47 +9,7 @@ use crate::record;
 use crate::sandbox::{resolve_slug, staged, CONTAINER_PREFIX};
 use crate::util::{bail, sha256_hex, Fail, Result};
 
-/* Swap THIS machine's sandbox container onto a different image, preserving /work, /history, the tunnel, and
- * every setting the container carries — recreate.sh's four modes as verbs. One engine, four pre-steps,
- * because the four were always one flow:
- *
- *   ic sandbox rebuild <slug> <sha256>    the owner-approved overlay (hash = what the owner reviewed)
- *   ic sandbox update [slug]              the fresh :<channel> base, overlay re-applied on top
- *   ic sandbox rollback [slug]            back to the image this sandbox came from
- *   ic sandbox dev [slug]                 the locally-built dev image (the dogfood loop)
- *   ic sandbox reshape <slug> …           the SAME image, with a different share of this machine
- *
- * The sandbox holds no HOST Docker socket (its own engine is nested — it cannot recreate its own
- * container), which is why every mode runs HERE, on the machine that runs the container.
- *
- * `reshape` is the fifth mode and the odd one: it moves the container onto no new image at all. A memory or
- * CPU cap, `--privileged`, the host's GPU — every one of those is a `docker run` flag, and a container's flags
- * are fixed for its life, so changing one IS a recreate: the same cutover as an update (park, run, health,
- * unpark on failure), with the pull and the overlay build skipped because the image is the one already here.
- * The asks ride to the image as SEEDS (contract.rs) and come back onto the new container as replayed env, which
- * is what makes a reshape a standing change rather than a one-run argument — and why `docker update`, which
- * retunes the running cgroup and is forgotten by the next recreate, is not used.
- *
- * HOW THE CONTAINER IS RUN is deliberately not written in this file — see contract.rs.
- *
- * ——— AND ONE VERB THAT STOPS HALFWAY ———
- *
- *   ic sandbox prepare [slug]             pull and build the next update, WITHOUT applying it
- *
- * An update is one blocking operation but it is not one kind of work. Resolving what to build costs a second,
- * pulling the new base and re-applying the overlay costs the overwhelming majority of the wall clock, and the
- * cutover — stop, park, run, wait for health — costs seconds. Only the last of those is downtime: the sandbox
- * is up and serving through everything above the `image_exists(&target_image)` check below, and the container
- * is not touched until well past it.
- *
- * So that check is the seam, and `prepare` is the same engine stopped at it. What it leaves behind is a built
- * image plus the `staged_*` keys in the host record naming it, which a later `ic sandbox update` recognises
- * and swaps straight onto. The click then costs what the cutover costs, which is the number the update card
- * can finally quote honestly.
- *
- * Two properties make this safe to run at any moment, and both are properties the file already had: nothing
- * above the seam touches the container, so an abandoned or failed prepare costs exactly nothing; and the
- * staged image is a real local tag, so a routine `docker image prune` cannot silently drop it. */
+/* Swap THIS machine's sandbox container onto a different image, preserving /work, /history, the tunnel, and every setting the container carries. */
 
 const APPROVED_FILE: &str = "/work/.intentic/local/environment.approved.Dockerfile";
 const DEV_TAG: &str = "intentic-sandbox:dev";
@@ -90,22 +50,11 @@ const PRIVILEGED_TOKEN: &str = "--privileged";
 const GPUS_TOKEN: &str = "--gpus=all";
 const HOST_RUNTIME_ENV: &str = "SANDBOX_RUNTIME";
 
-/* How long the cutover will wait for dockerd to hand back the loopback port the container it just stopped was
- * publishing (see the launch in `recreate`). Sized to the teardown, not to a timeout: the proxy for a stopped
- * container goes in well under a second, so three tries two seconds apart is already generous, and every one
- * of those seconds is only ever spent on a swap that would otherwise silently lose its shortcut. A port still
- * held after this belongs to something else, which is what the publish-less retry is for. */
+/* How long the cutover will wait for dockerd to hand back the loopback port the container it just stopped was publishing (see the launch in `recreate`). */
 const PORT_RELEASE_TRIES: u32 = 3;
 const PORT_RELEASE_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
 
-/* Did a launch fail because its published port is still taken? Classified from the log's tail rather than from
- * `run_argv`, which reports only whether docker agreed — every other caller wants that yes/no, and this is the
- * one place that needs the reason, so the reason is read where it is needed instead of widening the signature.
- *
- * Matched on the stable half of dockerd's refusal ("port is already allocated"), never on the address: the port
- * is the contract's to choose (@intentic/sandbox-run's localDaemonPort, reaching this file only inside an opaque
- * argv), and re-deriving it to match on would put a second copy of that arithmetic in the one file with no
- * business knowing it. */
+/* Did a launch fail because its published port is still taken? */
 fn port_still_held(log_tail: &str) -> bool {
     log_tail.contains("port is already allocated")
 }
@@ -188,10 +137,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         docker::quiet(&["start", &container]);
     }
 
-    /* Preparing holds a SECOND full copy of the image until a swap consumes it, and a machine that also
-     * carries a rollback pin can be holding three. Asked before the pull rather than discovered as docker's
-     * "no space left" several minutes into one — and only for prepare, which is the flow that can be
-     * declined without cost: an update the owner is waiting on has already weighed this. */
+/* Preparing holds a SECOND full copy of the image until a swap consumes it, and a machine that also carries a rollback pin can be holding three. */
     if reach == Reach::Staged {
         match checks::check_disk() {
             checks::Outcome::Fail { problem, remedy } => bail!(
@@ -199,10 +145,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
             ),
             checks::Outcome::Warn { problem } => {
                 println!("intentic: {problem}");
-                /* A person reading this warning can weigh it; a timer cannot, and "proceed" from a timer is
-                 * how a machine that was merely getting full gets filled. Not a failure — the tick simply
-                 * tries again later, when the disk may have room — so this exits 0 rather than teaching the
-                 * machine agent's backoff that preparing is broken here. */
+/* A person reading this warning can weigh it; a timer cannot, and "proceed" from a timer is how a machine that was merely getting full gets filled. */
                 if auto {
                     println!("intentic: skipping this background download — the space above is a person's call. `ic sandbox prepare {slug}` still takes it by hand.");
                     return Ok(());
@@ -238,21 +181,11 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         }
     }
 
-    /* The EXACT image the running sandbox was built from, captured before anything pulls. Identity is what
-     * the update and rollback decisions below are made from, because every name involved (:stable, :beta)
-     * is a tag the registry MOVES — by name, a stock update is :stable → :stable even when the images
-     * differ, which is precisely the case rollback exists for. A stock container's base is the container's
-     * own image (inspect .Image — exact even on a shared daemon); an overlay container's is its base tag's
-     * local resolution, still un-moved this side of the pull. */
+/* The EXACT image the running sandbox was built from, captured before anything pulls. */
     let current_base = docker::container_env_value(&container, "SANDBOX_BASE_IMAGE");
     let sandbox_image = docker::container_env_value(&container, "SANDBOX_IMAGE");
 
-    /* AN UNATTENDED PREPARE ONLY TRACKS THE OFFICIAL REGISTRY. A sandbox on a locally-built image, a pinned
-     * build, or a rollback pin left the channel on purpose, and staging `:{channel}` for it would light the
-     * "update ready" card on a box whose owner chose to be elsewhere — then a click would move it there. A
-     * person typing `prepare` gets what they asked for, as ever; the timer skips, exits 0, and says why.
-     * (An explicit SANDBOX_IMAGE on this process outranks the skip for the same reason it outranks the
-     * channel: the caller named an exact image, which is no longer a guess.) */
+/* AN UNATTENDED PREPARE ONLY TRACKS THE OFFICIAL REGISTRY. */
     if auto
         && image_override.is_none()
         && !follows_registry(current_base.as_deref(), sandbox_image.as_deref())
@@ -261,11 +194,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         return Ok(());
     }
 
-    /* AN UPDATE DOES NOT REFRESH AN IMAGE BUILT FROM A CHECKOUT, IT REPLACES IT. The dogfood loop's base is
-     * compiled on this machine from a working tree; pulling `:{channel}` over it hands the sandbox somebody
-     * else's build, and the only way back is the checkout. Narrower than the `prepare` skip above on purpose:
-     * a ROLLBACK pin is also a local tag, and updating off one is the ordinary way back to the channel. The
-     * refusal names the rebuild that is this sandbox's update, and `--force` is for meaning to leave. */
+/* AN UPDATE DOES NOT REFRESH AN IMAGE BUILT FROM A CHECKOUT, IT REPLACES IT. */
     if matches!(mode, Mode::Update { force: false, .. })
         && image_override.is_none()
         && built_from_checkout(current_base.as_deref(), sandbox_image.as_deref())
@@ -305,29 +234,19 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
             env_hash = Some(hash.clone());
         }
         Mode::Update { .. } => {
-            /* The approved overlay comes out FIRST here, ahead of the decision below, because whether a
-             * staged build is still the right answer is a question about that overlay: `prepare` recorded
-             * the hash it built with, and an owner who has re-approved a different recipe since must get the
-             * recipe they approved, not the one that happened to be staged. Re-applying it FROM the fresh
-             * base is what carries the extended environment across the swap either way. */
+/* The approved overlay comes out FIRST here, ahead of the decision below. */
             stage_overlay(&container, &overlay_path)?;
             let approved = std::fs::read(&overlay_path).unwrap_or_default();
             let approved_hash = (!approved.is_empty()).then(|| sha256_hex(&approved));
 
-            /* WHAT `prepare` LEFT READY, when it is still the right thing to swap onto — the whole point of
-             * preparing. Never consulted on a prepare run itself: that run is the thing that produces it, and
-             * a prepare that found its own previous output would refuse to refresh a stale one. */
+/* WHAT `prepare` LEFT READY, when it is still the right thing to swap onto — the whole point of preparing. */
             prepared = reach == Reach::Applied
                 // SANDBOX_IMAGE names an exact image to run — a pinned build, a locally-built one. Someone
                 // who passed it asked for THAT image, not for whatever was staged for the channel.
                 && image_override.is_none()
                 && staged_still_fits(&saved, &channel, approved_hash.as_deref(), old_base_id.as_deref())
                 && docker::image_exists(saved.staged.as_deref().unwrap_or_default());
-            /* A staged entry that no longer fits is DROPPED here — from the record AND from the sandbox, in
-             * one call, because the two disagreeing is the state that produces a wrong card. It is not merely
-             * a stale key: the sandbox has been told an update is downloaded and ready, and offering a
-             * thirty-second restart onto an image that is gone, superseded, or built from a recipe the owner
-             * has since replaced is worse than offering the ordinary update. */
+/* A staged entry that no longer fits is DROPPED here — from the record AND from the sandbox, in one call. */
             if !prepared && reach == Reach::Applied {
                 if saved.staged.is_some() {
                     println!("intentic: the prepared update no longer fits this sandbox — updating the ordinary way.");
@@ -347,19 +266,13 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
                 if pulled.is_none() {
                     bail!("{registry_image} is not available (pull failed) — the sandbox is untouched. Log: {}", log.path.display());
                 }
-                /* "Already current" means THIS CONTAINER runs the image the tag now names — not that the pull
-                 * moved nothing. Two sandboxes share one daemon: the first update refreshes the cache, and a
-                 * cache-only before/after told the second it was current while it ran last week's build. The
-                 * cache heuristic survives only for a base whose identity is unknowable. */
+/* "Already current" means THIS CONTAINER runs the image the tag now names — not that the pull moved nothing. */
                 let already_current = match (&old_base_id, &pulled) {
                     (Some(old), Some(new)) => old == new,
                     _ => cached.is_some() && cached == pulled,
                 };
                 if already_current {
-                    /* Nothing is waiting for this sandbox, whatever the record last said. This is the one
-                     * clear a PREPARE run also needs: it is how "re-prepare a sandbox that has since caught
-                     * up by another route" stops offering a restart that would change nothing. (An update
-                     * reaching here has already dropped a mis-fitting entry above; this is idempotent.) */
+/* Nothing is waiting for this sandbox, whatever the record last said. */
                     clear_staged(&slug, &container, &saved);
                     println!("intentic: no newer sandbox image is available yet — your sandbox is already on the latest :{channel} it can pull.");
                     println!("          If the app still shows an update, the new release's image may still be publishing — try again in a few minutes.");
@@ -384,10 +297,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
             }
             println!("intentic: rolling back to {registry_image}…");
             stage_overlay(&container, &overlay_path)?;
-            /* The overlay must ride the TARGET, not its own FROM: the FROM names the channel tag, which now
-             * points at the very build being rolled back from. Hash the APPROVED content first — what the
-             * owner reviewed IS what gets applied, re-based onto a target no agent can choose (the record is
-             * a host-side file) — then the same first-FROM rewrite the dev flow uses. */
+/* The overlay must ride the TARGET, not its own FROM: the FROM names the channel tag, which now points at the very build being rolled back from. */
             let overlay = std::fs::read_to_string(&overlay_path)?;
             if !overlay.is_empty() {
                 env_hash = Some(sha256_hex(overlay.as_bytes()));
@@ -395,11 +305,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
             }
         }
         Mode::Reshape(_) => {
-            /* Nothing to fetch and nothing to build: the target is the image this container already runs.
-             * The overlay is still staged, for its DIRECTIVE lines alone — the run must carry what the
-             * approved recipe demands beside what the owner is asking for — and the hash the container was
-             * built with rides through unchanged, so the daemon inside keeps reporting its environment as
-             * Applied rather than waking up to a rebuild it does not need. */
+/* Nothing to fetch and nothing to build: the target is the image this container already runs. */
             stage_overlay(&container, &overlay_path)?;
             env_hash = docker::container_env_value(&container, "SANDBOX_ENVIRONMENT_HASH");
         }
@@ -460,12 +366,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
             println!("intentic: building {target_image} from the approved overlay…");
             build_overlay(&target_image, &overlay_path, false, &log);
         }
-        /* One arm, because a rollback IS an update pointed at the pinned image — same overlay rebuild, same
-         * base pinning, same health gate — with one inversion: nothing may touch the registry. Update
-         * --pulls the overlay's FROM (the tag it just fetched); rollback must not, because the pin exists
-         * precisely BECAUSE the registry moved on, and a --pull here fetches the very build being escaped.
-         * Rollback's env hash was settled in its pre-step (the APPROVED content's, before the FROM
-         * rewrite), so only the image tag derives from the rewritten bytes. */
+/* One arm, because a rollback IS an update pointed at the pinned image — same overlay rebuild, same base pinning, same health gate — with one inversion. */
         Mode::Update { .. } | Mode::Rollback => {
             let fresh = matches!(mode, Mode::Update { .. });
             target_image = registry_image.clone();
@@ -481,10 +382,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
                     env_hash = Some(hash);
                 }
             }
-            /* A prepared update is the same derivation already performed, so this arm's own answer and the
-             * record's staged image are the same string by construction. Taken from the RECORD anyway rather
-             * than re-derived: the record is what `image_exists` was checked against, and a swap must go onto
-             * the image that was verified to be there rather than onto a name that ought to resolve to it. */
+/* A prepared update is the same derivation already performed, so this arm's own answer and the record's staged image are the same string by construction. */
             if prepared {
                 target_image = saved.staged.clone().unwrap_or(target_image);
             } else if !overlay.is_empty() {
@@ -525,10 +423,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         bail!("{target_image} is not available (pull or overlay build failed) — the sandbox is untouched. Log: {}", log.path.display());
     }
 
-    /* ——— THE SEAM. Everything above prepared an image; everything below moves the sandbox onto it. ———
-     *
-     * `prepare` stops here, which is the whole of what makes it safe to run at any moment: the container has
-     * not been read from since the overlay copy, has not been stopped, and does not know this happened. */
+/* `prepare` stops here, which is the whole of what makes it safe to run at any moment: the container has not been read from since the overlay copy. */
     if reach == Reach::Staged {
         return record_staged(
             Prepared {
@@ -592,14 +487,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         .filter(|line| line.starts_with("# intentic:runtime "))
         .collect::<Vec<_>>()
         .join("\n");
-    /* THE OWNER'S OWN DIRECTIVES, the second source beside the overlay's: what the container carries now
-     * (SANDBOX_RUNTIME, replayed by every other mode), or what a reshape is about to make it carry. Read
-     * here rather than trusted to the replay alone because the host has to be PROBED about them first: a GPU
-     * the owner asked for is dropped on a machine without the runtime exactly as the docker card's would be,
-     * and the probe cannot ask about a token it was not shown.
-     *
-     * The seeds are a reshape's whole payload to the image (contract.rs): the caps as given, and the edited
-     * token list when a switch was touched. Every other mode seeds nothing and replays what is there. */
+/* THE OWNER'S OWN DIRECTIVES, the second source beside the overlay's: what the container carries now (SANDBOX_RUNTIME, replayed by every other mode). */
     let carried_runtime =
         docker::container_env_value(&container, HOST_RUNTIME_ENV).unwrap_or_default();
     let (host_runtime, seeds) = match &mode {
@@ -621,10 +509,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     let dns = docker::inspect(&container, "{{join .HostConfig.Dns \" \"}}")
         .filter(|servers| !servers.is_empty());
 
-    /* What the record's `previous` becomes — the rollback target — decided by identity above and pinned
-     * under a protected local tag. Unpinned, the replaced image goes dangling the moment its tag moves,
-     * one routine `docker image prune` from deleting the only way back. The tag is created BEFORE the
-     * record that names it, so the record never points at nothing. */
+/* What the record's `previous` becomes — the rollback target — decided by identity above and pinned under a protected local tag. */
     let new_base_id = docker::image_id(&base_image);
     let next = next_previous(
         &saved,
@@ -661,16 +546,8 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     log.section(&format!("previous container logs ({container})"));
     docker::logs_into(&container, "5000", &log);
 
-    /* The channel record — written BEFORE the swap and before the LAUNCH: a swap that starts and then
-     * crash-loops is exactly the case rollback is for. A launch that fails outright rewinds it below.
-     *
-     * Every staged key goes with it. The sandbox is taking an image NOW: whatever was waiting for it is
-     * either the thing it is taking or something it has moved past, and both mean nothing is waiting any
-     * more. (A failed launch rewinds to `saved`, which still carries them — the prepared image is untouched
-     * on this machine and still worth swapping onto.) */
-    /* EXCEPT on a reshape, which takes no image at all: whatever `prepare` left staged is still the right thing
-     * to swap onto afterwards (same base, same recipe), and dropping it would cost the owner the download they
-     * already waited for — so the staged keys, and the sandbox's own copy of the offer, both survive. */
+/* The channel record — written BEFORE the swap and before the LAUNCH: a swap that starts and then crash-loops is exactly the case rollback is for. */
+/* Reshape reuses the staged image because it does not build one. */
     let reshaping = matches!(mode, Mode::Reshape(_));
     record::write(
         &slug,
@@ -686,31 +563,13 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         },
     )?;
 
-    /* The cutover PARKS the old container instead of destroying it: stop, rename aside, and only a
-     * replacement that answers health earns the rm. Every failure path below puts the parked container
-     * back, so the worst outcome of an update is the sandbox you already had — `rm -f` first meant a
-     * failed launch left nothing, and the documented recovery was re-running the connect wizard. */
+/* The cutover PARKS the old container instead of destroying it: stop, rename aside, and only a replacement that answers health earns the rm. */
     docker::quiet(&["rm", "-f", &parked]);
     docker::quiet(&["stop", &container]);
     docker::quiet(&["rename", &container, &parked]);
     log.section("run command");
 
-    /* THE PORT THIS CUTOVER JUST FREED IS NOT FREE YET, and that is a race rather than a refusal.
-     *
-     * The stop above is what releases the loopback binding, and dockerd tears the proxy down ASYNCHRONOUSLY:
-     * `stop` returns when the container is stopped, not when the socket it published is back. Launch into that
-     * window and docker refuses the whole run for a port that is in the act of becoming free.
-     *
-     * That is NOT the case the publish-less retry below exists for. That one is a port something ELSE holds —
-     * a second sandbox, an unrelated dev server — which no amount of waiting frees, so dropping the shortcut is
-     * the right answer and the sandbox comes up on its tunnel. Here the holder is the container being replaced,
-     * and the two are worth telling apart because the fallback is PERMANENT: a container's port bindings are
-     * fixed for its life, so a swap that loses this race leaves the browser on the tunnel until someone
-     * recreates again. Nothing notices — the daemon is healthy, the workspace merely gets slower, and the one
-     * line saying so scrolls past in a rebuild that prints hundreds.
-     *
-     * So a refusal naming the port buys a few seconds and the same argv again, and only a port still held after
-     * that is treated as someone else's. */
+/* THE PORT THIS CUTOVER JUST FREED IS NOT FREE YET, and that is a race rather than a refusal. */
     let mut launched = docker::run_argv(&argv, &log);
     for _ in 0..PORT_RELEASE_TRIES {
         // The window is the last attempt's output alone — its command line, the created container's id, and
@@ -765,18 +624,12 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     health::wait_ready(&container);
     docker::quiet(&["rm", "-f", &parked]);
 
-    /* Take the "an update is ready for you" offer back, now that the swap is real. The marker lives on the
-     * /history volume, which SURVIVES a recreate by design — so the replacement container inherits whatever
-     * the old one was told, and without this the update card would keep offering an image the sandbox is
-     * already running. Done here rather than before the cutover for the same reason the record is rewound on
-     * failure: until health answers, the prepared image is still the thing worth swapping onto. */
+/* Take the "an update is ready for you" offer back, now that the swap is real. */
     if !reshaping {
         staged::withdraw(&container);
     }
 
-    /* The record keeps ONE way back, so a superseded pin is dropped — kept, every update would retain a
-     * whole extra image, forever. Never the pin the record still names, and never the base just moved
-     * onto (a rollback's target IS the old `previous`). */
+/* The record keeps ONE way back, so a superseded pin is dropped — kept, every update would retain a whole extra image, forever. */
     if let Some(old_pin) = saved.previous.as_deref() {
         if old_pin.starts_with(&format!("intentic-sandbox-rollback-{slug}:"))
             && Some(old_pin) != next.as_deref()
@@ -822,13 +675,7 @@ pub fn reshape(slug: String, ask: Reshape) -> Result<()> {
     recreate(Mode::Reshape(ask), Some(slug), Reach::Applied, false)
 }
 
-/* THE RESHAPE'S PAYLOAD, as pure arithmetic on strings so it can be asserted without a container.
- *
- * Returns the owner's directive tokens the new container will carry (for the host probe) and the seeds that
- * carry every touched ask to the image. A cap is forwarded exactly as given — `12g`, `4`, or the empty string
- * main.rs maps `default` onto — because what a valid value is belongs to the contract. The token list is
- * seeded only when a switch was touched: an untouched list must replay off the old container like every other
- * pair rather than be re-stated here, or a token this binary has never heard of would be dropped in passing. */
+/* THE RESHAPE'S PAYLOAD, as pure arithmetic on strings so it can be asserted without a container. */
 fn reshape_seeds(ask: &Reshape, carried: &str) -> (String, Vec<contract::Seed>) {
     let tokens = apply_switches(carried, ask.privileged, ask.gpus);
     let mut seeds: Vec<contract::Seed> = Vec::new();
@@ -884,15 +731,7 @@ fn describe_shape(container: &str) -> String {
     format!("{memory}, {cpus}, {privileged}")
 }
 
-/* WHAT `prepare` LEAVES BEHIND: a built image, the host record naming it, and the sandbox told about it.
- *
- * In that order, and the order matters. The image exists before anything claims it does; the record — host
- * side, outside every volume the agent can reach — is the trust anchor a later update reads; the marker
- * inside the container is only ever a copy of that fact, for a daemon that has no way to see the other two.
- *
- * The sandbox's OWN channel is deliberately not touched. Preparing a beta build is not moving onto beta, and
- * a prepared update that is never applied must leave `ic sandbox update` following exactly what it followed
- * before — which is why the channel it was staged from is recorded under a key of its own. */
+/* WHAT `prepare` LEAVES BEHIND: a built image, the host record naming it, and the sandbox told about it. */
 /// What a prepare built, named the way the record and the marker both need it.
 struct Prepared<'a> {
     slug: &'a str,
@@ -974,12 +813,7 @@ enum Overlay {
     Lost,
 }
 
-/* Treating those two alike is what made a dev rebuild able to strip a sandbox in silence: the copy came back
- * with nothing, the flow staged an empty overlay, and every step after it read that as "this sandbox never had
- * an environment" — no overlay image built, no runtime directives, no hash stamped. `pnpm rebuild:sandbox`
- * then handed back the fresh daemon it was asked for on a container with no ffmpeg, no rust toolchain and no
- * privileges for the docker capability, printing the same success line as a rebuild that had kept all three.
- * The only report was the Environment card going back to "pending rebuild", which reads as a stale badge. */
+/* Treating those two alike is what made a dev rebuild able to strip a sandbox in silence: the copy came back with nothing, the flow staged an empty overlay. */
 fn overlay_outcome(copied: bool, has_one: bool) -> Overlay {
     match (copied, has_one) {
         (true, _) => Overlay::Copied,
@@ -988,11 +822,7 @@ fn overlay_outcome(copied: bool, has_one: bool) -> Overlay {
     }
 }
 
-/* Whether the sandbox has an approved overlay ANYWAY, asked two ways because the copy's own answer is the one
- * in doubt. The file is there to be seen (a different docker verb, so a copy that breaks on its own terms
- * cannot hide it) — or the container is running an image built from a recipe, which the runner stamps at
- * creation and no sandbox carries without having had one. Both are only worth asking after a copy came back
- * with nothing, so the ordinary swap spends no extra round-trip on the daemon. */
+/* Whether the sandbox has an approved overlay ANYWAY, asked two ways because the copy's own answer is the one in doubt. */
 fn overlay_exists(container: &str) -> bool {
     docker::exec_ok(container, &["test", "-f", APPROVED_FILE])
         || docker::container_env_value(container, "SANDBOX_ENVIRONMENT_HASH").is_some()
@@ -1198,9 +1028,7 @@ mod tests {
         }
     }
 
-    /* THE RESHAPE'S ARITHMETIC. The seeds are the whole of what a reshape says to the image, and the failure
-     * mode of getting them wrong is silent: a cap seeded under the wrong name is ignored and replayed around,
-     * a token list re-stated when untouched drops whatever this binary has not heard of. */
+/* THE RESHAPE'S ARITHMETIC. */
     #[test]
     fn switches_edit_only_their_own_token_and_leave_the_rest_of_the_owners_list_alone() {
         assert_eq!(apply_switches("", Some(true), None), "--privileged");
@@ -1232,9 +1060,7 @@ mod tests {
         );
     }
 
-    /* WHICH LAUNCH FAILURES ARE WORTH WAITING OUT. Only the port conflict is: everything else the cutover can
-     * be refused for is answered by dropping the shortcut and the optional directives, and re-running the same
-     * argv into the same refusal three times would just make a broken swap slower to report. */
+/* WHICH LAUNCH FAILURES ARE WORTH WAITING OUT. */
     #[test]
     fn only_a_held_port_is_worth_waiting_out_and_the_address_is_never_matched_on() {
         // Verbatim dockerd, the refusal this whole retry exists for.
@@ -1333,10 +1159,7 @@ mod tests {
 
     #[test]
     fn a_recipe_the_owner_has_re_approved_since_invalidates_what_was_staged() {
-        /* The staged image bakes the overlay it was built with. An owner who approved a new recipe between
-         * preparing and updating must get the recipe they approved — otherwise the fast path silently hands
-         * back an environment that was reviewed and replaced, and the Environment card would show Applied
-         * against a hash that is not what is running. */
+/* The staged image bakes the overlay it was built with. */
         assert!(!staged_still_fits(
             &prepared("stable", "sha256:new", Some("deadbeef")),
             "stable",
@@ -1469,11 +1292,7 @@ mod tests {
 
     #[test]
     fn a_sandbox_that_has_a_recipe_the_copy_cannot_read_stops_the_flow_instead_of_stripping_it() {
-        /* The dev loop's silent downgrade. A `pnpm rebuild:sandbox` whose copy came back with nothing staged
-         * an empty overlay and recreated the sandbox from the bare dev image: ffmpeg, bun and the rust
-         * toolchain gone, the docker capability left without the privileges its recipe asks for, and the same
-         * "sandbox is live" line printed as on the rebuild before it. Anything that says the recipe IS there
-         * makes an unreadable one a fault rather than an absence — and the flow stops on a fault. */
+/* The dev loop's silent downgrade. */
         assert!(matches!(overlay_outcome(false, true), Overlay::Lost));
     }
 

@@ -43,10 +43,7 @@ describe(`facetsOf`, () => {
         expect(facets[0]?.names).toContain(`Documentation`);
     });
 
-    /* The property the old counts line was written for and this one has to keep: a contribution point added to
-     * the schema must show up WITHOUT an edit here. The enumerated version that preceded it silently omitted six
-     * kinds, so this is pinned rather than trusted: the cast is the point, standing in for a manifest built
-     * against a newer schema than this app knows. */
+    /* The property the old counts line was written for and this one has to keep: a contribution point added. */
     it(`still surfaces a contribution kind it has never been taught`, () => {
         const probes = [{ probe: `latency` }, { probe: `errors` }];
         const facets = facetsOf(

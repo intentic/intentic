@@ -10,15 +10,7 @@ use crate::tty;
 use crate::ui;
 use crate::util::{bail, kv_lines, slug_from_token, step, Result};
 
-/* Run the AI-agent workspace sandbox on THIS machine and expose it to the browser — connect.sh/.ps1's
- * post-Docker half. The bootstrap shim keeps the one thing that genuinely needs a dependency-free start
- * (checking for Docker and installing it, with consent); everything after Docker lands here.
- *
- * The platform mints a per-project connection token plus the sandbox's reachability grant on the hub, and
- * hands out a one-liner. This flow starts the published image as a long-lived UNPRIVILEGED container
- * (privileges only ever arrive later through owner-approved overlay directives — the host's Docker socket is
- * never mounted) and rides the grant in; the box enables against the hub and serves its own share. The
- * browser then talks to the sandbox DIRECTLY over that address; the platform stays off the command path. */
+/* Run the AI-agent workspace sandbox on THIS machine and expose it to the browser — connect.sh/.ps1's post-Docker half. */
 
 pub struct Args {
     pub setup_code: Option<String>,
@@ -40,10 +32,7 @@ pub fn run(args: Args) -> Result<()> {
     let platform_url = env_or("PLATFORM_URL", "https://api.intentic.dev");
     let setup_code = args.setup_code.clone().or_else(|| env("SETUP_CODE"));
 
-    /* The one seam every setup failure passes through. The wizard in the browser cannot see this terminal,
-     * so whatever `connect` bails with is ALSO handed to the reporter — the wizard then names the real
-     * reason instead of guessing from elapsed time. Threaded as a parameter rather than created inside,
-     * because the failure report must outlive the flow that failed. */
+/* The one seam every setup failure passes through. */
     let reporter = platform::Reporter::new(&platform_url, setup_code.clone());
     let result = connect(args, &platform_url, setup_code, &reporter);
     if let Err(fail) = &result {
@@ -71,11 +60,7 @@ fn connect(
     let self_host = env("SELF_HOST").is_some();
 
     let mut connect_token = env("CONNECT_TOKEN").unwrap_or_default();
-    /* THE SANDBOX'S REACHABILITY, carried rather than arranged: a platform-signed grant naming this sandbox's
-     * id, the edge the daemon presents it to, and the public name that edge will answer for. The claim below
-     * supplies all three for a code-carrying setup; the env is the headless spelling both installers document
-     * (CONNECT_TOKEN=… SANDBOX_GRANT=… ./connect.sh). They ride into the container and are used nowhere else
-     * here — the dial is outbound from inside the box, so this machine opens nothing. */
+/* The reachability grant names this sandbox and the edge that presents it to the daemon. */
     let mut sandbox_grant = env("SANDBOX_GRANT").unwrap_or_default();
     let mut ingress_url = env("INGRESS_URL").unwrap_or_default();
     let mut sandbox_hostname = env("SANDBOX_HOSTNAME").unwrap_or_default();
@@ -87,17 +72,7 @@ fn connect(
     let mut owner_email = env("OWNER_EMAIL").unwrap_or_default();
     let cf_token = env("CF_TOKEN").unwrap_or_default();
 
-    /* WHAT THIS RUN IS GOING TO DO, DRAWN BEFORE IT DOES ANY OF IT.
-     *
-     * Same idea and the same phase vocabulary as the desktop app's own plan (desktop-app/src/setupPlan.ts),
-     * which has had this since the window existed while the terminal had nothing: no count, no position, and
-     * a four-minute image pull in the middle that a person cannot distinguish from a hang. The weights are
-     * seconds and they are guesses; they exist so the estimate is about TIME left rather than STEPS left.
-     *
-     * Steps that will not happen on this machine are left out rather than drawn and skipped — the plan is a
-     * promise about how long this takes, and dead entries make it a worse one. `connecting-machine` is the
-     * exception: it needs a pairing token the claim has not fetched yet, and the plan has to exist before the
-     * claim, so it is listed on the strength of every code-carrying setup getting one. */
+/* Same idea and the same phase vocabulary as the desktop app's own plan (desktop-app/src/setupPlan.ts). */
     let mut plan = vec![ui::PlanStep {
         phase: "preflight",
         label: "Check this device",
@@ -153,11 +128,7 @@ fn connect(
     });
     ui::begin("intentic · setting up your sandbox", plan);
 
-    /* PREFLIGHT — every prerequisite verified read-only, every failure reported at once, before anything is
-     * mutated and before the claim burns time against the setup code's TTL. This used to answer one problem
-     * per run (Docker, fix, re-run, token, fix, re-run…); now one run is one complete diagnosis, and the
-     * findings reach the setup wizard too — possession of the code authenticates the report exactly as it
-     * authenticates the claim, so even "Docker is not running" appears in the browser. */
+/* PREFLIGHT — every prerequisite verified read-only, every failure reported at once. */
     let mut list = vec![
         checks::Check::new("Docker", checks::check_docker),
         checks::Check::new("Disk space", checks::check_disk),
@@ -202,12 +173,7 @@ fn connect(
         host_pair_token = claim.host_pair_token.unwrap_or(host_pair_token);
         owner_email = claim.owner_email.unwrap_or(owner_email);
     }
-    /* Reachability is the platform's own edge now, and provisioning it is a pure function there: the daemon
-     * dials out presenting a signed grant naming this sandbox's id, and the edge routes by parsing that id
-     * back out of the hostname. So there is nothing for this CLI to arrange — it CARRIES the three values in
-     * and the box does the rest. Whether they all arrived is `reachability_warning`'s question, asked once
-     * below; this one is only whether the platform named a public address, which is what the slug and the
-     * container's own SANDBOX_PUBLIC_URL are keyed on. */
+/* Reachability is the platform's own edge now, and provisioning it is a pure function there. */
     let has_public_name = !sandbox_hostname.is_empty();
 
     // Per-sandbox identity, so several sandboxes coexist: the slug is the same key the public hostname uses.
@@ -273,11 +239,7 @@ fn connect(
     if connect_token.is_empty() {
         bail!("CONNECT_TOKEN is required (via the setup code or env) — copy the one-liner from the platform's setup screen.");
     }
-    /* A grant is what makes a sandbox reachable from anywhere; it is NOT what makes it run. Without one the
-     * box still starts and still answers on this machine's loopback — which is the whole of what a local-dev
-     * box, a sandbox published behind its owner's own domain, and the nightly update drill ever needed. This
-     * used to be a hard refusal, and that refusal took the update-survival drill (and every no-tunnel start)
-     * down with it: the sandbox it was drilling had never asked to be public. */
+/* A grant is what makes a sandbox reachable from anywhere; it is NOT what makes it run. */
     if let Some(warning) = reachability_warning(&sandbox_hostname, &sandbox_grant, &ingress_url) {
         ui::warn(&warning);
     }
@@ -321,10 +283,7 @@ fn connect(
     reporter.stage("pulling-image");
     ensure_image(&sandbox_image, &log)?;
 
-    /* The address is the platform's answer, not something this flow provisions: the box enables against the
-     * hub itself and serves its own share. What used to be a Cloudflare tunnel mint plus a sidecar container
-     * is now two env values riding into the container below. Empty when no grant came with the command — the
-     * daemon reads an empty SANDBOX_PUBLIC_URL as "loopback only", which is exactly what that sandbox is. */
+/* The address is the platform's answer, not something this flow provisions: the box enables against the hub itself and serves its own share. */
     let sandbox_public_url = if sandbox_hostname.is_empty() {
         String::new()
     } else {
@@ -476,12 +435,7 @@ fn connect(
     reporter.stage("waiting-health");
     health::wait_answering(&container, &log, "")?;
 
-    /* POSTFLIGHT — a daemon answering INSIDE the container proves only half the chain. The other half is
-     * exactly where a setup used to die invisibly: a grant the hub refuses, a name that never answers, a
-     * daemon that cannot register with the platform — the terminal said started, the browser showed a dead
-     * workspace, and nothing anywhere named the broken link. Verify end to end, with patience (a name still
-     * propagating and an in-box agent still coming up are ordinary states of a new setup), and fail NAMING
-     * the link rather than let it look set up when it is not. */
+/* POSTFLIGHT — a daemon answering INSIDE the container proves only half the chain. */
     step(
         "verifying",
         "verifying the sandbox is reachable end to end…",
@@ -497,12 +451,7 @@ fn connect(
         std::time::Duration::from_secs(120),
     );
     if let Some(summary) = checks::failure_summary(&findings) {
-        /* WHOSE VERDICT THIS IS. A code-carrying setup is being watched from a browser that has no other way
-         * to learn the truth, and it ends at a workspace the user opens over the tunnel: a half-reachable
-         * sandbox is a failed setup and has to say so, here and on the wizard. A codeless run is scripted —
-         * its tokens were handed in through the env, its outward links are whoever wrote the script's to
-         * wire, and the sandbox this flow was asked to bring up IS up. Name the broken links, point at the
-         * diagnosis, and let the operator reading the terminal decide. */
+/* WHOSE VERDICT THIS IS. */
         if setup_code.is_some() {
             reporter.findings_failed("verifying", checks::wire_failures(&findings));
             bail!("{summary}\nThe sandbox itself is running on this machine — fix the above, then re-check with: ic sandbox doctor {slug}");
@@ -512,13 +461,7 @@ fn connect(
 
     reporter.stage("done");
 
-    /* Desktop sync chosen at setup: the same paste covers it, gated on the SYNC_DIR opt-in the command
-     * carried. Never fails the setup.
-     *
-     * This and the machine connection below run BEFORE the closing block, where the "return to the platform"
-     * lines used to sit above them. The wizard's live gate flips on the sandbox itself and does not depend on
-     * either, so the only thing the old order bought was a summary with two more steps printing underneath
-     * it — the reader was told to leave, and then given more output. One ending, once, at the end. */
+/* Desktop sync chosen at setup: the same paste covers it, gated on the SYNC_DIR opt-in the command carried. */
     if let (Some(dir), false, false) = (
         sync_dir,
         sync_pair_token.is_empty(),
@@ -529,13 +472,7 @@ fn connect(
         }
     }
 
-    /* Connect this machine as a device — not gated on an opt-in, unlike sync above, because it needs no
-     * decision from the user: sync asks which FOLDER to mirror and there is no sensible default for that, while
-     * this asks for nothing and grants only what the machine already does for this sandbox. The permission it
-     * arrives with covers this machine's sandboxes and nothing else, and it is stated on the card.
-     *
-     * Never fails the setup. A machine that does not finish this is a machine whose Devices view says its
-     * sandboxes are not visible — exactly what every sandbox said before this existed. */
+/* Connect this machine as a device — not gated on an opt-in, unlike sync above, because it needs no decision from the user. */
     if !host_pair_token.is_empty()
         && !sandbox_public_url.is_empty()
         && !run_host_agent(&container, &sandbox_public_url, &host_pair_token)
@@ -547,20 +484,7 @@ fn connect(
     Ok(())
 }
 
-/* WHAT THIS RUN CAN PROMISE ABOUT REACHABILITY — three states, and the middle one is the reason this is a
- * function rather than a boolean.
- *
- *   a name, a grant and an edge  the daemon dials out and the address answers. Nothing to say.
- *   a name and nothing to dial   the platform published an address this box cannot serve. The postflight is
- *                                about to fail on the edge's 502, and the cause is right here, in hand, two
- *                                minutes before that.
- *   no name at all               a loopback-only sandbox: a local-dev box, one published behind its owner's
- *                                own domain, the update drill. Legitimate, and warned about rather than
- *                                refused.
- *
- * Pure, so the three are asserted rather than reasoned about. This used to be one boolean over the hostname
- * alone, which read "fully reachable" for a claim that had stopped carrying a grant — and every install that
- * followed came up healthy, registered, and unreachable, with nothing anywhere naming the missing value. */
+/* WHAT THIS RUN CAN PROMISE ABOUT REACHABILITY — three states, and the middle one is the reason this is a function rather than a boolean. */
 fn reachability_warning(hostname: &str, grant: &str, ingress: &str) -> Option<String> {
     if hostname.is_empty() {
         return Some(
@@ -579,13 +503,7 @@ fn reachability_warning(hostname: &str, grant: &str, ingress: &str) -> Option<St
     ))
 }
 
-/* THE ENDING, RANKED — because the old one was seven lines of equal weight and the reader had to find the
- * two that mattered among them.
- *
- * A finished setup has exactly one address and exactly one next action, and every other line here is
- * something the reader wants in a week rather than in five seconds: how to stop it, how to reset it, where
- * the logs are, and (when nobody asked for a deploy target) that this machine is not one. Those are
- * footnotes, and rendering them as footnotes is the whole change. */
+/* THE ENDING, RANKED — because the old one was seven lines of equal weight and the reader had to find the two that mattered among them. */
 fn ending(slug: &str, container: &str, public_url: &str, self_host: bool) {
     let mut footnotes: Vec<(String, String)> = vec![
         (
@@ -779,16 +697,7 @@ fn run_agent_bootstrap(agent: AgentBootstrap, vars: &[(&str, &str)]) -> bool {
             agent.unix_url
         },
     );
-    /* These installers inherit stdout, so two things have to be arranged before they get it.
-     *
-     * The terminal is handed over outright — they write whenever they like, and the live step line cannot be
-     * repainted through somebody else's output.
-     *
-     * And they are told WHERE they are running. Both agents render through the same shared renderer this
-     * binary does (@intentic/local-agent's ui.ts), which would otherwise see a terminal, decide it owns the
-     * screen, and open a second banner with a second checklist in the middle of this one. `nested` is the mode
-     * that says "you are detail under somebody else's step". A piped run needs no override: the child inherits
-     * the pipe and reaches the same conclusion on its own. */
+/* These installers inherit stdout, so two things have to be arranged before they get it. */
     let child_vars = agent_env(vars, ui::is_rich());
     ui::suspend();
     let finished = run_agent_script(&url, agent.what, &child_vars);
@@ -1005,9 +914,7 @@ mod tests {
         assert_eq!(&nested[..2], &vars[..]);
     }
 
-    /* THE STATE THAT SHIPPED: a claim that named an address and carried no grant. It read as a fully
-     * reachable sandbox, so nothing warned, and the box came up healthy on an address that answered 502
-     * until somebody read a container's environment by hand. */
+/* THE STATE THAT SHIPPED: a claim that named an address and carried no grant. */
     #[test]
     fn an_address_without_a_grant_is_named_rather_than_read_as_reachable() {
         let named = |grant, ingress| {

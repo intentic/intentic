@@ -44,7 +44,7 @@ const auditLeads = computed(() => auditable.value && !verified.value);
 </script>
 
 <template>
-    <!-- The footer wraps on purpose: the primary label is a full sentence, and unwrapped on a phone the control that matters most would get clipped. -->
+    <!-- The footer wraps so the primary action remains usable on phones. -->
     <Modal v-model:open="open" size="md">
         <template #header>
             <div class="flex min-w-0 items-center gap-3">
@@ -92,10 +92,7 @@ const auditLeads = computed(() => auditable.value && !verified.value);
                 >. Updating replaces the code wholesale and re-asks for broader declared host API access; code internals still need review.
             </Notice>
 
-            <!--
-                Three different parties guarantee three different things, kept as separate lines rather than one badge, ordered by how much each
-                actually settles.
-            -->
+            <!-- Keep the three guarantees separate and ordered by responsibility. -->
             <div class="flex flex-col gap-2 rounded-lg border border-line bg-canvas px-3 py-2.5">
                 <div :class="ui.sectionLabel()">What you'd be trusting</div>
 

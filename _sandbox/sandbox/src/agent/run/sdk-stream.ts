@@ -405,15 +405,7 @@ class TurnFold {
         yield this.toolCallFrame(block, parent);
     }
 
-    /* THE LIST THIS TURN INHERITS, and when it is safe to say so. The seed was read for the session the turn
-     * asked to resume; the CLI's first frame says which session it is actually running, and a CLI that could
-     * not resume starts a fresh one whose ids begin again at 1. Adopted under that session the seed would
-     * render last session's rows and let this session's first create overwrite one of them, so a seed for any
-     * other session is dropped unread, and the fold stays as empty as a first turn's.
-     *
-     * Seed the reducer immediately so updates can resolve old task ids, but publish only once the provider
-     * answers. An init followed by a usage refusal did no work: publishing here created another checklist
-     * bubble on every failed retry. The registry already carries unfinished work across refused turns. */
+    /* A turn inherits a checklist only when its seed belongs to the same session. */
     private adoptChecklist(sessionId: string): void {
         const seed = this.args.checklistSeed;
         if (seed === undefined || seed.sessionId !== sessionId) {
@@ -586,8 +578,7 @@ class TurnFold {
                 if (speed !== undefined) {
                     yield speed;
                 }
-                // Read here, not pre-stream: supportedCommands() resolves only after `init`, else a dead CLI could hang
-                // it.
+                // Read supported commands after init so dead CLIs cannot hang startup.
                 const commands = await this.session.supportedCommands?.().catch(() => undefined);
                 if (commands !== undefined && commands.length > 0) {
                     yield commandFrame(commands);
@@ -604,8 +595,7 @@ class TurnFold {
                 return false;
             }
             case "commands_changed": {
-                // A mid-session republish of the whole list; supportedCommands() is captured at init and won't reflect
-                // it.
+                // Republish changed commands when the session announces them.
                 yield commandFrame(message.commands);
                 return false;
             }

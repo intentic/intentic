@@ -1,13 +1,4 @@
-<!--
-    The review's shape while its first read is in flight: the file list beside the diff, in the columns and at the
-    heights <AgentReviewPanel> draws once the daemon answers, so rows land where the bars stood instead of pushing a
-    sentence out of the way. The list keeps the reader's own stored width, and a phone gets the list alone, exactly as
-    the real panel splits them.
-
-    One `role="status"` for the whole wait, with the sentence read rather than printed: the bars are decoration, and a
-    per-bar announcement would say nothing sixty times. Reveal-delay and minimum-hold timing belong to the caller
-    (useLoadingReveal), so a warm read paints none of this.
--->
+<!-- The review's shape while its first read is in flight: the file list beside the diff. -->
 <script setup lang="ts">
 import { useDevice } from "@intentic/ui";
 import DiffSkeleton from "../../workspace/viewers/DiffSkeleton.vue";
@@ -66,11 +57,7 @@ const NAME_WIDTHS = [`w-40`, `w-28`, `w-52`, `w-36`, `w-44`, `w-24`, `w-48`];
             </div>
         </aside>
 
-        <!--
-            Desktop opens on the first file, so the diff half is part of what this wait is for; a phone's diff is a
-            full-screen takeover that only a pick can reach, and promising one here would promise a screen that isn't
-            coming.
-        -->
+<!-- Desktop opens the first diff; mobile reaches it through a file pick. -->
         <section v-if="!mobile" class="flex min-h-0 min-w-0 flex-1 flex-col" aria-hidden="true">
             <!-- The diff's toolbar, at the list header's height: the two align in the real panel. -->
             <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line px-2 max-md:h-12">

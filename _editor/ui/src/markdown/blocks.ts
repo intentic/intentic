@@ -23,10 +23,7 @@ const INVISIBLE = new Set([`space`, `def`]);
 
 const whole = (source: string): MarkdownBlocks => ({ blocks: source === `` ? [] : [{ start: 0, end: source.length }], defs: `` });
 
-/**
- * Splits `source` into the spans a reader can edit one at a time. Falls back to one whole-document block whenever
- * the lexer's spans can't be trusted to reassemble the source exactly.
- */
+/** Splits `source` into the spans a reader can edit one at a time. */
 export const splitMarkdownBlocks = (source: string): MarkdownBlocks => {
     if (typeof source !== `string` || source === ``) {
         return { blocks: [], defs: `` };

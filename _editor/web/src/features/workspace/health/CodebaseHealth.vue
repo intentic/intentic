@@ -129,7 +129,7 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                                 <!-- One hue for every bar; length already encodes magnitude, so color must not. -->
                                 <button type="button" :class="`${ROW_CLASS} min-w-0 flex-1 text-left`" @click="emit('open-file', row.path)">
                                     <span class="text-2xs tabular-nums text-subtle">{{ index + 1 }}</span>
-                                    <!-- Truncation lands on the directory, not the filename; the directory alone gets a tooltip, only when cut off. -->
+                                    <!-- Truncate directories separately so filenames remain readable. -->
                                     <span class="flex min-w-0 overflow-hidden text-xs">
                                         <span class="truncate text-subtle" v-tooltip.top.overflow="row.dir">{{ row.dir }}</span>
                                         <span class="shrink-0 text-content">{{ row.name }}</span>
@@ -143,7 +143,7 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                                     <span class="text-right text-2xs tabular-nums text-muted">{{ formatCount(row.commits) }}</span>
                                     <span class="text-right text-2xs tabular-nums text-muted">{{ formatCount(row.complexity) }}</span>
                                 </button>
-                                <!-- Hidden until hover except on touch; a dormant row keeps the action but dimmed, with a tooltip explaining why. -->
+                                <!-- Dormant actions stay dimmed and appear on hover or touch. -->
                                 <button
                                     type="button"
                                     class="shrink-0 cursor-pointer transition-colors md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100"

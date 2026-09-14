@@ -4,8 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import { fileSecretUses, lastUseByName } from "./secret-uses.js";
 
-/* The use ledger: append-only rows on disk, capped, newest-last, what the inventory joins as "last used".
- * Driven against the real file store because the cap and the round-trip ARE the behaviour. */
+/* The use ledger: append-only rows on disk, capped, newest-last, what the inventory joins as "last used". */
 
 const store = () => fileSecretUses(join(mkdtempSync(join(tmpdir(), "secret-uses-")), "secret-uses.json"));
 

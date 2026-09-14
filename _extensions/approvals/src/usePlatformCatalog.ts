@@ -10,13 +10,7 @@ export interface PlatformCatalogEntry {
     readonly logo?: string | undefined;
 }
 
-/* WHO POSTS IT, from the manifest that owns that fact. A draft's `platform` is a bare string by contract (a
- * new platform needs no contract change) and it is the id of the capability whose skill does the posting, so
- * the enabled packs' own catalog entries already hold its display name and brand. Read through the same
- * `extensions` cache key the shell uses, which the daemon's file push invalidates when a pack changes.
- *
- * A platform with no installed connector still renders (BrandMark falls through to a monogram), and that is
- * the case that has to keep working: a draft can be proposed for somewhere this sandbox cannot yet post. */
+/* WHO POSTS IT, from the manifest that owns that fact. */
 export function usePlatformCatalog(): ComputedRef<Map<string, PlatformCatalogEntry>> {
     const api = host();
     const query = useQuery({

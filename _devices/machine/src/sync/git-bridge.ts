@@ -10,9 +10,7 @@ import { sshAlias } from "./ssh.js";
 // fetch, then fast-forward. One-way only: local commits or staged work the sandbox lacks freeze the bridge rather
 // than being rebased, reset or merged. Steady state costs one ls-remote per repo.
 
-// One seam for every effect the bridge has, so the fast-forward policy tests without git, ssh or a disk. Async:
-// these commands share the SSH transport this process serves on loopback (tunnel.ts); a blocking spawn would deadlock
-// it.
+// Keep bridge execution async so shared loopback SSH cannot deadlock.
 export interface BridgeExec {
     // Run a command capturing stdout; undefined ⇒ it failed (non-zero exit, spawn error, timeout).
     readonly run: (command: string, args: readonly string[], cwd?: string) => Promise<string | undefined>;

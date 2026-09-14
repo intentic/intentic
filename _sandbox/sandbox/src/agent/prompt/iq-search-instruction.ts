@@ -6,9 +6,7 @@ export const IQ_SEARCH_INSTRUCTION_HEADER = "## iq workspace search";
 // The chat-row title, beside the header it belongs to (turn-preamble.ts explains the pairing).
 export const IQ_SEARCH_INSTRUCTION_TITLE = "Using iq for workspace search";
 
-/* Claude Code reads the full skill through the plugin loader. Native Codex and OpenCode have no plugin seam,
- * so their opening request carries the nudge only as a disclosed turn preamble — not the full SKILL.md body,
- * which would duplicate what Claude gets for free and cost ~1.8k tokens per conversation start. */
+/* Claude Code reads the full skill through the plugin loader. */
 export interface IqSearchTeaching {
     readonly note: string;
     // Content address rather than package version: this experiment measures the words the model received, and

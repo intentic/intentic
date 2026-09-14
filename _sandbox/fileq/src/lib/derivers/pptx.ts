@@ -3,11 +3,7 @@ import { unzipSync } from "fflate";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 import { decodeEntities } from "../xml.js";
 
-/* Presentations: text runs out of the OOXML slide parts, one `## Slide N` section each. No library carries
- * its weight here — a pptx is a zip of XML whose visible text lives entirely in `<a:t>` runs grouped into
- * `<a:p>` paragraphs, and regex over that is honest about what it is: the words, in slide order, nothing
- * about layout. Speaker notes ride along the same way because they are routinely where the actual argument
- * of a deck lives. */
+/* Presentations: text runs out of the OOXML slide parts, one `## Slide N` section each. */
 
 const SLIDE_PART = /^ppt\/slides\/slide(\d+)\.xml$/;
 const NOTES_PART = /^ppt\/notesSlides\/notesSlide(\d+)\.xml$/;

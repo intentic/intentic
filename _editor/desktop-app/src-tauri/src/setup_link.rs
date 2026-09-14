@@ -1,34 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-/* THE ONLY CHANNEL FROM THE SPA INTO THIS APP.
- *
- * The workspace window shows remote content, so it gets no IPC at all — its capability list is empty. What it
- * gets instead is a navigation to `intentic://…` that the window handler intercepts in Rust and cancels, which
- * has two properties nothing else does: the same link works from an EXTERNAL browser (where the OS routes it
- * to the installed app), and a page that is somehow not ours can at worst ask for a setup it has no code for.
- *
- * The parse is deliberately total — anything unrecognised, or missing a value it cannot do without, returns
- * None rather than half a request. (There is no count in this sentence any more: it was written when there
- * were four of these and was wrong by two before anyone noticed. `Link` below is the list.) */
+/* The workspace window shows remote content, so it gets no IPC at all — its capability list is empty. */
 
-/* WHO SENT THIS LINK — the whole of what this app can know about whether to believe it.
- *
- * `App` is a navigation the workspace window made itself: the SPA's setup page handing this device the
- * code it just minted, which is what the app was opened to do. `External` is everything else — the OS protocol handler
- * and a second instance's argv — where the link is one ANYBODY can put on a page, in an email or in a chat
- * message, and all the OS showed the user before handing it over was "Open Intentic?".
- *
- * Two of a setup link's values are dropped when it arrives `External`, because both are chosen by the sender
- * and neither is anything the user is shown:
- *   • `platform` names the server the setup code is redeemed against, and that server's answer decides the
- *     new sandbox's own token, the tunnel that puts it on the internet, and WHICH ACCOUNT OWNS IT. Honouring
- *     a stranger's copy stands up a sandbox on this device that answers to them. Nothing real loses
- *     anything: the SPA only ever sets it when the platform is served from localhost, in local dev.
- *   • `cfToken` is dropped back to where this file's own doc comment already put it — riding the link only
- *     from the in-app webview, where the navigation is cancelled in-process and never reaches the OS. That
- *     was enforced on the SENDING side alone, which is no enforcement at all against a sender who isn't us.
- *
- * What survives (`code`, `name`, `syncDir`) is what the confirmation in windows.rs puts to the user instead. */
+/* WHO SENT THIS LINK — the whole of what this app can know about whether to believe it. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Source {
     App,
@@ -100,32 +74,10 @@ pub struct AuthArgs {
     pub state: String,
 }
 
-/* `intentic://window?do=…` — THE TITLE BAR THE PAGE DRAWS, WORKING THE WINDOW IT IS DRAWN IN.
- *
- * Both faces of this app are undecorated (windows.rs): the platform's title bar was a 32px strip carrying a
- * logo and three buttons above a product whose own top row is already a full-width bar, and the app's row is
- * where those three buttons belong. On the launcher face that is an ordinary Tauri custom title bar, local
- * content calling the window API. The WORKSPACE face is remote content with an empty capability list, and this
- * is what it gets instead — the same one-way link channel every other action here uses.
- *
- * IT IS A COMPLETE TITLE BAR AND NOT THREE BUTTONS. `Drag` is the one that looks like it should need IPC and
- * does not: a press on an empty stretch of the bar navigates here, and Rust hands the window to the platform's
- * own move loop, which is what `start_dragging` does from a command anyway — that call is asynchronous either
- * way, and the OS takes over while the button is still down. So the bar drags, snaps and double-clicks to
- * maximise without app.intentic.dev gaining a single callable command.
- *
- * [`Source::App`] ONLY, like `update`. These verbs are harmless compared to what an external link can already
- * ask for, but they are about THIS window, and a link from the OS handler is not something this app's own
- * window asked for. */
+/* Window links carry their action in the `do` query parameter. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowVerb {
-    /* THE PAGE ANNOUNCING ITS OWN BAR IS UP, which is what keeps a frameless window from ever being a trap.
-     *
-     * The app and the SPA ship separately — a binary somebody installed once against a page that is deployed
-     * continuously — so "the window has no frame and the page draws no controls" is a state that has to be
-     * survivable rather than impossible. The window opens undecorated and waits to hear this; silence (an app
-     * newer than the page, a page that failed to load at all, an offline start) hands the platform's frame
-     * back instead of leaving somebody a window they cannot move (windows.rs `arm_frame_fallback`). */
+/* THE PAGE ANNOUNCING ITS OWN BAR IS UP, which is what keeps a frameless window from ever being a trap. */
     Ready,
     Minimize,
     /// Maximise or restore, one verb: it is one button, and which of the two it does is a fact about the
@@ -146,19 +98,9 @@ pub enum Link {
     /// user's real browser. It carries nothing, because everything it starts is minted afterwards.
     SignIn,
     Auth(AuthArgs),
-    /* `intentic://update` — the workspace banner's button, and the reason the SPA can offer a swap it has no
-     * way to perform. The app tells the page an update is downloaded (update.rs `announce_to_workspace`) and
-     * the page answers with this, which is the same one-way-then-link shape every other action here has.
-     *
-     * [`Source::App`] ONLY, and it carries nothing so there is nothing to strip instead. What this link does
-     * is end the process and run an installer, which is a fine thing for the app's own window to ask for and
-     * not something a page in a browser should be able to do to somebody who clicked "Open Intentic?". A copy
-     * that genuinely wants it from outside has the tray row, which is on the machine rather than on the web. */
+/* `intentic://update` — the workspace banner's button, and the reason the SPA can offer a swap it has no way to perform. */
     Update,
-    /* `intentic://launcher` — the setup page's way back to the app's own face after "Back to your workspace"
-     * stepped it aside: the page draws the install's progress off what the app announces (windows.rs
-     * `announce_setup`) and this is the button beside that bar. [`Source::App`] only, and it carries nothing:
-     * it raises a window of this app, which is the app's own window's business and no page's from outside. */
+/* `intentic://launcher` — the setup page's way back to the app's own face after "Back to your workspace" stepped it aside. */
     Launcher,
     /// See [`WindowVerb`]: the workspace SPA's own title bar, which is a link channel rather than IPC for the
     /// same reason everything else here is.
@@ -339,13 +281,7 @@ mod tests {
         );
     }
 
-    /* THE ONE LINK THAT ENDS THE PROCESS, so it is the one link only this app's own window may send.
-     *
-     * `intentic://update` runs an installer over the running application. From the workspace webview that is
-     * the user pressing the button on a banner this app put there. From the OS handler it is any page in any
-     * browser, behind a prompt that said only "Open Intentic?" — and there is nothing to confirm afterwards
-     * that would make it a fair question, because the answer is "your app closes now". The tray row is the
-     * out-of-window way to reach it, and it is on the machine rather than on the web. */
+/* THE ONE LINK THAT ENDS THE PROCESS, so it is the one link only this app's own window may send. */
     #[test]
     fn only_this_apps_own_window_can_ask_it_to_replace_itself() {
         assert_eq!(
@@ -389,10 +325,7 @@ mod tests {
         assert_eq!(mirror.name, None);
     }
 
-    /* THE FOLDER-EXFILTRATION LINK THIS REFUSAL EXISTS TO STOP. `url` and `pair` are both the sender's: a
-     * page navigating here from a browser, behind nothing but "Open Intentic?", would put its reader one
-     * folder pick away from two-way syncing that folder into a sandbox the sender signs in to. Unlike a
-     * setup link there is nothing here worth keeping after a strip, so the whole link is refused. */
+/* THE FOLDER-EXFILTRATION LINK THIS REFUSAL EXISTS TO STOP. */
     #[test]
     fn a_sync_link_from_outside_the_app_is_refused_entirely() {
         assert_eq!(
@@ -435,13 +368,7 @@ mod tests {
         }
     }
 
-    /* THE BAR BELONGS TO THIS WINDOW, so only this window may work it. Nothing here is dangerous the way an
-     * `update` is, but a link from the OS handler is one any page can navigate to, and "the app you just
-     * opened minimises itself" is not a thing this app should be able to be told from outside.
-     *
-     * An unknown verb is the ordinary skew between a page that deploys continuously and an app somebody
-     * installed once: it parses to nothing and the press does nothing, rather than to a window action chosen
-     * by whichever arm happened to be last. */
+/* THE BAR BELONGS TO THIS WINDOW, so only this window may work it. */
     #[test]
     fn a_title_bar_press_is_refused_from_outside_the_app_and_when_it_names_nothing() {
         assert_eq!(
@@ -481,12 +408,7 @@ mod tests {
         assert_eq!(parse_link("intentic://auth?handoff=tok", Source::App), None);
     }
 
-    /* THE ONE-CLICK TAKEOVER THIS DROP EXISTS TO STOP.
-     *
-     * Any page can navigate to `intentic://setup?…`, and the OS hands it to this app on a prompt that says
-     * only "Open Intentic?". Were `platform` honoured from there, the setup code would be redeemed against
-     * the sender's own server — which answers with the connect token, the tunnel that publishes the sandbox,
-     * and the owner email. The victim's machine would then be running a sandbox the sender signs in to. */
+/* External setup links may not supply platform or Cloudflare credentials. */
     #[test]
     fn an_external_link_cannot_choose_the_platform_or_supply_a_cloudflare_token() {
         let url = "intentic://setup?code=abc123&syncDir=%2Fhome%2Fme&cfToken=cf&platform=https%3A%2F%2Fevil.example";

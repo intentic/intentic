@@ -1,8 +1,7 @@
 import { expect, test } from "vitest";
 import { PATCH_GAP, patchedSides } from "./diffPatch";
 
-/* What a rebuilt side has to get right is the GUTTER: a hunk at line 4,182 has to say 4,182, because the file
- * it came from is one the reader cannot open to check. Everything else here follows from that. */
+/* Rebuilt diff hunks preserve their source line numbers. */
 
 const patch = [`@@ -1,4 +1,4 @@`, ` one`, `-two`, `+TWO`, ` three`, ` four`, `@@ -120,3 +120,4 @@ context heading`, ` a`, `+b`, ` c`, ` d`].join(
     `\n`,

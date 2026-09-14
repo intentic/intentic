@@ -1,7 +1,4 @@
-<!--
-    Mobile action sheet: a PrimeVue Drawer docked to the bottom edge, the touch replacement for Popover/ContextMenu. Height follows content up to
-    `--height-panel-xl`.
--->
+<!-- Mobile action sheet: a PrimeVue Drawer docked to the bottom edge, the touch replacement for Popover/ContextMenu. -->
 <script setup lang="ts">
 import Drawer from "primevue/drawer";
 

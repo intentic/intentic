@@ -1,9 +1,7 @@
 import { expect, test } from "vitest";
 import { stateDir } from "./backing-ssh.js";
 
-/* stateDir's output is a path built by concatenation, and composeDown ends with `rm -rf` on it. So the thing
- * worth testing is not the happy slug: it is that no input can make the path name the PARENT of every
- * instance instead of one instance. */
+/* stateDir's output is a path built by concatenation, and composeDown ends with `rm -rf` on it. */
 
 test("a node id becomes one directory inside the kind's directory", () => {
     expect(stateDir("postgres", "app-db")).toBe("/opt/intentic/postgres/app-db");

@@ -347,24 +347,15 @@ const openHistory = (event: Event): void => {
 </script>
 
 <template>
-    <!--
-        Docked: one line across the column top, with the list on a sheet below it. Undocked: a resizable left rail
-        with the list always open, over a foot carrying the same +/history pair as labelled rows.
-    -->
-    <!--
-        The rail form isn't drawn here: RailColumn is the shared column shell every agent list stands in, keeping
-        this rail and /subagents' in step.
-    -->
+<!-- Docked: one line across the column top, with the list on a sheet below it. -->
+<!-- The rail form isn't drawn here: RailColumn is the shared column shell every agent list stands in, keeping this rail and /subagents' in step. -->
     <component
         :is="vertical ? RailColumn : 'header'"
         :ref="setBar"
         :class="vertical ? undefined : 'view-header relative flex items-center gap-1 border-b border-line px-1.5'"
         @contextmenu="onBarContextMenu"
     >
-        <!--
-            The switcher, docked only — the rail below already is the list. Renaming replaces it rather than nesting a
-            field in it: Enter/blur commit, Esc cancels, an empty or unchanged name silently cancels (createInlineRename).
-        -->
+<!-- The switcher, docked only — the rail below already is the list. -->
         <template v-if="!vertical">
             <input
                 v-if="edit.editing && renaming"
@@ -399,10 +390,7 @@ const openHistory = (event: Event): void => {
                 <span v-if="isArchived(active)" class="flex shrink-0 items-center" aria-label="Archived">
                     <Icon name="box" class="text-2xs text-subtle" />
                 </span>
-                <!--
-                    Italic while this chat is only being looked at (Conversation.peek), the same mark the rail cards and the
-                    workspace preview tab wear. Kept by the pin button below.
-                -->
+<!-- Italic while this chat is only being looked at (Conversation.peek), the same mark the rail cards and the workspace preview tab wear. -->
                 <span
                     class="min-w-0 flex-1 truncate text-left font-medium"
                     :class="[statusTabClass(active.status.value), { italic: active.peek.value }]"
@@ -446,16 +434,9 @@ const openHistory = (event: Event): void => {
             @open="emit('open', $event)"
         />
 
-        <!--
-            Docked toolbar: new chat, history, then the chat's other two homes (dock to rail, pop out to a window) in
-            that order — move within the window, then leave it. Tooltips name each chord; absent on the rail, which
-            already leads to both.
-        -->
+<!-- The docked toolbar orders creation, history, docking, and pop-out actions. -->
         <div v-if="!vertical" class="flex shrink-0 items-center gap-1">
-            <!--
-                Shown only while there's something to keep: the docked column has no card of its own to carry the rail's
-                pin. Disappears once the chat is kept, by this press or anything else in it.
-            -->
+<!-- Shown only while there's something to keep: the docked column has no card of its own to carry the rail's pin. -->
             <button
                 v-if="active.peek.value"
                 type="button"
@@ -493,11 +474,7 @@ const openHistory = (event: Event): void => {
             </button>
         </div>
 
-        <!--
-            Foot of the rail: New agent (the fleet board's own wording) and Past chats, labelled and sized to match, no
-            ellipsis (there's no chooser to promise). The list's own filter already searches open chats; this browses
-            history, newest first.
-        -->
+<!-- Foot of the rail: New agent (the fleet board's own wording) and Past chats, labelled and sized to match, no ellipsis (there's no chooser to promise). -->
         <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
             <Button size="small" @click="startAgent()"> <Icon name="plus" />New agent </Button>
             <button type="button" class="composer-ghost h-7 gap-1.5 px-2 text-2xs" @click="openHistory">
@@ -506,10 +483,7 @@ const openHistory = (event: Event): void => {
             </button>
         </div>
 
-        <!--
-            Pinned to the column's width, capped so the transcript is never fully covered. Painted on canvas, matching
-            the rail's own body, since the list's lanes are slabs mixed from canvas (`.lane`).
-        -->
+<!-- Pinned to the column's width, capped so the transcript is never fully covered. -->
         <div
             v-if="listOpen && !vertical"
             class="lane-ground-canvas absolute inset-x-1.5 top-full z-30 mt-1 flex max-h-[60vh] flex-col overflow-hidden rounded-xl border border-line-strong bg-canvas p-1.5 shadow-lg"
@@ -517,10 +491,7 @@ const openHistory = (event: Event): void => {
             <ChatTabList class="min-h-0 flex-1" @select="pick" @close="emit('close', $event)" @open="pickNotOpen" />
         </div>
 
-        <!--
-            Anchored to whichever button was pressed; AnchoredOverlay caps it to that button's own window. The session
-            list yields room; the search box keeps its size.
-        -->
+<!-- Anchored to whichever button was pressed; AnchoredOverlay caps it to that button's own window. -->
         <AnchoredOverlay v-model="historyOpen" :anchor="historyAnchor" side="bottom">
             <div class="flex min-h-0 w-72 flex-col">
                 <SearchBar

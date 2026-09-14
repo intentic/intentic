@@ -1,20 +1,7 @@
 ---
 import { DESKTOP_DOWNLOADS_PAGE, DESKTOP_GENERIC_ICON, desktopPlatforms } from "../lib/desktop-downloads";
 
-/* THE THIRD DOOR: an installer, for the computer the visitor is reading this on.
- *
- * The other two buttons beside it go to the app and to the repository. This one is for the reader who wants
- * the thing on their own machine, and it should not make them find out which build that is: the button names
- * their platform and links straight at that installer.
- *
- * The platform is known only in the browser, so the button ships as the honest general case — "Download the
- * app", pointing at the download page — and an inline script narrows it. Inline, and placed directly after
- * the markup, so it runs before the hero paints: a bundled module would be deferred and the label would
- * visibly change under the reader. Without JavaScript the general case is what stands, and it works.
- *
- * A Mac or a phone is left on the general case on purpose. There is no macOS build, and the download page
- * says that in words next to the one-line install that does work — better than a button promising a file
- * that does not exist. */
+/* THE THIRD DOOR: an installer, for the computer the visitor is reading this on. */
 
 interface Props {
     /** Appended to the button's own classes: `btn-sm` for a compact row, or spacing at the call site. */
@@ -40,9 +27,7 @@ const targets = Object.fromEntries(
     data-download-cta
     data-platforms={JSON.stringify(targets)}
 >
-    {/* An arrow into a tray, on every platform. The button says which computer it means in words, and a
-        16px monochrome glyph is a poor place to say it again: the marks that fit at that size are a flag and
-        a bird, and one of the two platforms has no mark anybody recognises small. */}
+    {/* Keep the platform meaning in the button label; the small icon is only decorative. */}
     {icon && (
         <svg viewBox="0 0 24 24" class="btn-icon" fill="currentColor" aria-hidden="true">
             <path d={DESKTOP_GENERIC_ICON}></path>
@@ -51,8 +36,7 @@ const targets = Object.fromEntries(
     <span data-download-label>{label}</span>
 </a>
 
-{/* An IIFE with nothing at top level, so a second button on the same page costs a second harmless run
-    rather than a redeclaration that kills the script. */}
+{/* Wrap the inline script so multiple download buttons do not redeclare its variables. */}
 <script is:inline>
     (() => {
         // userAgentData.platform where it exists ("Windows", "Linux", "macOS", "Android"), the user-agent

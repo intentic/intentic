@@ -1,7 +1,4 @@
-/* The sandbox-route permission model. An extension declares in its manifest exactly which daemon routes it may
- * reach through `api.sandbox.request/json`, as "<METHOD> <path-glob>" strings where `*` matches exactly one path
- * segment. The host matches every call against these and refuses an undeclared route, so an extension's backend
- * reach is explicit, diffable, and reviewable rather than an ambient client to the whole daemon. */
+/* The sandbox-route permission model. */
 
 const escapeRegExp = (literal: string): string => literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 

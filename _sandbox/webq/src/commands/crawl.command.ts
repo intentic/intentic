@@ -1,7 +1,4 @@
-/* `webq crawl <url>`: a bounded same-site crawl into a directory of markdown files plus an index. Stdout
- * is a report, not the content — one line per page with its token cost and file, and the skip counts that
- * keep a capped crawl honest. The files are the deliverable; the agent Reads the ones the index makes
- * look relevant. */
+/* `webq crawl <url>`: a bounded same-site crawl into a directory of markdown files plus an index. */
 import { join } from "node:path";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { DEFAULT_MAX_AGE_S } from "../lib/cache.js";

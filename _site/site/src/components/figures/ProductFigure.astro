@@ -3,9 +3,7 @@ import type { ProductFigure } from "@intentic/site-content/product";
 import AutomateFigure from "./AutomateFigure.astro";
 import DiscordThread from "../DiscordThread.astro";
 
-/* The diagrams a screenshot can't carry: what isolation, sharing, wiring and the platform boundary actually
- * mean. They are markup rather than images so they read at any width and stay in the site's palette, and
- * because a page that would otherwise need a mockup gets a drawing that claims nothing about a screen. */
+/* Product diagrams show isolation, sharing, wiring, and platform boundaries. */
 
 interface Props {
     figure: ProductFigure;
@@ -34,9 +32,7 @@ const boundary = {
     platform: ["Your identity (Google sign-in)", "The sandbox's name and URL", "Billing state", "Grants to invited teammates"],
 };
 
-// The one layer everyone lets you change, against the ones this product opens. It lived on the landing
-// page as a band of its own; the landing now makes a single claim and this argument belongs to the page
-// about the sandbox, which is the thing all four rows are describing.
+// Layers contrast user-controlled resources with product-managed resources.
 const layers = {
     prompt: [
         "Can describe tools, but cannot install them.",
@@ -140,9 +136,7 @@ const chevronDownGlyph = icon('<path d="m6 9 6 6 6-6"/>');
 }
 
 {
-    /* The automation machine, and it is the same drawing the home page's Automate stage carries — one
-       component, one set of words (`site-content/automate.ts`), two placements. It takes the same quiet plate
-       every other figure on these pages sits on, and arranges itself for the width it lands in. */
+    /* Automation uses the same machine figure as the home page. */
     figure === "automate" && (
         <div class="card p-6">
             <AutomateFigure />
@@ -152,8 +146,7 @@ const chevronDownGlyph = icon('<path d="m6 9 6 6 6-6"/>');
 
 {
     figure === "ownership" && (
-        /* Stacked, not a row: this figure lives in half a page column, and four boxes side by side there
-           would wrap every label onto its own line. */
+        /* Ownership boxes stack within the narrow column. */
         <div class="flex flex-col gap-3">
             <div class="card p-5">
                 <div class="eyebrow">Your browser</div>
@@ -253,8 +246,7 @@ const chevronDownGlyph = icon('<path d="m6 9 6 6 6-6"/>');
 
 {
     figure === "sharing" && (
-        /* Stacked for the same reason `ownership` is: this figure lives in half a page column, and the
-           landing's left-to-right fan of tunnels needs a width that does not exist here. */
+        /* This figure stacks its panels within a half-width page column. */
         <div class="flex flex-col gap-3">
             <div class="flex flex-col gap-3">
                 {people.map((person) => (

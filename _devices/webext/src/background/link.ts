@@ -35,8 +35,7 @@ export const ensureLink = async (): Promise<void> => {
         hello: async () => ({ type: "hello", token: (await store.sandbox())?.token ?? "", version: version() }),
         attach: (ws) => handler.upgrade(ws),
         backoff: createBackoff(PEER_LINK_BACKOFF),
-        /* A socket the sandbox has gone quiet on is redialled rather than held: the alarm above only re-dials a
-         * link that reads `closed`, so a half-open one would look connected to every entry point there is. */
+/* A socket the sandbox has gone quiet on is redialled rather than held: the alarm above only re-dials a link that reads `closed`. */
         silenceMs: peerLinkSilenceMs(WEBEXT_HEARTBEAT_MS),
         // Nothing reads a log here: the popup's activity list is written by the calls themselves.
         log: () => undefined,

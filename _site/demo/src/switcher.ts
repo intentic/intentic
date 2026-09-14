@@ -68,10 +68,7 @@ const STYLE = `
     overflow: hidden;
     text-overflow: ellipsis;
 }
-/* The phone shell, at the app's own breakpoint (useDevice's md, 767.98px) so the two agree about when it
-   arrives. Two things change there: the words go, because the three buttons are the control and the state they
-   name is on the screen behind them, and the bar lifts clear of the mobile tab bar (MobileTabBar.vue: h-14
-   over the safe area), which is a row of the app rather than an overlay, so nothing else moves out of its way. */
+/* Keep the phone shell breakpoint aligned with useDevice's md breakpoint. */
 @media (max-width: 767.98px) {
     #demo-switcher {
         bottom: calc(3.5rem + env(safe-area-inset-bottom) + 0.5rem);

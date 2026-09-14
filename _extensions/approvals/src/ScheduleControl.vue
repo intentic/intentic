@@ -1,7 +1,4 @@
-<!--
-    Shows an item's scheduled time as a sentence; the date input appears only once the row's hover pencil is pressed. No text-size class is set here
-    — size and colour are the caller's, since this renders both inside a review body and beside a scheduled item.
--->
+<!-- Shows an item's scheduled time as a sentence; the date input appears only once the row's hover pencil is pressed. -->
 <script setup lang="ts">
 import { ui, formatDateTime, formatTimestamp, formatWeekdayTime } from "@intentic/extension-ui";
 import { type ComponentPublicInstance, ref } from "vue";
@@ -18,10 +15,7 @@ const emit = defineEmits<{ change: [at: number | undefined] }>();
 
 const editing = ref(false);
 
-/* A calendar date alone ("Aug 5, 2026, 14:00") is unreadable at a glance over the horizon this queue works
- * across: the next few days, so anything inside a week reads as a weekday and only genuinely distant dates
- * spell themselves out. The exact instant stays in the tooltip. Local wall clock throughout: the agent bakes a
- * UTC offset into scheduledAt, so both ends agree on the instant and only the displayed clock is the viewer's. */
+/* A calendar date alone ("Aug 5, 2026, 14:00") is unreadable at a glance over the horizon this queue works across: the next few days. */
 const WEEK = 7 * 24 * 3_600_000;
 const words = (ms: number): string => {
     const ahead = ms - Date.now();

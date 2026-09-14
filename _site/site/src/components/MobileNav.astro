@@ -16,11 +16,7 @@ const currentPath = Astro.url.pathname;
             {
                 navEntries.map((entry) => {
                     if (entry.type === "menu") {
-                        /* THE GROUP YOU ARE INSIDE OPENS WITH THE MENU. Every accordion starting shut is right
-                           for a reader arriving from the home page and wrong for one already three pages into
-                           Docs: the row marking where they are is the thing they opened the menu to see, and it
-                           is behind a tap they have to know to make. The script still collapses the others the
-                           moment any heading is pressed, so this only changes where the overlay STARTS. */
+/* THE GROUP YOU ARE INSIDE OPENS WITH THE MENU. */
                         const here = isCurrentSection(entry, currentPath);
                         return (
                             <li class:list={["mobile-nav-group", { expanded: here }]}>
@@ -43,9 +39,7 @@ const currentPath = Astro.url.pathname;
                                         />
                                     </svg>
                                 </button>
-                                {/* Sections keep their labels here too: the grouping is the point of the
-                                    menu, and a phone has even less room to guess what a row means. A menu
-                                    whose rows ARE the grouping (Docs) carries no label to repeat. */}
+                                {/* Keep section labels in mobile menus unless the rows already provide the grouping. */}
                                 <div class="mobile-subnav">
                                     <ul class="mobile-subnav-inner">
                                     {entry.sections.map((section) => (
@@ -127,8 +121,7 @@ const currentPath = Astro.url.pathname;
                 </a>
             </li>
 
-            {/* Named in full here, unlike the bar: a phone menu has the room, and "Discord community" says
-                what is on the other side where a bare glyph would only say which company hosts it. */}
+            {/* Use the full Discord label because the mobile menu has room for it. */}
             <li>
                 <a href={discordUrl} target="_blank" rel="noopener" class="mobile-nav-link nav-wash">
                     <DiscordIcon />
@@ -146,12 +139,10 @@ const currentPath = Astro.url.pathname;
     .mobile-nav-overlay {
         position: fixed;
         inset: 0;
-        /* Hung from the bar, whatever height the carved band works out to at this width. A literal 4rem
-           here left a strip of page showing above the overlay at every width where the bar is taller. */
+/* Hung from the bar, whatever height the carved band works out to at this width. */
         top: var(--bar-height);
         z-index: 99;
-        /* Opaque for the same reason the desktop menu is: the page behind ghosts through an almost-opaque
-           layer once the blur spreads it, and this overlay covers the whole viewport. */
+/* Opaque for the same reason the desktop menu is: the page behind ghosts through an almost-opaque layer once the blur spreads it. */
         background: var(--color-canvas);
         opacity: 0;
         visibility: hidden;
@@ -179,7 +170,7 @@ const currentPath = Astro.url.pathname;
         min-height: calc(100dvh - var(--bar-height));
     }
 
-    /* ── List ──────────────────────────────────────────── */
+    /* List */
     .mobile-nav-list {
         list-style: none;
         padding: 0;
@@ -189,18 +180,13 @@ const currentPath = Astro.url.pathname;
         gap: 2px;
     }
 
-    /* ── Links ─────────────────────────────────────────── */
-    /* A row is a label, so it takes the brand face the bar's labels do, and it splits its two states the way
-       the desktop panel does — POSITION is the raking wash and a step of gold, STATE is ember plus a rule
-       down the left edge (see the long note in Nav.astro; this is the same grammar at a phone's scale).
-       The rule used to be the HOVER mark here while the desktop panel had no rule at all, so one shape meant
-       two different things depending on how wide your screen was. It means "you are here", on both. */
+    /* Links */
+/* A row is a label, so it takes the brand face the bar's labels do, and it splits its two states the way the desktop panel does. */
     .mobile-nav-link {
         display: flex;
         align-items: center;
         gap: 10px;
-        /* 2px of the left padding is spent on the rule, so a marked row keeps its words on the same vertical
-           as the rows above and below it. */
+        /* 2px of the left padding is spent on the rule, so a marked row keeps its words on the same vertical. */
         border-left: 2px solid transparent;
         padding: 14px 16px 14px 14px;
         font-family: var(--font-mark);
@@ -208,13 +194,11 @@ const currentPath = Astro.url.pathname;
         font-weight: 600;
         color: var(--color-muted);
         text-decoration: none;
-        /* Colour only. The rule is server-rendered — a row is the current page or it is not, and nothing
-           toggles that in the browser — so a transition on it would animate a change that never happens. */
+/* Colour only. */
         transition: color 0.15s;
     }
 
-    /* POSITION: the words brighten a step, over `.nav-wash` (global.css) — the same raking light the desktop
-       panel's rows take. It spends no ember, so it can never be read as the current page. */
+/* POSITION: the words brighten a step, over `.nav-wash` (global.css) — the same raking light the desktop panel's rows take. */
     .mobile-nav-link:hover,
     .mobile-nav-link:focus-visible {
         color: var(--color-content);
@@ -243,8 +227,7 @@ const currentPath = Astro.url.pathname;
         color: var(--color-gold-bright);
     }
 
-    /* STATE, and after the wash for the reason the desktop panel states it last: a row that gives up its mark
-       the moment a finger rests on it is the one row you are most likely to be resting on. */
+/* STATE, and after the wash for the reason the desktop panel states it last. */
     .mobile-nav-link.current,
     .mobile-nav-link.current:hover,
     .mobile-nav-link.current:focus-visible {
@@ -283,8 +266,7 @@ const currentPath = Astro.url.pathname;
         transition: color 0.15s;
     }
 
-    /* A heading is an accordion trigger, not a destination, so it takes no rule — the same split the bar
-       makes, where a trigger for the region you are in simply goes ember. */
+/* A heading is an accordion trigger, not a destination, so it takes no rule — the same split the bar makes. */
     .mobile-nav-heading:hover,
     .mobile-nav-heading.active {
         color: var(--color-primary-400);
@@ -299,18 +281,14 @@ const currentPath = Astro.url.pathname;
     }
 
     /* ── Sub-nav (collapsed by default) ────────────────── */
-    /* The 0fr→1fr collapse needs exactly ONE grid child, so the grid wraps the list rather than sizing each
-       link: rows added by the section labels would otherwise land in implicit `auto` rows and stay readable
-       while the menu says it is closed. */
+/* The 0fr→1fr collapse needs exactly ONE grid child, so the grid wraps the list rather than sizing each link. */
     .mobile-subnav {
         display: grid;
         grid-template-rows: 0fr;
         transition: grid-template-rows 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    /* `overflow: hidden` is what lets the 0fr row actually reach zero (it zeroes the item's automatic minimum
-       size); a `min-height: 0` here would also zero its max-content contribution, so the OPEN state collapses
-       to nothing too. */
+/* Hidden overflow lets the collapsed 0fr row reach zero. */
     .mobile-subnav-inner {
         list-style: none;
         margin: 0;
@@ -322,14 +300,14 @@ const currentPath = Astro.url.pathname;
         grid-template-rows: 1fr;
     }
 
-    /* ── Divider ───────────────────────────────────────── */
+    /* Divider */
     .mobile-nav-divider {
         height: 1px;
         background: var(--color-line);
         margin: 12px 16px;
     }
 
-    /* ── CTA button ────────────────────────────────────── */
+    /* CTA button */
     .mobile-cta {
         margin-top: auto;
         padding-top: 1.5rem;
@@ -337,10 +315,7 @@ const currentPath = Astro.url.pathname;
         text-align: center;
     }
 
-    /* ── Only visible below the bar's breakpoint ─────────
-       The same 68rem the bar hides its labels at, spelled the same way: an earlier pair (max-width: 48rem /
-       min-width: 48.0625rem) left one pixel at the boundary where the bar was hidden and this overlay was
-       too. */
+/* The mobile navigation hides below the 68rem breakpoint. */
     @media (width > 68rem) {
         .mobile-nav-overlay {
             display: none;

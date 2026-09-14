@@ -1,5 +1,4 @@
-/*! Vendor artwork from Remix Icon 4.8.0, Apache-2.0; see REMIX-LICENSE.txt.
- * Extracted as path data; geometry unchanged. These marks identify third-party services. */
+/* ! */
 import type { Glyph } from "./glyph.js";
 
 export const BRAND_GLYPHS = {

@@ -1,7 +1,4 @@
-<!--
-    Sign-in screen; shares its visual material with /setup via styles/entry.css so the two stay in one style. Centred layout, unlike the app's other
-    entry screens, which split. Always renders dark, regardless of the app's theme.
--->
+<!-- Sign-in screen; shares its visual material with /setup via styles/entry.css so the two stay in one style. -->
 <script setup lang="ts">
 import { Button, vAction } from "@intentic/ui";
 import { computed, onMounted, ref, watch } from "vue";
@@ -98,11 +95,7 @@ watch(
 
 <template>
     <div class="entry door">
-        <!--
-            Pinned to a fixed 16:9 across the full width so the two figures stay whole; the bottom crops instead, into
-            the
-            fade below.
-        -->
+<!-- Pinned to a fixed 16:9 across the full width so the two figures stay whole; the bottom crops instead, into the fade below. -->
         <div class="entry-plate" aria-hidden="true"><div class="entry-plate-img"></div></div>
 
         <main class="shell">
@@ -122,10 +115,7 @@ watch(
 
             <p class="hero-sub">A workspace for coding agents.</p>
 
-            <!--
-                The one framed object here; the turned corner and lotus finial only appear on a panel big enough to
-                carry them.
-            -->
+<!-- The one framed object here; the turned corner and lotus finial only appear on a panel big enough to carry them. -->
             <section class="entry-frame gate">
                 <span class="entry-corner entry-corner-tl"></span>
                 <span class="entry-corner entry-corner-tr"></span>
@@ -135,19 +125,12 @@ watch(
 
                 <p v-if="error" class="gate-error">{{ error }}</p>
 
-                <!--
-                    Google's button also supplies the sandbox credential, one sign-in for both. Kept mounted (hidden)
-                    rather than
-                    removed on failure, so nothing races the container out from under it.
-                -->
+<!-- Google's button also supplies the sandbox credential, one sign-in for both. -->
                 <div v-show="googleReady" class="socket">
                     <div ref="googleButton" class="socket-slot"></div>
                 </div>
 
-                <!--
-                    The site's primary button style (styles/entry.css), shown only when Google's embedded button could
-                    not render.
-                -->
+<!-- The site's primary button style (styles/entry.css), shown only when Google's embedded button could not render. -->
                 <Button
                     v-if="!googleReady"
                     :label="desktop ? `Continue with Google in your browser` : `Continue with Google`"
@@ -157,11 +140,7 @@ watch(
                     <template #icon><Icon name="google" /></template>
                 </Button>
 
-                <!--
-                    Some failures of the embedded button (blocked frame, restrictive policy) are invisible here and
-                    look like a dead
-                    page; this path needs none of that machinery.
-                -->
+<!-- Embedded-button failures are handled by the direct login path. -->
                 <button v-if="googleReady && !desktop" type="button" class="escape" v-action="redirectSignIn">
                     Trouble signing in? Use Google's own page.
                 </button>
@@ -190,10 +169,7 @@ watch(
 </template>
 
 <style scoped>
-/*
- * Shared material (metals, faces, plate, type, frame kit, buttons) lives in styles/entry.css; below is only this
- * screen's own layout: column position, gate width, and its three unique parts (socket, escape line, rail).
- */
+/* This file contains only login layout; shared materials live in entry.css. */
 .door {
     display: flex;
     flex-direction: column;
@@ -207,10 +183,7 @@ watch(
     padding-bottom: 1.25rem;
 }
 
-/*
- * The empty axis in the art. `margin: auto` instead of `justify-content`, so a short window scrolls rather than
- * clipping the gate.
- */
+/* The empty axis in the art. */
 .shell {
     display: flex;
     flex-direction: column;
@@ -226,10 +199,7 @@ watch(
     margin-bottom: clamp(1.5rem, 5vh, 3rem);
 }
 
-/*
- * Two one-sentence beats; capped well below the site's own display size, since this screen has a door to fit
- * under it, not a whole screen.
- */
+/* Two one-sentence beats; capped well below the site's own display size, since this screen has a door to fit under it, not a whole screen. */
 .headline {
     margin: 1.5rem 0 0;
     font-family: var(--face-display);
@@ -272,10 +242,7 @@ watch(
     color: var(--ink);
 }
 
-/*
- * A cut slot, not a box: the hairline is its lit edge, the inset shadow its depth. color-scheme: light matches
- * Google's iframe so the browser paints no second canvas behind it.
- */
+/* A cut slot, not a box: the hairline is its lit edge, the inset shadow its depth. */
 .socket {
     padding: 0.85rem;
     border: 1px solid var(--rule);
@@ -386,10 +353,7 @@ watch(
         top: 0.3rem;
         left: calc(-1.5rem - 0.275rem);
     }
-    /*
-     * Google's own button sizes itself and is the widest fixed element; narrowing the slot keeps it a comfortable width
-     * on a phone.
-     */
+/* Google's own button sizes itself and is the widest fixed element; narrowing the slot keeps it a comfortable width on a phone. */
     .door {
         padding-left: 1rem;
         padding-right: 1rem;

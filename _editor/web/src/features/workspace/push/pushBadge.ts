@@ -9,9 +9,7 @@ export const pushBadge = (stage: PushStage | undefined, question: PushQuestion |
     if (question !== undefined) {
         return { mark: `exclamation-triangle`, tone: `danger`, tooltip: `${question.title}, your push is waiting on you` };
     }
-    /* THE SAME DECISION WITH THE CARD CLOSED. Closing it moved the question off the screen; it did not answer it, and
-     * a tile that goes quiet at that moment is the app agreeing the failure is over. Same glyph, since it is the same
-     * fact, in `warning`: it is no longer interrupting anyone, and the panel is where the whole of it is. */
+    /* THE SAME DECISION WITH THE CARD CLOSED. Closing it moved the question off the screen; it did not answer it,. */
     if (held !== undefined) {
         return { mark: `exclamation-triangle`, tone: `warning`, tooltip: `${held.question.title}. Your push is still waiting on you` };
     }

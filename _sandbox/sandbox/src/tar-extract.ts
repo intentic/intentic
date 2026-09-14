@@ -4,10 +4,7 @@
 import type { Readable } from "node:stream";
 import type { Extract, Headers } from "tar-stream";
 
-/**
- * Consumes and discards an entry's body so tar-stream emits the next one; used for directory markers and skipped
- * entries.
- */
+/** Consumes and discards an entry's body so tar-stream emits the next one; used for directory markers and skipped entries. */
 export const drain = (source: Readable): Promise<void> =>
     new Promise((resolve, reject) => {
         source.on("end", resolve);
@@ -15,10 +12,7 @@ export const drain = (source: Readable): Promise<void> =>
         source.resume();
     });
 
-/**
- * Pipes `source` through `ex`, handing every entry to `onEntry`, resolving when exhausted. `asDecodeError` re-labels a
- * gunzip/tar-stream failure; entry failures propagate unchanged.
- */
+/** Pipes `source` through `ex`, handing every entry to `onEntry`, resolving when exhausted. */
 export const extractAll = async (
     source: Readable,
     ex: Extract,

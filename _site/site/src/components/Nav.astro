@@ -1,29 +1,5 @@
 ---
-/* THE BAR.
- *
- * Transparent at the top of a page and lifted once you have scrolled past it, so on the home page the
- * temple plate's own carved top border becomes the bar's — the reference art has it exactly that way.
- * Everywhere else it simply starts lifted, because there is no plate for it to sit in.
- *
- * OPENING A MENU IS BOTH HOVER AND CLICK. Hover alone strands anyone on a touch screen or a keyboard —
- * the trigger is a real <button> with `aria-expanded`, the script below toggles it, and CSS opens the
- * panel on hover or focus-within as well. Escape closes, a tap outside closes, and with no JavaScript
- * at all hover and keyboard focus still work.
- *
- * THE FOUR MENUS SHARE ONE PANEL. Server-rendered, each menu carries its own — that is the no-script
- * fallback — and on load the script lifts every panel's body into a single carved surface hung under the
- * bar, which travels and resizes from trigger to trigger while its contents cross-fade. Two panels can
- * no longer be on screen at once, which is exactly what the old arrangement got wrong: a clicked panel
- * stayed latched open while hover opened its neighbour, and the pair overlapped into a mess.
- *
- * THE PANEL DROPS THE SCREENSHOT RAIL the old bar carried. A lit photograph is the one thing that cannot
- * be dressed as carved stone, and what the rail was decorating — eight labelled destinations with a line
- * of scent each — is a menu already. Every label, row, href and panel action still comes from `nav.ts`,
- * so the bar, the phone overlay and the footer can never name different pages.
- *
- * The wordmark, the bar's labels and the panel's rows are all set in the brand face: a rounded geometric
- * with cut terminals and an angled `t`. See `--font-mark` in global.css.
- */
+/* The bar starts transparent and lifts after the page scrolls. */
 import { navEntries } from "@intentic/site-content/nav";
 import { APP_URL, discordUrl, githubUrl } from "@intentic/site-content/site";
 import { GITHUB_MARK } from "../lib/marks";
@@ -69,10 +45,7 @@ const currentPath = Astro.url.pathname;
                                 </svg>
                             </button>
 
-                            {/* THE PANEL IS CHROME AND A BODY, and the split is what lets the script share one
-                                chrome between all four menus: it moves the BODY into the flyout below the bar and
-                                drops the empty frame. The `id` rides on the body so the trigger's `aria-controls`
-                                survives the move. */}
+                            {/* Menu chrome stays fixed while its body moves into the shared flyout. */}
                             <div class="menu-panel">
                                 <div class="menu-panel-body" id={`bar-menu-${index}`}>
                                     <div class="menu-rows" style={`--menu-cols:${entry.sections.length}`}>
@@ -137,10 +110,7 @@ const currentPath = Astro.url.pathname;
                 )
             }
 
-            {/* THE DOCK THE FOUR PANELS SHARE, rendered here rather than built by the script because Astro
-                scopes this file's styles to the elements this file renders — a div created at runtime would
-                come out of the script naked. Empty and inert until the script fills it, which is also what
-                it stays if the script never runs. */}
+            {/* The shared dock is present in markup so Astro scopes its styles. */}
             <div class="flyout">
                 <div class="flyout-shift">
                     <div class="flyout-surface"></div>
@@ -167,21 +137,9 @@ const currentPath = Astro.url.pathname;
 <MobileNav />
 
 <script>
-    /* Three behaviours, and none of them is load-bearing: the bar is correct with the script removed, only
-       flat rather than lifted, and with four separate panels opened by CSS (`.menu:hover` /
-       `:focus-within`) instead of the one that travels. A browser with this blocked still navigates. */
+    /* The navigation remains usable when this enhancement script is unavailable. */
 
-    /* ── ONE PANEL FOR ALL FOUR MENUS ───────────────────────────────────────────────────────────────
-     *
-     * Every panel body is lifted out of its menu into a single surface docked under the bar. Opening a
-     * menu no longer paints and unpaints a slab: it MOVES the one that is already there — the surface
-     * slides to the new trigger and resizes to the new body while the bodies cross-fade through each
-     * other. Nothing about the panel's own look changes; the frame is the same carved cloth, it is just
-     * shared, so the state where two of them overlap cannot be reached.
-     *
-     * The whole dock lives INSIDE `.bar-links`, which is what makes the pointer bookkeeping small: any
-     * pointer inside a trigger or inside the open panel is inside the same subtree, so one `pointerleave`
-     * on the nav is the only place the menu closes on its own. */
+    /* All menu bodies share one surface below the bar. */
     const links = document.querySelector<HTMLElement>(".bar-links");
     const menus = [...document.querySelectorAll<HTMLElement>("[data-menu]")];
 
@@ -197,14 +155,12 @@ const currentPath = Astro.url.pathname;
     const surface = document.querySelector<HTMLElement>(".flyout-surface");
 
     if (links && flyout && surface && items.length > 0) {
-        /* Travel is instant between two open menus and deliberate from cold: a pointer crossing the bar on
-           its way somewhere else should not flash a panel, but once one is up, following the cursor is the
-           whole point. The grace on the way out covers the trip down into the panel and back. */
+        /* Switching menus is instant; opening from closed uses a delay. */
         const OPEN_DELAY = 90;
         const CLOSE_GRACE = 140;
         const DRIFT_MS = 340;
 
-        // Tells the stylesheet the four per-menu panels are gone, so their hover rules stop applying.
+        // Enhanced navigation disables the per-menu hover panels.
         links.setAttribute("data-enhanced", "");
 
         for (const item of items) {
@@ -213,8 +169,7 @@ const currentPath = Astro.url.pathname;
             item.menu.querySelector(".menu-panel")?.remove();
         }
 
-        // The open menu is held as the menu itself rather than as an index: there is no such thing as a
-        // half-valid one, and the index is only ever wanted for the direction of travel.
+        // The open value is a complete menu; its index is only for travel direction.
         let open: Menu | null = null;
         let leaving: HTMLElement | null = null;
         let openTimer = 0;
@@ -225,10 +180,7 @@ const currentPath = Astro.url.pathname;
             window.clearTimeout(closeTimer);
         };
 
-        /* Where the surface goes and how big it is. The pages are `width: max-content` and out of flow, so
-           each one measures its own natural size whatever size the surface currently is — no probing, no
-           cloning. `--fx` is measured from the nav's left edge because that is the box the dock hangs in,
-           and it is clamped to the viewport so a menu near the edge cannot push the panel off screen. */
+        /* The flyout is positioned from the trigger and clamped to the viewport. */
         const place = (item: Menu) => {
             const nav = links.getBoundingClientRect();
             const label = item.trigger.getBoundingClientRect();
@@ -253,7 +205,7 @@ const currentPath = Astro.url.pathname;
             idle();
             const next = items[i];
             if (!next || next === open) {return;}
-            // Which way the content drifts: with the cursor. A cold open has no direction, so it only rises.
+            // Content drifts toward the next menu; a cold open only rises.
             flyout.style.setProperty("--dir", String(open ? Math.sign(i - items.indexOf(open)) : 0));
 
             window.clearTimeout(driftTimer);
@@ -269,9 +221,7 @@ const currentPath = Astro.url.pathname;
                 place(next);
                 light(i);
             } else {
-                /* From closed, the panel must APPEAR where it belongs rather than slide in from whichever
-                   menu was open last. `data-instant` kills the transitions, the reflow commits the new
-                   position and body with them off, and only then does the reveal get its transitions back. */
+                /* Closed panels appear at their trigger without sliding. */
                 flyout.setAttribute("data-instant", "");
                 place(next);
                 light(i);
@@ -282,10 +232,7 @@ const currentPath = Astro.url.pathname;
             flyout.setAttribute("data-open", "");
         };
 
-        /* HANDING FOCUS BACK TO A TRIGGER IS NOT ARRIVING AT ONE. Focus lands on a trigger for two very
-           different reasons — a reader tabbing onto it, which opens the menu, and this menu closing and
-           putting focus back where it started, which must not. The keyboard cannot tell them apart from
-           the event alone (both are `:focus-visible`), so the closing side says so. */
+        /* Focus restoration is guarded so its own focus event does not reopen the menu. */
         let restoring = false;
         const restore = (el: HTMLElement) => {
             restoring = true;
@@ -293,9 +240,7 @@ const currentPath = Astro.url.pathname;
             restoring = false;
         };
 
-        /* Closing leaves the last body marked active on purpose: it fades out WITH the surface, instead of
-           blanking a beat before the frame it sits in. Focus inside the body being closed comes back to the
-           trigger it belongs to, because a hidden element cannot hold it and the browser would drop it. */
+        /* Closing keeps the last body active while the surface fades. */
         const hide = () => {
             idle();
             if (!open) {return;}
@@ -315,7 +260,7 @@ const currentPath = Astro.url.pathname;
             link.addEventListener("pointerenter", (event) => {
                 if (event.pointerType !== "mouse") {return;}
                 idle();
-                // A plain destination is not a menu: hovering one is the reader leaving, so the panel goes.
+                // Hovering a plain destination closes the menu.
                 if (i === -1) {
                     hide();
                 } else if (!open) {
@@ -331,12 +276,12 @@ const currentPath = Astro.url.pathname;
         links.addEventListener("pointerleave", (event) => {
             if (event.pointerType !== "mouse") {return;}
             idle();
-            // A keyboard is reading the open panel: a pointer wandering off the bar is not that reader leaving.
+            // Pointer movement does not close a panel while focus remains inside it.
             if (items.some((item) => item.page.contains(document.activeElement))) {return;}
             closeTimer = window.setTimeout(hide, CLOSE_GRACE);
         });
 
-        // The press. It is what a touch screen has instead of hover, and it is also how a keyboard opens.
+        // Click opens a menu for touch and keyboard users.
         for (const [i, item] of items.entries()) {
             item.trigger.addEventListener("click", (event) => {
                 event.preventDefault();
@@ -353,12 +298,11 @@ const currentPath = Astro.url.pathname;
             if (!target || restoring) {return;}
             const i = items.findIndex((item) => item.trigger === target);
             if (i !== -1) {
-                /* A press focuses the button too, and that press is the click handler's business — opening
-                   here as well would toggle the panel straight back shut. Only a keyboard arrival opens. */
+                /* Click handlers open menus; focus alone does not toggle them closed. */
                 if (target.matches(":focus-visible")) {show(i);}
                 return;
             }
-            // Tabbing through the open panel keeps it; reaching any other bar link closes it.
+            // Focus inside the panel keeps it; other bar links close it.
             if (!items.some((item) => item.page.contains(target))) {hide();}
         });
         links.addEventListener("focusout", (event) => {
@@ -366,12 +310,7 @@ const currentPath = Astro.url.pathname;
             if (!next || !links.contains(next)) {hide();}
         });
 
-        /* TAB HAS TO BE STEERED, and that is the one price of sharing a panel: the dock is the last thing in
-           the bar's markup, so document order would march a keyboard past every remaining label before it
-           reached the open panel's rows — and each label opens its own menu on the way past, so the panel
-           the reader was walking into is gone before they arrive. Three redirects fix it: into the panel
-           from its trigger, back out to the trigger from the first row, and on to the next label from the
-           last one. ArrowDown does the first as well, which is what a menu is expected to answer to. */
+        /* Tab navigation must cross the shared dock before leaving the bar. */
         links.addEventListener("keydown", (event) => {
             if (!open) {return;}
             if (event.key !== "Tab" && event.key !== "ArrowDown") {return;}
@@ -398,7 +337,7 @@ const currentPath = Astro.url.pathname;
                 const bar = [...links.querySelectorAll<HTMLElement>(".bar-link")];
                 const next = bar[bar.indexOf(trigger) + 1];
                 if (!next) {return;}
-                // Landing on it is what closes or switches the panel — that is the focus handler's job above.
+                // Focus handling closes or switches the panel.
                 event.preventDefault();
                 next.focus();
             }
@@ -412,14 +351,11 @@ const currentPath = Astro.url.pathname;
             hide();
             restore(trigger);
         });
-        // The dock is measured from live layout, so a resize invalidates it. Cheaper to close than to chase.
+        // Resize invalidates the dock measurement, so it closes.
         window.addEventListener("resize", hide);
     }
 
-    /* The lift. Every page opens with the plate behind the bar, so the bar starts with no ground of its
-       own and lets the carved band show through; once the page has scrolled the plate has moved out from
-       behind it and the bar takes a ground. With this blocked the bar simply stays transparent, which is
-       correct at the top of the page and merely thin further down. */
+    /* The bar lifts after scrolling past the top plate. */
     const bar = document.getElementById("site-bar");
     if (bar) {
         const lift = () => bar.toggleAttribute("data-lifted", window.scrollY > 40);
@@ -427,8 +363,7 @@ const currentPath = Astro.url.pathname;
         window.addEventListener("scroll", lift, { passive: true });
     }
 
-    /* The hamburger. The overlay it opens owns everything that happens INSIDE it (its accordions, and
-       closing itself when a row is followed); this is only the press that opens it. */
+    /* The hamburger opens an overlay that owns its internal navigation. */
     const toggle = document.getElementById("mobile-nav-open");
     const overlay = document.getElementById("mobile-nav-overlay");
     toggle?.addEventListener("click", () => {
@@ -440,19 +375,7 @@ const currentPath = Astro.url.pathname;
 </script>
 
 <style>
-    /* ── THE BAR IS THE SAME BAR ON EVERY PAGE ───────────────────────────────────────────────────────
-     *
-     * It used to be two objects: a transparent strip over the temple on the home page, and a flat dark
-     * band with a hairline everywhere else — different ground, different height. The bar is the one piece
-     * of furniture a reader carries from page to page, so it is the last thing that should move.
-     *
-     * IT IS TRANSPARENT, EVERYWHERE, and what sits behind it is the plate. Every page paints the same art
-     * at the same scale under its first screen (`PageBackdrop`, and the home page's own hero), so the bar
-     * has the carved top band behind it wherever you are. Its height is `--bar-height` in global.css: the
-     * band's own 90 units of the art, which is a stylesheet value rather than a measurement, so it cannot
-     * differ by a pixel between one page and the next.
-     *
-     * The ground below only arrives once the plate has scrolled out from behind it. */
+    /* The navigation bar keeps one shared height and surface on every page. */
     .bar {
         position: fixed;
         top: 0;
@@ -482,10 +405,7 @@ const currentPath = Astro.url.pathname;
         min-height: var(--bar-height);
     }
 
-    /* ── The brand ───────────────────────────────────────
-       The lockup itself — the flower aligned on the LETTERS rather than on the boxes, and why that needs a
-       rule at all — is `.lockup` in global.css, shared with the footer's cell. All this file says is how
-       big this one is drawn; the bar's own glow stays here because the footer's does not have it. */
+    /* The brand lockup aligns the flower with the lettering, not the boxes. */
     .brand {
         --wordmark-size: 1.85rem;
         flex: none;
@@ -494,18 +414,14 @@ const currentPath = Astro.url.pathname;
         text-shadow: 0 0 22px rgba(224, 123, 39, 0.35);
     }
 
-    /* `position: relative` because the shared flyout hangs in this box: every offset the script writes is
-       measured from the nav's left edge, so the dock cannot drift when the bar's ends change width. */
+    /* Relative positioning anchors the shared flyout. */
     .bar-links {
         position: relative;
         display: flex;
         align-items: center;
         gap: 0.35rem;
     }
-    /* THE BRAND'S OWN FACE. Inter here read as another site's furniture bolted onto this one; a titling
-       serif read as something you have to look at twice. The bar is a logo and seven words, so it takes the
-       logo's face: a rounded geometric, about as legible as small type gets. 16px rather than 15, because
-       this face runs a touch small for its point size. */
+    /* The wordmark uses the site's title face. */
     .bar-link {
         display: inline-flex;
         align-items: center;
@@ -534,55 +450,29 @@ const currentPath = Astro.url.pathname;
     .chev {
         transition: transform 0.2s ease;
     }
-    /* The chevron follows the OPEN menu, not the hovered one — with the script running, hover opens the
-       panel a beat later, and a chevron flicking over as the pointer crosses the bar reads as a twitch.
-       Without the script there is nothing to mark the state but hover, so there it turns on hover. */
+    /* The chevron follows the OPEN menu, not the hovered one — with the script running, hover opens. */
     .menu[data-open] .chev,
     .bar-links:not([data-enhanced]) .menu:hover .chev {
         transform: rotate(180deg);
     }
 
-    /* ── The panel ───────────────────────────────────────
-       A slab of the same carved vocabulary as the page: gold rule, warm cloth, a lozenge corner turned into
-       it. It hangs from the trigger and is held open by hover, by focus inside it, or by the script's
-       `data-open`. `top` leaves no dead space the pointer has to cross on its way in. */
+    /* Menu panels share the page's carved surface vocabulary. */
     .menu {
         position: relative;
     }
-    /* THE PANEL IS THE BUTTON'S BLOCK AT WALL SCALE, and like the button it carries its face on its OWN
-       background rather than on a pseudo-element. That is not a style preference, it is the only order
-       that lets the double rule survive — see the note on the border below.
-       The shadow is a `filter` rather than a `box-shadow`: `clip-path` clips everything the element paints,
-       a box-shadow included, so the only way to cast one from a notched panel is to cast it from the
-       clipped result. It follows the octagon exactly, corners and all.
-       ONE FACE, TWO FRAMES: the no-script panel and the shared flyout surface are the same object as far
-       as the eye is concerned, so they are the same rule. Only where they sit and how they move differs. */
+    /* THE PANEL IS THE BUTTON'S BLOCK AT WALL SCALE, and like the button it carries its face on its OWN. */
     .menu-panel,
     .flyout-surface {
         --cut: 9px;
 
-        /* THE CLOTH THE PANEL IS FACED IN. A dark warm linen rather than a fill: a woven ground reads as a
-           hanging stretched over the opening, and it is the one material this vocabulary did not already
-           own — the walls are stone, the frames are gold, the primary control is timber.
-           It is woven rather than photographed. Three turbulence fields in one tile: a slow cloud for the
-           fibre, then a warp and a weft — the same noise stretched hard along each axis, so one becomes
-           horizontal threads and the other vertical, and where they cross the eye reads a weave.
-           TILED, NOT STRETCHED, and that is the difference from the button's timber. A plank is cut to the
-           board, so its grain scales with it; cloth is woven at a fixed gauge and then cut, so the thread
-           count has to stay put whatever size the panel opens at. */
+        /* The flyout panel uses a dark warm linen surface. */
         background-color: #1f1710;
         background-image:
             url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='m' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='4' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.04 0 0 0 0 0.025 0 0 0 0 0.012 0.5 0 0 0 -0.13'/%3E%3C/filter%3E%3Cfilter id='h' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.03 0.72' numOctaves='1' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.78 0 0 0 0 0.63 0 0 0 0 0.45 0.2 0 0 0 -0.1'/%3E%3C/filter%3E%3Cfilter id='v' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72 0.03' numOctaves='1' seed='23' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.78 0 0 0 0 0.63 0 0 0 0 0.45 0.17 0 0 0 -0.09'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23m)'/%3E%3Crect width='200' height='200' filter='url(%23h)'/%3E%3Crect width='200' height='200' filter='url(%23v)'/%3E%3C/svg%3E"),
             radial-gradient(130% 120% at 50% 8%, rgba(52, 38, 24, 0.28) 0%, rgba(22, 16, 10, 0.12) 62%, rgba(9, 6, 4, 0.34) 100%);
         background-repeat: repeat, no-repeat;
         background-size: 200px 200px, cover;
-        /* THE SAME DOUBLE RULE THE BUTTONS WEAR, drawn the same way and for the same reason. The rule is
-           16px of inward image on a 1px border, which is what makes the pair of lines: the outer runs on
-           the border itself and the inner is drawn 5 units in, INSIDE the padding box. So anything opaque
-           covering the padding box covers the inner line and leaves a single hairline — which is exactly
-           what an `inset: 0` face on a pseudo-element did here, because `filter` makes this a stacking
-           context and a negative-z-index child paints AFTER the element's own border. Hence the face being
-           a background: backgrounds paint under the border, so the rule survives. */
+        /* Menu panels use the same double rule as buttons. */
         border: 1px solid transparent;
         border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M8.4 0.6H39.6M47.4 8.4V39.6M39.6 47.4H8.4M0.6 39.6V8.4' fill='none' stroke='rgba(201,160,92,0.66)' stroke-width='1.2'/%3E%3Cpath d='M39.6 0.6L47.4 8.4M47.4 39.6L39.6 47.4M8.4 47.4L0.6 39.6M0.6 8.4L8.4 0.6' fill='none' stroke='rgba(201,160,92,0.66)' stroke-width='2.34'/%3E%3Cpath d='M10.22 5H37.78M43 10.22V37.78M37.78 43H10.22M5 37.78V10.22' fill='none' stroke='rgba(201,160,92,0.4)' stroke-width='1'/%3E%3Cpath d='M37.78 5L43 10.22M43 37.78L37.78 43M10.22 43L5 37.78M5 10.22L10.22 5' fill='none' stroke='rgba(201,160,92,0.4)' stroke-width='1.95'/%3E%3C/svg%3E");
         border-image-slice: 16;
@@ -601,17 +491,13 @@ const currentPath = Astro.url.pathname;
         filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55)) drop-shadow(0 24px 34px rgba(0, 0, 0, 0.5));
     }
 
-    /* The rows and the action, and the room around them. It is its own element because the script MOVES it:
-       this is what travels between menus, so the padding and the floor width belong to it rather than to
-       the frame it happens to be sitting in. */
+    /* Menu body spacing moves with the shared panel. */
     .menu-panel-body {
         min-width: 22rem;
         padding: 1.1rem 1.15rem 0.9rem;
     }
 
-    /* WITHOUT THE SCRIPT each menu keeps its own panel, hung from its own trigger and held open by hover or
-       by focus inside it. `top` leaves no dead space the pointer has to cross on its way in. The script
-       deletes these frames on load and the flyout below takes over. */
+    /* Without the script each menu keeps its own hover panel. */
     .menu-panel {
         position: absolute;
         top: calc(100% + 0.55rem);
@@ -633,17 +519,7 @@ const currentPath = Astro.url.pathname;
         transition-delay: 0s;
     }
 
-    /* ── THE FLYOUT: ONE PANEL THAT FOLLOWS THE CURSOR ───────────────────────────────────────────────
-     *
-     * Opening a second menu should not be a slab blinking out and another blinking in three inches over —
-     * that is the same reader looking at the same object, so the object MOVES. The frame slides to the new
-     * trigger and grows or shrinks to the new body's measurements; the bodies cross-fade through each
-     * other while it travels. The script writes three numbers (`--fx`, `--fw`, `--fh`) and the transitions
-     * here do the rest.
-     *
-     * The move is split across two elements on purpose: `.flyout-shift` carries the horizontal travel as a
-     * transform (composited, so the trip across the bar is free) and `.flyout-surface` carries the size,
-     * which cannot be. */
+    /* The flyout follows the cursor within one stable panel. */
     .flyout {
         position: absolute;
         top: 100%;
@@ -662,16 +538,13 @@ const currentPath = Astro.url.pathname;
         pointer-events: auto;
         transition-delay: 0s;
     }
-    /* The gap under the bar is PADDING ON THE MOVING PART rather than an offset, because it has to be
-       hoverable: as an offset it is a strip of live page between the trigger and the panel, and a pointer
-       travelling down through it leaves the nav and closes the thing it was reaching for. */
+    /* The moving part owns the gap below the bar. */
     .flyout-shift {
         padding-top: 0.55rem;
         transform: translateX(var(--fx, 0));
         transition: transform 0.42s cubic-bezier(0.22, 0.68, 0.24, 1);
     }
-    /* `content-box`, so the width and height the script measured off a body land on that body exactly and
-       the carved 1px border sits outside them. */
+    /* Content-box sizing matches the dimensions measured from each body. */
     .flyout-surface {
         position: relative;
         box-sizing: content-box;
@@ -686,19 +559,14 @@ const currentPath = Astro.url.pathname;
     .flyout[data-open] .flyout-surface {
         transform: none;
     }
-    /* The one frame where the panel is allowed to teleport: a cold open, which must appear at its trigger
-       instead of sliding in from whichever menu was last open. */
+    /* The one frame where the panel is allowed to teleport: a cold open, which must appear at its trigger. */
     .flyout[data-instant],
     .flyout[data-instant] .flyout-shift,
     .flyout[data-instant] .flyout-surface,
     .flyout[data-instant] .flyout-page {
         transition: none;
     }
-    /* All four bodies are stacked at the surface's origin, each sized to itself and out of flow — so the one
-       on screen never reflows while the frame around it is still moving, and every one of them can be
-       measured at any time without being shown. `--dir` is the direction the cursor travelled: the arriving
-       body drifts in from that side and the leaving body drifts out the other way, which is what makes the
-       swap read as a turn of the page rather than a dissolve. */
+    /* Menu bodies stack at the surface origin and stay out of flow. */
     .flyout-page {
         position: absolute;
         top: 0;
@@ -738,45 +606,17 @@ const currentPath = Astro.url.pathname;
         padding: 0;
         list-style: none;
     }
-    /* ── A ROW IS AN ICON AND A LABEL, AND IT HAS TWO STATES THAT MEAN DIFFERENT THINGS ──────────────
-     *
-     * Each row wears a line drawing at its left (see `navIcons`), a label in the brand face, and, on the
-     * authored menus, a few words of scent under it. The reference menu carries no scent — it is looked up,
-     * not browsed — so its rows are the icon and the label alone.
-     *
-     * WHERE THE POINTER IS AND WHERE THE READER IS ARE NOT THE SAME FACT, and until this rewrite the panel
-     * said both with one voice: `:hover` and `.current` shared a declaration block, so they resolved to
-     * identical pixels — same wash, same ember label, same ember icon, same spring. Which meant the panel
-     * could not answer the question it is open to answer. Point anywhere in it and every row you touch looks
-     * exactly like the page you are on; point at the page you are on and nothing happens at all, which is
-     * the one row a reader is most likely to be pointing at.
-     *
-     * So the two states take SEPARATE CHANNELS, which is the rule the app's own lists already run on (see
-     * `ui-row-select` / `ui-row-select-on` in the editor's utilities.css: position is a neutral wash, choice
-     * is the accent plus a persistent mark). Written in this vocabulary rather than in the app's flat fill,
-     * because the material here is carved stone under raking light and a grey rounded box is not:
-     *
-     *   POSITION  `.nav-wash`, the site's one hover (global.css), and the gold warming a step. It spends no
-     *             ember, so it cannot be mistaken for state — and it is the same wash the phone overlay and
-     *             a book's rail answer the pointer with, so the gesture is learned once.
-     *   STATE     ember on the label and the icon, and a rule down the row's left edge. The rule is the mark
-     *             that survives the pointer: hover paints OVER a current row rather than replacing it, so the
-     *             two can be on screen together and stay legible. It is also the vocabulary the rail and the
-     *             phone overlay use, so "amber rule" means one thing everywhere on the site. */
+    /* Menu rows contain an icon and label with distinct states. */
     .menu-item {
         display: flex;
         align-items: flex-start;
         gap: 0.7rem;
-        /* The rule's 2px comes out of the left padding rather than adding to it, so a row lighting up cannot
-           shift its own icon sideways, and rest and current sit on one vertical. */
+        /* The active rule is included in the row's left padding. */
         border-left: 2px solid transparent;
         padding: 0.5rem 0.6rem 0.5rem calc(0.6rem - 2px);
         text-decoration: none;
     }
-    /* Label-only rows (the reference menu) have one line to sit against, so the icon centres on it. The
-       modifier is namespaced rather than a bare `flat`: Astro scopes this file's selectors with `:where()`,
-       which gives them class-only specificity, so a bare `.flat` here loses to any page's own `.flat` (the
-       landing page has one), and the menu inherited that page's padding. */
+    /* Label-only rows (the reference menu) have one line to sit against, so the icon centres on it. */
     .menu-item--flat {
         align-items: center;
     }
@@ -795,10 +635,7 @@ const currentPath = Astro.url.pathname;
     .menu-item--flat .menu-item-icon {
         margin-top: 0;
     }
-    /* The hover's second signal, and the reason the label can stay put: it is already the brightest text on
-       the page, so there is no headroom to brighten it without reaching for ember — which is state's. The
-       gold has a step above it, and the spring is the bite-and-settle the old stamped lozenge had, without
-       moving anything around it. */
+    /* The hover's second signal, and the reason the label can stay put: it is already the brightest text. */
     .menu-item:hover .menu-item-icon,
     .menu-item:focus-visible .menu-item-icon {
         color: var(--color-gold-bright);
@@ -823,8 +660,7 @@ const currentPath = Astro.url.pathname;
         color: var(--color-subtle);
     }
 
-    /* STATE. Last, and stated for the hovered case as well, so the pointer resting on the current row cannot
-       take its mark away — the same ordering the app's `ui-row-select-on` uses, for the same reason. */
+    /* Current rows keep their state while hovered. */
     .menu-item.current {
         border-left-color: var(--color-primary-500);
     }
@@ -868,12 +704,7 @@ const currentPath = Astro.url.pathname;
         color: var(--color-primary-400);
     }
 
-    /* THE BAR'S CALL IS A SECOND COPY of the home page hero's, so on that page it earns its place only once
-       the hero's own is gone: while the first screen is up the two would stack the same words four inches
-       apart. The home page's script flags the two states here (`data-cta-managed` turns the behaviour on,
-       `data-cta-shown` is the reveal). Its width is reserved even while hidden, so the reveal is a fade
-       rather than a jump that shoves the icons sideways. On every other page, and with no script anywhere,
-       the button is simply always shown: the fallback for a call to action is to be there. */
+    /* The bar CTA hides when the hero already exposes the same action. */
     .bar[data-cta-managed] .bar-cta {
         opacity: 0;
         transform: translateY(-0.45rem);
@@ -888,8 +719,7 @@ const currentPath = Astro.url.pathname;
         pointer-events: auto;
     }
 
-    /* ── The hamburger ───────────────────────────────────
-       Only below the bar's breakpoint, and it is the one control that swaps in for the six labels. */
+    /* Hamburger control styles. */
     .hamburger {
         display: none;
         flex-direction: column;
@@ -918,9 +748,7 @@ const currentPath = Astro.url.pathname;
         transform: translateY(-7px) rotate(-45deg);
     }
 
-    /* The bar holds six labels, two marks and a cartouche; below 72rem it cannot, so the labels go and what
-       stays is the brand, the one call, and the way into the same six. At 68rem the row had started wrapping
-       under the wordmark on a narrow laptop, which reads as a broken bar rather than a full one. */
+    /* Narrow bars hide labels when the full navigation no longer fits. */
     @media (max-width: 72rem) {
         .bar-links {
             display: none;
@@ -929,19 +757,13 @@ const currentPath = Astro.url.pathname;
             display: flex;
         }
     }
-    /* ON A PHONE AND A SMALL TABLET THE BAR'S CALL COMES OFF, and the hamburger is why. "Create your
-       workspace" is a long call, and beside a menu button it leaves the wordmark about 90px at 390 — the
-       two overlapped outright. Shortening the words instead would mean the button saying something
-       different here than it says four inches lower down, which is the one thing a call to action must not
-       do. So it goes, and the phone overlay carries it at the foot of the menu it opens, where it has the
-       whole width to itself. What is left in the bar is the brand and the way into everything else. */
+    /* Phones and small tablets use the hamburger instead of the bar CTA. */
     @media (max-width: 48rem) {
         .bar-cta {
             display: none;
         }
     }
-    /* Below this the marks go too, and the wordmark drops a step. Padding stays vertically zero: the bar's
-       height is `min-height`, and any vertical padding here would add to it. */
+    /* Small phones hide marks and reduce the wordmark size. */
     @media (max-width: 30rem) {
         .bar-icon {
             display: none;
@@ -949,8 +771,7 @@ const currentPath = Astro.url.pathname;
         .brand {
             --wordmark-size: 1.45rem;
         }
-        /* `:global`, because the class is handed to a CHILD COMPONENT: Astro scopes this block to elements
-           this file renders, and the mark's span is rendered by Lotus.astro. */
+        /* Global scope is required for the child component's brand mark. */
         .brand :global(.brand-mark) {
             width: 1.9rem;
             height: 1.9rem;

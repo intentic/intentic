@@ -9,15 +9,7 @@ import { baseDir } from "../config.js";
 export const configPath = join(baseDir, "device.json");
 export const auditPath = join(baseDir, "audit.jsonl");
 
-/* WHAT EACH LINK'S SOCKET IS DOING, stamped by the resident loop for the processes that are not it. device.json
- * says what this machine is MEANT to be connected to and nothing whatever about whether it is, so `status`
- * printed "connected as <id>" for every line in it — including, on the machine this was written for, a sandbox
- * whose host had answered 502 for four hours while the agent retried it every 30 seconds and said so in a log
- * nobody had been pointed at.
- *
- * Stamped on a tick rather than on each change, so the file AGES: a loop that died between writes leaves a
- * stamp a reader can tell is stale, which is the difference between no answer and a wrong one. An agent too old
- * to write one leaves no file at all, which reads the same way and is reported as such. */
+/* WHAT EACH LINK'S SOCKET IS DOING, stamped by the resident loop for the processes that are not it. */
 export const linkStatePath = join(baseDir, "links.tick");
 
 // How often the loop stamps, and the age past which a reader treats the stamp as no answer. Four ticks of

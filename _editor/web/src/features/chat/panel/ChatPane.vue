@@ -1033,10 +1033,7 @@ watch(
 </script>
 
 <template>
-    <!--
-        Everything the panel's chat list is not; carries the @container so composer density keys off this pane's own
-        share of the width, not the panel's.
-    -->
+<!-- Everything the panel's chat list is not; carries the @container so composer density keys off this pane's own share of the width, not the panel's. -->
     <div
         class="chat-pane @container relative flex min-h-0 min-w-0 flex-1 flex-col"
         :class="{ 'chat-pane-on': focused }"
@@ -1051,11 +1048,7 @@ watch(
             v-if="dragDepth > 0"
             class="pointer-events-none absolute inset-1 z-30 rounded-xl border-2 border-dashed border-primary-500 bg-primary-500/10"
         ></div>
-        <!--
-            Floats over the transcript's corner rather than a header, since a pane has no header of its own and the panel
-            above already names the chats. Muted at rest so it doesn't compete with the conversation; stops
-            pointerdown/focusin so closing an unfocused pane never flashes focus onto it.
-        -->
+<!-- Floats over the transcript's corner rather than a header, since a pane has no header of its own and the panel above already names the chats. -->
         <button
             v-if="closable"
             type="button"
@@ -1068,17 +1061,8 @@ watch(
         >
             <Icon name="times" class="text-2xs" />
         </button>
-        <!--
-            One scroller for the transcript and the composer under it, so the composer's height is reserved by layout, not
-            measured back into it — the composer sticks to the bottom and the transcript is always readable clear of it.
-            The insets live on the inner wrapper (the ResizeObserver target), not the scroller, since a sticky element
-            resolves against the scroller's padding edge.
-        -->
-        <!--
-            `.chat-scroller` is the IntersectionObserver root each prompt uses to tell if it's pinned. Vertical only: a
-            sideways scrollbar dragging the whole panel is always a bug; code blocks and tables carry their own horizontal
-            scroller (prose.css).
-        -->
+<!-- One scroller for the transcript and the composer under it, so the composer's height is reserved by layout, not measured back into it. -->
+<!-- `.chat-scroller` is the IntersectionObserver root each prompt uses to tell if it's pinned. -->
         <div
             ref="scroller"
             class="chat-scroller scrollbar-thin flex flex-1 flex-col overflow-x-hidden overflow-y-auto"
@@ -1086,16 +1070,9 @@ watch(
         >
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
                 <div class="chat-turns flex flex-1 flex-col pt-4">
-                    <!--
-                        The rest of the conversation, above the window it opened on (a long chat starts mid-history); drawn only where
-                        more exists. Styled like the day marker, not an action, since it's a statement about where the reader is that
-                        happens to be pressable.
-                    -->
+<!-- The rest of the conversation, above the window it opened on (a long chat starts mid-history); drawn only where more exists. -->
                     <div v-if="conversation.historyMore.value" class="flex justify-center py-2">
-                        <!--
-                            The press is the words, not the row — a full-width button would light up on any pointer crossing the top with
-                            no visible edges.
-                        -->
+<!-- The press is the words, not the row — a full-width button would light up on any pointer crossing the top with no visible edges. -->
                         <button
                             type="button"
                             class="cursor-pointer text-2xs text-subtle transition-colors hover:text-content disabled:cursor-default disabled:text-subtle"
@@ -1105,23 +1082,13 @@ watch(
                             {{ conversation.loadingOlder.value ? `Loading earlier turns…` : `Load earlier turns` }}
                         </button>
                     </div>
-                    <!--
-                        Where a forked chat says so, above its inherited turns; held back until the reader reaches that point, or it
-                        would misname the fork's true start over a window that begins mid-history.
-                    -->
+<!-- Where a forked chat says so, above its inherited turns; held back until the reader reaches that point. -->
                     <ChatForkLine v-if="!conversation.historyMore.value" />
                     <template v-if="messages.length > 0">
-                        <!--
-                            One section per turn, so each prompt's sticky range ends where its own answer does; a bare "continue" or app
-                            errand folds into the turn it serves (foldsIntoTurn).
-                        -->
+<!-- One section per turn, so each prompt's sticky range ends where its own answer does. -->
                         <!-- `index` is for the day marker below, the one row that cares about its column position, not its turn. -->
                         <template v-for="(turn, index) in turns" :key="turn.id">
-                            <!--
-                                The day this stretch was sent, drawn only where the date changes (dayMarks), between sections rather than
-                                inside one (a boundary, not part of a turn). No rule across the column, since that would fence turns apart.
-                                Weighted above, since the marker belongs to what follows it.
-                            -->
+<!-- The day this stretch was sent, drawn only where the date changes (dayMarks), between sections rather than inside one (a boundary, not part of a turn). -->
                             <div
                                 v-if="dayMarks.get(turn.id)"
                                 class="flex justify-center pb-0.5 text-2xs text-subtle"
@@ -1130,16 +1097,9 @@ watch(
                                 {{ dayMarks.get(turn.id) }}
                             </div>
                             <section class="chat-stack group/turn relative flex flex-col">
-                                <!--
-                                    v-memo skips a row whose listed inputs are unchanged — during streaming, every row but the one being written —
-                                    since `turns` rebuilds on every paint. The key lists exactly what the row renders from.
-                                -->
-                                <!-- `doomed` joins the memo key for the same reason: a just-struck (or un-struck) row renders differently. -->
-                                <!--
-                                    A `display: contents` wrapper so its children are the section's own flex items, spaced on the same gap as when
-                                    the row was the loop's direct element; needed because a row can now be preceded by a mark (cutsAbove) and
-                                    `v-memo` must sit on the `v-for` element itself. `cutAbove` joins the memo key for the same reason as `doomed`.
-                                -->
+                                <!-- v-memo keys rendered inputs so streaming updates only the active row. -->
+                                <!-- `doomed` is part of the memo key because struck rows render differently. -->
+                                <!-- A display-contents wrapper keeps message children in the section's flex flow. -->
                                 <div
                                     v-for="message in turn.messages"
                                     :key="message.id"
@@ -1153,11 +1113,7 @@ watch(
                                     ]"
                                     class="contents"
                                 >
-                                    <!--
-                                        The way back to just above this message, for boundaries one mark per turn can't reach (a folded message,
-                                        cutsAboveOf). Between rows, not inside one: `.chat-message` paint-contains via `content-visibility: auto`,
-                                        which clips a mark hanging above its top edge out of existence.
-                                    -->
+                                    <!-- Fork marks sit between message rows because row overflow clips marks above a row. -->
                                     <ChatForkCut v-if="cutsAbove.get(message.id) !== undefined" :cut="cutsAbove.get(message.id)!" />
                                     <ChatMessageView
                                         v-if="!repeatedChecklists.has(message.id) || isStreaming(message)"
@@ -1167,64 +1123,34 @@ watch(
                                         :doomed="doomed.has(message.id)"
                                     />
                                 </div>
-                                <!--
-                                    The fork point of this turn, in the column's margin at the end of the answer: everything above is what a fork
-                                    keeps. Last in the section so it sits level with the close of the answer, and inside it so it hangs off the
-                                    turn's own hover.
-                                -->
+                                <!-- The fork point sits after the answer and inside its hover region. -->
                                 <ChatForkCut :cut="forkCuts.get(turn.id) ?? messages.length" />
                             </section>
                         </template>
                     </template>
-                    <!--
-                        The transcript is on its way (a history open, an empty local mirror); without this it briefly reads as data
-                        loss, not loading.
-                    -->
+<!-- The transcript is on its way (a history open, an empty local mirror); without this it briefly reads as data loss, not loading. -->
                     <ChatTranscriptSkeleton v-else-if="activeLoading" />
-                    <!--
-                        Names the provider because that's the fact worth having on every provider but the trial, where the reader
-                        connected nothing and a provider name would only raise a question.
-                    -->
+<!-- Names the provider because that's the fact worth having on every provider but the trial. -->
                     <p v-else class="m-auto max-w-[80%] text-center text-xs text-muted">
                         {{ onTrial ? `Ask anything, this chat is free and needs nothing connected.` : `Start a conversation with ${providerName}.` }}
                     </p>
-                    <!--
-                        The live turn before it's written anything (showTurnStatus); outside the turn sections since it belongs to no
-                        message yet.
-                    -->
+<!-- The live turn before it's written anything (showTurnStatus); outside the turn sections since it belongs to no message yet. -->
                     <ChatTurnStatus v-if="showTurnStatus" />
                     <p v-if="activeError" class="text-xs text-danger">{{ activeError }}</p>
                 </div>
 
-                <!--
-                    The composer and its gating notices; last row of the transcript, stuck to the bottom edge, rather than a
-                    separate band, so the only surface is the composer's own box (transcript slides under it once scrolled). A
-                    touch wider than the reading column, capped for the floating window where full-width would be a very long line.
-                -->
+<!-- The composer and its gating notices; last row of the transcript, stuck to the bottom edge, rather than a separate band. -->
                 <div ref="footer" class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2 px-2 py-3">
-                    <!--
-                        The only two states with no composer to explain itself; a merely-busy sandbox is not one of them (that's said
-                        once, in the notification lane — Send's own tooltip explains why it's dark). In flow, not floating, since this
-                        is about one pane among several.
-                    -->
+<!-- The composer is hidden only when another notice explains a blocked or unavailable state. -->
                     <Notice v-if="denied" tone="danger">This Google account has no access to this sandbox, so chat is unavailable.</Notice>
                     <Notice v-else-if="blocked" tone="info" icon="clock">Chat is available after this sandbox finishes setup.</Notice>
                     <template v-if="!blocked">
-                        <!--
-                            This chat's standing: archived, the account gate, the trial, a credential to renew, an outage resuming
-                            (ChatPaneNotices).
-                        -->
+<!-- This chat's standing: archived, the account gate, the trial, a credential to renew, an outage resuming (ChatPaneNotices). -->
                         <ChatPaneNotices />
-                        <!--
-                            The turn stopped before finishing, and the way on (ChatContinueStrip). Above the queue, since this is what
-                            becomes of the stopped turn and the queue is what goes next either way.
-                        -->
+<!-- The turn stopped before finishing, and the way on (ChatContinueStrip). -->
                         <ChatContinueStrip :visible="continueStrip" :ready="continueOffer" @continue="continueTurn" />
                         <template v-if="connected">
-                            <!--
-                                Messages written while busy that haven't reached the agent yet; they sit here, not in the transcript, until the
-                                agent actually takes one. Each is removable before it lands.
-                            -->
+                            <!-- Queued messages stay outside the transcript until the agent receives them. -->
                             <div v-if="queued.length > 0" class="flex flex-col gap-1">
                                 <div
                                     v-for="message in queued"
@@ -1251,11 +1177,7 @@ watch(
                                 </div>
                                 <p class="px-1 text-2xs text-subtle">{{ queuedHint }}</p>
                             </div>
-                            <!--
-                                An edit in flight, said directly over the box being typed into: the struck rows above are the count, this is
-                                the label, which message and the two ways out. Last of the strips, closest to the box, since only this one
-                                describes what the box itself is now for; in the accent, since it's a mode the user armed.
-                            -->
+<!-- The edit notice identifies the message and its two actions. -->
                             <div
                                 v-if="editing !== undefined"
                                 class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-primary-500/40 bg-primary-600/10 px-3 py-2 text-2xs text-muted"
@@ -1266,10 +1188,7 @@ watch(
                                     <template v-if="editDropped > 1">it and the {{ editDropped - 1 }} below it are replaced when you send.</template>
                                     <template v-else>it is replaced when you send.</template>
                                 </span>
-                                <!--
-                                    The way out that keeps the answer, deliberately before Cancel — the offer answering the hesitation should be
-                                    read first.
-                                -->
+                                <!-- The keep-answer action precedes Cancel so the answer is read first. -->
                                 <Button
                                     size="small"
                                     severity="secondary"
@@ -1290,10 +1209,7 @@ watch(
                                     Cancel
                                 </Button>
                             </div>
-                            <!--
-                                The whole box changes standing when the agent's voice is armed (.composer-voice); being in this mode by
-                                accident is the one mistake worth painting.
-                            -->
+<!-- The whole box changes standing when the agent's voice is armed (.composer-voice); being in this mode by accident is the one mistake worth painting. -->
                             <form
                                 class="ui-field-shell composer-frame relative flex flex-col rounded-2xl border-line-strong bg-overlay shadow-lg"
                                 :class="{ 'composer-voice': voiceAgent }"
@@ -1302,12 +1218,7 @@ watch(
                                 <ChatMentionPopover v-if="mentionOpen" ref="mentionPopover" :query="activeMention?.query ?? ''" @pick="pickMention" />
                                 <ChatCommandPopover v-if="commandOpen" ref="commandPopover" :commands="commandMatches" @pick="pickCommand" />
                                 <div v-if="attachments.length > 0 || editorChip" class="flex flex-wrap gap-2 px-3 pt-3">
-                                    <!--
-                                        Editor-context chip: off by default, one click attaches the open file/selection (inverse of VSCode Claude
-                                        Code).
-                                        Absent on a conversation in another sandbox, since the file it names is open in this workspace, not that
-                                        daemon's.
-                                    -->
+                                    <!-- The editor-context chip attaches the open file or selection when enabled. -->
                                     <button
                                         v-if="editorChip"
                                         type="button"
@@ -1320,11 +1231,7 @@ watch(
                                         <Icon name="code" class="shrink-0 text-2xs" />
                                         <span class="max-w-36 truncate">{{ editorChipLabel }}</span>
                                     </button>
-                                    <!--
-                                        The same chip the sent bubble draws, by path: staging a file keys its thumbnail and its text peek to its
-                                        path, so what you see before sending is what the transcript keeps afterwards. `lead` is 0 here — the
-                                        composer is a tight row, and the file's lines are one hover away.
-                                    -->
+                                    <!-- Attachment chips use the same path key as the sent bubble. -->
                                     <ChatFileChip
                                         v-for="a in attachments"
                                         :key="a.id"
@@ -1339,10 +1246,7 @@ watch(
                                         @remove="staging.remove(a)"
                                     />
                                 </div>
-                                <!--
-                                    Body tier on desktop: what you type reads at the size it lands in the transcript; text-base below md, since
-                                    16px is the iOS zoom-on-focus threshold.
-                                -->
+                                <!-- The composer uses transcript body sizing on desktop. -->
                                 <textarea
                                     ref="input"
                                     rows="1"
@@ -1359,27 +1263,10 @@ watch(
                                     @paste="staging.onPaste"
                                 ></textarea>
 
-                                <!--
-                                    The control row wraps as two whole groups (brain: model/effort; shape+press) rather than clipping — a single
-                                    row ran off-screen at the docked column's old width. `ml-auto`, not `justify-between`, so the second group
-                                    holds the right edge whether or not it has wrapped onto its own line. What the row holds is now a fact about
-                                    this chat: four shaping controls show only off their default, sitting in the overflow otherwise
-                                    (composerMore.ts).
-                                -->
+                                <!-- The control row keeps model controls and actions in separate groups. -->
                                 <div class="flex flex-wrap items-center gap-x-1 gap-y-1.5 px-2.5 pb-2.5">
-                                    <!--
-                                        Model/effort/mode/persona go inert under a workflow badge because a workflow send makes no turn on this
-                                        conversation — each step runs its own session on its own settings. Dimmed, not hidden: they still say what an
-                                        ordinary send would use, and the badge is one press from handing them back.
-                                    -->
-                                    <!--
-                                        `min-w-0` lets the model name truncate first, since it's the one shrinkable middle in the row. Both labels
-                                        come
-                                        back together at one shared breakpoint (`@max-lg`) sized to the wider requirement, so widening the column
-                                        can't
-                                        make the row grow taller. The chips to the right are not on this breakpoint: they keep their word at every
-                                        width, since they're only in the row while set to something other than the default.
-                                    -->
+                                    <!-- Workflow sends disable controls that do not affect the workflow step. -->
+                                    <!-- `min-w-0` lets the model name truncate first, since it's the one shrinkable middle in the row. -->
                                     <div class="flex min-w-0 items-center gap-1">
                                         <ComposerModelPill
                                             ref="modelPill"
@@ -1399,28 +1286,13 @@ watch(
                                             label-class="@max-lg:hidden"
                                         />
 
-                                        <!--
-                                            The tier judge's pre-send answer, shown only when the turn is really about to move (simple draft,
-                                            auto-tier on,
-                                            a cheaper rung available; nothing in Measure mode). Sits with the model group since it's a sentence about
-                                            exactly that pill, keeping its glyph at every width and dropping only its words.
-                                        -->
+                                        <!-- The tier chip previews the model choice before sending. -->
                                         <ComposerTierChip :conversation="conversation" />
                                     </div>
 
-                                    <!--
-                                        How the turn is shaped, and the press that sends it — the group holding the right edge. Wraps internally (the
-                                        one exception to the outer row's rule) since its members are word-carrying chips that can outgrow even a
-                                        narrow
-                                        column when several are armed at once; `justify-end` keeps overflow lines against the edge with Send.
-                                    -->
+                                    <!-- How the turn is shaped, and the press that sends it — the group holding the right edge. -->
                                     <div class="ml-auto flex flex-wrap items-center justify-end gap-x-1 gap-y-1.5">
-                                        <!--
-                                            Mode's slot in an order that gradients away from the model (brain, then how it works, where it runs, who
-                                            it is,
-                                            what it runs through, whose words) that a chip must never break by appending itself. Mode sits closest to
-                                            effort since the two are one thought: how hard it thinks, how much rope it has.
-                                        -->
+                                        <!-- Mode follows the model and effort controls in the shaping group. -->
                                         <button
                                             v-if="inRow.mode"
                                             ref="modePill"
@@ -1437,13 +1309,7 @@ watch(
                                             <Icon name="chevron-down" class="text-2xs text-subtle" />
                                         </button>
 
-                                        <!--
-                                            Where it runs — the one control about the machine, not the message; hidden until there's somewhere else
-                                            to
-                                            choose, read-only once the conversation has run (ChatPlacementMenu). Deliberately not on the promotion
-                                            rule: it's
-                                            checked before nearly every send, so it keeps its slot regardless.
-                                        -->
+                                        <!-- Placement controls the machine, not the message. -->
                                         <button
                                             v-if="placementShown"
                                             ref="placementPill"
@@ -1458,14 +1324,7 @@ watch(
                                             <Icon name="chevron-down" class="text-2xs text-subtle" />
                                         </button>
 
-                                        <!--
-                                            Persona: who the chat is to the outside world. Only ever shown when it's somebody (composerMore.ts) —
-                                            unset, it
-                                            was a bare glyph on every chat announcing "nobody in particular"; set, it must be unmissable, in the
-                                            active
-                                            tint. Absent on a chat in another sandbox, since the persona id names nothing there and the send drops
-                                            it.
-                                        -->
+                                        <!-- Persona: who the chat is to the outside world. -->
                                         <button
                                             v-if="inRow.persona"
                                             ref="personaPill"
@@ -1481,26 +1340,14 @@ watch(
                                             :aria-expanded="personaOpen"
                                             :aria-label="`Acts as: ${personaName}`"
                                         >
-                                            <!--
-                                                Wears the persona's own face, falling back to the glyph only for a missing card; the name rides
-                                                beside it at
-                                                every width, unlike the pills either side, since it's here to say something about the next send.
-                                            -->
+                                            <!-- The persona control shows its face when a persona is selected. -->
                                             <PersonaFace v-if="pickedPersona !== undefined" :persona="pickedPersona" :size="16" />
                                             <Icon v-else name="users" class="text-2xs text-link" />
                                             <span class="max-w-32 truncate">{{ personaName }}</span>
                                             <Icon name="chevron-down" class="text-2xs text-subtle" />
                                         </button>
 
-                                        <!--
-                                            Run-through: one control replacing two, since a loop and workflow answer the same question with answers
-                                            the
-                                            composer can only take one of. Armed, it wears the chosen thing's own icon and name in the active tint;
-                                            unarmed
-                                            it sits mute in the overflow. A running loop takes it over entirely and outranks even an armed workflow,
-                                            since
-                                            stopping something already running isn't a next-message decision.
-                                        -->
+                                        <!-- Run-through chooses one loop or workflow action. -->
                                         <button
                                             v-if="inRow.runThrough"
                                             ref="runThroughPill"
@@ -1521,15 +1368,7 @@ watch(
                                             </template>
                                         </button>
 
-                                        <!--
-                                            Voice: the box is writing the agent's words, not yours — the next Send places the draft into the
-                                            transcript
-                                            with no reply, then disarms. Last of the shaping chips, nearest Send, since it changes what Send is more
-                                            than
-                                            anything else. Armed-only: off, it's a named overflow row; on, it's the one piece of the composer's
-                                            changed
-                                            standing a reader can press to take back.
-                                        -->
+                                        <!-- Voice makes the next send use the agent's voice. -->
                                         <button
                                             v-if="inRow.voice"
                                             type="button"
@@ -1552,14 +1391,7 @@ watch(
                                             <span>As agent</span>
                                         </button>
 
-                                        <!--
-                                            The overflow: every shaping control sitting at its default, each a named row with its current value and a
-                                            sentence — strictly more readable than the bare glyph it replaces. Nothing hidden here is doing anything;
-                                            a
-                                            control set to something else has left for a chip on the left. Last of the shaping controls, immediately
-                                            before
-                                            the mic, so it holds one fixed spot while chips beside it come and go.
-                                        -->
+                                        <!-- The overflow lists shaping controls that remain at their defaults. -->
                                         <button
                                             v-if="moreRows.length > 0"
                                             ref="morePill"
@@ -1575,11 +1407,7 @@ watch(
                                             <Icon name="sliders-h" class="text-xs max-md:text-base" />
                                         </button>
 
-                                        <!--
-                                            Hands-free voice: one tap arms it, and the pause is the send (useComposerVoice). Every browser gets it —
-                                            the
-                                            transcription runs sandbox-side, gated only on the viewer role, which can't send at all.
-                                        -->
+                                        <!-- Hands-free voice: one tap arms it, and the pause is the send (useComposerVoice). -->
                                         <button
                                             v-if="canDrive"
                                             type="button"
@@ -1602,13 +1430,7 @@ watch(
                                             />
                                         </button>
 
-                                        <!--
-                                            Stop covers the whole live turn, including one parked on a plan/question/permission card — the most
-                                            common
-                                            reason to want out, since a parked turn still holds the run lock. Fixed before Send in the row so the two
-                                            never
-                                            trade places under a finger.
-                                        -->
+                                        <!-- Stop covers the entire live turn, including parked cards. -->
                                         <button
                                             v-if="streaming"
                                             type="button"
@@ -1620,11 +1442,7 @@ watch(
                                         >
                                             <Icon name="stop" class="text-sm" />
                                         </button>
-                                        <!--
-                                            Send stays alongside Stop for as long as there's a message to send (mid-turn text is delivered or
-                                            queued); an
-                                            empty box mid-turn hands the slot to Stop instead (`sendShown`).
-                                        -->
+                                        <!-- Send remains available while a message can be sent. -->
                                         <button
                                             v-if="sendShown"
                                             type="submit"
@@ -1642,26 +1460,17 @@ watch(
                             <p v-if="voiceErrorMessage" class="px-1 text-2xs text-danger">{{ voiceErrorMessage }}</p>
                             <p v-if="workflowFailure" class="px-1 text-2xs text-danger">{{ workflowFailure }}</p>
                             <p v-else-if="loopFailure" class="px-1 text-2xs text-danger">{{ loopFailure }}</p>
-                            <!--
-                                What the badge changes about the press, said under the box about to do it: the message goes to a design, not
-                                this chat. Names itself here since the greyed pills' hover won't reach a touch device.
-                            -->
+<!-- What the badge changes about the press, said under the box about to do it: the message goes to a design, not this chat. -->
                             <p v-else-if="pickedWorkflow" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
                                 <Icon name="sitemap" class="shrink-0 text-2xs text-link" />Send starts "{{ pickedWorkflow.name }}": this message is
                                 what every step is asked to do. Model, effort, mode and looping are each step's own.
                             </p>
-                            <!--
-                                The loop badge's own sentence carries the stop condition, not just the name, since this is the one badge whose
-                                press keeps spending after the user looks away.
-                            -->
+                            <!-- The loop badge includes its stop condition. -->
                             <p v-else-if="runThroughState === 'loop' && pickedLoop" class="flex items-center gap-1.5 px-1 text-2xs text-muted">
                                 <Icon name="repeat" class="shrink-0 text-2xs text-link" />Send loops this message until it's met: ends on
                                 {{ loopDesignLine(pickedLoop) }}.
                             </p>
-                            <!--
-                                A persona that can't do what the pill implies, said where the message is written rather than discovered on an
-                                empty-handed turn — only for states the pill itself can't show.
-                            -->
+                            <!-- Persona capability text appears where the message is written. -->
                             <p v-else-if="personaNotice" class="flex items-center gap-1.5 px-1 text-2xs text-warning">
                                 <Icon name="exclamation-circle" class="shrink-0 text-2xs" />{{ personaNotice }}
                             </p>
@@ -1671,19 +1480,10 @@ watch(
             </div>
         </div>
 
-        <!--
-            The pane's status bar, the one part of the footer outside the scroller: it's about the pane (context,
-            subscription, daemon liveness), not the message, so it sits on the panel's own background rather than needing a
-            surface to stay legible. The block slot carries only the refusal — a transport blip has its own home in the
-            notification lane, not blinking under the composer.
-        -->
+<!-- The pane's status bar, the one part of the footer outside the scroller: it's about the pane (context, subscription, daemon liveness), not the message. -->
         <ChatPaneStatus v-if="connected" :block="refusal" :hint="composerHint" />
 
-        <!--
-            The four composer menus, each in the app's standard desktop-panel/mobile-sheet swap (ResponsiveOverlay),
-            uncapped in height: each measures the room in the pill's own window, so a picker fits whether this pane is
-            docked or floating.
-        -->
+<!-- The four composer menus, each in the app's standard desktop-panel/mobile-sheet swap (ResponsiveOverlay), uncapped in height. -->
         <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" header="Model" panel-class="w-[26rem]">
             <ChatModelPicker :conversation="conversation" @selected="modelOpen = false" />
         </ResponsiveOverlay>
@@ -1705,10 +1505,7 @@ watch(
                 @manage="manageRunThrough()"
             />
         </ResponsiveOverlay>
-        <!--
-            The overflow itself; its rows hand off to the three panels above, which then open over this same button so the
-            choice is still made in the one list that owns it.
-        -->
+<!-- The overflow itself; its rows hand off to the three panels above. -->
         <ResponsiveOverlay v-model="moreOpen" :anchor="morePill" cross="end" header="This message" panel-class="w-80 p-1">
             <ComposerMoreMenu :rows="moreRows" @pick="openFromMore($event)" />
         </ResponsiveOverlay>

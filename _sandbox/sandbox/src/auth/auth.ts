@@ -154,9 +154,7 @@ export const authorizeMaintainer = async (authorizer: Authorizer, bearer: string
     }
 };
 
-// One comparison for the one fact every gate turns on: is this claim the same account as the stored row.
-// Case-insensitive since every roster write normalizes with `.toLowerCase()`, but a Google email claim isn't guaranteed
-// to.
+// Compare emails case-insensitively because roster writes normalize them.
 const sameEmail = (left: string, right: string): boolean => left.toLowerCase() === right.toLowerCase();
 
 export const createAuthorizer = (deps: {

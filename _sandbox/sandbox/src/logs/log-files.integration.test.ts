@@ -52,10 +52,7 @@ test("pruneLogFiles truncates oversized files to their tail and drops stale ones
     expect((await readFile(join(root, "fresh.log"), "utf8")).toString()).toBe("new");
 });
 
-/* THE RESOURCE SERIES GETS ITS OWN CAP, because 5MB of it is about 21 hours.
- *
- * It writes one ~4KB object a minute, so the shared debug-log ceiling meant the file could not answer "what did
- * memory do yesterday" no matter who asked. That is the same failure as not recording it at all. */
+/* THE RESOURCE SERIES GETS ITS OWN CAP, because 5MB of it is about 21 hours. */
 test("resource-metrics.jsonl keeps a week where a debug log keeps 5MB", async () => {
     const root = await tempRoot();
     // Six megabytes: past the shared cap, nowhere near this file's own.

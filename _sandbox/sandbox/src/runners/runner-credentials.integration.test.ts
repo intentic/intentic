@@ -11,8 +11,7 @@ import type { RunnerIdentity } from "./runner-identity.js";
 const TOKEN = "irt_test";
 const quiet = { warn: () => undefined, info: () => undefined };
 
-/* THE TRAVEL RULE, arm by arm: toRunnerCredential is every decision about what may leave the parent, so each
- * arm is pinned as a fact rather than trusted to survive a refactor. */
+/* THE TRAVEL RULE, arm by arm: toRunnerCredential is every decision about what may leave the parent. */
 describe("toRunnerCredential", () => {
     const TRANSLATOR = "http://127.0.0.1:8317";
 
@@ -66,8 +65,7 @@ describe("toRunnerCredential", () => {
     });
 });
 
-/* The runner side against a stub parent: what each answer kind becomes, that the refresh hook re-mints at
- * the parent with the superseded token named, and that the runner's own token authenticates every call. */
+/* The runner side against a stub parent: what each answer kind becomes, that the refresh hook re-mints at the parent with the superseded token named. */
 describe("parentCredentialSource", () => {
     let server: ServerType;
     let identity: RunnerIdentity;
@@ -132,8 +130,7 @@ describe("parentCredentialSource", () => {
     });
 });
 
-/* The translator proxy: the bearer swap is the whole security story — the runner's token in, the local one
- * out, and nothing through the door without one. */
+/* The translator proxy: the bearer swap is the whole security story — the runner's token in, the local one. */
 describe("translator proxy", () => {
     let upstream: ServerType;
     let proxy: ServerType;

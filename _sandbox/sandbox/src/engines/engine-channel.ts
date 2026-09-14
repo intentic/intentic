@@ -59,8 +59,7 @@ const fetchList = async (): Promise<ListCache | undefined> => {
     }
 };
 
-// Refreshed when the cached copy is older than an hour; a failed refresh keeps the previous value instead of clobbering
-// it.
+// Keep the cached engine list when refresh fails.
 export const blessedList = async (force = false): Promise<ListCache | undefined> => {
     if (!force && list !== undefined && Date.now() - list.at < LIST_TTL_MS) {
         return list;

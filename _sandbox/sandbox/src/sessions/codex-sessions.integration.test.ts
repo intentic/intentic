@@ -35,11 +35,4 @@ test("reports a missing thread and an empty home as not existing", async () => {
     expect(await codexThreadExists(home, "thr-3")).toBe(false);
 });
 
-/* THE BACKFILL. A native Codex agent that ran before the daemon kept its own record has its whole conversation
- * in this file and had no way to show it, /agents/:id/transcript answered `{messages: []}` for anything the
- * Claude Code SDK's store didn't hold, so the chat opened blank. The rollout is a lower-level format than the
- * frames the client saw, so the cards are coarser than they were live; that is the trade, and it beats nothing.
- *
- * The conversation is read from `event_msg` and the cards from `response_item`, never both: `response_item`
- * carries the same assistant text a second time (alongside the developer/system messages, which are not the
- * conversation), so reading messages from both would double every reply. */
+/* THE BACKFILL. A native Codex agent that ran before the daemon kept its own record has its whole conversation. */

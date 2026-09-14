@@ -19,10 +19,7 @@ const draft = useDraft(() => (isLoading.value ? undefined : text.value));
         <template #info><SafetyPolicyInfo /></template>
 
         <RowNote variant="block">
-            <!--
-                The frame owns the scroll, so a long policy stays inside the row rather than pushing the Save button off the page; the prose measure
-                is set here too, since it's a fact about this row, not the document.
-            -->
+            <!-- The frame scrolls long policies without moving Save. -->
             <div class="ui-field-shell max-h-[60dvh] overflow-auto p-3" style="--prose-measure: 72ch">
                 <MarkdownDocument
                     v-model="draft"

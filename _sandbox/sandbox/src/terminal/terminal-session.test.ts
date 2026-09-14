@@ -1,9 +1,7 @@
 import { expect, test } from "vitest";
 import { jobSessionLabel, panePidSessions, type ReapPolicy, reapableSessions } from "./terminal-session.js";
 
-/* The retention sweep's policy. What it must never do is take something someone is using or something still
- * working: everything else it takes costs nothing, because the pane's bytes are already in the terminal logs.
- * `tmux list-panes -a -F '#{session_name} #{session_attached} #{session_activity} #{pane_dead}'`. */
+/* The retention sweep's policy. */
 
 const NOW = 1_780_000_000_000;
 const HOUR = 3_600_000;
@@ -70,8 +68,7 @@ test("no tmux server (empty output) and blank lines yield nothing", () => {
     expect(reap("\n\n")).toEqual([]);
 });
 
-/* The pane→session map the port scan walks a listener's ancestry against. A pane whose pid doesn't parse is
- * skipped rather than defaulted: a wrong name here sends someone to another terminal entirely. */
+/* The port scan ignores panes whose process id cannot be parsed. */
 test("panePidSessions maps each pane's root pid to its session, skipping lines with no usable pid", () => {
     expect(panePidSessions("web-3f2a 397\npanel-docker 247\n")).toEqual(
         new Map([
@@ -83,9 +80,7 @@ test("panePidSessions maps each pane's root pid to its session, skipping lines w
     expect(panePidSessions("web-broken \nweb-negative -1\nweb-nan abc\n 500\n")).toEqual(new Map());
 });
 
-/* What a job session is CALLED. The id is the daemon's (sockets, kill routes, the reveal); the label is the
- * only part a person reads, and `job-checks` in front of an owner mid-push answered none of the questions they
- * had. */
+/* Job sessions use daemon ids and display labels. */
 test("a job session reads as a name rather than as its id", () => {
     expect(jobSessionLabel("job-checks")).toBe("Checks");
     expect(jobSessionLabel("job-capability-demo")).toBe("Capability demo");

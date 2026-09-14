@@ -12,8 +12,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { type App, computed, createApp, defineComponent, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-/* The model list itself is the app's own panel and has its own suite; here it is a stub that renders the two
- * slots and can answer with a row or with the keyboard's submit. */
+/* The model list itself is the app's own panel and has its own suite. */
 vi.mock(`./ModelPicker.vue`, () => ({
     default: defineComponent({
         setup:
@@ -82,9 +81,7 @@ const { modelLabelFor, providerModels } = await import("../accounts/providerCata
 const { DEFAULT_EFFORT, DEFAULT_THINKING, defaultRunSettings } = await import("./pickerRunSettings");
 const { default: HostPickerBody } = await import("./HostPickerBody.vue");
 
-/* WHAT A `chooseRun` ANSWER CARRIES BESIDES THE TIER THE TEST IS ABOUT. The panel has no "leave it to the
- * model" stop, so it seeds whatever the caller left out and every answer names all three; read from the source
- * rather than transcribed, minus the effort each test sets for itself. */
+/* WHAT A `chooseRun` ANSWER CARRIES BESIDES THE TIER THE TEST IS ABOUT. */
 const { effort: _seededEffort, ...SEEDED_KNOBS } = defaultRunSettings();
 
 let app: App | undefined;
@@ -110,8 +107,7 @@ afterEach(() => {
     providerModels.value = { ...providerModels.value, claude: [] };
 });
 
-/* THE ROW SELECTS, THE BAR ANSWERS. Both halves matter: a list row that settled the promise made every other
- * control in the panel a setting you could only apply by afterwards clicking a model you had already chosen. */
+/* THE ROW SELECTS, THE BAR ANSWERS. */
 it(`selects a model row without settling, and answers when the bar is pressed`, async () => {
     const anchor = document.createElement(`button`);
     const settled = vi.fn();
@@ -165,8 +161,7 @@ it(`carries an account switch into the answer`, async () => {
     });
 });
 
-/* AN ACCOUNT BELONGS TO THE PROVIDER IT WAS CHOSEN UNDER. Re-pointing across providers has to drop it (and the
- * harness with it), or the run would be pinned to a credential the new provider has never heard of. */
+/* AN ACCOUNT BELONGS TO THE PROVIDER IT WAS CHOSEN UNDER. */
 it(`drops the account and harness when the selection moves to another provider`, async () => {
     const anchor = document.createElement(`button`);
     const result = requestModelPick({
@@ -186,9 +181,7 @@ it(`drops the account and harness when the selection moves to another provider`,
     await expect(result).resolves.toEqual({ provider: `codex`, model: `gpt-5.6`, label: modelLabelFor(`codex`, `gpt-5.6`) });
 });
 
-/* THE TIER IS A SETTING OF THE ANSWER, not the answer: choosing a rung leaves the panel open, and the press that
- * ends it carries the rung. Without that, the caret on every "Fix with agent" could re-point the model and not
- * what it costs. */
+/* THE TIER IS A SETTING OF THE ANSWER, not the answer: choosing a rung leaves the panel open, and the press that ends it carries the rung. */
 it(`carries the tier into the answer`, async () => {
     const anchor = document.createElement(`button`);
     const settled = vi.fn();
@@ -210,10 +203,7 @@ it(`carries the tier into the answer`, async () => {
     });
 });
 
-/* THE PANEL OPENS ON A STATE, NEVER ON AN ABSENCE. A caller may hand over a bare pair — a run button, an
- * automation rung, an extension calling `api.models.pick()` — and there is no "leave it to the model" stop for
- * the panel to draw that with. So the defaults fill the selection in as it opens, every control shows one, and
- * an untouched press answers with what was on screen rather than with three missing fields. */
+/* THE PANEL OPENS ON A STATE, NEVER ON AN ABSENCE. */
 it(`opens a run's settings on the defaults and answers with them untouched`, async () => {
     const anchor = document.createElement(`button`);
     const result = requestModelPick({ anchor, provider: `claude`, model: `claude-opus-4-6`, chooseRun: true, action: `Fix with agent` });
@@ -254,9 +244,7 @@ it(`offers the model's top tier to a run whose thinking the reader never switche
     });
 });
 
-/* AND SWITCHING THINKING OFF TAKES IT AWAY AGAIN, on the way out as well as on the meter: Claude refuses `max`
- * beside thinking explicitly disabled, so the answer is the tier the run will actually spend rather than the one
- * the reader chose before they touched the other control. */
+/* AND SWITCHING THINKING OFF TAKES IT AWAY AGAIN, on the way out as well as on the meter: Claude refuses `max` beside thinking explicitly disabled. */
 it(`repairs a top-tier pick when thinking is switched off under it`, async () => {
     providerModels.value = {
         ...providerModels.value,
@@ -319,11 +307,7 @@ it(`carries fast speed into the answer`, async () => {
     });
 });
 
-/* NO ANSWER LEAVES A RUN SETTING UNSET, which is the invariant that replaced the × and the `Default` stop, and
- * it is this test rather than a type that holds it: `exactOptionalPropertyTypes` is off for Vue programs, so
- * `{ effort: undefined }` type-checks here no matter how `StagedPatch` is annotated. Driven the way the defect
- * would arrive — a caller handing over a bare pair, a reader pressing nothing — because that is the path on
- * which the old panel answered with three missing fields. */
+/* An unanswered run setting remains unset. */
 it(`answers with all three run settings even when the caller named none and the reader pressed nothing`, async () => {
     const anchor = document.createElement(`button`);
     const result = requestModelPick({ anchor, provider: `claude`, model: `claude-opus-4-6`, chooseRun: true, action: `Fix with agent` });
@@ -336,10 +320,7 @@ it(`answers with all three run settings even when the caller named none and the 
     expect([answer.effort, answer.thinking, answer.fast]).toEqual([DEFAULT_EFFORT, DEFAULT_THINKING, false]);
 });
 
-/* AND THERE IS NO WAY BACK TO "THE MODEL'S OWN DEFAULT" ON SCREEN EITHER, because the panel never offers that
- * state in the first place. It used to: an × beside the meter cleared the tier and the answer then named none,
- * which meant a reader could arrive at a press whose cost they had no way to read. Every control here now
- * stands on a value somebody can see, so there is nothing to clear and nothing to clear it with. */
+/* AND THERE IS NO WAY BACK TO "THE MODEL'S OWN DEFAULT" ON SCREEN EITHER, because the panel never offers that state in the first place. */
 it(`offers no way to unset a run setting once the panel has shown one`, () => {
     const anchor = document.createElement(`button`);
     void requestModelPick({
@@ -359,10 +340,7 @@ it(`offers no way to unset a run setting once the panel has shown one`, () => {
     );
 });
 
-/* LEAVING IS A CANCEL, WHOLE, and this is the behaviour that flipped. It used to answer with whatever had been
- * staged, so backing out of an effort change armed it instead: the tier stuck on the caller's next run and the
- * only way to undo it was to open the panel again and clear it. The rows can write through freely precisely
- * because Escape now undoes all of them at once. */
+/* LEAVING IS A CANCEL, WHOLE, and this is the behaviour that flipped. */
 it(`answers with nothing when the panel is dismissed after staging`, async () => {
     const anchor = document.createElement(`button`);
     const result = requestModelPick({ anchor, provider: `claude`, model: `claude-opus-4-6`, chooseRun: true, action: `Fix with agent` });
@@ -375,9 +353,7 @@ it(`answers with nothing when the panel is dismissed after staging`, async () =>
     await expect(result).resolves.toBeUndefined();
 });
 
-/* THE ROWS ARE THE RUN CALLERS', not the panel's. The chat sets its effort in the composer, and a workflow step
- * stores a pair and an account: for those a meter would be a control whose answer is dropped on the floor, which
- * is worse than no control at all. */
+/* THE ROWS ARE THE RUN CALLERS', not the panel's. */
 it(`offers no run settings to a caller that has not said it carries them`, () => {
     const anchor = document.createElement(`button`);
     void requestModelPick({ anchor, provider: `claude`, model: `claude-opus-4-6` });
@@ -393,9 +369,7 @@ it(`offers no run settings to a caller that has not said it carries them`, () =>
     ]);
 });
 
-/* NOTHING CHOSEN IS A REAL STATE the panel opens in — an automation rung added past the end of its ladder
- * arrives with a blank pair — and there is no such thing as half an entry, so the press is refused until the
- * list has been answered. */
+/* NOTHING CHOSEN IS A REAL STATE the panel opens in — an automation rung added past the end of its ladder arrives with a blank pair. */
 it(`refuses the press until a model has been chosen`, async () => {
     const anchor = document.createElement(`button`);
     const settled = vi.fn();
@@ -414,9 +388,7 @@ it(`refuses the press until a model has been chosen`, async () => {
     expect(button(element, `Use this model`)!.disabled).toBe(false);
 });
 
-/* OVER AN ATTEMPT, THE BAR IS ABOUT THE ATTEMPT. The caller's action is gone from it, the attempt is named, and the
- * two verbs say what the press does to it; the answer carries which one was pressed, since the run they start is
- * not the same run. */
+/* OVER AN ATTEMPT, THE BAR IS ABOUT THE ATTEMPT. */
 it(`names the attempt and ends in Continue or Start over, and the answer says which`, async () => {
     const anchor = document.createElement(`button`);
     const result = requestModelPick({

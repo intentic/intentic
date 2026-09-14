@@ -284,16 +284,10 @@ watch(
 </script>
 
 <template>
-    <!--
-        On the card ground (ChatPanel's), not the route's default canvas, since the rail list is copied from
-        the floating chat and must read the same way.
-    -->
+<!-- On the card ground (ChatPanel's), not the route's default canvas, since the rail list is copied from the floating chat and must read the same way. -->
     <!-- Clips to this surface; an overgrown block used to paint past the card ground and over the shell. -->
     <div class="lane-ground-card flex h-full min-h-0 overflow-hidden bg-card">
-        <!--
-            Not an error: most turns start no agent. Distinct message when filtered to one agent, since "no
-            agents started" would contradict the chip just clicked.
-        -->
+<!-- Not an error: most turns start no agent. -->
         <div v-if="visible.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
             <Icon name="users" class="text-2xl text-muted" />
             <div class="text-sm text-content">{{ focus === undefined ? "No agents started" : "Nothing running for this agent" }}</div>
@@ -314,15 +308,9 @@ watch(
 
         <template v-else>
             <!-- The chat rail's own column: lane slabs of session cards, read the same way as agents you started. -->
-            <!--
-                The same width, gutter and drag as the floating chat's rail — this list holds other rows of it, not a
-                copy.
-            -->
+<!-- The same width, gutter and drag as the floating chat's rail — this list holds other rows of it, not a copy. -->
             <RailColumn>
-                <!--
-                    What narrowed this list, and the way out, pinned above the scroller like the chat rail's own
-                    filter.
-                -->
+<!-- What narrowed this list, and the way out, pinned above the scroller like the chat rail's own filter. -->
                 <RouterLink
                     v-if="focus !== undefined"
                     :to="{ name: `subagents` }"
@@ -348,16 +336,9 @@ watch(
                                 :selected="session.id === selected"
                                 :to="rowTo(session.id)"
                             >
-                                <!--
-                                    The chat rail's own facts line: model, a settled row's age, and the live readout.
-                                    See `hasFacts` for
-                                    what it dropped.
-                                -->
+<!-- The chat rail's own facts line: model, a settled row's age, and the live readout. -->
                                 <template v-if="hasFacts(session)" #meta>
-                                    <!--
-                                        Clipped to the rail's width; an inherited model says so on hover rather than
-                                        claiming the child chose it.
-                                    -->
+<!-- Clipped to the rail's width; an inherited model says so on hover rather than claiming the child chose it. -->
                                     <span
                                         v-if="modelOf(session) !== undefined"
                                         class="max-w-24 truncate"
@@ -366,10 +347,7 @@ watch(
                                         "
                                         >{{ modelOf(session)!.label }}</span
                                     >
-                                    <!--
-                                        Settled rows only: a live row's clock is the live readout's own ticking
-                                        elapsed.
-                                    -->
+<!-- Settled rows only: a live row's clock is the live readout's own ticking elapsed. -->
                                     <span v-if="!subagentLive(session) && session.activityAt > 0" class="ml-auto shrink-0">{{
                                         relativeTime(session.activityAt)
                                     }}</span>
@@ -381,35 +359,20 @@ watch(
             </RailColumn>
 
             <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-                <!--
-                    Plain text, distinct from the report below (the same output, said once); its own tinted panel
-                    rather
-                    than rules.
-                -->
+<!-- Plain text, distinct from the report below (the same output, said once); its own tinted panel rather than rules. -->
                 <p v-if="current?.error" class="mx-4 mt-3 shrink-0 whitespace-pre-wrap rounded-md bg-danger/10 px-3 py-2 text-2xs text-danger">
                     {{ current.error }}
                 </p>
 
-                <!--
-                    One scroller for the report and the work below it, told apart by a label and air rather than a
-                    rule,
-                    so nothing seams-breaks between them.
-                -->
+<!-- One scroller for the report and the work below it, told apart by a label and air rather than a rule, so nothing seams-breaks between them. -->
                 <div ref="pane" class="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto px-1 py-3" @scroll.passive="onPaneScroll">
                     <div class="chat-turns">
                         <!-- Its own spacing: the report-to-transcript gap is bigger than the gap between two turns. -->
                         <div class="flex min-w-0 flex-col gap-6">
-                            <!--
-                                Rendered through the chat's markdown, not raw text, and clamped rather than boxed so it
-                                can't push
-                                the work off-screen. A failure is the header's glyph's job, not repeated here.
-                            -->
+<!-- Rendered through the chat's markdown, not raw text, and clamped rather than boxed so it can't push the work off-screen. -->
                             <section v-if="report !== undefined" class="flex min-w-0 flex-col gap-2">
                                 <span class="text-2xs font-semibold uppercase tracking-wide text-muted">Report</span>
-                                <!--
-                                    The check's standing sits above the report, so the reader knows how to read it
-                                    before starting.
-                                -->
+<!-- The check's standing sits above the report, so the reader knows how to read it before starting. -->
                                 <p v-if="current?.verification" class="flex min-w-0 items-baseline gap-1.5 text-2xs">
                                     <Icon
                                         :name="VERIFICATION[current.verification.state].name"
@@ -420,17 +383,10 @@ watch(
                                     </span>
                                     <span class="min-w-0 truncate text-muted">{{ verificationDetail(current.verification) }}</span>
                                 </p>
-                                <!--
-                                    The ceiling is a share of the viewport (60vh), not a fixed height, so it scales
-                                    with the window
-                                    instead of over- or under-cutting the report.
-                                -->
+<!-- The ceiling is a share of the viewport (60vh), not a fixed height, so it scales with the window instead of over- or under-cutting the report. -->
                                 <div ref="reportBox" class="relative" :class="reportClamped ? `max-h-[60vh] overflow-hidden` : undefined">
                                     <Markdown :source="report" :decorate="decorate" class="chat-markdown chat-markdown-compact" />
-                                    <!--
-                                        The fade signals there's more; a hard cut mid-heading read as a rendering
-                                        fault.
-                                    -->
+<!-- The fade signals there's more; a hard cut mid-heading read as a rendering fault. -->
                                     <div
                                         v-if="reportClamped && reportOverflows"
                                         class="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-card to-transparent"
@@ -447,20 +403,12 @@ watch(
                                 </button>
                             </section>
 
-                            <!--
-                                The child's turns in the chat's own components (ChatThinking, ChatToolRows/Run),
-                                including nested
-                                children. The label only shows when a report sits above it to be told apart from.
-                            -->
+<!-- The child's turns in the chat's own components (ChatThinking, ChatToolRows/Run), including nested children. -->
                             <section class="flex min-w-0 flex-col gap-1.5">
                                 <span v-if="report !== undefined" class="text-2xs font-semibold uppercase tracking-wide text-muted">Work</span>
                                 <div class="chat-stack flex min-w-0 flex-col">
                                     <div v-for="(message, index) in messages" :key="index" class="chat-stack flex flex-col">
-                                        <!--
-                                            The same bubble the chat gives the user's words. Uncapped, unlike the
-                                            conversation's: there is
-                                            exactly one prompt here.
-                                        -->
+<!-- The same bubble the chat gives the user's words. -->
                                         <p
                                             v-if="message.role === 'user'"
                                             class="chat-surface max-w-[85%] self-end whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed text-content"
@@ -473,10 +421,7 @@ watch(
                                                 :thinking="message.thinking"
                                                 :streaming="current !== undefined && subagentLive(current)"
                                             />
-                                            <!--
-                                                `md-prose` carries prose.css's rules; without it headings, lists and
-                                                code render as plain body text.
-                                            -->
+<!-- `md-prose` carries prose.css's rules; without it headings, lists and code render as plain body text. -->
                                             <Markdown
                                                 v-if="message.text"
                                                 :source="message.text"
@@ -493,10 +438,7 @@ watch(
                                             </div>
                                         </template>
                                     </div>
-                                    <!--
-                                        A running child streams from its parent's turn, so empty here means "nothing
-                                        yet", not "nothing coming".
-                                    -->
+<!-- A running child streams from its parent's turn, so empty here means "nothing yet", not "nothing coming". -->
                                     <p v-if="messages.length === 0" class="px-1 py-3 text-center text-2xs text-subtle">
                                         {{
                                             current !== undefined && subagentLive(current)
@@ -510,17 +452,11 @@ watch(
                     </div>
                 </div>
 
-                <!--
-                    The pane's controls, under the column like the chat's composer status row: only what's actionable,
-                    tool-call visibility and the way back to the parent.
-                -->
+<!-- The pane's controls, under the column like the chat's composer status row: only what's actionable, tool-call visibility and the way back to the parent. -->
                 <div v-if="current" class="flex shrink-0 items-center justify-center gap-3 px-3 pb-2 pt-1 text-2xs text-subtle">
                     <!-- The chat's own control: hiding calls in one place expresses the same wish for the other. -->
                     <ChatToolCallsToggle />
-                    <!--
-                        A control and an address: plain click docks the parent conversation, Ctrl/⌘-click opens its own
-                        tab.
-                    -->
+<!-- A control and an address: plain click docks the parent conversation, Ctrl/⌘-click opens its own tab. -->
                     <ActionLink
                         :to="parentTo(current)"
                         :class="FOOTER_ACTION"

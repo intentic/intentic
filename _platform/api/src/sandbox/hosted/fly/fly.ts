@@ -11,13 +11,7 @@ const BASE = `https://api.machines.dev/v1`;
 // sibling platforms can mint identical app names; the reaper proves ownership by this stamp.
 export const FLY_META_ROLE = `intentic_role`;
 export const FLY_META_PLATFORM = `intentic_platform`;
-/* WHOSE MACHINE THIS IS, in the provider's own console. Everything else here is an id: the app name carries the
- * sandbox's tunnel id, the stamp below carries its row id, and answering "who is this costing money for?" meant
- * joining both against the platform's database — which is exactly the question somebody asks while looking at a
- * Fly bill, with no database in front of them. The owner's email is the one fact that makes the list readable
- * without a join. Written at create and re-written with every config replacement, so it follows a machine that
- * is claimed, rebuilt or moved onto an overlay. Warm stock deliberately has none: it is nobody's yet, and that
- * absence is how the console shows stock apart from a person's sandbox. */
+/* WHOSE MACHINE THIS IS, in the provider's own console. */
 export const FLY_META_OWNER = `intentic_owner`;
 export const flyWarmRole = (instance: string): Record<string, string> => ({ [FLY_META_ROLE]: `warm`, [FLY_META_PLATFORM]: instance });
 export const flySandboxRole = (sandboxId: string, instance: string, owner?: string): Record<string, string> => ({

@@ -101,10 +101,7 @@ const place = (at: { box?: string; runner?: string }): void => {
             </span>
         </button>
 
-        <!--
-            Other workspaces on this account, under their own heading (a bigger step than the rows above); absent on a
-            single-sandbox account.
-        -->
+<!-- Other workspaces on this account, under their own heading (a bigger step than the rows above); absent on a single-sandbox account. -->
         <template v-if="otherBoxes.length > 0">
             <p class="mt-1 px-2.5 pb-0.5 pt-1.5 text-2xs font-medium uppercase tracking-wide text-subtle">Other sandboxes</p>
             <button
@@ -122,10 +119,7 @@ const place = (at: { box?: string; runner?: string }): void => {
                     <span class="text-2xs text-subtle">{{ boxDetail(box) }}</span>
                 </span>
             </button>
-            <!--
-                Said once under the section, not per row: the whole difference from this sandbox and its runners is what a
-                remote turn is served by.
-            -->
+<!-- Said once under the section, not per row: the whole difference from this sandbox and its runners is what a remote turn is served by. -->
             <p v-if="!settled" class="px-2.5 py-1 text-2xs text-subtle">
                 The turn runs there and streams back into this tab. It uses that sandbox's files and accounts, so this box's open file,
                 @-mentions and personas stay behind.

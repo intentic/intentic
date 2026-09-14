@@ -408,7 +408,7 @@ async function* runConversationTurn(
             // `base` is where the branch sits on main; stale, it reads a fast-forward as real work.
             await services.agents.recordWorktree(
                 conversationId,
-                // oxlint-disable-next-line oxc/no-map-spread -- these are the registry's own persisted records; a fresh object per repo is the point, not a saving
+                // oxlint-disable-next-line oxc/no-map-spread -- Each route returns a fresh immutable record.
                 (services.agents.entry(conversationId)?.repos ?? worktree.repos).map((composed) => ({
                     ...composed,
                     base: onto.get(composed.repo) ?? composed.base,

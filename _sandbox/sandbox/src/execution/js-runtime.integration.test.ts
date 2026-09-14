@@ -4,9 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import { type JsExecutionPlan, runJs } from "./js-runtime.js";
 
-/* The RUNNER honouring a plan, real `node` subprocesses on purpose: the permission flags ARE the fence, and
- * only the real runtime can vouch for them. A mocked spawn would test our belief about Node, not Node. The
- * pure half (what plan a card yields, what argv a plan means) is js-runtime.test.ts. */
+/* The RUNNER honouring a plan, real `node` subprocesses on purpose: the permission flags ARE the fence, and only the real runtime can vouch for them. */
 
 const NO_ABORT = new AbortController().signal;
 
@@ -97,10 +95,7 @@ test("aborting the turn kills the script the same way", async () => {
     expect(result.timedOut).toBe(false);
 });
 
-/* The same Stop, arriving one tick earlier. A turn stopped while the command gate held this script's card
- * reaches the runner with the signal ALREADY aborted, and `addEventListener` on an aborted signal never fires:
- * the script used to run its full timeout (ten minutes at the ceiling) after the user stopped the turn. The
- * elapsed assertion is the whole point — a regression here still ends with `timedOut: true`, just much later. */
+/* The same Stop, arriving one tick earlier. */
 test("a turn stopped before the script was dispatched kills it immediately, not at the timeout", async () => {
     const controller = new AbortController();
     controller.abort();

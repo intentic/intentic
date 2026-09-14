@@ -66,10 +66,7 @@ export interface LatestRelease {
 /** The newest published release, or null when the API cannot be read at build time. */
 export function latestRelease(): Promise<LatestRelease | null>;
 
-/**
- * Downloads in the last month for each named npm package, keyed by name. A package resolves to null when the
- * registry cannot be read at build time, so one bad name costs only its own figure.
- */
+/** Downloads in the last month for each named npm package, keyed by name. */
 export function npmDownloads(names: readonly string[]): Promise<Record<string, number | null>>;
 
 export interface SearchBlock {

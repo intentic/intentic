@@ -131,15 +131,9 @@ const finish = (id: string): void => {
             <!-- Sized like the rail labels inside the panel, not smaller: it's the heading for everything below it. -->
             <h2 class="flex-1 text-sm font-semibold text-content">New automation</h2>
 
-            <!--
-                One control in the header, beside close; once picked it shows the template's name, stating what prefilled the fields without a row of
-                its own. The kit's chip: one of a set, lit when chosen.
-            -->
+            <!-- The selected template is shown beside the close control. -->
             <div v-if="recipes.length > 0" class="relative flex shrink-0 items-center">
-                <!--
-                    The clear button sits inside the chip's own tint, not beside it as a second bare ✕ next to the panel's, which read as two
-                    identical, easily confused glyphs.
-                -->
+                <!-- Clearing stays inside the selected-template chip. -->
                 <div class="ui-chip gap-0 px-0" :class="template ? `ui-chip-on` : ``">
                     <button
                         type="button"
@@ -167,10 +161,7 @@ const finish = (id: string): void => {
 
                 <!-- Click-outside closes it; a popover with no way out but its own trigger would be worse than the bar it replaced. -->
                 <div v-if="recipesOpen" class="fixed inset-0 z-10" @click="recipesOpen = false"></div>
-                <!--
-                    `bg-canvas`, not `bg-card`: over a `bg-card` panel, a same-toned popover reads as the panel growing, not a layer above it, and
-                    its own `bg-overlay` cards need something darker to sit against.
-                -->
+                <!-- The template popover uses canvas contrast against the composer card. -->
                 <div
                     v-if="recipesOpen"
                     class="absolute right-0 top-full z-20 mt-1.5 flex w-pop-lg flex-col gap-2 rounded-lg border border-line-strong bg-canvas p-2 shadow-2xl"
@@ -203,16 +194,10 @@ const finish = (id: string): void => {
                                         alt=""
                                     />
                                     <Icon v-else :name="glyph(recipe.icon) ?? 'bolt'" class="mt-0.5 shrink-0 text-2xs" />
-                                    <!--
-                                        Stacked, not a row: at this width a note beside the title crowded it into truncating. Title, description,
-                                        then note, each on its own line with the whole card's width.
-                                    -->
+                                    <!-- Stacked, not a row: at this width a note beside the title crowded it into truncating. -->
                                     <span class="min-w-0 flex-1">
                                         <span class="block truncate font-medium">{{ recipe.title }}</span>
-                                        <!--
-                                            Chores show their description directly now, instead of a tooltip; an integration has none by design
-                                            (AutomationTemplate.description) since title and note already say enough.
-                                        -->
+                                        <!-- Chore descriptions remain visible in the template list. -->
                                         <span v-if="recipe.description" class="mt-0.5 line-clamp-2 block text-2xs text-subtle">
                                             {{ recipe.description }}
                                         </span>
@@ -226,7 +211,7 @@ const finish = (id: string): void => {
                 </div>
             </div>
 
-            <!-- The kit's icon button, not a bare glyph: same ink, but a thumb-sized hit area and the hover plate every other dismiss has. -->
+            <!-- The kit action uses the shared icon-button hit area and hover plate. -->
             <button type="button" :class="ui.iconButton()" aria-label="Close" @click="emit(`close`)">
                 <Icon name="times" class="text-xs" />
             </button>
@@ -245,7 +230,7 @@ const finish = (id: string): void => {
             </div>
         </form>
 
-        <!-- The handoff: what creating an automation doesn't finish by itself. Same shape either way, a copyable line and what to do with it. -->
+        <!-- The handoff: what creating an automation doesn't finish by itself. -->
         <div v-else-if="savedAutomation && embedSnippet(savedAutomation)" class="flex flex-col gap-3">
             <p class="text-sm text-content"><Icon name="check-circle" class="mr-1.5 text-success" />Front Desk created: drop this into your site:</p>
             <div class="flex items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2">

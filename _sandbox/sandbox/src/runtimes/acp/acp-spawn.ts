@@ -3,10 +3,7 @@ import { Readable, Writable } from "node:stream";
 import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
 import { DAEMON_OWNER, workloadStamp } from "../../platform/boot/leftovers.js";
 
-/* Spawning an ACP agent subprocess: the capability's command split on whitespace (no shell quoting, the
- * config documents this), the pasted KEY=VALUE env block layered over the daemon's env, and stdio piped into
- * the SDK's ndjson Stream. Stderr is kept as a bounded tail folded into surfaced errors (the agent.ts
- * precedent, a bare "exited" without the reason is undebuggable). */
+/* Spawning an ACP agent subprocess: the capability's command split on whitespace (no shell quoting, the config documents this). */
 
 export const splitCommand = (command: string): string[] => command.trim().split(/\s+/);
 

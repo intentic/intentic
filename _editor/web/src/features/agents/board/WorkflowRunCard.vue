@@ -50,11 +50,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
         :class="[
             // Same step the agent cards take (AgentCard's `live`), so a lane draws one card size.
             bigLane ? 'gap-2.5 p-4' : 'gap-2 p-3.5',
-            /* Dashed, and that is the whole visual claim: this is a container of the solid cards around it
-               rather than one of them. Everything else — fill, border, hover, the selection ring and the
-               attention bar — is the session card's shared surface (.session-card in styles.css), the same one
-               the agent cards beside it and the chat rail's rows wear. The bar is an inset shadow there, so
-               nothing about it is dashed and the two rhythms can no longer argue. */
+/* Dashed, and that is the whole visual claim: this is a container of the solid cards around it rather than one of them. */
             lane === 'attention' ? 'session-card-attention' : '',
             // The agent card's selection, on the agent card's channel: the chat panel is showing THIS run, and
             // a board that says so about a session but not about a run makes the run look like a thing you
@@ -67,15 +63,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
         @keydown.space.self.prevent="emit(`open`)"
     >
         <div class="flex items-center gap-2.5">
-            <!--
-                Graph glyph where an agent card has its identity tile: one look says this row is a shape, not a
-                session. Two boxes, not one, so it lands on the agent tile's geometry exactly: a 22px disc centred in
-                the 28px slot the tile's context ring occupies (AgentCard, which argues the proportion). A run has no
-                context of its own to ring, but its title still has to start on the same axis as the titles under it,
-                and its mark has to be the same shape AND size as theirs, or the lane draws two vocabularies.
-                It wears the empty rim for that reason: without it a run's bare disc reads a size smaller than the
-                ringed cards beside it. The inset ring is ProgressRing's own track, restated (AgentCard argues it).
-            -->
+<!-- Graph glyph where an agent card has its identity tile: one look says this row is a shape, not a session. -->
             <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-(length:--ring-track) ring-inset ring-content/12">
                 <span class="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
                     <Icon name="sitemap" class="text-2xs text-link" />
@@ -87,7 +75,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 :class="bigLane ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs'"
                 >{{ run.workflow.name }}</span
             >
-            <!-- Wears the agent card's own attention chip, since the waiting step has no card of its own to wear it: the run answers on its behalf. -->
+            <!-- Waiting runs use the agent card's attention chip. -->
             <span
                 v-if="needsYou"
                 v-tooltip.top="`A step is waiting on you: open the run to answer it`"
@@ -103,14 +91,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
             >
                 <Icon name="external-link" class="text-2xs" />
             </button>
-            <!--
-                The ended run's exit, in the slot Stop occupies while running: it's the agent card's Archive, aimed at a whole graph, needed since
-                nothing transitions a run automatically off the lane.
-                Takes the run's sessions with it (their only cards), unlike the old dismissal, which just scattered a finished job's conversations
-                back onto the lanes.
-                Lossless like the agent card's Archive: branches, transcripts and counters stay, and Restore is permanent, which is what lets this
-                skip a confirmation dialog.
-            -->
+            <!-- Ended runs use the action slot for archive. -->
             <button
                 v-if="run.state !== `running` && run.archivedAt === undefined"
                 type="button"
@@ -132,10 +113,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
             >
                 <Icon name="undo" class="text-2xs" />
             </button>
-            <!--
-                On the card, not behind hover, unlike Archive: it's the one thing a person opens this board to do to a run going wrong, and a
-                hover-only control isn't there at 2am.
-            -->
+            <!-- Active runs keep their primary open action visible. -->
             <button
                 v-if="run.state === `running`"
                 type="button"
@@ -162,10 +140,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
             <span v-else>{{ timeAgo(run.startedAt) }}</span>
         </div>
 
-        <!--
-            What's actually burning money right now, distinct from the step count's "how far"; on a fan-out this is the line that shows both attempts
-            are live.
-        -->
+        <!-- Usage reports the active work, not only the completed step count. -->
         <p v-if="doing.length > 0" class="flex min-w-0 items-center gap-1.5 text-2xs text-subtle">
             <Icon name="spinner" spin class="shrink-0 text-2xs text-link" />
             <span class="truncate">{{ doing.join(` · `) }}</span>

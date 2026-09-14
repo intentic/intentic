@@ -4,15 +4,7 @@ import { sandboxJson } from "../client/sandboxClient";
 import { SANDBOX_SAVINGS } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 
-/* What each of this sandbox's token-reduction mechanisms was worth, from the daemon's /settings/savings route:
- * the cleaners' realized per-command savings (exact) and the iq search teaching's measured A/B (an experiment, with a
- * sample size). Read-only; refetched on focus so the surfaces reflect recent turns.
- *
- * WINDOWED SERVER-SIDE, unlike useUsage, which fetches the whole rolled-up ledger once and lets the browser
- * slice it. The difference is the shape of what's behind them: the spend rollup is a handful of rows per active
- * day, while this one is aggregated from a row per Bash COMMAND and a row per turn, so the equivalent payload
- * would be the raw ledgers themselves. The window is in the query key, so a range change refetches.
- */
+/* What each of this sandbox's token-reduction mechanisms was worth, from the daemon's /settings/savings route. */
 
 export function useSavings(window: MaybeRefOrGetter<DayWindowQuery>) {
     const { query, error } = useSandboxQuery({

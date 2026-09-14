@@ -1,11 +1,7 @@
 import { createMemoryHistory, createRouter, type RouteRecordRaw } from "vue-router";
 import { describe, expect, it } from "vitest";
 
-/* Guards the load-bearing Vue Router behavior the workspace deep-link scheme relies on (the `workspace/:path(.*)*`
- * record in router/index.ts + useWorkspaceRoute): a file path READS back as split segments, "" when bare, and a
- * WRITE must pass an ARRAY so real "/" survive instead of being encoded to %2F. If a vue-router upgrade or a
- * "simplification" of the pattern to a single-string param breaks either, the feature silently dies: these fail
- * first. Mirrors the real pattern (no window, so we can't import the createWebHistory() router here). */
+/* The workspace deep-link route must remain resolvable by Vue Router. */
 
 const noop = { template: `<div />` };
 const routes: RouteRecordRaw[] = [

@@ -77,9 +77,7 @@ export const statusSummary = (running: number | undefined, links: number, sync: 
 
 export const deviceStatus = async (mutagen: string | undefined): Promise<DeviceStatus> => {
     const [pid, links, sync, stamped] = await Promise.all([readResidentPid(), readLinks(), deviceReport(mutagen), readLinkStates()]);
-    /* A loop that is not running holds no sockets, so every link is closed and that needs no stamp to know; a
-     * loop that IS running is the only thing that knows, and its stamp is the whole answer. Neither leaves the
-     * question open, which the shape carries as an absent `state` and every surface below reports as unknown. */
+    /* A loop that is not running holds no sockets, so every link is closed and that needs no stamp to know;. */
     const states: readonly (PeerLinkState | undefined)[] = links.map((link) => (pid === undefined ? "closed" : stamped?.[link.sandboxUrl]));
     const connected = states.every((state) => state !== undefined) ? states.filter((state) => state === "open").length : undefined;
     return {
@@ -208,11 +206,7 @@ export const buildSkewLine = (report: DeviceReport): string | undefined => {
     return `${which} — the loop keeps the build it started with. Restart it with \`intentic-machine run --stop\` then \`intentic-machine run\`.`;
 };
 
-/* ONE LINK'S LINE, and the word in it that was not earned. "connected" is a claim about a socket, and this
- * printed it from the link list alone: a sandbox unreachable for hours read exactly like a healthy one, on the
- * command whose entire job is to say which of the two you have. The permissions line beneath it had been hedged
- * as "last pushed by the sandbox" for the same reason and this line had not. Unknown now says so in words rather
- * than picking the reassuring one. */
+/* ONE LINK'S LINE, and the word in it that was not earned. */
 export const linkLine = (link: StatusLink): string => {
     switch (link.state) {
         case "open":

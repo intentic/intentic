@@ -2,9 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { createPiEventMapper } from "./pi-events.js";
 
-/* The Pi event → AgentEvent mapping, exercised as the pure table it is: one Pi RPC event in, its frames
- * out. The adapter's loop (pi-agent.test.ts) trusts these shapes, so drift between Pi's wire vocabulary and
- * the contract's is caught here, next to the mapping that owns it. */
+/* The Pi event → AgentEvent mapping, exercised as the pure table it is: one Pi RPC event in, its frames out. */
 
 const CWD = WORKSPACE_ROOT;
 

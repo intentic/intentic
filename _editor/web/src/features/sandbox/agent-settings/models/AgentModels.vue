@@ -320,14 +320,9 @@ const eagernessOptions = [
 <template>
     <!-- `id` so a chat's "Turn it off everywhere" link can land here directly, not at the top of a long settings page. -->
     <div id="models" class="flex flex-col gap-6">
-        <!--
-            One group per catalog block; heading is the block's own, so it can't describe rows it no longer holds.
-        -->
-        <RowGroup v-for="block in blocks" :key="block.id" :label="block.label">
-            <!--
-                Replaces the row count and caption that used to sit here, both restating what's on screen; this is the control that changes what the
-                group is. Stays on phone, unlike the selection cluster, since collapsing rows helps most there.
-            -->
+        <!-- Each catalog block owns its heading and visible model rows. -->
+        <RowGroup v-for="block in blocks" :key="block.id" :label="block.label" sticky>
+            <!-- The filter controls the visible model rows. -->
             <template #info>
                 <SegmentedControl
                     :model-value="viewOf(block.id)"
@@ -338,10 +333,7 @@ const eagernessOptions = [
                 />
             </template>
 
-            <!--
-                Per-group, acting on that group alone (a page-wide select-all would span blocks with nothing in common). Hidden on phone (no tick
-                column there) and in the collapsed view (there are no rows to tick).
-            -->
+            <!-- Per-group, acting on that group alone (a page-wide select-all would span blocks with nothing in common). -->
             <template #actions>
                 <div v-if="viewOf(block.id) === `advanced`" class="flex flex-wrap items-center gap-2 max-md:hidden">
                     <label class="flex cursor-pointer items-center gap-2 text-2xs text-muted">
@@ -369,10 +361,7 @@ const eagernessOptions = [
                 </div>
             </template>
 
-            <!--
-                The same per-job setting, read and written a block at a time, not a summary (there are no rows under it). Handed only jobs that can
-                actually run, so an inert one can't make an otherwise-agreeing block misreport as differing.
-            -->
+            <!-- The same per-job setting, read and written a block at a time, not a summary (there are no rows under it). -->
             <ModelGroupRow
                 v-if="viewOf(block.id) === `simple`"
                 :block="block"
@@ -411,12 +400,9 @@ const eagernessOptions = [
                     @select="(on: boolean) => selectRole(row.role.id, on)"
                     @open="(index: number | undefined, anchor: HTMLElement) => openRowPicker(row.list, index, anchor)"
                 >
-                    <!--
-                        `v-if` sits on the `<template>`, not inside the slot, so the other seventeen rows get no slot at all: an empty slot still
-                        opens dead space below the row.
-                    -->
+                    <!-- Only the judge row receives this explanatory slot. -->
                     <template v-if="row.role.id === JUDGE" #note>
-                        <!-- Points at the switch: the only row here whose feature can be off elsewhere needs to explain why it's disabled. -->
+                        <!-- The judge row explains why its feature may be unavailable. -->
                         <p v-if="judgeOff" class="text-2xs text-subtle">
                             Nothing is judging commands at the moment, so this is not in use.
                             <RouterLink
@@ -426,10 +412,7 @@ const eagernessOptions = [
                             >
                             under Safety.
                         </p>
-                        <!--
-                            Not "pick something cheap": the judge is the only job here whose input may have been written by whatever the agent was
-                            reading, arguing for its own approval.
-                        -->
+                        <!-- The judge model evaluates untrusted generated input. -->
                         <p v-else class="text-2xs text-subtle">
                             Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in
                             something from outside, that text may be arguing for its own approval.
@@ -439,16 +422,10 @@ const eagernessOptions = [
             </template>
         </RowGroup>
 
-        <!--
-            Not a job (not selectable), so its own group rather than a nineteenth row needing a placeholder tick column. Last, since it's the only
-            setting that can override a choice made a second ago; the page reads in order of growing reach.
-        -->
+        <!-- Not a job (not selectable), so its own group rather than a nineteenth row needing a placeholder tick column. -->
         <RowGroup label="Cheaper turns" caption="Not a job: a substitution made inside a turn you started.">
             <Row spine title="Automatic tier" description="Run simple turns on a cheaper model from the same provider.">
-                <!--
-                    Uses `#lead` like the job rows, not the `icon` prop, so its mark matches their size instead of the smaller type-sized glyph that
-                    would misalign the title column. No tick: not selectable.
-                -->
+                <!-- The judge row uses the standard lead slot and mark size. -->
                 <template #lead="{ mark, iconClass }">
                     <span class="flex shrink-0 items-center justify-center" :style="{ width: `${mark}px`, height: `${mark}px` }">
                         <Icon name="credit-card" aria-hidden="true" class="text-muted" :class="iconClass" />
@@ -516,10 +493,7 @@ const eagernessOptions = [
         </RowGroup>
     </div>
 
-    <!--
-        Mounted once; the overlay inside places itself on an `open` watcher, so an already-open host would never place and would park off-screen. Its
-        content remounts per open, resetting the search box and catalogs.
-    -->
+    <!-- Mount once so the picker can place itself on open. -->
     <ModelPinPicker
         :open="editing !== undefined"
         :anchor="editing?.anchor"

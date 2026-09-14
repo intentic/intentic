@@ -1,11 +1,7 @@
 import type { Capability } from "@intentic/sandbox-contract";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 
-/* A TUNNEL is a capability the manifest stores and the machine either holds or does not: a VPN into somewhere
- * of the user's (vpn/), or a geo exit out of somewhere else (exit/). The second was written as "the first
- * one's shape retold" and says so in its own comments; this directory is the retold half written once. What
- * a kind keeps for itself is exactly what differs: its link's shape, its drivers' SPI, and what a start owes
- * before it counts (an exit must prove its country from the outside; a vpn's interface is the whole answer). */
+/* A TUNNEL is a capability the manifest stores and the machine either holds or does not: a VPN into somewhere of the user's (vpn/). */
 
 export type TunnelKindName = "vpn" | "exit";
 

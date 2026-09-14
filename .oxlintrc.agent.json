@@ -23,9 +23,7 @@
         // steady, and reports the moment the edit pushes it higher. The ratchet only turns one way.
         "complexity": ["error", { "max": 10 }]
 
-        /* The assertion ban list used to live here, with a 328-site backlog. The backlog is gone and the rule is
-         * an ordinary one in .oxlintrc.json now — see the block there for what the sweep changed and why. This
-         * file is for rules main cannot meet YET; nothing else currently qualifies. */
+/* The assertion ban list used to live here, with a 328-site backlog. */
     },
     "ignorePatterns": [
         "**/node_modules",

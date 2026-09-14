@@ -1,7 +1,4 @@
-/* `webq fetch <url>`: one page as markdown — a capsule line saying what happened, the content up to a
- * token budget, and always a saved file carrying the whole thing. The budget exists because the reader is
- * an agent's context window: a 300k-token page printed whole is an attack on the caller, so the tail lives
- * in the file and the cut is announced with the exact path to Read. */
+/* `webq fetch <url>`: one page as markdown — a capsule line saying what happened, the content up to a token budget. */
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { closeBrowser } from "../lib/browser.js";
 import { DEFAULT_MAX_AGE_S } from "../lib/cache.js";

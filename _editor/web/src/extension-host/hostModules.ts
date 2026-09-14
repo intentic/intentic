@@ -12,7 +12,7 @@ import * as vue from "vue";
 // Imported for its side effect from main.ts, before any extension loads.
 
 declare global {
-    // oxlint-disable-next-line no-var, no-underscore-dangle -- ambient global declarations require `var`; the generated ext-shims read exactly this dunder name
+    // oxlint-disable-next-line no-var, no-underscore-dangle -- Ambient declarations require var.
     var __intenticHost: { readonly modules: Readonly<Record<string, unknown>> } | undefined;
 }
 

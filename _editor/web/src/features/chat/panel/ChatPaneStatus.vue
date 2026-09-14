@@ -67,28 +67,19 @@ const usageChip = computed(() => {
 </script>
 
 <template>
-    <!--
-        Carries the mobile keyboard inset for the whole footer, so the bottom-stuck composer rides up with it; rendered
-        only where the composer is.
-    -->
+<!-- Keep the composer above the mobile keyboard inset. -->
     <div
         class="mx-auto flex w-full max-w-[51rem] items-center gap-2 px-3 pb-2 text-2xs text-subtle"
         :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 8}px` } : undefined"
     >
-        <!--
-            The refusal owns this slot whenever set, since a tooltip alone never reaches touch; it displaces the keyboard
-            hint, which is meaningless on a virtual keyboard and not worth the width in a narrow panel.
-        -->
+<!-- The refusal owns this slot whenever set, since a tooltip alone never reaches touch; it displaces the keyboard hint. -->
         <span v-if="block !== undefined" class="flex min-w-0 items-center gap-1 text-warning">
             <Icon name="exclamation-circle" class="shrink-0 text-2xs" />
             <span class="truncate">{{ block }}</span>
         </span>
         <span v-else-if="!mobile" class="@max-md:hidden">{{ hint }}</span>
         <div class="ml-auto flex items-center gap-3">
-            <!--
-                Whether this transcript shows its tool calls (ChatToolCallsToggle, also drawn in the Subagents pane); joins the
-                other readouts under the composer.
-            -->
+<!-- Whether this transcript shows its tool calls (ChatToolCallsToggle, also drawn in the Subagents pane); joins the other readouts under the composer. -->
             <ChatToolCallsToggle />
             <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
                 <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-primary-500'" />
@@ -104,15 +95,9 @@ const usageChip = computed(() => {
                     ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageRing
                 >
             </RouterLink>
-            <!--
-                Every chip here names a page, so each is a link: hover shows the address, Ctrl/Cmd-click opens it without
-                leaving the chat.
-            -->
+<!-- Every chip here names a page, so each is a link: hover shows the address, Ctrl/Cmd-click opens it without leaving the chat. -->
             <RouterLink to="/sandbox/agent" class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content">
-                <!--
-                    One spelling and colour for sandbox state, shared with the rail chip and switcher (availability.ts); a short
-                    retry keeps the healthy look.
-                -->
+<!-- One spelling and colour for sandbox state, shared with the rail chip and switcher (availability.ts); a short retry keeps the healthy look. -->
                 <span class="inline-block h-1.5 w-1.5 rounded-full" :class="availabilityVisual.dotClass"></span>
                 {{ availabilityVisual.label }} · Manage
             </RouterLink>

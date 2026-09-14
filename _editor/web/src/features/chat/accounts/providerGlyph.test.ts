@@ -1,6 +1,4 @@
-/* WHAT A PROVIDER WITH NO BRAND MARK LOOKS LIKE. All four of these used to draw one `sparkles`, in a rail whose
- * only job is telling providers apart: the free trial, a model running on the user's own hardware and a server
- * they pointed us at were the same glyph, three tiles down. */
+/* WHAT A PROVIDER WITH NO BRAND MARK LOOKS LIKE. */
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { beforeEach, expect, it } from "vitest";
 import { endpointProviders, providerGlyph } from "./providerCatalog";

@@ -28,16 +28,7 @@ const CATEGORIES: Readonly<Record<string, Omit<SessionCategory, "type">>> = {
     style: { hue: 320, icon: `palette` }, // cosmetics, polish, format, restyle
 };
 
-/* A title already written as a Conventional Commits subject, the user's own `fix: …` prompt, or a session a
- * rename spelled that way. Its own word beats any verb table's reading of it.
- *
- * CASE-INSENSITIVE, because title.ts capitalizes every title it derives (`fix: Codex agents…` is stored as
- * `Fix: Codex agents…`), so a lowercase-only match never fired on the one shape it was written for.
- *
- * Which is why the word is then CHECKED against the table rather than trusted. `Note: …`, `Warning: …` and
- * `TODO: …` have the shape of a prefixed subject and none of its meaning, so they fall through to the verb
- * reading below and are treated as the prose they are. The scope and the `!` are read but discarded, a
- * `feat(web)!:` title is the same KIND of work as a `feat:` one, and a tint has no room to say more. */
+/* Existing Conventional Commit subjects are displayed unchanged. */
 const PREFIXED = /^([a-z]+)(?:\([^)]*\))?!?:\s+\S/i;
 // Dropped along with a leading verb, so `Fix the tree truncation` and `Fix tree truncation` read alike.
 const ARTICLE = /^(?:the|a|an)\s+/i;

@@ -97,16 +97,7 @@ export const settleHostedStretch = async (
     logger.info({ app: machine.appName, minutes }, `hosted meter: stretch settled`);
 };
 
-/* CLOSE AN OPEN STRETCH WITHOUT ASKING THE PROVIDER, for the paths that already know how the machine ended:
- * the settle above (which just asked), the delete and release routes (which are about to destroy it) and the
- * idle sweep (which has just read it stopped, or found it gone). `endedAt` is the stop time when the caller
- * holds one (Fly's last-transition stamp), clamped into the stretch: a stamp before the wake, or ahead of our
- * clock (skew), is not a stop time, and now is the latest the stretch could have ended.
- *
- * Every path that drops a HostedMachine row goes through this first, because a dropped row is minutes that
- * were never charged: the used figure reads the open stretch LIVE off the row (hostedUsedMinutes), so deleting
- * the row erased them, and provision → work a day → delete → provision again was a month that never filled.
- * Answers the minutes charged. Idempotent, a machine with no open stretch is 0 and no write. */
+/* CLOSE AN OPEN STRETCH WITHOUT ASKING THE PROVIDER, for the paths that already know how the machine ended: the settle above (which just asked). */
 export const closeHostedStretch = async (
     prisma: Prisma.TransactionClient,
     machine: { id: string; wokeAt: Date | null },

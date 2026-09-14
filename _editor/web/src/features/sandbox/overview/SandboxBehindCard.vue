@@ -95,10 +95,7 @@ const detail = computed(() =>
                             <CopyButton :text="reloadCommand" label="Copy" aria-label="Copy reload command" class="mr-1" />
                         </div>
                     </div>
-                    <!--
-                        Only where the button never had a chance: a refusal means the door is open and something else
-                        went wrong, which connecting a second time would not fix.
-                    -->
+<!-- Only where the button never had a chance: a refusal means the door is open and something else went wrong, which connecting a second time would not fix. -->
                     <ConnectDeviceHint v-if="!hostId" :slug="slug" gains="this becomes a button." />
                 </div>
                 <div v-else-if="daemonDrifted" class="flex flex-wrap items-center gap-2">

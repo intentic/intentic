@@ -53,8 +53,7 @@ export const fileAutomationsStore = (path: string, runsPath: string): Automation
     });
     // Unreadable runs fall back to no history rather than reading as an absent manifest, which would silently stop
     // every automation.
-    // Not on the unreadable-manifest notice either: nobody hand-edits a run history, and the next recorded run rebuilds
-    // it.
+    // Rebuild unreadable run history only from the next recorded run.
     const ledger = jsonFile<RunLedger>(runsPath, {
         parse: (raw) => RunLedgerSchema.safeParse(raw).data,
         fallback: () => ({}),

@@ -1,7 +1,4 @@
-<!--
-    Chooses a documentation run's scope. Defaults to 'undocumented' or 'stale' packages, never 'everything' — each package is a separate agent run,
-    so documenting a whole monorepo at once must be an explicit choice.
--->
+<!-- Chooses a documentation run's scope. -->
 <script setup lang="ts">
 import { AgentRunButton, type AgentRunChoice, Button, Checkbox, Icon, Modal, useAgentRunPick } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
@@ -38,10 +35,7 @@ const toggle = (dir: string): void => {
     chosen.value = chosen.value.includes(dir) ? chosen.value.filter((entry) => entry !== dir) : [...chosen.value, dir];
 };
 
-/* Which model every session in this run opens on, and the caret that re-points them for this run alone. ONE
- * pick for the whole fan-out rather than one per package: the dialog starts N+1 sessions on one press, and a
- * per-package model would be N+1 decisions to make a single scope choice. Cleared on start, so re-opening the
- * dialog is back on the sandbox's standing list. */
+/* Which model every session in this run opens on, and the caret that re-points them for this run alone. */
 const runModel = useAgentRunPick(() => host().models, `documentation-run`);
 
 const start = (): void => {
@@ -66,8 +60,7 @@ const start = (): void => {
                 <span class="ml-auto text-2xs text-subtle">{{ chosen.length }} of {{ packages.length }}</span>
             </div>
 
-            <!-- A wash instead of a frame with hairlines between every row: the checkboxes already give the list
-                 its structure, and 55 of them inside a ruled box is a spreadsheet. -->
+<!-- A wash instead of a frame with hairlines between every row: the checkboxes already give the list its structure. -->
             <div class="max-h-72 overflow-y-auto rounded-lg bg-content/4 p-1">
                 <label
                     v-for="dir in packages"
@@ -81,8 +74,7 @@ const start = (): void => {
                 </label>
             </div>
 
-            <!-- Naming the cost is part of the decision. A user who picks fifty packages should know that is fifty
-                 sessions before they click, not after the bill. -->
+            <!-- Show the session cost before the user starts the run. -->
             <p v-if="chosen.length > 8" class="flex items-start gap-2 text-2xs text-muted">
                 <Icon name="info-circle" class="mt-0.5 shrink-0" />
                 <span>{{ chosen.length }} packages means {{ chosen.length + 1 }} agent sessions, running in parallel.</span>

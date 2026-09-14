@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { toCell, toRows } from "./sheetCells";
 
-/* The parser hands back JS values, and this is the step that decides what the reader sees. Worth pinning
- * because the library underneath was swapped: the old one produced an HTML table and did its own formatting,
- * so every one of these decisions is new and none of them is enforced by a type. */
+/* The parser hands back JS values, and this is the step that decides what the reader sees. */
 
 describe(`toCell`, () => {
     it(`passes the three types the template renders through untouched`, () => {

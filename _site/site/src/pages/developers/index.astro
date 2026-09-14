@@ -27,11 +27,7 @@ const uiPoints = [
     { name: "files", what: "Which workspace files back your view, so the daemon pushes you a refresh instead of you polling." },
 ];
 
-/* THE LIFECYCLE, DRAWN — a wave through two swimlanes. The x-axis is time, the lanes are WHO ACTS: the flow
- * runs along the author's lane, dips into the user's for Discover and Install, and comes back up for Maintain,
- * which is the one fact the old six-row list buried: publishing is not the end of the story. The dashed arc
- * over the top is Maintain re-entering review, what makes the figure a cycle rather than a line. Geometry is computed from the shared lifecycle data, so
- * the diagram cannot show a step the site doesn't have. */
+/* THE LIFECYCLE, DRAWN — a wave through two swimlanes. */
 const LC = { w: 600, h: 212, chipW: 64, chipH: 30 };
 const lcPitch = (LC.w - 20 - LC.chipW) / (extensionLifecycle.length - 1);
 const lcLaneY = { author: 78, user: 174 };

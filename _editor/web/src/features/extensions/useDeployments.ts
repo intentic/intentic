@@ -6,9 +6,7 @@ import { jsonBody } from "../sandbox/client/jsonBody";
 import { DEPLOYMENTS } from "../../lib/queryKeys";
 import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
 
-/* The live Komodo deployments surfaced by the in-sandbox `intentic deploy deployments` subcommand, read DIRECTLY
- * from the daemon (the sandbox already merges desired-state with live Komodo). Shared by the infrastructure +
- * live-status extensions through the app-wide query cache. */
+/* The live Komodo deployments surfaced by the in-sandbox `intentic deploy deployments` subcommand. */
 
 // Run `intentic deploy deployments` in the sandbox and validate the terminal result line. `komodoReachable` is the
 // CLI's own verdict on the deployment engine, TRI-STATE: undefined = no komodo declared (services-only

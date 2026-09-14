@@ -7,10 +7,7 @@
         <meta name="robots" content="noindex" />
         <!-- ponytail: approximates the dark canvas token oklch(16% 0.007 65); regenerate if themes.css changes. -->
         <meta name="theme-color" content="#141210" />
-        <!-- The runtime config the app reads synchronously at module-eval time (src/environments/environment.ts).
-             Inline rather than the esbuild-bundled env.js the real entries use: the demo's whole config is two
-             sentinel values, and the interceptor in src/demo/transport.ts owns that origin. No Google client id —
-             the demo seeds a daemon session directly, so Identity Services is never loaded. -->
+<!-- The runtime config the app reads synchronously at module-eval time (src/environments/environment.ts). -->
         <script>
             window.env = {
                 production: true,
@@ -22,9 +19,7 @@
                 afterSignOut: "/",
             };
         </script>
-        <!-- Extension bundles resolve these bare specifiers to the app's own instances (see _editor/web/index.html).
-             Prefixed with the demo's base by hand: an import map is data, not markup Vite rewrites, so an absolute
-             /ext-shims path here would leave the site's root — the one place these files are not. -->
+<!-- Extension bundles resolve these bare specifiers to the app's own instances (see _editor/web/index.html). -->
         <script type="importmap">
             {
                 "imports": {

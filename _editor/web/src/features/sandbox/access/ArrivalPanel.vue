@@ -158,10 +158,7 @@ const cancel = (): Promise<void> =>
 <template>
     <div class="flex flex-col gap-4">
         <template v-if="plan === undefined">
-            <!--
-                Connected devices go first, since a connected machine needs no archive or file dialog. Every connected machine gets a row, even
-                asleep ones, so an offline device reads as waiting, not unsupported.
-            -->
+            <!-- Connected devices go first, since a connected machine needs no archive or file dialog. -->
             <RowGroup v-if="hosts.length > 0" flat label="Your devices">
                 <Row
                     v-for="host in hosts"
@@ -272,10 +269,7 @@ const cancel = (): Promise<void> =>
                 </Row>
             </RowGroup>
 
-            <!--
-                Asked only when the plan actually carries secret values, not just names. Boxed, not full-bleed, since the shared card's RowNote block
-                already owns the padding; matches the export dialog's own lock-in-a-box.
-            -->
+            <!-- Asked only when the plan actually carries secret values, not just names. -->
             <div v-if="plan.carriesSecrets" class="overflow-hidden rounded-lg border border-line">
                 <Row
                     flush

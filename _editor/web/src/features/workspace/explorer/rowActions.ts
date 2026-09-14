@@ -75,9 +75,7 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
             run: (): void => sources.openPersonas(dir),
         });
     }
-    /* A repository that carries its own checks says so on its row, standing like a persona's: the file is a fact about
-     * this folder, not an action you can take on any folder. A declaration nobody has switched on is the one state
-     * worth interrupting for, so it is the one the tooltip leads with. */
+    /* A repository check action points to the checked file, not the repository itself. */
     const checks = sources.checkDirs.get(dir);
     if (checks !== undefined) {
         actions.push({

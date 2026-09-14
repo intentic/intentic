@@ -179,35 +179,9 @@ export interface TurnContext {
     readonly children?: ChildSupervisor;
 }
 
-/* WHY EVERY STEP IN HERE IS MEASURED, and why they run together rather than one after another.
- *
- * Planning a turn is nothing but independent I/O, a capability listing, a dependency probe, a token refresh, a
- * settings read, a browser bring-up, a delegation lookup, and it was written as a chain of awaits, so a turn
- * paid the SUM of them. The daemon's own preflight marks (agent.routes.ts) recorded 5 to 22 seconds sitting
- * inside a single stage called `plan`, which is where the marks stopped: the one number anybody had said the
- * slow thing was "planning", and planning is a dozen things. Now each one files its own span, so the next slow
- * turn names the step instead of the phase, and because they overlap, the turn pays the SLOWEST rather than
- * the total. Nothing here reads anything else here, with two exceptions the harness arm spells out.
- */
-/* THE SAFETY JUDGE, BOUND TO THIS SANDBOX'S ACCOUNTS AND TO THIS TURN'S POLICY AND MODEL.
- *
- * A closure over `services`, the policy text and the owner's model pin rather than any of them directly, because
- * the seam it fills lives in guard/, which is deliberately ignorant of accounts, chains and quotas (see
- * CommandGateOptions.judge), and because both of those settings must be the one snapshot this turn was planned
- * with rather than whatever the files say at the moment a command happens to run.
- *
- * Always present, unlike the explainer it replaced — that was off unless the owner switched it on, because it
- * was a nicety on a card. This is the decision itself, and a turn without it would be a turn where the hard rule
- * is the only thing standing. What keeps it cheap is that the gate only calls it when triage fires, and memoises
- * per program within the turn; whether it is called AT ALL is the owner's (settings.commandJudge, carried beside
- * this as `judging`), and at `off` the gate never reaches this closure. */
-/* THE TURN IDENTITY A WATCH'S WAKE HAS TO REPRODUCE: where the arming turn ran, on whose account, at what tier,
- * with what reasoning, as which persona, in what posture, and what job it was.
- *
- * The list belongs to agent/run/turn/turn-seed.ts rather than here, because the proof follow-up needs exactly the
- * same one and the two used to keep separate, differently incomplete copies of it. A wake that fires four hours
- * later has nobody to ask what it should have been; every answer it gets has to have been written down at arm
- * time, and a field this forgets is a field the wake silently changes. */
+/* WHY EVERY STEP IN HERE IS MEASURED, and why they run together rather than one after another. */
+/* A closure over `services`, the policy text and the owner's model pin rather than any of them directly, because the seam it fills lives in guard/. */
+/* THE TURN IDENTITY A WATCH'S WAKE HAS TO REPRODUCE: where the arming turn ran, on whose account, at what tier, with what reasoning, as which persona. */
 const watchSeed = (input: AgentTurn): WatcherTurnSeed => seedFields(input);
 
 const judgeFor =
@@ -256,10 +230,7 @@ const experimentStamps = (
 export const ruleCommandIn = (command: string, anchor: IsolationAnchor | undefined, repo?: string): string =>
     anchor === undefined ? command : `${nsenterPrefix(anchor.pid, repoCwd(anchor.cwd, repo))}bash -c ${shellQuote(command)}`;
 
-/* THE RULES A TURN RUNS UNDER: the owner's own, plus the checks each repository declares for itself and the owner has
- * adopted (rules/repo-checks.ts). Merged once, at the top of planning, so the end-of-turn note, the Stop's rules and
- * the per-file rules all read one list and none of them has to know a check can come from a repository. Never written
- * back anywhere: settings.json holds what the owner wrote, and nothing else. */
+/* THE RULES A TURN RUNS UNDER: the owner's own, plus the checks each repository declares for itself and the owner has. */
 const underRepoChecks = (settings: SandboxSettings, declared: readonly Rule[]): SandboxSettings =>
     declared.length === 0 ? settings : { ...settings, rules: withRepoChecks(settings.rules, declared) };
 
@@ -890,8 +861,7 @@ export const planHarnessTurn = async (
             // Debugging ports for those Chromiums, so the first browser call can register a session the owner can
             // watch.
             ...(Object.keys(browser.ports).length > 0 ? { browserPorts: browser.ports } : {}),
-            // Each logged-in profile's passkey store, so the observer plugs the platform's software security key into
-            // it.
+            // Include passkey stores so observers can resolve logged-in profiles.
             ...(Object.keys(browser.passkeys).length > 0 ? { browserPasskeys: browser.passkeys } : {}),
             // The routed server's account→owner map, so the observer resolves a call's `account` argument to its
             // profile.

@@ -300,17 +300,11 @@ const run = async (model: PickedModel): Promise<void> =>
 </script>
 
 <template>
-    <!--
-        An ordinary page: the shell's router-view wrapper does the scrolling. RunControls is the last element, a pill sticking to the viewport bottom
-        while the list scrolls under it.
-    -->
+    <!-- An ordinary page: the shell's router-view wrapper does the scrolling. -->
     <Page width="wide">
         <PageHeader title="Acceptance">
             <template #actions>
-                <!--
-                    One Refresh for the whole page: dev-server states and stories are both re-readable, and a panel started from Preview while this
-                    was open is exactly the staleness this clears.
-                -->
+                <!-- Refresh reloads both dev-server state and stories. -->
                 <PageAction quiet icon="refresh" label="Refresh" hint="Re-read the stories and the dev-server states" @click="refreshEverything" />
             </template>
         </PageHeader>
@@ -341,10 +335,7 @@ const run = async (model: PickedModel): Promise<void> =>
                 </div>
                 <!-- Count withheld while loading: "0" beside a loading group is a wrong answer, not a pending one. -->
                 <RowGroup v-for="entry in byRepo" :key="entry.repo" :label="entry.repo" :count="storiesLoading ? undefined : entry.count">
-                    <!--
-                        The repo's one dev server (state, address, Start) sits beside its name; an ungrouped story's address rides here too, for want
-                        of its own group row. The span is this row's hover scope, so the heading's actions stay reachable.
-                    -->
+                    <!-- Each repository row owns its dev-server state and address. -->
                     <template #actions>
                         <span class="group flex items-center gap-2">
                             <TargetChip v-if="entry.rooted" :repo="entry.repo" group="" :targets="targets" />
@@ -364,10 +355,7 @@ const run = async (model: PickedModel): Promise<void> =>
                         </div>
                     </template>
                     <template v-for="section in entry.groups" :key="section.group || 'root'">
-                        <!--
-                            The group's own row: one tick runs the whole group, and its address shows here only when it isn't simply the repo's dev
-                            server above.
-                        -->
+                        <!-- A group tick runs all stories in that group. -->
                         <div v-if="section.group !== ``" class="group flex items-center gap-3 bg-canvas px-4 py-1">
                             <Checkbox
                                 :model-value="section.paths.every((path) => selected.has(path))"
@@ -380,7 +368,7 @@ const run = async (model: PickedModel): Promise<void> =>
                                 :aria-label="`Run every story in ${section.group}`"
                                 @update:model-value="setSelected(section.paths, $event === true)"
                             />
-                            <!-- Quieter than the rows it opens would be a heading nobody finds; this line is the only marker between groups. -->
+                            <!-- Group headings remain visible between their story rows. -->
                             <span class="min-w-0 flex-1 truncate font-mono text-2xs text-muted">{{ section.group }}/</span>
                             <TargetChip :repo="entry.repo" :group="section.group" :targets="targets" />
                         </div>
@@ -402,10 +390,7 @@ const run = async (model: PickedModel): Promise<void> =>
                         <!-- One composer per group, so the next story lands beside the ones it belongs with. -->
                         <StoryComposer :repo="entry.repo" :group="section.group" :taken="paths" @create="create" />
                     </template>
-                    <!--
-                        The top-level composer, rendered here only when the loop above didn't already: a repo with no groups, or none at the top
-                        level, still needs a place to start the next story.
-                    -->
+                    <!-- Render the top-level composer only when no group owns the story. -->
                     <StoryComposer v-if="!entry.rooted" :repo="entry.repo" group="" :taken="paths" @create="create" />
                 </RowGroup>
                 <p v-if="unread > 0" class="text-2xs text-subtle">
@@ -456,10 +441,7 @@ const run = async (model: PickedModel): Promise<void> =>
                 Verdicts are read for the newest {{ SCAN_RUNS }} runs. Older ones show theirs when opened.
             </p>
 
-            <!--
-                Sticky and last in the page, so it floats over the list while scrolling and settles under it at the end, centred in <Page>. Hidden
-                while a report is open, since that's a different question than starting a new run.
-            -->
+            <!-- The composer stays sticky and follows the list's final column. -->
             <RunControls
                 v-if="stories.length > 0"
                 :chosen="chosen.length"

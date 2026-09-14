@@ -5,11 +5,7 @@ import { ref, watch } from "vue";
 import { changeEpochOf } from "../changes/useWorkspaceLive";
 import { deriveText, readDerivedText, type WorkspaceDerived } from "../files/derivedText";
 
-/* A file's derived text: what the sandbox rendered a document, picture, recording or archive into, which is the
- * same text an agent reads instead of the bytes. Two jobs in one surface — it is the only preview a zip or an
- * EPUB has, and it is where anyone can check what an agent is working from, which is why the provenance (which
- * reader, when, what it had to cut, whether the file has moved on since) rides above the prose rather than
- * hiding behind it. */
+/* Derived text is the agent-readable rendering of a file. */
 
 // `downloadable`: the parent can hand over the bytes, so the empty state and the band can offer that too.
 const { path, downloadable = false } = defineProps<{ path: string; downloadable?: boolean }>();
@@ -109,10 +105,7 @@ const derive = (): void => {
                 <Icon name="exclamation-triangle" class="shrink-0 text-[0.7rem]" />
                 <span>This file changed after its text was made, so this is a reading of an older version.</span>
             </div>
-            <!--
-                Every cap and degradation the derivation hit, shown rather than stored: text that was cut reading as the
-                whole document is the one failure this surface cannot afford.
-            -->
+<!-- Every cap and degradation the derivation hit, shown rather than stored. -->
             <ul v-if="shadow.notes.length > 0" class="shrink-0 space-y-0.5 border-b border-line bg-overlay px-3 py-1.5 text-2xs text-muted">
                 <li v-for="note of shadow.notes" :key="note" class="flex items-start gap-2">
                     <Icon name="info-circle" class="mt-px shrink-0 text-[0.7rem]" />

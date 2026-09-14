@@ -149,10 +149,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
     <div class="flex flex-col gap-5">
         <NoticeStack :of="[viewNotice, staleNotice]" />
 
-        <!--
-            The section's instrument, not either half's: pills lead, the search box takes the row's slack, and filters ride
-            #controls. Below the filterable threshold a spacer keeps the buttons at the right edge.
-        -->
+<!-- The section's instrument, not either half's: pills lead, the search box takes the row's slack, and filters ride #controls. -->
         <div class="flex flex-wrap items-center gap-2">
             <SegmentedControl :model-value="view" :options="viewOptions" @update:model-value="show" />
 

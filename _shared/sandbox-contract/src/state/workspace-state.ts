@@ -332,9 +332,7 @@ const STATE_FILES = [
         why: "Scratch that agents and tools leave behind (build logs, demo checkouts); nothing reads it after the turn that wrote it. The state janitor empties it at boot.",
         portability: "derived",
     },
-    // Not written by the daemon: pnpm auto-creates its content-addressable store when an install runs from under
-    // `.intentic`. Declared anyway so the table accounts for everything under the state dir; a fresh install rebuilds
-    // it.
+    // Account for the pnpm store even though pnpm creates it, not the daemon.
     {
         path: ".intentic/local/.pnpm-store/",
         invalidates: [],
@@ -540,9 +538,7 @@ export const extensionRuntimeDir = (extension: string): string =>
     `${STATE_GROUP_DIR.local}/runtime/extensions/${extension.replaceAll(/[^a-zA-Z0-9._-]/g, "_")}`;
 
 // Manifests the unreadable-manifest notice reports on: exactly the entries that declare `manifests` in
-// `invalidates`, since a file's problems are only worth showing if a write to it can refresh the notice. A broken
-// file still falls back and sets its bad bytes aside (store/json-file.ts); it just stops asking the owner to fix
-// it.
+// Report broken manifests only when a file change can refresh their notice.
 export const REPORTED_MANIFEST_PATHS: readonly string[] = WORKSPACE_STATE_FILES.filter((file) => file.invalidates.includes("manifests")).map(
     (file) => file.path,
 );

@@ -3,9 +3,7 @@ import { promisify } from "node:util";
 import type { Capability } from "@intentic/sandbox-contract";
 
 // Narrow mailbox key: the newest code or link a site sent; read over the curl imaps:// the IMAP skill teaches.
-// "From this site" means sender or subject carries the site's label; loose, since verification comes from siblings.
-// "Just" means a half-hour window: SINCE is day-granular, so the search over-fetches a day and the Date header narrows
-// it.
+// Bound code lookup to a half-hour day-granular search window.
 
 const run = promisify(execFile);
 

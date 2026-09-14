@@ -198,8 +198,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         }
     };
 
-    // Takes the tab, not just a name, since only the daemon's answer says what pane kind it needs; a cache hit ignores
-    // it.
+    // Derive sessions from the full tab so a cache hit cannot ignore the daemon's pane kind.
     const sessionOf = (tab: TerminalTab): TerminalSession => {
         const cached = cache.get(tab.name);
         if (cached !== undefined) {

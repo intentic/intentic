@@ -1,7 +1,4 @@
-<!--
-    One directory's documentation page opened in a Workspace tab beside its code. A separate component from DocsView, not a mode of it: DocsView
-    tracks the open page in the `?doc=` query, which two open tabs would collide over, so this takes the page as a prop instead.
--->
+<!-- One directory's documentation page opened in a Workspace tab beside its code. -->
 <script setup lang="ts">
 import { appLink, Button, ui, Icon, SegmentedControl, useLoadingReveal } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
@@ -88,10 +85,7 @@ const areaLink = computed(() => {
             </div>
         </div>
 
-        <!--
-            No card here: this div IS the pane, so it matches the file-preview treatment, a centered measure with `ui-softscroll`. The scroll area
-            belongs to the tab, keyed by directory, so switching packages remounts at the top.
-        -->
+        <!-- No card here: this div IS the pane, so it matches the file-preview treatment, a centered measure with `ui-softscroll`. -->
         <div v-else class="ui-softscroll min-h-0 flex-1 overflow-y-auto bg-canvas px-6 py-5">
             <DocPage
                 v-if="dir === undefined"

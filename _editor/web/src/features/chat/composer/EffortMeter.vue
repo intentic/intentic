@@ -1,8 +1,4 @@
-<!--
-    Reasoning-effort ladder over a plain (levels, level) pair, used by the composer and by Sandbox ▸ Agent ▸ Models. Segments brighten with level
-    rather than toggling on or off; it renders nothing when the caller has no levels to offer. On touch it is a readout that opens the levels as a
-    sheet, not five direct targets.
--->
+<!-- Reasoning-effort ladder over a plain (levels, level) pair, used by the composer and by Sandbox ▸ Agent ▸ Models. -->
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { CatalogOption } from "@intentic/sandbox-contract";
@@ -70,10 +66,7 @@ const pick = (value: string): void => {
                         :style="index <= effortIndex ? { backgroundColor: effortFill(index) } : undefined"
                     ></span>
                 </span>
-                <!--
-                    Outer span carries labelClass (hides the word in a narrow composer); the width-reserving grid lives
-                    one level in.
-                -->
+<!-- Outer span carries labelClass (hides the word in a narrow composer); the width-reserving grid lives one level in. -->
                 <span class="text-2xs text-subtle" :class="labelClass">
                     <span class="grid">
                         <span v-for="word in labelWidths" :key="word" class="invisible col-start-1 row-start-1 whitespace-nowrap" aria-hidden="true">{{ word }}</span>

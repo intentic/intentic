@@ -27,10 +27,7 @@ const runAfter = (text: string, at: number, char: string): number => {
     return length;
 };
 
-/**
- * Puts `marker` around the selection, or removes it if already there. With nothing selected, empty markers are
- * inserted with the caret between them, so Ctrl+B then typing produces bold text.
- */
+/** Puts `marker` around the selection, or removes it if already there. */
 export const toggleWrap = (text: string, start: number, end: number, marker: string): TextEdit => {
     const width = marker.length;
     const char = marker[0] ?? ``;
@@ -58,11 +55,7 @@ export const toggleWrap = (text: string, start: number, end: number, marker: str
     };
 };
 
-/**
- * Turns the selection into a link, or wraps the caret in an empty one. Selected words become the link text, and
- * the selection lands in the empty target (the part not yet known); with nothing selected, the caret goes where
- * the words would.
- */
+/** Turns the selection into a link, or wraps the caret in an empty one. */
 export const insertLink = (text: string, start: number, end: number): TextEdit => {
     const selected = text.slice(start, end);
     const next = `${text.slice(0, start)}[${selected}]()${text.slice(end)}`;

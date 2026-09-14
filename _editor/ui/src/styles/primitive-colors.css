@@ -1,12 +1,9 @@
-/* Tier 1 — primitive palettes. Raw, role-agnostic color ramps in OKLch (perceptually
- * uniform). Nothing in the app should reference these directly; map them to roles in
- * semantic-colors.css or to the numeric `surface`/`primary`/... scales below. */
+/* Tier 1 — primitive palettes. */
 @theme {
     --color-white: #fff;
     --color-black: #000;
 
-    /* Neutral (warm gray, hue 65) — backgrounds, text, borders. Subtly warmed to pair with
-     * the orange brand; chroma kept very low so it still reads as neutral. */
+    /* Neutral (warm gray, hue 65) — backgrounds, text, borders. Subtly warmed to pair. */
     --color-neutral-0:   oklch(99% 0.002 65);
     --color-neutral-50:  oklch(98% 0.003 65);
     --color-neutral-100: oklch(96% 0.005 65);
@@ -20,8 +17,7 @@
     --color-neutral-900: oklch(23% 0.008 65);
     --color-neutral-950: oklch(16% 0.007 65);
 
-    /* Brand (orange, hue 55) — primary actions, links, active state. Warm, dev-infrastructure
-     * orange. Hue eases toward red at the dark end so deep shades stay rich, not muddy. */
+/* Brand (orange, hue 55) — primary actions, links, active state. */
     --color-brand-0:   oklch(97% 0.02  55);
     --color-brand-50:  oklch(96% 0.035 55);
     --color-brand-100: oklch(93% 0.06  55);
@@ -63,8 +59,7 @@
     --color-green-900: oklch(36% 0.08 150);
     --color-green-950: oklch(27% 0.06 150);
 
-    /* Blue (hue 255) — info / neutral-informational. Distinct from the orange brand so an
-     * informational state never reads as a primary action. */
+    /* Blue (hue 255) is the informational palette, distinct from the orange brand. */
     --color-blue-0:   oklch(97% 0.02  255);
     --color-blue-50:  oklch(96% 0.03  255);
     --color-blue-100: oklch(93% 0.05  255);
@@ -78,22 +73,7 @@
     --color-blue-900: oklch(36% 0.10  255);
     --color-blue-950: oklch(27% 0.075 255);
 
-    /* Categorical series (hues 55 / 255 / 190 / 295 / 345) — chart IDENTITY, nothing else.
-     * The five ramps above are all spoken for: brand orange means "action", and red/green/amber
-     * are status-reserved, so a series painted in one would read as an error or a success. These
-     * are five single steps rather than ramps, because a categorical slot needs exactly one.
-     *
-     * Two steps per slot, light and dark, SELECTED for each surface rather than flipped: dark
-     * needs its own lightness band, not an inversion. The values are not taste — they are the
-     * output of the palette validator (colorblind separation, lightness band, chroma floor)
-     * against the real card surfaces, #fdfbfa and #201c19:
-     *   light — worst adjacent CVD ΔE 12.5 (protan), normal-vision 21.8
-     *   dark  — worst adjacent CVD ΔE  9.1 (protan), normal-vision 17.7
-     * Adjacency is what was measured, so THE SLOT ORDER IS PART OF THE RESULT. Series render in
-     * slot order (see PROVIDER_SERIES in usageChart.ts); permuting them breaks the guarantee —
-     * swapping slots 3 and 4 alone drops the worst pair to ΔE 4.0 and fails the check.
-     * Slots 1 and 3 (light) and slot 4 (dark) sit under 3:1 against their surface: legal for
-     * fills, and the reason every chart using them ships direct labels and a table view. */
+/* Categorical series (hues 55 / 255 / 190 / 295 / 345) — chart IDENTITY, nothing else. */
     --color-series-1-light: oklch(70.0% 0.170  55.0); /* orange  #ec7c0e */
     --color-series-2-light: oklch(52.1% 0.169 254.8); /* blue    #0367c7 */
     --color-series-3-light: oklch(66.9% 0.116 189.6); /* teal    #00aba4 */
@@ -105,8 +85,7 @@
     --color-series-4-dark:  oklch(51.9% 0.180 294.9); /* violet  #734ac3 */
     --color-series-5-dark:  oklch(60.0% 0.191 344.9); /* magenta #ca449a */
 
-    /* Amber (hue 88) — warning / caution. Pushed toward golden-yellow so it stays clearly
-     * distinct from the brand orange (hue 55). */
+    /* Amber stays distinct from the other warning colors. */
     --color-amber-0:   oklch(98% 0.02 88);
     --color-amber-50:  oklch(97% 0.04 88);
     --color-amber-100: oklch(94% 0.07 88);

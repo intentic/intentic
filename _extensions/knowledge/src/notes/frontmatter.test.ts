@@ -35,8 +35,7 @@ body`),
         expect([...parsed.fields]).toEqual([]);
     });
 
-    /* The whole reason this is not a YAML parser. Every one of these is a fact about the world that YAML would
-     * silently convert into something else, and a knowledge base exists to not lose facts. */
+    /* Frontmatter preserves scalar text literally; it cannot apply YAML coercions. */
     it(`leaves values that YAML would coerce exactly as written`, () => {
         expect(
             fields(`---

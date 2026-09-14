@@ -3,10 +3,7 @@ import { dirname, join } from "node:path";
 import { agentHome } from "@intentic/local-agent";
 import { z } from "zod";
 
-/* Bridge configuration: where the sandbox is and which credential/agent to use. Environment wins (the
- * editor's agent_servers env block / the ACP env_var auth method); the config file written by
- * `intentic-acp login` is the fallback, under the same ~/.intentic/<agent> home every local agent uses. The
- * session map persists ACP-session → daemon-conversation identities so editors can resume across bridge restarts. */
+/* Bridge configuration: where the sandbox is and which credential/agent to use. */
 
 const CONFIG_DIR = agentHome("acp").dir;
 

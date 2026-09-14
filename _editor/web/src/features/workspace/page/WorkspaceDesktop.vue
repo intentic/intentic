@@ -788,7 +788,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                             @keydown.esc="clearFilter"
                         />
                         <div class="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
-                            <!-- Same three switches, same order, as the editor this models. `mousedown` keeps the caret in place on press. -->
+                            <!-- Same three switches, same order, as the editor this models. -->
                             <template v-if="textMode">
                                 <button
                                     v-for="toggle in MATCH_TOGGLES"
@@ -851,7 +851,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                             ]"
                         />
                         <span class="flex-1"></span>
-                        <!-- What the list leaves out. Dark is the default (node_modules, dist, .turbo, specs); lit means a switch is on. -->
+                        <!-- This control reports which files the workspace list omits. -->
                         <button
                             type="button"
                             class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 transition-colors"
@@ -953,7 +953,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                     @pick="canEditFiles ? fileInput?.click() : refuseWrite()"
                 >
                     <template #lead>
-                        <!-- The explorer's one control, and, while a split has stood it aside, the only sign of that: a dot, pulsing once. -->
+                        <!-- The explorer control shows when a split pane is hidden. -->
                         <button
                             type="button"
                             :class="ui.iconButton(`relative mx-1 h-7 w-7 self-center`)"

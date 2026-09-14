@@ -223,18 +223,7 @@ const STUCK_REMEDY =
 const heldBy = (foreground: NonNullable<SessionState["foreground"]>): string =>
     foreground.title === `` ? `an untitled window [${foreground.app}]` : `"${foreground.title}" [${foreground.app}]`;
 
-/*
- * WHETHER THIS DESKTOP CAN BE DRIVEN, which the window list alone cannot say and used to be asked of it.
- *
- * The line this replaces searched `windows()` for the focused row and reported "none holding the foreground"
- * when it found none — a sentence that is true of an idle desktop and of a machine whose keyboard is held by
- * the lock screen, because the lock screen has no row to find. A release ran on the second kind: the doctor
- * declared the machine ready, then six assertions failed in a row, all of them worded as though the product
- * had stopped answering a deep link.
- *
- * So the holder is read from the OS, and a holder the window list does not show is SAID to be one, rather than
- * silently becoming nobody.
- */
+/* WHETHER THIS DESKTOP CAN BE DRIVEN, which the window list alone cannot say and used to be asked of it. */
 export const desktopReadiness = (open: readonly WindowInfo[], session: SessionState): DesktopReadiness => {
     const count = `${open.length} window(s) currently open`;
     if (session.locked) {

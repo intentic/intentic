@@ -1,12 +1,6 @@
 use std::io::{BufRead, BufReader, Write};
 
-/* Interactive input comes from the CONTROLLING TERMINAL, never stdin. The bootstrap shims pipe this binary's
- * flows from `curl … | sh`, where stdin is the script text — the same constraint the shell versions lived
- * under. And the probe must be an OPEN, not a permission check: /dev/tty is world-readable on every machine,
- * but opening it fails with ENXIO whenever the process has no controlling terminal (systemd, CI, setsid).
- * `[ -r /dev/tty ]` passed in exactly those cases, the read then failed, and its empty-answer fallback landed
- * on a default the caller read as YES — which silently approved a root-level Docker install on every headless
- * run. So: open is the probe, and a failed read is a refusal, never a default. */
+/* Interactive input comes from the CONTROLLING TERMINAL, never stdin. */
 
 #[cfg(unix)]
 const TTY_IN: &str = "/dev/tty";
@@ -18,17 +12,7 @@ const TTY_IN: &str = "CONIN$";
 #[cfg(windows)]
 const TTY_OUT: &str = "CONOUT$";
 
-/* THE CALLER SAYING "THERE IS NOBODY HERE TO ASK", rather than us working it out.
- *
- * Every probe below is an INFERENCE about whether a person is present, and the desktop app is the one caller
- * that already knows the answer for certain: it spawns these flows with no window, no console and closed
- * stdin, from a GUI process. A question asked on that run reaches nobody and is answered by nobody, and the
- * cost of the inference being wrong there is not a bad guess — it is a setup that never ends, on a machine
- * whose owner is watching a spinner.
- *
- * The probes are good and they are kept; this is the belt to their braces, and it costs one environment
- * variable. Set it and every prompt in this binary becomes "no answer", which each caller already handles —
- * a consent question refuses, a destructive one refuses, and a picker falls back to its default. */
+/* THE CALLER SAYING "THERE IS NOBODY HERE TO ASK", rather than us working it out. */
 pub fn prompting_disabled() -> bool {
     disabled_by(std::env::var(NO_PROMPT).ok().as_deref())
 }

@@ -9,22 +9,7 @@ export type RowDensity = `comfortable` | `compact` | `dense`;
 
 export type RowTone = `default` | `danger` | `warning` | `success` | `info`;
 
-/* A tier is read in one place rather than reassembled from five ternaries down a template.
- * THE ICON SCALES WITH THE TIER, with a 16px floor for the lead mark. A section's silhouette has to survive
- * beside a small label; shrinking it to the label's 12px turned keys and faces into indistinct scratches.
- *
- * `mark` IS THE SAME ARGUMENT FOR THE OTHER LEAD, and it is a NUMBER because the components it feeds take
- * pixels. <BrandMark> and <Avatar> each say in writing why they refuse a scale, and they are right: they are
- * drawn at 16 in a chat composer, at 44 on a capability card and at 56 on a profile, and none of those is a row.
- * What was missing is the row's own answer, so seven record lists guessed one each — 22 on the extensions list,
- * the environment contents and the skills list, 20 on the secrets list and the registry browser, 24 on the
- * capability connections, 32 on the personas list — and three of those sit one tab apart from each other.
- *
- * ONE SIZE PER TIER, FACES INCLUDED. A round <PersonaFace> and a square <BrandMark> plate are both 22 in a
- * compact row. A face does read a shade smaller inside the same box, and that is a real optical effect, but the
- * correction costs a second number, a rule about when it applies, and a call site that has to know which kind of
- * mark it is drawing — which is how 32 got there in the first place. <Row> hands this out as a `#lead` slot
- * prop, so no call site types it at all. */
+/* A tier is read in one place rather than reassembled from five ternaries down a template. */
 export const ROW_TIERS = {
     comfortable: { pad: `px-4.5 py-3.5`, gap: `gap-3`, icon: `text-xl`, title: `font-semibold leading-tight`, description: `text-xs`, mark: 28 },
     compact: { pad: `px-4 py-2.5`, gap: `gap-3`, icon: `text-lg`, title: `text-sm font-medium leading-tight`, description: `text-2xs`, mark: 22 },
@@ -80,10 +65,7 @@ const ROW_DENSITY: InjectionKey<ComputedRef<RowDensity>> = Symbol(`ui.row.densit
 /** Published by <RowGroup> for every row, outline and note on its surface. */
 export const provideRowDensity = (density: ComputedRef<RowDensity>): void => provide(ROW_DENSITY, density);
 
-/**
- * The tier this row draws at: what the caller asked for, else the group's, else `comfortable`. `own` is
- * undefined when the call site left it to the list.
- */
+/** The tier this row draws at: what the caller asked for, else the group's, else `comfortable`. */
 export const useRowDensity = (own: () => RowDensity | undefined): ComputedRef<RowDensity> => {
     const group = inject(ROW_DENSITY, undefined);
     return computed(() => own() ?? group?.value ?? `comfortable`);

@@ -1,8 +1,4 @@
-<!--
-    Syntax-highlighted command on a permission card. The gate's flagged span gets a tinted, underlined mark; everything else keeps its normal Shiki
-    colour at reduced opacity — no guessing at which arguments matter beyond what the gate flagged. Light/dark swap is handled by
-    `.chat-command-block` in chat.css, not by this component.
--->
+<!-- Syntax-highlighted command on a permission card. -->
 <script setup lang="ts">
 import type { ProgramAsk } from "@intentic/sandbox-contract";
 import { type CodeToken, CopyButton, Icon, ui, useHighlighter } from "@intentic/ui";
@@ -44,26 +40,13 @@ const shown = computed(() => (clamped.value ? lines.value.slice(0, CLAMP_LINES) 
 <template>
     <div class="flex flex-col gap-1.5">
         <div class="relative">
-            <!--
-                `pre-wrap`, not a scroller: a command being judged must show its tail, not hide it off the right edge.
-                `break-all` wraps an unbreakable URL instead of widening the card; this is body-tier text, not the
-                transcript's dimmer meta tier.
-            -->
-            <!--
-                `pr-16` reserves room for the copy button, which floats over the top-right corner and would sit on top of a
-                wrapped first line otherwise (same trick as `<Code>`, code.css's `ui-code-copyable`).
-            -->
+<!-- `pre-wrap`, not a scroller: a command being judged must show its tail, not hide it off the right edge. -->
+<!-- Reserve right padding so the copy button cannot cover wrapped command text. -->
             <pre
                 class="chat-command-block overflow-hidden rounded-md border border-line bg-canvas py-2 pr-16 pl-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap"
             ><code><template v-for="(line, index) in shown" :key="index"><span v-for="(piece, at) in line.pieces" :key="at" :style="piece.style" :class="piece.marked ? 'chat-command-mark' : 'chat-command-dim'">{{ piece.text }}</span>{{ index === shown.length - 1 ? "" : "\n" }}</template></code></pre>
-            <!--
-                Copies the whole program, never the clamped rendering: half a command is worse than none. A shortened
-                card's excerpt already marks itself as partial; the full program is in the transcript.
-            -->
-            <!--
-                Positioned in its own box: the button's own root is `relative` for its press spinner, so `absolute` has to
-                come from here instead.
-            -->
+<!-- Copies the whole program, never the clamped rendering: half a command is worse than none. -->
+<!-- Positioned in its own box: the button's own root is `relative` for its press spinner, so `absolute` has to come from here instead. -->
             <div class="absolute top-1.5 right-1.5 flex">
                 <CopyButton :text="program.text" label="Copy" class="bg-canvas" />
             </div>
@@ -83,10 +66,7 @@ const shown = computed(() => (clamped.value ? lines.value.slice(0, CLAMP_LINES) 
                 {{ expanded ? `Show less` : `Show all ${lines.length} lines` }}
                 <Icon :name="expanded ? `chevron-up` : `chevron-down`" />
             </button>
-            <!--
-                Says there's more rather than ending mid-word; nothing to expand to here, since the rest was never sent (see
-                the transcript). The excerpt always keeps the flagged fragment, so the title's subject is never what got cut.
-            -->
+<!-- Says there's more rather than ending mid-word; nothing to expand to here, since the rest was never sent (see the transcript). -->
             <span v-if="program.truncated" class="text-2xs text-subtle">{{
                 program.spans.length > 0 ? `Shortened for this card, kept around the flagged part.` : `Shortened for this card.`
             }}</span>

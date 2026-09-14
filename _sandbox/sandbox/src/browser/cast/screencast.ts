@@ -476,8 +476,7 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
                 armStill(session);
                 return;
             }
-            // Real motion resets the back-off and clears lastStill, so the next capture doesn't compare against a stale
-            // one.
+            // Reset quiet detection after real motion.
             quiet = 0;
             lastStill = undefined;
             onFrame({ bytes: Buffer.from(frame.data, "base64"), format: "jpeg" });

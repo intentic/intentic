@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { InfoDialog, InfoTable } from "@intentic/ui";
 
-/* The (i) beside the Safety policy. Two things somebody needs before they write a line of it and cannot get
- * from a textarea: what actually happens to a command, and — the part that decides whether this page is worth
- * taking seriously — what the document does NOT control. */
+/* The (i) beside the Safety policy. */
 
 const TIERS = [
     [`The sandbox itself`, `A container, a git worktree of its own, credentials masked out of everything the model reads`, `Nobody. Nothing here can change it.`],
@@ -24,9 +22,7 @@ const TIERS = [
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">What happens to a command</h3>
         <InfoTable class="mt-2" :headers="[`Step`, `What it does`, `Who it interrupts`]" :rows="TIERS" />
 
-        <!-- The honest limit, and the reason the page is safe to hand to the assistant. Without this an owner
-             either over-trusts the document (thinking it is the boundary) or under-uses it (afraid a loose line
-             opens the machine up). Neither is true and the difference is worth two paragraphs. -->
+<!-- The honest limit, and the reason the page is safe to hand to the assistant. -->
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">What this can and cannot do</h3>
         <p class="mt-2 text-2xs text-muted">
             It decides <span class="font-medium text-content">how often you are interrupted</span>, not what the assistant is capable of. Nothing

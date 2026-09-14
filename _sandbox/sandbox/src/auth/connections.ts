@@ -1,11 +1,6 @@
 import type { Caller } from "./auth.js";
 
-/* Every authenticated browser transport whose authorization was decided only when it opened.
- *
- * Ordinary HTTP requests re-run the owner/member check each time. An event stream or WebSocket does not:
- * after its opening request there is no next middleware pass on which a removed member or a rotated session
- * can be rejected. Keeping the close callback beside the verified caller makes revocation an event, rather
- * than waiting for an already-authorized terminal or browser window to happen to disconnect by itself. */
+/* Every authenticated browser transport whose authorization was decided only when it opened. */
 export interface AuthConnections {
     readonly register: (caller: Caller, close: () => void) => () => void;
     // No email means the sandbox-wide kill switch. An email closes only that member's live transports.

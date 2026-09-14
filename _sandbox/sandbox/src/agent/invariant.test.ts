@@ -2,8 +2,7 @@ import { expect, test } from "vitest";
 import { checks } from "./invariant.js";
 import type { JournalEntry, TurnJournal } from "./run/turn/turn-journal.js";
 
-/* The window this check exists to close: a turn is running, its journal write was swallowed, and the next
- * container recreate (an update, an environment approval, a dev swap) ends it with nothing to resume from. */
+/* A running turn must persist its journal before recreation can proceed. */
 
 const fail = (message: string): never => {
     throw new Error(message);

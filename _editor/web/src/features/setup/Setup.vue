@@ -402,9 +402,7 @@ type Handoff = "locked" | "yours" | "handed" | "claimed";
 const copied = ref(false);
 // App was handed the code (desktop's copy-equivalent); last thing observable before the machine takes over.
 const launched = ref(false);
-/* …and what the app says about that setup afterwards (desktopSetup.ts): the bar its own card draws, reported
- * here on every change, so the page a dismissed card hands the window back to can show how the install is
- * going rather than pointing at a window that has just stepped aside. */
+/* . */
 const { report: desktopReport, heardAt: desktopHeardAt } = useDesktopSetup();
 // A link back to this screen is in the user's inbox (the phone's handoff: SetupHandoff.vue). Deliberately NOT
 // part of `handoff` below: that state machine tracks the COMMAND's journey to a machine, and posting yourself a
@@ -750,11 +748,7 @@ const restartHosted = async (): Promise<void> => {
     const action = ++hostedAction;
     hostedBusy.value = true;
     hostedError.value = undefined;
-    /* CLEARED BEFORE THE CALL, NOT AFTER IT. A restart stops the machine and then starts it, which took about
-     * six seconds against Fly in production while this page read the machine every twelve — so the old reset,
-     * which ran once the call had returned, left a whole poll free to read the stop this very button caused
-     * and report it as the restart having failed. Everything below describes the boot being replaced, so none
-     * of it is true from the moment the button is pressed. */
+/* CLEARED BEFORE THE CALL, NOT AFTER IT. */
     bootReport.value = null;
     announceRefusal.value = null;
     announced.value = false;
@@ -1343,7 +1337,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                 <div class="flex min-w-0 flex-1 flex-col gap-3 md:gap-4 xl:max-w-3xl">
                     <!-- Titled since it asks for something (a form needs a heading); an icon, not a number, since there's no step 2. -->
                     <StepSection v-if="lane === `attach`" icon="link" title="Connect your sandbox" class="entry-frame rounded-none work-card">
-                        <!-- Corners are absolutely positioned against `.entry-frame`; this lane earns the same ornament as the run card. -->
+                        <!-- The lane's corners are positioned against the shared entry frame. -->
                         <span class="entry-corner entry-corner-tl"></span>
                         <span class="entry-corner entry-corner-tr"></span>
                         <span class="entry-corner entry-corner-bl"></span>
@@ -1359,7 +1353,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                         </p>
                         <label class="ui-field">
                             <span class="ui-field-label">Domain</span>
-                            <!-- Stacked on a phone; side by side, the field loses half its width and the typed address scrolls out of view. -->
+                            <!-- Stack the domain field on phones so its address remains readable. -->
                             <div class="flex flex-col gap-2 md:flex-row md:items-center">
                                 <input
                                     v-model="domain"
@@ -1370,7 +1364,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     :class="ui.input('w-full')"
                                     @keydown.enter="connectDomain"
                                 />
-                                <!-- attaching gates disabled too, not just loading: the theme has no disabled tokens, so loading alone looks live. -->
+                                <!-- Attaching disables the action as well as showing progress. -->
                                 <Button
                                     label="Connect"
                                     class="w-full justify-center md:w-fit"
@@ -1405,7 +1399,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 detail: `Something is listening, but it isn't replying: a sandbox still starting up, or a proxy pointed at the wrong port. Give it a moment and try again.`,
                             }"
                         />
-                        <!-- Tunnel alive, no sandbox behind it: usually a resumed sandbox's container is gone; named as that, not a 530. -->
+                        <!-- A live tunnel without a sandbox reports the missing sandbox. -->
                         <Notice
                             v-else-if="attachOutcome?.kind === `no-origin`"
                             :of="{ tone: `danger`, title: `That domain is live, but no sandbox is running behind it.` }"
@@ -1470,7 +1464,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                     <!-- Renders only before `created` exists (or a resumed row); `!loaded` alone once drew this beside the run card. -->
                     <div v-else-if="created === null || resuming" class="flex flex-col items-start gap-2 py-1">
                         <template v-if="created === null">
-                            <!-- Reading offers and minting the row are one wait to the reader, so they render as one line, not two states. -->
+                            <!-- Offers and row creation render as one loading state. -->
                             <p v-if="!loaded || creating" class="flex items-center gap-2 text-xs text-muted">
                                 <Icon name="spinner" spin class="text-info" />
                                 Setting one up for you. Nothing to fill in.
@@ -1481,7 +1475,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     <template #icon><Icon name="refresh" /></template>
                                 </Button>
                             </template>
-                            <!-- Held back until `loaded`: offering attach is honest only once we know what the platform can do; can't flicker. -->
+                            <!-- Attach is offered only after platform capabilities load. -->
                             <button v-if="loaded" type="button" :class="ui.linkButton()" @click="setLane(`attach`)">
                                 Already running a sandbox somewhere? Connect it by domain →
                             </button>
@@ -1513,7 +1507,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 <template #icon><Icon name="refresh" /></template>
                             </Button>
                         </template>
-                        <!-- Named remedy only when on screen: `otherWorkspace` needs a reported-in sandbox, which the holder may not be. -->
+                        <!-- Show the remedy only when a reported-in sandbox can receive it. -->
                         <template v-else-if="lanes.kind === `spent`">
                             <Notice
                                 :of="{
@@ -1540,11 +1534,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                         </button>
                     </div>
 
-                    <!--
-                        Card is what you do (command, two switches, one state line); what it means moved to SetupRunDetails, docked
-                        or folded into (i). On a phone the card is one sentence plus the handoff; the command's detail lives there
-                        instead.
-                    -->
+<!-- Card is what you do (command, two switches, one state line); what it means moved to SetupRunDetails, docked or folded into (i). -->
 
                     <!-- No heading: it could only name one of three answers below, and the chooser says it better than a title could. -->
                     <!-- Ladder is its own row outside every card, not nested in the run card, so it isn't read as a step's detail. -->
@@ -1556,7 +1546,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                             role="radiogroup"
                             aria-label="Where the sandbox runs"
                         >
-                            <!-- Choosing a rung turns its corners gold (the page's one selection signal), not a border tint easy to miss. -->
+                            <!-- Selected rungs use gold corners as the page's selection signal. -->
                             <button
                                 v-for="option in ladderOptions"
                                 :key="option.value"
@@ -1572,7 +1562,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 <span class="entry-corner entry-corner-tr"></span>
                                 <span class="entry-corner entry-corner-bl"></span>
                                 <span class="entry-corner entry-corner-br"></span>
-                                <!-- A drawing, not a glyph (SetupRungArt); the spinner replaces it (`invisible`, not gone), so height never jumps. -->
+                                <!-- The rung art reserves space while its spinner is shown. -->
                                 <span class="mb-1 grid w-full grid-cols-1 grid-rows-1">
                                     <SetupRungArt
                                         :kind="option.value"
@@ -1587,17 +1577,16 @@ const warmSandboxCredential = async (): Promise<void> => {
                                         <Icon name="spinner" spin class="text-xl text-link" />
                                     </span>
                                 </span>
-                                <!-- Mark on the title's own line, not above it, so the name reads as a station on the row, not an adjacent card. -->
+                                <!-- The mark stays on the title line so the rung reads as one station. -->
                                 <span class="rung-name">
                                     <span class="entry-lozenge"></span>
                                     <span class="min-w-0">{{ option.title }}</span>
                                 </span>
                                 <!-- Cost gets its own colour: the one line a reader compares across the row rather than reading down. -->
                                 <span class="rung-cost">{{ option.meta }}</span>
-                                <!-- Three or four words on what a rung asks or where it puts the machine; longer prose moved under the row. -->
+                                <!-- Keep the rung note to a short action or destination. -->
                                 <span class="text-xs leading-snug text-subtle">{{ option.note }}</span>
-                                <!-- The allowance is spent, and saying so beats hiding a rung the reader was
-                                     offered on their first sandbox. -->
+                                <!-- Spent allowances remain visible instead of hiding an unavailable rung. -->
                                 <span v-if="option.value === `hosted` && hostedSpent" class="text-xs text-warning">Already using yours</span>
                             </button>
                         </div>
@@ -1611,9 +1600,9 @@ const warmSandboxCredential = async (): Promise<void> => {
                         <span class="entry-corner entry-corner-bl"></span>
                         <span class="entry-corner entry-corner-br"></span>
                         <span class="entry-finial" aria-hidden="true"><AppBrand shape="mark" /></span>
-                        <!-- Leads the card in every lane, so phrases like 'the token above' always point at something actually on screen. -->
+                        <!-- The card lead keeps references such as “the token above” visible. -->
                         <div class="flex flex-col gap-2">
-                            <!-- One group across every state, so the escape hatch beside it stays reachable even when the mint has errored. -->
+                            <!-- One group keeps the escape hatch reachable in every state. -->
                             <!-- Stacked on a phone: a label column left too little room for a hostname, read character by character. -->
                             <div
                                 v-if="addressFact !== `own`"
@@ -1621,21 +1610,18 @@ const warmSandboxCredential = async (): Promise<void> => {
                             >
                                 <span :class="factLabel">Address</span>
                                 <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-                                    <!-- Keyed on the rung, not the machine: a chosen hosted rung with no machine must not fall to the mint spinner. -->
+                                    <!-- Address facts are keyed by the selected rung, not machine state. -->
                                     <template v-if="addressFact === `hosted`">
                                         <span v-if="hostedHost" :class="factHost">{{ hostedHost }}</span>
                                         <span v-else-if="hostedRow !== null" :class="`${factSlot} gap-2 text-xs text-muted`">
                                             <Icon name="spinner" spin class="self-center" /> Assigned as your machine starts…
                                         </span>
-                                        <!--
-                                            No machine to be had means the address line must not promise one, contradicting 'we're out of machines'
-                                            below.
-                                        -->
+                                        <!-- A missing machine must not produce an address promise. -->
                                         <span v-else :class="`${factSlot} text-xs text-muted`">{{
                                             hostedFull ? `Assigned when a machine frees up` : `Assigned when your machine starts`
                                         }}</span>
                                     </template>
-                                    <!-- Platform mints no addresses: a fact, not a wait, so no spinner and no hatch (both alternatives mint too). -->
+                                    <!-- A platform without addresses shows a fact, not a waiting state. -->
                                     <span v-else-if="addressFact === `none`" :class="`${factSlot} text-xs text-muted`">
                                         This platform doesn't set one up
                                     </span>
@@ -1646,10 +1632,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                         <span v-else :class="`${factSlot} gap-2 text-xs text-muted`">
                                             <Icon name="spinner" spin class="self-center" /> Preparing your intentic domain…
                                         </span>
-                                        <!--
-                                            One escape hatch, not two separate links asking the same question; each choice under it states what it
-                                            does.
-                                        -->
+                                        <!-- One escape hatch presents the available choices. -->
                                         <button type="button" :class="ui.linkButton()" @click="reaching = !reaching">
                                             {{ reaching ? `Keep this address` : `Use a different address` }}
                                         </button>
@@ -1657,7 +1640,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 </div>
                             </div>
 
-                            <!-- Overflow from the address row; used to be a bordered inset with captions, now labels carry the distinction. -->
+                            <!-- Address overflow uses labels instead of a nested bordered panel. -->
                             <p v-if="addressFact === `none`" class="text-xs text-muted">
                                 Sandboxes here are reached at an address you already have. Already running one?
                                 <button type="button" class="cursor-pointer text-link hover:underline" @click="setLane(`attach`)">
@@ -1674,7 +1657,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 >.
                             </p>
 
-                            <!-- Own Cloudflare: token, zone, editable subdomain; the way back sits by the (i), since there's no header now. -->
+                            <!-- Own Cloudflare credentials and the way back share this section. -->
                             <template v-if="addressFact === `own`">
                                 <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                                     <button v-if="intenticAvailable" type="button" :class="ui.linkButton()" @click="mode = `intentic`">
@@ -1705,7 +1688,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     storage-note="Used once to look up your Cloudflare zones, then it rides the command into your sandbox, never stored by intentic."
                                 />
 
-                                <!-- Zone suffix wraps to its own line rather than stealing width from the subdomain field, which a phone lacked. -->
+                                <!-- The zone suffix wraps so the subdomain keeps phone width. -->
                                 <label v-if="selectedZone" class="ui-field">
                                     <span class="ui-field-label">Domain</span>
                                     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -1732,10 +1715,10 @@ const warmSandboxCredential = async (): Promise<void> => {
                         <!-- Kept separate from the arrival notice so a lane change doesn't erase it; a full fleet isn't shown twice. -->
                         <Notice v-if="hostedError && !hostedFull" :of="hostedError" />
 
-                        <!-- Steps ticking while going fine, or what broke and what's next otherwise, never both (hostedWait.ts decides). -->
+                        <!-- Show progress steps or the failure, never both. -->
                         <template v-if="machine === `hosted`">
                             <template v-if="hostedRow !== null">
-                                <!-- Step list is gone here on purpose; ticking beside a stated failure would be the page arguing with itself. -->
+                                <!-- Failure state replaces the progress list. -->
                                 <template v-if="hostedWait.failure">
                                     <p class="flex items-start gap-2 text-xs text-content">
                                         <Icon name="exclamation-circle" class="mt-0.5 shrink-0 text-warning" />
@@ -1751,7 +1734,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                         <template #icon><Icon name="refresh" /></template>
                                     </Button>
                                 </template>
-                                <!-- Healthy wait: one row per step, current one spinning; naming where we are beats one sentence saying so. -->
+                                <!-- Healthy waits show one row per step and spin the current row. -->
                                 <template v-else>
                                     <ul class="flex flex-col gap-1.5">
                                         <li
@@ -1771,7 +1754,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                             <span>{{ step.label }}</span>
                                         </li>
                                     </ul>
-                                    <!-- Promise comes from hostedWait.ts (origin's estimate, then elapsed minutes); a download reads as counted work. -->
+                                    <!-- The wait note uses the origin estimate and elapsed time. -->
                                     <p class="text-xs text-muted">{{ hostedWait.note }}</p>
                                 </template>
                             </template>
@@ -1779,8 +1762,8 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 <Icon name="spinner" spin class="text-info" />
                                 Starting a machine for you…
                             </p>
-                            <!-- This is the commitment, not the description above; the no-backup fact is stated here, where someone decides. -->
-                            <!-- Full fleet: the button that can't work isn't drawn; `Check again` re-reads capacity, not a doomed retry. -->
+                            <!-- The action states the no-backup commitment at the decision point. -->
+                            <!-- A full fleet offers only a capacity recheck. -->
                             <template v-else-if="hostedFull">
                                 <p class="flex items-start gap-2 text-xs text-content">
                                     <Icon name="exclamation-circle" class="mt-0.5 shrink-0 text-warning" />
@@ -1835,7 +1818,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                             </nav>
                         </template>
 
-                        <!-- Hidden until the command's path is ready; a failed mint gets a notice and retry, not an endless placeholder. -->
+                        <!-- The command area appears only when its path is ready. -->
                         <template v-else-if="!commandReady">
                             <template v-if="setupError">
                                 <Notice :of="setupError" />
@@ -1850,7 +1833,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                             </div>
                         </template>
                         <template v-else>
-                            <!-- In the app the terminal is gone: one click hands the code to the app; the title already names the machine. -->
+                            <!-- In-app setup hands the command to the app. -->
                             <template v-if="desktop">
                                 <p class="text-xs text-muted">
                                     Installs Docker if you need it, starts your sandbox and its tunnel, and opens your workspace the moment it
@@ -1861,7 +1844,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 </Button>
                             </template>
 
-                            <!-- Browser's install-earlier answer, one button only; `w-fit` avoids a flex-column stretch `w-auto` doesn't stop. -->
+                            <!-- Browser setup exposes one install-earlier action. -->
                             <Button
                                 v-if="appFirst && installer"
                                 as="a"
@@ -1883,7 +1866,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted"
                             >
                                 <span>Other ways to set up:</span>
-                                <!-- Only shown while the other rung is folded; the visible row already shows what a link here would offer. -->
+                                <!-- Show alternate setup links only while their rung is folded. -->
                                 <template v-if="otherMachinesFolded">
                                     <button type="button" :class="ui.linkButton()" @click="showOtherMachines">Use a machine we host</button>
                                     <span aria-hidden="true" class="text-subtle">·</span>
@@ -1896,7 +1879,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                             </nav>
 
                             <div v-if="commandVisible" class="flex flex-col gap-2">
-                                <!-- One line naming which machine, the one thing the title can't; skipped on a phone, already said there. -->
+                                <!-- The machine line fills the desktop reference slot. -->
                                 <p v-if="!mobile" class="flex items-center gap-2.5 text-xs text-muted">
                                     <Icon name="terminal" class="shrink-0 text-link" />
                                     <span class="min-w-0">
@@ -1906,7 +1889,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                         <template v-else>Paste it into a terminal: this computer, or any server you have a shell on.</template>
                                     </span>
                                 </p>
-                                <!-- Copy button rides the tab row on desktop, drops under the command on a phone: beside what it acts on. -->
+                                <!-- Copy stays beside the command on desktop and below it on phones. -->
                                 <div class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:justify-between">
                                     <SegmentedControl
                                         v-model="runTab"
@@ -1924,7 +1907,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 </div>
                                 <SetupCompose v-if="runTab === `compose` && composeArgs" :args="composeArgs" />
                                 <template v-else>
-                                    <!-- Clamped on a phone: unwrapped runs many lines between Copy and the next step; no label, redundant already. -->
+                                    <!-- Clamp the command on phones so the next step stays visible. -->
                                     <Code
                                         :code="selectedCommand"
                                         :lang="selectedCommandLang"
@@ -1932,7 +1915,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                         :copyable="false"
                                         :clamp-lines="mobile ? 4 : undefined"
                                     />
-                                    <!-- Full width, touch-sized, under the command, since copying is the point; secondary, as the handoff is primary. -->
+                                    <!-- The copy action is full-width and touch-sized on phones. -->
                                     <CopyButton
                                         v-if="mobile"
                                         :text="selectedCommand"
@@ -1941,7 +1924,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                         severity="secondary"
                                         @copied="onCopied"
                                     />
-                                    <!-- Local dev only, folded as a note to intentic's own devs; gated on the same condition as the tag it describes. -->
+                                    <!-- Local development guidance stays folded behind the same gate. -->
                                     <details v-if="buildsFromCheckout" class="text-xs text-warning">
                                         <summary class="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
                                             <Icon name="box" class="shrink-0" />
@@ -1976,7 +1959,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                             <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" class="xl:hidden" />
                         </template>
 
-                        <!-- Spins in every state (the poll never stops); colour, not the spin, carries whose move it is. No 'Check now'. -->
+                        <!-- Keep the spinner visible while polling and use color to show ownership. -->
                         <div v-if="waiting" class="flex flex-col gap-2">
                             <!-- Spinner doesn't survive a failure report; spinning beside 'here is what broke' would contradict itself. -->
                             <p
@@ -1991,10 +1974,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     :class="handoff === `claimed` ? `text-success` : handoff === `handed` ? `text-info` : `text-subtle`"
                                 />
                                 <span class="min-w-0">
-                                    <!--
-                                        Machine's own stage beats the canned guess; 'Starting Docker' was written before this page knew anything
-                                        more.
-                                    -->
+                                    <!-- The machine's reported stage overrides the fallback label. -->
                                     <template v-if="handoff === `claimed` && buildStage !== undefined">
                                         <span class="font-medium text-success">Your machine picked it up.</span> Right now: {{ buildStage }}.
                                     </template>
@@ -2002,10 +1982,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                         <span class="font-medium text-success">Your machine picked it up.</span> Starting Docker. The first run takes
                                         a few minutes.
                                     </template>
-                                    <!-- Handed off two ways, and the next move differs: a copied command still has to be
-                                         pasted, where the app already has everything and is opening its own window.
-                                         Once the app is reporting, the strip under this line is the answer and this
-                                         line only names what is happening. -->
+<!-- Copied commands require a paste; the app path opens its own window. -->
                                     <template v-else-if="handoff === `handed` && launched && desktopReport">
                                         <span class="font-medium text-content">The app is setting it up.</span> This page opens your workspace the
                                         moment it answers.
@@ -2017,12 +1994,12 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     <template v-else-if="handoff === `handed`">
                                         <span class="font-medium text-content">Copied.</span> Paste it into that terminal and press Enter.
                                     </template>
-                                    <!-- States whose move it is, not the sandbox's status ('nothing running' told the reader nothing actionable). -->
+                                    <!-- This names the actor responsible for the next setup step. -->
                                     <template v-else-if="desktop && !commandVisible">
                                         <span class="font-medium text-content">Waiting for you to start it.</span> Nothing runs until you press "Set
                                         it up now" above.
                                     </template>
-                                    <!-- Same sentence for a browser offered an installer; naming the app's button would name one this reader lacks. -->
+                                    <!-- Browser and app setup use the same action sentence. -->
                                     <template v-else-if="installing">
                                         <span class="font-medium text-content">Waiting for you to start it.</span> Nothing runs until you install the
                                         app above.
@@ -2034,19 +2011,14 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 </span>
                             </p>
 
-                            <!-- THE APP'S OWN BAR, on this page: what "Back to your workspace" leaves behind. Only
-                                 while this page handed the setup to the app (a report from a run some other tab
-                                 started belongs to that tab's card), and only until the machine has reported in
-                                 for itself, from which point the sandbox's own words above outrank the installer's. -->
+<!-- THE APP'S OWN BAR, on this page: what "Back to your workspace" leaves behind. -->
                             <DesktopSetupProgress
                                 v-if="launched && desktopReport && handoff !== `claimed`"
                                 :report="desktopReport"
                                 :heard-at="desktopHeardAt"
                             />
 
-                            <!-- The machine said exactly what broke: render it verbatim, problem and fix per check,
-                                 and the one instruction that is always true. This is the card the whole report
-                                 channel exists for: the answer used to live in a terminal nobody was watching. -->
+<!-- The machine said exactly what broke: render it verbatim, problem and fix per check, and the one instruction that is always true. -->
                             <Notice
                                 v-if="reportFailures !== null"
                                 :of="{ tone: `danger`, title: `Setup failed on your machine. Here is what it found:` }"
@@ -2060,7 +2032,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 <p class="mt-1.5 text-2xs">Fix the above, then run the same command again. It stays valid.</p>
                             </Notice>
 
-                            <!-- Hidden on a wide screen, riding the reference column instead; at the foot it sat furthest from the command. -->
+                            <!-- Wide screens move this explanation into the reference column. -->
                             <SetupNudge
                                 v-if="nudging"
                                 class="xl:hidden"
@@ -2071,10 +2043,10 @@ const warmSandboxCredential = async (): Promise<void> => {
                                 @copied="onCopied"
                             />
 
-                            <!-- Claimed-but-silent differs from never-run: the command ran, so the terminal has the answer. Fuse is longer. -->
+                            <!-- Claimed-but-silent differs from never-run: the command ran, so the terminal has the answer. -->
                             <p v-if="slowBuild" class="flex items-start gap-2 text-xs text-warning">
                                 <Icon name="exclamation-circle" class="mt-0.5 shrink-0" />
-                                <!-- Checks `launched`, not `commandVisible`: a folded command on a phone isn't sent to an app window it lacks. -->
+                                <!-- Check launch state, not visibility, before handing a command to the app. -->
                                 <span class="min-w-0"
                                     >Picked up a while ago, still no sandbox. Check {{ launched ? `the Intentic window` : `that terminal` }} for an
                                     error. It's safe to re-run.</span
@@ -2085,10 +2057,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                     </section>
                 </div>
 
-                <!--
-                    Docked reference for the run step only; `xl:w-88` is measured to fit the longest cleanup one-liner on one
-                    line, not a guess.
-                -->
+<!-- Docked reference for the run step only; `xl:w-88` is measured to fit the longest cleanup one-liner on one line, not a guess. -->
                 <aside
                     v-if="created && lane === `provision` && laneTakeable && machine !== `hosted`"
                     class="hidden flex-col gap-3 xl:sticky xl:top-8 xl:flex xl:w-88 xl:shrink-0"
@@ -2115,17 +2084,9 @@ const warmSandboxCredential = async (): Promise<void> => {
 </template>
 
 <style scoped>
-/*
- * Shared material lives in styles/entry.css (metals, ink, faces, plate, type). Below is this page's own
- * composition: how the art sits, the masthead, and this page's two objects, a rung and the framed card every
- * rung leads to.
- */
+/* Shared material lives in styles/entry.css (metals, ink, faces, plate, type). */
 
-/*
- * The ground: how far the picture reaches, and where the veil closes over it. Both track the art (56.25vw, from
- * its own 16:9) rather than being chosen, with clamps at the extremes: a phone, where a fixed veil would close
- * over unpainted canvas, and a very wide monitor, where the masthead would float mid-temple.
- */
+/* The ground: how far the picture reaches, and where the veil closes over it. */
 .vestibule .entry-plate {
     --plate-reach: clamp(16rem, 40vw, 34rem);
 }
@@ -2174,11 +2135,7 @@ const warmSandboxCredential = async (): Promise<void> => {
     text-wrap: pretty;
 }
 
-/*
- * Framed cards: `.entry-frame` draws the double rule and plate; padding lives here since it's the responsive
- * part and must clear the ornament. A body inset shallower than `--corner-size` puts a paragraph under a gold
- * curl.
- */
+/* Framed cards: `.entry-frame` draws the double rule and plate; padding lives here since it's the responsive part and must clear the ornament. */
 .work-card {
     padding: 1.6rem 1.35rem 1.35rem;
 }

@@ -25,10 +25,7 @@ export const landsByDefault = (rules: readonly Rule[]): boolean => {
     return deciding?.action.kind === `verdict` && deciding.action.verdict === `allow`;
 };
 
-/* WHAT STANDS BEFORE A PUSH OF THESE REPOSITORIES, in the order it runs. A rule naming no repository stands for every
- * push; one naming a repository stands only when that repository is going out, which is the whole point of naming it.
- * `repos` empty is a push of nothing in particular and leaves only the unconditional rules, matching what the daemon
- * runs when the caller names none. */
+/* WHAT STANDS BEFORE A PUSH OF THESE REPOSITORIES, in the order it runs. */
 export const pushChecksOf = (rules: readonly Rule[], repos: readonly string[]): Rule[] =>
     rules.filter(
         (rule) =>

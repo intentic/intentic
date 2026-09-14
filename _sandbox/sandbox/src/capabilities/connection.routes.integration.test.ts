@@ -3,12 +3,7 @@ import { createApp } from "../app.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
 
-/* The connection route: the extension BACKENDS' credential read. Two boundaries, each pinned:
- *   • WHO reaches it: only the daemon's header grants. A signed-in member (the OWNER included) is refused
- *     in-route, because everything a browser renders echoes secrets as hasToken booleans and this is the one
- *     read that answers them verbatim.
- *   • WHAT a grant buys: the extension token verifies against its manifest's permissions.daemon through the
- *     ordinary grants table, so an extension that never declared this route is out-of-scope, not served. */
+/* The connection route: the extension BACKENDS' credential read. */
 
 const KOMODO = {
     id: "prod-komodo",

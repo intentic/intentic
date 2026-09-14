@@ -5,10 +5,7 @@ use serde::Deserialize;
 use crate::tty;
 use crate::util::{bail, Result};
 
-/* The two Cloudflare calls the connect flows make DIRECTLY (everything else — tunnel + DNS creation — goes
- * through `intentic tunnel …` inside the image, where the logic lives once). Validated up front rather than
- * failing later deep inside `intentic deploy apply`: Cloudflare is the reachability fabric, and a bad token
- * should stop the flow while the user is still looking at it. The token never reaches the platform. */
+/* Connect flows call Cloudflare directly; tunnel and DNS creation use `intentic tunnel`. */
 
 const API: &str = "https://api.cloudflare.com/client/v4";
 

@@ -8,8 +8,7 @@ import { fakeDaemon } from "./__fixtures__/fake-daemon.js";
 import { bridgeAgentApp } from "./bridge.js";
 import type { BridgeConfig } from "./config.js";
 
-/* The bridge under test is the real agent() app driven through the SDK's in-process composition: real
- * JSON-RPC routing, a fake daemon behind it (the reverse of the sandbox's fake-acp-agent fixture). */
+/* The bridge under test is the real agent() app driven through the SDK's in-process composition: real JSON-RPC routing. */
 
 const CONFIG: BridgeConfig = { url: "https://sandbox.example", token: "ict_test", agent: "claude", model: undefined };
 

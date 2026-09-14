@@ -353,8 +353,7 @@ const runFire = async (
                     // anonymous.
                     ...(origin !== undefined ? { origin } : {}),
                     ...(title !== undefined ? { title } : {}),
-                    // The thread it would have continued: without it, approve has nothing to resume and mints a fresh
-                    // one.
+                    // Preserve the conversation to resume instead of minting a fresh one.
                     ...(resumedConversationId !== undefined ? { conversationId: resumedConversationId } : {}),
                     ...(resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {}),
                     createdAt: Date.now(),

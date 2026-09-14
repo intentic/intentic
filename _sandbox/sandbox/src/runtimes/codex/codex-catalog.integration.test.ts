@@ -6,9 +6,7 @@ import type { Config } from "../../env.config.js";
 import { createCodexCatalog } from "./codex-catalog.js";
 import { SEED_CODEX_MODELS } from "./codex-models.js";
 
-/* The ORDER the catalog is served in, and therefore the model a fresh Codex conversation starts on: `default` is
- * the head of the list. OpenAI's /v1/models publishes a set in registry order: alphabetical in practice, so
- * taking its first id meant starting on GPT 5.1 while GPT 5.6 sat in the same response. See model-order.ts. */
+/* The ORDER the catalog is served in, and therefore the model a fresh Codex conversation starts on: `default` is the head of the list. */
 
 const translatorConfig = { translator: { url: "http://127.0.0.1:8788", token: "local-bearer" }, openaiApiKey: "" } as unknown as Config;
 const offlineConfig = { translator: { url: "", token: "" }, openaiApiKey: "" } as unknown as Config;

@@ -62,7 +62,7 @@ export const resolveDaemonBase = async (sandboxUrl: string, fetchImpl: typeof fe
         if (index === candidates.length - 1) {
             return { base: candidate, local: false }; // The floor: the registry's own answer, taken on trust.
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are ORDERED preferences: probing the rest in parallel would spend requests on addresses we would discard anyway
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Candidate order is the fallback order.
         if (expected !== undefined && (await probeDaemonBase(candidate, expected, fetchImpl))) {
             return { base: candidate, local: true };
         }

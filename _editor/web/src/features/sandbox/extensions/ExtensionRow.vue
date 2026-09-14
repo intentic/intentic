@@ -119,10 +119,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
 </script>
 
 <template>
-    <!--
-        Header and detail share one tint while open, so it reads as one block; an ink wash, since canvas and card are barely distinct in light mode.
-        `body="drawer"`: what opens is the extension's whole record under its own headings, not evidence hanging off the name.
-    -->
+    <!-- Open extensions share one tinted header and detail block. -->
     <DisclosureRow
         class="@container border-l-2"
         :class="accent ?? `border-l-transparent`"
@@ -131,10 +128,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
         @update:open="emit(`update:expanded`, !expanded)"
     >
         <template #lead="{ mark }">
-            <!--
-                Dimmed and desaturated when off, so the mark goes quiet with the rest of the row. `mark`'s size comes from the list's own tier, not
-                this file.
-            -->
+            <!-- Dimmed and desaturated when off, so the mark goes quiet with the rest of the row. -->
             <BrandMark
                 :size="mark"
                 :name="manifest.name"
@@ -147,10 +141,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
 
         <template #title>
             <span class="flex min-w-0 items-baseline gap-3">
-                <!--
-                    Dimming never touches the switch, the one control that still does something on an off row. The name recedes by ink color, not
-                    opacity, which would read muddier and drop the hover tint.
-                -->
+                <!-- Dimming never touches the switch, the one control that still does something on an off row. -->
                 <span class="min-w-0 flex-1 truncate font-normal @2xl:w-48 @2xl:flex-none">
                     <span v-if="entry.extension.source !== `builtin`" class="text-subtle">{{ manifest.publisher }}.</span
                     ><span class="font-medium" :class="entry.extension.enabled ? `text-content` : `text-muted`">{{ manifest.name }}</span>
@@ -172,7 +163,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
 
         <template #control>
             <div class="flex shrink-0 items-center gap-2.5">
-                <!-- Ambient unless the update is a security fix, which promotes it to the loud tier; a real exception badge still outranks it. -->
+                <!-- Security updates use the loud tier; ordinary updates stay ambient. -->
                 <StatusBadge
                     v-if="!entry.state.attention && entry.extension.update !== undefined"
                     :variant="entry.extension.update.securityFix ? `danger` : `info`"
@@ -181,10 +172,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                 />
                 <StatusBadge v-if="entry.state.badge" :variant="entry.state.variant" :label="entry.state.label" size="xs" />
                 <span v-else-if="entry.state.label !== undefined" class="text-2xs text-subtle">{{ entry.state.label }}</span>
-                <!--
-                    Fixed, not hidden: a vanished control reads as a bug. Its engine runs regardless, so off would only blind the owner to it; the
-                    daemon refuses the flip too, this just says so first.
-                -->
+                <!-- Fixed, not hidden: a vanished control reads as a bug. -->
                 <span
                     v-if="entry.extension.essential"
                     :title="`Always on: this is the only window onto work the sandbox does on its own.`"
@@ -220,7 +208,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                     </template>
                 </dl>
 
-                <!-- Only a git-installed extension has an update lifecycle; a builtin updates with the image, a workspace one is live-edited. -->
+                <!-- Only git-installed extensions expose an update lifecycle. -->
                 <ExtensionUpdateCard v-if="entry.extension.source === `installed`" :extension="entry.extension" />
 
                 <div v-if="settings.length > 0">
@@ -235,10 +223,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                     </ul>
                 </div>
 
-                <!--
-                    The reach approved at install, and now whether it was ever used. A never-called route is drawn hollow, not as a warning: it's a
-                    question for the maintainer, not a fault.
-                -->
+                <!-- The reach approved at install, and now whether it was ever used. -->
                 <div v-if="manifest.permissions !== undefined">
                     <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">Daemon routes it may call</p>
                     <div class="flex flex-wrap gap-1">
@@ -263,20 +248,14 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                     <p v-else-if="routes.some((route) => route.unused)" class="mt-1.5 text-2xs text-subtle">
                         Dashed routes have never been called. That is worth raising with whoever maintains it, not acting on alone: a route used only
                         by a screen you have not opened looks identical.
-                        <!--
-                            The one case where 'raise it with the maintainer' means the owner is the maintainer; the turn reviews routes one by one
-                            rather than deleting what's dashed (see tightenBrief).
-                        -->
+                        <!-- Maintainer-owned extensions route review to the owner. -->
                         <button v-if="tightenable" type="button" :class="ui.linkButton(`text-2xs`)" @click="startAgent(tightenBrief(tighten))">
                             Have an agent go through them
                         </button>
                     </p>
                 </div>
 
-                <!--
-                    Checks only what's answerable off the files: the daemon serves this entry live, so something that only works because of how it's
-                    loaded here looks fine until it's a commit elsewhere.
-                -->
+                <!-- File checks cover only facts answerable without running the extension. -->
                 <div v-if="entry.extension.source === `workspace`">
                     <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">Fit to publish</p>
                     <p v-if="readinessError" class="text-2xs text-danger">{{ readinessError }}</p>
@@ -292,10 +271,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                             >
                         </li>
                     </ul>
-                    <!--
-                        Offered only when nothing fails; a warning is the author's call, not a blocker. The turn itself is an ordinary, watched chat
-                        (see publishBrief).
-                    -->
+                    <!-- Offered only when nothing fails; a warning is the author's call, not a blocker. -->
                     <p v-if="publishable" class="mt-1.5 text-2xs text-subtle">
                         <button type="button" :class="ui.linkButton(`text-2xs`)" @click="startAgent(publishBrief(publish))">
                             Publish it: an agent pushes these files and reports the commit

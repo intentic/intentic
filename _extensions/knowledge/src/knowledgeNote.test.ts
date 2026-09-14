@@ -27,8 +27,7 @@ describe(`linkifyNoteRefs`, () => {
         expect(out.querySelector(`a`)?.textContent).toBe(`Charles`);
     });
 
-    /* A link to a note nobody has written is the knowledge base's to-do list, not an error, so it reads as unfinished
-     * and, crucially, is not clickable: there is nothing on the other side of it. */
+/* A link to a note nobody has written is the knowledge base's to-do list, not an error, so it reads as unfinished and, crucially, is not clickable. */
     it(`marks a link to a note nobody has written, and gives it nowhere to go`, () => {
         const anchor = decorate(`<p>See [[Nowhere]].</p>`).querySelector(`a`);
         expect(anchor?.textContent).toBe(`Nowhere`);
@@ -53,9 +52,7 @@ describe(`linkifyNoteRefs`, () => {
         expect(out.querySelector(`a`)?.getAttribute(`href`)).toBe(`https://example.com`);
     });
 
-    /* The decorator runs on the SANITIZED fragment and authors its own markup, so a label that looks like a
-     * tag has to arrive as text and leave as text. Built from a text node rather than from innerHTML, because
-     * innerHTML would parse the tag before the decorator ever saw it and the test would prove nothing. */
+/* The decorator runs on the SANITIZED fragment and authors its own markup, so a label that looks like a tag has to arrive as text and leave as text. */
     it(`writes the anchor text as text, never as markup`, () => {
         const fragment = document.createDocumentFragment();
         const paragraph = document.createElement(`p`);

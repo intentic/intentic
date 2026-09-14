@@ -7,28 +7,7 @@ use crate::health;
 use crate::sandbox::CONTAINER_PREFIX;
 use crate::util::{bail, kv_lines, Result};
 
-/* THE REACHABILITY CHAIN — machine → container → daemon → platform, and edge → browser.
- *
- * connect used to stop at "the daemon answers /health inside the container", which proves the first half of
- * the chain and none of the second: a grant the hub refuses, a name still propagating, or a daemon that
- * cannot reach the platform to register all looked like success in the terminal — and then like a dead
- * workspace in the browser, with nothing anywhere naming the broken link. This module probes every link and
- * names the one that is broken, with its fix.
- *
- * THERE IS NO LOCAL HALF OF REACHABILITY LEFT TO PROBE. It used to be a cloudflared sidecar container beside
- * the sandbox, then an in-box tunnel agent holding named shares, and each move stranded a probe that went on
- * reporting every healthy sandbox as broken. The fabric is the platform's own edge now, dialled outbound by
- * the daemon itself, so a daemon that is up either reached it or did not — which the two public links below
- * already answer, from outside, where the answer actually matters.
- *
- * Two callers, one chain. connect runs it as a postflight WITH PATIENCE: a just-claimed name and an agent
- * still coming up are ordinary states of a fresh setup, so inconclusive links are re-probed until the
- * deadline and only then reported as failures. `ic sandbox doctor` runs it with none: a diagnosis of an
- * existing sandbox wants the state of this moment, not a two-minute wait.
- *
- * Classification is pure and tested; the probes beside it do the IO. The chain's order is its dependency
- * order — a daemon that is down makes "registered with the platform?" unknowable, and the report says
- * exactly that instead of piling three consequences onto one cause. */
+/* THE REACHABILITY CHAIN — machine → container → daemon → platform, and edge → browser. */
 
 /// A link's verdict this round: settled, or worth re-probing while patience remains — carrying the outcome
 /// to report if it runs out.
@@ -56,11 +35,7 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
     let container = format!("{CONTAINER_PREFIX}{slug}");
     let deadline = Instant::now() + patience;
     let mut settled: [Option<Outcome>; 5] = [const { None }; 5];
-    /* WHAT THIS CONTAINER WAS GIVEN TO DIAL THE EDGE WITH, read once, before any patience is spent. The
-     * edge's 502 has two very different causes and one appearance: a tunnel that has not been dialled YET,
-     * which waiting fixes, and a container that was created without a grant, which waiting cannot — it is a
-     * fact about the docker run that made this box. Both used to read as the first, so a sandbox that could
-     * never be reachable was reported as one still coming up, with a remedy that asked for more time. */
+/* WHAT THIS CONTAINER WAS GIVEN TO DIAL THE EDGE WITH, read once, before any patience is spent. */
     let missing_reach = match public_url {
         Some(_) => missing_reach_env(&container),
         None => Vec::new(),
@@ -165,10 +140,7 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
             // Anything still unsettled had its Pending outcome forced by settle(); one more pass writes them.
             continue;
         }
-        /* WHAT IT IS STILL WAITING FOR. A new name propagating and a daemon still dialling the edge are
-         * ordinary states of a fresh setup, so this loop is patient by design — but two minutes of a step
-         * that says only "verifying" is indistinguishable from a hang, and the user has no way to learn
-         * that the settled links already passed. Naming the outstanding ones costs nothing. */
+/* WHAT IT IS STILL WAITING FOR. */
         let waiting: Vec<&str> = LINKS
             .iter()
             .zip(settled.iter())
@@ -220,7 +192,7 @@ fn skip_both(settled: &mut [Option<Outcome>; 5], why: &str) {
     }
 }
 
-// ─── the links ─────────────────────────────────────────────────────────────
+// the links
 
 fn probe_container(container: &str) -> Verdict {
     let status = docker::inspect(container, "{{.State.Status}} {{.RestartCount}}");
@@ -391,9 +363,7 @@ fn classify_public(
 ) -> Verdict {
     match result {
         Ok(200) => Verdict::Settled(Outcome::Pass),
-        /* The same 502, with the cause already in hand: this container was created without the values its
-         * daemon dials with, so there is no tunnel to wait for. SETTLED, not pending — patience is for a dial
-         * in flight, and spending two minutes of it here only delays a verdict that cannot change. */
+/* The same 502, with the cause already in hand: this container was created without the values its daemon dials with, so there is no tunnel to wait for. */
         Ok(status @ (502 | 503 | 530)) if !missing_reach.is_empty() => {
             Verdict::Settled(Outcome::Fail {
                 problem: format!(
@@ -403,9 +373,7 @@ fn classify_public(
                 remedy: "re-run the setup command from this sandbox's setup screen — what the container is missing rides in with it.".to_string(),
             })
         }
-        /* The edge's own "I am up, nothing is registered for this name" answers. The cause is upstream of
-         * anything visible from here: no tunnel is registered under this sandbox's id, which means the daemon
-         * has not dialled the edge (yet, or at all). The daemon link above says whether it is even running. */
+/* The edge's own "I am up, nothing is registered for this name" answers. */
         Ok(status @ (502 | 503 | 530)) => Verdict::Pending(Outcome::Fail {
             problem: format!("the edge answers HTTP {status} for {host} — it is up, but no tunnel is registered for this sandbox."),
             remedy: "if the daemon check passed, give it a moment to dial the edge; if this persists, re-run the connect one-liner.".to_string(),
@@ -421,7 +389,7 @@ fn classify_public(
     }
 }
 
-// ─── the command ───────────────────────────────────────────────────────────
+// the command
 
 /// `ic sandbox doctor [slug]` — the chain, read-only, right now: for the sandbox that was fine last week and
 /// is a dead tab today. Exit code 1 when any link is broken, so scripts can watch it too.
@@ -567,10 +535,7 @@ mod tests {
         ));
     }
 
-    /* THE 502 THAT WILL NEVER CLEAR. Same status, same edge, different fact: this container was created
-     * without the values its daemon dials with. Waiting is the wrong advice and the wrong verdict — the
-     * whole failure this separates out is a setup that spent two patient minutes on a dial that was never
-     * going to happen, and then told its user to give it a moment. */
+/* THE 502 THAT WILL NEVER CLEAR. */
     #[test]
     fn a_502_from_a_container_that_was_given_no_grant_is_settled_and_names_the_missing_value() {
         match classify_public(

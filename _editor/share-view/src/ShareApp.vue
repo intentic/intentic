@@ -69,20 +69,13 @@ const toggleThinking = (index: number): void => {
                 <h1 class="text-lg font-semibold text-content">{{ payload.title }}</h1>
                 <p class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
                     <span :title="formatDateTime(payload.sharedAt)">{{ subtitle }}</span>
-                    <!--
-                        Says plainly when work is left out, or a messages-only share reads as an agent that did
-                        nothing.
-                    -->
+<!-- Says plainly when work is left out, or a messages-only share reads as an agent that did nothing. -->
                     <span aria-hidden="true">·</span>
                     <span>{{ payload.detail === "messages" ? "messages only" : "with the agent's work" }}</span>
                 </p>
             </header>
 
-            <!--
-                `chat-turns`/`chat-markdown` are the app's own stylesheet classes, so a shared page's type and spacing
-                match the
-                chat exactly.
-            -->
+<!-- `chat-turns`/`chat-markdown` are the app's own stylesheet classes, so a shared page's type and spacing match the chat exactly. -->
             <!-- No copy delegation here: <Markdown> binds its own code-block button; a second listener would double it. -->
             <main class="chat-turns flex flex-1 flex-col">
                 <template v-for="(message, index) in payload.messages" :key="index">
@@ -96,10 +89,7 @@ const toggleThinking = (index: number): void => {
                         <div class="chat-surface max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap text-content">
                             {{ message.text }}
                         </div>
-                        <!--
-                            Published beside the page: these are the actual bytes the agent looked at, not a filename
-                            standing in.
-                        -->
+<!-- Published beside the page: these are the actual bytes the agent looked at, not a filename standing in. -->
                         <div v-if="message.attachments?.length" class="flex flex-wrap justify-end gap-1">
                             <img
                                 v-for="path in message.attachments"

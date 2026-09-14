@@ -65,9 +65,7 @@ const tabs = computed<readonly Tab[]>(() => [
     },
     { id: `workspace`, to: `/workspace`, label: `Files`, panel: `files` },
     {
-        /* The queue when the pack is on; the workspace's OWN review: its Changes panel, when it is off.
-         * `?panel=changes` rather than the bare path the Files tab already owns: two tabs at one address are
-         * one tab's worth of navigation and two highlights (WorkspaceMobile reads the query). */
+        /* The queue when the pack is on; the workspace's OWN review: its Changes panel, when it is off. */
         id: `approvals`,
         to: approvalsTile.value?.to ?? `/workspace?panel=changes`,
         label: `Review`,

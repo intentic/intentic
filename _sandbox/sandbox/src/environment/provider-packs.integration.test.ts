@@ -10,10 +10,7 @@ import { createLogger } from "../logger.js";
 import { packFragment } from "./packs.js";
 import { providerPackFragments } from "./provider-packs.js";
 
-/* The provider-side fragment source: a pack rides the overlay exactly when its provider is CONNECTED. The
- * assertions compare against packFragment() through the same default stamp dir the source itself reads, so
- * they hold wherever the suite runs: in a dev checkout every wanted pack is a real fragment; inside a
- * standard image (stamped base) both sides collapse to "nothing to compose", which is itself the contract. */
+/* The provider-side fragment source: a pack rides the overlay exactly when its provider is CONNECTED. */
 
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 

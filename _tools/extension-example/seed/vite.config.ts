@@ -1,14 +1,7 @@
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
 
-/* The extension bundle, built exactly as /api/build/ prescribes.
- *
- * Two rules matter and neither is a preference:
- *   externals         , the host publishes its OWN vue, vue-query and extension-api instances through the
- *                        app's import map. Bundling a second copy forks reactivity and the query cache, so the
- *                        view would render from state nothing else in the shell can see.
- *   one file, no chunks, the loader fetches the bundle with an auth header and imports it from a blob: URL.
- *                        A relative chunk import has no base to resolve against there, so it would 404. */
+/* The extension bundle, built exactly as /api/build/ prescribes. */
 export default defineConfig({
     plugins: [vue()],
     build: {

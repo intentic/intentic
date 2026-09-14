@@ -142,20 +142,14 @@ const pickAccount = (id: string): void => {
 </script>
 
 <template>
-    <!--
-        The list above browses across providers; this footer configures what's selected. Labelled with the
-        provider's own mark so the two don't read as one screen when they disagree.
-    -->
+<!-- The list above browses across providers; this footer configures what's selected. -->
     <div class="flex items-center justify-between gap-2">
         <span class="flex min-w-0 items-center gap-1.5 text-2xs font-medium uppercase tracking-wide text-muted">
             <ProviderLogo :provider="provider" class="shrink-0 text-xs" />
             <span class="truncate">{{ providerDisplayLabel(provider) }} session</span>
         </span>
         <span class="flex shrink-0 items-center gap-2">
-            <!--
-                One control for age and re-measure: the age is the label, and watching it reset to "just now" is
-                the confirmation that the press worked.
-            -->
+<!-- One control for age and re-measure: the age is the label, and watching it reset to "just now" is the confirmation that the press worked. -->
             <button
                 type="button"
                 :class="ui.textAction(`gap-1 text-2xs text-subtle`)"
@@ -167,30 +161,20 @@ const pickAccount = (id: string): void => {
                 <Icon name="refresh" class="text-[0.6rem]" :spin="measuring" />
                 <span v-if="measuredAt !== undefined">{{ formatAge(measuredAt) }}</span>
             </button>
-            <!-- A ring is a glance; the Usage tab is where the windows, their reset times, and what has been
-                 spent against them actually live. -->
+            <!-- The ring summarizes headroom; Usage holds windows, resets, and spend. -->
             <RouterLink to="/sandbox/usage#accounts" class="text-2xs text-link hover:underline" @click="emit(`navigate`)">Headroom</RouterLink>
         </span>
     </div>
 
-    <!--
-        The refusal belonging to this selection but no single row (`unplacedRefusal`); shown above every
-        control it qualifies.
-    -->
+<!-- The refusal belonging to this selection but no single row (`unplacedRefusal`); shown above every control it qualifies. -->
     <p v-if="unplacedRefusal" class="flex items-start gap-1.5 text-2xs text-warning" v-tooltip.top="unplacedRefusal">
         <Icon name="exclamation-triangle" class="mt-px shrink-0 text-[0.6rem]" aria-hidden="true" />
         <span class="line-clamp-2">{{ unplacedRefusal }}</span>
     </p>
 
-    <!--
-        No frame per row: only the tint marks the active one, hover shows the rest are choosable. Same row
-        style as the model list above (`.ui-row-select`, square not rounded) so they read as one list.
-    -->
+<!-- No frame per row: only the tint marks the active one, hover shows the rest are choosable. -->
     <template v-if="accountRows.length > 1">
-        <!--
-            Shown only once the list is folded and long; a filter over a short, readable list would be a
-            control looking for a reason to exist.
-        -->
+<!-- Shown only once the list is folded and long; a filter over a short, readable list would be a control looking for a reason to exist. -->
         <SearchBar
             v-if="accountsLong && accountsOpen"
             ref="accountsFilter"
@@ -202,10 +186,7 @@ const pickAccount = (id: string): void => {
             @keydown.esc="escapeAccounts"
         />
 
-        <!--
-            Capped and scrolling only while unfolded; a max-height on a short, unfolded list would be a
-            scrollbar with nothing to scroll.
-        -->
+<!-- Capped and scrolling only while unfolded; a max-height on a short, unfolded list would be a scrollbar with nothing to scroll. -->
         <div
             id="picker-account-list"
             ref="accountsList"
@@ -224,10 +205,7 @@ const pickAccount = (id: string): void => {
                 :disabled="accountsLocked"
                 @click="pickAccount(a.id)"
             >
-                <!--
-                    Row grows a line only when there's a refusal or subtitle to show; a refusal takes that second line
-                    over the subtitle, since telling a turn-refusing account apart matters more.
-                -->
+<!-- Row grows a line only when there's a refusal or subtitle to show; a refusal takes that second line over the subtitle. -->
                 <span class="flex min-w-0 flex-col items-start leading-tight">
                     <span class="max-w-full truncate text-content">{{ a.label }}</span>
                     <!-- Truncated on the row, full text on hover; leads with the condition that decides the click. -->
@@ -237,10 +215,7 @@ const pickAccount = (id: string): void => {
                     </span>
                     <span v-else-if="a.subtitle" class="max-w-full truncate text-2xs text-subtle">{{ a.subtitle }}</span>
                 </span>
-                <!--
-                    Spend against this account's tightest limit; absent means unmeasured or unavailable, distinct from
-                    a measured zero.
-                -->
+<!-- Spend against this account's tightest limit; absent means unmeasured or unavailable, distinct from a measured zero. -->
                 <UsageRing v-if="a.headroom" :headroom="a.headroom" class="ml-auto" />
                 <Icon
                     v-if="a.needsReauth"
@@ -254,10 +229,7 @@ const pickAccount = (id: string): void => {
             <p v-if="accountsOpen && accountsShown.length === 0" class="px-3 py-1.5 text-2xs text-subtle" aria-live="polite">No accounts match.</p>
         </div>
 
-        <!--
-            Carries the count and shape of what's hidden (e.g. "28 with room · 6 spent"), so folding costs no
-            information worth having.
-        -->
+<!-- The collapsed group preserves the count and shape of hidden accounts. -->
         <button
             v-if="accountsLong"
             type="button"
@@ -278,10 +250,7 @@ const pickAccount = (id: string): void => {
 
     <!-- The connections behind a routed provider: shown, not offered. -->
     <template v-if="routedRows.length > 0">
-        <!--
-            Folded like the choosable list above, with more reason: nobody picks between these, so open rows
-            cost height for nothing.
-        -->
+<!-- Folded like the choosable list above, with more reason: nobody picks between these, so open rows cost height for nothing. -->
         <SearchBar
             v-if="routedLong && routedOpen"
             ref="routedFilter"
@@ -293,10 +262,7 @@ const pickAccount = (id: string): void => {
             @keydown.esc="escapeRouted"
         />
 
-        <!--
-            Unframed since these aren't clickable controls. Rendered even while folded (empty then) so
-            `aria-controls` below always names a real element.
-        -->
+<!-- Unframed since these aren't clickable controls. -->
         <div
             id="picker-routed-list"
             class="-mx-3 flex flex-col"
@@ -332,10 +298,7 @@ const pickAccount = (id: string): void => {
         <p v-if="routedRows.length > 1" class="text-2xs text-subtle">Turns are spread across these automatically</p>
     </template>
 
-    <!--
-        Harness axis (codex/grok): the provider's runtime, or its model through Claude Code; same
-        subscription ids run under either.
-    -->
+<!-- Harness axis (codex/grok): the provider's runtime, or its model through Claude Code; same subscription ids run under either. -->
     <div v-if="harnessChoosable" class="flex items-center justify-between gap-2">
         <span class="text-2xs font-medium uppercase tracking-wide text-muted">Harness</span>
         <div class="flex items-center gap-1">

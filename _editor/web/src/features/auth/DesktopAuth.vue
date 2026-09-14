@@ -150,10 +150,7 @@ onMounted(() => void hand());
                 </span>
                 <div class="min-w-0">
                     <h1 class="text-lg font-semibold">Signing in to the Intentic app</h1>
-                    <!--
-                        Shown only once there's an account; a browser that was never signed in gets one from the
-                        credential below.
-                    -->
+<!-- Shown only once there's an account; a browser that was never signed in gets one from the credential below. -->
                     <p v-if="user" class="truncate text-xs text-muted">{{ user.email }}</p>
                 </div>
             </header>
@@ -167,21 +164,12 @@ onMounted(() => void hand());
                 <Icon name="spinner" spin class="mt-0.5 shrink-0" />
                 <span>Handing your sign-in to the app…</span>
             </p>
-            <!--
-                The ordinary path: already signed in, so the credential is asked of the platform, not the user; the
-                Google block
-                below appears only if that comes back empty.
-            -->
+<!-- Signed-in users authenticate through the platform. -->
             <p v-else-if="stage === `checking`" class="flex items-start gap-2 text-xs text-muted">
                 <Icon name="spinner" spin class="mt-0.5 shrink-0" />
                 <span>Finishing your sign-in…</span>
             </p>
-            <!--
-                Google may resolve this silently, or need this button; it's on screen from the start either way.
-                color-scheme:light matches Google's button iframe so no opaque white canvas shows behind it; the button
-                itself
-                stays dark via its theme param.
-            -->
+<!-- Google may resolve this silently, or need this button; it's on screen from the start either way. -->
             <template v-else>
                 <p class="text-xs text-muted">
                     <template v-if="googleReady">Continue with Google to hand this sign-in to the app.</template>
@@ -190,13 +178,7 @@ onMounted(() => void hand());
                 <div v-show="googleReady" ref="googleButton" class="flex justify-center" style="color-scheme: light"></div>
                 <Button v-if="!googleReady" label="Open this in your browser" severity="secondary" class="self-start" @click="signInThroughBrowser" />
 
-                <!--
-                    Unconditional, like the login page's: a button that renders but can't work (blocked frame, policy,
-                    rejected
-                    origin) looks identical to one doing nothing. This path is a full-page redirect that needs none of
-                    that
-                    machinery.
-                -->
+<!-- The button is always rendered because blocked frames are indistinguishable. -->
                 <button
                     v-if="googleReady"
                     type="button"
@@ -207,11 +189,7 @@ onMounted(() => void hand());
                 </button>
             </template>
 
-            <!--
-                Both options after a failure, since retrying alone repeats what just failed (often the platform
-                refusing the
-                token); Google's own page bypasses that path entirely. Same pair the login screen offers.
-            -->
+<!-- Both options after a failure, since retrying alone repeats what just failed (often the platform refusing the token). -->
             <div v-if="error || stage === `done`" class="flex flex-wrap items-center gap-3">
                 <Button :label="error ? `Try again` : `Send it again`" severity="secondary" :loading="working" @click="hand" />
                 <button v-if="error" type="button" :class="ui.textAction(`text-subtle`)" v-action="useGooglesOwnPage">Use Google's own page.</button>

@@ -182,10 +182,7 @@ const save = async (): Promise<void> => {
         <Card class="flex flex-col gap-4">
             <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
                 <div class="flex min-w-0 flex-1 items-center gap-3">
-                    <!--
-                        The logo tile is the control itself: live for owners in every state, disabled for members. The hover/focus/busy
-                        overlay is one layer, so the tile's size never changes.
-                    -->
+<!-- The logo tile is the control itself: live for owners in every state, disabled for members. -->
                     <button
                         ref="logoTrigger"
                         type="button"
@@ -232,10 +229,7 @@ const save = async (): Promise<void> => {
                     <div class="-ml-2 min-w-0 flex-1 @2xl:max-w-md">
                         <div class="flex items-center gap-2">
                             <div class="flex min-w-0 items-center">
-                                <!--
-                                    Title and field share one box (height, padding, type scale) so switching modes only paints a border. The hidden
-                                    sizer keeps the field width proportional to its text.
-                                -->
+                                <!-- Title and field share one box so mode changes do not shift layout. -->
                                 <div class="grid w-fit min-w-0 max-w-full grid-cols-1 grid-rows-1">
                                     <template v-if="editing">
                                         <span
@@ -308,10 +302,7 @@ const save = async (): Promise<void> => {
                 </div>
             </div>
 
-            <!--
-                Reserves this card's second half while /info is still loading, since identity above renders instantly from the
-                platform; without it the card would grow and shift content once info arrives.
-            -->
+<!-- Reserves this card's second half while /info is still loading, since identity above renders instantly from the platform. -->
             <div
                 v-if="sandbox.reachable.value && infoLoading && outline"
                 role="status"
@@ -350,10 +341,7 @@ const save = async (): Promise<void> => {
                 <div v-if="agentUrl" class="flex items-center justify-between gap-3">
                     <dt class="text-subtle">Sandbox URL</dt>
                     <dd class="min-w-0">
-                        <!--
-                            `touch-target`: this link isn't exempt like inline prose text, since it's icon-bearing, alone on its row, and
-                            opens a new tab.
-                        -->
+<!-- `touch-target`: this link isn't exempt like inline prose text, since it's icon-bearing, alone on its row, and opens a new tab. -->
                         <a
                             :href="agentUrl"
                             target="_blank"
@@ -367,10 +355,7 @@ const save = async (): Promise<void> => {
             </dl>
         </Card>
 
-        <!--
-            Upgrade path for hosted sandboxes only (a member can't create one for the owner). One upgrade offered: the
-            reader's own device, since it's free hardware they already have.
-        -->
+<!-- Upgrade path for hosted sandboxes only (a member can't create one for the owner). -->
         <Card v-if="hosted && isOwner" class="flex flex-col gap-2">
             <div class="flex items-center gap-2 text-sm font-medium text-content"><Icon name="bolt" class="text-link" /> Need more power?</div>
             <!-- The cost fact is shown first: what a reader of this card usually comes here to check. -->
@@ -388,10 +373,7 @@ const save = async (): Promise<void> => {
         <!-- A newer sandbox image has shipped; this prompt self-hides otherwise. -->
         <SandboxUpdateCard />
 
-        <!--
-            Names a route gap between this app and the daemon instead of a silent 404; fires in dev too, where versions are
-            all 0.0.0. Self-hides.
-        -->
+<!-- Names a route gap between this app and the daemon instead of a silent 404; fires in dev too, where versions are all 0.0.0. -->
         <SandboxBehindCard />
         <SandboxManifestCard />
     </div>

@@ -99,8 +99,7 @@ const {
     relandNow,
     unwatchNow,
 } = useAgentDrag();
-// Looked up live, not snapshotted with the drop, so a rename or status change while the dialog is open is reflected in
-// it.
+// Resolve the target live so rename and status changes remain visible.
 const resolveTarget = computed(() => (pendingResolve.value === undefined ? undefined : agentById(pendingResolve.value)));
 // What a card is waiting on: an in-flight press/drop (useAgentDrag, self-naming) or an archive/restore batch addressed
 // by id alone.
@@ -580,8 +579,7 @@ const started = computed(
             archiveSize.value >
         0,
 );
-// Summed over the same cardsFor/runsFor the lanes render, so the header tally can never disagree with the counts under
-// it.
+// Derive header totals from the same cards and runs as the lanes.
 const kept = computed(() => LANES.reduce((sum, lane) => sum + keptIn(lane.key), 0));
 // Must not claim more than it knows: "n of 40" asserts all forty were checked, which is false while the daemon's half
 // of the filter is still outstanding.
@@ -923,25 +921,12 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
 };
 </script>
 <template>
-    <!--
-        `relative` positions the lane-drop affordances only; the fixed drag ghost and the app's notification lane need
-        no containing block here.
-    -->
+<!-- `relative` positions the lane-drop affordances only; the fixed drag ghost and the app's notification lane need no containing block here. -->
     <div ref="boardEl" class="relative flex h-full min-h-0 flex-col">
-        <!--
-            Wraps rather than shrinking controls: the filter field is permanent and /agents can be squeezed to a few
-            hundred pixels by the chat panel's drag handle.
-            Field sits on equal flex-1 basis-0 flanks so it's the bar's true center, not a leftover space; below the
-            lane-stacking width the field takes its own row and the flanks keep the first one.
-            `.view-header .view-header-wrap` (styles.css): this is the board's bar in the app's top row — the one line
-            across the window, the height every other bar has, and inside the desktop app the title bar itself.
-        -->
+<!-- The filter remains usable at narrow /agents widths. -->
         <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
-                <!--
-                    Drawn only when more than one sandbox exists (scopeOffered): a switch whose two settings look
-                    identical teaches the reader to ignore controls.
-                -->
+<!-- Drawn only when more than one sandbox exists (scopeOffered): a switch whose two settings look identical teaches the reader to ignore controls. -->
                 <SegmentedControl v-if="scopeOffered" v-model="fleetScope" :options="SCOPE_OPTIONS" class="shrink-0" />
             </div>
             <SearchBar
@@ -957,15 +942,9 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 :class="narrow ? 'order-last basis-full' : 'w-72'"
             />
             <div class="flex min-w-0 flex-1 basis-0 items-center justify-end gap-2">
-                <!--
-                    Shown only while filtering, since unfiltered lane headers already carry their own counts; says
-                    "searching" rather than a number while the answer is partial.
-                -->
+<!-- Filtering shows a searching state while lane counts are partial. -->
                 <span v-if="filtering" class="shrink-0 text-2xs text-muted" :aria-busy="searchPartial">{{ matchTally }}</span>
-                <!--
-                    Appears exactly when two or more chats sit side by side (the panes are the selection); opens a
-                    draft composed from their transcripts but not sent.
-                -->
+<!-- Appears exactly when two or more chats sit side by side (the panes are the selection); opens a draft composed from their transcripts but not sent. -->
                 <Button
                     v-if="chatStrip.panes.length >= 2"
                     size="small"
@@ -979,10 +958,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <Button size="small" class="shrink-0" @click="startAgent()"> <Icon name="plus" />New agent </Button>
             </div>
         </div>
-        <!--
-            Failures only: the layout shift and dismissal this costs suit something the user must read, not a routine
-            action's receipt (which floats instead).
-        -->
+<!-- Failures only: the layout shift and dismissal this costs suit something the user must read, not a routine action's receipt (which floats instead). -->
         <p v-if="notice !== undefined" class="flex shrink-0 items-center gap-2 border-b border-line bg-danger/10 px-3 py-1.5 text-2xs text-danger">
             <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />
             <span class="min-w-0 flex-1">{{ notice }}</span>
@@ -990,20 +966,11 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <Icon name="times" class="text-2xs" />
             </button>
         </p>
-        <!--
-            What the counter's pulse can't tell a screen reader; covers every archive so the visual pill stays purely
-            visual.
-        -->
+<!-- What the counter's pulse can't tell a screen reader; covers every archive so the visual pill stays purely visual. -->
         <span class="sr-only" aria-live="polite">{{ announcement }}</span>
-        <!--
-            Nothing on the board AND nothing archived is the only true empty state; an archive behind it would
-            otherwise be a dead end with no door to it.
-        -->
+<!-- Nothing on the board AND nothing archived is the only true empty state; an archive behind it would otherwise be a dead end with no door to it. -->
         <div v-if="(!started || total === 0) && !archiveOpen" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-4 text-center">
-            <!--
-                One heading, one sentence, nothing waiting on a daemon read: it used to swap its lower half once
-                accounts loaded, which is how it came to flash a sign-in wall right after signup.
-            -->
+<!-- One heading, one sentence, nothing waiting on a daemon read: it used to swap its lower half once accounts loaded. -->
             <template v-if="!started">
                 <div class="flex w-full max-w-xl flex-col gap-2">
                     <h2 class="text-sm font-semibold text-content">Start your first agent</h2>
@@ -1012,10 +979,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     </p>
                 </div>
             </template>
-            <!--
-                A board that's been cleared, not a first run: this user knows what agents are and just needs the way
-                back to the archive.
-            -->
+<!-- A board that's been cleared, not a first run: this user knows what agents are and just needs the way back to the archive. -->
             <template v-else>
                 <Icon name="sparkles" class="text-3xl text-subtle" />
                 <p class="max-w-sm text-xs text-muted">
@@ -1023,10 +987,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     reviewable on its own branch.
                 </p>
             </template>
-            <!--
-                Tasks read off the actual workspace (see `starters`), filling the composer rather than dispatching, so
-                the user sends their own first turn; empty when the workspace is.
-            -->
+<!-- Tasks read off the actual workspace (see `starters`), filling the composer rather than dispatching, so the user sends their own first turn. -->
             <div v-if="!started && starters.length > 0" class="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
                 <button v-for="starter in starters" :key="starter.label" type="button" class="ui-chip" @click="composeAgent(starter.prompt)">
                     {{ starter.label }}
@@ -1043,16 +1004,9 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <Icon name="history" class="text-2xs" />{{ archiveSize }} archived agent{{ archiveSize === 1 ? "" : "s" }}
             </button>
         </div>
-        <!--
-            No padding of its own: the stacked board's sticky lane headers pin to top-0, and padding would leave a gap
-            above them. One of the few `.scrollbar-stable` boxes, since a lane filling past the fold is ordinary here.
-        -->
+<!-- No padding of its own: the stacked board's sticky lane headers pin to top-0, and padding would leave a gap above them. -->
         <div v-else class="scrollbar-thin scrollbar-stable min-h-0 flex-1 overflow-auto">
-            <!--
-                `content-start` stops the stacked grid's rows from stretching to fill `h-full`, which would otherwise
-                float a lane's cards above the next header.
-                Exception: a query matching nothing drops `h-full`, so the explanation isn't pushed below the fold.
-            -->
+<!-- `content-start` stops the stacked grid's rows from stretching to fill `h-full`, which would otherwise float a lane's cards above the next header. -->
             <div
                 class="grid gap-3.5 p-3.5 sm:gap-4 sm:p-4"
                 :class="[narrow ? 'content-start' : 'grid-cols-3 items-start lg:gap-6 lg:p-6', noMatches ? '' : 'h-full']"
@@ -1064,13 +1018,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     class="flex min-w-0 flex-col rounded-xl transition-colors"
                     :class="[!dragging && !narrow ? 'min-h-0' : '', laneDropClass(lane.key)]"
                 >
-                    <!--
-                        Finished's header doubles as the archive's window, swapping its dot/label and growing a way
-                        back; pinned while scrolling stacked, so a card off-screen from its header can't be misread.
-                        Height is the row's, not its own contents': Finished carries extra controls (the archive
-                        counter, Clear), and a header that sizes to its own content would make lanes uneven and
-                        misaligned.
-                    -->
+<!-- Finished's header doubles as the archive's window, swapping its dot/label and growing a way back; pinned while scrolling stacked. -->
                     <header class="flex h-8 shrink-0 items-center gap-2.5 px-1" :class="narrow ? 'sticky top-0 z-10 rounded-t-xl bg-canvas' : ''">
                         <template v-if="lane.key === 'finished' && archiveOpen">
                             <button
@@ -1089,28 +1037,13 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         <template v-else>
                             <span class="h-2 w-2 rounded-full" :class="lane.dot"></span>
                             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ lane.label }}</span>
-                            <!--
-                                "3 of 12" while filtering: which lane a match sits in is half the answer, so lanes stay
-                                and report their own share on screen.
-                                THE NUMBER WITHOUT THE PILL, and RailLane says the same in the rail so the two frames
-                                keep one header: the count is load-bearing (a windowed Finished lane can hold forty
-                                behind six rows) but the `bg-overlay` capsule around it was reading as a control, and
-                                it was the heaviest mark in a header whose own label is 11px muted uppercase.
-                            -->
-                            <!--
-                                `data-lane-count` is the count's own hook, so a test asks for the count rather than
-                                for whatever class it happens to wear: archivePaging.test.ts read `span.rounded-full`
-                                and started matching the lane's DOT the moment the pill came off.
-                            -->
+<!-- "3 of 12" while filtering: which lane a match sits in is half the answer, so lanes stay and report their own share on screen. -->
+<!-- `data-lane-count` is the count's own hook, so a test asks for the count rather than for whatever class it happens to wear. -->
                             <span data-lane-count class="text-2xs tabular-nums text-subtle">{{ laneCount(lane.key) }}</span>
                         </template>
                         <span class="flex-1"></span>
                         <template v-if="lane.key === 'finished' && !archiveOpen">
-                            <!--
-                                The receipt for a quiet archive: the counter is where the card went, so a fading
-                                highlight there acknowledges it; the old repeated reassurance now lives once, on this
-                                button's tooltip.
-                            -->
+<!-- Archive feedback highlights the destination counter. -->
                             <button
                                 v-if="archiveSize > 0"
                                 type="button"
@@ -1122,10 +1055,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             >
                                 <Icon name="history" class="text-2xs" />{{ archiveSize }}
                             </button>
-                            <!--
-                                Hidden while filtering, like the drag: Clear archives the WHOLE lane, which isn't the
-                                right scope above a lane reading "1 of 12".
-                            -->
+<!-- Hidden while filtering, like the drag: Clear archives the WHOLE lane, which isn't the right scope above a lane reading "1 of 12". -->
                             <Button
                                 v-if="clearable > 0 && !filtering"
                                 size="small"
@@ -1139,14 +1069,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                 Clear
                             </Button>
                         </template>
-                        <!--
-                            Same slot as Clear, opposite weight: danger only on hover, so a column of retired agents
-                            doesn't read as a hazard while browsing it (the dialog is the actual guard).
-                            Hidden while filtering, like Clear: this deletes the WHOLE archive, not the scope shown on
-                            screen.
-                            Counts conversations, not rows: a workflow row is one thing to browse but four transcripts
-                            to destroy, and that's the number an irreversible act should show.
-                        -->
+<!-- Retired-agent danger appears on hover; the dialog is the actionable warning. -->
                         <Button
                             v-if="lane.key === 'finished' && archiveOpen && archiveSize > 0 && !filtering"
                             size="small"
@@ -1161,10 +1084,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             <Icon :name="purging ? 'spinner' : 'trash'" :spin="purging" class="text-2xs" />Delete all
                         </Button>
                     </header>
-                    <!--
-                        Held wakes lead the lane, since a hold is wholly waiting on the user, more than anything
-                        running below it; Attention lane only.
-                    -->
+<!-- Held wakes lead the lane, since a hold is wholly waiting on the user, more than anything running below it; Attention lane only. -->
                     <div v-if="lane.key === 'attention' && !archiveOpen && heldWakes.length > 0" class="flex flex-col gap-2.5 pb-2.5">
                         <HeldWakeCard
                             v-for="entry in heldWakes"
@@ -1176,12 +1096,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             @reject="releaseWake(entry.id, `reject`)"
                         />
                     </div>
-                    <!--
-                        Runs sit above their lane's agent cards, since a run is a container of several of them and a
-                        container belongs above its contents, not among them.
-                        In the archive, archived runs list here in the same slot; their steps have no separate cards
-                        there either.
-                    -->
+<!-- Runs sit above their lane's agent cards, since a run is a container of several of them and a container belongs above its contents, not among them. -->
                     <div v-if="runsFor(lane.key).length > 0" class="flex flex-col gap-2.5 pb-2.5">
                         <WorkflowRunCard
                             v-for="run in runsFor(lane.key)"
@@ -1208,10 +1123,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                 : "Nothing archived yet. Finished agents land here on their own after a few quiet days."
                         }}
                     </p>
-                    <!--
-                        An emptied lane keeps its header rather than collapsing: three columns shrinking to one
-                        mid-keystroke would jump the whole board under the cursor.
-                    -->
+<!-- An emptied lane keeps its header rather than collapsing: three columns shrinking to one mid-keystroke would jump the whole board under the cursor. -->
                     <p
                         v-else-if="
                             cardsFor(lane.key).length === 0 && runsFor(lane.key).length === 0 && !(lane.key === 'attention' && heldWakes.length > 0)
@@ -1221,11 +1133,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         {{ filtering ? "No matches in this lane." : lane.empty }}
                     </p>
                     <div v-else class="relative flex flex-col gap-3.5 pb-2.5">
-                        <!--
-                            Skips a card whose inputs haven't changed: the roster ticks about once a second per running
-                            turn, and without this every lane would redraw every card just to update one elapsed
-                            readout.
-                        -->
+<!-- Skips a card whose inputs haven't changed: the roster ticks about once a second per running turn. -->
                         <Transition
                             v-for="agent in cardsFor(lane.key)"
                             :key="agent.id"
@@ -1267,10 +1175,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             />
                         </Transition>
                     </div>
-                    <!--
-                        The lane's tail, not a pager: the count is the point, and the row keeps them one press away
-                        instead of gone; hidden while filtering, since the window is already lifted.
-                    -->
+<!-- The lane's tail, not a pager: the count is the point, and the row keeps them one press away instead of gone; hidden while filtering. -->
                     <button
                         v-if="lane.key === 'finished' && !archiveOpen && !filtering && hiddenFinished > 0"
                         type="button"
@@ -1280,10 +1185,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
                         {{ showAllFinished ? "Show fewer" : `${hiddenFinished} earlier` }}
                     </button>
-                    <!--
-                        One-way, unlike the lane's toggle: this pile has no "fewer" worth offering, since collapsing it
-                        back would lose the reader's place mid-search.
-                    -->
+<!-- One-way, unlike the lane's toggle: this pile has no "fewer" worth offering, since collapsing it back would lose the reader's place mid-search. -->
                     <button
                         v-if="lane.key === 'finished' && archiveOpen && archiveHidden > 0"
                         type="button"
@@ -1295,12 +1197,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     </button>
                 </section>
             </div>
-            <!--
-                The filter's own empty state, not the board's: agents exist, just none matched; names the rule that
-                produced the miss (case sensitivity) rather than leaving a silent blank.
-                The way out (Ignore case) is offered here rather than left as a hunt back to the switch, since a mode
-                is only fair if the screen it emptied can also undo it.
-            -->
+<!-- The filter's own empty state, not the board's: agents exist, just none matched. -->
             <p v-if="noMatches" class="px-4 pb-6 text-center text-2xs text-subtle">
                 <template v-if="matchCase">
                     No agent mentions "{{ query.trim() }}" with those exact capitals.
@@ -1313,14 +1210,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 >
             </p>
         </div>
-        <!--
-            What the query found off the board: the Finished window and the archive both hide agents the filter would
-            otherwise miss entirely, reading "no matches" for a hit one click away.
-            Collapsed by default, re-collapsed on every new query, since the board is the answer and this is its
-            footnote.
-            Sits outside the board's own `h-full` scroller, or the row would be pushed past the fold and only reachable
-            by hunting for it.
-        -->
+<!-- What the query found off the board: the Finished window and the archive both hide agents the filter would otherwise miss entirely. -->
         <div v-if="beyondVisible" class="flex max-h-[50%] shrink-0 flex-col border-t border-line px-3 pb-3 pt-2" :class="narrow ? '' : 'lg:px-4'">
             <button
                 type="button"
@@ -1340,12 +1230,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         <span class="text-2xs font-semibold uppercase tracking-wide text-muted">In the archive</span>
                         <span class="text-2xs tabular-nums text-subtle">{{ archivedHits.length }}</span>
                     </div>
-                    <!--
-                        Real cards, not a stripped list: an archived agent keeps its branch, diff and transcript, so
-                        reading or restoring it is exactly what the card already offers.
-                        `unwatch` is the one action wired here besides those two, and the only press this card keeps in
-                        the archive, since a watch is what would wake it back into a lane.
-                    -->
+<!-- Archived agents retain the branch, diff, and transcript actions. -->
                     <div class="grid gap-2.5" :class="narrow ? '' : 'grid-cols-3 items-start lg:gap-4.5'">
                         <AgentCard
                             v-for="agent in archivedHits"
@@ -1371,10 +1256,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         <span class="text-2xs font-semibold uppercase tracking-wide text-muted">In earlier chats</span>
                         <span class="text-2xs tabular-nums text-subtle">{{ sessionMatches.length }}</span>
                     </div>
-                    <!--
-                        Conversations no agent entry owns; with no card to draw, they read as history rows and open as
-                        tabs, the same act the History menu performs.
-                    -->
+<!-- Conversations no agent entry owns; with no card to draw, they read as history rows and open as tabs, the same act the History menu performs. -->
                     <button
                         v-for="session in sessionMatches"
                         :key="session.id"
@@ -1395,10 +1277,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 </section>
             </div>
         </div>
-        <!--
-            Discard is destructive and has no lane of its own, so it only exists while a card is actually being
-            dragged.
-        -->
+<!-- Discard is destructive and has no lane of its own, so it only exists while a card is actually being dragged. -->
         <div
             v-if="dragging"
             data-drop="discard"
@@ -1413,10 +1292,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
         >
             <Icon name="trash" class="text-2xs" />Discard
         </div>
-        <!--
-            A drag is the easiest gesture here to trigger by accident, and dropping a conflicted card on Finished
-            spends a turn, so unlike stop/land/discard it confirms first.
-        -->
+<!-- A drag is the easiest gesture here to trigger by accident, and dropping a conflicted card on Finished spends a turn. -->
         <Modal :open="pendingResolve !== undefined" size="sm" header="Have the agent resolve the conflict?" @update:open="cancelResolve">
             <p class="text-xs text-content">
                 {{ resolveTarget?.title ?? `This agent` }} will start a turn: it rebases its branch onto your current workspace, resolves the conflict
@@ -1428,10 +1304,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <Button size="small" label="Ask the agent" @click="confirmResolve" />
             </template>
         </Modal>
-        <!--
-            The one dialog guarding something unrecoverable: says what goes in the terms the archive has promised all
-            along ("nothing is lost"), and what stays (already-landed work).
-        -->
+<!-- The one dialog guarding something unrecoverable: says what goes in the terms the archive has promised all along ("nothing is lost"). -->
         <Modal :open="pendingPurge" size="sm" header="Delete every archived agent?" @update:open="pendingPurge = false">
             <p class="text-xs text-content">
                 {{ archived.length }} archived agent{{ archived.length === 1 ? "" : "s" }} will be deleted for good, each one's branch, its
@@ -1448,10 +1321,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 </Button>
             </template>
         </Modal>
-        <!--
-            A real card, so the drag reads as the card itself; `pointer-events-none` keeps the hit test on what's
-            underneath it.
-        -->
+<!-- A real card, so the drag reads as the card itself; `pointer-events-none` keeps the hit test on what's underneath it. -->
         <div v-if="dragging && dragged !== undefined" class="pointer-events-none fixed left-0 top-0 z-50 rotate-2" :style="ghostStyle">
             <div class="opacity-90 shadow-lg">
                 <AgentCard :agent="dragged" :dense="narrow" />
@@ -1468,10 +1338,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
     </div>
 </template>
 <style scoped>
-/*
- * Scale-fade on lane entry/exit without a list-level FLIP probe; a leaving card is absolutely positioned so its lane
- * collapses immediately while it finishes fading.
- */
+/* Scale-fade on lane entry/exit without a list-level FLIP probe; a leaving card is absolutely positioned so its lane. */
 .lane-enter-active,
 .lane-leave-active {
     transition:

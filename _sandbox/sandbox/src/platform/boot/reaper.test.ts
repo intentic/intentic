@@ -1,9 +1,7 @@
 import { expect, test } from "vitest";
 import { type AgentSessionState, parseAgentSessions, reapableAgentSessionNames, type TerminalPolicy } from "./reaper.js";
 
-/* The terminal half of the reaper's policy: which agent sessions go, decided purely from what tmux lists and
- * the owner stop clock. `tmux list-sessions -F '#{session_name}\t#{@intentic_owner}\t#{session_attached}\t
- * #{session_activity}'`. */
+/* The terminal half of the reaper's policy: which agent sessions go, decided purely from what tmux lists and the owner stop clock. */
 
 const NOW = 1_780_000_000_000;
 const MINUTE = 60_000;

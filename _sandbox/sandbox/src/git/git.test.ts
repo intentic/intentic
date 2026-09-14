@@ -3,8 +3,7 @@ import { gitFailureReason, pushRefusal, pushRefusalReason } from "./git.js";
 
 // Stderr fixtures below are copied verbatim from real git failures.
 test("gitFailureReason keeps git's verdict rather than the advice paragraph trailing it", () => {
-    // git's advice wraps two lines; the last line is a clause ("and the repository exists."), with the diagnosis above
-    // it.
+    // Ignore git's trailing advice clause when deriving the failure reason.
     const unreachable = {
         stderr: "ERROR: Repository not found.\nfatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights\nand the repository exists.\n",
     };

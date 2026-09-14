@@ -598,8 +598,7 @@ const rehydrateParkedTurn = async (services: Services, wake: WakeFn, entry: Jour
                     if (winner.card.kind === "plan" && winner.reply.kind === "plan" && winner.reply.approve) {
                         yield see({ kind: "mode", mode: POST_PLAN_MODE });
                     }
-                    // Holds the card out of Finished between this turn's end and the resumed turn's begin, which clears
-                    // it.
+                    // Keep the card in Resuming until the resumed turn begins.
                     svc.agents.markResuming(conversationId);
                 }
             }

@@ -2,15 +2,7 @@ import { createRequire } from "node:module";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-/* The small Chrome Web Store promotional tile.
- *
- * It is mandatory listing furniture, not a runtime asset, and it is generated for the same reason the icon
- * ladder is: the lotus comes out of the site's ornament kit rather than becoming another hand-copied logo.
- * No text, so it survives the store shrinking it and needs no locale variants. The right-hand rows are the
- * product in one glance — a short list of sites, each explicitly allowed — rather than another browser logo.
- *
- *   node _devices/webext/scripts/render-store-assets.mjs
- */
+/* The small Chrome Web Store promotional tile. */
 
 const here = import.meta.dirname;
 const workspace = join(here, "..", "..", "..");

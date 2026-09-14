@@ -2,9 +2,7 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 
 // Marks a conversation as one step of a workflow run, in OriginMark's slot and grammar. Text, not a link: a
-// run-page link on a card whose own click means 'focus this chat' made the provenance line the most clickable
-// thing on it. Renders nothing for an ordinary conversation; `compact` drops the step title where there's no width for
-// it.
+// Show workflow provenance only for workflow conversations and omit it when the compact label does not fit.
 
 defineProps<{ workflow?: NonNullable<AgentSummary["workflow"]>; compact?: boolean }>();
 </script>

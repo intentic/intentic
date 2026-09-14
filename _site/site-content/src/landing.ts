@@ -13,10 +13,7 @@ export interface LandingSectionIntro {
     sub: string;
 }
 
-/**
- * Name of a screenshot captured by `_tools/e2e/shots/capture.mts` (e.g. `fleet-board` -> its asset path). Only `name`
- * and `alt` are authored; size, format and variants come from the build.
- */
+/** Name of a screenshot captured by `_tools/e2e/shots/capture.mts`. */
 export interface ShotImage {
     name: string;
     alt: string;
@@ -46,10 +43,7 @@ export interface HeroDemo {
     note: string;
 }
 
-/**
- * One verb in the tour, one per Features-menu page: a line plus a proof (`shot`, or `figure` for Automate, which has no
- * honest screen to capture). Every item is the same size; there is no lead or compact one.
- */
+/** One verb in the tour, one per Features-menu page: a line plus a proof (`shot`, or `figure` for Automate, which has no honest screen to capture). */
 export interface VerbTourItem {
     verb: string;
     href: string;
@@ -59,10 +53,7 @@ export interface VerbTourItem {
     figure?: "automate";
 }
 
-/**
- * Workspace surfaces vs. a chat box, as two columns of nouns rather than argument. `chat.missing` stays one sentence:
- * as a list it would make the chat card the taller of the two.
- */
+/** Workspace surfaces vs. */
 export interface WorkspaceComparison {
     ours: { label: string; note: string; items: string[] };
     chat: { label: string; note: string; items: string[]; missing: string };

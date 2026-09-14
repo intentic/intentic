@@ -170,15 +170,7 @@ export const runHostedCanary = async (
                 detail: `a ${warm ? `warm` : `cold`} machine was provisioned but never checked in within ${DEADLINE_MS / 60_000} minutes`,
             };
         }
-        /* WHAT THE PERSON SEES NEXT at the address their browser opens: the starter site, or isn't running.
-         *
-         * Read off the ROW, never off the token minted above, because claiming a warm machine adopts that
-         * machine's identity: the claim moves the pool machine's token, digest and tunnel id onto this sandbox
-         * (hosted.ts claimPoolMachine), and the address the edge serves follows it. Deriving the address from
-         * the minted token meant probing a hostname that by then belonged to nothing, so every warm run — which
-         * is every run on a platform that keeps stock — reported "the starter site never served" about a
-         * sandbox that was serving perfectly well somewhere else. A check that is always red is a check
-         * nobody reads, which is the whole of what this one is for. */
+        /* WHAT THE PERSON SEES NEXT at the address their browser opens: the starter site, or isn't running. */
         const { tunnelId } = await prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, select: { tunnelId: true } });
         const starterUrl = previewUrl(`${STARTER_REPO}--${STARTER_APP}`, config.ingress.zone, tunnelId);
         const serving = starterUrl === undefined ? false : await waitForStarter(starterUrl, STARTER_DEADLINE_MS, sleep);

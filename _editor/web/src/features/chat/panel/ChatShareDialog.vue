@@ -1,7 +1,4 @@
-<!--
-    Confirms sharing a conversation, which is irreversible once opened. Asks only what changes what a stranger sees — the link's name, and how much
-    of the chat travels — and the consequence text below updates with that choice. Stays open on the resulting link rather than closing on success.
--->
+<!-- Confirms sharing a conversation, which is irreversible once opened. -->
 <script setup lang="ts">
 import { Button, ui, CopyButton, Icon, Modal, Notice } from "@intentic/ui";
 import type { ShareDetail, SharedConversation } from "@intentic/sandbox-contract";
@@ -123,8 +120,7 @@ const share = async (): Promise<void> => {
                 </button>
             </div>
 
-            <!-- The sentence that must not be missable, at the volume of a warning rather than a footnote:
-                 this is the moment a private conversation stops being private. -->
+            <!-- Sharing makes the conversation readable without sign-in. -->
             <p class="flex items-start gap-1.5 text-2xs text-warning">
                 <Icon name="globe" class="mt-0.5 shrink-0 text-2xs" />
                 <span>Anyone with the link can read it: no sign-in. Secrets are stripped, but nothing else is.</span>

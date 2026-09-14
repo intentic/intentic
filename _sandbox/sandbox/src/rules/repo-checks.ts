@@ -5,18 +5,7 @@ import { REPO_CHECKS_FILE, type RepoCheck, RepoChecksFileSchema, type RepoChecks
 import type { Services } from "../composition.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 
-/* WHAT A REPOSITORY ASKS TO HAVE RUN ON ITS OWN CODE, read from the repository rather than from this sandbox's
- * settings. A check command belongs beside the scripts it names: renaming `verify:push` and the check that calls it is
- * then one commit, a teammate's clone arrives already checked, and an agent proposing a check proposes a diff anyone
- * can read.
- *
- * It becomes an ordinary rule here (moment, condition, command) rather than a second engine: a declared check IS a rule
- * scoped to one repository, so everything already built on rules — ordering, firing stamps, the turn-ending note, the
- * push gate — reads it without knowing where it came from. What the repository may NOT say is what happens when it
- * fails; verdicts stay in the owner's settings, which is the whole of the line between the two files.
- *
- * Nothing declared runs until the owner adopts it (settings `adoptedChecks`), against a fingerprint of what was
- * declared at the time. Git has kept the same rule for hooks since the beginning: they are never cloned. */
+/* WHAT A REPOSITORY ASKS TO HAVE RUN ON ITS OWN CODE, read from the repository rather than from this sandbox's settings. */
 
 // Same ceiling a rule's own command gets when the form leaves it unsaid.
 const DEFAULT_TIMEOUT_MS = 900_000;
@@ -128,12 +117,7 @@ export const summariesOf = (declarations: readonly RepoDeclaration[], adopted: R
 
 export type RepoChecksDeps = Pick<Services, "workspace" | "sandboxSettings" | "logger">;
 
-/* The declarations, remembered for a moment. The push dialog polls the check's state several times a second while a
- * suite runs, and each poll asks what stands; reading every repository's file behind a tree walk that often would spend
- * real work to say what it said 300ms ago. Short enough that switching a repository on is felt by the next thing that
- * asks, and keyed by root so a test's temporary workspace can never answer for another's. The settings route reads
- * `declaredRepoChecks` directly and so is never served from here: a screen showing a file the reader has just edited
- * has to be right, not quick. */
+/* The declarations, remembered for a moment. */
 const MEMO_MS = 2_000;
 let memo: { readonly root: string; readonly at: number; readonly declarations: readonly RepoDeclaration[] } | undefined;
 
@@ -146,11 +130,7 @@ const recentDeclarations = async (root: string, now: number): Promise<readonly R
     return declarations;
 };
 
-/**
- * The rules standing because a repository asked for them. Adoption is read fresh every time (it is one field of the
- * settings the owner may have just changed); only the files themselves are memoised. Never throws — a failure here must
- * not take down the turn or the push it was consulted for.
- */
+/** The rules standing because a repository asked for them. */
 export const repoCheckRules = async (deps: RepoChecksDeps): Promise<Rule[]> => {
     try {
         const [declarations, settings] = await Promise.all([recentDeclarations(deps.workspace.root, Date.now()), deps.sandboxSettings.get()]);
@@ -161,10 +141,7 @@ export const repoCheckRules = async (deps: RepoChecksDeps): Promise<Rule[]> => {
     }
 };
 
-/**
- * The owner's rules and the repositories' own, as one list. Owner first, so a rule they wrote decides before a
- * repository's at a first-match moment, and an id a repository would collide with is left to its owner.
- */
+/** The owner's rules and the repositories' own, as one list. */
 export const withRepoChecks = (owned: readonly Rule[], declared: readonly Rule[]): Rule[] => {
     const taken = new Set(owned.map((rule) => rule.id));
     return [...owned, ...declared.filter((rule) => !taken.has(rule.id))];

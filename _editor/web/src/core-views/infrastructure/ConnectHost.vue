@@ -148,10 +148,7 @@ onUnmounted(() => clearInterval(timer));
             <template v-else>
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <SegmentedControl v-model="cmdOs" :options="OS_OPTIONS" />
-                    <!--
-                        The strongest case for the switch: this runs on a SERVER, which never has the developer's
-                        checkout.
-                    -->
+<!-- The strongest case for the switch: this runs on a SERVER, which never has the developer's checkout. -->
                     <ScriptSourceSwitch />
                 </div>
                 <Code

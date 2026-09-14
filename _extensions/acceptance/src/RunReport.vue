@@ -259,10 +259,7 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                     <span class="block truncate font-normal">{{ story.title }}</span>
                 </template>
                 <template #description>
-                    <!--
-                        The session's last words replace the activity line for a dead story: a dead session has no activity left, and why it stopped
-                        matters more here than the repo.
-                    -->
+                    <!-- A finished story shows its final session output as activity. -->
                     <span v-if="failureOf(story.slug)" class="block truncate text-danger" v-tooltip.top="failureOf(story.slug)">
                         {{ failureOf(story.slug) }}
                     </span>
@@ -272,10 +269,7 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                 </template>
                 <template #control>
                     <StatusBadge :variant="verdictBadge(story.slug).variant" :label="verdictBadge(story.slug).label" size="xs" />
-                    <!--
-                        Only while the daemon lists this session's Chromium; opens the Browsers area on the live screencast, with keyboard/mouse
-                        control if needed.
-                    -->
+                    <!-- The browser action appears only while Chromium is listed. -->
                     <Button v-if="browserOf(story.slug)" label="Watch" size="small" severity="secondary" as="a" v-bind="browserLink(story.slug)">
                         <template #icon><Icon name="eye" /></template>
                     </Button>
@@ -299,17 +293,11 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
 
                 <template #below>
                     <!-- The report is the artifact; everything else on this row summarizes it. -->
-                    <!--
-                        Capped prose width (prose.css), since an unbounded 72rem page ran paragraphs past 150 characters; screenshots below keep the
-                        full column.
-                    -->
+                    <!-- Report prose stays within the shared reading width. -->
                     <div v-if="outcomes[story.slug]?.report" :ref="(el) => (reportEl[story.slug] = el as HTMLElement)" style="--prose-measure: 68ch">
                         <Markdown :source="outcomes[story.slug]?.report ?? ``" :decorate="restrictReportImages" />
                     </div>
-                    <!--
-                        The one thing to read when a session died without a report: the provider's own failure sentence, instead of an
-                        otherwise-empty transcript.
-                    -->
+<!-- The one thing to read when a session died without a report: the provider's own failure sentence, instead of an otherwise-empty transcript. -->
                     <Notice
                         v-else-if="outcomes[story.slug]?.invalidResult"
                         :of="
@@ -328,14 +316,8 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                         }}
                     </div>
 
-                    <!--
-                        The story's own criteria, one verdict each, in authored order: the one part of result.json the report's prose doesn't already
-                        state in order.
-                    -->
-                    <!--
-                        At full reading size and colour, since this matrix answers the question the view exists for, not chrome around the answer;
-                        the agent's note stays quiet as its annotation.
-                    -->
+                    <!-- Criteria appear in authored order with one verdict each. -->
+                    <!-- The verdict matrix uses full reading size and contrast. -->
                     <ul v-if="(outcomes[story.slug]?.result?.criteria ?? []).length > 0" class="mt-4 flex max-w-read flex-col gap-1.5">
                         <li
                             v-for="(criterion, index) in outcomes[story.slug]?.result?.criteria ?? []"

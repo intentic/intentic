@@ -37,7 +37,7 @@ export const listZoneNames = async (token: string): Promise<string[]> => {
     let page = 1;
     let totalPages = 1;
     do {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- pagination: totalPages is only known after fetching each page, so pages must be fetched sequentially
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Each page reveals whether another page exists.
         const response = await fetch(`${BASE}/zones?per_page=50&page=${page}`, {
             headers: { Authorization: `Bearer ${token}` },
             signal: AbortSignal.timeout(30_000),
@@ -132,7 +132,7 @@ export const setAcmeChallenge = async (apiToken: string, zone: string, recordNam
         z.array(z.object({ id: z.string() })),
     );
     for (const record of existing) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- at most a couple of records; a stale one left behind can validate a dead token
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Records are checked in sequence so stale state is deterministic.
         await cfCall(apiToken, `/zones/${encodeURIComponent(zoneId)}/dns_records/${encodeURIComponent(record.id)}`, z.unknown(), {
             method: "DELETE",
         });

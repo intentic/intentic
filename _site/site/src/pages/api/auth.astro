@@ -4,9 +4,7 @@ import { referenceHref } from "@intentic/site-content/reference";
 import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
 import ReferenceLayout from "../../components/ReferenceLayout.astro";
 
-/* The scope ladder is IMPORTED rather than retyped, from the same module that puts it in the generated
- * document's security schemes. It is the one part of authorisation the daemon has an opinion about in code,
- * so a table here that could disagree with it would be the exact drift this whole book exists to end. */
+/* The scope ladder is IMPORTED rather than retyped, from the same module that puts it in the generated document's security schemes. */
 
 const mint = `curl -X POST "$SANDBOX/system/control/tokens" \\
   -H "authorization: Bearer $OWNER_SESSION" \\

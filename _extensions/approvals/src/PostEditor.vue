@@ -1,8 +1,4 @@
-<!--
-    In-place editor that replaces <PostBody> at the same size and position, so editing does not shift the row. Uses <ProseField>, not a bordered
-    textarea: no border until focused, grows against a hidden replica. No Save or Cancel — every keystroke writes the file directly (usePostEdit.ts);
-    Escape closes without discarding.
--->
+<!-- In-place editor that replaces <PostBody> at the same size and position, so editing does not shift the row. -->
 <script setup lang="ts">
 import type { PostApprovalSummary } from "@intentic/sandbox-contract";
 import { ProseField } from "@intentic/extension-ui";
@@ -19,9 +15,7 @@ const title = defineModel<string>(`title`, { required: true });
 // post (postText.ts): it is shown under the post, and editing the post has no business rewriting it.
 const headlined = computed(() => postsATitle(post.platform, post.target));
 
-/* The field exists only after the click, so `autofocus` (an initial-page-load attribute) would never fire.
- * The caret goes to the end rather than selecting everything: this is a change to a post, not a replacement of
- * it, and a stray keystroke over a full selection would wipe one. */
+/* The field exists only after the click, so `autofocus` (an initial-page-load attribute) would never fire. */
 const caretAtEnd = (el: Element | ComponentPublicInstance | null): void => {
     const field = (el as { field?: HTMLTextAreaElement } | null)?.field;
     if (field !== undefined) {

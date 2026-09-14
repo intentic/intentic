@@ -1,7 +1,4 @@
-<!--
-    Outline of a rendered markdown document's own headings, as a list of places to jump to — not a minimap, since prose has no visual silhouette the
-    way code does. Each row's left border joins into one spine; the current section lights its own segment.
--->
+<!-- The outline lists headings as navigation targets, not a code minimap. -->
 <script setup lang="ts">
 import { ui, SearchBar } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
@@ -73,4 +70,3 @@ watch(
         </div>
     </nav>
 </template>
-

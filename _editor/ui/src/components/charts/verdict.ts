@@ -1,10 +1,7 @@
 // <Verdict>'s tone and rank tables, kept as data so a measured answer's presentation isn't restated per caller (mirrors
 // <Row>'s geometry in row.ts).
 
-/**
- * What kind of answer this is: `success` only for an actually measured saving; "Measuring"/"Off" are `muted`, a
- * regression is `content`.
- */
+/** What kind of answer this is: `success` only for an actually measured saving; "Measuring"/"Off" are `muted`, a regression is `content`. */
 export type VerdictTone = `success` | `content` | `muted`;
 
 export const VERDICT_TONES = {

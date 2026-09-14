@@ -4,9 +4,7 @@ import { ref } from "vue";
 import { type PipelineStage, stageLabel } from "./pipelineDag";
 import { formatDuration, STATUS_TONE } from "./statusVisual";
 
-/* The mini pipeline graph that sits in a run row: one circle per stage, connected left→right, each coloured
- * by the worst status inside it. Clicking a circle opens that stage's job list. Stages arrive already
- * derived (pipelineDag.ts) so this and the expanded DagGraph can never disagree about the shape of a run. */
+/* The mini pipeline graph that sits in a run row: one circle per stage, connected left→right, each coloured by the worst status inside it. */
 
 const { stages, recurring } = defineProps<{
     stages: readonly PipelineStage[];

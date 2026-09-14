@@ -4,28 +4,10 @@ import { computed, toRef } from "vue";
 import { type RunSettingsPatch, usePickerRunSettings } from "./pickerRunSettings";
 import EffortMeter from "../composer/EffortMeter.vue";
 
-/* THE CONTROLS FOR HOW THE MODEL IS RUN: reasoning effort, extended thinking, speed. Shared verbatim by all
- * three pickers — the shell's (HostPickerBody), the settings page's (ModelPinPickerBody) and the composer's
- * (ChatModelPicker) — which drew them by hand before this existed, the first two in duplicate and the third in
- * a control of its own. The derivation behind them is pickerRunSettings.ts; this is only its markup.
- *
- * A SCALE IS A ROW AND A SWITCH IS A CHIP, which is the whole vocabulary. Effort has six rungs and no sensible
- * chip, so it keeps a labelled row and the meter. Thinking and speed are switches, and a switch that carries
- * its own name needs no label beside it — two chips say in one line what two labelled rows said in two, and
- * the chip's own dot is the state.
- *
- * IT DRAWS ROWS AND NOT A BLOCK — no wrapper, no border, no padding. Each caller has a footer of its own with
- * its own rule and its own 12px rhythm, and these fall into it beside the account list and the harness axis as
- * siblings. `hasContent` (the composable) is what tells a caller whether the footer is earned.
- *
- * EVERY CONTROL WRITES STRAIGHT THROUGH, one `update` patch each, and none of them closes anything. That is the
- * grammar all three callers share: these are settings OF the selection, never the answer to what the panel
- * asked. The shell picker's bar is what answers there; in the composer the selection IS the live conversation. */
+/* THE CONTROLS FOR HOW THE MODEL IS RUN: reasoning effort, extended thinking, speed. */
 
 const emit = defineEmits<{ update: [RunSettingsPatch] }>();
-/* `effortRow` CARRIES AN EXPLICIT `true`, and must: Vue casts an ABSENT Boolean prop to `false` unless the
- * declaration has a default, so leaving it to `undefined` would silently switch the row off for the two callers
- * that pass nothing. */
+/* `effortRow` CARRIES AN EXPLICIT `true`, and must: Vue casts an ABSENT Boolean prop to `false` unless the declaration has a default. */
 const props = withDefaults(
     defineProps<{
         provider: AgentProvider;
@@ -59,19 +41,13 @@ const chipsShown = computed(() => thinkingOffered.value || fastOffered.value);
 </script>
 
 <template>
-    <!-- REASONING EFFORT, the app's own meter, the same control the composer draws beside its model pill. It
-         always stands on a rung: the picker has no way to say "no tier pinned", so there is nothing here to
-         reset to and no × to do it with. -->
+<!-- REASONING EFFORT, the app's own meter, the same control the composer draws beside its model pill. -->
     <div v-if="effortShown" class="flex items-center justify-between gap-2">
         <span class="text-2xs font-medium uppercase tracking-wide text-muted">Reasoning effort</span>
         <EffortMeter :efforts="efforts" :effort="level" class="shrink-0" @pick="emit(`update`, { effort: $event })" />
     </div>
 
-    <!-- CLAUDE'S TWO SWITCHES. Thinking is offered wherever the provider is Claude; speed only where the
-         runtime, the route and the model all allow it, so the pair is often a single chip.
-         Sentence case: the uppercase style above is for a section heading, not for a control that is its own
-         label. The dot is the state, and it is filled rather than coloured so the chip reads at a glance in
-         both modes and on a skin that repaints the accent. -->
+<!-- CLAUDE'S TWO SWITCHES. -->
     <div v-if="chipsShown" class="flex flex-wrap items-center gap-1.5">
         <button
             v-if="thinkingOffered"

@@ -1,7 +1,4 @@
-<!--
-    Documentation area, serving both the rail's workspace-wide tile (picks its own repo) and the Workspace tree's per-repo panel (`repo` bound by the
-    host). The page scrolls with the document; the contents list is `sticky`, not a separately paned or clamped column.
--->
+<!-- Documentation serves workspace-wide and per-repo views. -->
 <script setup lang="ts">
 import {
     type AgentRunChoice,
@@ -174,10 +171,7 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.c
         </template>
 
         <template #strips>
-            <!--
-                The run strip's progress is read off documents on disk, not a counter. Both strips render as a wash, not a bordered box, so they
-                don't compete with the title and document as separate panels.
-            -->
+            <!-- The run strip's progress is read off documents on disk, not a counter. -->
             <div v-if="activeRun !== undefined" class="flex items-center gap-3 rounded-lg bg-content/4 px-3 py-2 text-xs">
                 <Icon name="spinner" spin class="shrink-0 text-link" />
                 <span class="text-content">
@@ -210,18 +204,12 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.c
             </div>
         </template>
 
-        <!--
-            Coverage, filtering and grouping live in `<DocsNav>`; this view just tracks which page is open. The two scrollers are `<SplitView>`'s
-            doing.
-        -->
+        <!-- Coverage, filtering and grouping live in `<DocsNav>`; this view just tracks which page is open. -->
         <template #rail>
             <DocsNav :components="set?.repoDoc?.components ?? []" :index="index" :page="page" @open="openPage" />
         </template>
 
-        <!--
-            Shown only in the compact `swap` layout, where opening a page replaces the contents list and this is the only way back. Sits above the
-            prose, in the frame, so it doesn't scroll away with the document.
-        -->
+        <!-- Shown only in the compact `swap` layout, where opening a page replaces the contents list and this is the only way back. -->
         <template #detail="{ compact }">
             <button v-if="compact && page !== undefined" type="button" :class="ui.textAction(`mb-2 shrink-0`)" @click="openPage(undefined)">
                 <Icon name="arrow-left" class="text-2xs" />
@@ -244,10 +232,7 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.c
                 </div>
             </div>
 
-            <!--
-                The frame lives here, not in `<DocPage>`, since a Workspace tab wants no box. `:scroll="false"`: the page is now the scrollport;
-                keyed by page only so figures re-init on their own container.
-            -->
+            <!-- The frame lives here, not in `<DocPage>`, since a Workspace tab wants no box. -->
             <ScrollFrame v-else :key="page ?? `overview`" :scroll="false">
                 <DocPage
                     v-if="page === undefined"

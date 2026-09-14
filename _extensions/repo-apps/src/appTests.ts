@@ -1,10 +1,4 @@
-/* Split a repo's vitest project dirs into three buckets for the merged AppsView:
- *   • byApp    , a project under <repo>/_apps/<X> where X is a DISCOVERED (startable) app →
- *                 rendered as that app's nested Run-tests.
- *   • packages , a project under _apps/<X> where X is NOT a discovered app (a package without a preview,
- *                 e.g. this repo's cli/sandbox/sync) → its own "Packages" group.
- *   • libraries, everything else (_libs/*, the repo root) → the "Library tests" section.
- * Pure; keyed on the _apps/<X> path segment. */
+/* Split a repo's vitest project dirs into three buckets for the merged AppsView: • byApp. */
 
 export interface GroupedTests {
     readonly byApp: Map<string, string[]>;

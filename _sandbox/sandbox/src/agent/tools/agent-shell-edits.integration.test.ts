@@ -4,8 +4,7 @@ import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";
 import { createShellEditTracker, type ShellEdit } from "./agent-shell-edits.js";
 
-/* Attribution by mtime across a command, against real files: the one thing worth a disk here is that a stat is
- * what the tracker reads, so a fake of it would assert the seam works by assuming it. */
+/* Attribution by mtime across a command, against real files: the one thing worth a disk here is that a stat is what the tracker reads. */
 
 const roots: string[] = [];
 afterAll(() => {

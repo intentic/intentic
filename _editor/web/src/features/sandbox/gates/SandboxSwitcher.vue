@@ -219,10 +219,7 @@ const confirmRemove = async (): Promise<void> => {
 </script>
 
 <template>
-    <!--
-        The rail's top control: a live chip for the active sandbox, click to switch. The corner overlays are siblings,
-        not children, since the button's overflow-hidden would clip anything meant to hang past its edge.
-    -->
+<!-- The rail's top control: a live chip for the active sandbox, click to switch. -->
     <span class="relative flex">
         <button
             ref="trigger"
@@ -352,10 +349,7 @@ const confirmRemove = async (): Promise<void> => {
                 Add sandbox
             </RouterLink>
 
-            <!--
-                Setups that were never finished, as their own section below Add sandbox, since they're errands, not places to
-                go; a draft normally never survives to be listed here, so this catches a closed tab or a crash.
-            -->
+<!-- Setups that were never finished, as their own section below Add sandbox, since they're errands, not places to go. -->
             <template v-if="unfinished.length > 0">
                 <div class="my-1 border-t border-line"></div>
                 <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">Unfinished setup</div>
@@ -417,10 +411,7 @@ const confirmRemove = async (): Promise<void> => {
         </p>
         <!-- The hosted lane is the only removal that destroys a machine; no cleanup command, since nothing else exists. -->
         <template v-if="pending?.role === 'owner' && pending.hosted === null && cleanupCommand !== undefined">
-            <!--
-                The machine is one of the owner's connected devices, so this is a tick box rather than a command: the
-                same removal the Devices tab's own button runs, on the machine that holds the container.
-            -->
+<!-- The machine is one of the owner's connected devices, so this is a tick box rather than a command: the same removal the Devices tab's own button runs. -->
             <template v-if="cleanupHost !== undefined">
                 <label class="mt-3 flex items-start gap-2 text-sm text-muted">
                     <!-- Same plain box the extension cards use; the kit has no checkbox component, on purpose. -->

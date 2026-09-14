@@ -49,7 +49,7 @@ usage() {
     echo "  -h, --help    show this help"
 }
 
-# ── shared helpers ────────────────────────────────────────────────────────────────────────────────────────────
+# shared helpers
 # NOTE: this script is fetched and run standalone (curl … | sh), so it can't source a shared lib — these helpers are
 # duplicated in connect.sh. Keep the two in lockstep. Under curl|sh only STDIN is the pipe: stdout/stderr are the
 # terminal (plain echo is fine) but interactive input must come from /dev/tty, not stdin.
@@ -180,7 +180,7 @@ maybe_remove_agent_auth() {
     case "$REPLY" in [Yy]*) remove_agent_auth ;; esac
 }
 
-# ── args ──────────────────────────────────────────────────────────────────────────────────────────────────────
+# args
 FORCE=0
 ALL=0
 AUTH=0
@@ -199,7 +199,7 @@ while [ $# -gt 0 ]; do
 done
 for a in "$@"; do SLUGS="$SLUGS $a"; done  # positionals after --
 
-# ── resolve which slugs to remove ─────────────────────────────────────────────────────────────────────────────
+# resolve which slugs to remove
 if [ "$ALL" = 1 ]; then
     all="$(list_sandboxes)"
     [ -n "$all" ] || { echo "intentic: no sandboxes found on this machine."; maybe_remove_agent_auth; exit 0; }

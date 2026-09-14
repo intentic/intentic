@@ -6,19 +6,13 @@ import { ref, watch, type Ref } from "vue";
 // in windows that import its module.
 
 export interface PreferenceOptions<T> {
-    /**
-     * The localStorage key; preferences live under `ui-`, namespaced away from a window's own view state
-     * (`intentic.*`).
-     */
+/** The localStorage key; preferences live under `ui-`, namespaced away from a window's own view state (`intentic.*`). */
     readonly key: string;
     /** What a stored string means, `null` for nothing stored; owns the default and validation together. */
     readonly read: (raw: string | null) => T;
     /** How to store it; `null` removes the key, for a preference whose value can be "none". */
     readonly write: (value: T) => string | null;
-    /**
-     * The DOM side, if any (an attribute on <html>, custom properties); run at load and on every change,
-     * in whichever window it happened.
-     */
+/** The DOM side, if any (an attribute on <html>, custom properties); run at load and on every change, in whichever window it happened. */
     readonly apply?: (value: T) => void;
 }
 
@@ -61,10 +55,7 @@ export interface PreferenceNote {
 
 const channel = typeof window === `undefined` || window.BroadcastChannel === undefined ? undefined : new BroadcastChannel(`intentic.preferences`);
 
-/**
- * A preference changed in another window, arriving here as the one path in. A key this window holds none
- * for is ignored; `null` means every preference resets to its default.
- */
+/** A preference change from another window enters through this path. */
 export const receivePreferenceChange = ({ key, raw }: PreferenceNote): void => {
     if (key === null) {
         for (const adopt of held.values()) {
@@ -81,10 +72,7 @@ if (typeof window !== `undefined`) {
     window.addEventListener(`storage`, (event: StorageEvent) => receivePreferenceChange({ key: event.key, raw: event.newValue }));
 }
 
-/**
- * Declare one preference and hand back the ref the app reads and writes; assigning it applies, persists,
- * and notifies every other window.
- */
+/** Declare one preference and hand back the ref the app reads and writes; assigning it applies, persists, and notifies every other window. */
 export const definePreference = <T>({ key, read, write, apply }: PreferenceOptions<T>): Ref<T> => {
     const state = ref(read(stored(key))) as Ref<T>;
     apply?.(state.value);
@@ -111,7 +99,7 @@ export const definePreference = <T>({ key, read, write, apply }: PreferenceOptio
             }
             const raw = write(value);
             persist(key, raw);
-            // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel, not window: this postMessage takes no targetOrigin
+            // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin.
             channel?.postMessage({ key, raw } satisfies PreferenceNote);
         },
         { flush: `sync` },

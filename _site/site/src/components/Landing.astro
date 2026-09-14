@@ -1,23 +1,12 @@
 ---
-/* ═══════════════════════════════════════════════════════════════════════════════════════════════════
- * THE HOME PAGE.
- *
- * A photographed temple wall behind the first screen, engraved display type with an ember full stop on
- * each beat, gold rules and turned corners in place of hairline borders, and a lotus wherever a page
- * would otherwise set a bullet dot. The vocabulary is the site's own — `styles/global.css` holds the
- * metals, the type tiers, the cartouche button and the frame; what lives beside this file in
- * `styles/home.css` is only THIS page's arrangement.
- *
- * Every word comes from the content modules (`landing.ts`, `about.ts`, `faq.ts`, `nav.ts`), so a copy
- * change lands here without this file being opened.
- * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
+/* Landing page composition for the Intentic site. */
 import { CREATOR_NAME, creatorBio, creatorRole } from "@intentic/site-content/about";
 import { faqGroups } from "@intentic/site-content/faq";
 import { landingContent } from "@intentic/site-content/landing";
 import { templeScene } from "@intentic/site-content/temple";
 import { APP_URL, DEMO_PATH, githubUrl, ORG_NAME } from "@intentic/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic/site-content/structured-data";
-// The providers' own marks, the same five the app draws beside every session.
+// Provider marks match the session icons used by the app.
 import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
 import { Image } from "astro:assets";
 import BaseLayout from "../layouts/BaseLayout.astro";
@@ -38,75 +27,38 @@ import "../styles/home.css";
 
 const content = landingContent;
 
-// FAQPage structured data is flat: the topic bands are a reading aid for the page, not part of the schema.
+// FAQPage data stays flat; topic bands belong only to the page layout.
 const faq = faqGroups.flatMap((group) => group.items).map((item) => ({ question: item.question, answer: item.answer.join(" ") }));
 
-/* THE HEADLINE, RE-BEATEN. The content ships two typeset lines ("You delegate. Agents work." and "You
- * approve.") because they were written for a 32px setting in a 26rem column. This page sets the same words
- * at three times that size, one sentence per line, with the full stop carrying the only ember on the
- * screen — so the beats are re-split off the same strings rather than authored a second time here.
- * Splitting on the sentence rather than on the line is what keeps this page and landing.ts one source. */
+/* Headline text is split into sentence beats. */
 const beats = content.hero.headlineLines
     .flatMap((line) => line.split(/(?<=\.)\s+/u))
     .map((beat) => beat.replace(/\.\s*$/u, ""))
     .filter((beat) => beat.length > 0);
 
 const appScreens = content.hero.screens.app.map((screen) => ({ ...screen, image: shotAsset(screen.name) }));
-/* THE WINGS HOLD STILLS. Only the centre frame walks its surfaces (see the script at the foot of this
- * file): a cross-fade inside a 340px frame is a flicker at the edge of vision, and caught mid-fade — which
- * on a four-second beat is a fair share of the time — it reads as two pictures printed over each other. So
- * the chat wing takes the first of the same shared list and holds it. */
+/* Side frames hold still images. */
 const chatStill = shotAsset(content.hero.screens.chat[0]!.name);
-/* THREE FRAMES ON ONE AXIS, so three measures, and all of them in `vw` because the frames take their width
- * from the window rather than from a capped shell (see `.hero-grid`).
- *
- * Each number is the frame's share of the window MULTIPLIED BY the crop: these are top-left crops drawn
- * larger than the frame that shows them, not whole screenshots shrunk to fit, so the pixels the browser
- * has to fetch are the drawn width and not the frame's. The centre takes 62% of the band at 112% = 70vw;
- * the plan wing 21% at 135% = 29vw; the chat wing 21% at 222% = 47vw. */
+/* Hero frames share a viewport axis, so their sizes use `vw`. */
 const appSizes = "(min-width: 64rem) 70vw, (min-width: 48rem) 78vw, 205vw";
 const chatSizes = "(min-width: 64rem) 47vw, (min-width: 48rem) 56vw, 60vw";
 const planSizes = "(min-width: 64rem) 29vw, (min-width: 48rem) 35vw, 40vw";
 
-/* HOW WIDE A VERB STAGE PAINTS ITS SCREENSHOT, which is no longer the column it sits in: the words take
- * the shell's measure — `max-width: 84rem` with a 1.5rem gutter either side, so 1296px of column — and the
- * FRAME leans out of it by half of whatever the window has left over beside the shell, capped at 4.5rem a
- * side (`--stage-bleed` in home.css, which says why). Four terms, and each one is that rule read back:
- *
- *   · from 102rem the bleed is capped, so the frame is a flat 1296 + 2 × 72 = 1440px;
- *   · from 84rem to 102rem it grows with the window: 1296 + (100vw - 1344) / 2, i.e. `50vw + 624px`;
- *   · below 84rem there is no room beside the shell to lean into, so it is the window minus the gutters;
- *   · under 48rem the box crops a top-left corner drawn at 275% of itself instead.
- *
- * Every number here also lives in `home.css` and the two have to move together: paint wider than `sizes`
- * budgeted for and the browser hands back a picture at a fraction of the resolution it is being drawn at.
- *
- * Not `COLUMN_SIZES`: that one describes the 80rem shell the feature and docs pages are built on, and this
- * page's is 84rem. Four rem of difference is a rung's worth of sharpness on a retina screen. */
+/* Stage screenshots size from the shell and viewport bleed. */
 const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 624px), (min-width: 48rem) calc(100vw - 3rem), 275vw";
 
-/* THE GETTING-STARTED BEATS, SORTED BY WHERE THEY HAPPEN rather than by their number. Everything up to the
- * last one is done in a browser on our side; the last is the line you paste into a terminal on your own
- * machine, which is the only one that touches your hardware. Taken from the END rather than at a fixed
- * index so an extra browser-side beat upstream widens the left zone instead of being mistaken for the
- * machine one. */
+/* Getting-started steps are grouped by execution location. */
 const browserSteps = content.connect.steps.slice(0, -1);
 const machineStep = content.connect.steps.at(-1)!;
 ---
 
 <BaseLayout title={content.meta.title} description={content.meta.description} faq={faq} extraJsonLd={[buildSoftwareAppSchema()]} backdrop={false}>
     <div class="home flex flex-1 flex-col">
-        {/* The bar is transparent over the plate until the first screen is behind you — the temple's own
-            carved top border becomes the bar's, exactly as the reference art has it. Every other page
-            gets the same picture from `PageBackdrop`, so the bar never changes under a reader. */}
+        {/* The home bar overlays the plate; other pages use PageBackdrop. */}
         <Nav />
 
         <main class="flex-1">
-            <!-- ═══ 1 · The first screen ═══════════════════════════════════════════════════════════
-                 SYMMETRIC, because the picture behind it is. The art is a framed plaque with a devata
-                 standing in each outer third and a deliberately empty middle; the copy sits in that
-                 middle, on the axis, and the product is spread underneath it in three frames — one wide
-                 one on the centre line and a narrower one leaning in from either side. -->
+            <!-- The first screen remains symmetric with its plate. -->
             <section class="hero" id="hero">
                 <div class="plate" aria-hidden="true">
                     <div class="plate-img"></div>
@@ -115,18 +67,14 @@ const machineStep = content.connect.steps.at(-1)!;
 
                 <div class="hero-grid">
                     <div class="hero-copy">
-                        {/* The one line on this page that is a greeting rather than a claim. Flanked rather
-                            than underlined — the band eyebrows elsewhere trail a hairline to the right,
-                            which on a centred axis would tip the whole block sideways. */}
+                        {/* The greeting is flanked because the hero axis is centered. */}
                         <p class="hero-eyebrow">
                             <Bullet mark="lozenge" />
                             <span>Welcome to {ORG_NAME}</span>
                             <Bullet mark="lozenge" />
                         </p>
 
-                        {/* A space between the beats. Each is its own block, so nothing paints it; without it
-                            the h1's text reads "You delegate.Agents work.You approve." to a crawler or a
-                            screen reader. */}
+                        {/* Beat spans need spaces for assistive text and crawlers. */}
                         <h1 class="headline">
                             {
                                 beats.map((beat, index) => (
@@ -143,27 +91,14 @@ const machineStep = content.connect.steps.at(-1)!;
 
                         <p class="hero-sub">{content.hero.subhead}</p>
 
-                        {/* TWO PRESSES, and resist adding a third. On a centred axis three controls in a row
-                            read as a toolbar, and the claim above them drops to a caption on it. They are
-                            the two ways to START: the hosted workspace, and the same thing on the reader's
-                            own machine. The demo is a fourth thing a visitor might want and it is not a way
-                            to start, so it rides on the picture below instead — over the surface it is a
-                            recording of.
-                            `data-hero-cta` is watched by the script at the foot of the file: while this
-                            button is on screen the bar keeps its own copy of it hidden, so the page never
-                            shows the same call twice at once. */}
+                        {/* Hero shows two start actions; the bar hides its duplicate while they are visible. */}
                         <div class="hero-actions">
                             <a class="btn btn-primary" href={APP_URL} data-hero-cta>Create your workspace</a>
                             <DownloadCta />
                         </div>
                     </div>
 
-                    <!-- THE PRODUCT, IN THREE FRAMES ON ONE AXIS. The workspace is the wide one on the
-                         centre line and the only one that cycles its surfaces; the plan and the chat lean in
-                         from the sides, overlapping its edges, at the size a thing in the middle distance
-                         would be. All three crop their screens from the top-left rather than fitting them,
-                         so a reader sees the legible top of a screen instead of a whole one shrunk past
-                         reading. -->
+<!-- Product frames share one visual axis. -->
                     <figure class="hero-visual">
                         <div class="hero-stack">
                             <Window class="window-plan" aria-hidden="true">
@@ -172,11 +107,7 @@ const machineStep = content.connect.steps.at(-1)!;
                                 </div>
                             </Window>
 
-                            {/* THE LEDGE IS EMPTY HERE, and that is the point of it. Elsewhere on the site a
-                                frame names the route its screenshot was taken on, because that reader has
-                                arrived on a page about one surface and wants to go open it. On the first
-                                screen the picture is the argument, not a specimen, and a caption over three
-                                cross-fading surfaces is a label that keeps changing under the eye. */}
+                            {/* The hero ledge stays empty because its image is the argument. */}
                             <Window class="window-app" finial>
                                 <div class="window-crop window-crop-app">
                                     {
@@ -197,11 +128,7 @@ const machineStep = content.connect.steps.at(-1)!;
                                     }
                                 </div>
 
-                                {/* THE DEMO, ON THE SURFACE IT IS A RECORDING OF. Quiet at rest and lit when
-                                    the pointer or the keyboard reaches the frame, so it reads as a property
-                                    of the picture rather than as a third button competing with the two
-                                    above. Quiet, not hidden: a control that only exists on hover does not
-                                    exist on a touch screen. Bottom-centre, clear of the side wings. */}
+                                {/* The demo control stays available to pointer, keyboard, and touch users. */}
                                 <a class="play" href={DEMO_PATH}>
                                     <span class="btn btn-sm">
                                         <svg viewBox="0 0 24 24" class="btn-icon" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
@@ -220,16 +147,7 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- ═══ 2 · The build ═══════════════════════════════════════════════════════════════
-                 ONE PICTURE OF THE WHOLE DEAL, and it is the first thing under the hero because the hero
-                 ends on a promise the reader has nothing to picture yet: agents work, you approve. This is
-                 the shape of that — the AI plans you already pay for are the stone, agents do the lifting,
-                 and what goes up is yours — told as a building site rather than as a machine, because the
-                 page is already built on a temple and a reader should meet one product, not two.
-                 IT IS A DRAWING, AND THE ONLY ONE ON THE PAGE. Everything below this band is a photograph of
-                 the product; a subscription, a fleet of agents and a shipped release are not one surface and
-                 never could be photographed together, so this band draws them instead. `TempleFigure` owns
-                 the scene and `site-content/temple.ts` owns its handful of words. -->
+            <!-- The build section follows the hero. -->
             <section class="band" id="build">
                 <div class="wall" aria-hidden="true"></div>
                 <div class="shell build-open fade-in">
@@ -238,8 +156,7 @@ const machineStep = content.connect.steps.at(-1)!;
                     <p class="lede">{templeScene.sub}</p>
                 </div>
 
-                {/* The stage's own measure, so the scene is exactly as wide as the screenshots in the band
-                    below it and the page has one picture width rather than two. */}
+                {/* Build stage width matches the screenshots below it. */}
                 <div class="stage build-stage fade-in">
                     <div class="card build-plate">
                         <Corners />
@@ -248,18 +165,7 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- ═══ 3 · What you do: the five verbs, a screenful each ═══════════════════════════
-                 A SHOWCASE, NOT A GRID, and the difference is the whole redesign. This band used to be one
-                 wide frame followed by four cards, and each card cropped its screenshot into a 13rem strip
-                 at 150% width — a sliver of a surface, four times over, on the one screen of the page whose
-                 job is showing the product. A screenshot small enough that nothing in it can be read is not
-                 a picture of the product; it is a picture of a screenshot.
-                 Every verb now takes a stage: its name, its one line, its link, and then the screen itself,
-                 in a 16:9 frame that leans a little wider than the words above it — see `--stage-bleed` in
-                 home.css for how far and why it can never be far. The four `stage-*` captures are SHOT at that
-                 shape rather than fitted to it (`_tools/e2e/shots/capture.mts`), which is what lets this page
-                 scale them and do nothing else. The chapter label is the band's eyebrow, sitting just above
-                 the first verb. -->
+            <!-- Verbs render as one screenful per showcase stage. -->
             <section class="band" id="verbs">
                 <div class="wall" aria-hidden="true"></div>
 
@@ -283,10 +189,7 @@ const machineStep = content.connect.steps.at(-1)!;
                                 </div>
 
                                 {item.shot !== undefined && image !== undefined && (
-                                    /* `finial` on every one of them, because on this band every frame leads
-                                       its own screen — the ornament is not marking one of five here. The
-                                       ledge carries the route, which at this size reads as the picture's
-                                       caption and is the one thing a reader needs to go and open it. */
+/* Each showcase frame gets its own finial. */
                                     <Window class="stage-frame" finial label={item.shot.label}>
                                         <div class="stage-crop">
                                             <Image
@@ -303,15 +206,7 @@ const machineStep = content.connect.steps.at(-1)!;
                                 )}
 
                                 {item.figure === "automate" && (
-                                    /* AUTOMATE, AND IT IS THE ONE STAGE WITH NO SCREENSHOT ON IT. There is
-                                       an automations screen, but what this stage has to explain is a machine
-                                       nobody has seen — an event, a veto, a session — and a list of five
-                                       configured automations shows the result of that rather than the shape
-                                       of it. So the stage draws the machine, left to right, and takes the
-                                       quieter `.card` treatment rather than the frame: on this site the
-                                       frame means "this is a photograph of the product", and it would be
-                                       lying here. The drawing itself is `AutomateFigure`, shared with the
-                                       feature page so the two tell it the same way. */
+/* Automate uses its machine figure instead of a screenshot. */
                                     <div class="card stage-machine">
                                         <Corners />
                                         <AutomateFigure />
@@ -327,9 +222,7 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- ═══ 4 · Why a workspace: the comparison ═════════════════════════════════════════
-                 Two columns of nouns, and the asymmetry between them is the whole argument — so the heavy
-                 side is a lit cartouche and the light one a dashed outline that ends early. -->
+            <!-- Compare the two working environments side by side. -->
             <section class="band" id="workspace">
                 <div class="wall" aria-hidden="true"></div>
                 <div class="shell fade-in">
@@ -376,7 +269,7 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- ═══ 5 · What it costs ═══════════════════════════════════════════════════════════ -->
+            <!-- Explain the cost model. -->
             <section class="band" id="economics">
                 <div class="wall" aria-hidden="true"></div>
                 <div class="shell fade-in">
@@ -419,7 +312,7 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- ═══ 6 · Who builds it ═══════════════════════════════════════════════════════════ -->
+            <!-- Identify who builds it. -->
             <section class="band" id="trust">
                 <div class="wall" aria-hidden="true"></div>
                 <div class="shell fade-in">
@@ -432,14 +325,13 @@ const machineStep = content.connect.steps.at(-1)!;
                             <a href="/about/" class="link band-cta">{content.trust.cta} →</a>
                         </div>
 
-                        {/* The same four checkable claims /about/ carries, from the same module, with the
-                            commit figure measured from git at build time rather than authored. */}
+                        {/* Trust claims share the about module and build-time commit count. */}
                         <TrustCards />
                     </div>
                 </div>
             </section>
 
-            <!-- ═══ 7 · Getting started ═════════════════════════════════════════════════════════ -->
+            <!-- Show how to get started. -->
             <section class="band" id="connect">
                 <div class="wall" aria-hidden="true"></div>
                 <div class="shell fade-in">
@@ -447,12 +339,7 @@ const machineStep = content.connect.steps.at(-1)!;
                     <h2 class="h2 display">{content.connect.heading}</h2>
                     <p class="lede">{content.connect.sub}</p>
 
-                    {/* THE STEPS ARE A PLAN OF THE SYSTEM, NOT A COUNT OF THEM. Two of the beats happen in a
-                        browser on our side; the third happens in a terminal on yours, and the whole product
-                        argument — the code and the keys never leave your hardware — is that boundary. So the
-                        section draws the boundary and hangs the beats off it: a seam down the middle, our
-                        side to the left, yours to the right, with the command sitting on your side because
-                        that is where it runs. See the note in home.css for what this replaced. */}
+                    {/* Steps are grouped by location: browser first, then terminal. */}
                     <div class="flow">
                         <div class="flow-zone">
                             <div class="flow-where">in your browser</div>
@@ -487,9 +374,7 @@ const machineStep = content.connect.steps.at(-1)!;
                                 <pre><code><span class="prompt">$ </span>curl -fsSL https://intentic.dev/connect | sh</code></pre>
                             </div>
                             <p class="command-note">{content.connect.commandNote}</p>
-                            {/* The other two rungs, one line under the command that assumes one of them. The
-                                link is last so it is read as a check on the command rather than as a
-                                competing offer. */}
+                            {/* Supporting links stay below the terminal command. */}
                             <p class="command-note">
                                 {content.connect.commandChoice.lead}{" "}
                                 <a href="/where-it-runs/" class="text-link hover:underline">{content.connect.commandChoice.cta}</a>
@@ -503,17 +388,13 @@ const machineStep = content.connect.steps.at(-1)!;
                             <p class="desktop-lead">{content.connect.desktop.lead}</p>
                             <p class="desktop-note">{content.connect.desktop.note}</p>
                         </div>
-                        {/* THE ONE DOWNLOAD ON THE PAGE, and it names the reader's own machine. It sits
-                            beside the install command because that is the question it answers: the same step,
-                            for someone who would rather not open a terminal. */}
+                        {/* The download sits beside the terminal command for non-terminal users. */}
                         <DownloadCta class="btn-sm" label={content.connect.desktop.cta} icon={false} />
                     </div>
                 </div>
             </section>
 
-            <!-- ═══ 8 · FAQ ═════════════════════════════════════════════════════════════════════
-                 Native <details>, so the whole widget costs no JavaScript and keeps keyboard and
-                 screen-reader behaviour for free. `name` makes each band an exclusive accordion. -->
+            <!-- FAQ uses native details for keyboard and screen-reader behavior. -->
             <section class="band" id="faq">
                 <div class="wall" aria-hidden="true"></div>
                 <div class="shell fade-in">
@@ -556,26 +437,17 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- ═══ 9 · The closing cartouche ═══════════════════════════════════════════════════
-                 The plate returns, cropped to its foot — the temple and the lotus at the bottom of the art,
-                 which is the half the first screen never shows because the windows cover it. -->
+            <!-- Closing cartouche returns the plate at the page end. -->
             <section class="band final">
                 <div class="plate plate-foot" aria-hidden="true">
                     <div class="plate-img"></div>
                 </div>
-                {/* THE ONE PLACE THIS PAGE AUTHORS ITS OWN WORDS. Everywhere else the copy is read from
-                    `landing.ts`, so the page can never make a claim the content modules do not — see the
-                    file header. The closing band is the exception, by request: it argues from the licence
-                    and the community rather than from the fleet, so it needs a sentence the modules do not
-                    have. If this ever stops being the closing argument, it belongs back in `landing.ts`
-                    with the rest. */}
+                {/* The closing band is the only page-authored copy; other copy comes from landing.ts. */}
                 <div class="shell fade-in final-inner">
                     <Lotus size="lg" />
                     <h2 class="h2 display final-heading">
                         <span>Open-source and free</span>
-                        {/* The space is for the heading's text, not its layout: both spans are blocks. The
-                            underline is drawn rather than `text-decoration`, which on a face this large sits
-                            too close and too thin, and cannot take the page's gold. */}
+                        {/* The underline is a separate gold element below the heading text. */}
                         {" "}
                         <span class="final-forever">forever</span>
                     </h2>
@@ -595,25 +467,10 @@ const machineStep = content.connect.steps.at(-1)!;
     </div>
 
     <script>
-        /* Two behaviours, and neither is load-bearing: the page is correct with the script removed. The
-           bar's own call is held back while the hero's is on screen, and the centre frame walks its three
-           surfaces.
-
-           THE BAR'S HEIGHT USED TO BE MEASURED HERE and is now a stylesheet value — see `--bar-height` in
-           global.css. Pinning the plate to its own 16:9 ratio made the art's scale a single term
-           (`width / 1600`), which a stylesheet can name; the observer that stood here was left over from
-           when the plate was `cover`-ed onto a content-sized box and the scale genuinely could not be
-           written down. Losing it is what lets every other page have the same bar as this one rather than
-           one only this page can compute. */
+/* The page remains usable when these enhancements are unavailable. */
         const bar = document.getElementById("site-bar");
 
-        /* THE BAR'S CALL TO ACTION, held back while the hero's own is on screen. The two say the same words,
-           so showing both above the fold is one call printed twice; instead the bar keeps its copy hidden
-           until the hero button has scrolled off, then reveals it as the standing shortcut. Setting
-           `data-cta-managed` here — rather than in the markup — is what makes the no-JS fallback the safe
-           one: with the script blocked the attribute never lands and the button is simply always shown.
-           The negative top margin lets the reveal fire as the hero button slips under the fixed bar rather
-           than only once it is fully off the top. */
+/* The bar CTA hides while the hero CTA is visible. */
         const heroCta = document.querySelector("[data-hero-cta]");
         if (bar && heroCta && "IntersectionObserver" in window) {
             bar.setAttribute("data-cta-managed", "");
@@ -628,9 +485,7 @@ const machineStep = content.connect.steps.at(-1)!;
             ctaObserver.observe(heroCta);
         }
 
-        /* ONE FRAME WALKS, and it is the middle one. The two wings hold stills: a cross-fade in a frame that
-           size is movement at the edge of vision with nothing to show for it, and the centre is where a
-           reader is already looking. Two surfaces, four seconds each. */
+/* One app frame is visible at a time. */
         const screens = document.querySelectorAll<HTMLElement>('[data-screen="app"]');
         if (screens.length > 1) {
             let shown = 0;
@@ -638,8 +493,7 @@ const machineStep = content.connect.steps.at(-1)!;
                 shown = (shown + 1) % screens.length;
                 screens.forEach((screen, index) => {
                     screen.classList.toggle("is-on", index === shown);
-                    // The alt text a screen reader gets is the one on screen: nobody should be handed three
-                    // descriptions of one picture.
+                    // Only the visible frame is exposed to screen readers.
                     screen.setAttribute("aria-hidden", index === shown ? "false" : "true");
                 });
             }, 4000);

@@ -32,16 +32,9 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
 <template>
     <!-- `@container`, not a viewport breakpoint: this panel's width is its containing pane, not the phone. -->
     <RowGroup class="@container" label="What gets stopped">
-        <!--
-            The heads, the rules and the two tracks behind the machine columns are ONE child of the group, so the
-            group's hairlines fall around the table instead of boxing the heads into a band of their own.
-        -->
+<!-- The heads, the rules and the two tracks behind the machine columns are ONE child of the group. -->
         <div class="relative">
-            <!--
-                TWO tracks, touching: each machine gets its own wash so the columns read apart without a gutter between
-                them. Decorative, and positioned, so it is drawn under the rows (`relative`, below). `right-4` is the
-                row's own padding, so the tracks sit exactly under the cells.
-            -->
+<!-- TWO tracks, touching: each machine gets its own wash so the columns read apart without a gutter between them. -->
             <div aria-hidden="true" class="pointer-events-none absolute inset-y-0 right-4 hidden @2xl:flex">
                 <span
                     v-for="(machine, index) in MACHINES"
@@ -55,11 +48,7 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
                 />
             </div>
 
-            <!--
-                Row with only #meta, not a padded div, so the heads inherit Row's own tier padding and gap (enforced by
-                _tools/checks/row-tiers.mjs) and land centred on the track they name.
-                font-medium, not font-semibold: that pairing with uppercase tracking-wide is this app's section-label style.
-            -->
+<!-- Keep #meta rows unpadded so headings align with Row's tier. -->
             <div class="relative hidden @2xl:block">
                 <Row>
                     <template #meta>
@@ -103,10 +92,7 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
                         </div>
                     </template>
 
-                    <!--
-                        self-stretch + h-full: badges stay centred on the row when the title wraps to several lines.
-                        #meta is already trailing, so reusing it lines the cells up with the heads for free.
-                    -->
+<!-- self-stretch + h-full: badges stay centred on the row when the title wraps to several lines. -->
                     <template #meta>
                         <div class="hidden self-stretch items-center @2xl:flex">
                             <span

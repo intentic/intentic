@@ -3,13 +3,7 @@ import { jsonBody } from "../../sandbox/client/jsonBody";
 import { sandboxJson } from "../../sandbox/client/sandboxClient";
 import { createRunWatcher, type RunWatcher } from "./runWatcher";
 
-/* THE PRE-PUSH CHECK, browser-side: the run watcher (runWatcher.ts, which owns the cadence, the reveal and the
- * settle) over the daemon's three prepush verbs. Module scope, because there is one check and one push flow at
- * a time, so a re-render of any surface never restarts a run.
- *
- * The session is called `job-checks` inside the sandbox, and a panel waiting on a tab could only offer that
- * name back, which is not an answer to "why has this opened" for anyone who met it mid-push: the reveal says
- * what is starting instead. */
+/* Browser-side pre-push checks run through the shared watcher. */
 
 const IDLE: CommandRun = { status: `idle`, command: ``, output: `` };
 

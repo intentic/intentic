@@ -8,10 +8,7 @@ import { uuid } from "../../lib/uuid";
 // last had the reader's attention, never to itself; addressed (`to`), not broadcast, so exactly one acts. If none is
 // open, one is opened and the errand waits for it to announce itself.
 
-/**
- * What a popped-out window asks the main window to do: a `file` reference carries a line and checkout a URL can't; a
- * `route` is any other in-app destination.
- */
+/** File references carry a line; routes carry other in-app destinations. */
 export type MainWindowErrand =
     | {
           readonly kind: `file`;
@@ -38,7 +35,7 @@ const DOORSTEP_MS = 30_000;
 const channel = typeof window === `undefined` || window.BroadcastChannel === undefined ? undefined : new BroadcastChannel(`intentic.main-window`);
 
 const post = (note: MainWindowNote): void => {
-    // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel, not window: this postMessage takes no targetOrigin
+    // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin.
     channel?.postMessage(note);
 };
 
@@ -82,10 +79,7 @@ const deliver = (): void => {
 // This window's own note reader, installed by useMainWindow; a set avoids a stale one from a hot update.
 const readers = new Set<(note: MainWindowNote) => void>();
 
-/**
- * The single entry point for an incoming note, shared by the channel listener and tests (see floating.ts's own version
- * of this seam).
- */
+/** The single entry point for an incoming note, shared by the channel listener and tests (see floating.ts's own version of this seam). */
 export const receiveMainWindowNote = (note: MainWindowNote): void => {
     if (note.kind === `here`) {
         sightings.set(note.id, { at: note.at, seenAt: Date.now() });
@@ -103,10 +97,7 @@ channel?.addEventListener(`message`, (event: MessageEvent<MainWindowNote>) => re
 // Roll-call once per load: a floating window must know who's out there before the reader clicks anything.
 post({ kind: `roll` });
 
-/**
- * Hands an errand to the app's own window; returns false in an ordinary window, where there's nothing to hand off to
- * and the caller must act itself.
- */
+/** Hands an errand to the app's own window; returns false in an ordinary window, where there's nothing to hand off to and the caller must act itself. */
 export const handOffToMainWindow = (errand: MainWindowErrand): boolean => {
     if (floatingWindowPanel.value === undefined) {
         return false;

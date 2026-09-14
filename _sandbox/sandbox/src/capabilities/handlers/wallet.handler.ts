@@ -2,22 +2,7 @@ import type { WalletConfig } from "@intentic/sandbox-contract";
 import { atomicToUsd, usdcBalance, usdcNetworkOf } from "../../wallet/x402.js";
 import type { CapabilityHandler } from "../capability.js";
 
-/* THE SANDBOX WALLET's handler, the card half of a feature whose money half lives elsewhere on purpose.
- *
- * `apply` asks the PLATFORM for this owner's wallet (one per owner, created on first ask) and writes the
- * answered ADDRESS back into the manifest entry, the address is public and is the whole of what the
- * container ever holds; the signing key stays with the platform, reached only through the connect token
- * (wallet/wallet-signer.ts says why). The card's caps are what THIS side checks before it asks for a
- * signature; the caps the signer enforces reach the platform from the owner's browser as the card is saved,
- * never from here, so nothing running in this container can widen its own allowance.
- *
- * A failed ensure is NOT fatal, the endpoint handler's reasoning verbatim: the entry stores either way and
- * the card carries the truth (`pending`), because the ordinary failure is a platform that has wallet signing
- * unconfigured, a fact for the card to state, not a reason to throw away the policy the owner just set.
- *
- * `remove` is a disconnect, not a burn: the wallet and its funds stay with the platform under the owner's
- * account (re-adding the card finds the same address), because a capability removal must never be the thing
- * that strands money. */
+/* THE SANDBOX WALLET's handler, the card half of a feature whose money half lives elsewhere on purpose. */
 
 export const walletHandler: CapabilityHandler = {
     // No secret: the config is an address and the owner's own policy numbers, all printable.

@@ -1,6 +1,4 @@
-/* Every deriver against a real file its real parser accepts, in a temp tree. What each test pins is the
- * CONTRACT of the derivation — the text is there, the caps and degradations announce themselves — never the
- * parser's formatting details, which belong to the libraries. */
+/* Every deriver against a real file its real parser accepts, in a temp tree. */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -97,9 +95,7 @@ describe("pdf", () => {
         }
     });
 
-    /* The OCR tier, exercised for real where the image carries tesseract + poppler (an extension's layer). The
-     * scan is built by Pillow — baked in the sandbox — from a TTF so the glyphs are large enough to recognise;
-     * the sentence is chosen to survive OCR without a dictionary. */
+/* The OCR tier, exercised for real where the image carries tesseract + poppler (an extension's layer). */
     const DEJAVU = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
     test.skipIf(!ocrAvailable() || !existsSync(DEJAVU))("a scan is recognised by tesseract when the image carries it, and says so", async () => {
         const path = join(root, "receipt.pdf");

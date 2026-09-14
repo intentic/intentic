@@ -1,8 +1,4 @@
-<!--
-    Full-screen /preview route, desktop only: publishes the dock slot the preview panel teleports into (shell/dockSlots.ts), the same contract as
-    ChatArea.vue. Parked behind the rail's Preview tile, the panel's iframe keeps its state. When the preview is in its own window, this area shows a
-    notice with an explicit recall button — never automatic.
--->
+<!-- Desktop /preview route that hosts the preview panel and its detached-window recall. -->
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
 import { onMounted, onUnmounted, useTemplateRef } from "vue";
@@ -28,8 +24,7 @@ onUnmounted(() => {
 
 <template>
     <div class="relative h-full w-full">
-        <!-- Published even while another window holds the panel, so "Bring it back here" lands it in this slot
-             the instant the window goes: no hop through the parking stage. -->
+<!-- Published even while another window holds the panel, so "Bring it back here" lands it in this slot the instant the window goes. -->
         <div ref="slot" class="contents"></div>
         <div v-if="floats" class="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
             <Icon name="external-link" class="text-3xl text-subtle" />

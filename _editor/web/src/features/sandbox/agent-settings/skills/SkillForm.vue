@@ -90,10 +90,7 @@ const save = (): void => {
 
         <div class="flex flex-col gap-1.5">
             <span :class="ui.sectionLabel(`text-2xs`)">What it should do</span>
-            <!--
-                No Write/Preview toggle: markup shows only in the block holding the caret. save="none" since the form's own
-                button commits it, not the document.
-            -->
+<!-- No Write/Preview toggle: markup shows only in the block holding the caret. -->
             <div class="ui-field-shell p-3" :class="{ 'opacity-50': disabled }" style="--prose-measure: 76ch">
                 <MarkdownDocument
                     v-model="body"

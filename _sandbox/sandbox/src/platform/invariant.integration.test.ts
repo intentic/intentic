@@ -6,9 +6,7 @@ import { afterEach, expect, test } from "vitest";
 import { checks } from "./invariant.js";
 import type { ProcessIdentity } from "./resources/proc-stat.js";
 
-/* 2026-07-31, from the survivor's side. A second daemon booted, took the claim, converged HOME onto its own
- * roots, and the daemon that had been running went on believing the answer it got at ITS boot: converging,
- * sweeping and announcing on the strength of a file that no longer named it, with nothing anywhere saying so. */
+/* 2026-07-31, from the survivor's side. */
 
 const fail = (message: string): never => {
     throw new Error(message);

@@ -3,18 +3,7 @@ import { scorecard } from "@intentic/astro-integrations";
 import DocsCodeBlock from "./docs/DocsCodeBlock.astro";
 import { githubUrl } from "@intentic/site-content/site";
 
-/* The one claim on this site that does not ask the reader to trust anybody.
- *
- * Everything else in the trust section is an argument: the platform cannot reach your code, the person is
- * real, the source is readable. Those are worth making, and none of them is checkable in the thirty seconds
- * somebody spends deciding whether to run an installer. This is: three commands, run on their machine,
- * against a public transparency log, that answer whether the bytes they downloaded came from the source
- * they can read. We are not a party to the check.
- *
- * The score is MEASURED, never authored: the same rule TrustCards applies to the commit count, and here it
- * matters more, because a security number typed by the people it grades is not evidence of anything. When
- * the API cannot be read at build time the block still renders: the commands are the substance, the score is
- * the summary. It never renders a placeholder number and never renders a zero. */
+/* The one claim on this site that does not ask the reader to trust anybody. */
 const card = await scorecard();
 
 const commands = `# The desktop installer, or any binary from a release

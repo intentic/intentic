@@ -1,14 +1,6 @@
 import type { AgentSummary } from "../schemas/agents.js";
 
-/* WHAT BECAME OF THE AGENT A SURFACE SENT AFTER A FAILURE — a red pipeline row, a refused push — read off the fleet
- * summary that surface joined by conversation id (ids/conversation-ids.ts). Reads both status and attention, since
- * a parked turn is `idle` with a flag rather than finished. Mirrors the fleet board's own labels except for naming
- * the subject (`Fix ready`), because on these surfaces the failure is what's read. Pure: no host, no clock.
- *
- * IN THE CONTRACT, NOT IN ONE SURFACE, because the words must not differ between the pipelines board (an
- * extension) and the push question (the shell): the same agent, one click apart, described two ways is a bug a
- * reader notices before a test does. Only the reading lives here; how each kind is DRAWN (icon, colour) is the UI
- * kit's `fixStanceLook`, which an extension cannot load in a test and this package must not know about. */
+/* WHAT BECAME OF THE AGENT A SURFACE SENT AFTER A FAILURE — a red pipeline row, a refused push. */
 
 export type FixStanceKind =
     // A turn is in flight. Nothing is owed by the reader.

@@ -1,7 +1,4 @@
-<!--
-    One markdown note, read and edited on a single <MarkdownDocument> surface, never a separate read/write view, framed with a Copy/Edit/Delete
-    cluster and an in-place delete confirmation. `verb` names the delete action; `paged` forwards to <ScrollFrame>'s bounded/full-page fork.
--->
+<!-- One markdown note, read and edited on a single <MarkdownDocument> surface, never a separate read/write view. -->
 <script setup lang="ts">
 import Button from "../primitives/Button.vue";
 import { ui } from "../../lib/ui.js";
@@ -59,10 +56,7 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
                     <template #icon><Icon name="save" /></template>
                 </Button>
             </template>
-            <!--
-                Caller's own controls sit before Copy, shown only while reading; editing replaces everything to their
-                right.
-            -->
+<!-- Caller's own controls sit before Copy, shown only while reading; editing replaces everything to their right. -->
             <template v-else>
                 <slot name="actions" />
                 <CopyButton :text="raw" v-tooltip.top="'Copy the raw note'" />
@@ -95,11 +89,7 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
 
         <p v-if="loading && !editing" class="px-4 py-6 text-xs text-subtle">Loading…</p>
         <template v-else>
-            <!--
-                `save="none"`: this frame's Cancel/Save pair is the save policy, so the document must not offer its
-                own. Ctrl/Cmd-S and Escape are bound here since the caret lives in this surface; the `#default` slot
-                shows instead when not editing.
-            -->
+<!-- `save="none"`: this frame's Cancel/Save pair is the save policy, so the document must not offer its own. -->
             <div
                 v-if="editing"
                 class="px-4 py-3"

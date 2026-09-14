@@ -131,8 +131,7 @@ test("a listener is named by the package that bound it; one at the repo root has
     expect(listenerDir(listener(8787), "/work", "shop")).toBeUndefined();
 });
 
-/* Measured against the real thing: two apps under one `pnpm dev` answered on FIVE ports, because Vite's HMR
- * channel and dependency optimizer bind from the same directory as the app they serve. */
+/* One `pnpm dev` process exposes the app and its Vite HMR sidecars on separate ports. */
 test("a package's sidecar sockets collapse into the one server the app is on", () => {
     expect(
         oneServerPerDir([

@@ -572,11 +572,7 @@ const seamWidth = computed<number>({
         </div>
         <Notice v-if="changes.actionError.value" :of="changes.actionError.value" class="mx-2 mt-2 shrink-0" />
 
-        <!--
-            What a merge land left behind: everything else applied, these files carry markers to finish in the
-            workspace.
-            Shown above the conflict report so the newest outcome reads first.
-        -->
+<!-- What a merge land left behind: everything else applied, these files carry markers to finish in the workspace. -->
         <div v-if="resolvingPaths.length > 0" class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border border-info/40 bg-info/10 px-2 py-1.5">
             <span class="text-2xs font-medium text-info">
                 Landed with {{ resolvingPaths.length }} file{{ resolvingPaths.length === 1 ? "" : "s" }} to finish
@@ -587,10 +583,7 @@ const seamWidth = computed<number>({
             <p class="break-all font-mono text-2xs text-muted">{{ resolvingPaths.join(", ") }}</p>
         </div>
 
-        <!--
-            The conflict report and its action ladder; mounted rather than inlined since it holds its own decision
-            tree.
-        -->
+<!-- The conflict report and its action ladder; mounted rather than inlined since it holds its own decision tree. -->
         <AgentConflictReport
             v-if="changes.conflicts.value !== undefined && changes.conflicts.value.length > 0"
             class="mx-2 mt-2"
@@ -609,11 +602,7 @@ const seamWidth = computed<number>({
             @select="jumpTo"
         />
 
-        <!--
-            Where the committed work went, shown only while `history` is the active filter, since it isn't what the
-            reader
-            is doing otherwise. One row per commit, and the row is the way into the graph.
-        -->
+<!-- Where the committed work went, shown only while `history` is the active filter, since it isn't what the reader is doing otherwise. -->
         <div
             v-if="filter === 'history' && history.commits.value.length > 0"
             class="mx-2 mt-2 flex shrink-0 flex-col gap-1 rounded-md border border-success/40 bg-success/10 px-2 py-1.5"
@@ -649,11 +638,7 @@ const seamWidth = computed<number>({
             </p>
         </div>
 
-        <!--
-            History loads only once absorbed work is reported, skipping a flash of "nothing here" first. The wait owns
-            this branch whether or not it is old enough to be drawn: below the reveal delay it renders the shell's
-            background, never the empty state below, which would state the opposite of what is about to arrive.
-        -->
+<!-- History loads only once absorbed work is reported, skipping a flash of "nothing here" first. -->
         <template v-if="waiting">
             <AgentReviewOutline v-if="outline" :label="waitLabel" />
         </template>
@@ -662,17 +647,9 @@ const seamWidth = computed<number>({
             class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
         >
             <Icon :name="changes.absorbed.value > 0 ? 'check' : 'file-edit'" class="text-2xl text-subtle" />
-            <!--
-                An empty list is two opposite facts needing different next moves: nothing written, or everything
-                already
-                committed. `absorbed` (the daemon's count of retired rows) tells them apart.
-            -->
+<!-- An empty list is two opposite facts needing different next moves: nothing written, or everything already committed. -->
             <p v-if="changes.absorbed.value > 0" class="max-w-xs text-2xs text-muted">{{ absorbedNote }} Anything it writes next shows up here.</p>
-            <!--
-                "Ask it in chat" only applies where a chat for this agent exists; a remote review has none on screen,
-                so the
-                sentence points at the crossing instead.
-            -->
+<!-- "Ask it in chat" only applies where a chat for this agent exists; a remote review has none on screen, so the sentence points at the crossing instead. -->
             <p v-else-if="remoteName !== undefined" class="max-w-xs text-2xs text-muted">
                 This agent hasn't changed any files. Its conversation is in {{ remoteName }}: open it there to ask for something, and whatever it
                 writes shows up here.
@@ -695,12 +672,7 @@ const seamWidth = computed<number>({
                 :class="mobile ? 'flex-1' : 'shrink-0 border-r border-line'"
                 :style="mobile ? undefined : { width: uiLength(shell.reviewListWidth.value) }"
             >
-                <!--
-                    The list's own header (count, filter, pass progress), the same height as the diff's toolbar so both
-                    align. The
-                    count prints once: the filter states the total and acts on it, so a bare count shows only without
-                    one.
-                -->
+<!-- The list's own header (count, filter, pass progress), the same height as the diff's toolbar so both align. -->
                 <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line px-2 max-md:h-12">
                     <SegmentedControl v-if="filterOptions.length > 1" v-model="filter" :options="filterOptions" size="xs" />
                     <span v-else class="whitespace-nowrap text-2xs text-muted">
@@ -708,15 +680,9 @@ const seamWidth = computed<number>({
                     </span>
                     <Icon v-if="changes.fetching.value" name="spinner" class="shrink-0 text-2xs text-muted" spin />
                     <span class="flex-1"></span>
-                    <!--
-                        Totals for the whole review; the code/tests split is now carried by the filter options above
-                        instead.
-                    -->
+<!-- Totals for the whole review; the code/tests split is now carried by the filter options above instead. -->
                     <ReviewStat :code="reviewCode" :additions="bodyAdditions" :deletions="bodyDeletions" />
-                    <!--
-                        A check and "N/total" reads as reviewed-of-total on its own, no hover-only shortcut hint needed
-                        here.
-                    -->
+<!-- A check and "N/total" reads as reviewed-of-total on its own, no hover-only shortcut hint needed here. -->
                     <span class="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-2xs text-subtle">
                         <Icon name="check" class="text-2xs" />{{ bodyViewed }}/{{ bodyFiles.length }}
                     </span>
@@ -724,12 +690,7 @@ const seamWidth = computed<number>({
 
                 <div class="scrollbar-thin min-h-0 flex-1 overflow-auto">
                     <div v-for="group in groups" :key="group.repo">
-                        <!--
-                            Sticky, since scrolling is what takes the repo context away. Two controls in one row
-                            (collapse, tick), not
-                            nested, sharing the same right-hand column as each row's own tick so the finished pass
-                            reads as one rail.
-                        -->
+<!-- Sticky, since scrolling is what takes the repo context away. -->
                         <div
                             class="group/head sticky top-0 z-10 flex w-full items-center border-b border-line/60 bg-canvas pr-1 transition-colors hover:bg-overlay"
                         >
@@ -760,12 +721,7 @@ const seamWidth = computed<number>({
 
                         <template v-if="!collapsed.has(group.repo)">
                             <template v-for="bucket in viewOf(group.repo).buckets" :key="`${group.repo}/${bucket.key}`">
-                                <!--
-                                    The package a run of rows belongs to, stated once: same
-                                    fold-left/sweep-right/totals-between heading as the
-                                    repo's, one scope down, since viewed and folding are both about the reader's own
-                                    attention on that package.
-                                -->
+<!-- The package a run of rows belongs to, stated once: same fold-left/sweep-right/totals-between heading as the repo's, one scope down. -->
                                 <div v-if="viewOf(group.repo).named" class="group/head flex items-center border-b border-line/40 bg-canvas/60 pr-1.5">
                                     <button
                                         type="button"
@@ -776,16 +732,10 @@ const seamWidth = computed<number>({
                                             class="shrink-0 text-[0.6rem] text-subtle"
                                             :name="moduleCollapsed(group.repo, bucket.key) ? 'chevron-right' : 'chevron-down'"
                                         />
-                                        <!--
-                                            One way to name a module, shared with the workspace's own Changes list
-                                            (ModuleLabel).
-                                        -->
+<!-- One way to name a module, shared with the workspace's own Changes list (ModuleLabel). -->
                                         <ModuleLabel :name="bucket.name" :packaged="bucket.packaged" />
                                         <span class="shrink-0 text-2xs text-subtle">{{ groupLabel(bucket.rows) }}</span>
-                                        <!--
-                                            A folded package can't hide a refusal either: same badge, same glyph, one
-                                            scope down.
-                                        -->
+<!-- A folded package can't hide a refusal either: same badge, same glyph, one scope down. -->
                                         <span
                                             v-if="bucket.blocked > 0"
                                             class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill bg-warning/20 text-2xs font-medium text-warning"
@@ -793,10 +743,7 @@ const seamWidth = computed<number>({
                                             <Icon name="exclamation-triangle" class="text-2xs" />{{ bucket.blocked }}
                                         </span>
                                         <span class="flex-1"></span>
-                                        <!--
-                                            Its size, always: the only place a folded package's +/- survives, and what
-                                            marks it worth folding.
-                                        -->
+<!-- Its size, always: the only place a folded package's +/- survives, and what marks it worth folding. -->
                                         <ReviewStat :code="bucket.code" :additions="bucket.additions" :deletions="bucket.deletions" />
                                     </button>
                                     <ReviewGroupCheck
@@ -834,17 +781,9 @@ const seamWidth = computed<number>({
                                                 class="shrink-0 text-2xs"
                                                 :class="explorerColorClass(explorerStyle, basename(file.change.path), 'file', false)"
                                             />
-                                            <!--
-                                                How a changed file is named, shared with the workspace's Changes list
-                                                (ChangeRowName).
-                                            -->
+<!-- How a changed file is named, shared with the workspace's Changes list (ChangeRowName). -->
                                             <ChangeRowName :path="file.change.path" :label="file.label" :named="viewOf(group.repo).named" />
-                                            <!--
-                                                Why this row refused, on the row itself: a blocked file is unlanded by
-                                                definition, so this mark replaces the
-                                                plain not-landed dot rather than sitting beside it. One word plus the
-                                                cause's glyph; the tooltip has the sentence.
-                                            -->
+<!-- Blocked files replace the ordinary unlanded marker. -->
                                             <span
                                                 v-if="file.blocked !== undefined"
                                                 class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill bg-warning/20 text-2xs font-medium text-warning"
@@ -852,10 +791,7 @@ const seamWidth = computed<number>({
                                             >
                                                 <Icon :name="REASON_COPY[file.blocked].icon" class="text-2xs" />{{ REASON_COPY[file.blocked].mark }}
                                             </span>
-                                            <!--
-                                                Which commit took this file; silent with only one, already named by the
-                                                summary above (`manyCommits`).
-                                            -->
+<!-- Which commit took this file; silent with only one, already named by the summary above (`manyCommits`). -->
                                             <span
                                                 v-else-if="file.carriedBy !== undefined && manyCommits"
                                                 class="shrink-0 rounded bg-overlay px-1 py-px font-mono text-2xs text-subtle"
@@ -867,11 +803,7 @@ const seamWidth = computed<number>({
                                                 class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
                                                 v-tooltip.right="'Not yet landed in your workspace'"
                                             ></span>
-                                            <!--
-                                                `of` turns the badge into a rail: weight against the heaviest file on
-                                                screen, scanned rather than read digit by
-                                                digit.
-                                            -->
+<!-- `of` turns the badge into a rail: weight against the heaviest file on screen, scanned rather than read digit by digit. -->
                                             <ReviewStat
                                                 :code="file.change.code"
                                                 :additions="file.change.additions"
@@ -903,10 +835,7 @@ const seamWidth = computed<number>({
                 </div>
             </aside>
 
-            <!--
-                Sits in flow with negative margins, straddling the border without an overlay that scrolls with the
-                list.
-            -->
+<!-- Sits in flow with negative margins, straddling the border without an overlay that scrolls with the list. -->
             <ResizeSeam
                 v-if="!mobile"
                 v-model="seamWidth"
@@ -918,11 +847,7 @@ const seamWidth = computed<number>({
 
             <section v-if="!mobile || selected !== undefined" class="flex min-h-0 min-w-0 flex-1 flex-col">
                 <template v-if="selected !== undefined">
-                    <!--
-                        The same toolbar the workspace tab renders, so Split|Unified and Comments sit in the same place
-                        everywhere;
-                        what it can't know (this file's place in a review) comes in through slots instead.
-                    -->
+<!-- The same toolbar the workspace tab renders, so Split|Unified and Comments sit in the same place everywhere. -->
                     <DiffToolbar
                         :path="selected.label"
                         :status="selected.change.status"
@@ -942,10 +867,7 @@ const seamWidth = computed<number>({
                                 <Icon name="arrow-left" class="text-xs" />
                             </button>
                         </template>
-                        <!--
-                            The row's mark, carried onto the opened file: a diff without it would read as an ordinary
-                            change.
-                        -->
+<!-- The row's mark, carried onto the opened file: a diff without it would read as an ordinary change. -->
                         <template #badges>
                             <span
                                 v-if="selected.blocked !== undefined"
@@ -954,11 +876,7 @@ const seamWidth = computed<number>({
                             >
                                 <Icon :name="REASON_COPY[selected.blocked].icon" class="text-2xs" />blocked · {{ REASON_COPY[selected.blocked].mark }}
                             </span>
-                            <!--
-                                What this diff is on an already-committed file: the agent's own change, measured the
-                                same as every other row,
-                                not the commit's own patch; the tooltip says which when the two differ.
-                            -->
+<!-- What this diff is on an already-committed file: the agent's own change, measured the same as every other row, not the commit's own patch. -->
                             <span
                                 v-else-if="selected.carriedBy !== undefined"
                                 class="inline-flex shrink-0 items-center gap-1 ui-status-pill bg-success/15 font-mono text-2xs font-medium text-success"
@@ -1000,12 +918,7 @@ const seamWidth = computed<number>({
                             <button type="button" :class="ICON_BUTTON" @click="move(1)" v-tooltip.bottom="'Next file (j)'" aria-label="Next file">
                                 <Icon name="chevron-down" class="text-2xs" />
                             </button>
-                            <!--
-                                Absent for a remote agent: "the workspace editor" is this box's own /work, and a tab
-                                there would carry another
-                                box's paths over a tree that never held them; the review is the whole surface for that
-                                case.
-                            -->
+<!-- Remote agents have no local workspace editor tab. -->
                             <button
                                 v-if="!mobile && at === undefined"
                                 type="button"
@@ -1022,16 +935,9 @@ const seamWidth = computed<number>({
 
                     <div class="min-h-0 flex-1">
                         <p v-if="diffError !== undefined" class="p-4 text-xs text-danger">{{ diffError }}</p>
-                        <!--
-                            The file's own read, one click deep into a list that already answered: the workspace
-                            editor's own diff outline, in this pane, past the same reveal delay, so a warmed row (the
-                            background loader reads ahead) still paints straight from cache with nothing in between.
-                        -->
+<!-- File reads open from the existing diff outline. -->
                         <template v-else-if="diff === undefined"><DiffSkeleton v-if="diffOutline" /></template>
-                        <!--
-                            Bytes, a patch, or two whole sides: FileDiffPane decides, same as it does in the workspace
-                            editor.
-                        -->
+<!-- Bytes, a patch, or two whole sides: FileDiffPane decides, same as it does in the workspace editor. -->
                         <FileDiffPane
                             v-else
                             :key="diffKey"

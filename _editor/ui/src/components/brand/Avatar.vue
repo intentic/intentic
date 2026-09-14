@@ -1,8 +1,4 @@
-<!--
-    A person, in a circle: one avatar for every face in the app (roster, member list, account control, profile, pipeline author). Fallback ladder:
-    picture, then initials (opt-in via `name`), then a neutral glyph. `hue` sets identity colour, computed by the caller; size is pixels, not a scale
-    tier.
--->
+<!-- A person, in a circle: one avatar for every face in the app (roster, member list, account control, profile, pipeline author). -->
 <script setup lang="ts">
 import { computed } from "vue";
 import { initialsOf } from "../../lib/format.js";
@@ -54,11 +50,7 @@ const hideBrokenImage = (event: Event): void => {
     >
         <span v-if="initials !== undefined" class="font-semibold leading-none">{{ initials }}</span>
         <Icon v-else name="user" />
-        <!--
-            Layered over the fallback tier, so a failed load reveals it rather than leaving a hole. no-referrer: an
-            avatar
-            host shouldn't learn which sandbox is looking.
-        -->
+<!-- Layered over the fallback tier, so a failed load reveals it rather than leaving a hole. -->
         <img
             v-if="src !== undefined && src !== null"
             :src="src"

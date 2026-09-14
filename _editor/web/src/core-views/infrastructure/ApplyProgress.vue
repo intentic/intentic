@@ -4,10 +4,7 @@ import { Button, Card, ui, Notice, type NoticeModel, ProgressRing } from "@inten
 import PlanStepRow from "../../components/PlanStepRow.vue";
 import type { useApplyProgress } from "./useApplyProgress";
 
-/* The live apply progress, replacing the old spinner + "follow progress in the terminal": per-resource rows
- * (creating → created), readiness gates with their URL as services come up, and the convergence summary: all
- * from the useApplyProgress instance InfraDeclare owns (fed by the durable /intentic/apply/events tail, so it
- * survives a refresh). The terminal stays the detailed log surface, reachable via "View logs". */
+/* The live apply progress, replacing the old spinner + "follow progress in the terminal": per-resource rows (creating → created). */
 const { progress } = defineProps<{ progress: ReturnType<typeof useApplyProgress> }>();
 const { applying, reattaching, error, nodes, readiness, iterations, prunes, orphans, converged, applyPhaseDone, progressPct } = progress;
 // The runner reports a bare message and no idea what it was applying; this card does.

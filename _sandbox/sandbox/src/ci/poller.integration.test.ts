@@ -19,9 +19,7 @@ import { createCiPoller } from "./poller.js";
 import type { FetchFn } from "./providers.js";
 import { createRunsCache } from "./runs-cache.js";
 
-/* The fallback path: a repo whose webhook could NOT be registered still wakes its `ci` automations, and the
- * first pass adopts the current picture in silence rather than replaying it. `warnings` is the whole input that
- * decides whether a repo is polled, so the fake reconciler is just that map. */
+/* The fallback path: a repo whose webhook could NOT be registered still wakes its `ci` automations. */
 
 const run = (id: number, conclusion: string, branch = "main") => ({
     id,

@@ -13,7 +13,7 @@
 # (_devices/machine/src/install.ts), where they are compiled and tested.
 #
 # Usage (the platform's Desktop sync card hands you this):
-#   curl -fsSL https://intentic.dev/sync | env SANDBOX_URL='https://sandbox-<id>.<zone>' PAIR_TOKEN='<token>' SYNC_DIR="$HOME/intentic/<name>-<id>" sh
+# Download the sync script with SANDBOX_URL and PAIR_TOKEN set.
 #
 # Required env:
 #   SANDBOX_URL  your sandbox's public URL (from the card).

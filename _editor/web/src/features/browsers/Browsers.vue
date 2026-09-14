@@ -241,11 +241,7 @@ watch(
             >
                 <!-- Which browser, which page, where it is, and the wheel. -->
                 <div ref="chromeEl" class="flex shrink-0 items-center gap-1 border-b border-line px-1.5 py-1">
-                    <!--
-                        A chip instead of a row of pills: with several browsers it's a label plus caret rather than a
-                        band with its own
-                        scrollbar.
-                    -->
+<!-- A chip instead of a row of pills: with several browsers it's a label plus caret rather than a band with its own scrollbar. -->
                     <button
                         ref="switcherTrigger"
                         type="button"
@@ -259,11 +255,7 @@ watch(
                     >
                         <span v-if="current" class="size-1.5 shrink-0 rounded-full" :class="dotOf(current)" />
                         <span class="max-w-32 truncate">{{ current?.label }}</span>
-                        <!--
-                            Rides here when a browser other than this one is parked; the queue chip below says how
-                            many, this is what opens
-                            them.
-                        -->
+<!-- Rides here when a browser other than this one is parked; the queue chip below says how many, this is what opens them. -->
                         <Icon v-if="queuedHelp.length > 0" name="exclamation-triangle" class="shrink-0 text-3xs text-warning" />
                         <Icon v-if="sessions.length > 1" name="chevron-down" class="shrink-0 text-3xs text-muted" />
                     </button>
@@ -289,11 +281,7 @@ watch(
                         </div>
                     </AnchoredOverlay>
 
-                    <!--
-                        Only for a signed-in profile (see accountOf); the switcher's rows carry the same fact when this
-                        is too narrow
-                        for it.
-                    -->
+<!-- Only for a signed-in profile (see accountOf); the switcher's rows carry the same fact when this is too narrow for it. -->
                     <span
                         v-if="accountOf(current) && !compact"
                         class="flex shrink-0 items-center gap-1 rounded-md bg-overlay px-1.5 py-0.5 text-3xs text-muted"
@@ -305,10 +293,7 @@ watch(
 
                     <span class="h-4 w-px shrink-0 bg-line"></span>
 
-                    <!--
-                        The agent's own tab strip; capped at half the row so the address stays legible with many tabs
-                        open.
-                    -->
+<!-- The agent's own tab strip; capped at half the row so the address stays legible with many tabs open. -->
                     <div ref="stripEl" class="scrollbar-none flex min-w-0 max-w-[50%] flex-1 items-center gap-0.5 overflow-x-auto">
                         <button
                             v-for="page in current?.pages ?? []"
@@ -340,11 +325,7 @@ watch(
                             <span class="text-content">{{ addressParts.host }}</span
                             ><span class="text-muted">{{ addressParts.rest }}</span>
                         </span>
-                        <!--
-                            No tooltip of its own: the address line above already has one, and nesting tooltips would
-                            open a second box on
-                            the first.
-                        -->
+<!-- No tooltip of its own: the address line above already has one, and nesting tooltips would open a second box on the first. -->
                         <CopyButton
                             :text="address"
                             class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
@@ -373,11 +354,7 @@ watch(
                         Closed{{ current?.finishedAt === undefined ? "" : ` ${relativeTime(current.finishedAt)}` }}
                     </span>
 
-                    <!--
-                        Everything besides watching/driving; closing lives here, not beside the wheel, since it ends
-                        the agent's work
-                        and shouldn't sit next to an everyday control.
-                    -->
+<!-- Closing controls stay separate from everyday browser controls. -->
                     <button
                         ref="moreTrigger"
                         type="button"
@@ -420,13 +397,7 @@ watch(
                     </AnchoredOverlay>
                 </div>
 
-                <!--
-                    Exactly the remote viewport's shape, so switching between a live and closed browser doesn't resize
-                    the window
-                    under the pointer. The dark terminal surface is for the photograph; a closed browser has no
-                    photograph, just a
-                    note.
-                -->
+<!-- Exactly the remote viewport's shape, so switching between a live and closed browser doesn't resize the window under the pointer. -->
                 <div
                     class="relative min-h-0 w-full"
                     :class="current?.running ? 'bg-terminal' : ''"
@@ -445,24 +416,14 @@ watch(
                         @paste="view.onPaste"
                         @contextmenu.prevent
                     >
-                        <!--
-                            The whole browser window, decoded off its own X display, so selects/autofill/file-pickers
-                            are all in the
-                            picture. No pointer is drawn here; `cursor-none` just hides the local arrow so it doesn't
-                            sit next to the X
-                            server's own.
-                        -->
+<!-- The whole browser window, decoded off its own X display, so selects/autofill/file-pickers are all in the picture. -->
                         <canvas
                             v-if="view.kind.value === 'video'"
                             ref="canvasEl"
                             class="h-full w-full object-contain"
                             :class="view.driving.value ? 'cursor-none' : ''"
                         />
-                        <!--
-                            One page's compositor surface, all a display-less browser can offer; no cursor in it, so
-                            the operator's own
-                            pointer wears the remote shape, only while driving.
-                        -->
+<!-- Display-less browsers expose one compositor surface without a cursor. -->
                         <img
                             v-else
                             v-show="view.frame.value"
@@ -476,11 +437,7 @@ watch(
                         <div v-if="view.status.value" class="absolute inset-0 flex items-center justify-center px-4">
                             <span class="rounded-md bg-card px-2 py-1 text-center text-xs text-muted">{{ view.status.value }}</span>
                         </div>
-                        <!--
-                            An open drop-down the picture itself can't show; only happens on the frames path, since a
-                            native menu on video
-                            is already photographed and clickable. See BrowserSelectMenu.
-                        -->
+<!-- An open drop-down the picture itself can't show; only happens on the frames path, since a native menu on video is already photographed and clickable. -->
                         <BrowserSelectMenu
                             v-if="view.select.value && view.driving.value"
                             :menu="view.select.value"
@@ -492,11 +449,7 @@ watch(
                         />
                     </div>
 
-                    <!--
-                        Not a failed stream, there's nothing to stream: this reads as the record it is, and the strip
-                        above (every tab
-                        the session ever had) is the real content.
-                    -->
+<!-- Recorded browser sessions have no live stream. -->
                     <div v-else class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
                         <Icon name="globe" class="text-2xl text-muted" />
                         <div class="text-sm text-content">This browser has closed</div>
@@ -506,11 +459,7 @@ watch(
                         </div>
                     </div>
 
-                    <!--
-                        Cards over the picture, not above it; the stack itself takes no pointer events, so the page
-                        stays clickable
-                        around them.
-                    -->
+<!-- Cards over the picture, not above it; the stack itself takes no pointer events, so the page stays clickable around them. -->
                     <div
                         v-if="current?.help !== undefined || queuedHelp.length > 0"
                         class="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col items-center gap-2 p-3"
@@ -533,11 +482,7 @@ watch(
                             >
                                 <div class="flex items-start gap-2">
                                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-sm text-warning" />
-                                    <!--
-                                        Kept on separate lines from the instruction below it: joined, a message ending
-                                        in a period collides with a
-                                        clause starting with a colon.
-                                    -->
+<!-- Kept on separate lines from the instruction below it: joined, a message ending in a period collides with a clause starting with a colon. -->
                                     <div class="min-w-0 flex-1">
                                         <div class="text-xs text-content">
                                             <span class="font-medium">The agent needs your help:</span>
@@ -571,11 +516,7 @@ watch(
                             </div>
                         </template>
 
-                        <!--
-                            Expands inline, not in a popover: an anchored panel here would open right over the ask card
-                            it's queued behind.
-                            Growing the stack upward is the one direction that covers nothing.
-                        -->
+<!-- Expands inline, not in a popover: an anchored panel here would open right over the ask card it's queued behind. -->
                         <div v-if="queuedHelp.length > 0" class="pointer-events-auto flex w-full max-w-2xl flex-col items-center gap-2">
                             <div v-if="queueOpen" class="flex w-full flex-col gap-0.5 rounded-lg border border-line bg-card p-1 shadow-lg">
                                 <RouterLink
@@ -610,4 +551,3 @@ watch(
         </div>
     </div>
 </template>
-

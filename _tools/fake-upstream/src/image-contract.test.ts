@@ -2,21 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-/* THE ONE THING THIS PACKAGE'S IMAGE CANNOT SURVIVE, asserted rather than remembered.
- *
- * The Dockerfile is the stock node base with `package.json` and `src` copied in — no install, no
- * `node_modules`, no build. So a workspace import anywhere under `src/` resolves perfectly from the checkout,
- * type-checks, passes every other suite in this package, and then kills the container at startup on
- * `ERR_MODULE_NOT_FOUND`.
- *
- * That is not a hypothetical failure mode; it is a night of the nightly `onboarding` job. A refactor lifted
- * this package's request-body read and JSON reply into `@intentic/testing/http-fake` alongside every other
- * fake's, which was right for all of them but this one, and the stand-in model then exited instantly every
- * time the journey stood the world up. Nothing in the repository could have said so before the container ran:
- * this test is what says so now, in the package that owns the constraint, in the suite that already runs.
- *
- * Tests and `vitest.config.ts` are exempt because they never enter the image — this file imports vitest.
- */
+/* THE ONE THING THIS PACKAGE'S IMAGE CANNOT SURVIVE, asserted rather than remembered. */
 const SRC = new URL(".", import.meta.url).pathname;
 
 // Every specifier a module can be loaded by, which for this package is `from "…"` and nothing more exotic:

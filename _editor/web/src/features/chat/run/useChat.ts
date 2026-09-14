@@ -130,11 +130,7 @@ export const resetChat = (): void => {
     // Which endpoints (the free trial included) this sandbox has is unknown until its own daemon answers.
     endpointProviders.value = [];
     endpointsLoaded.value = false;
-    /* The account card opens on the user's remembered pick, but ONLY where that pick is a provider it can
-     * connect. The picker writes whatever was chosen, the free trial and a model endpoint included, and neither
-     * holds a credential this card adds or drops; seeding one leaves the card showing rows for a provider that
-     * has no sign-in, under a raw id, with no chip lit. Keeping the previous value is safe by induction: every
-     * writer of `managedProvider` passes the same test. */
+/* The account card opens on the user's remembered pick, but ONLY where that pick is a provider it can connect. */
     if (hasSignIn(turnDefaults.provider.value)) {
         managedProvider.value = turnDefaults.provider.value;
     }

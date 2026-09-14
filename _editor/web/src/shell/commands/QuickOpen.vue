@@ -128,10 +128,7 @@ const onShow = async (): Promise<void> => {
 <template>
     <Modal v-model:open="isOpen" size="md" :chrome="false" :scroll="false" position="top" @show="onShow">
         <div role="combobox" aria-haspopup="listbox" aria-expanded="true" aria-label="Go to file">
-            <!--
-                field-bare: the search is the panel's top band, not a boxed field — the panel border and this
-                divider are already its frame. A skin styling this row targets `ui-search-row`, not the input.
-            -->
+<!-- field-bare: the search is the panel's top band, not a boxed field — the panel border and this divider are already its frame. -->
             <div class="ui-search-row relative border-b border-line">
                 <Icon
                     class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-subtle"

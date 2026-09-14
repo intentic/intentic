@@ -2,10 +2,7 @@ import type { AdminUserDetail, AnnounceRefusal, BootReport, SetupReport } from "
 import type { PrismaClient } from "@intentic/prisma";
 import { DAY_MS } from "../durations.js";
 
-/* THE SUPPORT PAGE — one account, everything operational the platform knows, assembled so "it doesn't work"
- * is answerable without psql. Reads only rows the account's own GDPR export already shows the subject, plus
- * the operational sandbox columns (setup/boot reports, refusals) that exist precisely to be read when
- * something is stuck. Null when neither id nor email matches; the route turns that into NOT_FOUND. */
+/* THE SUPPORT PAGE — one account, everything operational the platform knows, assembled so "it doesn't work" is answerable without psql. */
 
 const utcDayOf = (at: Date): string => at.toISOString().slice(0, 10);
 

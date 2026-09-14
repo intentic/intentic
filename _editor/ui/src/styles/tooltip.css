@@ -1,10 +1,4 @@
-/* The hover label raised by `v-tooltip` (composables/tooltip.ts). Plain CSS rather than a PrimeVue preset
- * because the directive is ours: the box is built by hand in whichever document the anchor lives in, and every
- * window of the app loads these rules with the app itself.
- *
- * The box is a strip, not a slab. Width is content-driven up to --ui-tooltip-max-width, which is set wide on
- * purpose: at a narrow cap a sentence of prose wraps into a tall column that covers the very control it
- * describes. --ui-tooltip-max-lines is the backstop for a label that should never have been a tooltip. */
+/* The hover label raised by `v-tooltip` (composables/tooltip.ts). */
 @layer components {
     .ui-tooltip {
         position: fixed;
@@ -30,9 +24,7 @@
         overflow: hidden;
     }
 
-    /* One triangle, rotated by which edge it hangs off. --ui-tooltip-arrow is set by the directive: it is the
-     * anchor's centre in the box's own coordinates, so a box pushed sideways to stay on screen still points
-     * at the control it belongs to. */
+/* One triangle, rotated by which edge it hangs off. */
     .ui-tooltip::after {
         content: "";
         position: absolute;

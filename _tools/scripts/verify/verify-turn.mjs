@@ -71,7 +71,7 @@ const alsoFailsAtHead = (ids) => {
     }
 };
 
-/* ── 1. the checks, judged against HEAD ──────────────────────────────────────────────────────────────────── */
+/* 1. the checks, judged against HEAD */
 say("checkout gates …");
 const verdicts = checkVerdicts(root);
 if (verdicts === undefined) {
@@ -134,7 +134,7 @@ if (changed === undefined || lintable.length > LINT_FILE_CEILING) {
     }
 }
 
-/* ── 3. the affected closure ─────────────────────────────────────────────────────────────────────────────── */
+/* 3. the affected closure */
 const graph = readWorkspaceGraph(root);
 const { global, seeds, affected } = affectedBy(graph, changed ?? [...graph.packages.values()].map(({ dir }) => dir));
 if (global !== undefined) {

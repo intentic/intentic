@@ -282,12 +282,9 @@ const confirmRemove = async (): Promise<void> => {
         </template>
 
         <template v-else>
-            <!-- No warning here for missing accounts: a card with none still bounds where an agent works, and connecting one is Capabilities' job. -->
+            <!-- Personas may exist without connected accounts. -->
 
-            <!--
-                Real empty state, not a line of apology: states the actual consequence (automations mute, chats unrestricted) and offers the one
-                action.
-            -->
+            <!-- The empty state names the effects of having no personas. -->
             <div v-if="personas.length === 0 && newName === undefined" :class="ui.emptyState('flex flex-col items-center gap-3 py-8')">
                 <Avatar :size="40" />
                 <div class="flex flex-col gap-1">
@@ -315,10 +312,7 @@ const confirmRemove = async (): Promise<void> => {
                     </Button>
                 </template>
 
-                <!--
-                    The row is the disclosure, no second affordance. `hit="pair"` since the name is its own control (a button inside a button is
-                    invalid); `Row`'s headline guard keeps renaming from also toggling the card.
-                -->
+                <!-- The row is the disclosure, no second affordance. -->
                 <DisclosureRow
                     v-for="persona in personas"
                     :key="persona.id"
@@ -327,18 +321,12 @@ const confirmRemove = async (): Promise<void> => {
                     :open="isOpen(persona)"
                     @update:open="toggleOpen(persona)"
                 >
-                    <!--
-                        Face drawn at the row tier's size (`mark`, 22), matching neighbouring lists' BrandMarks, not the rail's 32-size cards. The
-                        disclosure arrow is <DisclosureRow>'s own now, not a hand-drawn chevron swap.
-                    -->
+                    <!-- Persona faces use the row tier's standard mark size. -->
                     <template #lead="{ mark }">
                         <PersonaFace :persona :size="mark" />
                     </template>
 
-                    <!--
-                        Click-to-rename on the app's inline-rename machine (Enter commits, Escape cancels, blur commits). A permanently visible input
-                        would make this settings list read as a form.
-                    -->
+                    <!-- Click-to-rename on the app's inline-rename machine (Enter commits, Escape cancels, blur commits). -->
                     <template #title>
                         <input
                             v-if="rename.editing && renamingId === persona.id"
@@ -362,21 +350,15 @@ const confirmRemove = async (): Promise<void> => {
                         </button>
                     </template>
 
-                    <!--
-                        Under the name: the card's own brief, or a rename failure, whichever applies; omitted entirely so Row doesn't reserve a blank
-                        line.
-                    -->
+                    <!-- The description shows either the brief or the active rename error. -->
                     <template v-if="(rename.error !== undefined && renamingId === persona.id) || persona.brief !== undefined" #description>
                         <span v-if="rename.error !== undefined && renamingId === persona.id" class="text-danger">{{ rename.error }}</span>
-                        <!-- The line a new chat is matched on; worth its own row line, since it's the difference between a name and a job. -->
+                        <!-- A persona brief is the matching text for new chats. -->
                         <span v-else class="truncate">{{ persona.brief }}</span>
                     </template>
 
                     <template #meta>
-                        <!--
-                            Marks say "spans platforms" faster than words could. 16, not the row tier's 22, since #meta is a smaller cluster by
-                            <Row>'s contract, and a lead-sized mark here would compete with the face.
-                        -->
+                        <!-- Marks say "spans platforms" faster than words could. -->
                         <span v-if="persona.capabilities.length > 0" class="flex items-center gap-1">
                             <BrandMark
                                 v-for="mark in marks(persona)"
@@ -408,19 +390,13 @@ const confirmRemove = async (): Promise<void> => {
                         </button>
                     </template>
 
-                    <!--
-                        Opens inside the row it belongs to, so there's no separate form whose subject you'd have to remember; no `click.stop` needed
-                        since a `drawer` body renders outside the row's click handler.
-                    -->
+                    <!-- Editing stays inside the persona row. -->
                     <template #below>
                         <PersonaForm :draft="draft!" :accounts="accounts" :connected="connected" :grantables="grantables" :error="saveError" />
                     </template>
                 </DisclosureRow>
 
-                <!--
-                    One field between wanting a persona and having one: everything else has a default worth keeping, and the card opens the moment it
-                    exists.
-                -->
+                <!-- Creation asks only for the persona name; other fields have defaults. -->
                 <RowNote v-if="newName !== undefined" v-slot="{ mark }" variant="block">
                     <div class="flex flex-col gap-2">
                         <div class="flex flex-wrap items-center gap-2">

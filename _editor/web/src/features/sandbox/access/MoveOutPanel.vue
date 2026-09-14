@@ -115,10 +115,7 @@ const compare = (event: Event): Promise<void> =>
 
 <template>
     <div class="flex flex-col gap-4">
-        <!--
-            Held back until the read lands: "Not published" offers a button that creates a repository, and showing it before the daemon answers would
-            offer that wrongly to an owner who published months ago.
-        -->
+        <!-- Publishing controls wait until the repository state is known. -->
         <RowGroup v-if="workspace !== undefined" flat>
             <Row v-if="published !== undefined" :icon="published.icon">
                 <template #title
@@ -163,10 +160,7 @@ const compare = (event: Event): Promise<void> =>
                         <Button label="Cancel" size="small" severity="secondary" text @click="confirmingPublish = false" />
                     </template>
                 </template>
-                <!--
-                    Shown only at the confirm moment, not as standing prose. `v-if` on the slot, not inside it: a passed slot is one the row renders,
-                    margin included.
-                -->
+                <!-- Shown only at the confirm moment, not as standing prose. -->
                 <template v-if="confirmingPublish" #below>
                     <p class="text-2xs text-subtle">
                         Creates a private repository on {{ host }} and pushes <span class="font-mono">/work</span>. Secrets and
@@ -176,18 +170,12 @@ const compare = (event: Event): Promise<void> =>
             </Row>
         </RowGroup>
 
-        <!--
-            Two fidelities side by side, so the choice between a publishable document and a private archive is visible at once; Compare rides along
-            since it reads what Download writes.
-        -->
+        <!-- Publishable and private export choices remain visible together. -->
         <div class="flex flex-wrap items-center gap-2">
             <Button label="Download sandbox.toml" size="small" :loading="deriving" @click="downloadDefinition">
                 <template #icon><Icon name="download" /></template>
             </Button>
-            <!--
-                Disabled while one pack runs; two concurrent packs would only halve each other's speed, and the daemon 409s anyway. Ellipsis: the
-                press opens a question, not the pack itself.
-            -->
+            <!-- Disabled while one pack runs; two concurrent packs would only halve each other's speed, and the daemon 409s anyway. -->
             <Button
                 :label="packing ? 'Export running…' : 'Export environment…'"
                 size="small"
@@ -208,10 +196,7 @@ const compare = (event: Event): Promise<void> =>
             <Row v-for="entry in derived.omitted" :key="entry.subject" :title="entry.subject" :description="entry.detail" />
         </RowGroup>
 
-        <!--
-            Answers "where do I get it later". Download and delete are the same affordance (icon + tooltip, no bordered chip), the only two things
-            anyone does to a file.
-        -->
+        <!-- Download and delete use the same compact icon affordance. -->
         <RowGroup v-if="exports.length > 0" flat label="Exports" :count="exports.length">
             <Row v-for="entry in exports" :key="entry.name">
                 <template #title

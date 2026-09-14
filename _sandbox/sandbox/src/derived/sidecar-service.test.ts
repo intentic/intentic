@@ -3,8 +3,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { ExecFn } from "./fileq.js";
 import { startSidecarService } from "./sidecar-service.js";
 
-/* The trigger logic apart from any filesystem or child process: what gets a spawn, what gets a sweep, what
- * gets dropped. The exec seam records invocations; a manual subscribe stands in for the watcher. */
+/* The trigger logic apart from any filesystem or child process: what gets a spawn, what gets a sweep, what gets dropped. */
 
 const logger = { info: () => {}, warn: () => {}, error: () => {} } as unknown as Logger;
 

@@ -1,9 +1,7 @@
 import { sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { expect, test } from "vitest";
 
-/* Unit tests for the sandbox-route matcher the host uses to gate api.sandbox.request/json (apiImpl.ts). The
- * matcher lives in @intentic/extension-api, which ships no test harness of its own, so its consumer (the host)
- * owns the coverage. */
+/* Unit tests for the sandbox-route matcher the host uses to gate api.sandbox.request/json (apiImpl.ts). */
 
 const perms = ["GET /panels", "POST /panels/*/start", "GET /workspace/repos/*/apps", "POST /workspace/repos/*/apps/*/start", "GET /logs/file"];
 

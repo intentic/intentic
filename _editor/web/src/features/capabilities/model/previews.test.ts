@@ -22,8 +22,7 @@ test(`matches the switches back to the preset they spell`, () => {
     expect(matchHostPreset({ shell: `on`, write: `on`, screen: `off`, control: `off`, sandboxes: `off`, sandboxRemove: `off` })).toBeUndefined();
 });
 
-/* The grant, in one line and from the allowed half only: listing the blocked half too ran to three lines of a
- * form whose whole problem was length, and buried the part being decided. */
+/* The grant, in one line and from the allowed half only: listing the blocked half too ran to three lines of a form whose whole problem was length. */
 test(`states the grant in one line, from what is allowed`, () => {
     expect(hostGrantSummary({ shell: `on`, write: `off`, screen: `on`, control: `off`, sandboxes: `off`, sandboxRemove: `off` })).toBe(
         `May run commands and see the screen, and nothing else.`,

@@ -1,8 +1,4 @@
-<!--
-    The app's one centred, dismissable box; forms, confirms and documents are all built on it. `size` picks a named width tier
-    (`--container-modal-*`) with its own viewport clamp. Body scrolls by default, capped at `--height-panel-lg`; `scroll={false}` and
-    `chrome={false}` suit a caller that lays out its own height or header.
--->
+<!-- The app's one centred, dismissable box; forms, confirms and documents are all built on it. -->
 <script setup lang="ts">
 import Dialog from "primevue/dialog";
 import { computed } from "vue";

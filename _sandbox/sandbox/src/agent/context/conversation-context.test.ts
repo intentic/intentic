@@ -5,9 +5,7 @@ import type { Services } from "../../composition.js";
 import type { Composition } from "../../agents/registry/agents-store.js";
 import { contextNoteFor, decideComposition } from "./conversation-context.js";
 
-/* THE COMPOSITION IS READ OFF THE CARD, AND OFF NOTHING ELSE. Three cards: one that names its context, one that
- * says nothing about it, and the absence of one. The first narrows the tree, the other two are "everything",
- * which is spelled as no composition at all so the worktree layer keeps the freeze it always had. */
+/* THE COMPOSITION IS READ OFF THE CARD, AND OFF NOTHING ELSE. */
 
 const CARDS: readonly Persona[] = [
     { id: "backend", label: "Backend", capabilities: [], context: { repos: ["api", "billing"] } },

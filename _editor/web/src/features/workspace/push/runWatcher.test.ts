@@ -2,9 +2,7 @@ import type { CommandRun } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { createRunWatcher, type RunSource } from "./runWatcher";
 
-/* THE WATCHER'S OWN PROMISES, the ones the pre-push check and the push both ride on: the reveal happens once,
- * at the first state that names a terminal; a dropped poll is reported and does not end the wait; forgetting a
- * run stops the follow without killing the run; and a start the daemon refused rests with the reason. */
+/* THE WATCHER'S OWN PROMISES, the ones the pre-push check and the push both ride on: the reveal happens once, at the first state that names a terminal. */
 
 const openFocused = vi.fn();
 vi.mock(`../../terminal/useTerminalPanel`, () => ({ useTerminalPanel: () => ({ openFocused }) }));

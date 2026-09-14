@@ -33,7 +33,7 @@ const spend = computed<string>(() => `${chosen} ${chosen === 1 ? `session` : `se
 </script>
 
 <template>
-    <!-- Sticky wrapper only; the pill inside is what's seen, so the floating element never spans the column or intercepts a click on a row beside it. -->
+    <!-- Only the control pill is sticky and interactive. -->
     <div class="pointer-events-none sticky bottom-4 z-10 mt-4 flex justify-center">
         <!-- Translucent with blur, since rows scroll under this: opaque would look like a moving hole, transparent would be unreadable. -->
         <div
@@ -50,10 +50,7 @@ const spend = computed<string>(() => `${chosen} ${chosen === 1 ? `session` : `se
                 Clear
             </button>
 
-            <!--
-                The app's one run button: scope on the label, model behind the caret. `rounded` dropped, since the two halves need square inner edges
-                to read as one control.
-            -->
+            <!-- The app's one run button: scope on the label, model behind the caret. -->
             <AgentRunButton
                 :label="`Run ${narrowed ? storyCount(chosen) : `all ${storyCount(total)}`}`"
                 icon="play"

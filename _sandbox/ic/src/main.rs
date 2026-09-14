@@ -19,13 +19,7 @@ mod util;
 
 use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
 
-/* ic — intentic's host-side CLI: the flows that must run on the machine that runs the sandbox, because the
- * sandbox holds no host Docker socket and cannot recreate its own container. The curl-served scripts
- * (connect, rebuild/update, connect-host) are bootstrap shims that fetch this binary and hand over; cleanup
- * stays a self-contained script beside it as the break-glass path.
- *
- * Configuration doubles as flags AND the env vars the shims forward — every name the shell flows honored
- * keeps working (SETUP_CODE, CF_TOKEN, SANDBOX_IMAGE, INTENTIC_SET_ENV, …). */
+/* ic — intentic's host-side CLI: the flows that must run on the machine that runs the sandbox. */
 
 /// What this binary reports it is. `IC_VERSION` is set by build-ic.sh at release; without it the crate's own
 /// `0.0.0` sentinel stands, which is what an unreleased build should say — `Cargo.toml` is never bumped, so a
@@ -361,12 +355,7 @@ mod tests {
     use super::*;
     use clap::CommandFactory;
 
-    /* THE ARGUMENT SURFACE, asserted — the shims and the platform's cards build command lines against it.
-     *
-     * This is the same class of risk the desktop crate's commands.rs states: an argument that regresses to a
-     * different position or arity binds to the WRONG parameter, silently, and the failure surfaces much
-     * later as something else entirely. Here a `rebuild` whose hash became optional would accept a bare
-     * `ic sandbox rebuild <slug>` and rebuild against no trust anchor at all. */
+/* THE ARGUMENT SURFACE, asserted — the shims and the platform's cards build command lines against it. */
 
     #[test]
     fn the_command_tree_is_internally_consistent() {
@@ -571,8 +560,7 @@ mod tests {
         assert!(parse(&["machine", "remove", "-y", "--keep-user"]).is_ok());
     }
 
-    /* `docker prepare` is on the shims' critical path — connect.ps1 and connect-host.ps1 both stop dead if it
-     * will not parse — and it is the one command here whose flags decide whether a machine gets CHANGED. */
+/* `docker prepare` is on the shims' critical path — connect.ps1 and connect-host.ps1 both stop dead if it will not parse. */
     #[test]
     fn docker_prepare_defaults_to_asking_and_to_acting() {
         let Ok(Cli {
@@ -595,10 +583,7 @@ mod tests {
         assert!(parse(&["docker", "prepare", "extra"]).is_err());
     }
 
-    /* `reshape` changes a container's PRIVILEGES, so its surface is held tighter than the swaps': the slug is
-     * never inferred, at least one ask is required (a bare reshape would be a restart for nothing), and the
-     * switches take an explicit on/off rather than being flags that could only ever add. The machine agent
-     * builds this exact command line from a browser dialog (@intentic/machine icReshapeArgs). */
+/* `reshape` changes a container's PRIVILEGES, so its surface is held tighter than the swaps': the slug is never inferred. */
     #[test]
     fn reshape_names_its_sandbox_and_requires_at_least_one_ask() {
         assert!(parse(&["sandbox", "reshape"]).is_err());

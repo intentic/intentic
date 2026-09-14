@@ -2,8 +2,7 @@
 import type { ViewRegistration } from "@intentic/extension-api";
 import { type Component, defineAsyncComponent } from "vue";
 
-/* Renders one extension activation's view with its `repo` (+ props) bound: the single source consumed by both
- * hosts: the routed ExtensionHost (rail tiles) and the in-tree DirectoryOperator (per-repo directory panels). */
+/* Renders one extension activation's view with its `repo` (+ props) bound: the single source consumed by both hosts. */
 
 // One async component per registration, created on first render and cached by registration identity: a view
 // never remounts when a host recomputes, and runtime-registered extensions join the same cache (entries die

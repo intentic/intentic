@@ -14,9 +14,7 @@ const SCHEMA_VERSION = "1";
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-/* One row per indexed source, and the VERSION it was indexed at. For a conversation that is its record's byte
- * size, for a session the size and mtime of its file: both move on any change, which is what lets a boot ask
- * "is this still current" without reading the thing itself. The line count is what the metrics series reports. */
+/* Each indexed source stores the version needed to detect record changes without rereading it. */
 CREATE TABLE IF NOT EXISTS source (
     key TEXT PRIMARY KEY,
     kind TEXT NOT NULL,
@@ -24,12 +22,7 @@ CREATE TABLE IF NOT EXISTS source (
     lines INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS source_kind ON source(kind);
-/* The spoken lines. The folded column is the only tokenized one, everything else is carried for the answer:
- * - key/kind: which conversation or session said it
- * - speaker: which side, so a card can say whose words it is showing
- * - text: as written, whitespace already collapsed, for the snippet
- * ROWID ORDER IS TRANSCRIPT ORDER, because insertion is append-only per source. That is what lets the query
- * below pick the OLDEST matching line without storing a position. */
+/* The spoken lines. The folded column is the only tokenized one, everything else is carried for the answer. */
 CREATE VIRTUAL TABLE IF NOT EXISTS said USING fts5(
     key UNINDEXED,
     kind UNINDEXED,

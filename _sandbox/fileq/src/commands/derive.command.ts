@@ -1,7 +1,4 @@
-/* `fileq derive <file…>`: converge sidecars for named files, one outcome line each. This is the daemon's
- * verb — the eager service hands it every watcher batch that touched a candidate file, and a path that
- * VANISHED is as much its business as one that landed: derive on a missing source removes the orphaned
- * shadow, so deletion cleanup rides the same call as creation. */
+/* `fileq derive` derives metadata from one input file. */
 import { resolve } from "node:path";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { ensureSidecar, type Outcome } from "../lib/derive.js";

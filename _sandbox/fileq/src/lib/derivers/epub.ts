@@ -6,11 +6,7 @@ import { renderMarkdown } from "@intentic/webq/markdown";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 import { attributeOf, decodeEntities } from "../xml.js";
 
-/* EPUBs: a zip of XHTML chapters, read in the order the package document (the OPF) says they are read.
- * Each chapter goes through webq's writer like any HTML, under a heading of its own so a reader can find
- * chapter twelve in the sidecar. A book is the one format here that is routinely longer than an agent wants
- * whole, so the body is capped in bytes and the cap is announced — the sidecar still says what the book IS
- * and where it was cut, and `fileq read`'s own budget does the rest. */
+/* EPUBs: a zip of XHTML chapters, read in the order the package document (the OPF) says they are read. */
 
 const MAX_MARKDOWN_BYTES = 2 * 1024 * 1024;
 

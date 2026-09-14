@@ -78,8 +78,7 @@ test("two computations of the birth agree within jitter", async () => {
     expect(Math.abs(first - second)).toBeLessThan(5_000);
 });
 
-/* Corroboration: the apt channel is pure and provable here; the path channels stat real filesystems and are
- * exercised by the sweep itself rather than faked in a unit test. */
+/* Verify apt drift purely and path drift against real filesystems. */
 
 const drift = { bornAt: 0, at: 0, apt: ["xdg-utils"], paths: ["/usr/local/lib/python3.11/dist-packages/code_review_graph/cli.py"] };
 

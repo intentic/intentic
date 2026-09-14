@@ -1,32 +1,11 @@
-/* Compiled everywhere, TESTED everywhere, called only by the Windows build. That is deliberate and it is the
- * whole design: the Windows installer is cross-built on a Linux runner that can never execute a line of it, so
- * the decisions live in pure functions the runner CAN execute. The allow keeps that from reading as rot. */
+/* Compiled everywhere, TESTED everywhere, called only by the Windows build. */
 #![cfg_attr(not(windows), allow(dead_code))]
 
 use serde::Deserialize;
 
-/* WHAT THIS PC IS, AND WHAT THAT MEANS FOR DOCKER — the facts, and the pure reading of them.
- *
- * Windows is the one platform where "install Docker" is a tree rather than a step, and the shim that used to
- * own it could see two leaves of that tree: `docker` on PATH, and a daemon answering. Everything else arrived
- * as the same sentence — "docker is not installed and winget is unavailable" — including the cases where
- * Docker was installed, where Windows could not run it at all, and where the fix was in firmware and no amount
- * of re-running would ever reach it.
- *
- * So the machine is PROBED into facts (facts.rs, one read-only call) and the facts are READ here, by a
- * function with no I/O in it. That split is what makes this testable at all: every combination below is a
- * `Facts` literal in the tests at the bottom, checked on the Linux runner that cross-builds the Windows
- * binary and can never execute it.
- *
- * UNKNOWN IS NOT FALSE. The three hardware facts are `Option<bool>` because a machine whose CIM is broken
- * answers nothing, and a classifier that read that silence as "virtualization is off" would send somebody
- * into their BIOS over a WMI fault. Only an explicit `Some(false)` accuses the machine. Same discipline as
- * checks::Outcome::Skip and the daemon's "unknown" adapter health. */
+/* WHAT THIS PC IS, AND WHAT THAT MEANS FOR DOCKER — the facts, and the pure reading of them. */
 
-/* `Win32_Processor.Architecture` — the numeric form, because the string one is localized.
- *
- * Note that ZERO is a real value here (32-bit x86) rather than a missing one, which is why the fact is an
- * Option: a machine whose CIM would not answer must not arrive looking like a Pentium. */
+/* `Win32_Processor.Architecture` — the numeric form, because the string one is localized. */
 pub const ARCH_X64: u16 = 9;
 pub const ARCH_ARM64: u16 = 12;
 
@@ -177,10 +156,7 @@ fn req(id: &'static str, title: &str, problem: &str, remedy: &str, action: Actio
     }
 }
 
-/* THE FIRMWARE WALKTHROUGH. This is the one outcome where the user has to leave Windows, and the difference
- * between a good and a bad version of this message is whether they get back. "Enable virtualization in your
- * BIOS" is technically complete and practically useless: the key differs per maker, the setting has four
- * different names, and it lives under a different menu on every board. */
+/* THE FIRMWARE WALKTHROUGH. */
 const FIRMWARE_STEPS: &str = "\
 How to turn it on:
 
@@ -246,20 +222,7 @@ fn wsl_functioning(facts: &Facts) -> bool {
     facts.wsl_status_ok && !facts.wsl_version.trim().is_empty()
 }
 
-/* PROOF, FROM SOMETHING ALREADY RUNNING, THAT THIS PROCESSOR VIRTUALIZES.
- *
- * This exists because of a trap that costs a working machine its setup. `Win32_Processor` answers from wherever
- * it is asked — and once Hyper-V owns the CPU, it is asked from inside the hypervisor's own partition, where
- * the virtualization extensions are not visible. So a perfectly healthy Windows 11 PC, currently running WSL2
- * and Docker, reports:
- *
- *     VirtualizationFirmwareEnabled           : False
- *     SecondLevelAddressTranslationExtensions : False
- *     VMMonitorModeExtensions                 : False
- *
- * Read literally, that is a PC we would send into its BIOS and then declare unsupportable hardware. It is in
- * fact the machine this was tested on. Every one of those flags is believable ONLY when nothing here is already
- * virtualizing; the moment something is, the running thing is the better witness. */
+/* This exists because of a trap that costs a working machine its setup. */
 fn virtualization_proven(facts: &Facts) -> bool {
     facts.hypervisor_present == Some(true)
         || wsl_functioning(facts)
@@ -283,15 +246,7 @@ fn wsl_ready(facts: &Facts) -> bool {
     facts.service_vmcompute && wsl_functioning(facts)
 }
 
-/* WHAT IS STANDING IN THE WAY, IN THE ORDER IT HAS TO BE DEALT WITH.
- *
- * Read top to bottom: the early returns are not shortcuts, they are the DEPENDENCY ORDER. Telling somebody
- * their WSL2 is missing while their CPU cannot virtualize at all is three true sentences and one wasted
- * afternoon — the second fact only becomes actionable after the first is fixed, and a list that does not say
- * so reads as four unrelated problems.
- *
- * Disk space rides along with every blocker rather than waiting behind it: it is independent of all of this,
- * and a machine that is about to be sent into its BIOS may as well learn now that it also needs 5 GB. */
+/* Read top to bottom: the early returns are not shortcuts, they are the DEPENDENCY ORDER. */
 pub fn requirements(facts: &Facts) -> Vec<Requirement> {
     let mut found = Vec::new();
 
@@ -450,14 +405,7 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
         ));
     }
 
-    /* Non-administrators need this group to reach the engine, and Docker's installer only adds the user who
-     * ran it. A token without it produces "access is denied" on the pipe, which reads like a broken install.
-     *
-     * TWO STATES, NOT ONE. "not in the group" is fixable with administrator; "in the group, but this login
-     * token predates that" is not fixable by anything at all except a new sign-in. Collapsing them sends a
-     * machine that is one sign-out from ready to a UAC prompt, where the add cannot do anything — which is
-     * how a reported install stopped dead: Docker Desktop's installer had already added the account moments
-     * earlier, in the same pass. */
+/* Non-administrators need this group to reach the engine, and Docker's installer only adds the user who ran it. */
     if !facts.in_docker_users && !facts.elevated {
         let who = if facts.user.is_empty() {
             "this account"
@@ -525,16 +473,7 @@ fn disk(facts: &Facts) -> Option<Requirement> {
     ))
 }
 
-/* THE CHECKLIST — the same diagnosis, drawn as rows rather than as a list of problems.
- *
- * [`requirements`] answers "what is wrong", which is what the fixer needs. A person reading a terminal needs
- * the other half too: what was LOOKED at. A machine that prints two failures and nothing else has not told
- * anybody whether it checked virtualization and liked it, or never got that far — and "never got that far" is
- * the common case, because the dependency order above returns early.
- *
- * So the rows are a fixed list in the order the machine is examined, each one either fine, broken, or NOT YET
- * JUDGED because something above it has to be dealt with first. The third state is the point of this
- * function: it is the difference between a checklist and a list that merely looks complete. */
+/* THE CHECKLIST — the same diagnosis, drawn as rows rather than as a list of problems. */
 
 /// Every area of the machine, in examination order, with the requirement ids that belong to it.
 pub const AREAS: [(&str, &[&str]); 8] = [
@@ -639,19 +578,7 @@ pub fn advisories(facts: &Facts) -> Vec<String> {
 /// [`windows_name`].
 pub const FIRST_WINDOWS_11_BUILD: u32 = 22_000;
 
-/* WHAT THIS PC IS CALLED, AND WHY IT IS NOT WHAT THE REGISTRY SAYS.
- *
- * `HKLM\…\CurrentVersion\ProductName` was frozen at "Windows 10 …" when 11 shipped and has never been
- * corrected, so a Windows 11 machine introduces itself as "Windows 10 Pro" — which is exactly what a real
- * user saw on the first line of their checklist, above four things we were telling them to change. The
- * facts.rs OMEN fixture has carried that value with a comment about it since it was captured; nothing
- * DECIDES anything from the name, but this is the sentence a stranger reads first, and being visibly wrong
- * about the machine is not a good way to ask somebody for administrator.
- *
- * So the edition (the "Pro"/"Home" tail) is kept — that part of the registry value is right — and only the
- * family in front of it is re-derived from the build number, which is the version of record everywhere else
- * in this module. A name we cannot parse is left exactly as it is rather than guessed at.
- */
+/* Windows machine-wide startup is registered under HKLM. */
 pub fn windows_name(product_name: &str, build: u32) -> String {
     let trimmed = product_name.trim();
     if trimmed.is_empty() {
@@ -688,10 +615,7 @@ pub fn summary(facts: &Facts) -> String {
 mod tests {
     use super::*;
 
-    /* Every branch above as a fact literal. This runs on the Linux runner that CROSS-BUILDS the Windows
-     * binary and cannot execute a line of it — which is the whole reason the classifier has no I/O in it.
-     * The Windows-only halves (facts.rs's probe, fix.rs's remediations) are covered by the Windows smoke
-     * tiers instead; this is the part where the decisions live. */
+/* Every branch above as a fact literal. */
 
     /// A PC where everything is already right — the baseline every case below mutates.
     fn healthy() -> Facts {
@@ -727,13 +651,7 @@ mod tests {
         }
     }
 
-    /* A PC WITH NOTHING RUNNING YET — no hypervisor, no WSL, no Docker.
-     *
-     * The baseline for every judgement about HARDWARE, and it has to be, because [`virtualization_proven`]
-     * makes those judgements conditional on nothing already virtualizing. Flipping `virtualization_firmware`
-     * to false on top of `healthy()` describes a PC whose firmware virtualization is off while it runs Linux
-     * containers in WSL2, which is not a machine — it is two fixtures glued together, and the assertion it
-     * carried was only ever passing by accident. */
+/* A PC WITH NOTHING RUNNING YET — no hypervisor, no WSL, no Docker. */
     fn bare() -> Facts {
         Facts {
             hypervisor_present: Some(false),
@@ -763,8 +681,7 @@ mod tests {
         assert!(advisories(&healthy()).is_empty());
     }
 
-    /* THE REPORTED FAILURE. No Docker and no package manager was a dead end; it is now one fixable
-     * requirement whose remedy names the direct download. */
+    /* No Docker or package manager is still a fixable setup state. */
     #[test]
     fn no_docker_and_no_package_manager_is_still_ours_to_fix() {
         let facts = Facts {
@@ -817,9 +734,7 @@ mod tests {
         assert!(!desktop.remedy.contains("docker.com"));
     }
 
-    /* VIRTUALIZATION OFF IN FIRMWARE — the one outcome the user has to leave Windows for, and the one the
-     * old script could not see at all. It must not be reported as something we will fix, and it must carry
-     * the walkthrough: "enable it in your BIOS" is a sentence, not a fix. */
+/* VIRTUALIZATION OFF IN FIRMWARE — the one outcome the user has to leave Windows for, and the one the old script could not see at all. */
     #[test]
     fn firmware_virtualization_is_named_as_firmware_and_explained_in_full() {
         let facts = Facts {
@@ -863,9 +778,7 @@ mod tests {
         }
     }
 
-    /* A RUNNING HYPERVISOR IS PROOF. Hyper-V hides the firmware flag from Win32_Processor, so a machine that
-     * demonstrably virtualizes reports `VirtualizationFirmwareEnabled = false` — and reading that literally
-     * sends a working PC into its BIOS. */
+/* A RUNNING HYPERVISOR IS PROOF. */
     #[test]
     fn a_running_hypervisor_outweighs_the_firmware_flag() {
         let facts = Facts {
@@ -931,9 +844,7 @@ mod tests {
         assert!(!found[0].action.ours());
     }
 
-    /* THE VERDICT WITH NO WAY BACK, AND THE MACHINE THAT PROVOKED IT. `SecondLevelAddressTranslationExtensions`
-     * reads false under a running Hyper-V exactly as the firmware flag does, so the one requirement that tells
-     * somebody to go and use a different device must never be reachable from it alone. */
+/* THE VERDICT WITH NO WAY BACK, AND THE MACHINE THAT PROVOKED IT. */
     #[test]
     fn no_running_machine_is_ever_declared_unsupported_hardware() {
         for proof in [
@@ -1003,9 +914,7 @@ mod tests {
         assert!(found[0].remedy.contains("ARM"));
     }
 
-    /* ZERO IS A PROCESSOR, NOT A SILENCE. `Win32_Processor.Architecture` spells 32-bit x86 as 0, so the fact
-     * cannot use 0 for "could not read" the way the build number does — a machine whose CIM was unavailable
-     * would be told its perfectly good laptop is a Pentium and there is nothing to be done. */
+/* ZERO IS A PROCESSOR, NOT A SILENCE. */
     #[test]
     fn an_unreadable_processor_is_not_a_32_bit_one() {
         assert!(requirements(&Facts {
@@ -1027,8 +936,7 @@ mod tests {
         );
     }
 
-    /* A PENDING RESTART COMES FIRST. `wsl --install` on a machine with staged servicing reports success and
-     * leaves the features off, which is a diagnosis nobody recovers from unaided. */
+/* A PENDING RESTART COMES FIRST. */
     #[test]
     fn a_pending_restart_is_dealt_with_before_features_are_touched() {
         let facts = Facts {
@@ -1144,13 +1052,7 @@ mod tests {
         );
     }
 
-    /* THE REPORTED FAILURE, AS A DIAGNOSIS. A machine that has just installed Docker Desktop is in
-     * `docker-users` — Docker's own installer put it there — and carrying a login token issued before that.
-     * Reading only the token asks for administrator to perform an add that has already happened, which is a
-     * UAC prompt that cannot change anything, followed by `net`'s "already a member" reported as a failure.
-     *
-     * The two states have to be told apart, because a sign-out is not something administrator substitutes
-     * for and administrator is not something a sign-out substitutes for. */
+/* THE REPORTED FAILURE, AS A DIAGNOSIS. */
     #[test]
     fn an_account_already_in_the_group_is_asked_to_sign_out_rather_than_for_administrator() {
         let facts = Facts {
@@ -1262,8 +1164,7 @@ mod tests {
         .is_empty());
     }
 
-    /* A FRESH PC, WHICH IS THE CASE THIS WHOLE MODULE EXISTS FOR: nothing installed, features off. It must
-     * come back as an ordered, complete list of things we can do, not a single sentence about one of them. */
+/* A FRESH PC, WHICH IS THE CASE THIS WHOLE MODULE EXISTS FOR: nothing installed, features off. */
     #[test]
     fn a_bare_machine_gets_one_ordered_list_of_everything_it_needs() {
         let facts = Facts {
@@ -1297,11 +1198,7 @@ mod tests {
         );
     }
 
-    /* THE CHECKLIST'S THIRD STATE, which is the whole reason it is not just "the failures, inverted".
-     *
-     * A PC whose firmware has virtualization switched off is never asked about WSL2 or Docker, because the
-     * answers would be meaningless. Drawing those rows as ticks would be a lie, and leaving them out would
-     * read as a shorter checklist on a more broken machine. */
+/* THE CHECKLIST'S THIRD STATE, which is the whole reason it is not just "the failures, inverted". */
     #[test]
     fn rows_below_a_blocker_are_unjudged_rather_than_passed() {
         let facts = Facts {
@@ -1436,9 +1333,7 @@ mod tests {
         );
     }
 
-    /* THE REGISTRY LIES ABOUT WHICH WINDOWS THIS IS, and a real user met that lie on the first line of a
-     * checklist that then asked them for administrator four times. `ProductName` was frozen at "Windows 10"
-     * when 11 shipped; the build number is what everything else in this module already believes. */
+/* The registry must identify the target Windows installation. */
     #[test]
     fn a_windows_11_machine_is_not_introduced_as_windows_10() {
         // The exact pair the reported machine printed: 25H2, build 26200, calling itself Windows 10 Pro.

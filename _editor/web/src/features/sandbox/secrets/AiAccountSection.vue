@@ -73,24 +73,9 @@ const ROUTED_ROW: Record<KeyedProvider, { title: string }> = {
     gemini: { title: `Google account` },
 };
 
-/* Codex, Kimi and Gemini own no native account: the subscription row IS their connection. Read off the same
- * rules the composer's gate uses, so a provider is never offered an account row it has no store behind.
- *
- * TWO exclusions, not one, and the second is the one this asked by elimination. A provider with no sign-in at
- * all (an endpoint, an ACP agent: `hasSignIn`) is not a native provider either, and treating "not a
- * subscription" as "has native accounts" put a Connect button on the free trial's row for a handshake that does
- * not exist. */
+/* Codex, Kimi and Gemini own no native account: the subscription row IS their connection. */
 const hasNativeAccounts = computed(() => hasSignIn(managedProvider.value) && !subscriptionOnly(managedProvider.value));
-/* WHICH ESTATE TO SIGN IN TO, and the ONLY provider fact this card asks the user for before a sign-in starts.
- *
- * Z.ai sells one product through two entirely separate estates: an international plan signs in at z.ai and its
- * key works against api.z.ai, a mainland GLM Coding Plan signs in at bigmodel.cn and its key works against
- * open.bigmodel.cn, and each host refuses the other's credential. Nothing we can read tells us which one a
- * person holds, and guessing sends half of them through a sign-in that ends in a refusal about a key that is
- * perfectly good — so the choice is made HERE, before anything opens, rather than diagnosed afterwards.
- *
- * Shown only where there is genuinely a choice: a provider with one estate (Meta) renders no control at all,
- * and its `login/start` names no variant. */
+/* WHICH ESTATE TO SIGN IN TO, and the ONLY provider fact this card asks the user for before a sign-in starts. */
 const estates = computed(() => {
     const variants = mintedVariants(managedProvider.value) ?? [];
     return variants.length > 1 ? variants : [];
@@ -293,19 +278,10 @@ onUnmounted(() => clearTimeout(ringTimer));
 </script>
 
 <template>
-    <!--
-        RowGroup, not Card: wrapping an already-grouped list in a card added a bordered surface for no gain, the group
-        label already carries the heading.
-    -->
-    <!--
-        Deep-link flash rings the whole group; `-m-1 p-1` reserves room for the ring outside the surface so the section
-        doesn't grow and shove the page for 2.5s.
-    -->
+<!-- RowGroup, not Card: wrapping an already-grouped list in a card added a bordered surface for no gain, the group label already carries the heading. -->
+<!-- Deep-link rings stay outside the group to prevent layout shift. -->
     <RowGroup id="ai-account" label="AI account" :class="ringing ? '-m-1 rounded-xl p-1 ring-2 ring-info' : ''">
-        <!--
-            Each chip's dot has three states (checking / connected / not-connected), not two, since a grey dot before the
-            read lands would falsely claim every provider is disconnected.
-        -->
+<!-- Each chip's dot has three states (checking / connected / not-connected), not two. -->
         <template #actions>
             <div class="flex flex-wrap items-center justify-end gap-1">
                 <button
@@ -323,10 +299,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                         :aria-label="!accountsLoaded ? `checking` : providerReady(tab.value) ? `connected` : `not connected`"
                     />
                     {{ tab.label }}
-                    <!--
-                        "Free" shown on the chip itself, not only after opening it, so comparing providers doesn't require opening
-                        each one. Dropped once connected (accessBadge's rule: a connected provider reads as the default, not an ad).
-                    -->
+<!-- "Free" shown on the chip itself, not only after opening it, so comparing providers doesn't require opening each one. -->
                     <span
                         v-if="accountsLoaded && isFreeProvider(tab.value) && !providerReady(tab.value)"
                         class="shrink-0 rounded-sm bg-success/15 px-1 font-semibold text-success"
@@ -339,10 +312,7 @@ onUnmounted(() => clearTimeout(ringTimer));
 
         <Notice v-if="chatNotice" :of="chatNotice" class="m-3" />
 
-        <!--
-            Nothing read yet: an offline sandbox says so and stops; otherwise skeletons in the real rows' shape hold the
-            section's height until they land.
-        -->
+<!-- Nothing read yet: an offline sandbox says so and stops; otherwise skeletons in the real rows' shape hold the section's height until they land. -->
         <ConnectionRow
             v-if="!accountsLoaded && !reachable"
             title="Connections unavailable"
@@ -371,10 +341,7 @@ onUnmounted(() => clearTimeout(ringTimer));
             </Row>
         </template>
 
-        <!--
-            Native accounts and translator subscriptions render as one list of the same row shape, since both answer "what
-            am I signed in with, can I drop it?". A live sign-in opens in its own row's #below, not a detached panel.
-        -->
+<!-- Native accounts and translator subscriptions render as one list of the same row shape, since both answer "what am I signed in with, can I drop it?". -->
         <template v-else>
             <!-- Native accounts: Claude and Grok only. Codex, Kimi and Gemini skip straight to the subscription row below. -->
             <template v-if="hasNativeAccounts">
@@ -411,10 +378,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                     </template>
                 </ConnectionRow>
 
-                <!--
-                    No account is still a row, same shape as a connected one, so it reads as a missing connection, not an apology.
-                    Its action morphs Connect -> spinner -> Cancel as sign-in runs, never swapping in an unrequested control.
-                -->
+<!-- No account is still a row, same shape as a connected one, so it reads as a missing connection, not an apology. -->
                 <ConnectionRow
                     v-if="accountRows.length === 0"
                     :title="`${managedLabel} account`"
@@ -438,10 +402,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                         </Button>
                     </template>
                     <template v-if="nativeFlowLive || estates.length > 0" #below>
-                        <!--
-                            Estate chooser sits where the sign-in unfolds and is replaced by it, since choosing the estate is the connect's
-                            first step, not a separate setting.
-                        -->
+<!-- Estate chooser sits where the sign-in unfolds and is replaced by it, since choosing the estate is the connect's first step, not a separate setting. -->
                         <ConnectFlow v-if="nativeFlowLive" kind="native" :provider="managedProvider" />
                         <SegmentedControl
                             v-else
@@ -481,11 +442,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                 </ConnectionRow>
             </template>
 
-            <!--
-                Subscription rows (translator): the primary control for Codex/Kimi/Gemini, secondary under Grok's native
-                account. Several can coexist (the translator balances turns across them), each with its own Disconnect; Codex/Grok/Kimi mint a
-                one-time code, Google redirects instead.
-            -->
+            <!-- Subscription rows (translator): the primary control for Codex/Kimi/Gemini, secondary under Grok's native account. -->
             <template v-if="routedProvider">
                 <ConnectionRow
                     v-for="{ account, headroom, exhausted, blocked } in translatorRows.slice(0, visibleRoutedLimit)"
@@ -510,10 +467,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                     </template>
                 </ConnectionRow>
 
-                <!--
-                    No subscription: states what's missing with the one fix. Once connected, the same slot becomes a quiet "Add
-                    another account" row, mirroring the native list.
-                -->
+<!-- No subscription: states what's missing with the one fix. -->
                 <ConnectionRow
                     v-if="translatorAccounts[routedProvider].length === 0"
                     :key="`connect-${routedProvider}`"

@@ -136,8 +136,7 @@ export const styles = (config: WebchatPublicConfig): string => {
     all: initial;
     ${tokens("light", accent)}
     --gap: 1.25rem;
-    /* The app's radius scale (@intentic/ui tokens.css), by the names it uses them under: controls at lg,
-       bubbles at lg, the panel at xl, the composer shell at 2xl. */
+    /* The app's radius scale (@intentic/ui tokens.css), by the names it uses them under: controls at lg. */
     --radius-md: 0.5rem;
     --radius-lg: 0.75rem;
     --radius-xl: 1rem;
@@ -168,9 +167,7 @@ button {
     background: none;
 }
 
-/* The one place the accent is painted solid. A wash is what the app uses for controls, but those sit on a
-   surface we own: the launcher sits on the customer's page, where a 14% tint composites over an unknown
-   colour and can vanish. Conspicuous is the whole job of this button. */
+/* The one place the accent is painted solid. */
 .launcher {
     display: grid;
     place-items: center;
@@ -223,8 +220,7 @@ button {
     overscroll-behavior: contain;
 }
 
-/* Both bubbles carry a border, so the pair sit on one grid, a bubble that gained an edge only when it was the
-   visitor's would be a pixel taller than the one above it. */
+/* Keep both bubbles bordered so visitor and agent messages share one grid. */
 .msg {
     max-width: 85%;
     padding: 0.5rem 0.75rem;
@@ -237,8 +233,7 @@ button {
 .msg.notice { align-self: center; max-width: 100%; text-align: center; color: var(--muted); font-size: 0.8125rem; padding: 0.25rem 0; }
 .msg.failed { align-self: center; max-width: 100%; text-align: center; color: var(--danger); font-size: 0.8125rem; }
 
-/* Three dots while the agent is thinking and has written nothing yet, the turn can take seconds, and a panel
-   that shows nothing at all reads as a widget that broke. */
+/* Three dots while the agent is thinking and has written nothing yet, the turn can take seconds. */
 .typing { display: inline-flex; gap: 0.25rem; align-items: center; height: 1.5em; }
 .typing span { width: 0.375rem; height: 0.375rem; border-radius: 999px; background: var(--muted); animation: blink 1.2s infinite; }
 .typing span:nth-child(2) { animation-delay: 0.2s; }
@@ -248,14 +243,10 @@ button {
 
 .gate { display: flex; flex-direction: column; gap: 0.625rem; padding: 0 0.875rem 0.875rem; }
 .gate p { margin: 0; color: var(--muted); font-size: 0.8125rem; }
-/* Google's button and Turnstile's iframe are slotted from the light DOM, they are third-party frames and
-   belong in the document, not in this shadow root. */
+/* Google's button and Turnstile's iframe are slotted from the light DOM, they are third-party frames. */
 ::slotted(*) { display: block; }
 
-/* One shell holding the input and the send button, exactly as the app's composer does (ChatPanel's footer):
-   the frame is what takes focus, so the textarea inside it is transparent and borderless. Two nested boxes:
-   a bordered field beside a separate button: is the generic-widget arrangement this replaced, and it drew a
-   second edge around something that is already inside an edge. */
+/* One shell holding the input and the send button, exactly as the app's composer does (ChatPanel's footer): the frame is what takes focus. */
 .composer { padding: 0.75rem; }
 .composer-shell {
     display: flex;
@@ -298,8 +289,7 @@ button {
 .send:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 1px; }
 .send:disabled { background: var(--overlay); color: var(--subtle); cursor: default; }
 .send svg { width: 1.125rem; height: 1.125rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-/* The paper plane's ink sits up and to the right of its box, so it reads off-centre in a circle. Nudge it
-   back: the same correction the app makes in chat.css. */
+/* The paper plane's ink sits up and to the right of its box, so it reads off-centre in a circle. Nudge it. */
 .send svg { translate: -1px 1px; }
 
 .footer { padding: 0 0.75rem 0.625rem; text-align: center; }

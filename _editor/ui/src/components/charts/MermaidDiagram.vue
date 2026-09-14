@@ -1,7 +1,4 @@
-<!--
-    Renders a ```mermaid fence as a diagram; mermaid.js loads lazily on the first document that holds one. Mermaid itself validates the body: a
-    diagram it refuses falls back to a plain code block.
--->
+<!-- Renders a ```mermaid fence as a diagram; mermaid.js loads lazily on the first document that holds one. -->
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import { codeBlockHtml } from "../../markdown/code.js";

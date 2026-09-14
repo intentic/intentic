@@ -64,9 +64,7 @@ test("an unreadable entry is skipped and LEFT, never deleted; a foreign filename
 
     expect((await journal.list()).map((entry) => entry.kind)).toEqual(["automation"]);
 
-    /* Reading is not the moment to destroy a record. A file caught mid-write parses as garbage for an instant,
-     * and a lister that unlinked on a failed parse would delete the live entry of a turn that had only just
-     * started, which is exactly the turn the journal exists to protect. */
+/* Reading is not the moment to destroy a record. */
     const { readdirSync } = await import("node:fs");
     expect(readdirSync(dir).toSorted()).toEqual(["..evil.json", "a-fine.json", "notes.txt", "t-broken.json", "t-wrong-shape.json"]);
 });

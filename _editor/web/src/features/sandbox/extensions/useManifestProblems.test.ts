@@ -1,9 +1,7 @@
 import { ManifestProblemsSchema } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 
-/* The wire shape the notice is built from. Parsed rather than asserted structurally, because the browser's
- * whole claim here is that it renders what the daemon actually said: a report that does not survive the
- * contract's own schema is one the card would paint wrong. */
+/* The wire shape the notice is built from. */
 
 describe(`ManifestProblemsSchema`, () => {
     it(`accepts the three kinds the daemon reports`, () => {

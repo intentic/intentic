@@ -127,10 +127,7 @@ const updateHeading = computed(() => {
                     </ul>
                 </div>
 
-                <!--
-                    Shown above the cost and the button, so the reader has something to weigh an update against. Same text as the
-                    changelog for that release; absent when there's nothing to say.
-                -->
+<!-- Shown above the cost and the button, so the reader has something to weigh an update against. -->
                 <div v-if="updateAvailable && updateNotes.length > 0 && !localImage" class="mt-3 flex flex-col gap-1.5">
                     <p class="text-xs font-medium text-content">What's new</p>
                     <ul class="flex flex-col gap-1">
@@ -148,10 +145,7 @@ const updateHeading = computed(() => {
                     </p>
                 </div>
 
-                <!--
-                    Only the restart costs a turn, so the way out is downloading first. Shown only when an update is on offer; the
-                    rollback-only warning lives with the rollback disclosure instead.
-                -->
+<!-- Only the restart costs a turn, so the way out is downloading first. -->
                 <p v-if="midTurn > 0 && updateAvailable" class="text-2xs text-warning">
                     {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now, restarting the sandbox interrupts
                     {{ midTurn === 1 ? `its` : `their` }} work.
@@ -173,15 +167,10 @@ const updateHeading = computed(() => {
                     </p>
                 </template>
                 <template v-else-if="slug">
-                    <!--
-                        A sandbox on a checkout-built base is not updated from the registry: a pull would REPLACE its
-                        image with a published build, not refresh it, so the rebuild that does apply is what's offered
-                        and the trade is spelled out rather than made by a click.
-                    -->
+<!-- A sandbox on a checkout-built base is not updated from the registry: a pull would REPLACE its image with a published build, not refresh it. -->
                     <template v-if="localImage">
                         <DevRebuild :slug="slug" :base="localImage.base" :root="localImage.root" />
-                        <!-- A command, not a button: taking the published image throws away what a checkout built, which is
-                             a thing to mean rather than to click. Its own block, so it stays copyable whole. -->
+<!-- A command, not a button: taking the published image throws away what a checkout built, which is a thing to mean rather than to click. -->
                         <template v-if="updateAvailable">
                             <p class="text-2xs text-subtle">
                                 The published {{ latest }} is newer than what this sandbox reports, but taking it discards the image built from your
@@ -199,10 +188,7 @@ const updateHeading = computed(() => {
                     <template v-else-if="breaking && !acknowledged">
                         <Button label="I've read what changes: show me the update" size="small" severity="secondary" @click="acknowledged = true" />
                     </template>
-                    <!--
-                        One offer when the image is already staged, two when it isn't (download-only, or download-and-restart); the
-                        card already lays out two blocks side by side when rollback is also offered.
-                    -->
+<!-- One offer when the image is already staged, two when it isn't (download-only, or download-and-restart). -->
                     <template v-else-if="updateAvailable && hosted">
                         <p class="text-xs font-medium text-content">
                             Restart to update: the platform boots your sandbox onto the new image, files kept.
@@ -223,15 +209,9 @@ const updateHeading = computed(() => {
                         <p class="text-xs font-medium text-content">Or do both now, downloading and restarting in one go:</p>
                         <HostRecreate :slug="slug" action="Update" />
                     </template>
-                    <!--
-                        Offered alongside an available update too, since a rollback is as likely the reason someone opened this card. A
-                        text link, not a row: findable if you came for it, invisible otherwise.
-                    -->
+<!-- Offered alongside an available update too, since a rollback is as likely the reason someone opened this card. -->
                     <p v-if="rollbackTo && !hosted" class="text-2xs text-subtle">
-                        <!--
-                            Explicit space: Vue drops a whitespace-only text node spanning a newline, and the sentence would run into the
-                            link without it.
-                        -->
+<!-- Explicit space: Vue drops a whitespace-only text node spanning a newline, and the sentence would run into the link without it. -->
                         <template v-if="updateAvailable">Rather go back?&#32;</template>
                         <template v-else>Something wrong since the last update?&#32;</template>
                         <button type="button" class="underline hover:text-content" @click="toggleRollback">Roll back to the previous image</button>

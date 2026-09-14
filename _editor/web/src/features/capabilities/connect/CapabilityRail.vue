@@ -1,7 +1,4 @@
-<!--
-    Category navigation for the capabilities catalog, bounded by category count rather than how many capabilities exist. Narrows the grid rather than
-    filtering it — every tile stays a real card. Connected state shows as tint on a category's count, not a second number.
--->
+<!-- Category navigation for the capabilities catalog, bounded by category count rather than how many capabilities exist. -->
 <script lang="ts">
 import type { IconName } from "@intentic/ui";
 

@@ -176,14 +176,7 @@ export const createIngressServer = (options: IngressServerOptions): IngressServe
         }
     };
 
-    /* Where a miss goes, and what to say when it goes nowhere: `tunnel`, or an already-forwarded request, replays
-     * nowhere; `hosted` replays to the named or implied app; an unknown lane fails open to a replay. A hop-marked
-     * request is never replayed, since the peer that forwarded it already believed the tunnel was here.
-     *
-     * The lookup now runs even where no replay is possible (no hosted prefix configured), because the platform's 404 is
-     * the only thing that can tell a sandbox that is merely OFF from one that no longer exists — a distinction the
-     * reader is owed and the edge cannot make alone. It costs nothing on the hot path: this is the miss path, the
-     * answer is cached for a minute, and a platform that does not respond fails open to "it exists". */
+    /* Misses replay hosted apps when configured; hop-marked requests never replay. */
     const reachFor = async (sandboxId: string, request: IncomingMessage): Promise<{ readonly app?: string; readonly verdict: EdgeVerdict }> => {
         if (request.headers[HOP_HEADER] !== undefined) {
             return { verdict: `no-tunnel` };

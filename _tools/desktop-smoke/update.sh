@@ -169,7 +169,7 @@ until_true 20 "Xvfb is up on ${DISPLAY}" xdpyinfo -display "$DISPLAY" || exit 1
 eval "$(dbus-launch --sh-syntax)"
 export DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID
 
-# ── 1. it downloads without being asked ───────────────────────────────────────────────────────────────────────
+# 1. it downloads without being asked
 setsid "$INSTALLED" >/tmp/intentic-app.log 2>&1 &
 until_true 60 "the app started" workspace_window || app_log
 
@@ -181,7 +181,7 @@ if ! until_true 120 "the update downloaded on its own, and its signature verifie
     cat /tmp/releases.log >&2 || true
 fi
 
-# ── 2. the banner's button applies it ─────────────────────────────────────────────────────────────────────────
+# 2. the banner's button applies it
 # Harmless to leave in place afterwards: a page that navigates here again meets an app that is already current,
 # and `intentic://update` does nothing in any state but `ready` (update.rs `act`).
 : >"$STUB/press"
@@ -195,7 +195,7 @@ fi
 took_press() { grep -q 'GET /press HTTP/1.1" 200' /tmp/stub.log; }
 until_true 60 "the workspace page took the press" took_press || stub_log
 
-# ── 3. the file it runs from IS the newer release ─────────────────────────────────────────────────────────────
+# 3. the file it runs from IS the newer release
 if ! until_true 120 "the update installed over the running app" \
     bash -c "[ \"\$(sha256sum $INSTALLED | cut -d' ' -f1)\" = \"$AFTER_EXPECTED\" ]"; then
     AFTER="$(hash_of "$INSTALLED")"
@@ -208,14 +208,14 @@ if ! until_true 120 "the update installed over the running app" \
     stub_log
 fi
 
-# ── 4. and it still starts ────────────────────────────────────────────────────────────────────────────────────
+# 4. and it still starts
 # The half that makes an update worth having at all. A swap that boots into nothing trades a machine that was
 # merely out of date for one with no working app — the outcome `intentic-machine upgrade` rolls back for, and the
 # reason this is asserted rather than assumed. Installing relaunches the app itself (update.rs), so this waits
 # for the window to come back rather than starting anything.
 until_true 90 "the updated app is running" workspace_window || app_log
 
-# ── 5. …and knows it is current ───────────────────────────────────────────────────────────────────────────────
+# 5. Verify that the installed build is current.
 # The assertion that closes the loophole in 3: identical bytes would satisfy a hash check too. This one passes
 # only if the running app's own version now outranks the manifest, so it declines the update it just took
 # instead of taking it again forever.

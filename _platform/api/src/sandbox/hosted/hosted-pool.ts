@@ -163,13 +163,7 @@ export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, 
         }
         return;
     }
-    /* THE DIGEST THE TAG NAMES RIGHT NOW, which is what makes the drift check below a real one. It used to
-     * compare `row.image` against `config.hosted.image` — a tag against the same tag, equal by construction —
-     * so a re-pushed sandbox image was never detected, the pool kept machines whose rootfs no longer matched
-     * it, and the cost landed on whoever signed up next: their claim rewrote the machine with the tag, Fly
-     * resolved it to the new digest, and the machine had to pull before it could start. Comparing digests
-     * turns that into ordinary background work: a push drains the stale stock and rebuilds it here, on a tick,
-     * with nobody waiting on it. */
+    /* THE DIGEST THE TAG NAMES RIGHT NOW, which is what makes the drift check below a real one. It used. */
     const stockImage = await resolveHostedImage(config, logger);
     const live = new Map<string, (typeof rows)[number][]>();
     for (const row of rows) {

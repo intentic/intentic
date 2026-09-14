@@ -188,14 +188,10 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
 </script>
 
 <template>
-    <!--
-        A `@container`, not viewport breakpoints, so columns thin against this row's own width; with the chat panel open the list can be ~350px while
-        `sm:`/`lg:` still read true.
-    -->
-    <!-- `body="drawer"`: what opens is the automation's prose and its edit form, a place of its own rather than
-         a fact hanging off its id. -->
+    <!-- Use the row's container width so columns respond to the open chat panel. -->
+    <!-- The drawer contains the automation's prose and edit form. -->
     <DisclosureRow class="group/row @container" body="drawer" :open="expanded" @update:open="emit(`expand`)">
-        <!-- The row's one mark: what wakes it, tinted by health. Sized from the group's own tier via the slot prop, not a number typed here. -->
+        <!-- The row's one mark: what wakes it, tinted by health. -->
         <template #lead="{ mark, iconClass }">
             <span
                 class="flex shrink-0 items-center justify-center rounded-md"
@@ -209,10 +205,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
         <template #title>
             <span class="flex min-w-0 items-center gap-1.5">
                 <span class="truncate" :class="automation.enabled ? `text-content` : `text-subtle`">{{ automation.id }}</span>
-                <!--
-                    A chore's own check (knip, advisories, duplication) wakes it only when something's found; the icon says so and explains its
-                    "skipped" runs.
-                -->
+                <!-- A chore wakes only when its own check finds something. -->
                 <Icon
                     v-if="automation.guard"
                     name="shield"
@@ -228,17 +221,11 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
             </span>
         </template>
 
-        <!--
-            When it fires, then what it's for: the one place in the list that says what an automation is actually for, on its own line rather than
-            competing with the name.
-        -->
+        <!-- This line names when an automation fires and what it does. -->
         <template #description>
             <span class="flex min-w-0 items-baseline gap-1.5">
                 <span class="shrink-0">{{ triggerLabel }}</span>
-                <!--
-                    A hairline, not a middle dot: the trigger phrase is itself dot-separated, so one more dot would just extend that list.
-                    `aria-hidden`, so the row's accessible name stays "<id> <trigger>", not the truncated prompt too.
-                -->
+<!-- A hairline, not a middle dot: the trigger phrase is itself dot-separated, so one more dot would just extend that list. -->
                 <span class="hidden min-w-0 flex-1 items-center gap-2 truncate text-subtle @xl:flex" aria-hidden="true">
                     <span class="h-2.5 w-px shrink-0 bg-line-strong"></span>
                     <span class="min-w-0 truncate">{{ automation.prompt }}</span>
@@ -248,7 +235,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
 
         <!-- Facts, not verbs, scanned down the list: history first, then the two clocks. -->
         <template #meta>
-            <!-- `w-14` is the eight-mark width plus air, so a row with two runs and one with eight still align their newest mark in the same column. -->
+            <!-- `w-14` keeps the newest run marks aligned across rows. -->
             <span class="hidden w-14 shrink-0 @2xl:block"><RunStrip :runs="automation.runs" /></span>
             <span
                 v-if="lastRun"
@@ -260,7 +247,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
             </span>
             <span v-else class="hidden w-20 shrink-0 text-right @xl:block">never run</span>
 
-            <!-- The em dash matters: an empty cell beside a full one would read as a missing value, not "fires on its trigger, no clock". -->
+            <!-- An em dash distinguishes “no schedule” from missing data. -->
             <span
                 class="hidden w-12 shrink-0 truncate text-right @xl:block"
                 :class="nextLabel === undefined ? `text-subtle/50` : ``"
@@ -271,15 +258,9 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
         </template>
 
         <template #control>
-            <!--
-                Reserved boxes, not absence, for the two conditional verbs: laid out from the right, a missing one would shift every column after it
-                out of alignment down the list.
-            -->
+            <!-- Reserved boxes keep conditional verbs from shifting the row. -->
 
-            <!--
-                Always visible, not hover-revealed, since the snippet is the deliverable itself; it also carries install status, the only place that
-                can say whether the paste worked.
-            -->
+            <!-- Keep the install snippet visible because it is the deliverable. -->
             <span class="flex w-6 shrink-0 items-center justify-center">
                 <button
                     v-if="frontDesk"
@@ -293,18 +274,12 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                 </button>
             </span>
 
-            <!--
-                Verbs before the switch, so the always-visible control sits at a fixed right edge instead of shifting as hover-revealed verbs appear
-                beside it. They just stay on a touch pointer.
-            -->
+            <!-- Place verbs before the switch so the right edge stays fixed. -->
             <button type="button" :class="VERB" :aria-label="`Edit ${automation.id}`" v-tooltip.top="`Edit`" @click="startEdit">
                 <Icon name="pencil" class="text-xs" />
             </button>
 
-            <!--
-                Lets you test a 3am cron or a webhook without waiting or forging one, even on a disabled row. No button for a chat listener: a
-                by-hand fire carries no message, so testing one just means sending the bot a message.
-            -->
+            <!-- Lets you test a 3am cron or a webhook without waiting or forging one, even on a disabled row. -->
             <span class="flex w-6 shrink-0 items-center justify-center">
                 <button
                     v-if="trigger.kind !== `listener`"
@@ -340,17 +315,11 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
 
         <!-- The prose half, on demand: what this automation actually says and does, then what it has done. -->
         <template #below>
-            <!--
-                Not a dialog, same reasoning as the acceptance rows: a modal hides the list you're comparing against. The row gets the whole page
-                width, with its own history right below.
-            -->
+            <!-- Not a dialog, same reasoning as the acceptance rows: a modal hides the list you're comparing against. -->
             <div v-if="editing" class="flex flex-col gap-3 pr-3">
                 <Notice v-if="editError" :of="noticeOf(editError)" />
                 <AutomationFields :state="editForm" :name-locked="true" />
-                <!--
-                    The composer's own footer, same size: a form's submit, not a row verb, and the two must agree since a reader meets both one click
-                    apart.
-                -->
+                <!-- Match the composer's footer size because this is a form submit. -->
                 <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-3">
                     <Button label="Cancel" severity="secondary" :text="true" @click="cancelEdit" />
                     <Button label="Save" :loading="saving" @click="saveEdit">
@@ -359,10 +328,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                 </div>
             </div>
 
-            <!--
-                Two columns for two questions: what this is, and what it's done. Stacked, the ledger sat below the fold of a long prompt, answering
-                the question a row is usually opened for last. Stacks again under `3xl`, too narrow for two columns of this text.
-            -->
+            <!-- Two columns for two questions: what this is, and what it's done. -->
             <div v-else class="grid gap-x-6 gap-y-4 pr-3 @3xl:grid-cols-3">
                 <div class="flex min-w-0 flex-col gap-3 @3xl:col-span-2">
                     <div class="flex flex-col gap-1">
@@ -401,10 +367,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                         </div>
                     </div>
 
-                    <!--
-                        The two settings deciding whether the widget works at all. The snippet lives behind Install instead, so there aren't two
-                        copies to go stale or disagree.
-                    -->
+                    <!-- The two settings deciding whether the widget works at all. -->
                     <div v-if="frontDesk" class="flex flex-col gap-1.5">
                         <span :class="ui.sectionLabel(`text-2xs`)">Front desk</span>
                         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
@@ -413,10 +376,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                             <span>{{ frontDesk.access }}</span>
                             <span>{{ frontDesk.botCheck }}</span>
                         </div>
-                        <!--
-                            A glyph suffices in the row's own control, one in five rows; the word belongs here, once the reader has opened it to find
-                            out what to do.
-                        -->
+                        <!-- Use a glyph in the row and words after the reader opens it. -->
                         <Button
                             size="small"
                             severity="secondary"
@@ -429,7 +389,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                         </Button>
                     </div>
 
-                    <!-- Labelled pairs, not a sentence: the two facts most checked on a misbehaving row shouldn't require parsing the other four. -->
+                    <!-- Labelled pairs expose the two facts most checked during diagnosis. -->
                     <dl class="flex flex-wrap gap-x-5 gap-y-1.5">
                         <div v-for="setting in settings" :key="setting.label" class="flex min-w-0 flex-col">
                             <dt class="text-2xs text-subtle">{{ setting.label }}</dt>
@@ -438,10 +398,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                     </dl>
                 </div>
 
-                <!--
-                    Run history, with a way into any run that reached a turn: a button opening its transcript; a guard-skip has none, so it stays
-                    plain text.
-                -->
+                <!-- Run history links to transcripts for runs that reached a turn. -->
                 <div class="flex min-w-0 flex-col gap-1">
                     <span :class="ui.sectionLabel(`text-2xs`)">Runs</span>
                     <p v-if="automation.runs.length === 0" class="text-2xs text-subtle">Nothing yet. Run now to try it.</p>

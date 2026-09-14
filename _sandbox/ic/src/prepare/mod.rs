@@ -7,22 +7,7 @@ pub mod shell;
 use crate::util::bail;
 use crate::util::Result;
 
-/* `ic docker prepare` — GET THIS MACHINE TO A RUNNING DOCKER, OR SAY EXACTLY WHY NOT.
- *
- * This is the flow that replaced fourteen lines of connect.ps1. Those lines asked two questions — is `docker`
- * on PATH, does `docker info` answer — and turned every "no" into one of three sentences, the most common of
- * which was "docker is not installed and winget is unavailable", a dead end on a machine where nothing was
- * actually wrong except the route.
- *
- * What replaces it is: examine the machine once (facts.rs), read the examination (plan.rs), show the whole
- * checklist, ask ONE question covering everything that has to change, and then do it (fix.rs) — re-examining
- * between passes so each round sees the machine as the last round left it, not as it was at the start.
- *
- * THREE READERS, ONE RUN. A person at a terminal gets the checklist and the question. The desktop app gets
- * the same lines plus one `intentic-requirement:` per unmet requirement, which is what its cards are drawn
- * from — it has no terminal to answer a question on, so its first pass ends here with the list and its second
- * carries the consent back as INSTALL_DOCKER=1. And the platform's setup page gets the same diagnosis a
- * moment later, because `ic sandbox connect`'s preflight asks plan.rs the same question (checks.rs). */
+/* `ic docker prepare` — GET THIS MACHINE TO A RUNNING DOCKER, OR SAY EXACTLY WHY NOT. */
 
 /// Unix reads neither field — its Docker install belongs to connect.sh, and this is a verdict there. The
 /// allow is narrower than a `cfg`: the shape of the command is the same on both, and only the flow differs.
@@ -34,19 +19,7 @@ pub struct Args {
     pub dry_run: bool,
 }
 
-/* THE TWO WAYS THIS COMMAND STOPS WITHOUT ANYTHING BEING WRONG — as exit codes, because a caller must not
- * have to read prose to tell them from a crash.
- *
- * The desktop app's FIRST pass is designed to end here: examine, report, change nothing, wait to be asked
- * again with consent. Until now that ended the same way a genuine failure does — `exit 1` and a line on
- * stderr reading "there is no terminal to ask on, so nothing was changed" — which is a developer's sentence
- * describing normal behaviour, and it is what a user meets whenever the requirement lines fail to reach the
- * screen for any other reason. One reported install ended exactly there with nothing on screen at all.
- *
- * So the expected stops get their own codes. The app maps them to "here is what this PC needs" and never to
- * a red box; a terminal user sees the same checklist it always did; a script still stops, because both are
- * non-zero. 3 and 4 are chosen to sit above the 1 that means "it broke" and below the 125+ range shells
- * reserve for their own signalling. */
+/* THE TWO WAYS THIS COMMAND STOPS WITHOUT ANYTHING BEING WRONG — as exit codes, because a caller must not have to read prose to tell them from a crash. */
 
 /// Requirements were found and reported, and NOTHING was changed — the caller has the list and has to come
 /// back with consent (`-y`, or `INSTALL_DOCKER=1`).
@@ -86,17 +59,7 @@ fn announce(requirement: &plan::Requirement) {
     println!("intentic-requirement: {line}");
 }
 
-/* WHAT IS HAPPENING TO ONE REQUIREMENT, RIGHT NOW — the marker that turns a list into a live checklist.
- *
- * `intentic-requirement:` says a thing is unmet. It says nothing at all about the ten minutes that follow,
- * during which the app could draw exactly one row — "Set up Docker" — with a spinner on it, while WSL2 was
- * turned on, 600 MB came down, an installer ran, an engine started and a daemon was waited for. The reader
- * with the least patience in this whole flow is the one on a machine that needs the most work, and they were
- * the one shown the least.
- *
- * So each requirement reports its own state as it is worked through, and the `detail` carries the changing
- * measurement under it — the megabytes, the seconds left on the engine wait. Same prefix family as the
- * announcement and the same rule: pipes only, never a phase id, so nothing here can move a progress bar. */
+/* WHAT IS HAPPENING TO ONE REQUIREMENT, RIGHT NOW — the marker that turns a list into a live checklist. */
 #[cfg(windows)]
 fn announce_state(id: &str, state: &str, detail: Option<&str>) {
     if !piped() {
@@ -227,30 +190,14 @@ pub fn run(args: Args) -> Result<()> {
     if unmet.iter().all(|r| r.action == Action::Restart) {
         return restart(&unmet, args.yes);
     }
-    /* Or a sign-in that predates a group this account is already in — the same shape, one session smaller,
-     * and blocking for the same reason a pending restart is. Everything below `docker-users` on the list
-     * needs to REACH Docker's pipe, and this token cannot, so there is no version of carrying on: starting
-     * the engine and waiting five minutes for a connection that will be refused is not progress.
-     *
-     * Found anywhere on the list rather than only alone on it, and asked BEFORE consent: consent covers work,
-     * and there is no work here to authorise. Everything unmet has already been announced above, so the app
-     * still draws the whole list — this only decides what happens next, which is nothing until Windows issues
-     * a new token. */
+/* A stale login token cannot reach Docker until the user signs in again. */
     if let Some(stale) = unmet.iter().find(|r| r.action == Action::SignOut) {
         return sign_out(std::slice::from_ref(stale), &facts.user);
     }
 
     consent(&unmet, args.yes)?;
 
-    /* PASS BY PASS, RE-EXAMINING IN BETWEEN.
-     *
-     * Fixes change the machine under their own diagnosis: installing Docker Desktop makes `docker-desktop`
-     * go away and `docker-path` appear, since a program installed thirty seconds ago is on nobody's PATH.
-     * A single pass down the original list would either miss that or need the list to predict its own
-     * consequences, and the second is how you get a fixer that is wrong about a machine it just changed.
-     *
-     * Three passes is the ceiling, and the no-progress guard below is the real stop: a fix that reports
-     * success and changes nothing would otherwise loop until the ceiling, three times as slowly. */
+/* Fixes change the machine under their own diagnosis: installing Docker Desktop makes `docker-desktop` go away and `docker-path` appear. */
     let mut previous: Vec<&'static str> = unmet.iter().map(|r| r.id).collect();
     for pass in 0..3 {
         if pass > 0 {
@@ -305,10 +252,7 @@ pub fn run(args: Args) -> Result<()> {
                     announce_state(requirement.id, "done", Some("waiting for the restart"));
                     return restart(&pending, args.yes);
                 }
-                /* The fix worked and changed nothing yet, which is the whole point of `Done::AfterSignOut`.
-                 * This is a designed stop, not a failure, and it leaves through the same screen as the one
-                 * above rather than through `bail!` — an account that was just granted a permission is not
-                 * an error to print in red. */
+/* The fix worked and changed nothing yet, which is the whole point of `Done::AfterSignOut`. */
                 Outcome::SignOut => {
                     let mut pending = requirement.clone();
                     pending.action = Action::SignOut;
@@ -417,15 +361,7 @@ fn apply(requirement: &plan::Requirement, facts: &plan::Facts) -> Result<Outcome
     }
 }
 
-/* THE RESTART, WHICH IS THE ONE PLACE A SETUP CAN LOSE SOMEBODY.
- *
- * Turning on WSL2 succeeds and does nothing until Windows restarts, and this is the moment where a setup that
- * merely SAYS so gets abandoned: the user is now several minutes in, has answered a UAC prompt, and is being
- * asked to reboot and then find the command again.
- *
- * So: offer to do it, and say what to run afterwards either way. The desktop app takes the other route
- * entirely — it has already been handed the requirement above, and it remembers the setup across the restart
- * so nothing has to be found again. */
+/* Turning on WSL2 succeeds and does nothing until Windows restarts, and this is the moment where a setup that merely SAYS so gets abandoned. */
 #[cfg(windows)]
 fn restart(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     use crate::tty;
@@ -442,12 +378,7 @@ fn restart(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     println!();
     println!("  {again}");
     println!();
-    /* Pre-consent covers installing things, never a restart: the desktop app passes it, and a window that
-     * rebooted somebody's PC without a second click would be indefensible. It shows its own button instead.
-     *
-     * And either way this ends NON-ZERO. A restart scheduled ten seconds from now is not a run that
-     * succeeded — the caller (connect.ps1, and the app behind it) has to stop here rather than march on into
-     * a sandbox launch on a machine that is about to go down. */
+/* Pre-consent covers installing things, never a restart: the desktop app passes it. */
     if !pre_consented && tty::have_tty() && tty::confirm("Restart this PC now?", false) {
         fix::restart_windows().map_err(crate::util::Fail)?;
         stop(
@@ -461,16 +392,7 @@ fn restart(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     )
 }
 
-/* THE SAME PARKING, ONE SESSION SMALLER — and the outcome that used to leave through `bail!`.
- *
- * Windows issues a login token once, at sign-in, and never revises it. So an account can BE in `docker-users`
- * and still be refused by Docker's pipe, and nothing running in this session can change that: not another
- * `net localgroup`, not administrator, not re-running the setup. Only the next sign-in.
- *
- * That made it the one row on the checklist whose only control was "Check again", which could never work —
- * and, until this, the one designed stop reported as `error:` in red, on a machine where every single thing
- * had gone right. The desktop app has had the button for it for a while (Requirements.vue); what it needed
- * was for the installer to stop calling this a failure. */
+/* THE SAME PARKING, ONE SESSION SMALLER — and the outcome that used to leave through `bail!`. */
 #[cfg(windows)]
 fn sign_out(unmet: &[plan::Requirement], user: &str) -> Result<()> {
     let again = rerun_command();
@@ -495,14 +417,7 @@ fn sign_out(unmet: &[plan::Requirement], user: &str) -> Result<()> {
     )
 }
 
-/* AN EXPECTED STOP, SAID AS ONE. Everything above that ends a run through `bail!` is reported by main as
- * `error: …`, in red, on stderr — which is right for a failure and wrong for the two outcomes this command
- * is DESIGNED to reach: a machine that needs consent, and a machine that needs a restart. Neither is
- * anything going wrong, and dressing them as errors is how a first-run install reads like a crash.
- *
- * So they leave through here instead: an ordinary sentence, and one of the documented codes above rather
- * than the 1 that means "it broke". It exits the process rather than returning, because there is nothing
- * after it — the same thing main does with a `Fail`, one frame earlier and with a code that carries meaning. */
+/* AN EXPECTED STOP, SAID AS ONE. */
 #[cfg(windows)]
 fn stop(code: i32, message: &str) -> ! {
     crate::ui::note(message);
@@ -544,11 +459,7 @@ fn consent(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     println!("  https://www.docker.com/legal/docker-subscription-service-agreement");
     println!();
     if !tty::have_tty() {
-        /* THE DESKTOP APP'S FIRST PASS LANDS EXACTLY HERE, and it is the most-travelled line in this file:
-         * every Windows install that needs anything at all reaches it. It used to leave as `error: there is
-         * no terminal to ask on, so nothing was changed` — a sentence about our own plumbing, on stderr, in
-         * red, describing a run that did precisely what it was designed to do. The app has the requirement
-         * lines already and draws them as a list with a button; this is only the note behind that button. */
+/* The desktop app's first setup pass enters here. */
         stop(
             EXIT_NEEDS_CONSENT,
             "nothing has been changed yet - re-run with -y (or INSTALL_DOCKER=1) to go ahead with the list above.",
@@ -562,10 +473,7 @@ fn consent(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     Ok(())
 }
 
-/* Unix keeps its own route. connect.sh installs Docker there, with the root it asks for at the top of the
- * script, and duplicating that here would be a second implementation of a thing that works — the exact trade
- * the desktop app's scripts.rs header talks itself out of. What this IS good for on Unix is the verdict:
- * `ic docker prepare` answers "can this machine run a sandbox" everywhere. */
+/* Unix keeps its own route. */
 #[cfg(not(windows))]
 pub fn run(_args: Args) -> Result<()> {
     crate::util::step("checking-docker", "checking Docker...");
@@ -576,11 +484,7 @@ pub fn run(_args: Args) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    /* The flow above is Windows-only; its DECISIONS are plan.rs's and are tested there against fact
-     * literals, on every runner. What is asserted here is the one thing that spans both and that no unit
-     * test elsewhere covers: the marker the desktop app parses. Its prefix must never collide with the step
-     * vocabulary, because the app's step regex would then match it and move a progress bar to a phase that
-     * does not exist. */
+/* The flow above is Windows-only; its DECISIONS are plan.rs's and are tested there against fact literals, on every runner. */
 
     #[test]
     fn the_requirement_marker_cannot_be_mistaken_for_a_step() {

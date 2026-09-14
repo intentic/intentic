@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WorkspaceHotspot } from "@intentic/api-contract";
 import { hotspotAsk, type HotspotContext, moduleAsk } from "./refactorAsk";
 
-/* The selection is the part that can be wrong without anyone noticing: a prompt that reads well while asking
- * for the wrong KIND of change costs a whole turn. So every archetype is pinned to the figures that pick it,
- * and both boundaries of "out of proportion" are tested rather than the comfortable middle. */
+/* The prompt must select the intended kind of change. */
 
 const DAY_MS = 86_400_000;
 const NOW = 1_700_000_000_000;

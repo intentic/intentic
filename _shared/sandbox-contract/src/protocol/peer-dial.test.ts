@@ -1,9 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { dialPeer, type SocketLike } from "./peer-dial.js";
 
-/* The loop every peer runs, over a socket the test plays. What is at stake is the order of the two phases
- * (handler attached BEFORE the hello goes out), the retry after a drop, the one close that is never retried,
- * and that a stop reaches a dial still deciding where to go. */
+/* The loop every peer runs, over a socket the test plays. */
 
 class FakeSocket implements SocketLike {
     readyState = 0;
@@ -117,10 +115,7 @@ test("a drop redials on the ladder, telling it how long the socket held", async 
     }
 });
 
-/* THE DROP NOBODY REPORTS, which is the one that used to last for days: a far end that is gone while the socket
- * stays open — a sandbox container recreated behind a port relay that outlived it, a NAT that forgot the flow, a
- * laptop's wifi suspended mid-session. Note what this test never calls: `drops`. Nothing closes, nothing errors,
- * and the loop has to reach the conclusion on its own or hold a dead link forever. */
+/* A silent socket must be abandoned even when no close event arrives. */
 test("a socket that goes silent is abandoned and redialled, though no close ever arrives", async () => {
     vi.useFakeTimers();
     try {
@@ -157,10 +152,7 @@ test("a socket that goes silent is abandoned and redialled, though no close ever
     }
 });
 
-/* THE FAR END THAT IS NEVER COMING BACK, which is not a failure the loop can fix and not one it may narrate
- * forever: a sandbox deleted, a tunnel repointed, a machine left on for a week. Every attempt here errors and
- * closes without ever opening, exactly as a laptop's agent did 1,992 times into a 2.3 MB log. What is asserted
- * is BOTH halves: the log stops repeating, and the dialling does not slow down to achieve it. */
+/* THE FAR END THAT IS NEVER COMING BACK, which is not a failure the loop can fix and not one it may narrate. */
 test("a far end that never answers is reported a few times, then retried quietly at the same cadence", async () => {
     vi.useFakeTimers();
     try {

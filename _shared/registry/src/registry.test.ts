@@ -106,9 +106,7 @@ describe(`resolveRegistry`, () => {
     });
 
     // Blocked rows must survive the resolve: deleting them is what hides a warning from the people who
-    /* The staleness rule the checks ride on: a fact is bound to the sha it was derived from, and a listing
-     * repointed since the last scan renders no checks at all (the honest gap) rather than yesterday's verdict
-     * describing today's pointer. */
+/* The staleness rule the checks ride on: a fact is bound to the sha it was derived from. */
     it(`joins checks only when they were derived from the sha the listing still pins`, () => {
         const facts = RegistryFactsSchema.parse({
             scannedAt: `2026-08-01T00:00:00.000Z`,

@@ -2,23 +2,7 @@ import type { LimitResetClaim, LimitResetStatus } from "@intentic/sandbox-contra
 import { asRecord, asString, resetFromIso } from "./payload.js";
 import { type ClaudeStore, ensureFreshToken } from "../runtimes/claude/claude-credentials.js";
 
-/* Anthropic's once-a-week session reset. It reopens the five-hour pool and leaves weekly usage unchanged.
- * The endpoints and program name match Claude Code's /limit-reset implementation.
- *
- * Eligibility is not enrollment. On 2026-09-08 the affected account returned eligible=true, available=true,
- * in_experiment=false and arm=null, then refused the claim with result=ineligible. Claude Code 2.1.263 gates
- * its offer on arm="reset" as well as availability. Without that check we offered a reset the account could
- * not claim. Control and unenrolled accounts must not see the offer, even when their general eligibility
- * passes. The provider may change its rollout independently of these client checks; a refused claim still
- * has to say what happened without guessing that the user's plan is wrong.
- *
- * The User-Agent identifies the Claude Code surface used by our Agent SDK turns. Without it the provider
- * answers ineligible_reason="surface". Its version is pinned because the SDK package and bundled CLI use
- * different versions; an unsupported version is reported as ineligible_reason="cli_version".
- *
- * Probe only when a refused turn is on screen: at_wall=1 asserts that fact, and the endpoint rate limits
- * reads. A transient failure must remain unanswered so the next strip can retry, never cached as no grant.
- */
+/* Anthropic's once-a-week session reset. */
 
 const USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage?at_wall=1&skip_spend=1";
 const PROFILE_ENDPOINT = "https://api.anthropic.com/api/oauth/profile";

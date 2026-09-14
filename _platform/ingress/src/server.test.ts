@@ -286,10 +286,7 @@ describe(`the ingress edge replaying hosted sandboxes`, () => {
         expect(JSON.parse(answer.body)).toMatchObject({ replay: true });
     });
 
-    /* WHICH BUILD IS ANSWERING, which is the one thing every other field cannot tell you: they all describe
-     * what this process was configured to do, and a stale process is configured perfectly for a world that
-     * moved. deploy-ingress.sh compares this against the image it just pushed, so it has to be reported
-     * verbatim rather than derived. */
+    /* Health reports the build id so deployment can verify which image answers. */
     test(`names the build it is running on /health, so a deploy can be verified from outside`, async () => {
         const answer = await get(portOf(router.server), `ingress.${ZONE}`, `/health`);
         expect(JSON.parse(answer.body)).toMatchObject({ build: `turbo-testbuild` });

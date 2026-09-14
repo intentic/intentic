@@ -51,10 +51,7 @@ beforeEach(() => {
     cancel.mockResolvedValue(undefined);
 });
 
-/* The empty ALLOWLIST is the assertion, and `disallowedTools` being absent is half of it. Cursor validates tool
- * names against a vocabulary it reads from its own proto at runtime and refuses the whole run on one it does not
- * know; the denylist this replaced named `write`, which is not in it, so every walk that reached Composer threw
- * before asking it and fell through to a Claude rung. A list of names is a list of things to get wrong. */
+/* The empty ALLOWLIST is the assertion, and `disallowedTools` being absent is half of it. */
 test("asks on Cursor's own runtime with no tools rather than a list of names to deny", async () => {
     await expect(ask()).resolves.toBe(`fix: tree truncation`);
 

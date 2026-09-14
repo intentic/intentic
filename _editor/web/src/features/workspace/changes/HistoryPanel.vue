@@ -120,7 +120,7 @@ const confirmRestore = (id: string): void => {
                         @dblclick="openDiff(change, 'keep')"
                     >
                         <ChangeStatusMark :status="change.status" />
-                        <!-- `<bdi>` stops a leading '_' from reordering under dir="rtl"; the tooltip shows the full path only while truncated. -->
+                        <!-- Bidi isolation keeps paths ordered; the tooltip shows their full value. -->
                         <span class="truncate text-2xs text-muted max-md:text-xs" dir="rtl" v-tooltip.right.overflow="changeLabel(change)"
                             ><bdi>{{ changeLabel(change) }}</bdi></span
                         >
@@ -156,10 +156,7 @@ const confirmRestore = (id: string): void => {
 </template>
 
 <style scoped>
-/*
- * Cheap windowing without a virtual scroller: content-visibility skips paint for off-screen rows.
- * contain-intrinsic-size keeps the scrollbar stable before a row first renders.
- */
+/* Cheap windowing without a virtual scroller: content-visibility skips paint for off-screen rows. */
 .cv-row {
     content-visibility: auto;
     contain-intrinsic-size: auto 34px;

@@ -1,8 +1,4 @@
-/* Maintenance probes normally run inside one discovered repository, where a `refs/` directory is ordinary
- * project content. They also run once against the workspace root, where the same first segment is the reserved
- * reference shelf and can hold hundreds of thousands of files. The daemon sets this variable only for that
- * root scope; shell commands opt into the matching prune argument without baking the shelf's name into the
- * browser-safe contract package. */
+/* Maintenance probes normally run inside one discovered repository, where a `refs/` directory is ordinary project content. */
 export const WORKSPACE_ROOT_EXCLUDE_ENV = `INTENTIC_WORKSPACE_ROOT_EXCLUDE`;
 
 // Unquoted parameter expansion is intentional: when the variable is absent it contributes zero arguments;

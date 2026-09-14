@@ -190,11 +190,7 @@ watch(flow, (live) => {
 
 <template>
     <div v-if="flow" class="flex flex-col gap-2.5">
-        <!--
-            The exchange takes the whole panel rather than spinning one button inside it: what was brought back is
-            already spent, so every control here (open the provider again, paste, name it) would be inviting a step
-            that is mid-flight. The panel unmounts itself the moment the account lands.
-        -->
+<!-- The exchange takes the whole panel rather than spinning one button inside it: what was brought back is already spent. -->
         <p v-if="redeeming" class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="spinner" spin />{{ submitNote }}</p>
         <template v-else>
             <!-- `self-start`: without it the button stretches edge to edge, reading as a banner, not step one of three. -->
@@ -210,10 +206,7 @@ watch(flow, (live) => {
             </div>
             <p v-else-if="deviceFlow" class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="spinner" spin />Waiting for approval…</p>
             <template v-else>
-                <!--
-                    Shows the dead-end page before they meet it, so they recognize rather than read about it once two tabs away.
-                    Only for redirects that actually dead-end (Google, BigModel); Anthropic's paste-back needs none of this.
-                -->
+<!-- Shows the dead-end page before they meet it, so they recognize rather than read about it once two tabs away. -->
                 <template v-if="redirectFlow">
                     <p class="text-2xs text-muted">
                         After {{ destination }}, the <span class="font-semibold text-content">page won't load</span>. That's normal, it points back

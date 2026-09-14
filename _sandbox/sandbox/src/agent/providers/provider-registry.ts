@@ -66,8 +66,7 @@ export const servedModels = async (
     return { models, default: refused.has(served.default) ? models[0]!.id : served.default };
 };
 
-// Whether each provider could serve a turn now; complete over NATIVE_PROVIDERS because the init guard above enforces
-// it.
+// Report readiness for every native provider guarded by initialization.
 export const providerReadiness = async (services: Services): Promise<Record<NativeProvider, boolean>> => {
     const shared = sharedProviderReads(services);
     const entries = await Promise.all(PROVIDER_MODULES.map(async (module) => [module.id, await module.ready(services, shared)] as const));

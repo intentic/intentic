@@ -3,19 +3,7 @@ import { Code } from "astro:components";
 import type { RefOperation, RefRow } from "../lib/api-reference";
 import { intenticWarm } from "../lib/shiki-theme";
 
-/* ONE ROUTE, as a row you can open.
- *
- * CLOSED BY DEFAULT ON A LONG GROUP, and this is the decision the whole page hangs on. The git group has 43
- * routes; rendered open, that is about sixty screens, and a reader who arrived wanting `commit` has to scroll
- * past `stash-drop` to find it. Closed, the page is 43 lines — method, path, and what it does — which is a
- * list you can read. A small group opens flat instead, because scanning six lines is not a job anyone needs
- * an affordance for.
- *
- * A REAL <details>, so it works with JavaScript off, so the browser's own find-in-page reaches inside it, and
- * so a search engine sees the whole thing: the content is in the document either way, only its height is not.
- * The script in ApiPlayground opens whichever one the URL's fragment names, which is what keeps a deep link
- * from landing on a closed row.
- */
+/* ONE ROUTE, as a row you can open. */
 
 interface Props {
     operation: RefOperation;
@@ -25,9 +13,7 @@ interface Props {
 
 const { operation, open } = Astro.props;
 
-/* The verb, coloured. Four of them, and the colour is doing one job: telling a reader at a glance which rows
- * in a list of 43 change something. Reads-only is the site's gold; everything that writes takes the ember,
- * and the one that deletes takes the danger tone the rest of the site already uses for it. */
+/* The verb, coloured. */
 const METHOD_TONE: Record<string, string> = {
     GET: "border-line-strong text-gold",
     POST: "border-primary-600 text-primary-400",
@@ -35,10 +21,7 @@ const METHOD_TONE: Record<string, string> = {
     DELETE: "border-danger/50 text-danger",
 };
 
-/* A child sits one step in from its parent, as a data attribute rather than a utility class. The table's own
- * `.api-table td` padding rule is a class-plus-element selector, so it outranks any single-class helper and
- * the nesting silently flattened: every field in a four-level answer sat at the same indent, which is the one
- * thing this table has to get right. A data attribute puts the two rules at the same weight, and later wins. */
+/* A child sits one step in from its parent, as a data attribute rather than a utility class. */
 const rowIndent = (row: RefRow): string => String(Math.min(row.depth, 3));
 
 const hasInput = operation.params.length > 0 || operation.body !== undefined;
@@ -133,8 +116,7 @@ const hasInput = operation.params.length > 0 || operation.body !== undefined;
             </section>
         </div>
 
-        {/* The playground. Its markup is here and its behaviour is the one script on the page, which finds it
-            by the operation id and reads that operation's entry out of the group's payload. */}
+        {/* Keep playground markup paired with the script that reads its operation payload. */}
         <div class="api-play" data-play={operation.id}>
             <div class="api-play-head">
                 <span class="eyebrow eyebrow-bare">Try it</span>

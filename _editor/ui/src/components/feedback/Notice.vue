@@ -1,7 +1,4 @@
-<!--
-    One box for every app failure, shaped and ranked by notice.ts. `:of` takes a caught failure turned into a sentence; the default slot takes
-    authored prose, for markup a plain string can't carry. Both can be used together.
--->
+<!-- One box for every app failure, shaped and ranked by notice.ts. -->
 <script setup lang="ts">
 import { twMerge } from "tailwind-merge";
 import { computed, useAttrs } from "vue";
@@ -35,14 +32,8 @@ const boxClass = computed(() => twMerge(NOTICE_BOX[shown.value], attrs[`class`] 
         <Icon :name="icon ?? NOTICE_ICON[shown]" class="mt-px shrink-0" aria-hidden="true" />
         <span class="min-w-0 flex-1">
             <span v-if="of !== undefined" class="block">{{ of.title }}</span>
-            <!--
-                The cause, a shade back: evidence a reader may skip; sized down, not faded, since fading failed
-                contrast.
-            -->
-            <!--
-                `break-words`: the raw cause is often a URL/sha/token wider than the box; else the line pushes the
-                layout.
-            -->
+<!-- The cause, a shade back: evidence a reader may skip; sized down, not faded, since fading failed contrast. -->
+<!-- `break-words`: the raw cause is often a URL/sha/token wider than the box; else the line pushes the layout. -->
             <span v-if="of?.detail !== undefined && of.detail !== ``" class="mt-0.5 block break-words text-2xs">{{ of.detail }}</span>
             <slot />
         </span>

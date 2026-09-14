@@ -1,10 +1,7 @@
 import ExcelJS from "exceljs";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
-/* Spreadsheets: one markdown table per sheet, capped, with the cap announced. A spreadsheet is the format
- * most likely to be data rather than prose, and an agent that needs all 40,000 rows should be reading the
- * xlsx programmatically, not through a markdown shadow — the shadow's job is to say what the file IS and
- * show enough of it to reason about. */
+/* Spreadsheets: one markdown table per sheet, capped, with the cap announced. */
 
 const MAX_ROWS_PER_SHEET = 200;
 const MAX_COLUMNS = 30;

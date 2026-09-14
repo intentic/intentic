@@ -6,40 +6,12 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
 
-/* THE DECISION, TAKEN BEFORE THE SIGN-IN — AND THE ONLY PLACE IT IS STILL A QUESTION.
- *
- * /setup does not ask any more. It answers off the surface the reader arrived on: a browser gets a machine we
- * run, started on arrival, and the desktop app installs on the computer it is running on (setupArrival.ts).
- * That is right for somebody who has just signed up and has not seen the product, because "where does the
- * sandbox run" is an infrastructure question with pricing attached and they have nothing to answer it with.
- *
- * The reader here is the opposite person: still deciding, not signed in, one back button from gone, and
- * asking exactly that question on purpose. A page with no session, no code to mint and no spinner can afford
- * the paragraphs, so this page carries the whole trade — what each rung costs, what it asks of you, what it
- * does to your machine and what removes it — and hands the ANSWER to /setup through `?machine=`, which
- * outranks the arrival's own guess in both directions (Setup.vue's `requestedMachine`).
- *
- * WHAT IT MUST NOT DO IS SELL A RUNG. The product's identity is agents on hardware you own; the hosted rung
- * is a convenience with a real cost behind it. So the two cards are the same size, in the ladder's own order,
- * and neither is preselected, tagged or tinted. The ordering is instant-and-small → your own hardware, which
- * is the app's, so a reader who sees both surfaces sees one product.
- *
- * THERE USED TO BE A THIRD, a VM in the reader's own Hetzner / DigitalOcean / Oracle account. It is gone
- * everywhere, and this page is where its absence is most visible by design: a rung whose first step was
- * "create an API key in your provider's console" cannot be chosen by the person this page is written for.
- *
- * NOT IN THE BAR, deliberately, and for the reason nav.ts already gives about /download: a permanent tab
- * beside "Create your workspace" offers two openings where there is one, and most people who take it are
- * first-timers clicking the most concrete-sounding word. It lives where the hesitation actually lands — the
- * home page's install command, the download page, and the quickstart — the same three places the app is
- * offered from. */
+/* THE DECISION, TAKEN BEFORE THE SIGN-IN — AND THE ONLY PLACE IT IS STILL A QUESTION. */
 
 const connectUrl = installScriptUrl(`sh`);
 const cleanupUrl = installScriptUrl(`cleanup`);
 
-/* Each rung says the four things a reader needs and cannot look up: whose machine it is, what it costs, what
- * it asks of them, and what they get. `asks` is the honest one — the step that comes next, in the words of
- * the person who has to do it, because that step is what they are really choosing between. */
+/* Each rung says the four things a reader needs and cannot look up: whose machine it is, what it costs, what it asks of them, and what they get. */
 const rungs = [
     {
         machine: "hosted",
@@ -63,11 +35,7 @@ const rungs = [
     },
 ] as const;
 
-/* WHAT THE COMMAND DOES, as consequences rather than components. "Starts your sandbox in Docker, opens a
- * Cloudflare tunnel" is accurate and settles nothing for the reader who is hesitating: each term raises a
- * question instead of answering one. Fear of a piped install is fear of unbounded consequences, so these
- * are bounds, and the script is linked beside them because the cheapest way to be believed is to be
- * checkable. */
+/* WHAT THE COMMAND DOES, as consequences rather than components. "Starts your sandbox in Docker, opens. */
 const consequences = [
     {
         title: "It installs Docker, if you do not have it",
@@ -104,9 +72,7 @@ const consequences = [
         </section>
 
         <section class="mx-auto max-w-5xl px-6 pb-16">
-            {/* Two equal columns, in the app's own rung order, neither preselected or tagged. A reader picking
-                where their code lives should be choosing between two descriptions, not agreeing with a
-                recommendation. */}
+            {/* Equal columns present both machine choices without a recommendation. */}
             <div class="grid items-stretch gap-4 lg:grid-cols-2">
                 {
                     rungs.map((rung) => (
@@ -122,8 +88,7 @@ const consequences = [
                                 <p class="mt-2 text-sm text-muted">{rung.asks}</p>
                             </div>
                             <p class="text-xs text-subtle">{rung.limits}</p>
-                            {/* The whole point of the page: the click carries the answer, so /setup opens on
-                                this rung instead of asking the question a second time. */}
+                            {/* Setup opens on the selected machine. */}
                             <a class="btn btn-primary btn-sm mt-auto" href={`${APP_URL}/setup?machine=${rung.machine}`}>
                                 {rung.cta}
                             </a>
@@ -156,8 +121,7 @@ const consequences = [
                     }
                 </div>
 
-                {/* THE SCRIPT AND ITS UNDO, side by side and both real URLs. The script is served as plain
-                    text, so "read it" is a link and not an invitation to go find a repository. */}
+                {/* The install script and its source remain directly accessible. */}
                 <div class="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line pt-4 text-sm">
                     <a href={connectUrl} class="text-link hover:underline">Read the install script</a>
                     <a href={cleanupUrl} class="text-link hover:underline">Read the removal script</a>
@@ -166,9 +130,7 @@ const consequences = [
             </div>
         </section>
 
-        <!-- The two exits for a reader who is not ready to install anything. Neither is a rung, so neither is
-             in the picker: one is the product running in a browser tab, the other is the same setup without a
-             terminal in it. -->
+<!-- The two exits for a reader who is not ready to install anything. -->
         <section class="mx-auto max-w-5xl px-6 pb-24">
             <div class="grid gap-6 sm:grid-cols-2">
                 <div class="flex flex-col gap-2">

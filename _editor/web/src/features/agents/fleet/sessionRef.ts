@@ -15,10 +15,7 @@ const tailOf = (text: string, marker: string): string | undefined => {
     return tail === `` || /[/\s]/.test(tail) ? undefined : tail;
 };
 
-/**
- * The session id inside a pasted reference, or undefined when the text is not one. `known` lets a bare non-uuid id
- * resolve; without it, only uuid-shaped bare text counts.
- */
+/** The session id inside a pasted reference, or undefined when the text is not one. */
 export const sessionIdFrom = (text: string, known?: (id: string) => boolean): string | undefined => {
     const trimmed = text.trim().replace(/\/+$/, ``);
     if (trimmed === ``) {

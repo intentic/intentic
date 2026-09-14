@@ -2,11 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { queryClient } from "../../lib/queryPersistence";
 import { heldInCache, warmQuery } from "./warmQuery";
 
-/* THE ONE PROPERTY EVERY WISH IN THE APP RESTS ON: reading a wish fills the entry that wish says it is
- * satisfied by. It reads as too obvious to test, and it was false for eight of the app's twelve wishes: their
- * read was the surface's plain fetcher, which answers its caller and files nothing. `have` therefore stayed
- * "no" forever, the loader always takes the first unsatisfied wish, and so it re-read that one thing on every
- * beat and never reached the rail at all. */
+/* THE ONE PROPERTY EVERY WISH IN THE APP RESTS ON: reading a wish fills the entry that wish says it is satisfied by. */
 
 const KEY = [`test`, `warm`];
 

@@ -7,17 +7,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::setup_link::{RecreateArgs, SetupArgs, SyncArgs};
 
-/* THE TWO ORIGINS, AND THEY ARE NOT THE SAME HOST.
- *
- * `APP_URL` is the SPA — the page the workspace window loads, and the origin the daemon must emit CORS for.
- * `PLATFORM_URL` is the platform's API, where a setup code is redeemed (`POST /setup/claim`) and where the
- * daemon announces itself once it boots.
- *
- * Naming both is not tidiness. The platform default used to be APP_URL, so every desktop setup ran
- * `connect.ps1` with `PLATFORM_URL=https://app.intentic.dev`, the claim POSTed at a static site, and the run
- * died on `HTTP 405 Method Not Allowed` right after "redeeming the setup code" — which reads as a bad code
- * rather than a wrong host. connect.sh had already met this and special-cases a 405 to say so in words. The
- * scripts' own default was correct the whole time; the app overrode it with something worse. */
+/* `APP_URL` is the SPA origin the daemon must allow through CORS. */
 pub const APP_URL: &str = "https://app.intentic.dev";
 pub const PLATFORM_URL: &str = "https://api.intentic.dev";
 
@@ -54,10 +44,7 @@ pub struct ParkedSetup {
 pub struct AppState {
     config_dir: PathBuf,
     pub settings: Mutex<Settings>,
-    /* A request waiting for the launcher UI to pick up. Parked in state rather than carried on the event,
-     * because the link that creates it is also what OPENS the launcher window — an event emitted alongside
-     * would fire before that window's listener exists. The launcher reads these on mount and on the bare
-     * notification, so both orderings land. */
+/* A request waiting for the launcher UI to pick up. */
     pub pending: Mutex<Option<SetupArgs>>,
     pub pending_recreate: Mutex<Option<RecreateArgs>>,
     /// A desktop-sync enrollment the SPA handed over (`intentic://sync`), waiting for the launcher face to
@@ -126,17 +113,7 @@ impl AppState {
         self.config_dir.join("close-action.json")
     }
 
-    /* A SETUP THAT A RESTART INTERRUPTED — the one piece of this app's state that has to outlive the process
-     * by design rather than by accident.
-     *
-     * Turning WSL2 on is the ordinary first step of a Windows install and it does nothing until the machine
-     * reboots. Everything else this app parks lives in `pending`, in memory, which is exactly right for a
-     * handover from a browser tab and exactly wrong here: the reboot is the point.
-     *
-     * On disk, with the time it was written, because the setup code inside it expires thirty minutes after
-     * the platform minted it and a Windows feature install plus a restart can spend most of that. The age is
-     * what lets the window say "your code expired while your PC restarted" instead of failing at the claim
-     * with something that reads like a bad code. */
+/* A SETUP THAT A RESTART INTERRUPTED — the one piece of this app's state that has to outlive the process by design rather than by accident. */
     pub fn park_setup(&self, args: &SetupArgs) {
         let parked = ParkedSetup {
             args: args.clone(),
@@ -162,21 +139,7 @@ impl AppState {
         self.config_dir.join("resume-setup.json")
     }
 
-    /* THE ONE THING THAT TIES THIS APP'S TWO FACES TOGETHER IN ANALYTICS.
-     *
-     * The launcher and the workspace are separate webviews with separate storage, so a product event from the
-     * install screen and one from the SPA a minute later have nothing in common — different anonymous ids,
-     * two unrelated strangers. Both are handed THIS value instead: the launcher sends its events under it, and
-     * the SPA carries it as a property, so the install a person ran and the workspace they landed in can be
-     * read as one story.
-     *
-     * A random id per install and nothing else — never a hostname, a username or a machine fingerprint. It
-     * identifies an installation of this app, which is what the question "did the install finish" is about,
-     * and it is per-OS-user already because that is where the config dir lives.
-     *
-     * Minted on first read and cached for the process, so a config dir that has gone read-only produces one
-     * id for this run rather than a fresh one per event — degraded, but not noise.
-     */
+/* The launcher and the workspace are separate webviews with separate storage. */
     pub fn install_id(&self) -> String {
         let mut cached = self.install_id.lock().unwrap();
         if let Some(id) = cached.as_ref() {
@@ -238,12 +201,7 @@ mod tests {
         }
     }
 
-    /* THE JOIN IS ONLY WORTH ANYTHING IF IT OUTLIVES THE PROCESS.
-     *
-     * This id is what ties an install the app ran to the workspace the user landed in afterwards, and those
-     * two are often not the same run of the app — a setup ends, the window is handed over, the machine gets
-     * restarted. An id minted per launch would still produce events; they would just quietly describe a new
-     * stranger every time, which is the failure mode that looks like working software. */
+/* This id ties an install run to the workspace it opens. */
     #[test]
     fn the_install_id_survives_a_restart() {
         let dir =
@@ -260,16 +218,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /* THE DEFAULT, PINNED TO THE CONNECT FLOW'S OWN.
-     *
-     * This app spawns the shipped connect scripts precisely so the desktop and terminal paths cannot disagree
-     * (scripts.rs states the case). But it passes PLATFORM_URL in explicitly, which overrides the default the
-     * flow would otherwise pick for itself — so on this one value the two ARE two copies, and the copy here
-     * was wrong: it pointed at the SPA, the claim POST hit a static site, and every desktop install failed on
-     * `HTTP 405 Method Not Allowed` one step after "redeeming the setup code".
-     *
-     * The default lives in the ic host-side CLI now (the scripts are bootstrap shims that forward env), so
-     * this pins against ic's source — which ships in this same repo, in this same commit. */
+/* This app spawns the shipped connect scripts precisely so the desktop and terminal paths cannot disagree (scripts.rs states the case). */
     #[test]
     fn the_platform_default_is_the_one_the_connect_flow_picks_for_itself() {
         let connect = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

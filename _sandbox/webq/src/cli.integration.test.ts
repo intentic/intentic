@@ -1,8 +1,4 @@
-/* The CLI end to end against a loopback fixture site: fetch, cache, query filtering, crawl with robots
- * and caps, budget clipping — the whole surface an agent touches. Driven IN-PROCESS through the same
- * `run(app, …)` seam cli.ts calls, with stdout captured by a spy: no build artifact to depend on, and no
- * child process (some sandboxes give each process its own loopback, which would turn a spawn-based suite
- * into a hang that says nothing about webq). The browser fallback has its own gated test at the end. */
+/* The CLI end to end against a loopback fixture site: fetch, cache, query filtering, crawl with robots and caps, budget clipping. */
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";

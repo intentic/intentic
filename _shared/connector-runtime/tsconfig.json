@@ -1,5 +1,4 @@
-/* The connector gateways consume this as a real built package (their dist runs as `node dist/gateway.js`
- * with default-condition resolution), so this is an emitting build: `tsgo` → dist/, tests excluded. */
+/* The connector gateways consume this as a real built package (their dist runs as `node dist/gateway.js` with default-condition resolution). */
 {
     "compilerOptions": {
         "types": ["node"],

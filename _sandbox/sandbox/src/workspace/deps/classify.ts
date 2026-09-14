@@ -165,7 +165,7 @@ export const classifyWorkspace = async (root: string, tree: WorkspaceTree): Prom
                     classifications.push({ path: entry.path, bucket: "repositories", reason: `repository:${marker}` });
                     continue; // one repo unit: do not descend
                 }
-                // oxlint-disable-next-line eslint/no-await-in-loop -- sequential I/O over an in-memory tree; parallelizing a drop buys nothing and risks fd exhaustion
+                // oxlint-disable-next-line eslint/no-await-in-loop -- Sequential I/O preserves tree traversal order.
                 await visit(children);
             } else {
                 // oxlint-disable-next-line eslint/no-await-in-loop -- see above

@@ -1,19 +1,14 @@
-<!--
-    One measured answer in three ranks: verdict, what qualifies it, then the evidence it was measured over. Draws no container and no margin; the
-    caller positions and frames it. Second readings use `xs`, not `sm` (see VERDICT_RANKS).
--->
+<!-- One measured answer in three ranks: verdict, what qualifies it, then the evidence it was measured over. -->
 <script setup lang="ts">
 import { VERDICT_RANKS, VERDICT_TONES, type VerdictSize, type VerdictTone } from "./verdict.js";
 
 const { size = `sm` } = defineProps<{
-    /** The answer, already worded: "↓12%", "25%", "No effect", "Measuring", "Off". A WORD when there is no
-     *  figure — the state IS the answer, and it belongs where the eye already is rather than four lines down. */
+/** The answer, already worded: "↓12%", "25%", "No effect", "Measuring", "Off". */
     value: string;
     /** What the value is a figure of. Never optional: "↓12%" alone does not say twelve percent of what. */
     unit: string;
     tone: VerdictTone;
-    /** What qualifies the answer: the confidence interval, how much sample is still owed. Empty reads as absent,
-     *  so a caller can pass a field that is sometimes blank without writing the guard. */
+/** What qualifies the answer: the confidence interval, how much sample is still owed. */
     detail?: string;
     /** What it was measured OVER — the two arms' sizes, the window. A figure with no account of how much data is
      *  behind it is one a reader cannot weigh. */

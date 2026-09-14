@@ -16,9 +16,7 @@ describe(`parseNote`, () => {
         expect(note(`#${"\t".repeat(50_000)}`).title).toBe(`Ada lovelace`);
     });
 
-    /* THE ONTOLOGY, READ OUT OF THE FORMAT THE NOTES ALREADY HAD. A link in a header field is a typed edge; the
-     * same link in the prose is an untyped one. Nothing else distinguishes them, which is why no sidecar and no
-     * schema is needed to have a graph. */
+    /* THE ONTOLOGY, READ OUT OF THE FORMAT THE NOTES ALREADY HAD. A link in a header field is a typed edge;. */
     it(`reads a link in a header field as a relationship named by that field`, () => {
         expect(note(`---\ntype: person\nworks_on: ["[[Intentic]]", "[[iq]]"]\n---\n`).links).toEqual([
             { target: `Intentic`, label: undefined, relation: `works_on` },

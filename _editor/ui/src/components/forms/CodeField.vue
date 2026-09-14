@@ -1,7 +1,4 @@
-<!--
-    A textarea that stays syntax-highlighted while being edited: a Shiki-highlighted `<pre>` stacked under a transparent-text textarea sharing one
-    box. `readonly` is the only difference between reading and writing. Sizes to content and always wraps.
--->
+<!-- A textarea that stays syntax-highlighted while being edited: a Shiki-highlighted `<pre>` stacked under a transparent-text textarea sharing one box. -->
 <script setup lang="ts">
 import { computed, ref, useAttrs, watch } from "vue";
 import type { ShikiLang } from "@intentic/code-read/langs";
@@ -67,10 +64,7 @@ defineExpose({ field });
         <!-- `[grid-area:1/1]`, not absolute: staying in flow is what gives the row its height. -->
         <div v-if="html" class="ui-code-field-html [grid-area:1/1] min-w-0" v-html="html"></div>
         <pre v-else class="ui-code-field-box [grid-area:1/1] min-w-0">{{ shown }}</pre>
-        <!--
-            Takes the keystrokes; transparent text over the colored `<pre>`, contributing only caret and selection.
-            `field-bare` is required, or skins draw their own inset and focus ring meant for a standalone field.
-        -->
+<!-- Takes the keystrokes; transparent text over the colored `<pre>`, contributing only caret and selection. -->
         <textarea
             ref="field"
             v-bind="forwarded"

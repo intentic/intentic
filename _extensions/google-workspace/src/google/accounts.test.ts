@@ -82,8 +82,7 @@ describe("selectConnection", () => {
         expect(() => selectConnection([], undefined)).toThrow(/No Google account is connected/);
     });
 
-    /* The case this function exists for. Picking the first would send mail from whichever card sorted first,
-     * which nobody notices until it is in someone's inbox. */
+    /* The case this function exists for. Picking the first would send mail from whichever card sorted first. */
     it("refuses to guess between several, and lists them", () => {
         expect(() => selectConnection(both, undefined)).toThrow(/pass --account.*google.*work_gmail/s);
     });

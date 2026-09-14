@@ -1,7 +1,4 @@
-<!--
-    The repository-narrowing column: a pinned "All repositories" row plus grouped per-repository rows, each showing one count so scanning "all" and
-    "one" is the same glance. Below <SplitView>'s fold width it becomes a <Picker> instead.
--->
+<!-- The repository-narrowing column: a pinned "All repositories" row plus grouped per-repository rows. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRailMemory } from "../../composables/useRailMemory.js";

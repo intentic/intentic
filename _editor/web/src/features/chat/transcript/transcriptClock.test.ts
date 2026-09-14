@@ -144,13 +144,7 @@ it(`replaces a run's rows on every head and keeps what sits above them`, () => {
     ]);
 });
 
-/* THE SAME RUN, IN A WINDOW THAT NEVER DREW IT. Where a window put a run is the window's own memory, and a
- * transcript arrives without it three ordinary ways: painted from the local mirror, redrawn from the daemon's
- * record, or opened fresh (every popped-out window). All three show the run already, and remember nothing about
- * having drawn it, so the head's rows have to find their own place — or the run lands a second time underneath
- * itself, which on a conversation of one long turn is the entire chat, twice, and again per attach that gets in.
- *
- * The rows settle it: the tail that IS this head's opening rows is the run's own work, already on screen. */
+/* THE SAME RUN, IN A WINDOW THAT NEVER DREW IT. */
 it(`reclaims the rows it is already showing when it holds no base for the run`, () => {
     const clock = new TranscriptClock(() => {});
     clock.rebuild([

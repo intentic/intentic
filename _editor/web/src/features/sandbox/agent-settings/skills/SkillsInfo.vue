@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import { InfoDialog, InfoTable } from "@intentic/ui";
 
-/* The (i) beside the Agent tab's "Skills" group. Three things a reader needs and cannot get from the list: what a
- * skill actually is (the word is used loosely everywhere and means something specific here), where each origin
- * comes from and therefore who can change it, and the one counter-intuitive fact: that having more of them is not
- * free, which is the reason a switch exists at all. */
+/* The (i) beside the Agent tab's "Skills" group. */
 
 const ORIGINS = [
     [`Yours`, `You wrote it here`, `Edit, switch off, or delete it`],

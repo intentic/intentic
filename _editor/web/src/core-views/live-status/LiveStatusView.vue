@@ -120,10 +120,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
 
             <Notice v-if="wsNotice" :of="wsNotice" class="mb-4" />
 
-            <!--
-                Engine declared but down on a previously-applied setup: "Not deployed" below is meaningless until it's
-                back.
-            -->
+<!-- Engine declared but down on a previously-applied setup: "Not deployed" below is meaningless until it's back. -->
             <div
                 v-if="komodoReachable === false && state?.converged !== undefined"
                 class="mb-4 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning"
@@ -232,10 +229,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                         </p>
                     </div>
 
-                    <!--
-                        Live check: streams "intentic deploy plan" to diff the desired graph against live
-                        infrastructure.
-                    -->
+<!-- Live check: streams "intentic deploy plan" to diff the desired graph against live infrastructure. -->
                     <div class="mt-4 border-t border-line-subtle pt-3">
                         <div class="mb-2 flex items-center gap-2">
                             <h3 class="text-2xs font-semibold uppercase tracking-wide text-subtle/70">Live check</h3>
@@ -256,10 +250,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                     </div>
                 </section>
 
-                <!--
-                    Access: URLs + admin logins for what's provisioned. Generated passwords reveal on click (owner
-                    only).
-                -->
+<!-- Access: URLs + admin logins for what's provisioned. -->
                 <section v-if="access.length > 0" class="rounded-lg border border-line bg-card p-4">
                     <h3 :class="ui.sectionLabel('mb-3')">Access</h3>
                     <Notice v-if="accessError" :of="accessError" class="mb-2" />

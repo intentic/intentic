@@ -4,16 +4,7 @@ use crate::logfile::Log;
 use crate::selfhost;
 use crate::util::{bail, kv_lines, normalize_host_name, Result};
 
-/* Enroll THIS machine as a deploy target for an existing sandbox — connect-host.sh as a verb.
- *
- * Run it on any host intentic should deploy onto — the sandbox's own machine or another; on as many machines
- * as you like (intentic splits services across them). It creates a dedicated service user + SSH key, exposes
- * this host's sshd over its OWN Cloudflare tunnel (ssh-<id>.<zone>), and self-registers with the sandbox's
- * daemon via POST /enroll (authenticated by the connection token). It does NOT create or recreate a sandbox.
- *
- * Two paths, matching the sandbox's setup mode (the Infra screen hands out the right one-liner): own
- * Cloudflare (CF_TOKEN creates the tunnel + DNS on the user's zone), or intentic-provided (the platform
- * minted the tunnel; the command carries its narrow connector token instead — no Cloudflare token here). */
+/* Enroll THIS machine as a deploy target for an existing sandbox — connect-host.sh as a verb. */
 
 fn env(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|value| !value.is_empty())

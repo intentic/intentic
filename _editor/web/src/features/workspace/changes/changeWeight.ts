@@ -13,10 +13,7 @@ export interface ShownStat {
     readonly deletions?: number;
 }
 
-/**
- * Picks which reading is on screen: code-only when stripped and available, else git's own count.
- * A file the daemon couldn't read as code (binary, oversized, no grammar) has no `code`, so git's count is the reading.
- */
+/** Picks which reading is on screen: code-only when stripped and available, else git's own count. */
 export const shownStat = (stripped: boolean, code: LineStat | undefined, additions?: number, deletions?: number): ShownStat =>
     stripped && code !== undefined ? code : { additions, deletions };
 
@@ -26,10 +23,7 @@ export const addedIn = (stat: ShownStat): number => stat.additions ?? 0;
 // Floor so even a tiny change draws a visible stub instead of a sub-pixel smudge.
 const MIN_FILL = 0.14;
 
-/**
- * Rail fill (0..1) for `added` against the list's biggest addition `of`; square root, not linear, so a lopsided
- * set (a 2-line fix beside a 400-line module) still spreads across a visible range.
- */
+/** Rail fill (0..1) for `added` against the list's biggest addition `of`; square root, not linear. */
 export const weightFill = (added: number, of: number): number =>
     added <= 0 || of <= 0 ? 0 : Math.min(1, Math.max(MIN_FILL, Math.sqrt(added / of)));
 
@@ -37,10 +31,7 @@ export const weightFill = (added: number, of: number): number =>
 export const bigger = (left: ShownStat, right: ShownStat): number =>
     addedIn(right) - addedIn(left) || (right.deletions ?? 0) - (left.deletions ?? 0);
 
-/**
- * Totals a run of changes as one code-only reading; a change with no `code` contributes git's own numbers instead,
- * the same substitution `shownStat` makes per row, so a heading agrees with its rows.
- */
+/** Totals a run of changes as one code-only reading; a change with no `code` contributes git's own numbers instead. */
 export const sumCode = (changes: readonly { readonly code?: LineStat; readonly additions?: number; readonly deletions?: number }[]): LineStat =>
     changes.reduce<LineStat>(
         (total, change) => ({

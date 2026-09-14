@@ -127,7 +127,7 @@ onBeforeUnmount(() => {
             </ul>
         </template>
 
-        <!-- Dependencies section rides every phase (offer during scan/upload, outcome after); hidden entirely when the drop has no project. -->
+        <!-- Dependencies remain visible through scan, upload, and outcome phases. -->
         <div v-if="setupSummary.length > 0" class="mt-3">
             <!-- Still uploading: the offer is pre-checked; unchecking becomes the remembered default. -->
             <template v-if="!finished">
@@ -171,10 +171,7 @@ onBeforeUnmount(() => {
                 </p>
             </template>
 
-            <!--
-                Asked, but nothing was installable (already ready, or unsupported); stays neutral rather than claiming a success the daemon didn't
-                report.
-            -->
+            <!-- No-installable state stays neutral when nothing changed. -->
             <div v-else-if="installAfterUpload" class="flex items-center gap-2 text-2xs text-subtle">
                 <Icon name="info-circle" class="text-sm text-muted" />
                 <span class="flex-1">No dependency install queued</span>

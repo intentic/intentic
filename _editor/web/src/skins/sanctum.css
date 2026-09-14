@@ -1,93 +1,16 @@
-/* ══ SANCTUM — ASH STONE, WOVEN CLOTH, A GOLD RULE ═════════════════════════════════════════════════════════
- *
- * The app wearing the SITE'S design system (_site/site/src/styles/global.css). Same metals, same ink, same
- * materials, same ornament kit — an IDE built out of the vocabulary the marketing pages are built out of, so
- * signing in does not feel like arriving at a different company.
- *
- * THE RULES OF THE HOUSE, IN ONE PARAGRAPH — the site's, restated for a window somebody sits in front of all
- * day. Structure is GOLD: every rule, every frame, every mark. The accent is EMBER and it is SPENT, never
- * spread: one lit control, the focus ring, a ticked box. The GROUND IS STONE and stone here is nearly
- * colourless — a warm ash that reads as rock rather than as brown. The site's other two materials appear once
- * each and nowhere else: CLOTH on the navigation rail and on every overlay, CAST METAL on the one loud
- * button. Ink is cream, because white on this ground reads as a hole cut in it. Every edge is eased, nothing
- * is a pill, and every surface has a surface.
- *
- * ── WHAT THIS FILE LEARNED, AND WHY THE PREVIOUS CUT WAS TIRING ───────────────────────────────────────────
- * THE GROUND WAS BROWN AND THE LINES WERE LIT. The stone ramp carried three times this chroma at a redder hue,
- * so every surface in the app was timber; and the gilding was mixed from the USER'S ACCENT, so at the default
- * warm accent every hairline, every rim and every lane edge came out a light saturated orange. Fifty warm
- * rectangles on a warm ground is not ornament, it is a room with no air in it — and nothing in it could be the
- * brightest thing, because everything already was.
- *
- * The fix is two decisions, and they are the whole difference:
- *   · THE STONE LOSES ITS COLOUR. Chroma drops to a third, at the gold's own hue — so the ground is neutral
- *     and the gold laid on it is the only warm thing, which is what makes gold read as metal.
- *   · THE GOLD IS FIXED, NOT DERIVED. `#c9a05c`, the site's own, whatever accent the user picked. A skin is a
- *     MATERIAL; the accent picker answers what colour the app is lit in, and letting it also repaint the
- *     structure is what turned one warm choice into a warm everything. The accent still shows — links, focus,
- *     ticked controls — and now it shows AGAINST something.
- *
- * ── AND WHY THE CUT AFTER IT WAS STILL TIRING, WHICH IS A DIFFERENT FAULT ─────────────────────────────────
- * The stone came right and the metal came right, and the app was still hard to sit in front of, for three
- * reasons that have nothing to do with colour temperature:
- *   · THE SITE'S SQUARENESS DOES NOT SURVIVE BEING REPEATED. It is right on a page with fifteen frames on it
- *     and wrong in a window with three hundred, most of them small. See TIER 2.
- *   · A SKIN CANNOT ONLY REPAINT WHAT IT OWNS. The roles came down and the app's own tinted marks did not, so
- *     the calmest chrome ever built was carrying a lane of forty saturated category chips down the middle of
- *     it. A skin that restates only its own tokens quiets only its own tokens; the loud things left over are
- *     what the room then feels like. See the category tile, and `--color-danger-800`.
- *   · FLAT IS NOT CALM, IT IS ONLY QUIET. Every surface was a solid fill, because the file had read its own
- *     contrast rule as a ban on texture. Material is what makes a dark interface restful rather than merely
- *     dim, and the fix costs no contrast at all — see the second lesson below.
- *
- * The two lessons from the earliest cut still hold, and both are load-bearing:
- *   · ORNAMENT ON AN EDGE BECOMES NOISE AT UI SIZE. A frieze that reads as carving at 40px reads as a torn
- *     edge at 14px, and every panel in an app is a 14px edge. Character comes from the material, the line
- *     weights and the type, because those survive being shrunk. The site's turned corner is drawn in exactly
- *     ONE place here — the dialog, the app's biggest panel.
- *   · A GRADIENT BEHIND TEXT IS A CONTRAST BUG — and it is a GRADIENT that is the bug, not a texture. A wash
- *     down a card puts the first line of a paragraph on a different ground from the last, because a gradient
- *     has a low-frequency component and the low frequency is what the reading sits on. A fine speckle has
- *     none: every square inch of it averages the same value. So the rule is EVERY SURFACE A WORD SITS ON IS
- *     FLAT IN THE LOW FREQUENCIES AND OPAQUE, which lets the plates carry a tooth (they do, at a whisper) and
- *     still bans every wash. An earlier cut of this file read the rule as "no background-image at all", and
- *     the result was a skin made of materials in which every surface anybody actually looked at was a flat
- *     rectangle.
- *
- * ── EVERYTHING ELSE ───────────────────────────────────────────────────────────────────────────────────────
- * The surface ramp, the role tokens and the radius scale are restated, which repaints Tailwind's
- * utilities and every PrimeVue component at once; selector rules sit in `@layer components` so a caller's own
- * utility still wins; and the whole file is inert until `data-skin="sanctum"` is on <html>. */
+/* Sanctum skin for the app's IDE-like shell, using the site's design vocabulary. */
 
-/* ── TIER 0 · THE STONE ────────────────────────────────────────────────────────────────────────────────────
- * The surface ramp in warm ash. Hue 78 is the GOLD'S OWN HUE, which is the point: the stone and the metal on
- * it are the same colour family, so a hairline reads as light caught on the rock rather than as a line drawn
- * over it. Chroma is a third of what a brown ground needs — 0.003 at the pale end, 0.009 in the dark — enough
- * that the ramp is not grey, far too little for it to be brown.
- *
- * THE LIGHTNESS LADDER IS THE APP'S OWN (primitive-colors.css), STEP FOR STEP, and that is not laziness. Those
- * numbers are what puts a card seven points above its canvas rather than four, and the difference is a screen a
- * person can sit in front of: too dark a ground under cream ink haloes, and too small a step between the wall
- * and a plate means every panel edge has to be carried by its rule alone. The skin changes what the app is made
- * of, not how brightly lit the room is. */
+/* TIER 0 · THE STONE The surface ramp in warm ash. */
 [data-skin="sanctum"] {
     color-scheme: dark;
 
-    /* SURFACES NOW FOLLOW THE PICKER. The ramp is no longer pinned to hue 78: themeColor.ts generates
-     * `--color-neutral-*` from the picked accent, and semantic-colors.css maps those to `--color-surface-*`.
-     * With the default orange that is still warm stone; with a blue pick it is cool slate. The lightness
-     * ladder is unchanged — the picker scales chroma, not lightness — so every contrast promise holds. */
+/* SURFACES NOW FOLLOW THE PICKER. */
 
-    /* THE METAL, AND IT IS THE SITE'S — `--color-gold` / `--color-gold-bright` from global.css, to the digit.
-     * Fixed rather than mixed from `--color-primary-*`: see the header. The picker still lights the app; it no
-     * longer builds it. */
+/* THE METAL, AND IT IS THE SITE'S — `--color-gold` / `--color-gold-bright` from global.css, to the digit. */
     --sanctum-gold: #c9a05c;
     --sanctum-gold-bright: #e5c489;
 
-    /* THE THREE RULE WEIGHTS, as the site draws them: gold at an ALPHA rather than a lighter grey, so a
-     * hairline is metal catching light on stone and not a seam of a different rock. One notch quieter than the
-     * site's 0.16 / 0.30, because a marketing page draws a dozen of these and a workspace draws a thousand.
-     * `whisper` is the seam between two things already touching. */
+/* THE THREE RULE WEIGHTS, as the site draws them: gold at an ALPHA rather than a lighter grey. */
     --sanctum-rule: rgba(201, 160, 92, 0.14);
     --sanctum-rule-strong: rgba(201, 160, 92, 0.26);
     --sanctum-whisper: rgba(201, 160, 92, 0.07);
@@ -98,257 +21,77 @@
     /* Dense, rough-dressed warm stone pilaster relief for the navigation rail. */
     --sanctum-rail: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='96'%3E%3Cdefs%3E%3Cfilter id='r' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5 0.3' numOctaves='3' seed='53' stitchTiles='stitch' result='chisel'/%3E%3CfeOffset in='chisel' dx='0' dy='-0.8' result='chiselLit'/%3E%3CfeOffset in='chisel' dx='0' dy='0.8' result='chiselDark'/%3E%3CfeComposite in='chiselLit' in2='chiselDark' operator='arithmetic' k1='0' k2='0.85' k3='-0.85' k4='0.5' result='relief'/%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.6 1.4' numOctaves='3' seed='29' stitchTiles='stitch' result='dense'/%3E%3CfeComposite in='dense' in2='relief' operator='arithmetic' k1='0.4' k2='0.6' k3='0' k4='-0.05' result='combined'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.78 0 0 0 0 0.64 0 0 0 0 0.42 0.22 0 0 0 -0.05'/%3E%3C/filter%3E%3C/defs%3E%3Crect width='48' height='96' filter='url(%23r)'/%3E%3C/svg%3E");
 
-    /* THE PLATE'S OWN STONE, for the surfaces that hold sentences — the cards, the slabs, the lanes.
-     *
-     * IT IS A DIFFERENT STONE FROM THE WALL, AND THAT IS THE WHOLE POINT OF IT BEING A SEPARATE TOKEN. For one
-     * cut the plates simply wore the wall's grain at a lower alpha, and the result was cards that read as
-     * PANES OF GLASS: identical speckle, identical colour, identical scale on both sides of the border, so the
-     * eye had nothing saying "different material" and read the only remaining difference — the value step — as
-     * a translucent sheet lying over the wall. Two things separate them. The tooth is WARM (a limestone grey
-     * with the gold's hue in it) against the wall's neutral grit, and it is far weaker: a POLISHED face beside
-     * a rough one. The value step does the rest, and it is a big one.
-     *
-     * AND IT IS NOW NEARLY FLAT, WHICH IS THE SECOND CORRECTION AND THE OPPOSITE OF THE FIRST. The tooth was
-     * introduced because the plates were paint-bucket rectangles; it then ran at a third of the wall's
-     * strength, and a third of the wall is still plenty of grit to sit under nine-point type all day. A wall is
-     * looked AT and a card is READ THROUGH, and those want different amounts of surface. So the curve drops to
-     * roughly a fifth of what it was — mean alpha under a hundredth, peak near a thirtieth — which is on the
-     * threshold of visible: enough that a plate is not a flat fill, not enough that anything sits on grit.
-     * The dressing is now carried by the BEVEL and the value step, and the speckle only stops the fill from
-     * looking printed. If a plate ever needs to look more like stone, deepen the ledge, not this.
-     *
-     * THIS IS NOT THE THING THE FILE BANS, and the distinction is the whole reason it can exist. What ruins a
-     * paragraph is a GRADIENT — a ground that is one value at the first line and another at the last, so the
-     * contrast a reader gets depends on where in the box the word fell. A uniform high-frequency speckle has
-     * no low-frequency component at all: every square inch of the plate averages the same value, so the
-     * contrast is identical top and bottom, and what changes is only that the surface stops looking like it
-     * was filled with a paint bucket. Measured against flat, cream ink on this moves by under a hundredth of a
-     * ratio point, which is nothing, and it is the difference between a screen made of material and a screen
-     * made of rectangles. */
+/* THE PLATE'S OWN STONE, for the surfaces that hold sentences — the cards, the slabs, the lanes. */
     --sanctum-tooth: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.55' numOctaves='2' seed='23' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.68 0 0 0 0 0.62 0 0 0 0 0.51 0.05 0 0 0 -0.017'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23f)'/%3E%3C/svg%3E");
 
-    /* THE SAME TOOTH INVERTED, for the one family of surfaces in this skin that is LIGHTER than what is around
-     * it: the button plaques. A light speckle is invisible on a pale stone — it has nowhere to go — so the
-     * dressed face of a plaque has to be cut in dark instead, which is also what it is in life: a chisel takes
-     * material away, and the pits it leaves are the shadowed part of a lit face. Same frequency and the same
-     * curve as the plates', so a plaque and the card behind it are unmistakably the same rock.
-     *
-     * A THIRD DEEPER THAN IT WAS, because the plaque under it came down about eight lightness points. Grit is
-     * an alpha, so the same alpha on a darker body is a fainter mark: holding the number would have quietly
-     * polished the face at the moment it was meant to get rougher. */
+/* THE SAME TOOTH INVERTED, for the one family of surfaces in this skin that is LIGHTER than what is around it: the button plaques. */
     --sanctum-tooth-cut: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.55' numOctaves='2' seed='29' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.15 0 0 0 0 0.12 0 0 0 0 0.085 0.32 0 0 0 -0.088'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23f)'/%3E%3C/svg%3E");
 
-    /* THE PITTING, AND ITS LIT LIPS — the pair of layers that is the difference between a dark speckle and a
-     * dressed face, and the reason a plaque now reads as rock at arm's length rather than only up close.
-     *
-     * THE FINE TOOTH ABOVE IS SUB-PIXEL AND THAT IS ITS LIMIT. At 1.55 cycles per pixel a feature is about
-     * two thirds of a pixel across, so what it paints is a DITHER: it stops the fill looking printed and can
-     * do nothing else, because the eye cannot resolve a single grain and so never sees one lit. Between that
-     * dither and the veining's slow cloud (0.035, a feature every thirty pixels) the face had NOTHING at the
-     * scale a chisel actually works at, which is a few pixels — and a surface with no structure in the band
-     * the eye reads texture in is a surface the eye reads as smooth.
-     *
-     * So one field at 0.4 — a feature every two and a half pixels — is laid down TWICE from the same seed:
-     * once dark, and once light and shifted a pixel DOWN. Same noise, offset by one pixel, is a relief: every
-     * hollow gets a shaded upper wall and a lit lower one, which is what a pit lit from above looks like and
-     * exactly how the letters are cut a few rules down. One field, two exposures — not two materials stacked,
-     * which is what a second independent noise would have been.
-     *
-     * The direction is not free. The light in this skin comes from ABOVE (every bevel in the file says so), so
-     * the lit copy goes BELOW the dark one. Flip it and every pit becomes a bump, and a face of bumps reads as
-     * hammered metal rather than as cut stone. */
+/* THE PITTING, AND ITS LIT LIPS — the pair of layers that is the difference between a dark speckle and a dressed face. */
     --sanctum-pit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='p' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.4' numOctaves='3' seed='31' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.14 0 0 0 0 0.11 0 0 0 0 0.075 0.3 0 0 0 -0.09'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23p)'/%3E%3C/svg%3E");
     --sanctum-pit-lip: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='l' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.4' numOctaves='3' seed='31' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 0.98 0 0 0 0 0.93 0.24 0 0 0 -0.078'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23l)'/%3E%3C/svg%3E");
 
-    /* THE VEINING — a slow, weak, warm cloud, and the one place in this file where a LOW-frequency variation is
-     * deliberately allowed. It exists because a uniform speckle cannot make stone: grit says "rough", but what
-     * says "quarried" is that the face is not the same colour twice over, and that difference is measured in
-     * centimetres, not in pixels. Without it the plaque is a grey rectangle with dust on it.
-     *
-     * WHY IT IS SAFE HERE AND NOWHERE ELSE. The file's rule bans a low-frequency wash under READING, because it
-     * changes what contrast the first line of a paragraph gets against the last. This lies under one short
-     * label on a control ~28px tall, and it swings under seven per cent of a colour the label already clears at
-     * about six to one — a change of a twentieth of a ratio point across a word. It is not permission to put
-     * this on a card. */
+/* THE VEINING — a slow, weak, warm cloud, and the one place in this file where a LOW-frequency variation is deliberately allowed. */
     --sanctum-mottle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='v' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.035' numOctaves='3' seed='13' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.12 0 0 0 0 0.1 0 0 0 0 0.075 0.14 0 0 0 -0.046'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23v)'/%3E%3C/svg%3E");
 
-    /* THE HORIZON — five towers on a stepped plinth, standing on the floor of the window. The site opens every
-     * page on a temple; this is that temple seen from a long way off. It earns its place by being FAR AWAY:
-     * capped at 84 absolute pixels however wide the window gets, in the STONE'S colour rather than the gold's,
-     * at a sixth opacity. An earlier version scaled with the viewport and at 1900px became a lit mountain range
-     * across the bottom third of the screen — the one thing that made the skin look broken rather than quiet.
-     *
-     * MEASURED AGAINST THE PLATES, not chosen by eye, and re-measured every time the wall moves — which is the
-     * part worth remembering. This is an alpha over the canvas, so darkening the canvas RAISES its contrast
-     * against everything around it: the same 0.16 that sat correctly under a card on the old lighter wall came
-     * out brighter than one the moment the wall dropped. A tenth is what puts it back under the plates and
-     * above the wall, which is where a distant thing belongs. The grey is warmed to the stone's own family
-     * besides: a neutral grey silhouette on a warm wall reads as cool, and the one thing this shape must not
-     * look like is weather.
-     *
-     * It is a background layer, not an element, which is what makes it behave: every plate in this skin is
-     * opaque, so the temple is simply occluded by whatever the app has put in front of it. A full board hides
-     * it completely and an empty pane is all horizon, with no condition anywhere for anyone to maintain. */
+/* THE HORIZON — five towers on a stepped plinth, standing on the floor of the window. */
     --sanctum-horizon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='92' viewBox='0 0 260 92' fill='%23a39a8c' fill-opacity='0.1' stroke='none'%3E%3Cpath d='M104 76V66H109.2V56H113.9V46H118V36H122.2V28C122.2 19 126.5 15 130 7C133.5 15 137.8 19 137.8 28V36H142V46H146.1V56H150.8V66H156V76Z'/%3E%3Cpath d='M58 76V69H62V62H65.6V55H68.8V48H71.6V42C71.6 36 75 33 78 26C81 33 84.4 36 84.4 42V48H87.2V55H90.4V62H94V69H98V76Z'/%3E%3Cpath d='M162 76V69H166V62H169.6V55H172.8V48H175.6V42C175.6 36 179 33 182 26C185 33 188.4 36 188.4 42V48H191.2V55H194.4V62H198V69H202V76Z'/%3E%3Cpath d='M15 76V71H18V66H20.7V61H23.1V56H25.2V52C25.2 48 27.5 46 30 40C32.5 46 34.8 48 34.8 52V56H36.9V61H39.3V66H42V71H45V76Z'/%3E%3Cpath d='M215 76V71H218V66H220.7V61H223.1V56H225.2V52C225.2 48 227.5 46 230 40C232.5 46 234.8 48 234.8 52V56H236.9V61H239.3V66H242V71H245V76Z'/%3E%3Cpath d='M20 76H240V70H20Z'/%3E%3Cpath d='M0 92H260V84H250V78H10V84H0Z'/%3E%3C/svg%3E");
 
-    /* SHADOW — the one flat, unlit value in the file, and the whole of two surfaces: the navigation rail and
-     * every overlay. Deeper than the wall and far deeper than a plate, warm at the ground's own hue, and
-     * carrying NOTHING — no weave, no tooth, no gradient.
-     *
-     * IT WAS CLOTH FIRST, faithfully lifted from the site's own navigation panel, and it was the wrong idea
-     * twice over. A hanging is a thing you look AT; a rail is a thing you look PAST forty times a minute on
-     * your way to something, and an overlay is a thing you look THROUGH to a list of names. Both of them are
-     * frames around other people's content, and a frame with a material in it competes with what it frames.
-     * The weave was also the only surface in the skin with a low-frequency component in it, so on a 48px
-     * column it never averaged out and the rail kept a permanent dark band down one side.
-     *
-     * SO THEY GO FLAT AND THEY GO DARK. Dark is what makes an overlay read as being IN FRONT: this skin's
-     * plates are lit and stand off the wall, so a panel that goes the other way — below the wall, unlit — is
-     * unmistakably not one of them, and needs no translucency to say so. And a rail that recedes is a rail
-     * whose icons are the only thing in it. */
+/* SHADOW — the one flat, unlit value in the file, and the whole of two surfaces: the navigation rail and every overlay. */
     --sanctum-shadow: color-mix(in oklab, var(--color-surface-950) 90%, black);
 
-    /* THE BRUSHED FIELD IS NOT DECLARED HERE ANY MORE. It was — the site's numbers to the digit, written out a
-     * second time — and it is now `--house-brushed` in `@intentic/house-css`, along with the rest of the cast
-     * bronze this skin's money plaque is made of. One piece of metal, described once, with three readers. */
+/* THE BRUSHED FIELD IS NOT DECLARED HERE ANY MORE. */
 
-    /* THE ORNAMENT KIT — two of the site's four (ornaments.ts), redrawn as data URLs because a background-image
-     * cannot take `currentColor`. The LOZENGE opens every section label. The LOTUS — the brand's own mark — is
-     * cut into the corner of an empty niche, the way a mason signs a stone he has dressed and left blank.
-     *
-     * TWO OF THE FOUR ARE REFUSED, for the same reason in two sizes. The DIVIDER wants more room than any
-     * surface in a workspace has to spare. The TURNED CORNER wanted a panel whose corners are its own to
-     * decorate, and no panel here has that: see the note over `.p-dialog`, where it used to live. What is left
-     * is the pair that attaches to a THING — a label, an empty niche — rather than to a rectangle. */
+/* THE ORNAMENT KIT — two of the site's four (ornaments.ts), redrawn as data URLs because a background-image cannot take `currentColor`. */
     --sanctum-lozenge: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M6 .8 11.2 6 6 11.2.8 6z' fill='none' stroke='%23c9a05c' stroke-width='1.3'/%3E%3Cpath d='M6 3.6 8.4 6 6 8.4 3.6 6z' fill='%23c9a05c' fill-opacity='.6'/%3E%3C/svg%3E");
     --sanctum-lotus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 -1.3 32 32' fill='%23c9a05c' fill-opacity='0.22'%3E%3Cpath d='M8.4 25.6c-3.2 0-5.6-1-7.2-3 3.6-1.2 6.6-.7 9 1.4z' opacity='.42'/%3E%3Cpath d='M23.6 25.6c3.2 0 5.6-1 7.2-3-3.6-1.2-6.6-.7-9 1.4z' opacity='.42'/%3E%3Cpath d='M16 9.5c2.1 3 3.2 5.7 3.2 8.1 0 2.2-1.1 4.1-3.2 5.6-2.1-1.5-3.2-3.4-3.2-5.6 0-2.4 1.1-5.1 3.2-8.1z' transform='rotate(-74 16 22.6)' opacity='.55'/%3E%3Cpath d='M16 9.5c2.1 3 3.2 5.7 3.2 8.1 0 2.2-1.1 4.1-3.2 5.6-2.1-1.5-3.2-3.4-3.2-5.6 0-2.4 1.1-5.1 3.2-8.1z' transform='rotate(74 16 22.6)' opacity='.55'/%3E%3Cpath d='M16 6.4c2.4 3.4 3.6 6.4 3.6 9.1 0 2.5-1.2 4.6-3.6 6.3-2.4-1.7-3.6-3.8-3.6-6.3 0-2.7 1.2-5.7 3.6-9.1z' transform='rotate(-39 16 21.7)' opacity='.78'/%3E%3Cpath d='M16 6.4c2.4 3.4 3.6 6.4 3.6 9.1 0 2.5-1.2 4.6-3.6 6.3-2.4-1.7-3.6-3.8-3.6-6.3 0-2.7 1.2-5.7 3.6-9.1z' transform='rotate(39 16 21.7)' opacity='.78'/%3E%3Cpath d='M16 3.4c2.8 4 4.2 7.5 4.2 10.6 0 2.9-1.4 5.4-4.2 7.3-2.8-1.9-4.2-4.4-4.2-7.3 0-3.1 1.4-6.6 4.2-10.6z'/%3E%3C/svg%3E");
 
-    /* ── THE FACES ────────────────────────────────────────────────────────────────────────────────────────
-     * The site's, and its size rule with them: a titling face from 13 to 24px, a display serif only above ~28.
-     * Playfair's whole character is the jump between a thick stem and a hairline, and a hairline is a fraction
-     * of a pixel under 20px — it does not look elegant there, it looks broken.
-     *
-     * So TITLING carries every heading in the chrome. Baloo 2 is the site's brand face, and a rounded
-     * geometric is about as legible as small type gets, which matters when a heading in this app may be 11px.
-     * DISPLAY is reached for once, by the one heading in the workspace drawn at display size (see h1.text-4xl
-     * below). BODY STAYS INTER — a screen read for eight hours is not the place for a personality, and swapping
-     * the reading face would change the metrics of every truncated label in the app, which is geometry, and
-     * geometry is not a skin's to move.
-     *
-     * Both are fetched on demand by useSkin.ts. If the network refuses them this falls through to the app's own
-     * stack with nothing looking broken. */
+    /* THE FACES The site's, and its size rule with them: a titling face from 13 to 24px, a display serif only above ~28. */
     --sanctum-titling: "Baloo 2", "Trebuchet MS", ui-rounded, var(--font-sans);
     --sanctum-display: "Playfair Display", "Iowan Old Style", Georgia, serif;
 
-    /* ── TIER 1 · THE ROLES ───────────────────────────────────────────────────────────────────────────────
-     * Stated unconditionally rather than under a scheme scope: the skin IS its own scheme. The three grounds
-     * are OPAQUE, which is the readability rule at the token tier — a plate you can see the wall through is not
-     * a plate, and opacity is also what lets a sticky header occlude the rows sliding under it.
-     *
-     * THE GROUND IS DEEP, AND IT IS NOT BLACK. The site's canvas is near-black because a page is looked at for
-     * ninety seconds; a window is looked at for nine hours, and cream ink on true black haloes.
-     *
-     * THE WALL IS STATED BELOW WHERE IT SHOULD LAND, BECAUSE THE GRAIN PUTS IT BACK. This is the one number in
-     * the file that cannot be read on its own: the tooth on the wall is a LIGHT speckle, so it lifts the mean
-     * of whatever it lies on — measured, by about five luminance levels. Stating the canvas at the app's own
-     * 17% therefore SHIPPED a wall lighter than the app's, which is the opposite of what the token says, and it
-     * cost the plates most of their step off it. 13.5% is what renders at roughly the app's 17% once the grain
-     * is on. Card and overlay are untouched, so the ladder is now a nine-point climb from wall to plate rather
-     * than a six-point one, which is most of why a card stopped reading as a pane of glass over the wall. */
+    /* TIER 1 · THE ROLES Stated unconditionally rather than under a scheme scope: the skin IS its own scheme. */
     --role-canvas: color-mix(in oklab, var(--color-surface-950) 84%, black);
     --role-card: var(--color-surface-900);
     --role-overlay: color-mix(in oklab, var(--color-surface-800) 93%, var(--color-surface-900));
     --role-line: var(--sanctum-rule);
     --role-line-strong: var(--sanctum-rule-strong);
 
-    /* INK IS CREAM, and these three are the site's own values. White on warm stone reads as a hole cut in it;
-     * cream reads as paper, bone and lime plaster, which is what the ground is made of. Content clears 11:1 on
-     * a card, so the warmth costs nothing anybody has to read. */
+/* INK IS CREAM, and these three are the site's own values. */
     --role-content: #efe3cd;
     --role-muted: #b7a68d;
     --role-subtle: #9c8b73;
-    /* HEADINGS ARE CUT STONE, NOT WRITTEN PAPER, and one value is the whole difference: a paler, less yellow
-     * ink than the body's cream. Set beside the other inks rather than inside the type rules, because it is one
-     * of the four colours a word in this app can be. */
+/* HEADINGS ARE CUT STONE, NOT WRITTEN PAPER, and one value is the whole difference: a paler, less yellow ink than the body's cream. */
     --sanctum-stone-ink: var(--color-surface-50);
 
-    /* A link is GOLD going ember under the pointer — the site's `.link`, exactly. Which also takes the app's
-     * commonest coloured text off the accent and onto the structural metal, and that alone removes a great deal
-     * of the shouting. */
+/* A link is GOLD going ember under the pointer — the site's `.link`, exactly. */
     --role-link: var(--sanctum-gold-bright);
 
-    /* STATUS, WARMED TOWARD THE PAGE AND THEN TAKEN DOWN AGAIN. The site's three values were the first cut of
-     * these, and on a marketing page they are correct: a page shows ONE of them. A board shows forty — every
-     * card carries a tick or a cross, a +N in green and a −N in red, a chip, a ring — and at the site's chroma
-     * that is a lane of confetti over a ground with almost none. Chroma is roughly HALVED here and lightness
-     * is untouched, which is the whole move: lightness is what carries legibility, chroma is what carries
-     * loudness, and they can be spent separately.
-     *
-     * They stay clearly four colours. A green tick is green, a red count is red — at 0.075 chroma against a
-     * ground running 0.008, a colour is still unmistakably a colour; it simply stops being a light. `info` has
-     * no counterpart on the site: a muted slate, kept at the others' lightness so the four read as one set.
-     *
-     * `danger` is deliberately left the loudest of the four, half a step above the rest. It is the only one
-     * that ever means STOP, and a destructive button that reads as the same volume as a resting count is the
-     * one place calm costs something real. */
+/* STATUS, WARMED TOWARD THE PAGE AND THEN TAKEN DOWN AGAIN. */
     --role-success: oklch(68% 0.062 148);
     --role-warning: oklch(78% 0.075 82);
     --role-danger: oklch(66% 0.095 30);
     --role-info: oklch(70% 0.05 235);
 
-    /* THE ONE NUMERIC STATUS SHADE THE CHROME REACHES FOR, and it is here because the roles above cannot
-     * reach it. `bg-danger-800` is the rail's unacknowledged-CI badge — a solid fill chosen precisely because
-     * it does NOT flip with the scheme, so a white label sits on a stable red in both. Untouched, it was the
-     * one chip on the board still running at full paint-tin chroma while everything around it had come down,
-     * which made a resting count of broken pipelines the brightest object in the window.
-     *
-     * LIGHTNESS UNTOUCHED, AGAIN. 43% is what the white label's ~5.6:1 is measured against, so the contract
-     * survives the change exactly; only the shout goes. Every other numeric status step is left alone because
-     * nothing in the app's chrome uses one — measured, not assumed. */
+/* THE ONE NUMERIC STATUS SHADE THE CHROME REACHES FOR, and it is here because the roles above cannot reach it. */
     --color-danger-800: oklch(43% 0.09 27);
 
-    /* THE FILLS — the accent, painted solid, on the handful of controls whose whole job is to be ON: a ticked
-     * box, a thrown switch, a progress bar. This is where the ember is SPENT. A step deeper than the app's dark
-     * scheme uses (500 rather than 400), because on stone the brighter step is a lamp rather than a signal. */
+/* THE FILLS — the accent, painted solid, on the handful of controls whose whole job is to be ON: a ticked box, a thrown switch, a progress bar. */
     --role-primary-fill: var(--color-primary-500);
     --role-primary-fill-hover: var(--color-primary-400);
-    /* And the status tints are mixed from the SAME warmed values as the roles above, not from the app's own
-     * ramp: a `danger` button tinted with one red and labelled in another is two reds in one control. */
+/* And the status tints are mixed from the SAME warmed values as the roles above, not from the app's own ramp. */
     --role-success-fill: var(--role-success);
     --role-warning-fill: var(--role-warning);
     --role-danger-fill: var(--role-danger);
     --role-fill-content: var(--color-surface-950);
 
-    /* The terminal takes the ground's own value, or it sits in the wall as a rectangle of a different rock.
-     * Must stay a hex literal: xterm.js reads this through getComputedStyle and its parser rejects oklch(). The
-     * role, not `--color-terminal` itself, so the skin overrides the scheme's value rather than the token that
-     * points at it. */
+/* The terminal takes the ground's own value, or it sits in the wall as a rectangle of a different rock. */
     --role-terminal: #100f0d;
 
-    /* ── THE CUT ─────────────────────────────────────────────────────────────────────────────────────────
-     * A SLOT IN THE PLATE, and it is the one recess in the skin: the fill every sunk surface takes — a text
-     * field, the search row, an unticked box, a progress track, a lane's ground. They differ only in how deep
-     * the shadow over them is, which is the thing each call site still says for itself. Named here because
-     * five rules wanted the same darkness and each had written it out, so a stone that got warmer or cooler
-     * moved four of the five. */
+    /* The cut is the shared fill for every sunk surface. */
     --sanctum-cut: color-mix(in oklab, var(--color-surface-950) 66%, black);
 
-    /* ── THE DRESSED FACE ────────────────────────────────────────────────────────────────────────────────
-     * EVERY STONE PLAQUE IN THE SKIN IS THIS EXACT STACK, and the three that wear it — the neutral plate, its
-     * hover, the verdigris `success` — differ only in body colour and stain. Top to bottom: the lit lips of
-     * the pits, the pits, the fine tooth, the slow veining, one wash.
-     *
-     * THE TOOTH TILES AT ITS OWN GAUGE and only the wash is stretched, which is what `--sanctum-face-size`
-     * says: a face is dressed at a fixed scale and then the stone is cut to size, so a plaque and a card show
-     * the same grain however differently sized they are. Stretching the tooth instead gives a small button a
-     * coarse speckle and a wide one a smooth wash — two materials again.
-     *
-     * THE 1px IN `--sanctum-face-position` IS THE RELIEF, NOT A NUDGE TO TASTE: the lip layer is the pit
-     * layer's own noise moved a pixel down, and at zero the face flattens back to a speckle.
-     *
-     * The wash is five and seven per cent, about the range a real face varies across, and it is stated as
-     * alphas over the body rather than as hex stops so the ramp cannot drift from the colour it is shading.
-     * The lit pair is one step up the same ramp, for hover. */
+    /* Stone plaques share one background, bevel, and border stack. */
     --sanctum-face:
         var(--sanctum-pit-lip), var(--sanctum-pit), var(--sanctum-tooth-cut), var(--sanctum-mottle),
         linear-gradient(180deg, rgba(255, 250, 238, 0.05), transparent 46%, rgba(0, 0, 0, 0.07));
@@ -359,42 +102,11 @@
     --sanctum-face-size: auto, auto, auto, auto, 100% 100%;
     --sanctum-face-repeat: repeat, repeat, repeat, repeat, no-repeat;
 
-    /* ── THE EDGE IS A CONTACT, NOT A BEVEL, AND THAT IS THE WHOLE OF THE SECOND ATTEMPT ─────────────────
-     * The first cut of the plaque was reported, correctly, as looking like a button from a 1998 web page, and
-     * every one of the four things making it look that way was a thing added to make it look SOLID: a
-     * forty-level ramp down the body, a near-white hairline along the top, a hard dark one along the foot, an
-     * inner vignette pulling the corners in. That set is the emboss every OS toolkit of that era shipped, and
-     * the eye has thirty years of practice reading it as "widget" rather than as "material".
-     *
-     * What a cut tile actually looks like: a FLAT body, a single hairline where the top edge catches the
-     * light, and — the part that does the work — a hard dark line immediately UNDER the plate, which is the
-     * contact shadow of an object resting on something. Depth is one pixel of darkness in the right place
-     * plus a short soft drop, not four gradients arguing about where the light comes from.
-     *
-     * EVERY PLAQUE HOVER MUST RESTATE THIS, and that is a specificity trap rather than a duplication: a tier's
-     * base rule is `.p-button:where(:not(…))`, `:where()` contributes nothing, so the base lands at one class
-     * while the generic `.p-button:enabled:hover` lands at three. Leave the shadow out of a hover and the
-     * generic's thinner bevel wins the moment a pointer arrives — the plaque visibly sinks into the page,
-     * which is the one thing a button must never do. */
+    /* The plaque edge is a contact border, not an extra bevel. */
     --sanctum-contact: inset 0 1px 0 rgba(255, 250, 238, 0.2), 0 1px 0 rgba(0, 0, 0, 0.5), 0 2px 5px -2px rgba(0, 0, 0, 0.6);
     --sanctum-contact-lit: inset 0 1px 0 rgba(255, 250, 238, 0.24), 0 1px 0 rgba(0, 0, 0, 0.5), 0 2px 6px -2px rgba(0, 0, 0, 0.6);
 
-    /* ── TIER 2 · THE GEOMETRY ────────────────────────────────────────────────────────────────────────────
-     * EVERY EDGE IS EASED, and this is the one place the skin declines to copy the site outright. The site is
-     * square, and square is right there: a marketing page draws perhaps fifteen frames, they are large, and
-     * the hard corner is what says "carved". A workspace draws HUNDREDS, most of them small — a 28px nav row,
-     * a 20px chip, a lane of 90px cards — and at that size a right angle is not a carved edge, it is a corner
-     * that catches the eye every time it passes. Twelve of them in a column is a grid of hard little boxes,
-     * and the fatigue is cumulative in a way ninety seconds on a landing page never reveals.
-     *
-     * So the ramp is the DESIGN SYSTEM'S OWN, eased by roughly a fifth. It is deliberately shallow — the
-     * largest radius here is 12px on a card that may be 400px wide, which is a stone whose arris has been
-     * rubbed off rather than a pill. Nothing in this skin is a pill; `rounded-full` is a literal 9999px in
-     * Tailwind and is untouched, so avatars, status dots and the composer's round controls stay round because
-     * they were always round.
-     *
-     * The keys are all restated rather than partly deleted: Tailwind's `rounded-*` utilities read them, and a
-     * missing key is a silently ignored class rather than an inherited value. */
+    /* TIER 2 · THE GEOMETRY EVERY EDGE IS EASED, and this is the one place the skin declines to copy the site outright. */
     --radius-xs: 0.125rem;
     --radius-sm: 0.1875rem;
     --radius-md: 0.3125rem;
@@ -405,38 +117,8 @@
 }
 
 @layer components {
-    /* ── THE WALL ─────────────────────────────────────────────────────────────────────────────────────────
-     * One soft vignette to close the corners down, the stone's tooth, and the temple on the floor. ONE
-     * gradient, not the three an earlier cut had: a warm bloom at the top left and a second at the bottom made
-     * the wall a lit stage rather than a wall, and made two panels of the same colour look like two colours
-     * depending on where they sat.
-     *
-     * `background-attachment: fixed` anchors every layer to the viewport, which is what makes them read as ONE
-     * wall — the grain does not slide when a column scrolls, and the horizon stands on the floor of the window
-     * rather than on the floor of each box that shows a piece of it.
-     *
-     * ── THE WINDOW'S GROUND, AND ONLY THE WINDOW'S ────────────────────────────────────────────────────────
-     * THE DECORATED STACK IS THE BODY'S AND THE ROUTE ELEMENT'S. Everything else painted `bg-canvas` gets the
-     * grain alone, and that split exists because the full stack was on `.bg-canvas` for three cuts and was
-     * quietly wrong the whole time. `bg-canvas` is not only the window's floor: it is also every RECESS INSIDE
-     * a panel — a code pane, a filter field, and every node box in the workflow graph. Each of those repainted
-     * the vignette and the temple, and with the layers anchored to the VIEWPORT rather than to the element, a
-     * 90px node sitting low on the screen showed whatever slice of a distant temple happened to fall behind it.
-     * A silhouette of a building through a graph node is not a subtle bug, but it is an invisible one until
-     * somebody opens the one screen made of small canvas boxes.
-     *
-     * The rule that comes out of it is worth more than the fix: A DECORATION SIZED IN VIEWPORT TERMS MAY ONLY
-     * BE PAINTED ON A VIEWPORT-SIZED SURFACE. The grain is exempt because it has no size — it tiles at 240px
-     * and a slice of it is the same material as the whole.
-     *
-     * The cost is that an opaque `bg-canvas` pane covering the route element occludes the temple, which is
-     * correct: a code editor is not the floor of the window, and this skin's whole horizon design is that the
-     * temple is simply hidden by whatever the app puts in front of it. */
-    /* `:not(.entry)` is the sign-in and setup screens opting out, and it has to be written here because they
-       cannot win this rule any other way: it is drawn with an id, so no amount of class specificity in
-       `styles/entry.css` reaches it. Those two pages carry the marketing site's OWN plate — the same
-       photograph, at its own scale, composed against — and this skin's horizon under it is a second temple
-       standing behind the first. */
+    /* THE WALL One soft vignette to close the corners down, the stone's tooth, and the temple on the floor. */
+/* `:not(.entry)` is the sign-in and setup screens opting out, and it has to be written here because they cannot win this rule any other way. */
     [data-skin="sanctum"] body,
     [data-skin="sanctum"] #app > :first-child:not(.entry) {
         background-image:
@@ -471,31 +153,13 @@
         background-attachment: fixed;
     }
 
-    /* ── THE PLATES ───────────────────────────────────────────────────────────────────────────────────────
-     * Every surface a reader takes in as a single object: the design system's card, the grouped-list slab every
-     * settings and detail screen is built from, and the dialog.
-     *
-     * A DRESSED FILL, ONE GOLD RULE, AND A LEDGE OF LIGHT. The fill is the card token with the half-strength
-     * tooth over it — no wash, no gradient, nothing that puts one end of a paragraph on a different ground
-     * from the other, but not a paint-bucket rectangle either (see `--sanctum-tooth`). Above the rule sits a
-     * hairline of caught light and below the plate a soft shadow: between them the plate reads as a slab
-     * standing off the wall, which is the whole job, and it is two declarations rather than the four the
-     * previous cut spent on a chamfer nobody could see.
-     *
-     * `.divide-y` IS PART OF THE SLAB'S IDENTITY, not decoration on the selector. `section > .bg-card` alone
-     * looked precise and was not: the workspace's file-tab strip is also a card-painted direct child of a
-     * <section>, and it wore a full carved frame across a 40px bar of tabs. What actually distinguishes a
-     * grouped list is that its children are hairline-divided rows, which is what `divide-y` says. */
+    /* Plates provide the shared surface for cards and grouped lists. */
     [data-skin="sanctum"] .ui-card,
     [data-skin="sanctum"] section > .bg-card.divide-y {
         background-color: var(--color-card);
         background-image: var(--sanctum-tooth);
         border-color: var(--sanctum-rule);
-        /* THE LEDGE IS THREE LINES AND ALL THREE ARE LOAD-BEARING. A lit hairline inside the top edge and a
-         * dark one inside the foot is a bevel at this size; the drop under the plate is what says it is
-         * standing on something rather than cut into it. The shadow used to be one wide, very soft blur, and a
-         * wide soft blur on a near-black wall is invisible — it is the TIGHT half, offset two pixels and dark,
-         * that a person actually reads as contact. */
+/* THE LEDGE IS THREE LINES AND ALL THREE ARE LOAD-BEARING. */
         box-shadow:
             inset 0 1px 0 rgba(240, 214, 168, 0.07),
             inset 0 -1px 0 rgba(0, 0, 0, 0.3),
@@ -503,14 +167,7 @@
             0 12px 28px -12px rgba(0, 0, 0, 0.6);
     }
 
-    /* A dashed card is a PLACE for something rather than a thing: no ledge, no shadow, and the dashes carry the
-     * rule so an empty niche never draws harder than a full plate.
-     *
-     * AND IT IS WHERE THE LOTUS GOES. `<Card dashed>` is the app's "nothing here yet" surface — always a full
-     * card, never one of the small add-tiles — so it is the one place with room for the brand's own mark at a
-     * size where its petals still read. Set in the bottom corner rather than centred: a watermark behind the
-     * invitation is a stamp, and a mark in the corner is a signature. At this alpha it is felt before it is
-     * seen, which is the whole point of putting it on the empty screen rather than on a busy one. */
+/* A dashed card is a PLACE for something rather than a thing: no ledge, no shadow. */
     [data-skin="sanctum"] .ui-card-dashed {
         box-shadow: none;
         border-color: var(--sanctum-rule-strong);
@@ -524,20 +181,7 @@
             auto;
     }
 
-    /* EVERY OTHER CARD-PAINTED SURFACE IN THE APP, and the one that matters most is the fleet board's: an
-     * agent card is `bg-card` + a border, not `.ui-card`, so without this line the busiest screen in the
-     * product was the one screen made of flat rectangles. The tooth is the same one the plates wear.
-     *
-     * It reaches the 20px chips and insets too, which is fine and was not always: an earlier cut drew a second
-     * hairline INSIDE every card-painted thing, and at chip size that read as a smudge. A speckle has no such
-     * failure mode — it has no edge to be in the wrong place.
-     *
-     * AND IT GETS THE LEDGE, at half the plates' weight. A board card is the surface the app draws most of and
-     * it was the surface with the least evidence of being a surface: same tooth as the wall, no bevel, no
-     * contact shadow, only a value step and a hairline. A lit top edge and a short drop are two declarations
-     * and they are the difference between an object and a hole. Small chips get it too and are the better for
-     * it — at 20px the pair reads as inlay, which is what a chip is. Anything wanting a shadow of its own
-     * writes a Tailwind utility, and utilities outrank this layer. */
+/* EVERY OTHER CARD-PAINTED SURFACE IN THE APP, and the one that matters most is the fleet board's: an agent card is `bg-card` + a border, not `.ui-card`. */
     [data-skin="sanctum"] .bg-card {
         background-image: var(--sanctum-tooth);
         box-shadow:
@@ -545,47 +189,24 @@
             0 1px 3px -1px rgba(0, 0, 0, 0.5);
     }
 
-    /* THE PINNED PROMPT BAND — the scroller has no fill of its own; it shows the panel's `bg-card` through it,
-     * and `.chat-prompt-pinned` must paint the same plate while sticky so messages pass under an continuous
-     * surface rather than a flat `--color-card` rectangle. Texture only: the band is part of the wall, not a
-     * card sitting on it, so it takes the tooth and not the ledge the rule above gives raised objects. */
+/* THE PINNED PROMPT BAND — the scroller has no fill of its own; it shows the panel's `bg-card` through it. */
     [data-skin="sanctum"] .chat-prompt-pinned {
         background-image: var(--sanctum-tooth);
     }
 
-    /* THE SESSION CARD — the fleet board's cards, the workflow rows and every chat-rail row, which are one
-     * component (.session-card in the app's stylesheet) and so are one rule here. It cannot take the line
-     * above: that card paints its own fill from a variable rather than through `bg-card`, and it owns its
-     * box-shadow outright — five slots, of which the SKIN is handed exactly two. Writing the shadow flat here
-     * would wipe the attention bar and the selection ring with it. */
+/* THE SESSION CARD — the fleet board's cards, the workflow rows and every chat-rail row. */
     [data-skin="sanctum"] .session-card {
         background-image: var(--sanctum-tooth);
         --card-ledge: inset 0 1px 0 rgba(240, 214, 168, 0.06);
         --card-drop: 0 1px 3px -1px rgba(0, 0, 0, 0.5);
     }
 
-    /* THE STEP ABOVE A CARD TAKES THE SAME STONE, and it has to, for a reason that only shows up once the tooth
-     * exists: the tooth LIFTS the surface it lies on by several luminance levels, so a plate that has it and a
-     * plate that does not are no longer in the order their tokens put them in. The fleet board's selected card
-     * is painted `bg-overlay` — a step ABOVE `bg-card` — and beside its untouched neighbours it came out
-     * looking flatter and darker than they did, which is the picked card reading as the dimmed one.
-     *
-     * No ledge here. This class is also every resting chip and inset in the app, and those are cut INTO their
-     * plate rather than standing on it; the hover form (`hover:bg-overlay`) is a different generated class and
-     * is not touched at all, so nothing grows a shadow under the pointer. */
+/* THE STEP ABOVE A CARD TAKES THE SAME STONE, and it has to, for a reason that only shows up once the tooth exists. */
     [data-skin="sanctum"] .bg-overlay {
         background-image: var(--sanctum-tooth);
     }
 
-    /* ── THE LANE ─────────────────────────────────────────────────────────────────────────────────────────
-     * A kanban column is a recess the cards sit in, so it goes DARKER than the wall rather than lighter — which
-     * is what lets a card stay the raised object without having to shout. One variable for the slab and its
-     * header, because the header must be opaque to occlude the cards scrolling under it and a header a shade
-     * off its own lane is a seam across the slab.
-     *
-     * ONE EDGE, NOT TWO. The lane used to wear the plates' inner moulding as well as its own rim, and on a
-     * board that is three tall rectangles side by side the doubled line was most of what the screen was made
-     * of. A recess is stated by being darker than the wall; the rule gives the recess a lip; that is the end. */
+    /* Lanes are darker recesses behind their cards. */
     [data-skin="sanctum"] .lane,
     [data-skin="sanctum"] .lane-header {
         --lane-fill: var(--sanctum-cut);
@@ -595,43 +216,17 @@
         box-shadow: inset 0 0 0 1px var(--sanctum-rule);
     }
 
-    /* ── THE SEAM ─────────────────────────────────────────────────────────────────────────────────────────
-     * The bar at the top of a column, which the desktop shell lines up across the whole window — so this is
-     * the app's main structural line, and lighting it is one rule. A carved fillet is a line with a fainter one
-     * under it: a border and one box-shadow, and that is the whole treatment.
-     *
-     * IT DOES NOT FADE AT THE ENDS, and that is deliberate, because the site's band rule does. Columns stand
-     * side by side here, so a fade per column turns one line across the window into a row of dashes. */
+    /* The seam aligns column headers across the desktop shell. */
     [data-skin="sanctum"] .view-header:not(.view-header-wrap) {
         border-bottom-color: var(--sanctum-rule-strong);
         box-shadow: 0 2px 0 -1px var(--sanctum-whisper);
     }
-    /* THE SAME FILLET UNDER THE TITLE BAR. In the desktop app's frameless window the top row wears a darker fill
-     * and a shadow onto the content (styles.css `--title-bar-shadow`); this keeps the fainter gold line under
-     * it, so the seam is still the seam and the shadow is added beneath rather than replacing it. `html` in the
-     * selector because the app's dark-scheme value is declared on the same attribute weight and later. */
+/* THE SAME FILLET UNDER THE TITLE BAR. */
     html[data-skin="sanctum"] {
         --title-bar-shadow: 0 2px 0 -1px var(--sanctum-whisper), 0 4px 14px -4px rgb(0 0 0 / 0.7);
     }
 
-    /* ── OVERLAYS ─────────────────────────────────────────────────────────────────────────────────────────
-     * Opaque, deliberately and without exception. An overlay is the only surface in the app that covers LIVE
-     * TEXT — a model list over a transcript, a dialog over a diff — and there is no amount of translucency that
-     * leaves somebody else's words illegible through the one you are reading. Depth comes from the gold rule
-     * and a deep shadow, both of which a browser always draws.
-     *
-     * AND THEY GO DEEP AND FLAT, WHICH IS A REVERSAL WORTH THE PARAGRAPH. They were faced in the site's woven
-     * cloth and lifted a step ABOVE a card, on the reasoning that a menu hanging off a bar is what the site's
-     * own panel is, and that "in front" means "lighter". Both halves were wrong here. A marketing panel is the
-     * thing you are looking at; an app's context menu — settings, sign out, the list of sandboxes — is a thing
-     * you look THROUGH to a list of names, and a material behind those names is a material competing with
-     * them. And "in front" is not a value, it is a RELATIONSHIP: this skin's plates are lit, standing off the
-     * wall on a bevel and a shadow, so a panel that goes the other way — unlit, below the wall — is
-     * unmistakably not one of them and reads as floating over the lot without needing to be brighter than
-     * anything.
-     *
-     * So: the shadow value, flat, one gold rule, one deep drop. The lift is entirely in the drop shadow now,
-     * which is the only cue here a browser can never fail to draw. */
+    /* OVERLAYS Opaque, deliberately and without exception. */
     [data-skin="sanctum"] .p-dialog,
     [data-skin="sanctum"] .p-popover,
     [data-skin="sanctum"] .p-menu,
@@ -645,22 +240,7 @@
         box-shadow: 0 18px 48px rgba(0, 0, 0, 0.66);
     }
 
-    /* THE DIALOG WORE THE TURNED CORNER AND IT IS GONE, ornament and token both. The idea was that a dialog is
-     * the biggest panel the app draws and is on screen alone, so it is the one surface that can carry the site's
-     * elbow. What that reasoned about was the dialog's BOX. What the ornament actually lands on is the dialog's
-     * CONTENT, and a dialog does not own its content: four corners of a rectangle whose size, padding and
-     * fill belong to whoever opened it.
-     *
-     * The command palette is the proof and it is not an edge case, it is the most-opened dialog in the app. It
-     * asks for no chrome, so its own content runs flush to all four edges: a full-width search field across the
-     * top and a scrolling list under it. The two top elbows landed INSIDE the search field, on top of the
-     * placeholder and against the field's own focus rim, and the bottom pair landed in the list. No inset can
-     * fix that, because there is nothing to inset past — the content starts at the edge.
-     *
-     * An ornament that has to be told which dialogs it may appear on is not a house style, it is a decoration
-     * with a list of exceptions, and this file already spends the site's character where it survives repetition:
-     * the gold rule on every edge, the lozenge on every section label, the lotus in an empty niche. A dialog
-     * keeps the deepest drop in the skin, which is the cue that actually says "in front of everything". */
+/* THE DIALOG WORE THE TURNED CORNER AND IT IS GONE, ornament and token both. */
     [data-skin="sanctum"] .p-dialog {
         box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75);
     }
@@ -669,49 +249,21 @@
         background: rgba(9, 8, 7, 0.76);
     }
 
-    /* A tooltip is an overlay that happens to be small, so it takes the overlays' own value rather than one of
-     * its own: they never appear together, and two floating things at two depths is a depth scale nobody can
-     * read. */
+/* A tooltip is an overlay that happens to be small, so it takes the overlays' own value rather than one of its own: they never appear together. */
     [data-skin="sanctum"] .ui-tooltip-body {
         background-color: var(--sanctum-shadow);
         border: 1px solid var(--sanctum-rule-strong);
     }
 
-    /* ── CONTROLS ─────────────────────────────────────────────────────────────────────────────────────────
-     * A field is a channel cut into the stone: darker than the plate around it, with the light catching the
-     * upper lip of the cut. That inset shadow is the whole trick, and it is 3px tall at the top edge of an
-     * empty box — it describes the cut without ever getting under a line of text. */
-    /* IT ASKS FOR THE FIELD BY ITS CLASS, and it used to ask by element and type: `textarea`, then
-     * `input[type="text"]`, `"search"`, `"email"`, `"password"`, `"number"`. That list is a promise that has to
-     * be renewed every time somebody writes a new `type=`, and it had already lapsed — the app ships `url`,
-     * `time` and `datetime-local` too, so four fields sat on a carved-stone surface as flat dark boxes with no
-     * recess, no gold rim and nothing to say why. `.ui-field-box` is one selector that cannot go out of date,
-     * and it is the reason the field became a class at all (primeng.css).
-     *
-     * `.field-bare` NEEDS NO EXCLUSION ANY MORE, and that is the same change from the other side: a field whose
-     * frame belongs to the box around it now wears a different class rather than the same one with a marker on
-     * it, so there is nothing here for it to match. What the exclusion was protecting is still worth knowing —
-     * cutting a recess into the chat composer's textarea painted a dark rectangle inside the composer, and the
-     * focus rule below drew a THIRD edge: a square-cornered accent band inside the composer's rounded one, which
-     * is the doubled highlight that used to appear around the message box. */
+    /* Controls are recessed channels with a lit upper edge. */
+/* IT ASKS FOR THE FIELD BY ITS CLASS, and it used to ask by element and type: `textarea`, then `input[type="text"]`, `"search"`, `"email"`, `"password"`. */
     [data-skin="sanctum"] .ui-field-box,
     [data-skin="sanctum"] .p-inputtext {
         background-color: var(--sanctum-cut);
         box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55);
     }
 
-    /* THE RIM IS A SEPARATE RULE FROM THE MATERIAL, and the two exclusions are why. A skin owns what a field is
-     * MADE of — every field here is a channel cut into stone, including an invalid one and an inline one. It
-     * does not own what a field is SAYING, and a rim is the app saying something.
-     *
-     * Both halves of that were wrong when this was one rule, and measured rather than guessed: an invalid field
-     * came back `rgba(201,160,92,0.26)`, the ordinary gold rule, because `[data-skin] .ui-field-box` outranks
-     * `.ui-field-error-box` — so under this skin a field could fail validation and look exactly like one that
-     * had not. And `ui-field-inline`, whose entire definition is that it has NO rim until you focus it, was
-     * handed the same edge as the framed box beside it, which collapses two variants into one.
-     *
-     * `.field-bare` needed the same exemption and gets it for free now: it wears a different class, so it never
-     * matches either rule. */
+/* THE RIM IS A SEPARATE RULE FROM THE MATERIAL, and the two exclusions are why. */
     [data-skin="sanctum"] .ui-field-box:not(.ui-field-inline, .ui-field-error-box),
     [data-skin="sanctum"] .p-inputtext {
         border-color: var(--sanctum-rule-strong);
@@ -721,36 +273,13 @@
         border-color: var(--sanctum-rule-strong);
     }
 
-    /* FOCUS IS THE METAL CATCHING THE LIGHT — a bright gold rim, and one soft ring in the accent, which is the
-     * single place the two metals are asked to work together. Stated as box-shadow rather than as an outline,
-     * because a focus ring that shares a property with a decoration is a focus ring that will lose an argument.
-     *
-     * BOTH LAYERS ARE `inset` NOW. The halo used to be `0 0 0 3px`, drawn OUTSIDE the border box, and that is
-     * the bug the flat scheme's contract was written against (tokens.css): an outward ring lands on top of
-     * whatever sits a few pixels away in a tight row, and it is cut off by any ancestor with `overflow: hidden`
-     * or `auto` — every scroll pane, rounded card and dialog body in the app. Under this skin it was the more
-     * visible of the two failures, because a gold band clipped flat on one side reads as damage to the stone.
-     * The same three pixels drawn inward say exactly the same thing and cannot leave the element.
-     *
-     * The buttons and the tabbables keep an OUTWARD ring on purpose: a button is a plate with its own margin
-     * around it, and the halo is what lifts it off the wall. The rule that fields must not paint outside their
-     * box is about fields, and `check:inputs` scopes itself the same way. */
-    /* THE RIM IS THE TOKEN, NOT THE COLOUR, which is the whole of how the invalid state survives this skin.
-     * Written as a literal gold, the rule matched an errored field too and painted its focus rim gold — and
-     * exempting the error with a `:not()` was worse, because then NOTHING in the skin matched, the recess below
-     * won on source order, and a focused invalid field came back with no ring at all. Measured, both times.
-     *
-     * Pointing the token at the skin's root instead makes the cascade do the work: gold is inherited by every
-     * field, and `.ui-field-error-box` re-points the same variable ON THE ELEMENT, which beats an inherited
-     * value without any specificity contest. One rule, both states, and the next skin gets the same deal for
-     * one line. */
+/* Focus uses a bright gold rim and one accent ring. */
+/* THE RIM IS THE TOKEN, NOT THE COLOUR, which is the whole of how the invalid state survives this skin. */
     [data-skin="sanctum"] {
         --ui-field-focus-line: var(--sanctum-gold);
     }
 
-    /* The recess is REPEATED here rather than left to the rule above, because `box-shadow` is one property: a
-     * focus ring stated as a shadow replaces the channel instead of joining it, and the field went flat for
-     * exactly as long as it was the one being typed into. */
+/* The recess is REPEATED here rather than left to the rule above, because `box-shadow` is one property. */
     [data-skin="sanctum"] .ui-field-box:focus,
     [data-skin="sanctum"] .p-inputtext:focus,
     [data-skin="sanctum"] .p-inputtext:focus-visible {
@@ -762,10 +291,7 @@
             inset 0 0 0 3px var(--ui-field-focus-ring);
     }
 
-    /* `:not(.ui-field-box)` because <Picker>'s bordered trigger is a <button> that IS a field — it sits in form
-     * rows next to text inputs and wears the field class — so it takes the field's inward ring, not the
-     * button's outward one. Without the exclusion it matched both and the button rule, being later, won.
-     * Focus outline uses negative offset so it is drawn inward and never clipped by scroll containers. */
+/* Picker triggers are fields even when rendered as buttons. */
     [data-skin="sanctum"] button:not(.ui-field-box):focus-visible,
     [data-skin="sanctum"] a:focus-visible,
     [data-skin="sanctum"] [tabindex]:focus-visible {
@@ -774,55 +300,18 @@
         box-shadow: inset 0 0 0 1px rgba(229, 196, 137, 0.3);
     }
 
-    /* ── THE SEARCH BAND, WHICH IS A CHANNEL THE WIDTH OF THE PANEL ───────────────────────────────────────
-     * Every filter row in the app: the command palette's top band, and every SearchBar (the model picker's
-     * first row, the panel filters, the standalone bordered one). Their inputs are `field-bare`, so the recess
-     * and the focus rim above never touch them; what the reader sees as "the search" is this row, and so this
-     * row is where the skin says it.
-     *
-     * SAME IDEA AS EVERY OTHER FIELD HERE, AT THE PANEL'S SCALE: the fill cut a step below the panel around
-     * it, and the light caught on the upper lip of the cut. The alternative was to leave the band flat and let
-     * the divider do all the work, which reads as a panel that happens to start with some text — nothing on it
-     * says "type". A channel does, and it says it in the material the rest of the skin is already made of.
-     *
-     * FOCUS IS THE LOWER LIP GOING GOLD, one line, and it is drawn as a shadow rather than as a border colour
-     * for a cascade reason worth knowing: the divider is a Tailwind `border-line` utility, and a utility beats
-     * anything this layer can say about `border-bottom-color`. An inset shadow is a property no utility here
-     * sets, so it lands — and it lands on the rule the reader is already looking at, instead of adding a
-     * fourth edge to a panel that just lost its second and third. */
+    /* Search bands span the panel as one recessed channel. */
     [data-skin="sanctum"] .ui-search-row {
         background-color: var(--sanctum-cut);
         box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
     }
-    /* FOCUS IS THE CHANNEL WARMING, not a line under it. A lit lower lip was still an EDGE, and an edge inside a
-     * panel that already draws two of them (the dialog's rim, the divider this lip lay on) reads as the doubled
-     * highlight it was meant to replace. Warming the fill instead keeps the count of lines in the panel exactly
-     * where it was and says the same thing: the light has moved to the channel the reader is typing into. */
+/* FOCUS IS THE CHANNEL WARMING, not a line under it. */
     [data-skin="sanctum"] .ui-search-row:focus-within {
         background-color: color-mix(in oklab, var(--sanctum-gold) 9%, var(--sanctum-cut));
         box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
     }
 
-    /* A BUTTON IS A CUT PLATE, AND IT HAS TO LOOK CUT. The app's own tinted fill, a rule mixed from whatever
-     * tone it is tinted with, the plates' stone face, and a bevel: light along the top lip, shade along the
-     * foot, a short drop underneath.
-     *
-     * The face and the bevel are the correction. Every button in the skin used to be a flat fill inside a thin
-     * warm rule, which is the same description as a card, a field, a chip and a panel edge — so a screenful of
-     * controls had nothing in it that looked like a thing you press, and the whole app read as one weight. No
-     * fill GRADIENT still: the tint is the meaning, and a sheen over it makes the label's ground uneven. A
-     * uniform tooth and a one-pixel bevel do not.
-     *
-     * THE BORDERLESS TIERS ARE EXCLUDED, and leaving them in is what put a fourth border weight on every screen.
-     * `text` and `link` are defined by the app as "no chrome at all" — a Cancel, a Dismiss, an inline escape
-     * hatch, and the whole of <SandboxVerbs>, which is the Start/Stop/… cluster on every machine row. This rule
-     * named `.p-button` with no exclusion, so all three properties landed on them: PrimeVue's transparent border
-     * came back as a gold hairline, and the bevel and the drop gave a control that is meant to be a WORD the
-     * silhouette of a plate. The reported symptom was the app having several border intensities that nobody had
-     * chosen; this was one of them, and it was the one the design system believed it had already ruled out.
-     *
-     * Spelled with `:where()` so it costs no specificity: the tier rules below are `.p-button:where(:not(…))` at
-     * one class, and a base rule that outranked them would take the plaque's own bevel with it. */
+/* A BUTTON IS A CUT PLATE, AND IT HAS TO LOOK CUT. */
     [data-skin="sanctum"] .p-button {
         transition:
             box-shadow 0.18s ease-out,
@@ -839,37 +328,7 @@
             0 1px 2px rgba(0, 0, 0, 0.4);
     }
 
-    /* ── THE COMMITTING BUTTON IS A CARVED STONE PLAQUE ───────────────────────────────────────────────────
-     * The app's default tier — Save, Change, New agent, New workflow, Open — the button a screen exists to
-     * collect a press on. Measured across the settings pages, most screens carry one or two: the quiet work is
-     * `severity="secondary"` and the dangerous work is `danger`, so this tier really is the primary and not a
-     * crowd.
-     *
-     * IT WAS AN ORANGE CHIP, THEN A GOLD FRAME, AND THE FRAME WAS THE WORSE OF THE TWO. The orange came from
-     * the app tinting this tier with the picked accent, which on a warm ground made every commit button a warm
-     * chip on a warm wall — the "everything is the brightest thing" failure. Replacing the tint with a gold
-     * hairline round a dark box fixed the shouting and introduced a quieter fault that took longer to notice:
-     * a dark box inside a warm hairline is the exact description of a card, a field, an input, a chip and a
-     * secondary button in this skin. The primary had no property that was not shared with the furniture, so a
-     * screen had nothing on it that looked pressable, and the only honest report of it was the user's — that
-     * the buttons had not meaningfully changed.
-     *
-     * SO IT INVERTS, like the plaque below it and for the same reason: the eye finds differences of LIGHTNESS
-     * first, and on a near-black window the cheapest unmistakable object is a pale one. A dressed stone plate,
-     * the same rock as the plates it sits on, with the label CUT INTO it — dark ink and one pale hairline over
-     * each letter, which is what an incision looks like when the light comes from above. ~6:1 on the stone.
-     *
-     * STONE, NOT METAL, and that is the whole difference from `ui-button-loud`. Both are plaques; one is rock
-     * and one is cast bronze, which is a hierarchy a person reads without being taught it — and it costs no
-     * colour at all, because stone here is the ground's own hue at the ground's own near-zero chroma. The
-     * accent stays out of it entirely, so a screenful of these does not change temperature with the picker.
-     *
-     * THE SEVERITIES ARE EXCLUDED BY NAME, and they have to be named here rather than left to the app's own
-     * rules. `danger`, `warn` and `success` are TONES that say what a press does; the app sets each one's tone
-     * in a separate one-class rule in `@layer primeng`, and this file's layer beats that layer outright — so a
-     * treatment set here without the exclusions repaints the destructive button as a stone plaque, which is a
-     * destructive button nobody sees. `ui-button-loud` is excluded for the same reason: it is bronze, a few
-     * rules down. */
+    /* Committing actions use the carved-stone plaque treatment. */
     [data-skin="sanctum"]
         .p-button:where(
             :not(
@@ -885,35 +344,11 @@
                     .ui-button-loud
                 )
         ) {
-        /* ── THE LABEL IS ONE LIT LIP, AND THE RELIEF THAT TRIED TO BE MORE IS REVERTED ───────────────────
-         * A cut letter lit from above shows a shaded upper wall and a lit lower one, so the full description
-         * of an incision is a dark line above the glyph and a bright one under it. That full description was
-         * written here — three shadows, the upper wall hard, its spill soft, the lower lip bright — and at the
-         * size this label is actually drawn, 13 to 14 pixels, it read as BLUR. Reported as blur, and correctly.
-         *
-         * WHY THE FULL RECIPE CANNOT WORK AT THIS SIZE. A stem of Inter at 13px is under two pixels wide, and
-         * every part of that relief is a whole pixel: the shade above is half a stroke thick, the soft spill is
-         * two, so together they are a grey cloud around a letter rather than a wall behind it. It looked right
-         * at 5× and wrong at 1×, and 1× is the only size anybody uses. A groove needs several pixels across its
-         * mouth before it can show two walls, which display type has and a button label never will.
-         *
-         * SO IT IS THE LIT LIP ALONE, at the alpha it had before: ONE pale hairline under each letter, which is
-         * as much of a cut as a pixel and a half can carry, and nothing above the glyph to soften its top edge.
-         * The label stays as crisp as unshadowed text, because the only thing added to it sits entirely OUTSIDE
-         * the strokes.
-         *
-         * WHAT CARRIES THE CARVING INSTEAD IS THE FACE, and that is the trade worth naming: the plaque now has
-         * a real dressed surface under the words (the pitting and its lit lips, a few rules up), and a dark
-         * letter on visibly cut stone reads as cut without the letter itself having to argue for it. Material
-         * first, then type — spending the relief budget on the ground rather than on 13px glyphs. */
+        /* Button labels use one lit upper edge without extra relief. */
         color: #1d160e;
         font-weight: var(--font-weight-semibold);
         text-shadow: 0 1px 0 rgba(255, 250, 238, 0.26);
-        /* THE FACE COMES DOWN EIGHT LIGHTNESS POINTS, from a bone that read as ivory or as warm plastic to a
-         * limestone the wall could plausibly have been quarried from. What is lost is nothing: a pale plaque
-         * was never carrying the contrast — the ink is, and it has six to one either way — and what is gained
-         * is that a mid grey takes a texture at all. Highlight and shade both have somewhere to go on it,
-         * which is why the pitting below can exist and could not before. */
+/* The sanctum face uses a darker limestone tone. */
         background-color: #b3a794;
         background-image: var(--sanctum-face);
         background-position: var(--sanctum-face-position);
@@ -923,9 +358,7 @@
         box-shadow: var(--sanctum-contact);
     }
 
-    /* Same exclusion as the base plate, and for the same reason one rule up: a tier with no chrome at rest must
-       not grow a rule and a bevel the moment a pointer crosses it. Its hover is the app's own — a wash of
-       `content` behind the word — and that is all it should ever be. */
+/* Same exclusion as the base plate, and for the same reason one rule up. */
     [data-skin="sanctum"] .p-button:where(:not(.p-button-text, .p-button-link)):enabled:hover {
         border-color: color-mix(in oklab, var(--ui-button-tone, var(--sanctum-gold)) 42%, transparent);
         box-shadow:
@@ -934,24 +367,7 @@
             0 1px 2px rgba(0, 0, 0, 0.4);
     }
 
-    /* ── THE QUIET AND SEVERITY TIERS ARE OPAQUE PLATES, NOT WASHES ───────────────────────────────────────
-     * The app tints these by mixing the tone into TRANSPARENT — `color-mix(… 10%, transparent)` — which is a
-     * sound choice on a flat scheme and a bad one here, because on this skin whatever is behind the button is
-     * not flat. A `success` button on a card shows the card's tooth through itself; the same button on canvas
-     * shows the wall's grain and the vignette; drag the card and the tint moves with the ground under it. The
-     * report was that "Land now" looked transparent and weird, and it was: it WAS transparent, and the weird
-     * was the wall's speckle coming through a green film.
-     *
-     * Mixed into `--color-card` instead of into nothing. Same formula, same tone variable, same one-rule-per-
-     * state shape as the app's own — the only change is what the tint is mixed WITH, so a tier stays one
-     * colour wherever it is put and reads as a plate cut from stone and stained, rather than as a gel over
-     * whatever happened to be underneath.
-     *
-     * `secondary` has no tone of its own (the app spells its neutral inline), so it is given one here and then
-     * takes the same formula as the other three: one recipe for every tier that is not a plaque.
-     *
-     * THE HOVER RULE IS NOT OPTIONAL. The app's hover sits at three classes and this base at two — `:where()`
-     * is free — so without a hover of its own every one of these goes translucent again under the pointer. */
+    /* Quiet and severity tiers use opaque plates instead of washes. */
     [data-skin="sanctum"] .p-button-secondary:where(:not(.p-button-text, .p-button-link)) {
         --ui-button-tone: var(--color-content);
     }
@@ -971,17 +387,7 @@
         border-color: color-mix(in oklab, var(--ui-button-tone) 44%, transparent);
     }
 
-    /* ── THE NEUTRAL TIER'S RIM IS DRAWN AT ITS OWN NUMBER, AND HAS TO BE ────────────────────────────────
-     * The four tiers above share one formula and one percentage, which is right for a formula and wrong for a
-     * PERCENTAGE, because the tones are not equally bright. `danger`, `warn` and `success` mix a mid-lightness
-     * hue; `secondary`'s tone is `--color-content`, the cream this whole skin writes in and the lightest colour
-     * in the palette. The same 30% therefore draws the loudest edge on the screen around the QUIETEST tier —
-     * reported as the neutral buttons "standing off too much", and correctly: on a card full of dark plates the
-     * brightest line in view belonged to the button that is supposed to recede.
-     *
-     * 16% rest / 28% hover puts its rim at about the weight the status tiers' already have, so a row of mixed
-     * buttons reads as one set of objects rather than as one outlined button beside three filled ones. The
-     * fill is untouched: it is what says "this is a control", and it was never the thing that shouted. */
+    /* The neutral tier keeps its own rim weight. */
     [data-skin="sanctum"] .p-button-secondary:where(:not(.p-button-text, .p-button-outlined, .p-button-link)) {
         border-color: color-mix(in oklab, var(--ui-button-tone) 16%, transparent);
     }
@@ -989,14 +395,7 @@
         border-color: color-mix(in oklab, var(--ui-button-tone) 28%, transparent);
     }
 
-    /* Hover raises the light on the stone and leaves the cutting alone: a carved letter does not go pale when
-     * the sun comes out. One step up the same ramp, so it interpolates cleanly.
-     *
-     * IT HAS TO RESTATE THE BEVEL, and that is a specificity trap rather than a duplication. The tier's base
-     * rule is `.p-button:where(:not(…))` — and `:where()` contributes NOTHING to specificity, so the base
-     * lands at one class while the generic `.p-button:enabled:hover` three rules up lands at three. Leave the
-     * shadow out here and the generic hover's thinner bevel wins the moment a pointer arrives, so the plaque
-     * visibly sinks into the page on hover, which is the one thing a button must never do. */
+/* Hover raises the light on the stone and leaves the cutting alone: a carved letter does not go pale when the sun comes out. */
     [data-skin="sanctum"]
         .p-button:where(
             :not(
@@ -1019,34 +418,7 @@
         box-shadow: var(--sanctum-contact-lit);
     }
 
-    /* ── THE COMMITTING SEVERITY IS A VERDIGRIS PLAQUE, NOT A GREEN FILM ──────────────────────────────────
-     * `success` in this app is not a status colour, it is one action: WRITE THIS DOWN. "Land now" on a ready
-     * card, "Land" on the agent's toolbar, "Commit" over the review list. Three call sites, all of them the
-     * one press the surface exists to collect, and every one of them was drawn as the tone mixed twelve per
-     * cent into the card — a dark green wash on a dark card, a hairline round it, and the same lightness as
-     * the furniture it sits among. The report was that they read as MUTED, which on a board where disabled
-     * means "faded and slightly tinted" is not a misreading: it was the correct reading of what was drawn.
-     *
-     * TWELVE PER CENT OF A TONE CANNOT CARRY A PRIMARY, and no amount of tuning that number fixes it — push
-     * the green up and the button becomes a saturated chip on a warm wall (the failure the neutral plaque
-     * section already talks itself out of), leave it down and it stays furniture. The variable the skin has
-     * and this tier was not spending is LIGHTNESS, which is the one difference the eye resolves before it
-     * resolves hue at all.
-     *
-     * SO IT INVERTS, exactly like the committing tier above it and for the identical reason: a pale dressed
-     * plate with the label cut into it, on a near-black window. Same rock, same pitting, same lit lips, same
-     * one-pixel contact shadow — the material vocabulary is not re-invented for one severity, it is re-cut in
-     * a different stain. The stone is weathered green here rather than bone, which is what copper leaves on
-     * limestone and is the only place in this skin green appears as a MATERIAL rather than as a signal.
-     *
-     * THREE PLAQUES, ONE LADDER, READ WITHOUT BEING TAUGHT. Bare stone is the app's default commit; stained
-     * stone is the irreversible one that writes to a branch; cast bronze is the one that spends money. Same
-     * object, three surfaces, and none of them can be confused with a card, a field, a chip or a disabled
-     * control, because nothing else on the window is pale.
-     *
-     * THE INK IS A DEEP CONIFER, NOT BLACK, so the stain reads as through-coloured stone rather than as a
-     * grey plate with a green light on it, and it holds ~7:1 on the face. The icon is the same ink: a check
-     * glyph in the label's colour is part of the inscription, not a badge stuck to it. */
+    /* Committing severity uses a verdigris plaque, not a green wash. */
     [data-skin="sanctum"] .p-button.p-button-success:where(:not(.p-button-text, .p-button-outlined, .p-button-link)) {
         color: #142118;
         font-weight: var(--font-weight-semibold);
@@ -1060,8 +432,7 @@
         box-shadow: var(--sanctum-contact);
     }
 
-    /* Hover raises the light on the stone and leaves the cutting alone — one step up the same ramp, and it
-     * restates the bevel for the specificity reason spelled out over the neutral plaque's hover. */
+/* Hover raises the light on the stone and leaves the cutting alone — one step up the same ramp. */
     [data-skin="sanctum"]
         .p-button.p-button-success:where(:not(.p-button-text, .p-button-outlined, .p-button-link)):enabled:hover {
         color: #142118;
@@ -1070,65 +441,13 @@
         box-shadow: var(--sanctum-contact-lit);
     }
 
-    /* ── AND WHEN IT CANNOT BE PRESSED IT IS AN UNCARVED BLANK ───────────────────────────────────────────
-     * This skin already says what a button is made of, in four layers, and each layer means something:
-     *
-     *     the TOOTH is the material   — the stone's own grain, on every plate in the skin
-     *     the MOTTLE is the vein      — slow variation across a face, because rock is not one colour
-     *     the PITS + their LIT LIPS   — the marks a chisel leaves: this face has been DRESSED
-     *     the incision (text-shadow)  — the label, cut in, lit from above
-     *
-     * A disabled control is therefore not a colour problem, it is a stage-of-work problem. It is a panel of the
-     * same rock, set in the wall, that nobody has dressed and nobody has inscribed: it keeps the grain and the
-     * vein, and it has no pitting, no lit lips and no incision. That reads as unavailable the way a blank
-     * pediment does — not because it is greyer, but because the work has not been done to it.
-     *
-     * IT WENT ROUND THREE TIMES, AND EVERY FAULT IS WORTH KEEPING WRITTEN DOWN.
-     *
-     *   1. It was #38342e, the WALL's own value, against a live plaque of pale limestone — so the one control on
-     *      a form that somebody was waiting to be able to press was a dark rectangle where a pale object had
-     *      been, and read as GONE rather than as unavailable.
-     *   2. The fix for that kept each tier's own material and took 28% of its light off: stone stayed stone,
-     *      bronze stayed bronze. Worse. A pale plate is this skin's single loudest "press me" signal — nothing
-     *      else on the window is pale — so a slightly dimmer pale plate is a button that LOOKS pressable and is
-     *      not, which is the more expensive of the two mistakes.
-     *   3. So the material went, and with it went too much: `background-image: none` left the one surface in the
-     *      whole skin with no grain at all, and `inset 0 1px 2px rgba(0,0,0,0.5)` put a half-black smear across
-     *      its top edge. A smooth rectangle with a hard black line on it is not stone in any light; it is the
-     *      1998 pressed-input emboss this file already talks itself out of, thirty rules up, for the plaque.
-     *      Reported, correctly, as ugly and as not belonging to the skin.
-     *
-     * SO THE RELIEF IS A SINGLE WARM HAIRLINE, and warm is the load-bearing word. Black on a warm ash ground
-     * does not read as shade, it reads as a hard line drawn ON the stone. The shade is mixed from the wall's own
-     * darkness at a quarter alpha and given no blur, which is what a shallow set actually looks like: one line
-     * of the top edge fallen out of the light, and a whisper on the lower lip where it comes back. Two pixels of
-     * relief in total, and no drop at all, because the panel is IN the wall.
-     *
-     * AND ITS EDGE IS A SEAM, NOT A RIM, which is the correction to "a disabled control has no edge". That was
-     * the right idea stated one notch too bluntly: with no edge at all the blank had nothing to end against, and
-     * on canvas — a shade darker than the card — it stopped being a panel and became a stain on the wall. What
-     * every LIVE tier here draws is a rim that CATCHES LIGHT: cream, gold, red, amber, green, each its own tone
-     * at some alpha, an edge proud of the surface. The blank's edge is the opposite thing — the shadow in the
-     * gap around a panel that has been set INTO the surface — so it still wears a shape nothing live can wear,
-     * and it is an object again. The flat scheme has no material and no gap, so there it stays a plain absence
-     * of rim; a skin answering this question in its own substance is what a skin is for.
-     *
-     * The ink is #968c7d — flat, no lit lip, 4.4:1 on the blank against the live neutral label's 10.5:1. Under
-     * half the contrast, which is the signal, and still a word rather than a smudge.
-     *
-     * IT RESTATES THE PLATE, AND THAT IS A SPECIFICITY FACT RATHER THAN A DUPLICATION. The app's own disabled
-     * rule (primeng.css) paints from these same three variables at one class plus `:disabled`, and this skin's
-     * LIVE tier rules are later in the same layer — `.p-button.p-button-success` is two classes and wins
-     * outright. Measured, not assumed: the success plaque stayed weathered-green while disabled, which is a
-     * button that cannot be pressed and does not say so. */
+    /* Disabled buttons remain blank rather than looking pressed. */
     [data-skin="sanctum"] .p-button:where(:not(.p-button-text, .p-button-link)):disabled:not(.p-button-loading) {
         --ui-button-off-fill: #2e2a25;
         --ui-button-off-line: rgba(18, 13, 9, 0.6);
         --ui-button-off-content: #968c7d;
         background-color: var(--ui-button-off-fill);
-        /* Vein over grain, and nothing above them. The pit layers and their lit lips are the dressing, and a
-           blank has not been dressed; stating the three list properties keeps this face independent of the
-           five-layer plaque rule it overrides, rather than inheriting a position list built for other stones. */
+/* Vein over grain, and nothing above them. */
         background-image: var(--sanctum-mottle), var(--sanctum-tooth);
         background-position: 0 0;
         background-size: auto;
@@ -1141,68 +460,12 @@
             inset 0 -1px 0 rgba(255, 250, 238, 0.045);
     }
 
-    /* The quiet tiers have no plate to sink; the app's base rule already keeps them transparent, so this is the
-       ink alone — one step brighter than the old #8a7c68, which sat at 3.7:1 on a card. */
+/* Quiet tiers stay transparent and use brighter ink. */
     [data-skin="sanctum"] .p-button:where(.p-button-text, .p-button-link):disabled:not(.p-button-loading) {
         --ui-button-off-content: #9c9182;
     }
 
-    /* ── THE LOUD BUTTON, AS THE SITE'S OWN GOLD PLATE ────────────────────────────────────────────────────
-     * The app's `ui-button-loud` — a handful of call sites in the whole product, every one of them the place a
-     * screen opens the paid relationship: join, fix the card that stopped working, manage the subscription,
-     * approve a run that costs credits.
-     *
-     * IT WAS A PANEL OF DARK TIMBER AND IT FAILED THE ONLY TEST THAT MATTERS FOR A PRIMARY. As an object the
-     * board was the nicest thing in the file; as the one control a reader is meant to find, it was a dark
-     * plate on a dark window with a thin warm rule round it — and so was every card, every field, every
-     * secondary button and every panel edge on the screen. The eye finds differences of LIGHTNESS before it
-     * finds anything else, and there were none. Nothing said "this one". (The site learned this first and in
-     * the same words: see the note over `.btn-primary` in global.css.)
-     *
-     * SO IT INVERTS. A plaque with the words cut INTO it, dark on metal, where everything else here is cream
-     * on stone; and it cannot be mistaken for a frame, because no frame in this skin is filled.
-     *
-     * THE TWO PLAQUES ARE ONE HIERARCHY IN TWO MATERIALS. The committing tier above is the same object cut
-     * from the wall's own rock; this one is cast bronze and sits a clear step brighter and warmer than it. A
-     * person reads stone-then-metal without being taught it, and it costs the skin no colour and no second
-     * shape — which is the only kind of hierarchy that survives being repeated on three hundred screens.
-     *
-     * IT IS THE SITE'S PLATE, NOT A DULLED COPY OF IT, and that reverses this rule's own earlier decision. The
-     * argument for dulling it was sound in general and wrong here: a landing page is looked at for ninety
-     * seconds and can afford a mirror, a window is sat in front of for nine hours, so the sweep was cut to a
-     * third, the outer halo deleted and the body deepened — "the site's object, aged".
-     *
-     * What that missed is WHERE this object appears. It is not furniture. Nobody meets it on the board, in the
-     * tree, in a settings row or anywhere they spend those nine hours; it exists on the two screens that ask
-     * for money and on the dialog that spends some, and a person sees it a few times in a membership. A lamp
-     * in the corner of the eye is a real fault for a control you sit beside all day and no fault at all for
-     * one you meet on the way to a checkout — and the cost of dulling it was the thing that actually mattered:
-     * the app's paying button was a near-miss of the button that sold the product, which reads as a cheaper
-     * imitation of the page the reader just came from, on the one screen where trust is the product.
-     *
-     * So the plate below IS the site's, read from `@intentic/house-css` rather than copied: the same four-stop
-     * body, the same raking sweep at full strength, the same brushed field, the same bevel, inner glow, halo
-     * and drop, because they are now one set of values with three readers.
-     *
-     * WHAT DOES NOT COME ACROSS IS THE CARTOUCHE. The site's plate is an octagon: corners notched with
-     * `clip-path` and a drawn frame laid in with `border-image`. Both are refused here, and the reason is the
-     * focus ring — this skin draws it as a `box-shadow`, and a box-shadow outside a clip-path is clipped away,
-     * so importing the notch would silently delete the keyboard ring from the one button on the page a
-     * keyboard user most needs to find. The app's radius and a warm rule instead: same metal, this skin's
-     * geometry.
-     *
-     * IT IS GOLD, NOT THE USER'S ACCENT, which reverses this file's earlier decision on purpose. The timber
-     * panel was lit with the picked colour on the argument that the one shouting control should wear it. But
-     * that made the app's loudest object change material with a setting, and it spent the accent — the thing
-     * this skin keeps scarce so that a link, a focus ring and a ticked box can be found — on the largest warm
-     * area on the screen. Gold is the structural metal and is already in every rule here; raising it from a
-     * hairline to a solid in exactly one place is a promotion, not a new colour.
-     *
-     * The label is a warm near-black with a pale hairline under each letter, so the stroke reads as an edge
-     * with depth rather than as ink: ~11:1 on the plate, and the pairing holds whatever accent is picked
-     * because neither side of it is the accent. It is a hairline and not the stone plaque's full three-part
-     * incision, and the difference is the material: metal is CUT, thin and clean, and takes no rough wall to
-     * throw a soft shade off. */
+    /* Loud buttons use the site's gold plate. */
     [data-skin="sanctum"] .p-button.ui-button-loud,
     [data-skin="sanctum"] .p-button.ui-button-loud:enabled:hover,
     [data-skin="sanctum"] .p-button.ui-button-loud:enabled:active {
@@ -1214,16 +477,12 @@
         background-image: var(--house-bronze-sweep), var(--house-brushed), var(--house-bronze-body);
         background-size: 100% 100%;
         background-repeat: no-repeat;
-        /* THE CARTOUCHE'S PALE RULE, WITHOUT THE CARTOUCHE. The site draws a cream double frame into the
-         * notch; on a rounded rect the same idea is one warm-cream hairline, which is also what closes the
-         * plate off from the near-black window it floats on. */
+/* THE CARTOUCHE'S PALE RULE, WITHOUT THE CARTOUCHE. */
         border-color: rgba(255, 240, 205, 0.5);
         box-shadow: var(--house-bronze-bevel);
     }
 
-    /* Under the pointer the plate catches more of the same light rather than changing colour, and the
-     * engraving does NOT lighten — metal that brightens does not turn its cut letters pale. One step up the
-     * same four stops, and the halo opens with it, so the lift arrives as a single movement. */
+/* Under the pointer the plate catches more of the same light rather than changing colour, and the engraving does NOT lighten. */
     [data-skin="sanctum"] .p-button.ui-button-loud:enabled:hover {
         background-color: #e4bd78;
         background-image:
@@ -1234,33 +493,14 @@
         box-shadow: var(--house-bronze-bevel-lit);
     }
 
-    /* Solid accent controls — checkbox, radio, switch — read as inlay: the unticked box is cut down into the
-     * plate like a field, and the ticked one is the metal filling it.
-     *
-     * THE FIELD IS THE UNTICKED STATE'S ALONE, AND THE SELECTOR HAS TO SAY SO. Written flat — every
-     * `.p-checkbox-box` — this cut the ticked box as well, and it won: PrimeVue injects its own component CSS
-     * into `@layer primeng`, this file is `@layer components`, and a later layer beats any specificity in an
-     * earlier one. So `checkbox.checked.background` never landed, and what shipped was the state the fills token
-     * above names first ("a ticked box, a thrown switch, a progress bar") drawn as a near-black square with an
-     * ember rule round it. The tick was there the whole time, in --color-fill-content over a field mixed from
-     * --color-surface-950: #100d0b on #050403, about 1.05:1 — a mark that is drawn, takes its place in the box,
-     * and cannot be seen. A ticked box then said what it was with a border colour alone.
-     *
-     * SO ONLY THE UNTICKED BOX IS CUT, and ticked, hovered, focused and disabled go back to Aura, which paints
-     * them from this skin's own fills: --color-primary-fill behind --color-fill-content, close to 7:1, the metal
-     * filling the field this comment claimed all along. Indeterminate keeps the cut on purpose — PrimeVue leaves
-     * `p-checkbox-checked` off a partial box, and its dash is drawn in the form field's own cream ink, which is
-     * the mark that belongs on a field rather than on metal. */
+/* Solid accent controls — checkbox, radio, switch — read as inlay: the unticked box is cut down into the plate like a field. */
     [data-skin="sanctum"] .p-checkbox:not(.p-checkbox-checked) .p-checkbox-box,
     [data-skin="sanctum"] .p-radiobutton:not(.p-radiobutton-checked) .p-radiobutton-box {
         background-color: var(--sanctum-cut);
         box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
     }
 
-    /* A PICKED ROW IS GOLD, NOT EMBER, and on a screen with a tree, a tab strip and two lists open at once that
-     * is the difference between a workspace and a fairground. Selection is structure — it says where you are —
-     * so it is drawn in the structural metal: a flat wash, and a gold bar down the edge the row is pinned to.
-     * Flat rather than graded, for the same reason as everything else here: a row is a line of text. */
+/* A PICKED ROW IS GOLD, NOT EMBER, and on a screen with a tree. */
     [data-skin="sanctum"] .ui-row-select-on,
     [data-skin="sanctum"] .ui-row-select-on:hover:not(:disabled) {
         background: rgba(201, 160, 92, 0.1);
@@ -1281,39 +521,13 @@
         box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.55);
     }
 
-    /* ── THE CATEGORY TILE, TAKEN DOWN ────────────────────────────────────────────────────────────────────
-     * The leading mark on every session card — a glyph on a wash of the CATEGORY'S hue, so a redesign is
-     * purple, an audit blue, new work green, a fix red (styles.css, .category-tile). It is the app's one
-     * genuinely rainbow element, and on a board it is also the most REPEATED one: a lane of forty cards is
-     * forty saturated chips down a single column, which on this ground is the loudest thing in the product and
-     * is what "the badges and icons are vivid and flat" means in practice.
-     *
-     * THE HUE SURVIVES, THE SATURATION DOES NOT. Cut to roughly a third — the wash from 55% to 20%, the glyph
-     * from 70% to 30% — and the lightness left where it was, because lightness is what makes the glyph legible
-     * and saturation is only what makes it shout. Side by side the four categories are still four colours and
-     * still tell you apart at a glance; stacked down a lane they read as a column of tinted stone rather than
-     * as a paint chart. The shape says the same thing twice anyway (that is the tile's own design), so colour
-     * is free to be the quieter half of the pair here.
-     *
-     * IT IS THE ONE SELECTOR IN THIS FILE THAT NAMES `html`, and that is load-bearing rather than a flourish.
-     * The app's own dark rule is `[data-mode="dark"] .category-tile`, which is exactly as specific as this
-     * skin's usual `[data-skin] .thing` shape, and it is declared LATER in the same `components` layer (the
-     * skins are imported near the top of styles.css, the tile is defined near the bottom) — so an equally
-     * specific rule here loses on source order. The type selector is the cheapest way to outrank it without
-     * `!important` or a fake second class. */
+    /* Category tiles use the session card's leading mark and tint. */
     html[data-skin="sanctum"] .category-tile {
         background: hsl(var(--tile-hue) 20% 52% / 0.16);
         color: hsl(var(--tile-hue) 30% 70%);
     }
 
-    /* ── TYPE ─────────────────────────────────────────────────────────────────────────────────────────────
-     * Every heading in the chrome takes the site's titling face, and takes a CARVE with it: one hard dark edge
-     * under the letter, no blur. That is what a chisel leaves — the stroke lit, the groove below it dark — and
-     * because it is dark-on-dark and offset a single pixel it costs nothing at 11px and is the whole character
-     * of the thing at 26px. A blurred shadow was tried first and is a smudge at every size.
-     *
-     * Element selectors, so this can neither miss a heading nor catch a paragraph. No letter-spacing: Baloo 2
-     * needs none, and half the app's headings carry `tracking-tight` of their own. */
+    /* Chrome headings use the site's display face and carved edge. */
     [data-skin="sanctum"] h1,
     [data-skin="sanctum"] h2,
     [data-skin="sanctum"] h3,
@@ -1323,31 +537,7 @@
         text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
     }
 
-    /* THE ONE DISPLAY HEADING IN THE APP, AND IT IS CUT FROM STONE. Matched on the size utility rather than on
-     * a page, because size is the actual condition: the site's rule is that Playfair is for type above ~28px,
-     * `text-4xl` is 39.6px at the app's own root size, and it is worn by exactly one heading — the line that
-     * greets somebody who is not signed in yet. A second heading that ever grows to display size should get
-     * this too, which is what makes the selector right rather than merely convenient.
-     *
-     * THE LETTERS ARE A PICTURE OF STONE CLIPPED TO THEIR OWN SHAPE. Three background layers composite at once:
-     * a coarse cloud for the blotching a weathered face has, a fine one for grain, and a narrow warm-grey ramp
-     * under both. They blend with `soft-light` and `overlay`, so the noise moves the ramp's own colour lighter
-     * and darker rather than laying grey over it — a stone is one material lit unevenly, not two materials
-     * stacked. `feColorMatrix` is a full matrix rather than `saturate 0` because feTurbulence generates noise in
-     * the ALPHA channel too, and a saturate-only filter leaves a randomly transparent rect whose holes average
-     * back to the flat grey underneath, cancelling the mottle almost exactly.
-     *
-     * THE BEVEL HAS TO BE `filter`, NOT `text-shadow`. The fill here IS a background, and a background is
-     * painted BEFORE a text shadow — so a pale shadow offset up-left would lay a flat copy of the glyph over
-     * the texture it is meant to be lighting. `drop-shadow` composites behind the finished element instead: two
-     * pale edges up and left for the lit face of the cut, then a hard black one below for the cut's depth.
-     *
-     * DESCENDERS ARE BOUGHT WITH PADDING, NOT WITH LEADING. A background is painted across the element's padding
-     * box, so anything a glyph reaches below that box is not painted and the tail of a "g" goes missing. Playfair's
-     * descenders are long, and any size utility (`text-4xl` is 1.111, `leading-none` is 1) outranks a line-height
-     * set here — so the clearance is padding, taken straight back out with a matching negative margin: the painted
-     * box grows, the laid-out box does not move, and it holds at any leading. Keep the pair together, and do not
-     * put `mb-*` on this heading — that would cancel the takeback and open a gap. */
+/* THE ONE DISPLAY HEADING IN THE APP, AND IT IS CUT FROM STONE. */
     [data-skin="sanctum"] h1.text-4xl {
         font-family: var(--sanctum-display);
         font-weight: var(--font-weight-semibold);
@@ -1369,9 +559,7 @@
             drop-shadow(0 2px 0 rgba(0, 0, 0, 0.9)) drop-shadow(0 4px 5px rgba(0, 0, 0, 0.55));
     }
 
-    /* EXCEPT INSIDE RENDERED MARKDOWN. Those headings are not the app's chrome, they are somebody's WRITING —
-     * an agent's answer, a README, a generated document — and dressing a document's own headings in the skin's
-     * face is the skin taking credit for content it did not author. */
+/* EXCEPT INSIDE RENDERED MARKDOWN. */
     [data-skin="sanctum"] .md-prose :is(h1, h2, h3, h4) {
         font-family: var(--font-sans);
         color: inherit;
@@ -1384,9 +572,7 @@
         letter-spacing: 0.09em;
     }
 
-    /* ── EDGES OF THE WINDOW ──────────────────────────────────────────────────────────────────────────────
-     * The scrollbar as a brass runner, the selection in the accent, the loading placeholder sweeping gold.
-     * Small things, and between them most of what the eye catches while it is not reading anything. */
+    /* EDGES OF THE WINDOW The scrollbar as a brass runner, the selection in the accent, the loading placeholder sweeping gold. */
     [data-skin="sanctum"] .scrollbar-thin {
         scrollbar-color: rgba(201, 160, 92, 0.26) transparent;
     }
@@ -1412,36 +598,9 @@
     }
 }
 
-/* ── THE RAIL, WHICH IS A SHADOW ───────────────────────────────────────────────────────────────────────────
- * THREE CUTS SPENT THE SKIN'S MATERIAL BUDGET HERE AND ALL THREE WERE WRONG, which is worth writing down
- * because the column keeps LOOKING like the place to spend it: 48px of unbroken height, no prose in it, nothing
- * to be read. First a timber plank — and timber's grain runs one way, so at 48px it has room for about three
- * strokes across the column, which is not figure, it is smears. Then the site's woven cloth on a brown ground
- * of its own, which made a seam against the panel beside it. Then the same cloth on the app's own card ground,
- * which fixed the seam and left the real problem: a weave has a slow component in it, and on a column this
- * narrow a slow component never averages out, so the rail kept a permanent dark band down one side however the
- * raking light was tuned.
- *
- * THE REAL ANSWER IS THAT A RAIL IS NOT A SURFACE, IT IS A GAP. You look PAST it forty times a minute on your
- * way to something else, so anything in it is something to look past. Flat, unlit, and a step deeper than the
- * wall: a slot cut in the window's edge that the icons stand in. It needs no lighting of its own either — the
- * plates around it are lit, and a thing that recedes beside lit things reads as receding without being drawn.
- *
- * ── AND IT IS UNLAYERED, WHICH IS THE PART THAT WAS ACTUALLY BROKEN ──────────────────────────────────────
- * The shell writes `class="icon-rail … bg-card"`. `bg-card` is a Tailwind UTILITY, and utilities are the last
- * layer in this app's cascade — so a `background-color` for `.icon-rail` written inside `@layer components`
- * loses to it no matter how specific the selector is, and every colour this rule has ever named was silently
- * discarded. It looked fine for exactly as long as the value it named happened to be `--color-card` too.
- *
- * That is the third time this file has needed the same escape hatch (the section labels, the picked card), and
- * the rule behind all three is one line: A SKIN MAY ONLY REPAINT A PROPERTY FROM `components` IF NO UTILITY IN
- * THE MARKUP SETS THAT PROPERTY. Check the app's class list before writing the rule, not after looking at it.
- * The border is left in the layer on purpose: `border-line` sets that one, and `--color-line` is already this
- * skin's own gold, so there is nothing to win. */
+/* Rails use a shadowed recess behind their content. */
 [data-skin="sanctum"] .icon-rail {
-    /* The stone picks up the accent's hue through --color-surface-950, but the neutral ramp's chroma is too low
-     * to read against this much black. Mixing a sliver of brand-950 in gives the rail just enough saturation
-     * that switching colours shifts the stone's warmth visibly. */
+/* The stone picks up the accent's hue through --color-surface-950, but the neutral ramp's chroma is too low to read against this much black. */
     background-color: color-mix(in oklab, color-mix(in oklab, var(--color-surface-950) 80%, var(--sanctum-gold)) 86%, black);
     background-image:
         var(--sanctum-rail),
@@ -1451,9 +610,7 @@
     background-repeat: repeat, no-repeat;
 }
 
-/* ICONS ON THE RAIL ARE CUT IN STONE — the same bevel the site's headlines carry, scaled to icon weight.
- * Two pale shadows up-left for the lit lip of the cut, one hard black below for its depth, and one soft
- * one for the shadow the glyph throws on the wall. The effect is subtle at this size: relief, not drama. */
+/* ICONS ON THE RAIL ARE CUT IN STONE — the same bevel the site's headlines carry, scaled to icon weight. */
 [data-skin="sanctum"] .icon-rail-tile > svg,
 [data-skin="sanctum"] .icon-rail-tile > .icon {
     filter: drop-shadow(0 -1px 0 rgba(247, 234, 208, 0.25))
@@ -1461,17 +618,14 @@
             drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
 }
 
-/* HOVER IS GOLD, NOT GREY. The app's `hover:bg-overlay` lands as a near-black wash on the near-black rail,
- * invisible. The skin overrides it to a gold tint — the structural metal catching light under the pointer —
- * and lifts the icon toward the lit ink. The active state deepens the tint. */
+/* HOVER IS GOLD, NOT GREY. */
 [data-skin="sanctum"] .icon-rail-tile:hover {
     background: rgba(201, 160, 92, 0.12) !important;
 }
 [data-skin="sanctum"] .icon-rail-tile:active {
     background: rgba(201, 160, 92, 0.2) !important;
 }
-/* The picked tile — the page the user is on — carries the gold at rest, so it reads as the one lit niche.
- * The app marks it with `bg-primary-600/15`; this replaces that accent wash with the structural metal. */
+/* The picked tile — the page the user is on — carries the gold at rest, so it reads as the one lit niche. */
 [data-skin="sanctum"] .icon-rail-tile.bg-primary-600\/15 {
     background: rgba(201, 160, 92, 0.15) !important;
 }
@@ -1480,27 +634,7 @@
     outline-offset: -2px;
 }
 
-/* ── THE PICKED CARD, IN THE SAME METAL AS THE PICKED ROW ──────────────────────────────────────────────────
- * A selected session card — the one whose chat is on screen — is drawn by the app in its own primary. On the
- * app's dark scheme that is a considered choice; under this skin it was a bright orange frame around a whole
- * card, sitting in a lane of quiet stone, and it was reliably the first thing the eye went to on the busiest
- * screen in the product — for a fact ("this is the chat you have open") that the reader already knows, because
- * they opened it.
- *
- * Selection is STRUCTURE — it says where you are — and this file already draws structure in gold, for the
- * picked row in every walkable list. A board card and a rail row are the same claim; they must not be two
- * different metals. So the card takes the gold too, and the accent goes back to meaning "act".
- *
- * ONE SELECTOR FOR EVERY FRAME OF THE CARD, which is what the shared surface buys: this used to be matched on
- * the utility PAIR the board card happened to write (`border-primary-500` + `ring-primary-500/50`), so it
- * reached the two board cards and left every rail row — the floating chat, the Subagents list — in raw
- * orange beside them. The rail was the surface that most looked like another product because of it.
- *
- * AND IT IS A HALO, NOT A FRAME. Solid gold on the border plus a bright ring is a band of metal round the
- * card, and a band that wide stops reading as "this one is picked" and starts reading as a second, brighter
- * card. The border comes down to two-thirds strength and the ring is a soft one, which leaves a glow around a
- * plate rather than a rim on it — the app already lifts the card to the overlay surface, and this skin's
- * plates carry a shadow that a lifted one carries further. */
+/* The selected card uses the same metal as the selected row. */
 [data-skin="sanctum"] .session-card.session-card-on {
     --card-border: color-mix(in oklab, var(--sanctum-gold) 66%, transparent);
     --card-ring: inset 0 0 0 1px rgba(201, 160, 92, 0.28);
@@ -1510,27 +644,13 @@
     --card-lift: 0 1px 6px -1px rgba(201, 160, 92, 0.5);
 }
 
-/* ── THE COMPOSER'S FRAME ──────────────────────────────────────────────────────────────────────────────────
- * The message box is ONE field whose frame is the rounded form rather than the textarea inside it, so the box
- * takes the treatment a focused field takes everywhere else here: a gold rim and one soft accent halo. The app
- * draws it in its own primary, which under this skin lit a bright orange rectangle around the largest control
- * on screen — permanently, for as long as anyone was typing — in the one colour the skin keeps for "act".
- *
- * UNLAYERED, like the picked card above: `--tw-ring-color` is set by a utility (`focus-within:ring-…`), and a
- * rule in `@layer components` loses to a utility however specific it is. */
+/* The composer frame belongs to the rounded form, not its textarea. */
 [data-skin="sanctum"] .composer-frame:focus-within {
     border-color: var(--sanctum-gold);
     --tw-ring-color: color-mix(in oklab, var(--color-primary-500) 24%, transparent);
 }
 
-/* ── THE DECISION CARDS ────────────────────────────────────────────────────────────────────────────────────
- * A card has no surface of its own in any skin now (ChatCard), so this one carves what is left: the glyph that
- * opens it, the sentence it asks, and the row a reader has chosen. The tooth, the rule and the plate that used
- * to stand a question off the transcript are gone with the box that carried them — a card is the words and the
- * column they sit on, and gilding the words is the version of that this skin can still say.
- *
- * UNLAYERED, unlike most of this file: the ink here restates colours the call site's own utilities set
- * (`text-content`, `text-subtle`), and a rule inside `@layer components` loses to a utility however specific. */
+/* Decision cards inherit the shared card surface and carve only their marks. */
 [data-skin="sanctum"] .chat-card-header > :first-child {
     color: rgba(201, 160, 92, 0.55);
 }
@@ -1539,42 +659,19 @@
     color: var(--sanctum-gold-bright);
     text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
 }
-/* The pick on a settled card, in the skin's structural metal rather than the app's ember, for the reason the
-   picked ROW above gives: selection says where you are, and where you are is drawn in gold here. Flat, and
-   without the live row's edge bar — that bar marks a state still being moved, and this one is decided. */
+/* Settled-card selection uses structural metal to mark location. */
 [data-skin="sanctum"] .chat-option-picked {
     background: rgba(201, 160, 92, 0.1);
 }
 
-/* ── THE INSCRIPTIONS ──────────────────────────────────────────────────────────────────────────────────────
- * The app's section labels — "LOOK", "FILE TREE", "CHANGES" — which the design system already draws as small
- * tracked capitals (`ui.sectionLabel`). Re-cut in the titling face, tracking opened up, and GOLD rather than
- * grey: this is the site's `.eyebrow`, and on a settings page it is the difference between a form and a tablet.
- *
- * MATCHED ON THE TREATMENT, not on a class the recipe owns: the recipe is a twMerge and a caller may
- * legitimately swap the label's SIZE, so requiring `text-xs` would silently drop whichever label somebody made
- * smaller.
- *
- * UNLAYERED, unlike every other selector here, and that is why it sits down on its own. Both properties it sets
- * are ALSO set by utilities in the same class list — `tracking-wide` owns the letter spacing, `text-subtle` the
- * colour — and a rule in `@layer components` loses to a utility no matter how specific it is. An unlayered rule
- * outranks every layer, which is the only way to restate a treatment the utilities are spelling out.
- * Deliberately the exception: everywhere else, a caller's utility must still win. */
+/* Section labels use the shared inscription treatment. */
 [data-skin="sanctum"] .font-semibold.uppercase.tracking-wide {
     font-family: var(--sanctum-titling);
     letter-spacing: 0.15em;
     color: var(--sanctum-gold);
 }
 
-/* THE LOZENGE — the site's full stop, and the mark a mason cuts to open a line of inscription. It is the one
- * piece of ornament that appears at the top of nearly every screen, and it is the whole argument for small
- * ornament: the cut of this skin that carved an arcade along every panel edge had, at a glance, LESS character
- * than this does, because an arcade at 14px is texture and texture reads as noise, while one deliberate mark at
- * the head of a line reads as a hand.
- *
- * Drawn from the site's own ornament kit (`LOZENGE` in _site/site/src/components/ornaments.ts) rather than from
- * a glyph, so its weight is ours rather than whichever font happened to load. `vertical-align` rather than a
- * flex change, so it cannot disturb a label's own layout. */
+/* THE LOZENGE — the site's full stop, and the mark a mason cuts to open a line of inscription. */
 [data-skin="sanctum"] .font-semibold.uppercase.tracking-wide::before {
     content: "";
     display: inline-block;
@@ -1587,29 +684,7 @@
     background-repeat: no-repeat;
 }
 
-/* ── ONE MARK PER LINE, AND THE LANE HEADERS HAD TWO ───────────────────────────────────────────────────────
- * A board's lane heading is `● ATTENTION 1` — the app's own STATUS DOT, whose colour is the lane's state, then
- * the label. The label is a section label, so the inscription rule above opened it with a gold lozenge as
- * well, and the heading came out as two ornaments in a row: a coloured dot, a gold diamond, and only then the
- * word. Neither is wrong on its own; together they read as a bullet that failed to load and got drawn twice.
- *
- * THE APP'S DOT WINS, because it is the one carrying information — warning, success, or the resting line —
- * and the skin's is decoration. So the lozenge stands down here, and the dot takes the lozenge's SHAPE
- * instead: turned forty-five degrees with its corner rounded off a hair, which is the same diamond every
- * section label in the app opens with, now drawn once and in the colour that means something.
- *
- * SCOPED TO `.lane > header` (RailLane), `[data-drop] > header` (AgentsView's board lanes), and
- * `[data-other-sandboxes]` (OtherSandboxChanges): each already opens its line with an icon — the lane's
- * status dot, or the server glyph beside "In other sandboxes" — so the lozenge would read as a second bullet.
- * AgentsView's sections carry `data-drop` but NOT `.lane` — `.lane` brings in the lane background and
- * box-shadow rules (lines 534–541) that only belong on the sidebar's RailLane.
- *
- * NOT `.lane-header`: that class is only applied when the board is stacked (AgentsView pins the header on a
- * narrow board and leaves it unpinned on a wide one), so a rule hung on it would fix the phone and leave the
- * three-column desktop untouched.
- *
- * UNLAYERED, for the two reasons this file's other unlayered rules are: `rounded-full` is a utility and beats
- * any layer, and the `::before` it suppresses is itself unlayered. */
+/* Lane headers reserve one status mark per line. */
 [data-skin="sanctum"] .lane > header > .h-2.w-2,
 [data-skin="sanctum"] [data-drop] > header > .h-2.w-2 {
     border-radius: 1px;

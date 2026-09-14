@@ -2,10 +2,7 @@ import type { DeviceSandbox } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { autoPrepareArgs, newState, prepareTargets, runTick, ticksToSkip } from "./auto-prepare.js";
 
-/* The tick's DECISIONS, without timers or docker: which sandboxes it may touch, what a failure does to the
- * next tick, and that it stays out of the way of work a person started. The judgement calls about WHAT to
- * download live in `ic sandbox prepare --auto` (recreate.rs) on purpose, so there is deliberately no test
- * here about channels, pinned images or disk — this file must never grow a second copy of those rules. */
+/* The tick's DECISIONS, without timers or docker: which sandboxes it may touch, what a failure does to the next tick. */
 
 const box = (slug: string, running = true): DeviceSandbox => ({
     slug,

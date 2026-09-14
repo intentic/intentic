@@ -1,7 +1,4 @@
-<!--
-    Click-to-open (i) affordance for a long write-up, the modal sibling of <InfoHint>'s hover card. Body is projected via slot; `title` names both
-    the dialog and the icon.
--->
+<!-- Click-to-open (i) affordance for a long write-up, the modal sibling of <InfoHint>'s hover card. -->
 <script setup lang="ts">
 import { ref } from "vue";
 import Icon from "../primitives/Icon.vue";
@@ -22,9 +19,7 @@ const open = ref(false);
     >
         <Icon name="info-circle" />
     </button>
-    <!-- The body is a @container: a write-up that lays itself out in two columns keys off the DIALOG's width
-         (<Modal>'s `md`, which is 36rem until the screen is narrower than that) rather than the window's: the
-         two disagree on every phone. -->
+<!-- The dialog body switches to two columns when its container is wide enough. -->
     <Modal v-model:open="open" size="md" :header="title">
         <div class="@container"><slot /></div>
     </Modal>

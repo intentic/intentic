@@ -83,8 +83,7 @@ const row = (host: HTMLElement, label: string): HTMLElement | undefined =>
 const segment = (host: HTMLElement, label: string, option: string): HTMLButtonElement =>
     [...(row(host, label)?.querySelectorAll<HTMLButtonElement>(`button`) ?? [])].find((button) => button.textContent?.trim() === option)!;
 
-/* The two switches, which are chips and not rows: `.composer-toggle` is the chip recipe, and picking on it
- * rather than on `aria-pressed` keeps the harness axis (ghost buttons, also pressed-state) out of the set. */
+/* The two switches, which are chips and not rows: `.composer-toggle` is the chip recipe. */
 const chips = (host: HTMLElement): string[] =>
     [...host.querySelectorAll<HTMLElement>(`button.composer-toggle`)].map((chip) => chip.textContent?.trim() ?? ``);
 const chip = (host: HTMLElement, label: string): HTMLButtonElement =>
@@ -123,9 +122,7 @@ test("speed is offered only for a model whose catalog row publishes it", async (
     expect(written).toEqual([{ provider: `claude`, model: `claude-haiku-4-5`, fast: true }]);
 });
 
-/* THE CHIP WRITES BOTH OF ITS STATES, and the off one is stored rather than dropped. Absent used to be a third
- * statement — "say nothing, let the harness answer" — reachable from a stop of its own; with the stop gone,
- * dropping the field on the way out would put an entry into a state its own panel can no longer show. */
+/* THE CHIP WRITES BOTH OF ITS STATES, and the off one is stored rather than dropped. */
 test("switching a chip off stores the off rather than dropping the field", async () => {
     const host = mount({ pin: { provider: `claude`, model: `claude-haiku-4-5`, thinking: true }, knobs: true });
     await nextTick();
@@ -174,9 +171,7 @@ test("a codex entry is offered the harness axis, and picking a chip writes it", 
     expect(written).toEqual([{ provider: `codex`, model: `gpt-5.6`, harness: `claude-code` }]);
 });
 
-/* RE-POINTING within the provider keeps every setting; across providers it keeps only the tier, since an
- * account id and a harness belong to the provider they were chosen under. Either way the entry comes out with
- * all three run settings on it: an entry is born explicit, so what the pin holds is what its panel shows. */
+/* RE-POINTING within the provider keeps every setting; across providers it keeps only the tier. */
 test("re-pointing within the provider keeps every knob; across providers it keeps only the tier", async () => {
     const host = mount({ pin: { provider: `codex`, model: `gpt-5.6`, effort: `high`, harness: `claude-code` }, knobs: true });
     await nextTick();

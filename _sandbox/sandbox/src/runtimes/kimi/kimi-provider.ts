@@ -2,12 +2,7 @@ import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../
 import type { CliProxyClient } from "../../agent/providers/translator.js";
 import { createKimiCatalog, type KimiCatalog } from "./kimi-catalog.js";
 
-/* EVERYTHING KIMI CONTRIBUTES TO THE DAEMON, and it is the module that proves the seam's floor: NO adapter
- * (Kimi has no native runtime — `capabilitiesOf("kimi", …)` answers the Claude Code loop, whose adapter the
- * claude module contributes), no boot, no pack of its own (the translator's rides translatorWanted). What is
- * left is exactly what every provider owes: a catalog, a readiness rung, and its rows in the secrets
- * inventory — the last of which was MISSING for as long as that list was hand-enumerated, which is the
- * omission this module structure exists to make impossible. */
+/* Kimi has no native adapter; this module exposes only its provider catalog. */
 
 export interface KimiSlice {
     // Kimi's model catalog: the translator's provider-scoped definitions, read through the management API.

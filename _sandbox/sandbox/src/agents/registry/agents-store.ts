@@ -57,8 +57,7 @@ export const PersistedAgentSchema = z.object({
     // What the complexity judge made of the last turn, feeding the next turn's `afterHardTurn` signal; may be read
     // tomorrow, from another device. The judgement itself, never what ran; absent means nothing judged yet.
     tier: z.enum(["fast", "standard"]).optional(),
-    // Standing veto over automatic tier selection; mirrored onto AgentSummary, since the composer's own toggle draws
-    // it.
+    // Mirror the tier hold onto AgentSummary for the composer.
     tierHold: z.boolean().optional(),
     account: z.string().optional(),
     sessionId: z.string().optional(),
@@ -94,8 +93,7 @@ export const PersistedAgentSchema = z.object({
     // Breaking-change sentence for the Release's trailer; almost always absent.
     landedBreaking: z.string().optional(),
     status: PersistedAgentStatusSchema,
-    // Why the last turn failed; persisted since the reader who needs it arrives hours later, and a fresh turn clears
-    // it.
+    // Persist the last failure until a fresh turn clears it.
     failure: z.string().optional(),
     // Which kind of failure, the frame's own code; persisted and cleared alongside `failure`.
     failureCode: z.string().optional(),

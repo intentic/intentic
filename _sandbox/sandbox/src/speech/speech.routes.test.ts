@@ -5,8 +5,7 @@ import { testConfig } from "../testing.js";
 import { createSpeechRoute, type SpeechRoutesDeps } from "./speech.routes.js";
 import { MAX_UTTERANCE_WAV_BYTES, type Speech, SpeechModelNotReadyError, SpeechUnprovisionedError } from "./transcribe.js";
 
-/* The speech routes over their two seams (perf, speech). The app's own middleware: bearer auth, CORS, the
- * boot gate: is the app's and is tested there (app.integration.test.ts). */
+/* The speech routes over their two seams (perf, speech). */
 
 const speechDeps = (speech: Partial<Speech>): SpeechRoutesDeps => ({
     perf: createPerfTracker(createLogger(testConfig)),

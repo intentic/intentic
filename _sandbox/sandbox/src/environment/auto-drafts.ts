@@ -10,8 +10,7 @@ import { statePath } from "../workspace/layout/state-paths.js";
 // - corroboration: the live container actually has it (drift.ts), since the ledger's own parsing can lie.
 // - a mechanical template: only ecosystems whose Dockerfile step follows from the package name alone (apt, cargo,
 //   rustup, npm); everything else waits for a person.
-// A written draft is frozen (synthesis skips existing files); rejection tombstones the tool so a sweep never recreates
-// it.
+// Keep written drafts frozen so rejection cannot recreate them.
 
 export const AUTO_MARKER = "# intentic:auto";
 

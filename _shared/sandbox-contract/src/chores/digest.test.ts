@@ -13,9 +13,7 @@ describe(`digestOf`, () => {
     });
 });
 
-/* The anti-drift mechanism. A chore that counts things must not mint a new digest, and therefore a new badge:
- * every time an ordinary day's work moves the number by one. Buckets widen with the count, because the difference
- * between one and two matters and the difference between four hundred and five hundred does not. */
+/* The anti-drift mechanism. */
 describe(`bucketOf`, () => {
     test(`absorbs drift and keeps the moves that mean something`, () => {
         expect(bucketOf(12)).toBe(bucketOf(13));

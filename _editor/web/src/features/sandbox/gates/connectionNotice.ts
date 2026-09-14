@@ -122,10 +122,7 @@ const hoursSpentNotice = (input: ConnectionNoticeInput, name: string): Connectio
     };
 };
 
-/* THE EDGE'S OWN VERDICT, which is the only thing in this file that can tell a browser's broken network from a sandbox
- * that is simply not there: the request reached Intentic and Intentic held no tunnel for this box. Held for
- * DETACHED_AFTER_MS first, because a container that is restarting is detached for a few seconds and telling someone
- * their sandbox is off during a restart is both true and useless. */
+/* THE EDGE'S OWN VERDICT, which is the only thing in this file that can tell a browser's broken network from a sandbox that is simply not there. */
 const detachedNotice = (input: ConnectionNoticeInput, name: string): ConnectionNotice | undefined =>
     input.failure?.kind === `detached` && input.outageMs >= DETACHED_AFTER_MS
         ? {

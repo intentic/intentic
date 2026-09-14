@@ -14,10 +14,7 @@ describe(`DisposableStore`, () => {
         expect(stopped).toEqual([`first`, `second`]);
     });
 
-    /* The property the daemon's shutdown depends on. One subsystem throwing on the way out must not strand
-     * the ports, child processes and watchers behind it in the list: every other member still gets its call,
-     * and the failure is reported once everything that could be released has been.
-     */
+/* The property the daemon's shutdown depends on. */
     it(`keeps disposing after a member throws, then reports the failures`, () => {
         const store = new DisposableStore();
         const stopped: string[] = [];
@@ -43,8 +40,7 @@ describe(`DisposableStore`, () => {
         expect(() => store.dispose()).toThrow(AggregateError);
     });
 
-    /* An async boot step landing after shutdown began is a real race, not a caller error: the honest reading
-     * of "add this to the things that get cleaned up" once cleanup has happened is to clean it up now. */
+/* An async boot step landing after shutdown began is a real race, not a caller error. */
     it(`disposes a late arrival immediately instead of holding it`, () => {
         const store = new DisposableStore();
         store.dispose();

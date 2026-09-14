@@ -44,19 +44,13 @@ const facts = computed(() =>
 </script>
 
 <template>
-    <!--
-        `hit="pair"`: keyboard focus lands on the chevron and glyph, not the headline, since the headline already opens the transcript (a button
-        can't nest in a button). The whole row still opens on click; only the transcript link is excepted.
-    -->
+    <!-- The disclosure pair owns focus; the headline remains the navigation link. -->
     <DisclosureRow v-model:open="open" density="compact" hit="pair">
         <template #lead="{ iconClass }">
             <Icon :name="KIND_ICONS[episode.kind]" :class="[iconClass, open ? `` : KIND_TINTS[episode.kind]]" />
         </template>
 
-        <!--
-            Only wraps in a button when there's a transcript to open, since a dead link affordance is worse than none. `w-fit` keeps the link's hit
-            area (and underline) to its text, not the full row width, since the row itself opens on click too.
-        -->
+        <!-- Only wraps in a button when there's a transcript to open, since a dead link affordance is worse than none. -->
         <template #title>
             <button
                 v-if="episode.sessionId"
@@ -70,17 +64,11 @@ const facts = computed(() =>
             <span v-else class="block min-w-0 truncate" :title="episode.label">{{ episode.label }}</span>
         </template>
 
-        <!--
-            Facts and preview share one line (this slot renders as one paragraph), so a titled turn doesn't grow to three lines vs its neighbors'
-            two. A failure keeps its own line below.
-        -->
+        <!-- Facts and preview share one line in the row metadata. -->
         <template v-if="facts.length > 0 || preview || episode.error" #description>
             <span class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                 <span v-for="fact in facts" :key="fact">{{ fact }}</span>
-                <!--
-                    `flex-1` needs a zero basis, not just `min-w-0`: from its full content width the preview would wrap to its own line before
-                    shrinking, pushing this row to three lines on a narrow pane.
-                -->
+                <!-- The preview uses a zero flex basis so it can shrink. -->
                 <span v-if="!open && preview" class="min-w-0 flex-1 truncate text-subtle">{{ preview }}</span>
             </span>
             <span v-if="episode.error" class="mt-0.5 block break-words text-danger">{{ episode.error }}</span>
@@ -94,10 +82,7 @@ const facts = computed(() =>
             <span :title="formatTimestamp(episode.at)">{{ timeAgo(episode.at) }}</span>
         </template>
 
-        <!--
-            The daemon's own rows, oldest first, unedited. Inset behind a rail rather than a hairline, since a hairline already separates episodes in
-            this list; `<DisclosureRow>` owns the rail and its alignment under the headline.
-        -->
+        <!-- The daemon's own rows, oldest first, unedited. -->
         <template #below>
             <div class="flex flex-col gap-1">
                 <p v-if="episode.detail" class="whitespace-pre-wrap break-words text-2xs text-muted">{{ episode.detail }}</p>

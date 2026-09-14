@@ -1,10 +1,6 @@
 import { type AgentSummary, type AgentTurn, type FixResume, planFixAttempt } from "@intentic/sandbox-contract";
 
-/* ONE FAILURE, MANY ATTEMPTS, ONE LIVE ANSWER — the daemon's side of it, for a fix the daemon itself starts (POST
- * /ci/fix). The DECISION is the contract's (planFixAttempt), shared with the browser's push card so the two can
- * never disagree about whether a press continues an attempt, opens the next one, or has to wait; this carries it
- * out through the daemon's own doors: stop, archive, start. Narrow deps, so the whole thing runs under a fake in a
- * unit test where the real registry and worktrees would want a git repository. */
+/* ONE FAILURE, MANY ATTEMPTS, ONE LIVE ANSWER — the daemon's side of it, for a fix the daemon itself starts (POST /ci/fix). */
 
 export interface FixAttemptDeps {
     // The live roster and the archive as the registry holds them now; both count toward the next attempt's number.

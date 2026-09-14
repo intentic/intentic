@@ -24,10 +24,7 @@ export type ConnectionFailure =
     | { readonly kind: "forbidden"; readonly message: string }
     // No daemon URL to dial: setup is unfinished, or the daemon has never announced itself.
     | { readonly kind: "unaddressed"; readonly message: string }
-    /* Intentic's edge answered, and it holds no tunnel for this sandbox: the container is not running, or the machine
-     * it runs on is off. Distinct from `network` in exactly the way that matters to a reader — the browser's own
-     * connection is proven fine, because the edge is what answered. Still retried: a box that comes back redials
-     * within seconds. */
+/* Intentic's edge answered, and it holds no tunnel for this sandbox: the container is not running, or the machine it runs on is off. */
     | { readonly kind: "detached"; readonly message: string }
     // The platform has no such sandbox. Nothing the reader waits for can change that.
     | { readonly kind: "gone"; readonly message: string };

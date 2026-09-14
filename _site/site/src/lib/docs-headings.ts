@@ -51,10 +51,7 @@ function anchorMarkup(id: string): string {
     return `<a class="docs-anchor" href="#${id}" aria-label="${ANCHOR_LABEL}" title="${ANCHOR_LABEL}">` + `<span aria-hidden="true">#</span></a>`;
 }
 
-/**
- * Fails the build if an Astro expression inside a `<code>` inside a `<table>` leaves the `<code>` unclosed, silently
- * rendering the rest of the page as code. Fix at the source: `<code set:text="..." />`.
- */
+/** Fails the build when table code markup leaves an expression unclosed. */
 export function assertNoCodeBleed(html: string, pageId: string): void {
     // One pass tracking `<code>` nesting depth; the bug is exactly a depth that never returns to zero.
     let depth = 0;

@@ -32,9 +32,7 @@ const search: Command = {
             throw new Error("Say who to look for.");
         }
         const max = readLimit(ctx.args, 10, 30);
-        /* People's search index is built per session: the documented first step is a warm-up call with an
-         * empty query, and without it the first real search of a process reliably answers with nothing. It is
-         * one request and it is the difference between this command working and appearing to find no one. */
+/* People's search index is built per session: the documented first step is a warm-up call with an empty query. */
         await call(ctx.session, { url: `${API}/people:searchContacts`, query: { query: "", readMask: FIELDS } }).catch(() => undefined);
         const found = await call<{ results?: { person?: Person }[] }>(ctx.session, {
             url: `${API}/people:searchContacts`,

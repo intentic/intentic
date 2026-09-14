@@ -3,14 +3,7 @@ import { computed } from "vue";
 import type { AgentOrigin } from "@intentic/sandbox-contract";
 import { originMeta } from "../features/agents/fleet/agentStatus";
 
-/* "This conversation came in from outside": the one mark that tells an agent an automation opened for a
- * Discord mention, a web-chat visitor or a webhook apart from one the user started. Everything else about it
- * is an ordinary conversation (its own worktree, its own chat tab, its own turns), which is exactly why the
- * provenance has to be visible: without it the card reads as an agent the user forgot starting.
- *
- * Renders nothing for a user-started conversation, so callers can hand it an optional origin unconditionally.
- * `compact` is the icon alone (the chat tab strip, where the title already carries the sender); the full form
- * names the source and who sent it (the fleet card). */
+/* "This conversation came in from outside": the one mark that tells an agent an automation opened for a Discord mention. */
 
 const props = defineProps<{ origin?: AgentOrigin; compact?: boolean }>();
 
@@ -18,8 +11,7 @@ const meta = computed(() => (props.origin !== undefined ? originMeta(props.origi
 </script>
 
 <template>
-    <!-- The hint only in `compact`, where the glyph stands alone. Beside the label and detail it duplicated,
-         it was the row saying itself twice: once in the line the user is reading, once in a box on top of it. -->
+<!-- The hint only in `compact`, where the glyph stands alone. -->
     <span
         v-if="meta !== undefined"
         v-tooltip.top="compact === true ? meta.hint : undefined"

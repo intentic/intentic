@@ -149,10 +149,7 @@ watch(
                 <SegmentedControl :model-value="picked" :options="MODES" @update:model-value="setMode" />
             </label>
 
-            <!--
-                Same surface as the sandbox's own prompt: same three bases, same runtime, same kind of document. `save="explicit"` is the same
-                declaration the sandbox prompt and safety policy make, since every turn this card wears reads it.
-            -->
+            <!-- Same surface as the sandbox's own prompt: same three bases, same runtime, same kind of document. -->
             <div v-if="picked === `custom`" class="ui-field-shell max-h-[60dvh] overflow-auto p-3" style="--prose-measure: 72ch">
                 <MarkdownDocument
                     v-model="prompt"
@@ -166,7 +163,7 @@ watch(
                     class="min-h-48"
                     @save="commitPrompt"
                 >
-                    <!-- What Custom costs, scoped to this card's turns: it drops what this app tells the assistant about its own panels. -->
+                    <!-- Custom mode removes the app's built-in briefing for this persona. -->
                     <template #note>
                         Replaces the whole prompt on this persona's turns, including what this app tells the assistant about its question cards,
                         checklist panel and browser tools. Leave it empty to fall back to the sandbox's.
@@ -175,10 +172,7 @@ watch(
             </div>
         </div>
 
-        <!--
-            Shown regardless of the prompt setting, since a persona's checklist is independent of which prompt it runs. Bordered and divided like a
-            row group, since that's what it is.
-        -->
+        <!-- Shown regardless of the prompt setting, since a persona's checklist is independent of which prompt it runs. -->
         <div class="flex flex-col gap-2">
             <span class="flex items-center gap-2 text-sm text-content">
                 <Icon name="book" class="w-4 shrink-0 text-center text-xs text-subtle" />
@@ -207,10 +201,7 @@ watch(
                     @remove="remove(skill.name)"
                 />
 
-                <!--
-                    New skill opens in the same place a written one is read, as an open <DisclosureRow>, the same component its twin on the agent's
-                    skills list uses.
-                -->
+                <!-- New skills use the same disclosure row as existing skills. -->
                 <DisclosureRow v-if="adding" open body="drawer" icon="plus" title="New skill" @update:open="close">
                     <template #below>
                         <SkillForm :disabled="busy" @save="save" @cancel="close" />

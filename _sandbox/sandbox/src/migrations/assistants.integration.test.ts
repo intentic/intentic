@@ -9,10 +9,7 @@ import { applyMigration, type MigrationDeps } from "./apply.js";
 import { planHermes } from "./hermes.js";
 import { detectOpenclaw, planOpenclaw } from "./openclaw.js";
 
-/* The whole crossing, minus the HTTP framing: a packed `~/.hermes` through the archive reader, the adapter and
- * the apply loop, against deps that record every write. What the daemon composition adds on top (real stores,
- * the capability registry) is covered by its own suites; this one proves the migration pipeline's promises:
- * bounded reading, re-derivation, per-item failure, idempotent memory. */
+/* The whole crossing, minus the HTTP framing: a packed `~/.hermes` through the archive reader, the adapter and the apply loop. */
 
 const packHome = (entries: Record<string, string>): ReadableStream<Uint8Array> => {
     const packer = pack();

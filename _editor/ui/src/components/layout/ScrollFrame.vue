@@ -1,8 +1,4 @@
-<!--
-    A bordered surface with a fixed header and one scrolling body. `#meta` is the muted fact line under the title; `#strips` holds banners that must
-    not scroll away. `scroll: false` drops the internal scroller for content sized elsewhere; `sticky` pins the header to the page via
-    `--pinned-top`.
--->
+<!-- A bordered surface with a fixed header and one scrolling body. -->
 <script setup lang="ts">
 import { computed } from "vue";
 
@@ -21,24 +17,17 @@ const {
     sticky?: boolean;
 }>();
 
-/* Ignored unless the page owns the scroll, so a caller cannot ask for a pin that has nothing to pin against.
- * `bg-card` is the frame's own surface repeated on the header: a stuck header scrolls prose under itself and
- * needs to be opaque, and inheriting the section's background is not the same thing as painting it. */
+/* Ignored unless the page owns the scroll, so a caller cannot ask for a pin that has nothing to pin against. */
 const pinned = computed(() => sticky && !scroll);
 </script>
 
 <template>
-    <!-- A @container, because whether the header's title and actions fit on one line is a fact about the PANEL:
-         these sit in a workspace pane the reader can drag down to a third of the window, where a viewport query
-         says "wide" and hands a 300px header two competing halves. -->
+<!-- A @container, because whether the header's title and actions fit on one line is a fact about the PANEL. -->
     <section
         class="@container flex min-h-0 flex-col rounded-lg border border-line-subtle bg-card"
         :class="[grow ? `flex-1` : ``, scroll ? `overflow-hidden` : `overflow-clip`]"
     >
-        <!-- THE HEAD AND THE STRIPS PIN AS ONE BLOCK when pinned, rather than as two stacked `sticky` elements
-             at hand-computed offsets. The header's height is not a constant here (a title wraps, an action
-             cluster drops to its own row below `@xl`), so any `top-<n>` on the strips is a number that is wrong
-             at some width, and wrong here means a delete confirmation hidden behind the bar that asked it. -->
+<!-- THE HEAD AND THE STRIPS PIN AS ONE BLOCK when pinned, rather than as two stacked `sticky` elements at hand-computed offsets. -->
         <div :class="pinned ? `sticky top-(--pinned-top) z-2 shrink-0 bg-card` : `contents`">
             <header
                 v-if="title !== undefined || $slots[`title`] || $slots[`actions`] || $slots[`lead`]"
@@ -52,8 +41,7 @@ const pinned = computed(() => sticky && !scroll);
                         </h2>
                         <slot name="badges" />
                     </div>
-                    <!-- Pinned, these two are NOT in the bar: see the note above. They fall through to the top of
-                         the document instead, which is where they are read. -->
+                    <!-- Unpinned descriptions stay in document flow below the header. -->
                     <template v-if="!pinned">
                         <p v-if="description !== undefined || $slots[`description`]" class="mt-1 text-xs text-muted">
                             <slot name="description">{{ description }}</slot>

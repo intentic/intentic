@@ -148,10 +148,7 @@ const roster = computed(() => {
             <div class="flex flex-col gap-2">
                 <!-- Answers "can I start work, and if not, when", not a connection count (the roster already does that). -->
                 <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <!--
-                        Counted against the accounts that could have room, never the whole roster: a credential no turn
-                        can run on belongs to the legend below, or connecting one reads as capacity that shrank.
-                    -->
+<!-- Counted against the accounts that could have room, never the whole roster: a credential no turn can run on belongs to the legend below. -->
                     <span class="text-sm text-content">
                         {{ summary.counts.room }} of {{ capacityTotal }} accounts {{ summary.counts.room === 1 ? `has` : `have` }} room
                     </span>
@@ -187,18 +184,11 @@ const roster = computed(() => {
             </div>
         </RowNote>
 
-        <!--
-            2. PROVIDERS: the unit a reader actually chooses (the translator picks the account). Separated by alignment,
-            not framing: a rail with the mark, the name beside it, everything else hanging off a spine one step in, since nested bordered cards read
-            as false hierarchy (an account card reading as a provider).
-        -->
+        <!-- 2. PROVIDERS: the unit a reader actually chooses (the translator picks the account). -->
         <RowNote variant="block">
             <div class="flex flex-col gap-6">
                 <div v-for="group in groups" :key="group.provider" class="flex gap-2">
-                    <!--
-                        Rail: the mark plus a line showing how far the provider reaches. Uses the text colour's own tint, not
-                        bg-overlay/bg-canvas, both near-identical to bg-card in light mode.
-                    -->
+<!-- Rail: the mark plus a line showing how far the provider reaches. -->
                     <div class="flex w-5 shrink-0 flex-col items-center gap-1.5">
                         <span class="flex size-5 items-center justify-center rounded-md bg-content/10 text-content">
                             <ProviderLogo :provider="group.provider" class="text-xs" />
@@ -218,31 +208,21 @@ const roster = computed(() => {
                             <span v-else-if="!isInline(group)" class="ml-auto shrink-0 text-2xs text-muted">{{ groupState(group) }}</span>
                         </div>
 
-                        <!--
-                            Indented one step from the provider's name; smaller, lighter, and markless, so an account heading can't read
-                            as another provider.
-                        -->
+<!-- Indented one step from the provider's name; smaller, lighter, and markless, so an account heading can't read as another provider. -->
                         <div class="flex flex-col gap-3 pb-1 pl-3">
                             <!-- Small provider: the meters themselves. Nothing that fits is folded away. -->
                             <template v-if="isInline(group)">
-                                <!--
-                                    Hairline between accounts (none above the first): nine pooled meters in one column need a break, or a "95%"
-                                    can't be traced to its account. Faint and indented, unlike the panel's own full-bleed dividers, so it stays
-                                    subordinate.
-                                -->
+                                <!-- Separate account groups with a hairline, except before the first. -->
                                 <div
                                     v-for="(row, index) in group.rows"
                                     :key="row.id"
                                     class="flex flex-col gap-1.5"
                                     :class="single(group) === undefined && index > 0 ? `border-t border-line-subtle pt-3` : ``"
                                 >
-                                    <!--
-                                        Account is its own tier, between the provider heading and the pools it heads, styled to not be mistaken for
-                                        either.
-                                    -->
+                                    <!-- Account labels sit between the provider and its pools. -->
                                     <div v-if="single(group) === undefined" class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                                         <span class="min-w-0 truncate text-xs font-medium text-content">{{ row.label }}</span>
-                                        <!-- Shown only when the renamable label doesn't already identify the account; same rule as the Agent tab. -->
+                                        <!-- Show the identity only when the account label does not identify it. -->
                                         <span v-if="row.identity !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{
                                             row.identity
                                         }}</span>
@@ -263,17 +243,14 @@ const roster = computed(() => {
                                         }}
                                     </p>
 
-                                    <!--
-                                        Narrow: wraps the meter to its own line rather than dropping the reset date, the number this opens for.
-                                        Measured against the panel, not the window.
-                                    -->
+                                    <!-- Narrow layouts wrap meters without hiding reset dates. -->
                                     <div
                                         v-for="pool in row.pools"
                                         :key="pool.kind"
                                         class="flex flex-wrap items-center gap-x-3 gap-y-1 @xl:flex-nowrap"
                                     >
                                         <span class="min-w-0 flex-1 truncate text-2xs text-muted @xl:w-40 @xl:flex-none">{{ pool.label }}</span>
-                                        <!-- A 0% pool still draws a sliver; an empty track would read the same as no reading at all, opposite facts. -->
+                                        <!-- Zero usage keeps a visible sliver so the pool remains present. -->
                                         <div
                                             class="order-last h-1.5 min-w-0 flex-1 basis-full overflow-hidden rounded-full bg-content/10 @xl:order-none @xl:basis-0"
                                         >
@@ -293,7 +270,7 @@ const roster = computed(() => {
                                 </div>
                             </template>
 
-                            <!-- Large provider: bars. No reading draws an empty track, never a zero-height bar; those are opposite claims. -->
+                            <!-- Large providers use bars; missing readings keep an empty track. -->
                             <template v-else>
                                 <div class="flex h-5 items-end gap-0.5">
                                     <span
@@ -326,11 +303,7 @@ const roster = computed(() => {
             </div>
         </RowNote>
 
-        <!--
-            3. ATTENTION: what a percentage cannot say — the accounts no turn can run on until a person acts. The
-            heading counts them and states the fix once; each condition then names itself above the accounts it holds,
-            since "no Antigravity project" and "sign-in expired" are the same instruction but not the same news.
-        -->
+<!-- 3. -->
         <RowNote v-if="summary.attention.length > 0" variant="block">
             <div class="flex flex-col gap-2">
                 <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -401,7 +374,7 @@ const roster = computed(() => {
                         </thead>
                         <tbody class="text-muted">
                             <tr v-for="{ row, blocked } in roster" :key="row.id" class="border-b border-line/50">
-                                <!-- Name over sign-in identity: reconciling an unplaceable name is exactly why a reader opens this table. -->
+                                <!-- Account names lead identities so the sign-in target is clear. -->
                                 <td class="max-w-56 py-1.5 pr-3">
                                     <span class="block truncate text-content">{{ row.label }}</span>
                                     <span v-if="row.identity !== undefined" class="block truncate text-subtle">{{ row.identity }}</span>
@@ -423,10 +396,7 @@ const roster = computed(() => {
         </RowNote>
     </RowGroup>
 
-    <!--
-        An unread state is not an empty one: drawn as the panel itself (headline, band strip, legend), not a
-        "Reading..." sentence in its place.
-    -->
+<!-- An unread state is not an empty one: drawn as the panel itself (headline, band strip, legend), not a "Reading..." sentence in its place. -->
     <RowGroup v-else-if="!accountsLoaded && outline" class="@container" role="status" aria-busy="true">
         <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
         <span class="sr-only">Reading your connections…</span>

@@ -48,10 +48,7 @@ const logout = async (): Promise<void> => {
 
 <template>
     <!-- The dot sits outside the avatar's clip circle; the wrapper positions it, the button keeps overflow-hidden. -->
-    <!--
-        The active-tile plate sits behind the avatar as an absolutely positioned sibling, since a border or
-        ring drawn on the avatar itself would decorate the photo, not the frame, and the avatar keeps its own size.
-    -->
+<!-- The active plate is a sibling so the avatar image remains undecorated. -->
     <div class="account-control relative mt-auto shrink-0">
         <span v-if="onSettings" class="pointer-events-none absolute -inset-1 rounded-lg bg-primary-600/15" aria-hidden="true"></span>
         <button

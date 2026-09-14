@@ -2,8 +2,7 @@ import { expect, test } from "vitest";
 import { z } from "zod";
 import { createMcpServer, type McpAuditEntry, textResult, tool } from "./peer-mcp-server.js";
 
-/* The dispatch every peer serves its tools through, against two hand-written tools: what the model is shown,
- * what an arriving call is checked against, and the rule that a failed tool is a result and not a fault. */
+/* The dispatch every peer serves its tools through, against two hand-written tools: what the model is shown, what an arriving call is checked against. */
 
 class Refused extends Error {}
 

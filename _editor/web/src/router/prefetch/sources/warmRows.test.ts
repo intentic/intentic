@@ -2,10 +2,7 @@ import type { GitChange, RepoChanges } from "@intentic/api-contract";
 import { describe, expect, it } from "vitest";
 import { warmRows, WARM_LIMIT } from "./warmRows";
 
-/* The order the workspace review is read ahead in: the one rule of that source worth pinning, since everything
- * else about it (the keys, the reads) is shared with the panel by construction. Warming the rows in a DIFFERENT
- * order than the panel draws them would warm the rows the reader reaches last, which is the failure this
- * asserts against and which no type can catch. */
+/* Read-ahead follows the workspace review's stable source order. */
 
 const change = (path: string): GitChange => ({ path, status: `modified`, additions: 1, deletions: 0 });
 

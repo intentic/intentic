@@ -11,32 +11,13 @@ import Footer from "../Footer.astro";
 import Nav from "../Nav.astro";
 
 interface Props {
-    /**
-     * Which book this page belongs to. Omitted means /docs, which is most of them; the authoring pages pass
-     * developersBook. It decides the rail, the breadcrumb root and which shelf previous/next walks: everything that
-     * would otherwise have to be repeated per page and could therefore disagree with the tree.
-     */
+/** Which book this page belongs to. */
     book?: Book;
     pageId: string;
-    /**
-     * The page's h1. It MUST start with the page's title in the docs tree: ideally be exactly it.
-     *
-     * Five pages used to be called one thing in the rail and another on the page: you clicked "Updates & rollback"
-     * and arrived at "Updates: what we promise never breaks", clicked "Overview" and arrived at "intentic
-     * documentation". A reader cannot tell that from a mistake, and it makes the rail untrustworthy for the one
-     * job it has. Three places carry the three lengths a page name needs, and none of them is this one: the tree's
-     * `title` is the short name the rail, breadcrumb and previous/next use, the tree's `meta.title` is the
-     * descriptive form for the browser tab and search engines, and `lead` below is the sentence. Two pages append
-     * a "· subtitle" here, which still reads as the same page; anything else does not.
-     */
+/** The page's h1. */
     heading: string;
     lead: string;
-    /**
-     * Heading ids this page links to internally: from a hand-written index table, say. Checked against the
-     * headings actually rendered, so renaming a heading breaks the build instead of leaving a dead link nobody
-     * notices. A dead in-page link is invisible in a screenshot and invisible in a diff; it is only visible to
-     * the reader who clicks it and goes nowhere.
-     */
+/** Heading ids this page links to internally: from a hand-written index table, say. */
     requireAnchors?: string[];
 }
 
@@ -44,13 +25,7 @@ const { book = docsBook, pageId, heading, lead, requireAnchors } = Astro.props;
 const page = bookPage(book, pageId);
 const bookRoot = bookHref(book, "");
 
-/* The content is RENDERED HERE rather than dropped straight into a <slot />, because both the anchors and the
- * section rail need to know what headings the page has. Rendering the slot to a string is the only place that
- * knowledge exists: the page's markup is authored per-page, and the layout is the one component that sees all of
- * it. See lib/docs-headings.ts for what the pass does and why it is not authored per heading.
- *
- * Safe to re-emit with set:html because these pages are static: no client islands anywhere under /docs/, so the
- * string is final HTML and not a hydration boundary. */
+/* The content is RENDERED HERE rather than dropped straight into a <slot />. */
 const rendered = await Astro.slots.render("default");
 assertNoCodeBleed(rendered, pageId);
 const { html, headings } = extractDocsContent(rendered);
@@ -74,15 +49,12 @@ const { section, prev, next } = bookNeighbours(book, pageId);
 <BaseLayout breadcrumbs={breadcrumbs}>
     <Nav />
     <main class="flex-1">
-        {/* Three columns where there is room for three: rail, prose, sections. The prose column is `min-w-0`
-            and the outer grid caps at 96rem, so adding the third column widens the page rather than squeezing
-            the column the prose sits in. */}
+        {/* Use three columns only when the capped layout can preserve the prose width. */}
         <div
             class="below-bar mx-auto grid max-w-6xl gap-10 px-6 pb-20 lg:grid-cols-[15rem_1fr] lg:gap-14 xl:max-w-[96rem] xl:grid-cols-[16rem_minmax(0,1fr)_14rem]"
         >
             <aside class="lg:relative">
-                {/* Narrow screens: the rail is collapsed, so search sits beside the menu toggle rather than
-                    inside the thing you would have to open to reach it. */}
+                {/* Keep compact search beside the menu toggle when the rail is collapsed. */}
                 <div class="mb-4 flex items-center gap-2 lg:hidden">
                     <button
                         class="flex items-center gap-2 border border-line bg-card px-3.5 py-2 text-sm text-muted"
@@ -97,14 +69,10 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                     </button>
                     <DocsSearchField variant="compact" />
                 </div>
-                {/* top-20 / 6rem, not top-28 / 9rem: the fixed nav is 65px, so the old offset left 63px of dead
-                    gap above the rail and reserved 144px of height for it. Twenty rows need that space: with the
-                    old numbers the whole "Build on it" shelf sat below the rail's own scroll on a 1000px-tall
-                    viewport, which is exactly the orientation this rewrite exists to give back. */}
+                {/* Keep the rail offset at 5rem below the fixed navigation. */}
                 <div class="sticky top-20 hidden max-h-[calc(100vh-6rem)] overflow-y-auto pb-2 lg:block" id="docs-sidebar" data-rail-scroll>
                     <DocsSidebar book={book} pageId={pageId}>
-                        {/* Hidden on narrow screens: its compact twin is already in the row above, and two
-                            search controls one scroll apart is a bar with no shape. */}
+                        {/* Hide the full search control on narrow screens because its compact twin is above. */}
                         <div class="mb-6 hidden lg:block" slot="search">
                             <DocsSearchField />
                         </div>
@@ -122,8 +90,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                             pageId && (
                                 <Fragment>
                                     <li aria-hidden="true">›</li>
-                                    {/* The shelf, so the trail says which part of the docs this is: the one
-                                        thing a breadcrumb is for that "Docs › Page" was not doing. */}
+                                    {/* Include the shelf in the breadcrumb when the page belongs to one. */}
                                     {section && (
                                         <Fragment>
                                             <li class="text-subtle">{section.label}</li>
@@ -140,20 +107,13 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                 </nav>
 
                 <header class="mb-10 border-b border-line pb-8">
-                    {/* The book's own name is the fallback, so a page outside every shelf says "Docs" or "API"
-                        rather than a generic word that belongs to neither. */}
+                    {/* Use the book label when the page has no shelf. */}
                     <div class="eyebrow">{section?.label ?? book.label}</div>
                     <h1 class="display mt-3 text-3xl font-semibold sm:text-4xl">{heading}</h1>
                     <p class="mt-4 text-base leading-relaxed text-muted">{lead}</p>
                 </header>
 
-                {/* Inside the article, before the prose: the rail is the grid's third column, so on a narrow
-                    screen it stacks below everything and a reader would meet the section list only after
-                    scrolling the whole page.
-
-                    Skipped on a page that authored its own index table. `requireAnchors` is exactly the signal
-                    that it did, and that table is this list plus a description column: stacking both put two
-                    tables of contents back to back on a phone, the second one strictly worse than the first. */}
+                {/* Show the inline table of contents unless the page provides its own anchored index. */}
                 {requireAnchors === undefined && <DocsToc headings={headings} variant="inline" />}
 
                 <div class="docs-body" set:html={html} />
@@ -161,8 +121,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                 {
                     (prev || next) && (
                         <div class="mt-16 border-t border-line pt-8">
-                            {/* Named, because shelf-scoped movement only makes sense if the reader can see which
-                                shelf is being walked. */}
+                            {/* Label previous and next links when navigation is shelf-scoped. */}
                             {section && <div class="eyebrow mb-4">More in {section.label}</div>}
                             <div class="flex items-stretch justify-between gap-4">
                                 {prev ? (
@@ -190,16 +149,14 @@ const { section, prev, next } = bookNeighbours(book, pageId);
     </main>
     <Footer />
 
-    {/* Outside the rail and outside <main>: a modal inside the collapsed rail cannot open on a phone. */}
+    {/* Keep the search modal outside the collapsible rail so it opens on narrow screens. */}
     <DocsSearch />
 
     <script>
         const toggle = document.getElementById("docs-sidebar-toggle");
         const sidebar = document.getElementById("docs-sidebar");
 
-        /* Tell the reader the rail continues. Twenty-seven rows do not fit a laptop viewport, and the shelf that
-           falls off the bottom is the last one. So a reader who never scrolls the rail never learns that a
-           quarter of the documentation exists. The CSS fades whichever edge has something behind it. */
+        /* The rail marks that more documentation rows continue below the viewport. */
         if (sidebar) {
             const edges = () => {
                 // A pixel of slack: sub-pixel layout makes a container scrolled fully to its end report a
@@ -219,12 +176,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                 }
             });
 
-            /* THE RAIL STAYS PUT ACROSS A NAVIGATION. Every link in this book is a full page load, so the rail —
-               its own scroll region — reset to the top on each click and the reader lost their place in a long
-               list. Its position is remembered per book and restored on the next page. Only on a first visit,
-               with nothing saved, does it fall back to putting the page you are on in view: the rail's job is
-               "where am I", and on a Build-on-it page the marked row is below the fold, so `nearest` reveals it
-               without moving the common case where it already shows. */
+            /* The docs rail restores its scroll position across full page loads. */
             const scrollKey = `rail-scroll:${location.pathname.split("/")[1] || "root"}`;
             const saved = sessionStorage.getItem(scrollKey);
             if (saved !== null) {sidebar.scrollTop = Number(saved);}
@@ -245,16 +197,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
         }
     </script>
 
-    {/* Scroll-spy for the section rail. Marks the section whose heading last crossed the top of the reading area,
-        so the rail answers "where am I" and not just "what is here". IntersectionObserver rather than a scroll
-        handler: it reports only when a boundary is crossed instead of on every frame.
-
-        The rootMargin's top is the sticky header's height plus a little, and its bottom is -70% of the viewport,
-        so the "current" band is a strip near the top of the reading area. Without that, three headings sit on
-        screen at once near the foot of a short section and the highlight flickers between them.
-
-        It lives here rather than in DocsToc because the rail and its inline twin are two renders of one list :
-        the behaviour belongs to the page, which this component is exactly one of. */}
+    {/* Use an IntersectionObserver to highlight the section currently crossing the reading band. */}
     <script>
         const links = new Map<string, HTMLElement>();
         for (const link of document.querySelectorAll<HTMLElement>("[data-toc-link]")) {
@@ -310,9 +253,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
         }
     </script>
 
-    {/* Copy-link behaviour for the anchor beside every heading. The anchor is a real <a href="#id"> and works
-        without this; the handler adds "clicking it puts the full URL on your clipboard", which is what someone
-        reaching for a section link actually wants, and briefly says so. */}
+    {/* Keep heading anchors usable without JavaScript and add clipboard feedback when available. */}
     <script>
         for (const anchor of document.querySelectorAll<HTMLAnchorElement>(".docs-anchor")) {
             anchor.addEventListener("click", (event) => {

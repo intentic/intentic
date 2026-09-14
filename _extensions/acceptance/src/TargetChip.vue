@@ -85,10 +85,7 @@ const app = (): string | undefined => targets.serversOf(repo).find((server) => s
                 </button>
                 <p class="text-2xs text-subtle">…or an address of your own:</p>
             </template>
-            <!--
-                Typed straight into the aiming state, so the chip, gate and manifest all read the same value; clearing hands the group back to the
-                repo's server, or leaves it unaddressed.
-            -->
+            <!-- The target field feeds the chip, gate, and manifest from one value. -->
             <input
                 :value="targets.addressOf(repo, group) ?? ``"
                 type="text"
@@ -100,7 +97,7 @@ const app = (): string | undefined => targets.serversOf(repo).find((server) => s
                 The daemon runs no dev server for <span class="font-mono">{{ repo }}</span>: start the app yourself in a terminal, or point at a
                 deployment. The agents reach it from inside the sandbox, so a localhost address is the direct route.
             </p>
-            <!-- Once apps are listed there's no "leave it to the repo" option: the run remembers the pick, so this is asked once, not once per run. -->
+            <!-- Selecting an app persists the target for the run. -->
             <p v-else-if="picks().length > 0" class="text-2xs text-subtle">
                 Pick the app these stories belong to. The next run against this group starts here, so this is a question you answer once.
             </p>

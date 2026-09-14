@@ -252,16 +252,8 @@ const finish = (): void => {
 
         <Notice v-if="errorMsg" :of="errorMsg" class="mb-3" />
 
-        <!--
-            No address bar any more: the picture is now the whole window, so the real address bar and back button are
-            Chromium's own.
-        -->
-        <!--
-            Capped, not just proportioned: aspect-ratio alone could derive a height taller than the modal, creating a
-            scrollbar over a surface whose wheel belongs to the remote browser. `max-h`+`object-contain` shrink and
-            letterbox
-            instead.
-        -->
+<!-- No address bar any more: the picture is now the whole window, so the real address bar and back button are Chromium's own. -->
+<!-- Capped, not just proportioned: aspect-ratio alone could derive a height taller than the modal. -->
         <div
             ref="surface"
             tabindex="0"
@@ -275,11 +267,7 @@ const finish = (): void => {
             @paste="onPaste"
             @contextmenu.prevent
         >
-            <!--
-                Whole window decoded from H.264; the only pointer shown is the X server's own, so `cursor-none` hides
-                the local
-                one.
-            -->
+<!-- Whole window decoded from H.264; the only pointer shown is the X server's own, so `cursor-none` hides the local one. -->
             <canvas v-show="painting" ref="canvasEl" class="h-full w-full cursor-none object-contain" />
             <div v-if="!painting" class="absolute inset-0 flex items-center justify-center gap-2 text-xs text-muted">
                 <Icon name="spinner" spin />
@@ -288,10 +276,7 @@ const finish = (): void => {
         </div>
 
         <template #footer>
-            <!--
-                Browsing ends by closing (the daemon flushes the profile), so one button, not a Cancel implying it's
-                undoable.
-            -->
+<!-- Browsing ends by closing (the daemon flushes the profile), so one button, not a Cancel implying it's undoable. -->
             <Button v-if="browsing" label="Close" :loading="status === 'saving'" @click="finish">
                 <template #icon><Icon name="check" /></template>
             </Button>

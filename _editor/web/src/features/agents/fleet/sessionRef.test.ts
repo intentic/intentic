@@ -19,8 +19,7 @@ describe(`sessionIdFrom`, () => {
         expect(sessionIdFrom(ID.toUpperCase())).toBe(ID);
     });
 
-    /* An id is whatever minted it. A workflow's step sessions are named, not uuids, so the costume has to be
-     * what carries them: a shape check alone would take the branch chip's own value and refuse it. */
+/* An id is whatever minted it. */
     it(`carries an id that is not a uuid, on the strength of its costume`, () => {
         expect(sessionIdFrom(`agent/${STEP}`)).toBe(STEP);
         expect(sessionIdFrom(`https://sandbox.example.com/agents/${STEP}`)).toBe(STEP);
@@ -34,9 +33,7 @@ describe(`sessionIdFrom`, () => {
         expect(sessionIdFrom(`README.md`, (id) => id === STEP)).toBeUndefined();
     });
 
-    /* The strictness that keeps Quick Open a file palette. Every one of these is something a person types while
-     * looking for a file, and the middle two are the traps: a folder called `agents`, and a path that happens
-     * to end in a uuid. */
+    /* Quick Open accepts only references matching the strict session shape. */
     it(`leaves an ordinary file search alone`, () => {
         expect(sessionIdFrom(`AgentCard.vue`)).toBeUndefined();
         expect(sessionIdFrom(`src/agents/AgentCard.vue`)).toBeUndefined();

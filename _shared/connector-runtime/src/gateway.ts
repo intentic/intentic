@@ -36,8 +36,7 @@ export interface SlotView<THandle> {
 
 export type CloseReason = "superseded" | "dead" | "shutdown";
 
-// A delivery refusal whose message is meant for the owner; any other error's message or stack stays in the gateway log
-// only.
+// Expose owner-facing refusal text while retaining other errors in logs.
 export class GatewayRefusal extends Error {
     readonly response: string;
 

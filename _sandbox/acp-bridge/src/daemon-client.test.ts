@@ -4,9 +4,7 @@ import type { AttachFrame } from "@intentic/sandbox-contract";
 import { afterEach, expect, test } from "vitest";
 import { createDaemonClient } from "./daemon-client.js";
 
-/* The HTTP layer over a real node:http server: the turn is started and then watched (two requests), the SSE
- * framing round-trips attach frames (unknown shapes skipped), the bridge token header rides every call, 401 →
- * ACP auth_required. */
+/* The HTTP layer over a real node:http server: the turn is started and then watched (two requests). */
 
 let server: Server | undefined;
 afterEach(() => server?.close());

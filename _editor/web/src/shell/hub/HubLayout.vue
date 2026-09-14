@@ -1,7 +1,4 @@
-<!--
-    Shared shell for a hub page — title, section index, and the active section's body — used by the sandbox hub and settings hub. The index is a
-    column of grouped links, not a tab strip; each row is a real `<a>` (href, middle-click, copyable). Mobile shows a horizontal strip instead.
--->
+<!-- Shared shell for a hub page — title, section index, and the active section's body — used by the sandbox hub and settings hub. -->
 <script setup lang="ts">
 import { type IconName, type NavGroup, NavRail, Row, SegmentedControl, SplitView } from "@intentic/ui";
 import { areaIcon } from "@intentic/ui/icons";
@@ -24,9 +21,7 @@ const {
     /** The section the param-less URL shows. Its row writes no param, so no section has two URLs. */
     defaultSlug: string;
     groups: readonly NavGroup<HubTab>[];
-    /** Holds the unknown-slug redirect while the set is still filling in: a hub whose rows come from extension
-     *  detect() cannot judge a deep link until the workspace facts have landed, and redirecting earlier would
-     *  bounce a perfectly good one. Hubs with a fixed set leave it alone. */
+/** Holds the unknown-slug redirect while the set is still filling in. */
     ready?: boolean;
 }>();
 
@@ -72,17 +67,9 @@ watch(
 </script>
 
 <template>
-    <!-- Wide because the index spends 14rem of it: at the 56rem default the body would be left narrower than it
-         was before the column arrived. `scroll="page"` because a hub's body is a long FORM, not a document beside
-         an index: Usage and Secrets both run past a screen, and clamping them would put a scrollbar inside a
-         card inside a page. The rail sticks instead, which is how you leave the section you are in.
-
-         Everything else (the shell, the header, the gap, the rail width, the page cap, the phone behaviour) is <SplitView>'s
-         now. This component is what remains once the layout is shared: route ↔ slug, and nothing else. -->
+<!-- Wide because the index spends 14rem of it: at the 56rem default the body would be left narrower than it was before the column arrived. -->
     <SplitView :title="title" :description="description" scroll="page">
-        <!-- Mobile keeps the strip. At phone width there is no column to put beside anything, and a scrolling row
-             of pills is the idiom every mobile tab bar already uses; the width failure that killed the strip on
-             desktop is caused by a content cap that does not apply once the page is the whole screen. -->
+<!-- Mobile keeps the strip. -->
         <template #compact>
             <div class="scrollbar-thin overflow-x-auto border-b border-line-subtle pb-2">
                 <SegmentedControl :model-value="activeSlug" :options="options" @update:model-value="select" />
@@ -92,8 +79,7 @@ watch(
         <template #rail>
             <NavRail aria-label="Sections" :groups="groups">
                 <template #row="{ item: tab }">
-                    <!-- <Row> is presentational by design and owns no router, so an internal-nav row wraps it:
-                         which is what buys back the href the strip never had. -->
+                    <!-- Internal navigation wraps the presentational row to provide its href. -->
                     <RouterLink :key="tab.slug" :to="linkTo(tab.slug)" class="block">
                         <Row
                             as="div"
@@ -103,14 +89,9 @@ watch(
                             :selected="tab.slug === activeSlug"
                             class="rounded-lg"
                         >
-                            <!-- A fact about the section, so it rides the row's #meta cluster. Same chip the
-                                 rail's tiles wear, same tone table: a count here and a count there are the
-                                 same claim and should not be two shades apart. -->
+<!-- A fact about the section, so it rides the row's #meta cluster. -->
                             <!-- Chip only: a hub row is a section of one view, so it never speaks for a run in flight. -->
-                            <!-- The test stays out here, unlike the corner badges, because `#meta` is a slot Row only
-                                 draws when it is filled: an unconditional one would put an empty cluster and a `gap-4`
-                                 minimum into every hub row that has nothing to report. So this chip mounts rather than
-                                 toggles, and `appear` inside ViewBadgeChip is what animates it. -->
+<!-- The test stays out here, unlike the corner badges, because `#meta` is a slot Row only draws when it is filled. -->
                             <template v-if="tab.badge !== undefined && badgeChip(tab.badge)" #meta>
                                 <ViewBadgeChip :badge="tab.badge" class="text-2xs" />
                             </template>

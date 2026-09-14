@@ -1,8 +1,4 @@
-<!--
-    The AskUserQuestion card: the ask, the options, and the answer being composed. Drawn as a list on the card's own
-    text column rather than as a stack of boxes — the mark rides in the header icon's gutter, so every label starts
-    where the ask does, and a wash (never a rim) says which row is chosen.
--->
+<!-- The AskUserQuestion card: the ask, the options, and the answer being composed. -->
 <script setup lang="ts">
 import { growTextarea, Icon, type IconName, useDevice } from "@intentic/ui";
 import type { AskQuestion, TranscriptQuestion } from "@intentic/sandbox-contract";
@@ -210,7 +206,7 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
                                 <pre v-if="option.preview" class="chat-option-preview scrollbar-thin">{{ option.preview }}</pre>
                             </span>
                         </button>
-                        <!-- "Other" is an ordinary option row, identical markup; its field appears below once picked and keeps its text when unpicked. -->
+                        <!-- The custom-answer field stays below the ordinary Other option. -->
                         <button
                             type="button"
                             :role="question.multiSelect ? 'checkbox' : 'radio'"
@@ -234,10 +230,7 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
                     </div>
                     <!-- The one framed thing on the card, in the column the labels stand in. -->
                     <div v-if="isSelected(index, OTHER_LABEL)" class="chat-option-field flex flex-col gap-1">
-                        <!--
-                            Grows rather than a fixed one-line input, since answers here often run long. `text-base` below `md` avoids iOS's
-                            auto-zoom-on-focus.
-                        -->
+<!-- Grows rather than a fixed one-line input, since answers here often run long. -->
                         <textarea
                             :ref="(el) => setOtherInput(index, el)"
                             rows="1"

@@ -552,18 +552,9 @@ const keepTab = (event: Event, id: string): void => {
 
 <template>
     <div class="flex min-h-0 flex-col gap-1.5">
-        <!--
-            Reading order top to bottom: narrow with the filter, pick a lane, and when the query reaches past what's
-            open, the "Not open" group at the foot.
-        -->
-        <!--
-            The `Aa` case toggle mirrors the board's: a mode only one of the two search boxes could see or undo would
-            be confusing.
-        -->
-        <!--
-            Full-width because this switch decides what the column IS, not a filter on it — it reads as the column's own
-            header. `stretch` keeps a pointer-sized track at `xs` (SegmentedControl honours the density prop).
-        -->
+<!-- Reading order top to bottom: narrow with the filter, pick a lane, and when the query reaches past what's open, the "Not open" group at the foot. -->
+<!-- The `Aa` case toggle mirrors the board's: a mode only one of the two search boxes could see or undo would be confusing. -->
+<!-- Full-width because this switch decides what the column IS, not a filter on it — it reads as the column's own header. -->
         <SegmentedControl
             :model-value="grouping"
             :options="GROUPINGS"
@@ -584,28 +575,13 @@ const keepTab = (event: Event, id: string): void => {
             placeholder="Filter by your messages…"
             class="shrink-0"
         />
-        <!--
-            A different list, not this one regrouped — its own component (see ChatPersonaRail). Emits the same `select`
-            this file does, so the host focuses a chat the same way from either list.
-        -->
+<!-- A different list, not this one regrouped — its own component (see ChatPersonaRail). -->
         <ChatPersonaRail v-if="grouping === `persona`" @select="onPersonaSelect" />
-        <!--
-            LANE BREAKS OUTRANK CARD BREAKS, and at 12px against 10px they barely did: the eye groups by proximity,
-            so two gaps that close together read as one flat list with headings dropped into it rather than as three
-            groups. 16px against 10px is the smallest ratio that separates them.
-        -->
+<!-- LANE BREAKS OUTRANK CARD BREAKS, and at 12px against 10px they barely did: the eye groups by proximity. -->
         <div v-else ref="scroller" class="scrollbar-thin flex min-h-0 flex-1 flex-col items-stretch gap-4 overflow-y-auto">
-            <!--
-                An empty lane isn't drawn at all (see occupiedLanes); one emptied only by the filter keeps its header, so the
-                list doesn't reshuffle under the cursor mid-keystroke.
-            -->
+<!-- An empty lane isn't drawn at all (see occupiedLanes); one emptied only by the filter keeps its header. -->
             <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :dot="lane.dot" :count="countIn(lane.key)">
-                <!--
-                    Same act and wording as the board's Finished lane (there it archives, here it closes the chats); on every
-                    lane, since a close is lossless whatever the lane — the turn detaches and keeps running, unsent words are
-                    set aside, and the chat is still on the board. Shown only where it would close something, and hidden while
-                    filtering, since it would close more than the query matched.
-                -->
+<!-- Closing a chat is lossless in every lane. -->
                 <template #actions>
                     <Button
                         v-if="clearing[lane.key].size > 0 && !filtering"
@@ -620,11 +596,7 @@ const keepTab = (event: Event, id: string): void => {
                         Clear
                     </Button>
                 </template>
-                <!--
-                    Dashed like the board's run card: a run is the container for the rows below it, not one of them. Click opens
-                    it the same way the board does (openRunInChat) — live sessions into the panes, or the diagram when nothing
-                    is live.
-                -->
+<!-- Dashed like the board's run card: a run is the container for the rows below it, not one of them. -->
                 <div v-if="runsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-2.5">
                     <RailCard
                         v-for="run in runsIn(lane.key)"
@@ -650,10 +622,7 @@ const keepTab = (event: Event, id: string): void => {
                 <p v-if="cardsIn(lane.key).length === 0 && runsIn(lane.key).length === 0" class="px-1 text-2xs text-subtle">No matches</p>
                 <div v-else-if="cardsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-2.5">
                     <template v-for="{ conversation: c, agent } in cardsIn(lane.key)" :key="c.conversationId">
-                        <!--
-                            Replaces the card rather than nesting a field in it (a button can't host a usable input). Enter/blur commit,
-                            Esc cancels, an empty or unchanged name silently cancels — the WorkspaceTree convention (createInlineRename).
-                        -->
+<!-- Replaces the card rather than nesting a field in it (a button can't host a usable input). -->
                         <input
                             v-if="edit.editing && renamingId === c.conversationId"
                             v-model="edit.draft"
@@ -696,14 +665,8 @@ const keepTab = (event: Event, id: string): void => {
                                     :members="viewersOfSession(c.session.value.id)"
                                     label="in this chat"
                                 />
-                                <!--
-                                    The × is a hit target around an 11px glyph; a miss lands on the card and re-selects it. Sits beside the
-                                    status glyph on hover (AgentCard's pattern), so nothing shifts as the pointer crosses.
-                                -->
-                                <!--
-                                    A peeked card offers the pin in the same slot every other card offers its ×, so nothing shifts on hover. It's
-                                    the only visible cue for peek besides the italic title.
-                                -->
+<!-- The × is a hit target around an 11px glyph; a miss lands on the card and re-selects it. -->
+                                <!-- The peeked card keeps its pin action in the trailing slot. -->
                                 <span
                                     v-if="c.peek.value"
                                     role="button"
@@ -724,10 +687,7 @@ const keepTab = (event: Event, id: string): void => {
                                     <Icon name="times" class="text-2xs" />
                                 </span>
                             </template>
-                            <!--
-                                One line: why it needs attention or is unread, where it came from, the model, and (settled only) its age,
-                                right-aligned. Reads from the fleet entry when there is one, else the conversation.
-                            -->
+<!-- One line: why it needs attention or is unread, where it came from, the model, and (settled only) its age, right-aligned. -->
                             <template v-if="hasMeta({ conversation: c, agent })" #meta>
                                 <span
                                     v-if="agent !== undefined && attentionReason(agent) !== undefined"
@@ -745,18 +705,12 @@ const keepTab = (event: Event, id: string): void => {
                                     class="ui-status-pill shrink-0 bg-primary-600/15 font-semibold text-link"
                                     >{{ unreadBadge(agent)!.label }}</span
                                 >
-                                <!--
-                                    Grouped with the attention/unread chips: same question, answered by the reader's own unfinished draft. Read
-                                    from the conversation, not the fleet entry — this rail only renders in the window holding that composer.
-                                -->
+                                <!-- Attention and unread chips share the trailing metadata group. -->
                                 <UnsentMark v-if="c.unsent.value" :preview="draftPreview(c.draft.value)" :at="c.draftAt.value" :now="now" />
                                 <!-- Provenance marks (external origin, workflow), same as the board's OriginMark in the card body. -->
                                 <OriginMark :origin="originOf(c)" compact />
                                 <WorkflowMark :workflow="agent?.workflow" compact />
-                                <!--
-                                    Which sandbox the chat runs in, when not this one (Conversation.box): two identical-looking rows can be on
-                                    different machines. Named in the tooltip, since the glyph alone can only say "somewhere else".
-                                -->
+                                <!-- Chats in another sandbox identify that sandbox in metadata. -->
                                 <span
                                     v-if="c.box.value !== undefined"
                                     v-tooltip.top="`Runs in “${boxNameOf.get(c.box.value!) ?? `another sandbox`}”`"
@@ -780,10 +734,7 @@ const keepTab = (event: Event, id: string): void => {
                         </RailCard>
                     </template>
                 </div>
-                <!--
-                    Not a pager — the count itself is the point ("12 more open"), one press away rather than gone. Same row as
-                    the board's, at rail width; hidden while filtering since the window is lifted then.
-                -->
+<!-- Not a pager — the count itself is the point ("12 more open"), one press away rather than gone. -->
                 <button
                     v-if="lane.key === 'finished' && !filtering && hiddenFinished > 0"
                     type="button"
@@ -795,10 +746,7 @@ const keepTab = (event: Event, id: string): void => {
                 </button>
             </RailLane>
 
-            <!--
-                Query hits outside this window's open chats (fleet, archive, agent-less conversations); a row opens the
-                conversation, same as History. Same card shape as the lanes above, just muted.
-            -->
+<!-- Query hits outside this window's open chats (fleet, archive, agent-less conversations); a row opens the conversation, same as History. -->
             <RailLane v-if="filtering && notOpenCount > 0" label="Not open" icon="search" :count="notOpenCount">
                 <div class="flex min-w-0 flex-col gap-2.5">
                     <!-- Same identity tile as the lanes above; the category tint still signals what kind of work this is. -->
@@ -843,10 +791,7 @@ const keepTab = (event: Event, id: string): void => {
             edit.error
         }}</span>
 
-        <!--
-            Both teleport out (hover card to the overlay target, menu to `append-to`); kept here only so the component
-            stays single-rooted, since a fragment root would drop the sizing classes its hosts pass in.
-        -->
+<!-- Both teleport out (hover card to the overlay target, menu to `append-to`); kept here only so the component stays single-rooted. -->
         <HoverCard ref="hoverCard" />
         <ContextMenu ref="tabMenu" :model="tabMenuItems" :min-width="13" />
         <ChatShareDialog

@@ -1,8 +1,7 @@
 import { expect, it } from "vitest";
 import { repoNameFromUrl } from "./repoName";
 
-/* The name a clone lands under is derived, not asked for, so the derivation is the whole form's correctness.
- * A wrong answer here is a repo at /work/repo.git, or at /work/ with no name at all. */
+/* The name a clone lands under is derived, not asked for, so the derivation is the whole form's correctness. */
 
 it("takes the last segment of a clone URL and drops the .git suffix", () => {
     expect(repoNameFromUrl(`https://github.com/owner/my-app.git`)).toBe(`my-app`);

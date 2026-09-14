@@ -1,8 +1,4 @@
-<!--
-    Composer control naming an automatic model swap for this turn, shown only when useTierPreview decides one will happen. Two states: route (swap
-    will happen; press holds the current model for this conversation), held (a hold is active; press lifts it) — spelled out in the label and
-    `aria-label`, never a tooltip. Keeps its mark and drops only its words on a narrow pane.
--->
+<!-- Shows whether this turn routes to a cheaper model or holds the current model. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import type { Conversation } from "../session/conversation";
@@ -15,8 +11,7 @@ const preview = useTierPreview(
     () => props.conversation.draft.value,
 );
 
-/* The whole sentence, on `title` AND `aria-label`, because the chip's own words are deliberately short enough
- * to fit a composer row: they name the models, this names what is being done to them and what the press does. */
+/* The whole sentence, on `title` AND `aria-label`, because the chip's own words are deliberately short enough to fit a composer row: they name the models. */
 const title = computed(() => {
     const state = preview.value;
     if (state === undefined) {
@@ -46,8 +41,7 @@ const press = (): void => {
         @click="press"
     >
         <Icon :name="preview.kind === `route` ? `arrow-right` : `lock`" class="text-2xs" />
-        <!-- The words go on a narrow pane, the mark stays: see the note at the top of this file for why this
-             control in particular must never vanish with the width. -->
+        <!-- Narrow panes hide the words but keep the route marker visible. -->
         <template v-if="preview.kind === `route`">
             <span class="@max-lg:hidden">{{ preview.cheap }}</span>
         </template>

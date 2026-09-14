@@ -1,7 +1,4 @@
-<!--
-    Every notice a view has, ranked and de-duplicated (notice.ts), in one place. Pass a plain list including `undefined`s; renders nothing when
-    nothing is wrong.
--->
+<!-- Every notice a view has, ranked and de-duplicated (notice.ts), in one place. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import Notice from "./Notice.vue";

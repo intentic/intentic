@@ -1,8 +1,4 @@
-<!--
-    One session as a card, shared by every rail (fleet board, floating chat, Subagents) so they render identically. Row order is fixed — identity
-    tile, title, trailing slot, status glyph, meta slot, live line, snippet — and a caller passes only the slots it has data for. Card chrome (fill,
-    border, selection ring) is the shared `.session-card` class in styles.css.
--->
+<!-- Shared session-card shell for every rail. -->
 <script setup lang="ts">
 import type { AgentProvider, MatchSnippet, UnfinishedWork } from "@intentic/sandbox-contract";
 import { type IconName, ProgressRing } from "@intentic/ui";
@@ -85,21 +81,7 @@ const statusMeta = computed(() =>
         <slot name="aside" />
         <span class="flex min-w-0 flex-1 flex-col gap-1.5">
             <span class="flex w-full min-w-0 items-start gap-2">
-                <!--
-                    THE MARK, on the board's construction at the rail's scale (AgentCard argues the proportion at
-                    length): a disc inside a rim, the rim carrying how much context the session has spent.
-                    24/1.5/18 here against the board's 28/1.5/22 — the ratio is what carries over, not the pixels. A
-                    rail row is denser than a board card by design and its tile has always run a size below, so
-                    matching the board's 28 would cost 10px of height on every row in a list read by the dozen.
-                    The rim is drawn WHETHER OR NOT there is context to draw: a bare disc beside a ringed one reads as
-                    two sizes of mark in one list even when the discs are identical, so only the ARC is conditional.
-                    CENTRED ON THE TITLE'S FIRST LINE, which is what `-mt-1` buys and why it is not a fudge: the row
-                    is `items-start`, so a 24px mark top-aligned against a 16px line hangs 4px low — measured, not
-                    guessed — and the eye checks a mark against the words beside it, not against the box. Pulling it
-                    up by half the difference lands its centre on the line's centre, and a title that wraps to two
-                    lines still hangs off it rather than wrapping around it. It eats 4px of the card's 12px top
-                    padding and nothing else.
-                -->
+<!-- THE MARK, on the board's construction at the rail's scale (AgentCard argues the proportion at length): a disc inside a rim. -->
                 <span
                     v-if="provider !== undefined || icon !== undefined"
                     class="relative -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
@@ -120,19 +102,11 @@ const statusMeta = computed(() =>
                     <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
                         run.text
                     }}</span>
-                    <!--
-                        Italic is invisible to screen readers; stated in text since this element's role doesn't accept
-                        aria-label.
-                    -->
+<!-- Italic is invisible to screen readers; stated in text since this element's role doesn't accept aria-label. -->
                     <span v-if="peek" class="sr-only">, temporary</span>
                 </span>
                 <slot name="trailing" />
-                <!--
-                    StatusGlyph only when there is unfinished work to mark: it is the same glyph either way, but it
-                    carries the amber dot and the sentence explaining it, which is the one thing a resting status
-                    cannot say about itself. Every other row keeps the bare Icon it has always drawn — the glyph is
-                    identical, so no row changes appearance for gaining the capability.
-                -->
+<!-- StatusGlyph only when there is unfinished work to mark: it is the same glyph either way, but it carries the amber dot and the sentence explaining it. -->
                 <span v-if="status !== undefined" class="flex h-4 shrink-0 items-center">
                     <StatusGlyph v-if="unfinished !== undefined && statusMeta !== undefined" :meta="statusMeta" :unfinished="unfinished" :now="now" />
                     <Icon v-else v-bind="status" />
@@ -145,10 +119,7 @@ const statusMeta = computed(() =>
                 class="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted"
             >
                 <slot name="meta" />
-                <!--
-                    Tight card's live readout, held at the end of the facts line; same corner a settled card's age
-                    uses.
-                -->
+<!-- Tight card's live readout, held at the end of the facts line; same corner a settled card's age uses. -->
                 <span v-if="tight && live !== undefined" class="ml-auto flex min-w-0 items-center gap-1 font-medium text-link">
                     <Icon :name="live.icon" class="shrink-0 text-2xs" />
                     <span class="min-w-0 truncate">{{ live.text }}</span>

@@ -1,19 +1,4 @@
-/* `ic runner` — RUNNERS on this machine: sandbox-image containers that belong to a parent sandbox instead
- * of a person, executing turns it dispatches (design: docs/remote-runners-plan.md at the workspace root;
- * the daemon halves are `sandbox/src/runners/` and the sandbox contract's runner contract).
- *
- * `up` is `sandbox connect` minus the platform: the same run contract, spoken by the image itself
- * (contract.rs — nothing here states a docker-run shape), with the runner seed in the env instead of a
- * setup code, no tunnel grant, no Google client, no local publish. The container boots as a loopback
- * daemon, redeems its pairing against the parent over HTTPS, and dials the parent's WebSocket; from there
- * the parent's Devices/agents surfaces are where it is watched, not this terminal.
- *
- * A runner may also arrive wearing its PARENT'S SHAPE, two optional files the parent's daemon shipped here
- * through the host agent: the parent's approved environment overlay with the sha256 that pins it (built
- * BEFORE boot through the same byte-exact check `ic sandbox rebuild` runs — the parent's owner approved
- * those bytes, and a runner has no owner of its own to re-approve them), and a settings-only sandbox
- * definition the daemon seeds itself from on first boot (SANDBOX_DEFINITION_SEED, the run contract's fleet
- * door). Both optional: a bare runner still runs turns, it just isn't the parent's twin. */
+/* `ic runner` starts sandbox-image containers for a parent sandbox. */
 
 use crate::contract::{self, RunRequest};
 use crate::docker;
@@ -148,9 +133,7 @@ pub fn up(args: Up) -> Result<()> {
         })
         .transpose()?;
 
-    /* The parent's overlay, built BEFORE anything boots (the recreate flow's ordering: a failed build leaves
-     * this machine with nothing to clean up). The base pulled is the overlay's own FROM — with an overlay in
-     * play, SANDBOX_IMAGE's default is not what runs here, the built image is. */
+/* The parent's overlay, built BEFORE anything boots (the recreate flow's ordering: a failed build leaves this machine with nothing to clean up). */
     let (run_image, base_image, env_hash, runtime_lines) = match (&overlay, &environment_hash) {
         (Some(content), Some(hash)) => {
             let verified = verified_overlay(content, hash, &image, &slug)?;

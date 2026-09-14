@@ -3,10 +3,7 @@ import { agent, type AgentApp, client, methods, type SessionUpdate, type AgentCa
 import { decidePermission } from "../acp-permissions.js";
 import type { AcpConnection, TurnHooks } from "../acp-connection.js";
 
-/* A scenario-driven fake ACP agent built with the SAME SDK's agent() API, composed in-process (no spawn, no
- * transport), the QueryFn/CodexRunner pattern for ACP. The prompt text selects the behaviour; the fixture
- * exercises the adapter over a real ClientContext, so the JSON-RPC layer and update routing are the SDK's
- * own, not mocks. */
+/* This fixture uses the ACP SDK in-process without transport. */
 
 // The fixture's session/prompt behaviours, keyed by a keyword in the prompt text.
 export const fakeAcpAgentApp = (): AgentApp => {

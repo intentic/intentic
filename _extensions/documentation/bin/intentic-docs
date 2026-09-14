@@ -1,31 +1,5 @@
 #!/usr/bin/env node
-/* `intentic-docs` — the FACTS half of the documentation system, on the agent's PATH every turn
- * (contributes.bin: the daemon prepends this directory, and the files themselves are the approved code because
- * they ride the sha-pinned checkout).
- *
- * The split this tool exists to enforce: a model authors judgement, a script computes facts. Which packages
- * exist, what depends on what, how big each one is, whether a page has been kept up with its code, whether an
- * anchor still resolves — all of that is cheap and exact from the filesystem and git, and all of it is something
- * a model will otherwise produce plausibly and wrongly. So the agent runs `facts` before it writes a word, and
- * `validate` after, and the only thing left for it to get wrong is the part that needs a mind.
- *
- * A PACKAGE'S DOCUMENT IS ITS OWN README. There is no per-package JSON sidecar: the one-liner is the README's
- * lead sentence, the anchors are its `## Key files` links, and staleness is a git comparison. Everything an
- * author could forget to update has been replaced by something derived from what they did update.
- *
- * THREE VERBS
- *   facts     enumerate packages, their dependency edges, sizes and revisions          → JSON on stdout
- *   validate  every package has a README, it has a lead sentence, anchors resolve      → exit 1 + reasons
- *   check     recompute the derived index (staleness, orphans, coverage, facts)        → writes index.json
- *
- * `check` is where rot becomes visible. Staleness is computed HERE and written to a file rather than derived in
- * the browser, because `GET /git/{repo}/log` takes no path filter — the browser would need one commit-diff
- * request per commit to learn what touched a package. One `git rev-list --count` answers it exactly.
- *
- * WHY THIS FILE IS PLAIN ESM AND NOT TYPESCRIPT. It is executed directly by the agent's shell, so it must run
- * with no build step and no loader. That costs a small, deliberate duplication: the constants below also live in
- * src/paths.ts. paths.test.ts imports both and asserts they are equal, so the duplication cannot drift silently
- * — it fails a test the moment it does. */
+/* Facts are derived from the filesystem and git; authors supply only the judgement in README files. */
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
@@ -39,9 +13,7 @@ export const README_TAIL = "README.md";
 
 const MANIFESTS = ["package.json", "Cargo.toml", "pyproject.toml", "go.mod"];
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", "target", ".cache", ".next", "coverage", "vendor", "__pycache__"]);
-/* A manifest inside one of these is a FIXTURE, not a package — `_search/iq-recall/src/__fixtures__/workspace` has a
- * package.json because a test needs one to read. These dirs are still WALKED (their lines count toward the package
- * that owns them, and their names are how `hasTests` is detected); they just cannot themselves be a package. */
+/* Fixture directories contribute to their parent package but cannot become packages themselves. */
 const NON_PACKAGE_SEGMENTS = new Set(["__fixtures__", "__mocks__", "__snapshots__", "__tests__", "fixtures", "test", "tests", "spec"]);
 const SOURCE_EXTENSIONS = new Set(["ts", "tsx", "js", "jsx", "mjs", "cjs", "vue", "rs", "py", "go", "sql", "css", "svelte"]);
 // A generated bundle or a lockfile would dominate a size comparison while telling the reader nothing.
@@ -53,9 +25,7 @@ const ONE_LINER_MAX = 200;
 
 // ---- shell ---------------------------------------------------------------------------------------------------
 
-/* git, or undefined. Every git fact here is optional by design: a repo with no commits yet, a directory that has
- * never been committed, or a workspace that is not a git repo at all are all ordinary states for a workspace an
- * agent is actively building — and none of them should stop a document from being written. */
+/* Git facts are optional so undocumented or uncommitted trees remain readable. */
 const git = (cwd, args) => {
     try {
         return execFileSync(`git`, args, { cwd, encoding: `utf8`, stdio: [`ignore`, `pipe`, `ignore`] }).trim();
@@ -80,9 +50,7 @@ const readText = (path) => {
     }
 };
 
-/* Canonical JSON: sorted keys, two-space indent, trailing newline. The whole reviewability argument for a data
- * document model rests on this — unstable key order turns every regeneration into an unreadable diff, which is
- * exactly the objection that ruled out generated HTML in the first place. */
+/* Generated JSON uses sorted keys, two-space indentation, and a trailing newline. */
 const canonical = (value) => `${JSON.stringify(sortKeys(value), undefined, 2)}\n`;
 
 const sortKeys = (value) => {
@@ -101,8 +69,7 @@ const sortKeys = (value) => {
 
 // ---- reading a README ------------------------------------------------------------------------------------------
 
-/* Markdown reduced to the words in it. A one-liner lands in a tooltip and a list row, where `**bold**` and a link
- * target are noise — so emphasis, code ticks and link syntax collapse to their text and nothing else changes. */
+/* One-liners strip Markdown syntax before entering compact UI surfaces. */
 const plain = (text) =>
     text
         .replace(/!\[[^\]]*\]\([^)]*\)/g, ``)
@@ -111,12 +78,7 @@ const plain = (text) =>
         .replace(/\s+/g, ` `)
         .trim();
 
-/* THE LEAD SENTENCE — a package's one-liner, and the reason a README needs no `oneLiner` field to forget.
- *
- * The first paragraph after the `# H1`, cut at its first sentence. Authors are told to write one sentence there,
- * so for a page written to the convention this is the whole paragraph; cutting is what keeps a page that opened
- * with three sentences from putting all three in a tooltip. Badge lines and block quotes are skipped because
- * they are chrome, and a fence before the prose is a quickstart rather than a description. */
+/* A package one-liner is the first sentence of prose after its H1. */
 const leadSentence = (markdown) => {
     const lines = markdown.split(/\r?\n/);
     const start = lines.findIndex((line) => /^#\s+\S/.test(line));
@@ -153,21 +115,13 @@ const leadSentence = (markdown) => {
     if (prose === ``) {
         return undefined;
     }
-    /* First sentence: a `.`, `!` or `?` followed by a space and a capital, or the end of the paragraph. The
-     * lookahead for a capital is what stops `e.g.` and `@intentic/graph v1.2` from cutting the sentence in half. */
+    /* Sentence detection requires punctuation followed by whitespace and a capital. */
     const match = /^(.+?[.!?])\s+[A-Z(]/.exec(prose);
     const sentence = match === null ? prose : match[1];
     return sentence.length <= ONE_LINER_MAX ? sentence : `${sentence.slice(0, ONE_LINER_MAX - 1).replace(/\s+\S*$/, ``)}…`;
 };
 
-/* THE ANCHORS — `## Key files`, read as data.
- *
- * `- [src/compile.ts](src/compile.ts) — RawNode map → validated graph.` Link targets are PACKAGE-relative, so the
- * same link works on GitHub, in the file tree and in the documentation view; this returns them repo-relative,
- * which is what every reader of the index wants and what `validate` resolves against.
- *
- * External links and anchors-into-prose are skipped rather than reported: a `## Key files` list is allowed to
- * mention a URL, and only a local path can be checked for existence. */
+/* Key-file anchors are package-relative local paths; external links are ignored. */
 const keyFilesOf = (markdown, dir) => {
     const lines = markdown.split(/\r?\n/);
     const at = lines.findIndex((line) => /^##\s+key files/i.test(line.trim()));
@@ -202,23 +156,11 @@ const keyFilesOf = (markdown, dir) => {
 
 // ---- discovery -----------------------------------------------------------------------------------------------
 
-/* Every package under a repo: a directory holding a recognised manifest. Evidence over configuration — reading
- * pnpm-workspace globs, npm `workspaces`, Cargo `members` and their equivalents would be four parsers that each
- * disagree with the filesystem in a different way, and the filesystem is the thing that is actually true.
- *
- * The repo root counts as a package only when nothing under it does, so a plain single-package repo documents
- * itself instead of coming back empty. */
-/* A DIRECTORY THAT IS ITS OWN REPOSITORY, and therefore where this repository's packages stop. A worktree's
- * marker is a file rather than a directory, so this asks whether the marker exists at all. */
+/* Packages are directories with recognized manifests, except when the repository root is the only package. */
+/* A directory containing a git marker is a repository boundary. */
 const isRepoRoot = (dir) => existsSync(join(dir, `.git`));
 
-/* Every package in a repository, found by its manifest — and NOTHING from a repository nested inside it.
- *
- * The boundary is the whole reason this is not a plain walk. A workspace root holding clones (a monorepo beside a
- * reference shelf, which is the ordinary shape here) would otherwise claim every package in every clone as its
- * own: hundreds of entries duplicating indexes those repos already keep, plus every reference checkout reported
- * as undocumented work. Each of those repos documents itself, at its own root, in its own git history — which is
- * the point of a page living beside its code. */
+/* Discovery stops at nested repositories so each repository owns its own packages. */
 const discoverPackages = (repoRoot) => {
     const found = [];
     const walk = (dir, depth) => {
@@ -340,13 +282,7 @@ const committedAt = (repoRoot, rev) => {
     return seconds === undefined ? undefined : (Number.parseInt(seconds, 10) || 0) * 1000;
 };
 
-/* HOW FAR THE CODE HAS RUN AHEAD OF ITS PAGE — the whole staleness signal, in one git call and no authored field.
- *
- * Commits touching the package since the last commit that touched its README. Because that rev is the README's
- * OWN most recent commit, every commit in the range is by construction one that changed the package without
- * changing its page — which is exactly the thing worth counting, and exactly what the same-commit rule asks an
- * author to keep at zero. Updating the README in the same commit as the code moves the rev forward with it, so
- * there is nothing to bump and nothing to forget. */
+/* Staleness counts package commits after the last commit that changed its README. */
 const behindOf = (repoRoot, dir, readmeRev) => {
     if (readmeRev === undefined) {
         return 0;
@@ -357,8 +293,7 @@ const behindOf = (repoRoot, dir, readmeRev) => {
 
 // ---- the document tree ---------------------------------------------------------------------------------------
 
-/* Where the repo-level map lives for the tree being read. The PACKAGE pages are not in here — a published one is
- * `<repo>/<dir>/README.md`, beside its code, which is the entire point of the layout. */
+/* The repository map lives under the selected published or staging tree. */
 const mapBase = (root, repo, from) =>
     from === `staging` ? join(root, STAGING_ROOT, repo === `` ? `root` : repo) : join(root, repo === `` ? `` : repo, DOCS_DIR);
 
@@ -369,12 +304,7 @@ const pagePath = (root, repo, dir, from) =>
         ? join(root, STAGING_ROOT, repo === `` ? `root` : repo, dir, README_TAIL)
         : join(root, repo === `` ? `` : repo, dir, README_TAIL);
 
-/* Which package dirs have a page. Read off the filesystem rather than from repo.json, so a page that exists is
- * counted whether or not the map remembered to mention it.
- *
- * Published: the packages that exist and have a README. A published page CANNOT outlive its directory — it is in
- * it — so the orphan case is structurally impossible on this side, which is one whole class of rot the layout
- * deletes rather than detects. Staging: whatever the draft holds, which may well name a package that is gone. */
+/* Published pages must sit beside existing packages; staging pages are discovered from the draft tree. */
 const documentedDirs = (root, repo, from, packages) => {
     if (from !== `staging`) {
         return packages.filter((dir) => dir !== `` && existsSync(pagePath(root, repo, dir, from)));
@@ -434,9 +364,7 @@ const factsOf = (root, repo) => {
     };
 };
 
-/* Every package has a page, every page describes itself, and every anchor resolves. Anchors are checked against
- * the WORKING TREE the agent is in, which is the point: an anchor that no longer resolves is the one staleness
- * signal that needs no git history and cannot be argued with. */
+/* Validation requires package pages, lead sentences, and resolvable local anchors. */
 const validateDocs = (root, repo, from) => {
     const repoRoot = repoRootOf(root, repo);
     const base = mapBase(root, repo, from);
@@ -493,8 +421,7 @@ const checkDocs = (root, repo, from) => {
         const deadAnchor = anchors.find((anchor) => !existsSync(join(repoRoot, anchor.path)));
         const readmeRev = gone ? undefined : revOf(repoRoot, `${dir}/${README_TAIL}`);
         const behind = gone ? 0 : behindOf(repoRoot, dir, readmeRev);
-        /* Reasons are ordered by how much they tell the reader, not by how easy they are to compute. A dead
-         * anchor is a page that is already wrong; being commits behind only means it MIGHT be. */
+        /* Report missing packages and anchors before staleness. */
         const reason = gone
             ? `the package no longer exists`
             : deadAnchor !== undefined
@@ -553,21 +480,12 @@ const main = (argv) => {
         const at = argv.indexOf(`--${name}`);
         return at === -1 || argv[at + 1] === undefined ? fallback : argv[at + 1];
     };
-    /* The container workspace root, and the ONE place in this repo that still spells it as a literal rather
-     * than reading @intentic/constants WORKSPACE_ROOT. This file ships as a raw directory onto the agent's
-     * PATH (contributes.bin) with no node_modules beside it, so its imports are `node:` builtins and nothing
-     * else — a bare specifier here would resolve to nothing and take the whole tool down on first run. Same
-     * bargain the connect/recreate scripts make, and the same obligation: if WORKSPACE_ROOT ever moves, this
-     * default moves with it. The path guard knows about this line by name. */
+    /* This standalone executable defaults to the workspace root. */
     const root = flag(`root`, `/work`);
     const repo = flag(`repo`, ``);
     const from = flag(`from`, `staging`) === `published` ? `published` : `staging`;
 
-    /* `--repo` IS RELATIVE TO `--root`, and passing the absolute path instead has to fail loudly rather than
-     * quietly work. Joining a root onto an absolute path yields a directory that does not exist and never did
-     * (`/work` + `/work/intentic` → `/work/work/intentic`), so the run scanned nothing, found nothing, and wrote
-     * an empty index into a tree it had just invented — twice, and someone had to notice and delete it by hand
-     * both times. The absolute path is the obvious thing to type; the only defence is refusing it. */
+    /* Repository paths must be relative to the selected workspace root. */
     if (isAbsolute(repo) || repo.split(`/`).includes(`..`)) {
         process.stderr.write(
             `--repo is relative to --root, so pass \`${relative(root, repo) || `.`}\` rather than \`${repo}\`.\nOmit it entirely for the root repository itself.\n`,
@@ -590,13 +508,7 @@ const main = (argv) => {
     }
     if (verb === `check`) {
         const write = argv.includes(`--write`);
-        /* WRITING A STAGED INDEX FOR A DRAFT THAT DOES NOT EXIST IS HOW THE APP LOSES ITS DOCUMENTS. `--from`
-         * defaults to staging because generation is what usually runs this, but the other caller — someone who
-         * has just edited a README that is already in the repository — wants `--from published`, and forgetting
-         * it used to CREATE the staging directory. The app reads that directory to answer "is there a draft to
-         * review", so a lone index there announced a draft with no map and no pages, and the repository's real
-         * documents went behind a toggle. Refusing costs a re-run with the right flag; writing costs the reader
-         * the whole area. */
+        /* A staging index requires an existing staging tree. */
         if (write && from === `staging` && !existsSync(mapBase(root, repo, from))) {
             process.stderr.write(
                 `no draft at ${mapBase(root, repo, from)} — nothing to index there.\nIf you edited a README in the repository, this is \`--from published\`.\n`,
@@ -608,12 +520,7 @@ const main = (argv) => {
             process.stdout.write(canonical(index));
             return 0;
         }
-        /* AN INDEX OF NOTHING IS NEVER AN ANSWER, IT IS A MISS. No packages, no pages, no orphans means the run
-         * scanned a directory that documents nothing — in practice `--repo .` typed from inside a repository,
-         * which resolves against `--root` and lands on the workspace itself. That wrote an empty index to the top
-         * of the workspace, left the repository's real index untouched and unrefreshed, and rode into the next
-         * commit; it was deleted by hand and came back thirteen times. The guard above refuses the absolute path,
-         * this one refuses the answer that path produced, so the mistake cannot be spelled any other way. */
+        /* An empty discovery result is rejected instead of writing an empty index. */
         if (index.entries.length === 0 && index.undocumented.length === 0 && index.orphans.length === 0) {
             // The directory the caller is standing in is the repository they almost certainly meant, so name it for them.
             const here = relative(root, process.cwd()).split(`\\`).join(`/`);

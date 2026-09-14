@@ -1,58 +1,7 @@
 import type { Directive, DirectiveBinding } from "vue";
 import { placeAnchored, type Side } from "./anchorPlacement.js";
 
-/* `v-tooltip.top="'Archive'"`, the app's own hover label, replacing PrimeVue's directive.
- *
- * It is ours because PrimeVue's operates on the MODULE-SCOPE `document`: it appends to `document.body`, looks
- * its element up with `document.getElementById`, and aligns against that document's viewport and scroll. Hover
- * anything the app drew into another document and the label lands in the wrong one, at the other's coordinates,
- * over whatever happened to be there, which is what a tooltip in a floating panel did back when such a panel
- * was painted from another window. Owning the directive fixes it for every call site at once: the box is created
- * in `el.ownerDocument` and measured against `el.ownerDocument.defaultView`, so it is right in whatever surface
- * the element belongs to (an iframe's document included) by construction rather than by remembering to pass a
- * target.
- *
- * Positioning is `fixed` against that window, which is also why there is no scroll math: a scroll moves the
- * anchor out from under the box, so the box is dismissed instead of chased (the pointer has left it anyway).
- * WHERE THE BOX GOES IS `placeAnchored`'S ANSWER (anchorPlacement.ts), the same geometry AnchoredOverlay and
- * InfoHint use, fed the anchor's own window; this file only rounds it onto the pixel grid and draws the arrow.
- *
- * Sizing is capped in CSS, not here, see --ui-tooltip-max-width / --ui-tooltip-max-lines in tokens.css. The
- * cap is deliberately wide: a tooltip is read in one glance, and a narrow box turns a long line of prose into
- * a tall slab that covers the thing it describes.
- *
- * Modifiers: `top` (default) | `bottom` | `left` | `right` pick the preferred side, it flips to the opposite
- * one when there is no room; `overflow` shows the label ONLY while the anchor's own text is clipped, which is
- * what a truncated cell wants (repeating text the user can already read in full is noise). Put `.overflow` on
- * the element that actually clips, not on a wrapper around it, the check is that element's own scrollWidth.
- *
- * This is the app's ONE tooltip. Native `title=` survives in exactly two places, both deliberate: an `<iframe
- * title>`, which is a required accessible name rather than a hint, and the panel resize handles, where the
- * browser's ~1s delay is the point, these open instantly, and a handle you sweep past on the way somewhere
- * else should not flash a box each time. Everything else that hints belongs here, so it can be restyled,
- * re-measured and kept out of the wrong window from one file.
- *
- * WHEN A CONTROL EARNS ONE. A tooltip is a LABEL FOR A CONTROL THAT HAS NO VISIBLE LABEL, not a place to
- * park prose that didn't fit. The audit that produced this list found 241 call sites, a third of them
- * telling the user something already on their screen, so the bar is written down rather than re-litigated:
- *
- *   1. An icon-only button, link or rail tile: yes. Three words or fewer, naming the action.
- *   2. `.overflow` on the element that actually clips: yes, always, that is text the user asked for and
- *      cannot read.
- *   3. A disabled control may say why it is disabled.
- *   4. A NON-INTERACTIVE element does not get a hover label. If a glyph or a number needs decoding, decode
- *      it on screen or drop the glyph, hovering a chip to be told the word you are reading is the kind of
- *      hint that teaches people to stop hovering anything. The one exception is a mark carrying a VALUE
- *      that exists nowhere else: an error string, a status detail, the name behind a bare dot.
- *   5. ONE TOOLTIP PER HOVER TARGET. Never put one on a descendant of a tooltipped element, `mouseenter`
- *      fires on both and the two boxes open on top of each other (the rail's tile-plus-badge did exactly
- *      this). Fold the child's text into the parent's label instead.
- *   6. Placement follows the layout: `.top`/`.bottom` inside a horizontal cluster, `.right`/`.left` inside
- *      a vertical stack. Sideways is for a narrow column spilling into the wide area next door, never for a
- *      button spilling onto the button beside it.
- *   7. Consequence disclosure belongs BESIDE the control as muted text, not in here. A hover paragraph
- *      never reaches a touch device, and it is gone the moment the pointer moves, see AgentConflictReport,
- *      which pairs every button with the sentence that qualifies it. */
+/* `v-tooltip.top="'Archive'"`, the app's own hover label, replacing PrimeVue's directive. */
 
 const GAP = 6; // px between the anchor and the box: leaves room for the arrow
 const EDGE = 8; // px of viewport kept clear on every side

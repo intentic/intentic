@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { dateIn, defaultEnd, offsetOf, parseWhen, toInstant } from "./time.js";
 
-/* A fixed instant, mid-summer so the Berlin cases exercise a DST offset, and late enough in the UTC evening
- * that Berlin is ALREADY ON THE NEXT DAY, which is the whole condition the zone handling exists for. */
+/* A fixed instant, mid-summer so the Berlin cases exercise a DST offset, and late enough in the UTC evening that Berlin is ALREADY ON THE NEXT DAY. */
 const NOW = new Date("2026-08-09T22:30:00Z");
 const BERLIN = "Europe/Berlin";
 
@@ -18,8 +17,7 @@ describe("parseWhen", () => {
         expect(parseWhen("+1w", NOW, BERLIN).dateTime).toBe("2026-08-16T22:30:00.000Z");
     });
 
-    /* THE ONE THAT MATTERS. 22:30 UTC is already tomorrow in Berlin, so "today" answered from the process
-     * clock would book the meeting a day early: every evening, for every owner east of UTC. */
+/* THE ONE THAT MATTERS. */
     it("reads `today` in the calendar's zone, not the container's", () => {
         expect(parseWhen("today", NOW, BERLIN)).toEqual({ date: "2026-08-10" });
         expect(parseWhen("today", NOW, "UTC")).toEqual({ date: "2026-08-09" });

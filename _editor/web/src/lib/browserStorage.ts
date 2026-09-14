@@ -1,6 +1,4 @@
-/* Browser storage is optional infrastructure, not an authentication prerequisite. Access can throw before a
- * method is even called (blocked cookies, hardened webviews, sandboxed frames), so every auth-path operation
- * goes through this boundary and keeps the in-memory session usable when persistence is unavailable. */
+/* Browser storage is optional infrastructure, not an authentication prerequisite. */
 const local = (): Storage | undefined => {
     try {
         return globalThis.localStorage;

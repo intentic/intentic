@@ -3,10 +3,7 @@ import ArchitectureFigure from "../../components/figures/ArchitectureFigure.astr
 import DocsLayout from "../../components/docs/DocsLayout.astro";
 import DocsRelated from "../../components/docs/DocsRelated.astro";
 
-/* THE SYSTEM MAP, not a package inventory. This page names the boundaries a user relies on: who authenticates
- * whom, where code and credentials live, what survives a restart, how a conversation fans out, and what moves
- * when execution is placed on another machine. Package-level implementation detail belongs in the repository's
- * generated architecture book; product mechanisms belong here when they change custody, control or failure. */
+/* THE SYSTEM MAP, not a package inventory. */
 
 const lifecycle = [
     {

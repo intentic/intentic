@@ -1,7 +1,4 @@
-<!--
-    Renders a real `<a href>` that also behaves like a button. A plain click calls `preventDefault` and emits `activate`; a modified or middle click
-    is left to the browser untouched. Needs `custom` on the underlying RouterLink so it does not navigate on its own.
--->
+<!-- Renders a real `<a href>` that also behaves like a button. -->
 <script setup lang="ts">
 import { browserOwnsClick } from "@intentic/ui";
 import { type RouteLocationRaw, RouterLink } from "vue-router";

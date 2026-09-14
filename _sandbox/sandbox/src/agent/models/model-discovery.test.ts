@@ -3,9 +3,7 @@ import { humanizeModelId, listModels, suggestedModels } from "./model-discovery.
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
 
-/* One humanizer for every provider that has to invent a label. It used to be three, and they disagreed about
- * `gpt`: the same id rendered "GPT 5 Codex" under Codex and "Gpt 5 Codex" under the Google channel, which
- * re-serves OpenAI's open-weights models and so shows exactly those ids. */
+/* One humanizer for every provider that has to invent a label. */
 test("humanizeModelId title-cases the tokens and keeps vendor acronyms upper", () => {
     expect(humanizeModelId("gpt-5-codex")).toBe("GPT 5 Codex");
     expect(humanizeModelId("gpt-oss-120b-medium")).toBe("GPT OSS 120b Medium");

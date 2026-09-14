@@ -37,10 +37,7 @@ const stabilizeStylesIn = (root: ParentNode, selector: string): void => {
     root.querySelectorAll<HTMLStyleElement>(selector).forEach(stabilizeStyleElement);
 };
 
-/**
- * Holds every `<style>` matching `selector` stable against no-op writes: those already in `document.head`, and
- * any appended later (a lazy import, a hot update). Idempotent per selector.
- */
+/** Keeps matching styles stable against no-op writes and later insertions. */
 export const stabilizeStyleWrites = (selector: string): void => {
     if (typeof document === `undefined`) {
         return;

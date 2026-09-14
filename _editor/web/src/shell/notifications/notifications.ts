@@ -76,10 +76,7 @@ const notifications = computed<readonly Notification[]>(() =>
     [...(receipt.value === undefined ? [] : [receipt.value]), ...held.value].sort((a, b) => TIER[a.kind] - TIER[b.kind]),
 );
 
-/**
- * Declares a condition or question as a pure function of state; returns a stopper. Re-registering the same id
- * replaces it, so a remounted component is idempotent, not doubled.
- */
+/** Declares a condition or question as a pure function of state; returns a stopper. */
 export const hold = (id: string, source: () => NotificationInput | undefined): (() => void) => {
     sources.set(id, source);
     return (): void => {

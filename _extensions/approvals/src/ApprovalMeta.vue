@@ -1,8 +1,4 @@
-<!--
-    Muted meta line under an approval: what it is, where, whose name, and a trailing note. A reply target renders through destinationOf (postText.ts)
-    as place plus relationship ('reply in r/ClaudeAI'), not the raw URL; already-short targets pass through unchanged. Truncates as one line, not per
-    segment, so the note is never crowded out.
--->
+<!-- Compact approval metadata with a readable destination and optional note. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import { destinationOf } from "./postText";
@@ -11,9 +7,7 @@ const { name, target, actsAs, note } = defineProps<{
     /** The platform's display name, or "Action": capitalized here, since an unknown platform arrives as its bare id. */
     name: string;
     target?: string;
-    /* WHOSE NAME IT ACTS UNDER (the item's `actsAs` persona), because the row it sits on carries an Approve
-     * button and this is the one fact that button cannot be taken back on. Between the place and the time on
-     * purpose: the reader wants where before who, and who before when. */
+/* The metadata identifies the persona acting on the item. */
     actsAs?: string;
     /** One trailing fact the section cares about ("proposed 3h ago"). */
     note?: string;

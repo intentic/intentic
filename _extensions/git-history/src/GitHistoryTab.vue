@@ -563,10 +563,7 @@ const runPending = async (): Promise<void> => {
         <p v-if="stashes.actionError.value" class="shrink-0 px-3 py-1 text-2xs text-danger">{{ stashes.actionError.value }}</p>
         <p v-if="branchState.actionError.value" class="shrink-0 px-3 py-1 text-2xs text-danger">{{ branchState.actionError.value }}</p>
 
-        <!--
-            A halted rebase leaves HEAD somewhere unexpected with half its commits replayed; this explains the aftermath the graph alone doesn't. Git
-            also refuses most menu verbs until the operation ends, which this banner makes legible.
-        -->
+        <!-- A halted rebase explains the current HEAD and replay state. -->
         <div v-if="operation.operation.value" class="flex shrink-0 items-start gap-1.5 border-b border-warning/40 bg-warning/10 px-3 py-1.5">
             <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
             <div class="min-w-0 flex-1">
@@ -589,12 +586,9 @@ const runPending = async (): Promise<void> => {
             </Button>
         </div>
 
-        <!-- One row per commit: an SVG gutter (lanes/edges/node) then metadata. Click to expand detail inline, right-click for the action menu. -->
+        <!-- One row per commit: an SVG gutter (lanes/edges/node) then metadata. -->
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto">
-            <!--
-                Skeleton rows stand in for the ones about to load: a gutter dot, a subject line, an author line. The gutter is a column of plain
-                dots, not invented lanes, since the branch shape itself is what this view exists to show.
-            -->
+            <!-- Skeleton rows stand in for the ones about to load: a gutter dot, a subject line, an author line. -->
             <div v-if="loading && commits.length === 0" role="status" aria-busy="true">
                 <span class="sr-only">Reading this repository's history…</span>
                 <div v-for="row in outline ? 8 : 0" :key="row" class="flex items-center gap-2 px-3 py-1.5" aria-hidden="true">
@@ -750,10 +744,7 @@ const runPending = async (): Promise<void> => {
                             <p class="mb-1 text-2xs font-medium uppercase tracking-wide text-subtle">
                                 {{ files.length }} changed {{ files.length === 1 ? "file" : "files" }}
                             </p>
-                            <!--
-                                Collapsible directory tree of changed files; click peeks a diff beside this pane, double-click keeps the tab, and the
-                                row stays marked while showing.
-                            -->
+                            <!-- Changed files form a collapsible tree beside the diff. -->
                             <div class="scrollbar-thin max-h-64 overflow-auto">
                                 <template v-for="row in fileRows" :key="`${row.kind}:${row.path}`">
                                     <button
@@ -803,10 +794,7 @@ const runPending = async (): Promise<void> => {
         <!-- The ref pills' own menu, whose verbs depend on whether the pill is a branch, tag, or remote-tracking. -->
         <ContextMenu ref="refMenu" :model="refMenuItems" :min-width="14" />
 
-        <!--
-            One dialog per action: a name input, a mode picker, or a plain confirm; destructive ones carry the checkpoint reassurance, a conflict
-            shows inline.
-        -->
+        <!-- Each history action uses one focused dialog. -->
         <Modal :open="pending !== undefined" size="sm" :header="pending ? ACTIONS[pending.kind].header : ''" @update:open="cancelAction">
             <template v-if="pending">
                 <p class="text-xs text-content">

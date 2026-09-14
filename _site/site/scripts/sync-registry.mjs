@@ -3,9 +3,7 @@ import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
 import { OFFICIAL_REGISTRY_URL, REGISTRY_FACTS_FILE, REGISTRY_FILE } from "@intentic/registry";
 
-/* Refresh the vendored copy the gallery build falls back to when GitHub can't be reached
- * (src/lib/registry.ts). Run it when the registry has moved on enough that an offline build would look
- * embarrassing; nothing depends on it being current, which is the entire point of having it. */
+/* Refresh the vendored copy the gallery build falls back to when GitHub can't be reached (src/lib/registry.ts). */
 
 const RAW_BASE = `${OFFICIAL_REGISTRY_URL.replace("https://github.com/", "https://raw.githubusercontent.com/")}/HEAD`;
 

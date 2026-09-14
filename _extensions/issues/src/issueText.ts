@@ -4,8 +4,7 @@ import type { IssueStatus, IssueSummary } from "@intentic/sandbox-contract";
 
 export type Tone = `success` | `danger` | `warning` | `info` | `neutral` | `primary`;
 
-// `open` carries no badge: it's the resting state and majority of the list. Only a row that is more than waiting earns
-// one.
+// Badge only non-open issues that need attention.
 export const statusBadge = (status: IssueStatus): { label: string; tone: Tone } | undefined => {
     switch (status) {
         case `investigating`:

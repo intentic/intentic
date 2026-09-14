@@ -5,23 +5,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
 
-/* One template, one page per question.
- *
- * The ORDER is the whole design, and it is not the order a marketing page would use. A reader arriving here
- * came from a question, and so did the machine that quoted this page into somebody's chat window. Both get
- * served by the same thing: the answer, immediately, in a block that survives being lifted out of the page.
- *
- *   h1 (the question) → the answer → what is checkably true → every approach → the recommendation → depth → FAQ
- *
- * The answer sits directly after the h1 with no hero art, no eyebrow line and no call to action between them,
- * because anything in that gap is what gets extracted instead. The options table comes BEFORE the verdict for
- * the same reason the compare shelf puts the losing rows in: a page that answers only "use our thing" is
- * discounted by readers and models alike, and the recommendation is worth more once the alternatives have been
- * given honestly.
- *
- * The FAQ at the foot carries the neighbouring phrasings of the same question, and rides into the page's
- * FAQPage schema through BaseLayout, so each one is separately quotable.
- */
+/* Each guide renders from one question template. */
 
 export function getStaticPaths() {
     return guidePages.map((page) => ({ params: { slug: page.slug }, props: { page } }));
@@ -35,7 +19,7 @@ const { page } = Astro.props;
 const index = guidePages.indexOf(page);
 const next = guidePages[(index + 1) % guidePages.length];
 
-// The body FAQ is also the page's structured data: one list, so the two can never disagree.
+// FAQ body and structured data share one list.
 const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: entry.answer }));
 ---
 
@@ -45,8 +29,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
 >
     <Nav />
     <main class="flex-1">
-        <!-- The question, then the answer. Nothing between them: whatever sits in that gap is what a model
-             lifts instead of the answer. -->
+        <!-- Guide question stays directly above its answer. -->
         <section class="page-hero">
             <div class="below-bar relative mx-auto max-w-7xl px-6 pb-14 lg:pb-16">
                 <a href={guidesHref("")} class="eyebrow transition-colors hover:text-link">Guides</a>
@@ -65,8 +48,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
         </section>
 
         <div class="mx-auto max-w-7xl px-6">
-            <!-- The checkable part. Specifics with numbers and names, because a page with nothing falsifiable
-                 in it has nothing anyone can cite. -->
+            <!-- Facts must be specific and falsifiable. -->
             <section class="border-b band-rule py-14 lg:py-16">
                 <h2 class="text-xl font-semibold tracking-tight text-content">What is true regardless of what you pick</h2>
                 <ul class="mt-6 grid gap-x-10 gap-y-4 md:grid-cols-2">
@@ -81,8 +63,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
                 </ul>
             </section>
 
-            <!-- Every approach, including the ones that are not this product, each with where it stops
-                 working. This is the section that earns the verdict below it. -->
+            <!-- Each approach includes its limit. -->
             <section class="fade-in border-b band-rule py-14 lg:py-16">
                 <h2 class="text-xl font-semibold tracking-tight text-content">Your options, and where each one stops</h2>
                 <table class="opts mt-7 w-full">
@@ -98,9 +79,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
                             page.options.map((option) => (
                                 <tr>
                                     <th scope="row">
-                                        {/* <strong> rather than a plain span: it is what makes the Markdown
-                                            mirror read "**Name** what it is" instead of running the two
-                                            together into one sentence. font-medium keeps the visual weight. */}
+                                        {/* Strong text preserves the Markdown mirror's name boundary. */}
                                         <strong class="block font-medium text-content">{option.name}</strong>
                                         <span class="mt-1 block text-2xs leading-relaxed font-normal text-subtle">{option.what}</span>
                                     </th>
@@ -113,7 +92,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
                 </table>
             </section>
 
-            <!-- The recommendation, after the alternatives have been given their due. -->
+            <!-- Recommendation follows the alternatives. -->
             <section class="fade-in border-b band-rule py-14 lg:py-16">
                 <h2 class="text-xl font-semibold tracking-tight text-content">What to actually do</h2>
                 <div class="mt-5 space-y-4">
@@ -121,8 +100,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
                 </div>
             </section>
 
-            <!-- Depth. Each heading is a statement and the first sentence under it answers that statement,
-                 so a section survives being read on its own. -->
+            <!-- Each section starts by answering its heading. -->
             {
                 page.sections.map((section) => (
                     <section class="fade-in border-b band-rule py-14 lg:py-16">
@@ -146,8 +124,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
                 ))
             }
 
-            <!-- The same question, asked the other nineteen ways. Each answer stands alone because each one
-                 is separately quotable, and each carries an id so it can be linked on its own. -->
+<!-- Related questions cover the remaining variants. -->
             <section class="fade-in border-b band-rule py-14 lg:py-16">
                 <h2 class="text-xl font-semibold tracking-tight text-content">Related questions</h2>
                 <div class="mt-7 space-y-7">
@@ -208,9 +185,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
     <Footer />
 
     <style>
-        /* Three columns on a desktop, a stack of labelled cards on a phone: the same bargain the comparison
-           table makes, and for the same reason. `data-side` carries the column header down into the stacked
-           view so a cell never floats free of what it was answering. */
+        /* Options use three columns on desktop and stack on phones. */
         .opts {
             border-collapse: collapse;
         }

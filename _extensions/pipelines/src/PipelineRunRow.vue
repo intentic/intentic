@@ -126,9 +126,7 @@ const attemptNumber = computed(() =>
 );
 // Only worth a word past the first: "attempt 1" on every chip would be noise, "attempt 3" is the story.
 const attemptWord = computed(() => (attemptNumber.value === undefined || attemptNumber.value <= 1 ? undefined : `attempt ${attemptNumber.value}`));
-/* THE ATTEMPT AS THE PICKER'S BAR NAMES IT (AgentRunAttempt): which, on what, how it stands; and whether it can be
- * continued from there, which only an ENDED one can. A landed attempt is history rather than an attempt on offer:
- * the run red again after it is a new failure wearing the same name. */
+/* An attempt is continuable only when it has ended; landed attempts are history. */
 const attemptOnOffer = computed<AgentRunAttempt | undefined>(() => {
     const state = fixState.value;
     if (state === undefined || state.kind === `landed`) {
@@ -258,10 +256,7 @@ const openStartOver = (): void => {
 </script>
 
 <template>
-    <!--
-        `hit="pair"`: the headline is a link to the vendor; swallowing it into the disclosure would conflate opening jobs with leaving the app.
-        `wide-control`: the trailing cluster (graph, time, two buttons) may wrap to a second line rather than crowd the subject.
-    -->
+    <!-- The vendor headline stays a link; the disclosure controls job details. -->
     <!-- @container: the chip's content is measured against this row, not the window, which the chat panel can halve. -->
     <DisclosureRow class="@container border-l-4" :class="tone.rowBorder" hit="pair" body="drawer" wide-control v-model:open="expanded">
         <template #lead="{ iconClass }">
@@ -281,7 +276,7 @@ const openStartOver = (): void => {
                     {{ headline }}
                 </a>
                 <StatusBadge :variant="tone.variant" :label="tone.label" size="xs" class="shrink-0" />
-                <!-- Links to the later green run, not just naming it, so a reader can check the failed job actually ran there and wasn't skipped. -->
+                <!-- The later successful run link verifies the failed job's recovery. -->
                 <a
                     v-if="superseded"
                     :href="superseded.url"
@@ -317,25 +312,13 @@ const openStartOver = (): void => {
         </template>
 
         <template #control>
-            <!--
-                Stages and actions both wrap, or two buttons that refuse to shrink squeeze the circles the row exists to show.
-                `ml-auto`+`justify-end` keeps them right-aligned either way.
-            -->
+<!-- Stages and actions both wrap, or two buttons that refuse to shrink squeeze the circles the row exists to show. -->
             <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
-                <!--
-                    `basis-0` with a ~3-circle floor: the graph is the one element here that can give ground, but not below legibility. Takes its
-                    natural width when the line has room (`max-w-max`), scrolls past that.
-                -->
-                <!--
-                    Padding is `hover:scale-110`'s headroom: without it, a scaled circle overflows the box's exact-fit size and flashes both
-                    scrollbars.
-                -->
+                <!-- `basis-0` with a ~3-circle floor: the graph is the one element here that can give ground, but not below legibility. -->
+<!-- Padding is `hover:scale-110`'s headroom: without it, a scaled circle overflows the box's exact-fit size and flashes both scrollbars. -->
                 <div class="scrollbar-thin flex max-w-max min-w-24 flex-1 basis-0 items-center overflow-x-auto p-1">
                     <PipelineGraph v-if="stages.length > 0" :stages="stages" :recurring="recurring" />
-                    <!--
-                        Same circles-and-connectors geometry as the real graph, so the row doesn't re-flow once jobs land. Three is a placeholder
-                        guess.
-                    -->
+                    <!-- Same circles-and-connectors geometry as the real graph, so the row doesn't re-flow once jobs land. -->
                     <div v-else-if="jobsLoading" class="flex items-center" aria-hidden="true">
                         <template v-for="i in 3" :key="i">
                             <span v-if="i > 1" class="h-px w-3 shrink-0 bg-line"></span>
@@ -350,10 +333,7 @@ const openStartOver = (): void => {
                         {{ timeAgo(run.createdAt) }}
                     </span>
                     <div class="flex items-center gap-1">
-                        <!--
-                            Branch's agent, for a row with none of its own; the demoted button's tooltip only explains, this is the press that acts
-                            on it. Neutral colour: it isn't this run's own agent.
-                        -->
+                        <!-- A branch agent is shown when the run has no agent of its own. -->
                         <a
                             v-if="branchState"
                             v-bind="branchState.link"
@@ -364,10 +344,7 @@ const openStartOver = (): void => {
                             <Icon :name="branchState.stance.icon" :spin="branchState.stance.spin" class="text-2xs" />
                             Agent on branch
                         </a>
-                        <!--
-                            One slot for the agent, whichever half of its life applies (fixStance.ts owns the words). Stays even after the run goes
-                            green: a rerun keeps the vendor's run id. Carries the full report while in play; once landed, only the label remains.
-                        -->
+                        <!-- One slot for the agent, whichever half of its life applies (fixStance.ts owns the words). -->
                         <a
                             v-if="fixState !== undefined && !fixState.retry"
                             v-bind="fixState.link"
@@ -389,10 +366,7 @@ const openStartOver = (): void => {
                                 :deletions="fixDiff.deletions"
                             />
                         </a>
-                        <!--
-                            Beside a chip for an attempt still in play: the one decision left from here, and it only opens the picker, whose bar
-                            is the press that stops and files the attempt away (openStartOver). Not offered once the fix has landed, which is history.
-                        -->
+                        <!-- Active attempts expose the remaining detail action beside their chip. -->
                         <Button
                             v-if="fixState !== undefined && fixState.ongoing && run.status === `failed`"
                             ref="startOver"
@@ -408,11 +382,7 @@ const openStartOver = (): void => {
                         >
                             <template #icon><Icon name="chevron-down" class="text-2xs" /></template>
                         </Button>
-                        <!--
-                            Primary only on the branch's open failure with no agent already on it; every other red row stays at Re-run's weight.
-                            'Continue' carries on in the same conversation (id derives from the run) rather than starting a rival agent; its caret's
-                            panel is where Start over lives, since deviating from the safe press should cost a look at what it replaces.
-                        -->
+                        <!-- Only an unassigned branch failure gets the primary action. -->
                         <AgentRunButton
                             v-else-if="run.status === `failed`"
                             :label="fixState?.retry === true ? `Continue` : `Fix with agent`"
@@ -424,10 +394,7 @@ const openStartOver = (): void => {
                             :hint="startHint"
                             @run="startFix"
                         />
-                        <!--
-                            Offered for a queued run too: waiting on a runner that never comes is exactly when Cancel is wanted, and both forges
-                            accept it pre-start.
-                        -->
+                        <!-- Queued runs also expose cancellation while waiting for a runner. -->
                         <Button
                             v-if="inFlight"
                             label="Cancel"
@@ -438,10 +405,7 @@ const openStartOver = (): void => {
                             :disabled="busy !== undefined"
                             @click="emit(`cancel`, run)"
                         />
-                        <!--
-                            Last rung: fix, review, land, prove it. Takes the weight the Fix button gives up once the fix has landed in the
-                            workspace.
-                        -->
+<!-- Last rung: fix, review, land, prove it. -->
                         <Button
                             v-else
                             label="Re-run"
@@ -487,10 +451,7 @@ const openStartOver = (): void => {
 
             <p v-else class="py-2 text-xs text-muted">No job details available for this run.</p>
 
-            <!--
-                Same graph, given the window: worth reading whole exactly when panning inside the row would be needed. A separate instance, so its
-                pin and pan stay independent of the inline one.
-            -->
+            <!-- Same graph, given the window: worth reading whole exactly when panning inside the row would be needed. -->
             <Modal v-model:open="fullscreen" size="full" :scroll="false" :header="`${headline}: job graph`">
                 <PipelineDagGraph :stages="stages" :recurring="recurring" fill />
             </Modal>

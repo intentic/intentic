@@ -20,11 +20,7 @@ export interface ArchiveEntry {
     readonly directory: boolean;
 }
 
-/**
- * Every member of a zip, from the central directory alone.
- * The filter is an enumeration hook: answering false for all of them walks the index and inflates nothing, which is
- * also what keeps an entry compressed by a method fflate lacks (or encrypted) listable rather than fatal.
- */
+/** Every member of a zip, from the central directory alone. */
 export const zipEntries = (bytes: Uint8Array): ArchiveEntry[] => {
     const entries: ArchiveEntry[] = [];
     unzipSync(bytes, {

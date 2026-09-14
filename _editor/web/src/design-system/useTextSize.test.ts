@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-/* Compact (100%) is the shipped default — no attribute, scale 1. Comfortable (stored as `default`) and Large
- * set data-text-size. index.html's anti-flash script mirrors the same contract. */
+/* Compact (100%) is the shipped default — no attribute, scale 1. */
 
 const load = () => import("@intentic/ui/text-size");
 

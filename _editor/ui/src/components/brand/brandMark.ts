@@ -36,10 +36,7 @@ export const brandUrl = (logo: string | undefined): string | undefined =>
     // Slug only: a `/hex` some manifests pinned was an old workaround that would override the real brand colour.
     logo === undefined ? undefined : `https://cdn.simpleicons.org/${logo.split(`/`)[0]}`;
 
-/**
- * The brand behind a CDN url: its official colour in both schemes, and the mark as a mask. Undefined leaves
- * <BrandMark> on its themed tiers.
- */
+/** The brand behind a CDN url: its official colour in both schemes, and the mark as a mask. */
 export const loadBrand = (url: string): Promise<Brand | undefined> => {
     const cached = brands.get(url);
     if (cached !== undefined) {

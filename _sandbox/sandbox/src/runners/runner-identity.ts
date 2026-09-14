@@ -4,11 +4,7 @@ import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 import type { RunnerModeEnv } from "./runner-mode.js";
 
-/* WHO THIS RUNNER IS, the runner-side half of the pairing (the parent's half is the peer store, runners/runner-peer.ts): which
- * sandbox it belongs to and the durable token every reconnect presents. On /history for the enrollment
- * files' reason: it outlives the container (a rebuilt runner must not need re-pairing), and it sits where no
- * tool the agent has can read it. The PAIRING in the container's env is single-use and burned at the parent
- * the moment this file first exists, so the env copy `docker inspect` shows is inert from then on. */
+/* WHO THIS RUNNER IS, the runner-side half of the pairing (the parent's half is the peer store, runners/runner-peer.ts). */
 
 const RunnerIdentitySchema = z.object({
     parentUrl: z.string(),
@@ -30,9 +26,7 @@ export const readRunnerIdentity = async (historyRoot: string): Promise<RunnerIde
     return await file.read();
 };
 
-/* The identity, enrolling first when this container has never redeemed its pairing. Every boot after the
- * first takes the read path; a boot whose pairing was already spent AND whose identity file is gone is a
- * genuinely broken runner (a wiped /history under a reused container) and throws the sentence that says so. */
+/* The identity, enrolling first when this container has never redeemed its pairing. */
 export const ensureRunnerIdentity = async (historyRoot: string, env: RunnerModeEnv): Promise<RunnerIdentity> => {
     const existing = await readRunnerIdentity(historyRoot);
     if (existing !== undefined) {

@@ -83,8 +83,7 @@ describe("the verify-removals follow-up", () => {
         expect(message).toMatch(/passing suite does not settle/i);
     });
 
-    /* No cwd is an ACP or translator turn, where there is no repository to ask. The check does not go silent,
-     * it falls back to the half that needs no history, which is also the half that is never wrong. */
+    /* No cwd is an ACP or translator turn, where there is no repository to ask. The check does not go silent. */
     test("without a repository, only a removal that defends itself in words is reported", async () => {
         const declared = `// do not remove: the retry below needs this delay`;
         const ledger = createRemovalLedger();

@@ -1,5 +1,4 @@
-/* Source-consumed by the web app's Vite (default export → ./src/index.ts); this config exists for standalone
- * type-checking (vue-tsc resolves the .vue surfaces the extension registers). */
+/* Source-consumed by the web app's Vite (default export → ./src/index.ts). */
 {
     "compilerOptions": {
         "noEmit": true,

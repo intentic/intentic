@@ -5,11 +5,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
 
-/* The comparison hub: the page "how does intentic compare to X?" resolves to.
- *
- * Ordered for the job a visitor actually has, which is to find X and leave: every page is a chip in a jump
- * strip in the first viewport, before any argument. Only then the frame (the two questions), and then the
- * families, which exist so the page still answers for the tools that will never have a page of their own. */
+/* The comparison hub resolves the question of how Intentic compares to another tool. */
 
 // A name only links where we have written a page about it; the rest stay plain text. An outbound link per
 // competitor from the hub would be a link farm, and the per-comparison page already carries the real one.
@@ -70,9 +66,7 @@ const pageByName = new Map(comparePages.map((page) => [page.name, page]));
         <!-- The families: the answer for every tool, including the ones without a page -->
         <section>
             <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
-                {/* Each family is a ruled band. The description column is naturally taller than a row of one
-                    or two cards, and without the rule that difference reads as a gap where a card failed
-                    rather than as the end of a section. */}
+                                {/* Family bands keep their description and cards visually separated. */}
                 {
                     compareFamilies.map((family, i) => (
                         <div
@@ -104,8 +98,7 @@ const pageByName = new Map(comparePages.map((page) => [page.name, page]));
                                 </div>
                             </div>
 
-                            {/* A lone comparison takes the whole column rather than half of it: at
-                                half width beside empty space it reads as a card that failed to load. */}
+                            {/* A lone comparison uses the full column. */}
                             <div class:list={["grid gap-4 lg:content-start", { "sm:grid-cols-2": familyPages(family.id).length > 1 }]}>
                                 {familyPages(family.id).map((page) => (
                                     <a href={compareHref(page.slug)} class="card group p-6 transition-colors hover:border-primary-600/40">

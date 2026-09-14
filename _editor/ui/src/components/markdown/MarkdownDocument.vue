@@ -1,8 +1,4 @@
-<!--
-    The one surface a markdown config is authored on, wherever in the product. Always displays as rendered prose, no preview toggle; the caret enters
-    on click via <MarkdownDocumentSurface>. `stored` decides `auto` (saves silently) vs `explicit` (Ctrl-S) save policy; mobile falls back to
-    <CodeField>.
--->
+<!-- The one surface a markdown config is authored on, wherever in the product. -->
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, useSlots } from "vue";
 import { useDevice } from "../../composables/useDevice.js";
@@ -99,14 +95,8 @@ defineExpose({ text, commit, focus: (): void => surface.value?.focus(), dirty, s
 
 <template>
     <div class="flex min-w-0 flex-col">
-        <!--
-            Same document, twice over, in the same type rules, so switching between reading and writing moves nothing
-            and neither sets its own measure.
-        -->
-        <!--
-            `flex-1` on all three branches, so a caller's minimum height goes to the document, not the column holding
-            it.
-        -->
+<!-- Same document, twice over, in the same type rules, so switching between reading and writing moves nothing and neither sets its own measure. -->
+<!-- `flex-1` on all three branches, so a caller's minimum height goes to the document, not the column holding it. -->
         <MarkdownDocumentSurface
             v-if="writing"
             ref="surface"
@@ -117,10 +107,7 @@ defineExpose({ text, commit, focus: (): void => surface.value?.focus(), dirty, s
             @change="onChange"
             @save="commit"
         />
-        <!--
-            Phone gets the source field instead: `contenteditable` fights a touch keyboard's selection and autocorrect;
-            writes through the same `onChange` either way.
-        -->
+<!-- Phones use the source textarea for reliable touch editing. -->
         <CodeField
             v-else-if="editable"
             :model-value="doc"
@@ -139,21 +126,14 @@ defineExpose({ text, commit, focus: (): void => surface.value?.focus(), dirty, s
         <!-- Why you cannot write here, said where somebody would try it; absent when the answer is obvious. -->
         <p v-if="readOnlyReason !== undefined && !editable" class="mt-2 text-2xs text-subtle">{{ readOnlyReason }}</p>
 
-        <!--
-            Caller's note on the left, the app's draft status on the right, one row for every surface; absent entirely
-            when there's nothing to say.
-        -->
+<!-- Caller's note on the left, the app's draft status on the right, one row for every surface; absent entirely when there's nothing to say. -->
         <div v-if="foot" class="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <span class="min-w-0 text-2xs text-subtle"><slot name="note" /></span>
             <span class="flex shrink-0 items-center gap-2">
                 <span v-if="count !== undefined" class="text-2xs tabular-nums" :class="over ? `text-danger` : `text-muted`">{{ count }}</span>
                 <span class="text-2xs" :class="status === `Saved` ? `text-success` : `text-subtle`">{{ status }}</span>
                 <slot name="actions" />
-                <!--
-                    Always on screen under `explicit`, not appearing on dirty, since a control that materializes gets
-                    pressed by accident; disabled instead. `mousedown.prevent` keeps the caret from blurring out before
-                    the click lands.
-                -->
+<!-- Always on screen under `explicit`, not appearing on dirty, since a control that materializes gets pressed by accident; disabled instead. -->
                 <Button
                     v-if="policy === `explicit`"
                     label="Save"

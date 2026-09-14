@@ -1,10 +1,6 @@
 import type { IconName } from "../icons/iconSets.js";
 
-/* HOW A FIX STANCE IS DRAWN, keyed by the kind the contract's `fixStance` reads off a fleet summary. The reading
- * lives in @intentic/sandbox-contract so an extension's pure tests can import it; this is the half only a rendering
- * surface needs, and it is here rather than in each surface so the chip beside a red pipeline row and the one on the
- * push question wear the same icon and tint for the same state. Takes the kind as a string, since this kit does not
- * depend on the contract; an unknown kind draws as an ending rather than crashing on `undefined.icon`. */
+/* HOW A FIX STANCE IS DRAWN, keyed by the kind the contract's `fixStance` reads off a fleet summary. */
 
 export interface FixStanceLook {
     readonly icon: IconName;

@@ -219,8 +219,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
             if (mintsEndpointProvider(renamed.kind)) {
                 await syncEndpointCompat(services);
             }
-            // The warm ACP subprocess is keyed by the old name; dropping it lets the next turn respawn under the new
-            // one.
+            // Drop the old ACP process so a renamed capability respawns under the new name.
             if (renamed.kind === "agent") {
                 services.acpConnections.drop(capability.id);
             }

@@ -14,10 +14,7 @@ const tempStore = () => {
     return { store: fileSandboxSettingsStore(path), path };
 };
 
-/* The store's defaults, taken FROM the schema rather than transcribed next to it. The copy that used to sit
- * here restated all twenty-two fields and their rationale, so every setting the product gained broke this file
- *: never because the store was wrong, only because the list had moved. What these tests are actually about is
- * the store: absent file ⇒ defaults, and a round trip that changes nothing. */
+/* Store defaults come from the schema, so this test cannot drift with a duplicated list. */
 const DEFAULTS: SandboxSettings = SandboxSettingsSchema.parse({});
 
 test("get returns the defaults when the file is absent", async () => {

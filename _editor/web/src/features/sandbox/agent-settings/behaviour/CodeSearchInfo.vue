@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { InfoDialog, InfoTable } from "@intentic/ui";
 
-/* The (i) beside the Agent tab's "Code search" group. Two settings that compose and are easy to confuse: one
- * teaches the assistant to search, one answers the question that comes before any search, so each is explained
- * as an off-vs-on comparison and framed by WHEN it happens, which is the whole difference between them.
- *
- * Defaults quoted here come from SandboxSettingsSchema (off / off). */
+/* The (i) beside the Agent tab's "Code search" group. */
 
 const IQ_COMPARISON = [
     [`A typical hunt`, `Several calls, then whole files read to find one function`, `One call`],
@@ -42,10 +38,7 @@ const SHADOW_COMPARISON = [
             Switching it on loads a small plugin that teaches the assistant iq's commands and nudges it to reach for them. The Search box in your
             workspace uses iq either way: this only changes what the assistant does.
         </p>
-        <!-- Why this setting carries a measurement control, and the one rule that makes its arms honest. It used
-             to be said on the row itself, in three lines of 11px text wedged between the switch and its own
-             result, which is the densest possible place to explain a method, and the reason the row was
-             unreadable. A dialog has room for it; a settings row does not. -->
+<!-- Why this setting carries a measurement control, and the one rule that makes its arms honest. -->
         <div class="mt-2 flex items-start gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2">
             <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-subtle" />
             <p class="text-2xs text-muted">
@@ -56,9 +49,7 @@ const SHADOW_COMPARISON = [
             </p>
         </div>
 
-        <!-- ② Project map, one question earlier than ①. Worth being precise about two things: that it is read
-             fresh rather than stored (that is the whole reason it isn't a note you'd write yourself), and that
-             it follows where the conversation was opened rather than always starting at the top. -->
+<!-- ② Project map, one question earlier than ①. -->
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Project map</h3>
         <p class="mt-1.5 text-2xs text-muted">
             Before it can search for anything, the assistant has to know what it is looking at. With this on, the sandbox reads your folders when a
@@ -83,9 +74,7 @@ const SHADOW_COMPARISON = [
                 isn't there any more. Sent once per conversation, and you can read exactly what was sent: it appears above your first message.
             </p>
         </div>
-        <!-- The map's measurement block, and the one thing about it a reader will otherwise get wrong: it is
-             not scored on the same quantity as its neighbour, on purpose, because the same corpus that showed
-             the map working showed searching-per-turn unable to see it. -->
+<!-- The map measurement uses a different score from its neighbour. -->
         <div class="mt-2 flex items-start gap-2 rounded-lg border border-line bg-canvas px-2.5 py-2">
             <Icon name="wave-pulse" class="mt-0.5 shrink-0 text-2xs text-subtle" />
             <p class="text-2xs text-muted">
@@ -98,10 +87,7 @@ const SHADOW_COMPARISON = [
             </p>
         </div>
 
-        <!-- ③ Document shadows, one step before either of the above: the files no text search can see into.
-             The two things worth being precise about: it never invents content (a scan or a photo says what
-             was NOT generated, rather than pretending), and the switch governs only the background pass — the
-             reader itself is always there. -->
+<!-- ③ Document shadows, one step before either of the above: the files no text search can see into. -->
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Document shadows</h3>
         <p class="mt-1.5 text-2xs text-muted">
             Some files in a workspace aren't text: Word documents, spreadsheets, slide decks, PDFs, images, recordings. With this on, the sandbox

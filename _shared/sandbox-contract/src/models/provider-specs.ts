@@ -162,8 +162,7 @@ export const PROVIDER_SPECS = [
         access: { kind: "subscription", requirement: "Muse Code subscription", runs: "Muse Spark under Claude Code" },
         auth: {
             kind: "minted",
-            // One estate, no choice to offer; the id still exists since a stored account records which variant minted
-            // it.
+            // Preserve the minted variant id because stored accounts reference it.
             variants: [
                 {
                     id: "meta",

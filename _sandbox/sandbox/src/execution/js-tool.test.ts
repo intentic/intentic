@@ -2,8 +2,7 @@ import { expect, test } from "vitest";
 import type { JsExecutionPlan } from "./js-runtime.js";
 import { formatJsResult, JS_SERVER_NAME, JS_TOOL_NAME, jsToolDescription } from "./js-tool.js";
 
-/* The loop-facing half of the backend, pure part: what the model is told, and the shape a run answers in.
- * The handler itself runs real scripts and lives in js-tool.integration.test.ts. */
+/* The loop-facing half of the backend, pure part: what the model is told, and the shape a run answers in. */
 
 const dirPlan = (dir: string, overrides: Partial<JsExecutionPlan> = {}): JsExecutionPlan => ({
     cwd: dir,
@@ -30,9 +29,7 @@ test("a run's answer reads like a shell's: output, then the status", () => {
     expect(formatJsResult({ exitCode: undefined, timedOut: false, stdout: "", stderr: "" }, 30)).toContain("killed before exiting");
 });
 
-/* The description is the model's contract with the fence, so its load-bearing sentences are pinned: the scoped
- * roots it names, the no-spawn refusal that closes the bash-through-code road, and the honesty note about the
- * network: the one thing the fence cannot cut. */
+/* The tool description must match the scoped execution plan enforced by the fence. */
 test("the description tells the truth the plan enforces", () => {
     const open = jsToolDescription(dirPlan("/work", { allowSpawn: true }));
     expect(open).toContain("/work");

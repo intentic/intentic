@@ -29,11 +29,7 @@ vi.mock("../../../browser/tools/browser-tools.js", () => ({
     browserServersOf: (...args: unknown[]) => browserServers(...args),
 }));
 
-/* NOTHING HERE TOUCHES THE DISK, which is what keeps this suite under the unit budget: the shared fixture's
- * ROOT is a path that does not exist, so planTurn's dependency probe discovers no projects and earns no notice,
- * and no prompt assertion below depends on whatever happens to be checked out on the machine running it. The
- * cases that need a REAL tree (a dependency notice, a skill catalogue read off disk) are asserted where one can
- * be built: turn-plan.integration.test.ts. The seams themselves live in turn-plan.testing.ts, shared with it. */
+/* NOTHING HERE TOUCHES THE DISK, which is what keeps this suite under the unit budget: the shared fixture's ROOT is a path that does not exist. */
 const IQ_PLUGIN_DIR = join(repoRoot(import.meta.url), "_search/iq/plugin");
 
 beforeEach(() => {

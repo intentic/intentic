@@ -2,12 +2,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { IntenticLine } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/server";
 
-/* ONE MOVE PER TUNNEL AT A TIME, streamed. Two concurrent dials of one id would race the same interface (and,
- * for an exit, the same derived proxy port and routing table) and leave a half-built tunnel behind; rejecting
- * the second is honest, the first is already streaming its progress. The stream ends on the link's own state
- * so the caller (a capability card, the CLI) renders the result without a second round-trip, and a failure is
- * surfaced twice on purpose: as an error frame for the stream's reader and as a thrown ORPCError for the
- * caller. Every streaming tunnel route is this shape; they differ only in the generator they run. */
+/* ONE MOVE PER TUNNEL AT A TIME, streamed. */
 export async function* heldStream(
     held: Set<string>,
     id: string,

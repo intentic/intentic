@@ -445,20 +445,7 @@ export const originMeta = (origin: AgentOrigin): { icon: IconName; label: string
 export const unreadBadge = (agent: { unread: boolean; seenAt?: number }): { label: "New" | "Updated"; seenAt?: number } | undefined =>
     !agent.unread ? undefined : agent.seenAt === undefined ? { label: `New` } : { label: `Updated`, seenAt: agent.seenAt };
 
-/* WHAT THE LIVE LINE SAYS. Normally the agent's own last tool (or the todo it is on), but a parent whose
- * children are working is not itself the interesting fact, and its own tool line goes quiet for exactly as long
- * as it waits on them. So the children lead, and what the parent was doing trails.
- *
- * THE TOOL'S TARGET IS NOT ON THIS LINE, and leaving it off is the point rather than an omission. It used to
- * be — `Bash · pnpm --filter @intentic/ui test -- --run src/lib` — and that is a line of shell, on a card in a
- * column of cards, changing every second or two. A board is scanned; the question it answers is "is this one
- * moving, and roughly at what", and the tool NAME answers that completely. The target answers "which file, on
- * which flag", which is a question you ask with the transcript open, where the full call is printed in full
- * and stays put long enough to read. In the lane it was a truncated fragment of a command — never enough of
- * one to act on, always enough to pull the eye off whatever the reader came to the board for.
- *
- * A TODO STILL WINS OVER THE TOOL, unchanged: "Wire the retry path" is what the agent is doing it TOWARDS, and
- * that is worth a card's line in a way that "which of ten files it is reading right now" is not. */
+/* A working child's activity takes precedence over its parent's idle tool. */
 export const activityLine = (agent: Pick<AgentSummary, "activity" | "subagents">): string | undefined => {
     const activity = agent.activity;
     const own = activity === undefined ? undefined : (activity.todo ?? activity.tool);

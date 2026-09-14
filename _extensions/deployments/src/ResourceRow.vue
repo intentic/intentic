@@ -161,10 +161,7 @@ const logText = computed(() => {
             </div>
 
             <div class="mb-3 flex flex-wrap items-center gap-2">
-                <!-- The one thing this surface can do that Komodo's own UI cannot: put an agent on the failure
-                     with the repo that holds the bug already open. It is the only primary button on the row,
-                     and it IS Pipelines' "Fix with agent": the same component, because it is the same act:
-                     one click on the standing model, a caret for the container that wants a bigger one. -->
+<!-- The one thing this surface can do that Komodo's own UI cannot: put an agent on the failure with the repo that holds the bug already open. -->
                 <AgentRunButton label="Ask the agent to fix" icon="sparkles" :picker="fixModel" :loading="busy" :disabled="busy" @run="startFix" />
                 <Button
                     v-if="resource.state !== `stopped`"

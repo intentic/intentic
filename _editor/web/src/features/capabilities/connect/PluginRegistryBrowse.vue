@@ -1,7 +1,4 @@
-<!--
-    Lists what a plugin registry repository publishes; picking a row fills the url, commit and path fields of the install form below it. Plugins only
-    — extension discovery lives on the Sandbox screen's Discover row, not here.
--->
+<!-- Lists what a plugin registry repository publishes; picking a row fills the url, commit and path fields of the install form below it. -->
 <script setup lang="ts">
 import { isShaPinned, type RegistryEntry } from "@intentic/registry";
 import type { Marketplace } from "@intentic/api-contract";
@@ -96,24 +93,13 @@ const pick = (entry: RegistryEntry): void => {
                         :disabled="blockedReason(entry) !== undefined"
                         @click="pick(entry)"
                     >
-                        <!--
-                            Registry's own mark (usually the extension's initials); a column of them is scannable
-                            without reading unfamiliar
-                            names.
-                        -->
+<!-- Registry's own mark (usually the extension's initials); a column of them is scannable without reading unfamiliar names. -->
                         <BrandMark :size="20" :name="entry.name" :art="entry.art" :logo="entry.logo" :icon="entry.icon" />
-                        <!--
-                            Verified is the only badge: the one state a human actually asserted, unlike the default
-                            "listed".
-                        -->
+<!-- Verified is the only badge: the one state a human actually asserted, unlike the default "listed". -->
                         <Icon v-if="entry.trust === 'verified'" name="shield" class="shrink-0 text-success" title="Verified" />
                         <span class="font-medium text-content">{{ entry.name }}</span>
                         <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>
-                        <!--
-                            Evidence, not endorsement: the nightly scan re-checked this pinned commit and loaded it (or
-                            didn't); silent when
-                            there's no check at all.
-                        -->
+<!-- Evidence, not endorsement: the nightly scan re-checked this pinned commit and loaded it (or didn't); silent when there's no check at all. -->
                         <Icon
                             v-if="checksOk(entry)"
                             name="check"

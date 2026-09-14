@@ -1,5 +1,4 @@
-/* Two emitted entry points, both run by `node`: dist/cli.js (the agent's `gw`, reached through bin/gw) and
- * dist/gateway.js (the watcher process the daemon starts). Tests are excluded from the emit. */
+/* Both Node entry points are emitted for the agent's `gw` command. */
 {
     "compilerOptions": {
         "types": ["node"],

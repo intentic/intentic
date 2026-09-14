@@ -158,11 +158,7 @@ describe(`hosted health`, () => {
         expect(health?.healthy).toBe(false);
     });
 
-    /* THE TWO FACTS THE ALERT USED TO WITHHOLD, which are the two that decide what the reader does next. It
-     * said "its allowance for this org, or a region's hardware" and left them to guess between a quota raised
-     * with Fly and a region placed somewhere else, then called the whole lane down — while the refusal is
-     * latched per region and the sign-up path scopes it to the caller's own, so everyone outside that region
-     * was being served the entire time. The provider's wording is the diagnosis, so the mail carries it. */
+    /* Regional refusals name the region and preserve healthy regions. */
     it(`names the refusing region, quotes the provider, and does not call the lane down for one region's refusal`, async () => {
         const sent: string[] = [];
         vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
@@ -185,10 +181,7 @@ describe(`hosted health`, () => {
         expect(sent[0]).not.toContain(`no sign-up anywhere`);
     });
 
-    /* THE OUTAGE THIS WATCH WAS MISSING, and the shape of it is the whole point: every row has its machine,
-     * both pools are stocked, the fleet and the database agree completely — and not one hosted sandbox can be
-     * reached, because the process in front of them is a build from before the replay lane existed. The sweep
-     * used to call this healthy, and did for ten days while people were told to start their sandboxes over. */
+    /* A fully stocked fleet is unhealthy when its edge lacks replay support. */
     it(`is unhealthy on a perfect fleet when the edge is an old build with no replay lane`, async () => {
         const { status, tunnels } = EDGE_OK;
         // Exactly what the pre-replay edge answered: no `replay` key at all, so absence is the only signal.
@@ -202,11 +195,7 @@ describe(`hosted health`, () => {
         expect(health?.healthy).toBe(false);
     });
 
-    /* THE STALE EDGE THE TWO CHECKS AROUND IT BOTH LET THROUGH. This one has the replay lane and uses it, so
-     * `replay: true` says nothing is wrong and every sandbox really is reachable — it is simply running an
-     * image older than the change that added a build stamp, because nothing rolled its machines. Production
-     * answered exactly this for days while the sweep logged a healthy lane every fifteen minutes. The absence
-     * of the key is the entire signal, which is why the fixture omits it rather than emptying it. */
+/* THE STALE EDGE THE TWO CHECKS AROUND IT BOTH LET THROUGH. */
     it(`is unhealthy when the edge replays but carries no build stamp, so its machines never rolled`, async () => {
         const { status, tunnels, replay } = EDGE_OK;
         stubFly([`intentic-sbx-pool-1`], {}, { status, tunnels, replay });
@@ -250,10 +239,7 @@ describe(`hosted health`, () => {
         expect(health?.healthy).toBe(false);
     });
 
-    /* THE OUTAGE EVERY OTHER READING HERE CALLS HEALTHY. On 2026-09-12 the fleet was perfect and the edge
-     * answered its own /health with the current build and `replay: true` — and Fly refused every replay it
-     * sent, because the org had cross-network replays off and each sandbox app is on its own 6PN. The only
-     * witnesses were the sandboxes themselves, each posting `reach: unreachable` before giving up. */
+/* THE OUTAGE EVERY OTHER READING HERE CALLS HEALTHY. */
     it(`is unhealthy when every sandbox that checked in says its own address does not answer`, async () => {
         stubFly([`intentic-sbx-a`, `intentic-sbx-pool-1`]);
         const prisma = prismaWith([taken(`intentic-sbx-a`)], [warm(`intentic-sbx-pool-1`)], { reachable: 0, unreachable: 3 });

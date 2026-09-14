@@ -478,10 +478,7 @@ const onPick = (event: Event): void => {
                         @load-more="searchLoadMore"
                     />
                 </div>
-                <!--
-                    No wrapper element around these rows: a bare `<template>` (no v-for/v-if) compiles to a real HTML element
-                    the browser hides entirely. `v-for` belongs on the row itself.
-                -->
+                <!-- Bare templates cannot wrap these rows; `v-for` belongs on the row itself. -->
                 <PullToRefresh v-else :on-refresh="refetch">
                     <div class="pb-24">
                         <button
@@ -494,7 +491,7 @@ const onPick = (event: Event): void => {
                                 node.type === 'dir' && !isLockedWorkspacePath(node.path) && !deadLink(node) ? openDir(node.path) : openFile(node.path)
                             "
                         >
-                            <!-- A row the sandbox keeps to itself: padlock, dimmed; a tap opens the explanatory tab instead of an empty folder. -->
+                            <!-- Private rows are dimmed and open their explanatory tab. -->
                             <Icon
                                 :name="isLockedWorkspacePath(node.path) ? 'lock' : iconForEntry(node.name, node.type)"
                                 class="shrink-0 text-base"
@@ -535,10 +532,7 @@ const onPick = (event: Event): void => {
                     </div>
                 </PullToRefresh>
 
-                <!--
-                    Upload FAB: hidden during search, which has no directory to land in. Positioned on a wrapper div, not the
-                    button: PrimeVue's `.p-button` sets its own `position: relative`, beating an `absolute` utility on the button.
-                -->
+                <!-- The upload FAB stays on a wrapper so PrimeVue cannot override its absolute position. -->
                 <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
                 <div v-if="!contentMode" class="absolute bottom-4 right-4 z-10">
                     <Button rounded class="h-14 w-14 px-0 py-0 shadow-lg" aria-label="Upload files here" @click="fileInput?.click()">
@@ -607,10 +601,7 @@ const onPick = (event: Event): void => {
                     >
                         <Icon name="download" class="text-base text-muted" /> Download
                     </button>
-                    <!--
-                        Rename and Delete are writes, withheld below the operating tier like the padlock above; Download and Copy
-                        path stay.
-                    -->
+                <!-- Rename and Delete stay gated; Download and Copy path remain available. -->
                     <template v-if="canEditFiles">
                         <button
                             type="button"

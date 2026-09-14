@@ -57,10 +57,7 @@ export interface SpeechStatus {
 }
 
 export interface Speech {
-    /**
-     * Where voice stands on this sandbox; asking while the model is absent starts fetching it, so the polling itself is
-     * what prepares it.
-     */
+/** Where voice stands on this sandbox; asking while the model is absent starts fetching it, so the polling itself is what prepares it. */
     readonly status: () => Promise<SpeechStatus>;
     /** One utterance's WAV to text; empty string when whisper heard only silence or noise. */
     readonly transcribe: (wav: Buffer, locale: string | undefined) => Promise<string>;

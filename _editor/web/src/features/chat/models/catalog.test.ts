@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { statusIcon, statusTabClass } from "./catalog";
 
-/* The tab strip's two projections of one conversation's status, checked against the rule that decides how many
- * of them are allowed to move: the glyph carries the motion, the title carries the colour. Both are drawn side
- * by side in the same 7px-tall button, for as long as a turn runs, which on a long turn is minutes. */
+/* The tab strip's two projections of one conversation's status, checked against the rule that decides how many of them are allowed to move. */
 describe(`statusTabClass`, () => {
     it(`colours the title without animating it: the spinner beside it already says "running"`, () => {
         expect(statusIcon(`streaming`).spin).toBe(true);

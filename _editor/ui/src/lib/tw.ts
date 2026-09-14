@@ -1,11 +1,7 @@
 import { twMerge } from "tailwind-merge";
 import type { Directive } from "vue";
 
-/* Applies conditional Tailwind classes with conflict resolution. Pass an array of class strings (falsy
- * entries ignored); tailwind-merge collapses conflicts so the last wins.
- *
- *   <div v-tw="[base, active && 'bg-card', !active && 'bg-canvas']"></div>
- */
+/* Applies conditional Tailwind classes with conflict resolution. */
 type TwValue = (string | boolean | null | undefined)[] | undefined;
 
 // Track the classes this directive last applied to each element, so an update removes only what it added

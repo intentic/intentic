@@ -1,7 +1,4 @@
-<!--
-    The single icon primitive for the app: draws the native SVG paths in icons/iconSets.ts. Size/colour come
-    from Tailwind classes on the tag. `spin` animates via SVG's own element, not CSS, so DevTools' Styles panel doesn't rebuild every frame.
--->
+<!-- The single icon primitive for the app: draws the native SVG paths in icons/iconSets.ts. -->
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, useAttrs } from "vue";
 import { ICONS, type IconName } from "../../icons/iconSets.js";
@@ -22,13 +19,7 @@ const label = (): string | undefined => {
 };
 const drawing = computed<Glyph>(() => ICONS[name]);
 
-/*
- * The spinner is drawn against the pack's own rules, because it is the only glyph that moves and moving geometry has
- * different needs from still geometry. Square ends leave a nub on each tip that the eye tracks around the circle; a
- * 2-unit stroke is under a device pixel by the time the mark is 11px wide (the rail's RunningMark), so the whole arc
- * is antialiased grey and rebuilt from different sub-pixels every frame. Round ends, a heavier stroke and a still
- * track underneath — see the template — leave a ring that never moves and an arc that clearly does.
- */
+/* The spinner is drawn against the pack's own rules, because it is the only glyph that moves and moving geometry has different needs from still geometry. */
 const isSpinner = computed(() => name === `spinner`);
 const SPINNER_STROKE = 2.5;
 
@@ -69,11 +60,7 @@ onBeforeUnmount(() => motionQuery?.removeEventListener(`change`, readMotionPrefe
             stroke-miterlimit="2"
             :shape-rendering="isSpinner ? `geometricPrecision` : undefined"
         >
-            <!--
-                The circle the spinner's arc travels, at a quiet fraction of the same ink. It sits outside the turning
-                group on purpose: unmoved geometry rasterises once and then holds still, so the mark keeps a steady
-                ring at any size and only the bright arc reads as motion.
-            -->
+<!-- The circle the spinner's arc travels, at a quiet fraction of the same ink. -->
             <circle v-if="isSpinner" cx="12" cy="12" r="8.75" :stroke-width="SPINNER_STROKE" opacity="0.35" />
             <!-- Everything that turns, and only what turns. -->
             <g :stroke-width="isSpinner ? SPINNER_STROKE : undefined" :stroke-linecap="isSpinner ? `round` : undefined">
@@ -95,10 +82,7 @@ onBeforeUnmount(() => motionQuery?.removeEventListener(`change`, readMotionPrefe
 </template>
 
 <style scoped>
-/*
- * The svg is 1em×1em; in a flex container it would otherwise shrink to a sliver, so keep its intrinsic
- * size regardless of flex pressure.
- */
+/* The svg is 1em×1em; in a flex container it would otherwise shrink to a sliver, so keep its intrinsic size regardless of flex pressure. */
 svg {
     display: inline-block;
     vertical-align: -0.125em;

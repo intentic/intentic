@@ -158,7 +158,7 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
     const published: string[] = [];
     try {
         for (const authzUrl of authorizations) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- each authorization is published then validated in turn; parallel challenges would race the same zone
+            // oxlint-disable-next-line eslint/no-await-in-loop -- Authorizations are published and validated in order.
             const authz = await jsonOf(await signedPost(authzUrl, undefined));
             const identifier = (authz["identifier"] as { value?: string } | undefined)?.value ?? "";
             const challenges = Array.isArray(authz["challenges"]) ? (authz["challenges"] as Record<string, unknown>[]) : [];

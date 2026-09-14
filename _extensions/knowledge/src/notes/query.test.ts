@@ -55,8 +55,7 @@ describe(`search`, () => {
         expect(hit?.snippet).toBe(babbageBody);
     });
 
-    /* A snippet is shown as evidence under a title, not rendered, so the markers that only mean something to a
-     * renderer read as damage. The words themselves are never touched. */
+    /* Snippets stay unrendered so their search markers remain evidence. */
     it(`shows a matched line as words rather than as markup`, () => {
         const marked = buildIndex([
             file(`a.md`, `---\ntype: term\n---\n- The **client-generated** UUID sent to [[Checkout API|the API]], not \`stripe.key\`.`),

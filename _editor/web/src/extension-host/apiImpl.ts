@@ -41,18 +41,7 @@ export interface HostBindings {
     readonly capabilities: () => readonly CapabilityFacts[];
 }
 
-/* WHAT TO CALL A SELECTION, the one place a (provider, model, account, effort) selection is turned into words
- * for an extension, so `pick` and `describe` can never name the same pin two different ways.
- *
- * The account's name is its SIGN-IN IDENTITY where the provider reported one, because that is what the owner
- * recognises: three connections all labelled "Claude" say nothing, and the label is theirs to rename anyway. A
- * pinned id that matches no connected account is left unnamed rather than echoed back, a pin whose credential
- * has been disconnected is exactly what a caller needs to be able to notice.
- *
- * The TIER is named the same way and for the same reason (effortLabelOf): clamped to what this model actually
- * offers, read against the selection's OWN thinking (absent keeps Max on the scale, because the turn then goes
- * out with no thinking field; explicitly off takes it away, because Claude refuses that pair), and left unnamed
- * where the runtime publishes no scale at all. */
+/* WHAT TO CALL A SELECTION, the one place a (provider, model, account, effort) selection is turned into words for an extension. */
 // The account half of that, lifted out so the builder below stays one flat literal: which id was pinned, and
 // what the owner would recognise it as.
 const namedAccount = (provider: AgentProvider, account: string | undefined): Pick<PickedModel, "account" | "accountLabel"> => {
@@ -439,9 +428,7 @@ export const createExtensionApi = (
                         agents.open(agent);
                     }
                 })(),
-            /* A new chat with the workflow badge already set, `startAgent` is the same call "New agent" makes,
-             * so the user lands in the one session-starting surface this product has, with the composer's
-             * caret in it and the design named beside the effort control. Nothing is spent until they send. */
+            /* A new chat with the workflow badge already set, `startAgent` is the same call "New agent" makes. */
             composeWorkflow: (workflowId) => {
                 startAgent();
                 useChat().active.value.workflowId.value = workflowId;

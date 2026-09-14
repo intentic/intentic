@@ -150,7 +150,7 @@ test("joins an offline device to the machine it is already syncing", () => {
     expect(merged[0]?.gap).toBeUndefined();
 });
 
-// ── environments that share a name ───────────────────────────────────────────
+// environments that share a name
 // WSL hands a distro the Windows machine's own hostname, and the distro is usually named after the machine too, so
 // both of merge's keys collide between two environments that share nothing else: separate filesystems, separate
 // agents, separate containers. Folding them would put one machine's buttons on the other's row.

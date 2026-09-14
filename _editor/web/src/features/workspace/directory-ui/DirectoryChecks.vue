@@ -5,12 +5,7 @@ import { RouterLink } from "vue-router";
 import RepoCheckRow from "../../sandbox/agent-settings/behaviour/RepoCheckRow.vue";
 import { useRepoChecks } from "../../sandbox/environment/useRepoChecks";
 
-/* WHAT THIS REPOSITORY ASKS TO HAVE RUN, opened from its own row in the tree. The settings page lists every repository
- * at once, which answers "what runs when I push?"; this answers "what does THIS one do?", where the reader already is.
- * Same rows, same switch, one composable — the two surfaces cannot drift into describing the same file differently.
- *
- * A repository with no declaration gets the file it would need, not an apology: the path and the shape are the whole of
- * what somebody is missing, and both fit on the screen that told them it was empty. */
+/* WHAT THIS REPOSITORY ASKS TO HAVE RUN, opened from its own row in the tree. */
 
 const dir = defineModel<string | undefined>({ required: true });
 
@@ -38,8 +33,7 @@ const EXAMPLE = `{
     <Modal v-model:open="visible" size="md" :header="`Checks in ${dir ?? ``}`">
         <div class="flex flex-col gap-4">
             <template v-if="entry !== undefined">
-                <!-- What the switch means, before the switch: the same opening its sibling panel (DirectoryPersonas)
-                     gives, and the one thing the row itself cannot say. -->
+                <!-- Explain the switch before the control because the row cannot explain itself. -->
                 <p class="text-xs text-subtle">
                     This repository declares these in <code class="ui-code">{{ entry.path }}</code
                     >, so they travel with it. Switching them on is what lets this sandbox run them.

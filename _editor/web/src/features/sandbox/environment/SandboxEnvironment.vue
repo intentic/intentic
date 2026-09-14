@@ -37,10 +37,7 @@ const outline = useSandboxOutline(reading);
             No environment changes yet. When the agent proposes a change to the sandbox image's overlay, its diff appears here to review and rebuild.
         </div>
 
-        <!--
-            Sits one layer below the overlay (installed vs. which engine version) and above the bundle; never hidden, since every sandbox has engines
-            worth checking.
-        -->
+        <!-- The environment row sits below the overlay and separates installed from available states. -->
         <EnginesCard />
 
         <!-- Out is drawn first: that's the one an owner reaches for while still holding this sandbox. -->

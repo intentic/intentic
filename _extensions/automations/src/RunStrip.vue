@@ -1,17 +1,11 @@
-<!--
-    One glyph-width mark per automation run, oldest left to newest right — reversed from the ledger's newest-first order. A skipped run (a guard that
-    found nothing to do) draws as its own quiet mark, not a gap or a failure, the same distinction the row's health dot makes for `idle`.
--->
+<!-- One glyph-width mark per automation run, oldest left to newest right — reversed from the ledger's newest-first order. -->
 <script setup lang="ts">
 import type { AutomationRun } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 
 const { runs, limit = 8 } = defineProps<{ runs: readonly AutomationRun[]; limit?: number }>();
 
-/* The ledger keeps twenty (RUNS_KEPT) and the strip shows the last eight of them. Not all twenty: at a row's
- * height the marks have to stay ~3px apart to read as separate events, and twenty of those is 100px of the
- * trailing cluster — wider than the two time facts beside it, for history nobody scans that far back. Eight
- * covers "the last week of a nightly" and "this morning" on a chattier trigger. */
+/* The ledger keeps twenty (RUNS_KEPT) and the strip shows the last eight of them. */
 const shown = computed(() => runs.slice(0, limit).toReversed());
 
 const MARK: Record<AutomationRun[`outcome`], string> = {
@@ -38,12 +32,7 @@ const summary = computed<string>(() => {
 </script>
 
 <template>
-    <!-- RIGHT-ALIGNED INSIDE A FIXED BOX, which is the caller's job and the reason this draws no width of its
-         own: a strip sized by its run count puts every row's history at a different x, and a column that does
-         not line up is a column nobody scans. The marks grow leftward from a fixed right edge, so the newest
-         run — the one being looked for — is always in the same place.
-         `items-center` on marks of one height rather than a stretch: this rides a two-line row, and a mark that
-         grew with the row would read as a bar chart of nothing. -->
+<!-- RIGHT-ALIGNED INSIDE A FIXED BOX, which is the caller's job and the reason this draws no width of its own. -->
     <span v-if="shown.length > 0" class="flex items-center justify-end gap-0.5" v-tooltip.top="summary" :aria-label="summary">
         <span v-for="run in shown" :key="run.at" class="h-3 w-1 rounded-xs" :class="MARK[run.outcome]"></span>
     </span>

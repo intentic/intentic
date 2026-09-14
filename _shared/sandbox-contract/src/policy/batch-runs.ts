@@ -55,21 +55,7 @@ export const parseBatchFile = <T>(text: string, shape: (value: Record<string, un
     }
 };
 
-/* WHAT THE AGENT IS TOLD ABOUT WHERE TO LEAVE ITS ANSWER, appended to whatever prompt the pack composed.
- *
- * WHY THE AGENT WRITES A FILE AND NOT A ROUTE. A ledger is a daemon route, and reaching it from a turn would
- * mean handing the agent a token and a client it needs for nothing else. Writing one small JSON file is
- * something every agent can already do, and the surface promotes finished runs when it next sees them. The
- * promotion is idempotent and re-runs on every poll, so nothing is lost by not being watched.
- *
- * `outcomes` is the pack's vocabulary and is spelled out in full, because a closed set is what lets a surface
- * debounce without hiding anything: an agent that verified some findings and concluded they were false
- * positives has to be able to SAY so, or the next poll starts the same turn again forever. Pass the
- * explanations with the words — a model that reads an outcome as an admission of having done nothing useful
- * will avoid it and report something else, and the surface never goes quiet.
- *
- * The closing line is not decoration. A turn that concludes there was nothing to do and writes no file is
- * indistinguishable from a turn that died, and the surface has to show the second as an unknown. */
+/* WHAT THE AGENT IS TOLD ABOUT WHERE TO LEAVE ITS ANSWER, appended to whatever prompt the pack composed. */
 export const batchReportingClause = (params: { readonly path: string; readonly fields: string; readonly outcomes?: string | undefined }): string =>
     [
         `When you are finished, write your conclusion to ${params.path} as JSON:`,
@@ -78,23 +64,8 @@ export const batchReportingClause = (params: { readonly path: string; readonly f
         `Write that file even if you conclude there was nothing to do.`,
     ].join(`\n\n`);
 
-/* THE BODY OF THE `POST /agent` THAT STARTS ONE ITEM, so the flag combination that makes a run a run is decided
- * once. `isolated: true` with a conversationId is the shape (and the only shape) that registers a fleet entry,
- * which is why none of these packs owns session machinery; `unattended: true` is what the turn IS — started by
- * a row rather than by a person at a composer — and `runRole` is which of those rows, so the daemon answers
- * with the owner's list FOR THAT JOB (model-roles.ts) unless the caller pinned a model on the row's caret, in
- * which case the pick rides along and the daemon's fill step leaves it alone.
- *
- * PERMISSIONS AND ISOLATION ARE THE CALLER'S, deliberately. They are the two decisions that differ by kind and
- * both are about safety rather than plumbing: an acceptance test that parks on a permission card is a test that
- * never finishes, so that surface trades the prompt away; a maintenance chore is different in kind — nobody is
- * waiting on it, it may take until tomorrow, and a sweep that can answer its own permission prompts is exactly
- * the thing an owner would want to have been asked about. A default here would decide that for both. */
-/* WHAT THE CARET ON THE RUN BUTTON CHOSE, in the shell's own vocabulary (`provider`; the turn calls it `agent`).
- * Every field but the provider is optional and absent means absent: the turn goes out without it and the model's
- * own default answers. All of them travel, because all of them are things the picker can now set and each is a
- * different price — a run re-pointed at a frontier model but not at the tier, the loop or the account it was
- * pinned under is not the run the reader configured. */
+/* The batch request fixes the isolation and run flags for one item. */
+/* WHAT THE CARET ON THE RUN BUTTON CHOSE, in the shell's own vocabulary (`provider`; the turn calls it `agent`). */
 export interface BatchTurnPick {
     readonly provider: string;
     readonly model?: string | undefined;

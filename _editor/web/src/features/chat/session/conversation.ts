@@ -1113,8 +1113,7 @@ export class Conversation {
         }, wait);
     }
 
-    // Drop a pending continuation (a turn starting, the switch going off, the tab closing); leaves the ladder where it
-    // is.
+    // Canceling auto-continue leaves the ladder in its current state.
     private cancelAutoContinue(): void {
         clearTimeout(this.autoContinueTimer);
         this.autoContinueTimer = undefined;

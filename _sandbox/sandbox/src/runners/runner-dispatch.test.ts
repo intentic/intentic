@@ -4,9 +4,7 @@ import type { ConversationWorktree } from "../agents/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
 import { dispatchRemoteTurn } from "./runner-dispatch.js";
 
-/* The dispatch's OFFLINE answer, the one path that needs no runner to exist: a machine asleep is a normal
- * state, and the frame the user reads must say what to do about it — never a spinner, never a turn that
- * quietly runs here instead (the placement was the user's explicit ask). */
+/* The dispatch's OFFLINE answer, the one path that needs no runner to exist: a machine asleep is a normal state. */
 
 const worktree: ConversationWorktree = { cwd: "/nowhere", branch: "agent/c1", repos: [{ repo: "root", base: "abc" }] };
 

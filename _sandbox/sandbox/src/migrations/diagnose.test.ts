@@ -3,8 +3,7 @@ import { diagnoseArchive } from "./diagnose.js";
 
 const files = (...paths: string[]): Map<string, Buffer> => new Map(paths.map((path) => [path, Buffer.from("x")]));
 
-/* Each of these is a real mistake with a different next move. The rule they all serve: never answer a failed
- * upload by repeating the instruction the user just followed. */
+/* Each of these is a real mistake with a different next move. */
 
 test("an empty archive points at the error the pack command already printed", () => {
     expect(diagnoseArchive(new Map())).toContain("empty");

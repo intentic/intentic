@@ -3,15 +3,7 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { lockedFile } from "./lockedFile";
 
-/* THE FILES THE APP WILL NOT OPEN, SAYING SO IN THE ONE PLACE THE READER LOOKED.
- *
- * The refusal used to arrive as a flicker: a tab appeared, the read came back empty, the tab closed. That reads
- * as a bug, and a reader who thinks a screen is broken tries again. So the row is drawn locked (the explorer)
- * and clicking it lands HERE, where the file says what it holds and points at the screen that actually manages
- * it: the padlock is a door, not a wall.
- *
- * What each entry holds, and what it is called, lives in lockedFile.ts, keyed on the contract's own answer so
- * the sentences cannot drift off the rule the daemon enforces (they had). This is only the drawing of it. */
+/* The refusal used to arrive as a flicker: a tab appeared, the read came back empty, the tab closed. */
 
 const { path } = defineProps<{ path: string }>();
 

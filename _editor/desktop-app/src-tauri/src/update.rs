@@ -8,48 +8,7 @@ use tauri::menu::MenuItem;
 use tauri::{AppHandle, Emitter, Manager, Wry};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
-/* KEEPING THE APP ON THE VERSION THAT WAS RELEASED, WITHOUT EVER ASKING FIRST.
- *
- * This app is tray-resident by design — the × hides the workspace rather than ending the process (windows.rs)
- * — and `main` cuts a release most days. Before this module the two facts met as follows: ONE check, at
- * startup, emitting a notice that read "it installs the next time you quit", with nothing anywhere in this
- * crate that installed anything, ever. A machine left up for a week checked once; a machine quit nightly
- * installed nothing either. Every copy in the wild simply stayed where it was.
- *
- * That is worse than a stale app. The `ic` CLI a setup downloads is pinned to THIS build's release tag
- * (commands.rs `ic_url`), so an app that never updates also freezes the flow it drives — and the
- * `intentic-requirement:` protocol the Windows setup screen is built around arrived in one commit, which an
- * older app receives, cannot parse, and renders as an install that hangs on "checking Docker".
- *
- * THE SHAPE IS THE ONE THE SANDBOX ALREADY USES. `ic sandbox prepare` pulls and builds the next image without
- * touching the running container, writes `/history/update-staged.json` to say so, and a later `ic sandbox
- * update` swaps onto what is already downloaded — seconds of downtime instead of minutes. This is that,
- * applied to the shell:
- *
- *   check on a schedule → download to disk, silently → offer the swap → apply it on quit, or on the click
- *
- * WHAT IS NEVER DONE: nothing is installed while a script run is live, and nothing is installed under a
- * question. An install replaces the running executable and ends the process; doing that behind somebody's
- * four-minute `connect.ps1` would kill the install they are watching. `busy()` is the whole guard, and it is
- * checked at the last possible moment rather than at the start of the download.
- *
- * WHY THE BYTES GO TO DISK. `Update::download` verifies the release's minisign signature and hands back a
- * `Vec<u8>` — around 15 MB of NSIS installer on Windows and roughly 100 MB of AppImage on Linux. Holding the
- * latter resident for the days this process routinely lives would be a real cost for an app that is idle for
- * almost all of it, so the verified bytes are staged under this app's own cache directory and read back at
- * install time. That trades nothing away: the staging directory and the installed application are the same
- * user's, on both platforms (`installMode: currentUser` puts the Windows install under %LOCALAPPDATA%), so
- * anything able to tamper with a staged installer can already replace the app it would be installing over.
- *
- * WHAT THIS CANNOT DO, AND SAYS SO. `latest.json` names exactly two artifacts — the AppImage for
- * `linux-x86_64` and the NSIS installer for `windows-x86_64` (build-desktop.sh) — so a copy installed from the
- * `.deb` or the `.rpm` has no artifact of its own to be updated with. Left alone the plugin would fetch the
- * AppImage and hand it to `dpkg`, which rejects it as not a package: a failure with nothing useful in it. So a
- * deb/rpm build is recognised up front and offered the download page instead. The same ending catches the
- * other population that can never update itself: every copy installed at or before v1.213.0 was compiled with
- * a pubkey whose private half was lost, so it rejects every manifest signed since, forever. Those two are the
- * only cases where this app asks a person to do something, and it is better than the silence they get now.
- */
+/* This app is tray-resident by design — the × hides the workspace rather than ending the process (windows.rs) — and `main` cuts a release most days. */
 
 /// Where a user goes when this app cannot update itself — the page that offers every artifact by name.
 const DOWNLOADS_URL: &str = "https://intentic.dev/download";
@@ -72,13 +31,7 @@ const RECHECK_ON_SHOW_AFTER: Duration = Duration::from_secs(60 * 60);
 /// forever would only mean never telling them.
 const GIVE_UP_AFTER: u32 = 3;
 
-/* WHAT THE APP IS DOING ABOUT ITS OWN VERSION, as one value that every surface renders.
- *
- * Three of them draw this: the launcher's notice, the tray entry, and — through the one-way channel the
- * workspace window already has — the SPA's own banner. One value rather than three booleans is what stops
- * them disagreeing, which the old event could not help doing: it carried a version and nothing about whether
- * anything had been downloaded, so the only sentence available was a guess about the future ("it installs the
- * next time you quit") that happened to be false. */
+/* WHAT THE APP IS DOING ABOUT ITS OWN VERSION, as one value that every surface renders. */
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum Stage {
@@ -161,12 +114,7 @@ pub fn stage(app: &AppHandle) -> Stage {
     app.state::<UpdateState>().stage.lock().unwrap().clone()
 }
 
-/* MOVING TO A STATE, AND TELLING EVERY SURFACE AT ONCE.
- *
- * The store and the three notifications are one function precisely so they cannot come apart: a stage written
- * without an emit is a launcher notice frozen on the previous sentence, and an emit without the store is a
- * window that reopens showing something else. `update_state` reads the same value on mount, so a webview that
- * was not open when this ran catches up. */
+/* The store and the three notifications are one function precisely so they cannot come apart. */
 fn set(app: &AppHandle, next: Stage) {
     {
         let state = app.state::<UpdateState>();
@@ -185,19 +133,7 @@ fn set(app: &AppHandle, next: Stage) {
     announce_to_workspace(app, &next);
 }
 
-/* TELLING THE HOSTED SPA, WITHOUT GIVING IT A COMMAND SURFACE.
- *
- * The workspace window is remote content with an empty capability list, and that does not change here. What it
- * already has is a one-way marker injected at load (`workspace_init_script`) and an `intentic://` navigation
- * this window intercepts — a channel INTO the app that is a link rather than IPC, so the same button works
- * from an external browser and a page that is somehow not ours can at worst ask for something it has no
- * credentials for.
- *
- * This is the load-time marker's missing half: a page open BEFORE the download finished would otherwise never
- * hear about it, and the banner would appear only on a reload — on the one screen whose whole problem is that
- * it is never reloaded. An event dispatched into the page is still one-way; nothing is returned and nothing is
- * callable. The version is escaped rather than trusted: it is ours, off a signed manifest, and it is still
- * being written into a JavaScript string literal. */
+/* The workspace window is remote content with an empty capability list, and that does not change here. */
 fn announce_to_workspace(app: &AppHandle, stage: &Stage) {
     let Some(window) = app.get_webview_window(crate::windows::WORKSPACE) else {
         return;
@@ -229,12 +165,7 @@ pub fn escape_js(value: &str) -> String {
         .collect()
 }
 
-/* WHETHER THIS PROCESS CAN REPLACE ITSELF AT ALL, decided once, before anything is fetched.
- *
- * `bundle_type()` is the same call the updater plugin makes to choose its own install path, so there is no
- * second opinion to drift from: it reads a marker the bundler patched into this exact artifact. Deb and rpm
- * are recognised HERE rather than at install time because that is the difference between a sentence somebody
- * can act on and `dpkg` refusing an AppImage. */
+/* WHETHER THIS PROCESS CAN REPLACE ITSELF AT ALL, decided once, before anything is fetched. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Updatable {
     /// An artifact `latest.json` names: the NSIS installer, or the AppImage.
@@ -274,8 +205,7 @@ fn clear_staging(app: &AppHandle) {
     *app.state::<UpdateState>().ready.lock().unwrap() = None;
 }
 
-/* THE RESIDENT LOOP. One check on arrival, then the cadence — and every wake re-reads the failure count, so
- * an app that has given up stops making requests rather than quietly making them forever. */
+/* THE RESIDENT LOOP. */
 pub fn start(app: &AppHandle) {
     // The one build that is told nothing at all: nobody bundled it, so it has no release to be behind and no
     // artifact it could be moved onto. Everything else checks — INCLUDING deb and rpm, which cannot install
@@ -321,12 +251,7 @@ fn busy_or_installing(app: &AppHandle) -> bool {
     app.state::<UpdateState>().installing.load(Ordering::SeqCst) || crate::scripts::busy()
 }
 
-/* ONE PASS: ask, and download what comes back.
- *
- * Downloading without being asked is the whole point — an "Update" button that then makes somebody wait four
- * minutes for an AppImage is the experience this replaces, and it is why `Ready` is the only state with a
- * button on it. The download itself is safe to run beside anything: it writes to this app's cache directory
- * and touches nothing the machine is using. Only the INSTALL has to wait for a quiet moment. */
+/* ONE PASS: ask, and download what comes back. */
 async fn check_now(app: &AppHandle) {
     if app.state::<UpdateState>().installing.load(Ordering::SeqCst) {
         return;
@@ -334,9 +259,7 @@ async fn check_now(app: &AppHandle) {
     if *app.state::<UpdateState>().failures.lock().unwrap() >= GIVE_UP_AFTER {
         return;
     }
-    /* What was true before this pass, so a failure can put it back. A half-finished check is not a fact about
-     * this app's version, and the states it passes through on the way are the two that must never be left
-     * standing: a tray row frozen on "Checking for updates…", or one frozen at 61%. */
+/* What was true before this pass, so a failure can put it back. */
     let settled = stage(app);
     set(app, Stage::Checking);
     *app.state::<UpdateState>().last_check.lock().unwrap() = Some(Instant::now());
@@ -362,13 +285,7 @@ async fn check_now(app: &AppHandle) {
 
     let version = found.version.clone();
 
-    /* A .DEB OR .RPM INSTALL, WHICH IS ONLY A PROBLEM NOW THAT THERE IS SOMETHING TO MISS.
-     *
-     * `latest.json` names an AppImage for `linux-x86_64`, so this copy has no artifact of its own to be moved
-     * onto — left to itself the plugin would download that AppImage and hand it to `dpkg`, which rejects it as
-     * not a package: a failure with nothing in it a person could act on. Saying so is better, and saying so
-     * HERE rather than at startup is what keeps it from being a permanent notice on a machine that is already
-     * current. Nothing is downloaded: there is nothing this build could do with the bytes. */
+/* `latest.json` names an AppImage for `linux-x86_64`, so this copy has no artifact of its own to be moved onto. */
     if updatable() == Updatable::OtherPackaging {
         return set(
             app,
@@ -403,9 +320,7 @@ async fn check_now(app: &AppHandle) {
                     return;
                 };
                 let percent = ((so_far.min(total) * 100) / total) as u8;
-                /* Whole percents only, and only forwards. This callback fires once per chunk — tens of
-                 * thousands of times across a 100 MB AppImage — and an emit apiece would be three surfaces
-                 * redrawing several hundred times a second for the whole download. */
+/* Whole percents only, and only forwards. */
                 if percent > announced.load(Ordering::Relaxed) {
                     announced.store(percent, Ordering::Relaxed);
                     set(
@@ -445,12 +360,7 @@ async fn check_now(app: &AppHandle) {
     set(app, Stage::Ready { version });
 }
 
-/* A FAILURE IS QUIET UNTIL IT IS A PATTERN, AND THEN IT IS SAID OUT LOUD.
- *
- * One failed check is a laptop on a train. Three in a row is this copy, specifically, being unable to update
- * itself — which for every install cut at or before v1.213.0 is permanent and structural: those builds were
- * compiled with a pubkey whose private half was lost, so a signature check that fails today fails forever.
- * Retrying silently is how they came to be a population nobody has ever told. */
+/* One failed check is a laptop on a train. */
 fn record_failure(app: &AppHandle, settled: Stage, version: Option<String>, reason: &str) {
     eprintln!("intentic: update check failed: {reason}");
     let failures = {
@@ -488,18 +398,7 @@ pub fn refusal(app: &AppHandle) -> Option<&'static str> {
     None
 }
 
-/* APPLYING IT — the swap, and the only part of this that the user can feel.
- *
- * Windows: the NSIS installer runs in `passive` mode (a progress bar, no questions), `install` ends this
- * process itself, and the installer starts the app again with the arguments it had. So nothing after the call
- * runs, and the relaunch is the installer's rather than ours.
- *
- * Linux: `install` rewrites the AppImage in place, keeping the old one until the write succeeds, and RETURNS.
- * Restarting is ours to do, and `restart()` is what knows an AppImage's real path — `current_exe` inside one
- * points into a squashfs mount that is about to be the previous version.
- *
- * Staging is cleared BEFORE the attempt, not after. On Windows there is no after; on Linux a staged file kept
- * past a failure is one that gets retried on every quit from here on. */
+/* APPLYING IT — the swap, and the only part of this that the user can feel. */
 pub fn install(app: &AppHandle, restart: bool) -> Result<(), String> {
     if let Some(refusal) = refusal(app) {
         return Err(refusal.to_string());
@@ -526,15 +425,7 @@ pub fn install(app: &AppHandle, restart: bool) -> Result<(), String> {
     Ok(())
 }
 
-/* WHAT THE OFFER DOES WHEN IT IS TAKEN — one entry point for all three surfaces.
- *
- * The tray row, the launcher's button and the SPA's banner (through `intentic://update`) are three drawings of
- * one state, so they must not be three decisions about what pressing it means. `Ready` installs and comes
- * back; `Manual` opens the download page, which is the only thing left to offer a copy that cannot replace
- * itself; everything else is a press on a row that is not offering anything, and does nothing.
- *
- * Off the caller's thread, because on Windows installing ends this process from inside the call — doing that
- * on a tray menu callback tears down the very menu that is mid-event. */
+/* WHAT THE OFFER DOES WHEN IT IS TAKEN — one entry point for all three surfaces. */
 pub fn act(app: &AppHandle) {
     match stage(app) {
         Stage::Ready { .. } => {
@@ -553,15 +444,7 @@ pub fn act(app: &AppHandle) {
     }
 }
 
-/* THE INVISIBLE PATH, AND THE ONE THAT MAKES "ALWAYS ON THE NEWEST VERSION" TRUE.
- *
- * Quitting is the perfect moment: the window is going anyway, nothing is being watched, and the next launch is
- * the new version with nobody having been asked about it. This is what the launcher's old notice claimed
- * happened and what nothing in this crate did.
- *
- * Called from the exit event, so it must not be slow and must not be able to stop the exit. It is a file write
- * on Linux and a ShellExecute on Windows; a failure leaves the app exactly as it was, which is the whole
- * promise. No restart, obviously — the user is leaving. */
+/* THE INVISIBLE PATH, AND THE ONE THAT MAKES "ALWAYS ON THE NEWEST VERSION" TRUE. */
 pub fn install_on_exit(app: &AppHandle) {
     // An install already under way is what an "Update" click a moment ago started, and it is on its way to
     // ending this process by itself. Reaching the installer twice is the one race here that could leave a
@@ -581,10 +464,7 @@ pub fn install_on_exit(app: &AppHandle) {
 mod tests {
     use super::*;
 
-    /* WHAT EACH STATE OFFERS. The tray is the surface a user meets when the window is not on screen at all —
-     * this app lives in it — and the rule it has to keep is the same one the banner keeps: exactly one state
-     * has a button, and that state is the one where the bytes are already on this machine. Anything else is a
-     * button that starts a wait. */
+/* WHAT EACH STATE OFFERS. */
     #[test]
     fn only_a_finished_download_is_offered_as_an_action() {
         for stage in [
@@ -663,11 +543,7 @@ mod tests {
         assert_eq!(Stage::Current.ready_version(), None);
     }
 
-    /* THE VERSION IS OURS AND IT IS STILL ESCAPED.
-     *
-     * It arrives on a minisign-verified manifest this repo publishes, so nothing hostile is expected in it —
-     * and it is written into a JavaScript string literal inside a page loaded from app.intentic.dev, which is
-     * the one place in this app where "expected" is not a good enough reason to skip the encoder. */
+/* It arrives on a minisign-verified manifest this repo publishes, so nothing hostile is expected in it. */
     #[test]
     fn nothing_can_end_the_string_it_is_injected_into() {
         assert_eq!(escape_js("1.2.3"), "1.2.3");

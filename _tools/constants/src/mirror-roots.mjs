@@ -5,8 +5,7 @@
 // Overlaid directory names; `.cache` is deliberately excluded and `.venv` is python's node_modules.
 export const MIRRORED_DIRS = new Set(["node_modules", ".venv", "dist", "generated"]);
 
-// Last path segment, quotes and trailing slash stripped; `dist/*` (contents) is not a match, only the directory itself
-// is.
+// Classify the last path segment after stripping quotes and slashes; directory contents are not matches.
 const lastSegment = (token) => {
     const bare = token.replace(/^['"]|['"]$/g, "").replace(/\/+$/, "");
     return bare.slice(bare.lastIndexOf("/") + 1);

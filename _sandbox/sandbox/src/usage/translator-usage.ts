@@ -273,8 +273,7 @@ const appendKimiPool = (windows: UsageWindow[], value: unknown, seconds: number 
         return;
     }
     const { kind, label } = kimiWindowKind(seconds);
-    // First writer wins: the plan pool is appended before throttles, so a same-length `limits[]` entry cannot overwrite
-    // it.
+    // Preserve the first limits entry for each window length.
     if (windows.some((window) => window.kind === kind)) {
         return;
     }

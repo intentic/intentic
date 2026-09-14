@@ -8,8 +8,7 @@ import { githubReader } from "./github.js";
 import { scanSummary, writeScanOutputs } from "./outputs.js";
 import { scanRegistry } from "./scan.js";
 
-/* The scan's entry point, run from a checkout of the registry repo itself. Reads the environment, scans, and
- * hands the result to writeScanOutputs; the workflow that calls it only moves the resulting files around. */
+/* The scan's entry point, run from a checkout of the registry repo itself. */
 
 const scan = async (): Promise<void> => {
     const token = process.env[`GITHUB_TOKEN`];

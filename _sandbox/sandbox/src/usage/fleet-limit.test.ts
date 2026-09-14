@@ -2,10 +2,7 @@ import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { fleetLimit } from "./fleet-limit.js";
 
-/* ONE RULE FOR "IS THIS FLEET SPENT FOR THIS MODEL". What is pinned is the scoping the six rules it replaced
- * disagreed on: an account counts on the pools the model spends, a spent pool for another family is not a
- * spent account, the proxy's own bench outranks any reading, and the three states (spent, room, nothing on
- * file) stay apart. */
+/* ONE RULE FOR "IS THIS FLEET SPENT FOR THIS MODEL". */
 
 const window = (over: Partial<UsageWindow> & Pick<UsageWindow, "kind">): UsageWindow => ({ utilization: 10, gates: "all", ...over });
 const reading = (account: string, ...windows: UsageWindow[]): { account: string; usage: AccountUsage } => ({

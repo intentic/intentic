@@ -3,8 +3,7 @@ import type { CodeAnalysisRequest, CodeAnalysisResponse } from "./codeAnalysisPr
 
 /* oxlint-disable unicorn/require-post-message-target-origin -- dedicated-worker postMessage has no target origin */
 
-/* Shiki/TextMate walks run here rather than on the browser's render thread. This worker owns its highlighter
- * core and lazily loaded grammars; the small serializable answer is all that crosses back to the UI. */
+/* Shiki/TextMate walks run here rather than on the browser's render thread. */
 self.addEventListener(`message`, (event: MessageEvent<CodeAnalysisRequest>) => {
     const { id, text, lang } = event.data;
     void analyzeInApp(text, lang).then(

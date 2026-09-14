@@ -207,10 +207,7 @@ onMounted(async () => {
                 <Notice v-if="testsError" :of="noticeOf(testsError)" class="mb-4" />
                 <Notice v-if="actionError" :of="noticeOf(actionError)" class="mb-4" />
 
-                <!--
-                    Startable app instances (monorepo only); each carries its own Run-tests when it owns projects, with a type icon/pill for frontend
-                    vs backend at a glance.
-                -->
+                <!-- Startable app instances expose tests for their owned projects. -->
                 <section v-if="monorepo">
                     <!-- Skeleton rows stand in while scanning; without them, an empty section reads the same as a repo with no apps. -->
                     <div

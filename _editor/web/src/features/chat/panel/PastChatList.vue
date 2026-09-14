@@ -29,10 +29,7 @@ const emit = defineEmits<{ open: [id: string] }>();
                 <!-- Members with this session open right now. -->
                 <PresenceAvatars :members="viewersOfSession(session.id)" label="in this chat" />
             </span>
-            <!--
-                Why this row matched, when it wasn't the title: the line the query hit and which side said it. Absent on an
-                unfiltered list or a title match, so it never repeats the row above.
-            -->
+<!-- Why this row matched, when it wasn't the title: the line the query hit and which side said it. -->
             <MatchLine
                 v-if="session.snippet !== undefined"
                 :snippet="session.snippet"

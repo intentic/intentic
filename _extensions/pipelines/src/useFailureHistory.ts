@@ -4,12 +4,7 @@ import { computed, type Ref } from "vue";
 import { failedOf, type JobFailureRun, recurringFailures } from "./failureHistory";
 import { host } from "./host";
 
-/* Which jobs keep breaking, across the runs on screen.
- *
- * Deliberately uses the SAME query keys as useRunJobs, so this shares vue-query's cache with the rows rather
- * than fetching anything twice, every visible row already loads its own jobs, and this is a second reader of
- * those same entries. Adding this view-level analysis costs no extra requests.
- */
+/* Which jobs keep breaking, across the runs on screen. */
 
 export function useFailureHistory(runs: Ref<readonly PipelineRun[]>) {
     const api = host();

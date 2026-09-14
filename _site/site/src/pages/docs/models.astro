@@ -2,9 +2,7 @@
 import DocsLayout from "../../components/docs/DocsLayout.astro";
 import DocsRelated from "../../components/docs/DocsRelated.astro";
 
-/* The provider/harness/account axes, which are three different questions the UI asks in one picker and which
- * nothing outside the code explained. The harness one especially: "why does Codex behave differently under
- * Claude Code" had no answer a user could reach. */
+/* The provider/harness/account axes, which are three different questions the UI asks in one picker and which nothing outside the code explained. */
 
 const providers = [
     {
@@ -171,9 +169,7 @@ const others = [
     </ul>
 
     <h2>What it costs</h2>
-    {/* SAYS WHICH MONEY THIS IS. The docs discussed spend in three places and never once said what intentic itself
-        charges, so a reader searching the docs for "pricing" or "cost" landed on a ledger of inference spend and
-        could reasonably read it as a bill from us. Three lines, and the ambiguity is gone. */}
+    {/* Distinguish provider usage from intentic's free service before describing costs. */}
     <p>
         Two different kinds of money, and only one of them is a bill. <strong>intentic itself is free</strong>: every sandbox, every
         capability and team sharing, with no tiers and no card. What a turn costs is <em>your</em> provider subscription being spent, because

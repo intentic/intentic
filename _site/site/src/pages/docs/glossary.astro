@@ -1,21 +1,7 @@
 ---
 import DocsLayout from "../../components/docs/DocsLayout.astro";
 
-/* THE WORDS THESE DOCS USE AS IF YOU KNEW THEM.
- *
- * Written because an audit counted "daemon" 92 times across 14 pages with no definition anywhere, and found
- * "land", "worktree" and "harness" each first used a whole shelf before the page that explains them. A reader
- * meeting a load-bearing word for the first time on page two has two choices, and both are bad: guess, or go
- * hunting. Searching for "glossary" returned nothing.
- *
- * GROUPED, NOT ALPHABETICAL. Nobody reads a glossary end to end; they arrive at one word. But the words come in
- * families: everything about a running sandbox, everything about several agents at once, and a reader who
- * looked up "worktree" almost always wants "land" next. Alphabetical order would put those eight rows apart.
- * Within a group the order is the order you meet them.
- *
- * EVERY DEFINITION LINKS TO THE PAGE THAT OWNS IT. A glossary that explains something fully is a page competing
- * with the page it summarises, and the two drift. One sentence of what it is, one of why it matters, then the
- * link: the definition here should be enough to keep reading, never a substitute for the page. */
+/* Written because an audit counted "daemon" 92 times across 14 pages with no definition anywhere, and found "land". */
 
 interface Term {
     /** The word as the docs write it, including the "/ verb" form where both are used. */

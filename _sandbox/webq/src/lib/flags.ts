@@ -1,5 +1,4 @@
-/* Flag parsers and the flag groups both verbs share — declared once so `webq fetch` and `webq crawl`
- * cannot drift apart on the options that mean the same thing. */
+/* Flag parsers and the flag groups both verbs share — declared once so `webq fetch` and `webq crawl`. */
 import type { BrowserMode } from "./page.js";
 
 export const numberParser = (raw: string): number => {

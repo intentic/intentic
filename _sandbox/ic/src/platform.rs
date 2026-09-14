@@ -2,24 +2,14 @@ use std::time::Duration;
 
 use crate::util::{bail, kv_lines, step, Result};
 
-/* The setup-code claim. The platform's one-liner carries ONE short-lived code instead of raw tokens (nothing
- * secret lands in shell history or `ps`); redeeming it answers KEY=value lines — CONNECT_TOKEN plus either
- * the intentic-provided tunnel values or the own-Cloudflare zone/subdomain picks. */
+/* The setup-code claim. */
 
 /// What a claim can carry. SYNC_DIR is deliberately NOT here — it is the user's local-folder opt-in, carried
 /// on the command as an env var, never through the platform.
 #[derive(Default)]
 pub struct Claim {
     pub connect_token: Option<String>,
-    /* WHAT MAKES THE SANDBOX REACHABLE, and the two values are useless apart: a platform-signed grant naming
-     * this sandbox's id, and the edge the daemon presents it to. They ride into the container's environment
-     * and are read nowhere else on this machine — the dial is outbound, from inside, so nothing here opens a
-     * port or arranges a name.
-     *
-     * Dropping either produces the quietest failure this flow has: the box starts, comes healthy, registers
-     * with the platform, and serves nobody, because a daemon with no edge dials no tunnel and the address the
-     * platform published answers 502 forever. That is not hypothetical — it is what shipped when the zrok
-     * trio these replaced was deleted from this struct and nothing took its place. */
+/* WHAT MAKES THE SANDBOX REACHABLE, and the two values are useless apart: a platform-signed grant naming this sandbox's id. */
     pub sandbox_grant: Option<String>,
     pub ingress_url: Option<String>,
     /// The public name the platform published for this sandbox — the address the browser opens, and the
@@ -33,13 +23,7 @@ pub struct Claim {
     pub owner_email: Option<String>,
 }
 
-/* Is this address a platform on THIS machine? The one question that turns TLS verification off, so it is
- * asked of the parsed HOST and nothing else.
- *
- * It used to be a substring search for "//localhost" anywhere in the string, which any address can be dressed
- * up to satisfy — `https://not-your-platform.example//localhost` is a perfectly ordinary URL whose host is
- * not local at all, and it silently bought a claim that accepts any certificate. `http::Uri` is already in
- * this binary's dependency graph (ureq parses with it), so the honest answer costs nothing to ship. */
+/* Is this address a platform on THIS machine? */
 fn is_local(platform_url: &str) -> bool {
     let host = platform_url
         .parse::<http::Uri>()
@@ -103,17 +87,7 @@ pub fn claim(platform_url: &str, code: &str) -> Result<Claim> {
     })
 }
 
-/* THE REMOVAL NOBODY ELSE CAN WITNESS.
- *
- * When this container goes, it stops holding its tunnel — and so does a container that is merely stopped, and so
- * does one whose machine went to sleep. At the edge all three are the same silence, so a browser waiting on this
- * sandbox can only spin, or guess, and guessing "your sandbox was deleted" at a closed laptop lid is worse than
- * spinning. The one moment the truth is known is this one, here, on the machine doing the deleting, while the
- * container's connect token can still be read out of it.
- *
- * Best-effort in the same sense as the reporter below: its own short timeout, every error swallowed. A platform
- * that cannot be reached leaves the old behaviour (a patient wait), never a failed removal.
- */
+/* When this container goes, it stops holding its tunnel — and so does a container that is merely stopped, and so does one whose machine went to sleep. */
 pub fn farewell(platform_url: &str, connect_token: &str, removed_by: &str) -> bool {
     // The container's own PLATFORM_URL is spelled from INSIDE it; on a dev box that is host.docker.internal,
     // which resolves nowhere out here.
@@ -134,19 +108,7 @@ pub fn farewell(platform_url: &str, connect_token: &str, removed_by: &str) -> bo
         .is_ok()
 }
 
-/* SETUP TELEMETRY FOR THE WIZARD — the terminal is not where the user is looking.
- *
- * The setup wizard sits in a browser watching the registry while this flow runs in a terminal the user may
- * have closed, on a machine the browser cannot see. Until this existed, the wizard's only evidence was the
- * claim timestamp: anything that failed after it — a dead pull, a rejected tunnel, a container that never
- * came healthy — left the browser guessing by elapsed time, and the real reason scrolled away in a window
- * nobody was watching. Every stage transition and every terminal failure is therefore POSTed to
- * /setup/report against the same setup code the claim used: possession of a live code is the auth, exactly
- * the claim's trust.
- *
- * Reporting is BEST-EFFORT BY DESIGN: its own short timeout, every error swallowed. The report exists to
- * explain a failure, so it must never cause one — and a headless install with no setup code (env-var-only)
- * simply has no wizard watching, so `code: None` makes every call a no-op. */
+/* SETUP TELEMETRY FOR THE WIZARD — the terminal is not where the user is looking. */
 pub struct Reporter {
     platform_url: String,
     code: Option<String>,
@@ -257,10 +219,7 @@ mod tests {
         assert!(!is_local("https://api.intentic.dev"));
     }
 
-    /* THE DRESSED-UP ADDRESS THE OLD SUBSTRING CHECK ACCEPTED.
-     *
-     * Every one of these contains "//localhost" or "//127.0.0.1" somewhere, and not one of them is served by
-     * this machine — so each used to redeem a setup code over a connection that accepts any certificate. */
+/* Every one of these contains "//localhost" or "//127.0.0.1" somewhere, and not one of them is served by this machine. */
     #[test]
     fn a_remote_host_cannot_dress_itself_up_as_local() {
         assert!(!is_local("https://evil.example//localhost"));

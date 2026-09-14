@@ -10,35 +10,14 @@ import DocsToc from "./docs/DocsToc.astro";
 import Footer from "./Footer.astro";
 import Nav from "./Nav.astro";
 
-/* THE /api BOOK'S PAGE FRAME. Same rail, same prose column, same section list and the same tokens as
- * DocsLayout, and a sibling of it rather than a variant, for one reason that is not cosmetic.
- *
- * DocsLayout RENDERS ITS SLOT TO A STRING and re-emits it with `set:html`, because it discovers a page's
- * headings by reading the markup the page produced. That is a fine bargain for a book of static prose and it
- * states its own condition out loud: "no client islands anywhere under /docs/". A string is finished HTML, not
- * a hydration boundary, so anything interactive inside it arrives as dead markup.
- *
- * This book's whole point is a playground that answers you. So the slot is rendered STRAIGHT INTO THE PAGE
- * here, islands and all, and the price is that headings can no longer be discovered: they are passed in. For
- * the 37 generated pages that is free and in fact better, because the section list is the group's own
- * operations, known before a single tag is emitted rather than recovered from markup afterwards. The five
- * authored pages state theirs, which is the same discipline `requireAnchors` already asks of a docs page.
- *
- * Everything else is shared. DocsSidebar, DocsToc, DocsSearchField and DocsSearch take a book or a list and do
- * not care which book it is, so the rail, the section list and the search field here are the same components
- * the other two books use, not copies of them.
- */
+/* THE /api BOOK'S PAGE FRAME. */
 
 interface Props {
     pageId: string;
     /** The page's h1. Must start with the page's title in the book tree, as in DocsLayout. */
     heading: string;
     lead: string;
-    /**
-     * The page's own sections, for the "On this page" list. Authored rather than discovered, because this
-     * layout hands the slot to the browser instead of reading it. Under three entries the list suppresses
-     * itself, so a short page can pass an empty array and say nothing.
-     */
+/** The page's own sections, for the "On this page" list. */
     headings?: DocsHeading[];
     /** Shown above the prose on every page in the book: what the playground is and is not. */
     simulated?: boolean;
@@ -155,9 +134,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
 
     <DocsSearch />
 
-    {/* The rail's overflow fades and its open-on-narrow behaviour, and the section rail's scroll-spy. Both are
-        DocsLayout's scripts unchanged: they read the DOM by id and data attribute, so they are about the page
-        frame rather than about which book rendered it. */}
+    {/* Keep rail overflow and section-scroll behavior independent of the rendered documentation book. */}
     <script>
         const toggle = document.getElementById("docs-sidebar-toggle");
         const sidebar = document.getElementById("docs-sidebar");
@@ -177,10 +154,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                 }
             });
 
-            /* THE RAIL STAYS PUT ACROSS A NAVIGATION. Every link in this book is a full page load, so the rail —
-               its own scroll region — reset to the top on each click and the reader lost their place in a long
-               list. Its position is remembered per book and restored on the next page; only on a first visit,
-               with nothing saved, does it fall back to revealing the current page. */
+/* THE RAIL STAYS PUT ACROSS A NAVIGATION. */
             const scrollKey = `rail-scroll:${location.pathname.split("/")[1] || "root"}`;
             const saved = sessionStorage.getItem(scrollKey);
             if (saved !== null) {sidebar.scrollTop = Number(saved);}

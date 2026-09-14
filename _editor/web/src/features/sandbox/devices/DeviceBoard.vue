@@ -5,17 +5,14 @@ import DeviceBoardCard from "./DeviceBoardCard.vue";
 import { type DeviceRow, deviceTally, rowMatches, showFilter } from "./deviceRows";
 import { desktopApp } from "../../../app/environments/desktop";
 
-// The fleet: every machine paired with this sandbox, one card each, nothing expandable. A card answers
-// "what is on that computer and does it want anything"; pressing it opens that machine's own page, which
-// is where every button lives.
+// Device cards list paired machines; controls live on each machine's page.
 
 const { rows, isLoading, notice, outline, ownSlug, readAt } = defineProps<{
     rows: readonly DeviceRow[];
     /** The first read only; a refetch must never blank an already-populated board. */
     isLoading: boolean;
     notice: NoticeModel | undefined;
-    // Holds the "nothing is paired" claim while the first read is in flight: before the list lands that
-    // would be a guess, so the outline draws the board's shape instead.
+    // The loading outline withholds the empty claim until the first read completes.
     outline: boolean;
     ownSlug: string | undefined;
     /** When this reading landed; every card is judged as of then, not as of now. */
@@ -30,17 +27,13 @@ const needle = computed(() => query.value.trim().toLowerCase());
 
 const shown = computed<readonly DeviceRow[]>(() => (needle.value === `` ? rows : rows.filter((row) => rowMatches(row, needle.value))));
 
-// Read inside the desktop app, whose own window needs no capability at all, since it runs on the device it
-// manages; said once, since no card here knows which machine the reader sits at.
+// Desktop app reads its own device without a capability.
 const inDesktopApp = desktopApp() !== undefined;
 </script>
 
 <template>
     <RowGroup label="Devices" :count="rows.length === 0 ? undefined : rows.length">
-        <!--
-            The other half of the Ports tab's cross-link: both are about "ports" in opposite directions (out to the
-            internet there, in to this machine here), so each says which.
-        -->
+<!-- The other half of the Ports tab's cross-link: both are about "ports" in opposite directions (out to the internet there, in to this machine here). -->
         <template #info>
             <InfoHint label="Devices">
                 <span class="block text-sm font-medium text-content">Your own machines</span>

@@ -37,8 +37,7 @@ export interface RevalidateResult {
 
 const isBinary = (buf: Buffer): boolean => buf.includes(0);
 
-// A model swap invalidates every stored vector, never the chunks; a write, so only whoever owns writing the index calls
-// it.
+// Invalidate stored vectors on model changes while preserving chunks.
 export const syncModel = (db: IndexDb, modelDir: string | undefined): void => {
     if (modelDir === undefined) {
         return;

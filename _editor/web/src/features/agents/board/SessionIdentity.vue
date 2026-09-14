@@ -20,10 +20,7 @@ const ROW = `flex items-start gap-2 rounded-lg px-2.5 py-1.5`;
 </script>
 
 <template>
-    <!--
-        No hover labels down this column: each row already reads its label and value, so a hint would only repeat it
-        and pop boxes along the way to the one wanted.
-    -->
+<!-- Rows already include their labels, so this column has no hover hints. -->
     <div class="flex flex-col p-1">
         <div :class="ROW">
             <span class="w-16 shrink-0 pt-px text-2xs text-subtle">Session id</span>
@@ -40,10 +37,7 @@ const ROW = `flex items-start gap-2 rounded-lg px-2.5 py-1.5`;
             <span class="min-w-0 flex-1 select-text break-all font-mono text-2xs text-content">{{ link }}</span>
             <CopyButton :text="link" aria-label="Copy a link to this agent" />
         </div>
-        <!--
-            The id is also what brings you back, via Quick Open.
-            Said once here, not repeated as a hint on every surface that prints the name.
-        -->
+<!-- The id is also what brings you back, via Quick Open. -->
         <p class="px-2.5 pb-1 pt-1.5 text-2xs text-subtle">Paste the id into Quick Open to come back to this agent from anywhere.</p>
     </div>
 </template>

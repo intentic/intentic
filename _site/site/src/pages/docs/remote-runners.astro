@@ -3,9 +3,7 @@ import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
 import DocsLayout from "../../components/docs/DocsLayout.astro";
 import DocsRelated from "../../components/docs/DocsRelated.astro";
 
-/* REMOTE EXECUTION WITHOUT A SECOND CONTROL PLANE. This page is placed with agent-driving rather than machine
- * setup because placement belongs to a conversation: the computer is merely where its runner container lives.
- * The connected-computer page owns enrolling and granting a machine; this one owns what moves for a turn. */
+/* REMOTE EXECUTION WITHOUT A SECOND CONTROL PLANE. */
 
 const placement = [
     "agents spawn --provider claude --on build-rig 'Run the Linux test matrix'",

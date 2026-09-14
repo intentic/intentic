@@ -2,9 +2,7 @@ import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { ERRANDS, errandOf, errandPrompt } from "./errands";
 
-/* The classifier is the whole mechanism: an errand that stops reading as one goes back to opening a turn of
- * its own and pinning the app's prose over the user's question, silently and only after a reload, so what it
- * has to survive is pinned here rather than left to the one call site. */
+/* Errand classification keeps app-generated prose out of user turns. */
 
 const errand = ERRANDS.landConflict;
 const user = (text: string) => ({ id: 1, role: `user`, text }) as const;

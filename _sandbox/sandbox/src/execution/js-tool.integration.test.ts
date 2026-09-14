@@ -6,8 +6,7 @@ import type { SecretAccess, SecretUseReport } from "../agent/tools/agent-secrets
 import type { JsExecutionPlan } from "./js-runtime.js";
 import { type JsToolDeps, runJsTool } from "./js-tool.js";
 
-/* The handler end to end: real scripts through the bare handler, because the server wrapper is registration
- * and the SDK's to test. What the model is told, and the answer's shape, are pinned in js-tool.test.ts. */
+/* The handler end to end: real scripts through the bare handler, because the server wrapper is registration and the SDK's to test. */
 
 const dirPlan = (dir: string, overrides: Partial<JsExecutionPlan> = {}): JsExecutionPlan => ({
     cwd: dir,

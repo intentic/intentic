@@ -5,10 +5,7 @@ import type { AgentRequest } from "../../agent/run/agent.js";
 import type { ChildSupervisor } from "../../agent/subagents/children.js";
 import { cursorCustomTools } from "./cursor-tools.js";
 
-/* Which daemon tools a Cursor turn is handed, and what the pair actually does. The mount rules are the
- * suite's spine: `ask` follows attendance (a card an unattended turn cannot answer is a deadlock), the
- * spawn/wait pair follows the ENGINE's presence (planCursorTurn sets it under the full-agency predicate), and
- * neither implies the other. */
+/* Which daemon tools a Cursor turn is handed, and what the pair actually does. */
 
 const request = (over: Partial<AgentRequest> = {}): AgentRequest =>
     ({
@@ -39,9 +36,7 @@ describe("which tools mount", () => {
         expect(Object.keys(cursorCustomTools(request({ unattended: true }), push()))).toEqual([]);
     });
 
-    /* `providers` rides with `spawn` and is never separated from it: the spawn door requires a provider and a
-     * model, so a turn that can spawn but cannot see what is connected has been handed a requirement with no
-     * way to satisfy it. */
+/* `providers` rides with `spawn` and is never separated from it: the spawn door requires a provider and a model. */
     it("the engine brings the supervision set, and unattended keeps it: a child deadlocks nothing", () => {
         const children = supervisor();
         expect(Object.keys(cursorCustomTools(request({ children }), push()))).toEqual(["ask", "spawn", "providers", "wait", "send", "answer"]);

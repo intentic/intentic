@@ -7,10 +7,7 @@ import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 // reverted later.
 
 export interface ExpiryTracker {
-    /**
-     * Paths touched in committed history between `landedHead` and `head` (one-way, see module header). One diff per
-     * repo per head move, shared across all landings; one extra diff the first time a landing is asked about.
-     */
+/** Paths touched in committed history between `landedHead` and `head` (one-way, see module header). */
     readonly committedSince: (dir: string, repo: string, landedHead: string, head: string) => Promise<ReadonlySet<string>>;
     /** Drops one landing's entry once its claim is over (absorbed or retired). */
     readonly drop: (repo: string, landedHead: string) => void;
@@ -18,10 +15,7 @@ export interface ExpiryTracker {
     readonly metrics: () => Readonly<Record<string, number>>;
 }
 
-/**
- * Total characters across path lists; the text weight reported by each of the three attribution caches (this module,
- * origins.ts, landed-presence.ts) for the durable resource series.
- */
+/** Total characters across path lists; this is the text weight used by attribution caches. */
 export const pathWeight = (lists: Iterable<Iterable<string>>): number => {
     let total = 0;
     for (const paths of lists) {

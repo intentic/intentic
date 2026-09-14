@@ -50,10 +50,7 @@ const spawnDenied = computed(() => posture.value === `deny`);
             </template>
         </Row>
 
-        <!--
-            First ceiling a fan-out hits; the assistant stops rather than retries here, so a low number serializes work
-            instead of failing it.
-        -->
+<!-- First ceiling a fan-out hits; the assistant stops rather than retries here, so a low number serializes work instead of failing it. -->
         <Row
             icon="users"
             title="Subagents at once"
@@ -76,10 +73,7 @@ const spawnDenied = computed(() => posture.value === `deny`);
             </template>
         </Row>
 
-        <!--
-            Bounds a long conversation's total rather than one burst: twenty rounds of five reach the same count as one
-            round of a hundred.
-        -->
+<!-- Bounds a long conversation's total rather than one burst: twenty rounds of five reach the same count as one round of a hundred. -->
         <Row
             icon="clone"
             title="Subagents per conversation"

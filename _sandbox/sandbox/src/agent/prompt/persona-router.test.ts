@@ -3,9 +3,7 @@ import { unstubbed } from "@intentic/testing";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../../composition.js";
 
-/* THE ROUTER, at the seam it spends: askRoleModel is mocked so a test can hand back a reply and see what the
- * router makes of it. The walk itself (which rung, what a refusal does) has its own suite (role-model.test.ts);
- * what is testable here is the prompt the rung is shown, the shortcut that skips it, and how its words are read. */
+/* THE ROUTER, at the seam it spends: askRoleModel is mocked so a test can hand back a reply and see what the router makes of it. */
 
 const ask = vi.fn<(prompt: string) => Promise<string>>();
 // Which role each ask named, so a test can pin that the router spends the persona-routing list and no other.

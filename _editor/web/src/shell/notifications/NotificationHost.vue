@@ -78,19 +78,13 @@ const press = (entry: Notification, action: NotificationAction): void => {
 </script>
 
 <template>
-    <!--
-        Clipped by the viewport from the top, not scrolled, so an overflowing lane loses the receipt first (it retires
-        itself) while the fixed question stays reachable.
-    -->
+<!-- Viewport clipping retires overflowing receipts while keeping fixed questions reachable. -->
     <div
         class="pointer-events-none fixed inset-x-3 z-50 flex max-h-[calc(100dvh-1.5rem)] flex-col items-end justify-end gap-2 overflow-hidden sm:left-auto sm:right-3 sm:max-w-[calc(100vw-1.5rem)]"
         :class="mobile ? `bottom-[calc(4.25rem+env(safe-area-inset-bottom))]` : `bottom-3`"
     >
         <Transition v-for="entry in notifications" :key="entry.id" name="lane">
-            <!--
-                Two columns, not an icon beside a stack: the glyph is a grid item in the title's row (`self-center`); everything
-                below is `col-start-2` to stay indented past it.
-            -->
+<!-- Two columns, not an icon beside a stack: the glyph is a grid item in the title's row (`self-center`). -->
             <div
                 class="pointer-events-auto grid max-w-full grid-cols-[auto_minmax(0,1fr)] gap-x-2 rounded-lg border border-line-strong bg-card p-3 shadow-lg"
                 :class="widthOf(entry)"

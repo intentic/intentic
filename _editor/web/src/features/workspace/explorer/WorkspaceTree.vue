@@ -1097,7 +1097,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         @dragleave="onRowDragLeave(row)"
                         @drop="onRowDrop($event, row)"
                     >
-                        <!-- No chevron on a locked folder or a barren chain whose tail is empty; there's nothing to expand into either way. -->
+                        <!-- Locked and empty folders have no expandable child. -->
                         <Icon
                             v-if="expandable(row)"
                             class="w-[0.7rem] shrink-0 text-[0.6rem] text-subtle"
@@ -1105,7 +1105,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             @click="onChevronClick($event, row)"
                         />
                         <span v-else class="w-[0.7rem] shrink-0"></span>
-                        <!-- Icon size/colour come from the active explorer setup; a locked row shows a padlock here instead, explained on hover. -->
+                        <!-- Row icons use explorer sizing; locked rows show a padlock. -->
                         <span
                             class="flex shrink-0 items-center justify-center"
                             :class="treat(row).slotClass"
@@ -1124,7 +1124,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             @blur="commitRename"
                             @vue:mounted="focusRename"
                         />
-                        <!-- A collapsed barren chain reads as one path ("public / demo / assets"), selectable and deletable as one unit. -->
+                        <!-- Collapsed barren chains act as one selectable path. -->
                         <span
                             v-else
                             class="min-w-0 flex-1 truncate"
@@ -1162,7 +1162,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                             aria-hidden="true"
                             class="shrink-0 text-2xs text-subtle"
                         />
-                        <!-- Row action icons show on hover or when selected (restingClass); handlers, not buttons, since the row is already one. -->
+                        <!-- Row actions appear on hover or selection and use the row handlers. -->
                         <Icon
                             v-for="action in row.entry.type === 'dir' ? actionsFor(row.entry.path) : []"
                             :key="action.id"

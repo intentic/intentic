@@ -17,9 +17,7 @@ describe("what the review is not drawing", () => {
         expect(sideTotal(repo(), `unstaged`, 12)).toBe(12);
     });
 
-    /* THE READING THE COMMIT BOX DEPENDS ON. The verbs act on scopes the daemon resolves, so a commit records
-     * the whole index however much of it the panel listed. Counting rows alone put "500 staged" beside a button
-     * about to record five thousand — which is the state a directory overhaul lands in the moment it is staged. */
+/* THE READING THE COMMIT BOX DEPENDS ON. */
     it("adds the cut rows back to the side that lost them, and only that side", () => {
         const big = repo({ staged: 4500, unstaged: 300 });
         expect(sideTotal(big, `staged`, 500)).toBe(5000);

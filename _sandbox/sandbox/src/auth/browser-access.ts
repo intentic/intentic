@@ -1,10 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-/* Permanent browser retirement for an account-owned sandbox. Session rotation alone is insufficient during
- * account deletion: another device may still hold a fresh Google proof and the connect token, and could mint
- * a new session immediately. This daemon-private marker makes every future browser authorization fail while
- * leaving local/control-plane recovery available to the machine that still owns the container. */
+/* Permanent browser retirement for an account-owned sandbox. */
 export interface BrowserAccess {
     readonly enabled: () => Promise<boolean>;
     readonly disable: () => Promise<void>;

@@ -5,8 +5,7 @@ import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
 import ReferenceLayout from "../../components/ReferenceLayout.astro";
 import { groupCounts } from "../../lib/api-reference";
 
-/* THE BOOK'S FRONT DOOR. Its job is to answer two questions in the first screen — whose API is this, and where
- * is the thing I came for — and then get out of the way. Everything below the fold is the map. */
+/* THE BOOK'S FRONT DOOR. */
 
 const counts = await groupCounts();
 const shelves = specShelves();

@@ -1,8 +1,6 @@
 import type { LanguageRegistration } from "shiki/core";
 
-/* Minimal TextMate grammar for gitignore-style files (.gitignore, .dockerignore, .prettierignore, …),
- * @shikijs/langs ships no ignore grammar. Scopes are limited to ones light-plus/dark-plus actually color:
- * comment (green), keyword.control (purple "!" negation), constant.character.escape (wildcards/ranges). */
+/* Minimal TextMate grammar for gitignore-style files (.gitignore, .dockerignore, .prettierignore, …). */
 const gitignore: LanguageRegistration = {
     name: `gitignore`,
     scopeName: `source.gitignore`,

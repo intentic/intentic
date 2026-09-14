@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { draftPreview } from "./draftPreview";
 
-/* The name a card wears while nothing else has named it. Short enough for a lane, long enough to tell two
- * drafts apart, and one line whatever was pasted into the box. */
+/* The name a card wears while nothing else has named it. */
 describe(`draftPreview`, () => {
     it(`is nothing at all for an empty composer, so the card keeps its "New agent"`, () => {
         expect(draftPreview(``)).toBeUndefined();

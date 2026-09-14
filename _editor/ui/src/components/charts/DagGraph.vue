@@ -1,7 +1,4 @@
-<!--
-    Domain-agnostic, read-only DAG renderer: dagre positions nodes, Vue Flow pans/zooms. The `#node` slot fills each card; `#overlay` draws on top of
-    the canvas. Caller must size this component (h-full w-full).
--->
+<!-- Domain-agnostic, read-only DAG renderer: dagre positions nodes, Vue Flow pans/zooms. -->
 <script setup lang="ts" generic="T">
 import { VueFlow, BaseEdge, Handle, Position } from "@vue-flow/core";
 import type { Edge, Node, VueFlowStore } from "@vue-flow/core";
@@ -246,10 +243,7 @@ const toggle = (id: string): void => {
 
 <template>
     <div ref="root" class="relative h-full w-full">
-        <!--
-            `elements-selectable` must stay true: Vue Flow gates pointer events on it, and with it false, clicks,
-            hover, and tooltips inside #node all go dead.
-        -->
+<!-- `elements-selectable` must stay true: Vue Flow gates pointer events on it, and with it false, clicks, hover, and tooltips inside #node all go dead. -->
         <VueFlow
             :id="flowId"
             class="dag-graph h-full w-full text-subtle"
@@ -265,10 +259,7 @@ const toggle = (id: string): void => {
             @nodes-initialized="refit()"
             @move-start="hold()"
         >
-            <!--
-                Elbow routing from dagre's own path (see lanePath), not the two endpoints; only used when `edgeShape`
-                is `elbow`.
-            -->
+<!-- Elbow routing from dagre's own path (see lanePath), not the two endpoints; only used when `edgeShape` is `elbow`. -->
             <template #edge-lane="edge">
                 <BaseEdge
                     :id="edge.id"
@@ -284,10 +275,7 @@ const toggle = (id: string): void => {
                     @click="toggle(data.id)"
                 >
                     <Handle type="target" :position="targetPosition" />
-                    <!--
-                        Fades the interior only, not the card: opacity on the card itself would let an edge behind it
-                        show through as a strikethrough.
-                    -->
+<!-- Fades the interior only, not the card: opacity on the card itself would let an edge behind it show through as a strikethrough. -->
                     <div class="h-full w-full transition-opacity" :class="data.dimmed === true ? `opacity-45` : ``">
                         <slot name="node" :node="data" :selected="data.id === selectedId" />
                     </div>

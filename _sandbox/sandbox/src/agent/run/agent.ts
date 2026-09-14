@@ -498,8 +498,7 @@ const baseOptions = (
             // The harness's own ask beside the owner's rules: a checklist about to be left open is said back once, since
             // the board reads that list to tell a finished session from one that stopped short.
             checklistCloseHooks({ workspaceRoot: request.workspaceRoot }),
-            // Only when isolated and unanchored; an anchor already resolves paths to the worktree, so rewriting doubles
-            // it.
+            // Apply worktree redirection only when no anchor already resolves paths.
             request.isolation !== undefined && request.isolation.anchor === undefined ? worktreeRedirectHooks(request.isolation.plan) : {},
             // Rewrites a model-named screenshot path into the tool-owned output directory before the tool sees it.
             request.browserOutputDir !== undefined ? browserArtifactHooks(request.browserOutputDir) : {},

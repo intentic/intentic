@@ -360,8 +360,7 @@ test("the enrollment-minted sync token reads /ports, files its own machine repor
             },
         ],
     });
-    // The one write the token carries: the device's own report (folders/ports/agent), the only way the daemon learns
-    // it.
+    // Record only the device report carried by the enrollment token.
     // Filed under the enrollment that presented the token; `hostname` in the body is a label, never an identity.
     const report = {
         hostname: "laptop",
@@ -650,8 +649,7 @@ test("agent.run gates a Codex turn with no subscription and no api key as subscr
     expect(facts.some((fact) => fact.kind === "error" && fact.code === "subscription-required")).toBe(true);
 });
 
-// Gemini has no Claude Code road left: capabilitiesOf always answers Gemini's own runtime, whatever harness is asked
-// for.
+// Keep Gemini on its native runtime even when the Claude Code harness is named.
 // Asking for the Claude Code harness explicitly must still land on the native runtime, not be honoured.
 test("agent.run sends a Gemini turn to the native runtime even when the Claude Code harness is asked for by name", async () => {
     let claudeCodeCalled = false;

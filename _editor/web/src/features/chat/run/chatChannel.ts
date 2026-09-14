@@ -37,17 +37,13 @@ export const onChatNote = <K extends ChatNote["kind"]>(kind: K, read: (note: Not
 // Guarded like every channel here: no BroadcastChannel (tests, SSR) just means a single-window app.
 const channel = typeof window === `undefined` || window.BroadcastChannel === undefined ? undefined : new BroadcastChannel(`intentic.chat`);
 
-/**
- * Never delivers to its own poster, so a module wanting the note applied here must apply it itself. Posted as JSON,
- * since a Vue proxy fails structured clone; this also drops StoredTab's undefined optional fields to match a restored
- * tab's shape.
- */
+/** Never delivers to its own poster, so a module wanting the note applied here must apply it itself. */
 export const postChatNote = (note: ChatNote): void => {
     if (channel === undefined) {
         return;
     }
     const envelope: ChatEnvelope = { sandbox: useSandbox().activeSandboxId.value, note };
-    // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel, not window: this postMessage takes no targetOrigin
+    // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin.
     channel.postMessage(JSON.parse(JSON.stringify(envelope)) as ChatEnvelope);
 };
 

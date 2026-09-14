@@ -158,10 +158,7 @@ watch(
 
 <template>
     <div class="group/tabs relative flex min-w-0 flex-1">
-        <!--
-            Right-click past the last tab (on the scroller itself) is the strip's own menu; a tab stops its own event first.
-            `.scrollbar-none` hides the native bar; scrollLeft (wheel + the thumb below) still works.
-        -->
+<!-- Right-click past the last tab (on the scroller itself) is the strip's own menu; a tab stops its own event first. -->
         <div
             ref="scroller"
             class="scrollbar-none flex min-w-0 flex-1 items-stretch overflow-x-auto"

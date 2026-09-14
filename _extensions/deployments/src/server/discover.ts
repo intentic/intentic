@@ -1,12 +1,7 @@
 import { access, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
-/* Repo discovery, the extension's own copy: every directory under the workspace root owning a `.git` entry,
- * as ABSOLUTE dirs (the repo-links scan joins compose paths against them, and relative dirs would silently
- * depend on the backend host's cwd). The daemon's discovery is richer, reserved names, scaffold roles, the
- * shared ignore vocabulary, but none of that is importable from an extension (the SDK boundary), and none of
- * it changes which repos can hold a compose file. Deliberately the same walk shape: skip hidden and junk
- * dirs, stop at the first .git boundary, bounded depth. */
+/* Repo discovery, the extension's own copy: every directory under the workspace root owning a `.git` entry. */
 
 const IGNORED = new Set(["node_modules", "dist", "build", "out", "coverage", "target", "vendor", "tmp", "refs", "public"]);
 const SEGMENT = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;

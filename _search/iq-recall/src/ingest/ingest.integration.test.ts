@@ -160,9 +160,7 @@ test("a deleted transcript loses its rows", async () => {
     expect(db.get("SELECT COUNT(*) AS n FROM sessions WHERE session_id = ?", SESSION_B)?.["n"]).toBe(0);
 });
 
-/* THE BUDGET, and the contract that makes stopping early safe: byte offsets mean unfinished work is deferred,
- * never lost. Without a way to stop, this walked every changed transcript inline, and on the UserPromptSubmit
- * path a workspace with ~1000 of them blew the hook's 10s ceiling on 21 of 43 prompts in one day. */
+/* THE BUDGET, and the contract that makes stopping early safe: byte offsets mean unfinished work is deferred. */
 const SESSION_C = "aaaaaaaa-0000-4000-8000-000000000003";
 
 const writeSession = async (sessionId: string, prompt: string): Promise<void> => {

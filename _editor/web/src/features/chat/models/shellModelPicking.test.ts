@@ -16,8 +16,7 @@ const { providerAccounts } = await import("../accounts/providerAccounts");
 const { providerModels } = await import("../accounts/providerCatalog");
 const { agentRunChoice, shellModelPicking } = await import("./shellModelPicking");
 
-// No VueQueryPlugin anywhere in this file: an app that never provides the client proves nothing under here injects
-// one.
+// Keep this test independent of VueQueryPlugin so it proves no injection occurs.
 const mounted = (setup: () => () => unknown): App => {
     const app = createApp(defineComponent({ setup }));
     app.mount(document.createElement(`div`));
@@ -112,10 +111,7 @@ test(`the standing choice names the tier the run will actually use when the pin 
     expect({ effort: choice.effort, effortLabel: choice.effortLabel }).toEqual({ effort: `high`, effortLabel: `High` });
 });
 
-/* AND THE REST OF THE ENTRY COMES WITH IT. The picker a caret opens configures all of these now, and the turn
- * carries all of them, so the standing answer has to be the entry as the owner wrote it: opening on a stripped
- * version would offer to undo their own setting the moment anybody pressed the panel's button, and a run bought
- * at the faster rate is a different price from the same model on its defaults. */
+/* A run entry carries every setting selected by its picker. */
 test(`the standing choice carries the whole pinned entry, not merely the pair and the tier`, () => {
     pinned({ provider: `claude`, model: `claude-sonnet-4-6`, harness: `claude-code`, thinking: false, fast: true });
 

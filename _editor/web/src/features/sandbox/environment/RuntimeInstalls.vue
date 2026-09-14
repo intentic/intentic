@@ -103,10 +103,7 @@ const brief = (entry: EnvironmentRecurring): string =>
         :count="countLabel"
         :caption="awaiting.length ? `Not in the image, so every rebuild loses them.` : undefined"
     >
-        <!--
-            The fold lives in the header, not as a row: it's a fact about the list, not an entry in it. `aria-pressed`, not `aria-expanded`, since it
-            filters which rows are drawn rather than opening a region.
-        -->
+        <!-- The fold lives in the header, not as a row: it's a fact about the list, not an entry in it. -->
         <template v-if="dismissed.length" #actions>
             <button
                 type="button"
@@ -135,10 +132,7 @@ const brief = (entry: EnvironmentRecurring): string =>
                     :idle="entry.declined === true"
                 />
             </template>
-            <!--
-                Same line order as a contents row: name, then the mono annotation. Here the name yields instead of the annotation, since there's no
-                sentence to give up width, and clipping the recurrence would hide the fact this row exists to report.
-            -->
+            <!-- Same line order as a contents row: name, then the mono annotation. -->
             <template #title>
                 <span class="flex min-w-0 items-center gap-3 overflow-hidden">
                     <!-- `font-normal`: mono at the row title's own weight reads louder than the sans names above it. -->
@@ -156,10 +150,7 @@ const brief = (entry: EnvironmentRecurring): string =>
             <template #below>
                 <div class="flex flex-col gap-3">
                     <p class="text-xs leading-relaxed text-muted">{{ explanation(entry) }}</p>
-                    <!--
-                        Shows the exact step 'Add to the image' would apply, so the button can be judged, not trusted; hidden on a dismissed row so
-                        it doesn't look like it's still asking.
-                    -->
+                    <!-- Show the exact install step so the action is inspectable. -->
                     <Code
                         v-if="entry.step !== undefined && entry.declined !== true"
                         :code="entry.step"
@@ -167,7 +158,7 @@ const brief = (entry: EnvironmentRecurring): string =>
                         :label="entry.drafted === true ? `What it adds to the proposal` : `What this would add`"
                         :clamp-lines="10"
                     />
-                    <!-- Quiet by design: the tab's one filled shape is the strip's pills, and these sit inside a row already opened on purpose. -->
+                    <!-- Install details stay quiet inside the already-open row. -->
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
                         <button
                             v-if="canOperate && entry.step !== undefined && entry.drafted !== true && entry.declined !== true"

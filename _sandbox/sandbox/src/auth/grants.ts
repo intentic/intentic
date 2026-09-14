@@ -178,8 +178,7 @@ export const grantsOf = ({ panelToken, agentToken, controlTokens, verifySync, ve
             if (!controlScoped(token.scope, method, path)) {
                 return OUT_OF_SCOPE;
             }
-            // The touch is a side effect, not a condition: a failed write must not refuse a request the token was good
-            // for.
+            // Do not let a failed token touch reject an otherwise valid request.
             await controlTokens.touch(token.id).catch(() => undefined);
             return { verdict: "ok", principal: { kind: "control", id: token.id, label: token.label, scope: token.scope } };
         },

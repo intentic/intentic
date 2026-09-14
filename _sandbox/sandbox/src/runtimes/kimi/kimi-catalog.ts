@@ -2,12 +2,7 @@ import { compareUnrankedModelIds, type Model } from "@intentic/sandbox-contract"
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import type { CliProxyClient } from "../../agent/providers/translator.js";
 
-/* Kimi Code's picker catalog. CLIProxyAPI owns both the subscription credential and the executor, so its
- * provider-scoped model definitions are the only catalog that can honestly describe what this pinned runtime
- * knows how to route. The endpoint is local and requires no inference from the multiplexed /v1/models owner.
- * A compile-time floor keeps the picker useful while the proxy is still booting, on the shared ladder
- * (agent/model-catalog.ts) with nothing persisted between: the proxy is local and answers within seconds of
- * boot, so a last-known-good file would only ever be a stale copy of it. */
+/* Kimi Code's picker catalog. */
 export interface KimiCatalog {
     readonly models: () => Promise<{ models: Model[]; default: string }>;
 }

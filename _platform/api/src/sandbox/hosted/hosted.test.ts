@@ -13,10 +13,7 @@ import { testIngressConfig } from "../../testing.js";
 
 vi.mock(`./hosted-app-lock.js`, async () => ({ withHostedAppLock: (await import(`../../testing.js`)).fakeHostedAppLock }));
 
-/* The settle between a machine's config update and its start (hosted.ts SETTLE_MS) is half a second of real
- * time in production, polled up to sixty times. Here the wait is a no-op: every case that crosses it is about
- * WHICH provider states count as settled and what is asked of Fly in each, never about how long settling
- * takes, and the six that crossed it in real time were most of this package's test wall-clock. */
+/* The settle between a machine's config update and its start (hosted.ts SETTLE_MS) is half a second of real time in production, polled up to sixty times. */
 vi.mock("node:timers/promises", async (importOriginal) => ({
     ...(await importOriginal<typeof import("node:timers/promises")>()),
     setTimeout: async () => undefined,
@@ -56,18 +53,12 @@ const config = (over?: Record<string, unknown>): Config =>
         ...over,
     }) as unknown as Config;
 
-/* Every model the hosted routes touch, stubbed to the harmless answer, with the case's own overrides on top.
- * The defaults matter: the hour meter reads membership (absent ⇒ not a member ⇒ metered) and the month's
- * usage (absent ⇒ nothing spent) on paths whose SUBJECT is something else entirely, and a fixture that
- * omitted them would fail those tests for a reason none of them are about. */
+/* Every model the hosted routes touch, stubbed to the harmless answer, with the case's own overrides on top. */
 const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>>) => {
     const prisma = {
         hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
         hostedUsage: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}) },
-        /* Two shapes. The array form settles what the model calls already returned. The callback form is the
-         * row write under the owner's slot lock (hosted.ts withHostedSlot): it runs against this same fake, the
-         * advisory lock below is a no-op, and the slot count answers whatever the case set `hostedMachine.count`
-         * to — 0 unless a case is about the count. */
+/* Two shapes. */
         $transaction: vi.fn((work: Promise<unknown>[] | ((tx: unknown) => Promise<unknown>)) =>
             typeof work === `function` ? work(prisma) : Promise.all(work),
         ),
@@ -481,15 +472,7 @@ describe(`provisionHosted`, () => {
         expect(poolDelete).not.toHaveBeenCalled();
     });
 
-    /* THE CLAIM MUST NOT CHANGE WHAT THE MACHINE IS HOLDING, and this is the assertion that says so.
-     *
-     * A warm machine is worth having because the sandbox image is already on its disk. The claim replaces its
-     * config to give it an identity, and that config names an image — so if it names the configured TAG, Fly
-     * re-resolves the tag, and after a re-push that is a different digest and the machine must pull before it
-     * can start. `startAfterUpdate` allows thirty seconds; a pull is minutes. Measured in production: one
-     * re-push of `sandbox:stable`, then four claims, then four "did not start after its config was replaced"
-     * and four users waiting out the cold build the pool exists to avoid. Naming the row's own digest is the
-     * whole fix, so it is pinned here rather than left to read correctly. */
+/* THE CLAIM MUST NOT CHANGE WHAT THE MACHINE IS HOLDING, and this is the assertion that says so. */
     it(`boots the digest the warm machine already holds, never the configured tag`, async () => {
         const machine = settlingMachine(`m7`);
         const calls = stubFetch([

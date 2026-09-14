@@ -4,29 +4,17 @@
         <meta charset="utf-8" />
         <title>intentic</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
-        <!-- Installable PWA: standalone display, dark canvas chrome. The service worker (public/sw.js) is
-             registered lazily, only when the user enables push notifications, and handles push alone — it
-             deliberately caches nothing, since the app is a live daemon client. -->
+<!-- Installable PWA: standalone display, dark canvas chrome. -->
         <link rel="manifest" href="/manifest.webmanifest" />
-        <!-- ponytail: approximates the dark canvas token oklch(16% 0.007 65) at the default accent; the picked
-             colour retints it, but this is only the chrome around the first paint. -->
+<!-- ponytail: approximates the dark canvas token oklch(16% 0.007 65) at the default accent; the picked colour retints it. -->
         <meta name="theme-color" content="#141210" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <!-- THE LOTUS, AND THE SAME FILES THE SITE SERVES. The mark is the product's, not this app's, so the
-             icon a tab shows here and the icon a tab shows on the marketing pages are literally the same
-             drawings — copied into this app's public/ rather than linked, because the two are separate
-             origins and a favicon must be reachable with no network hop to the other one. -->
+<!-- THE LOTUS, AND THE SAME FILES THE SITE SERVES. -->
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-        <!-- Runtime config: esbuild bundles environment.local|deployment.ts into public/assets/js/env.js,
-             setting window.env BEFORE the app boots (so environment.ts can read it synchronously). A classic
-             script, so it runs before the deferred app module. $API_URL is substituted (envsubst) at deploy. -->
+<!-- Runtime config: esbuild bundles environment.local|deployment.ts into public/assets/js/env.js. -->
         <script src="/assets/js/env.js"></script>
-        <!-- Import map for EXTENSION bundles only: they are single-file ESM with `vue` and
-             `@intentic/extension-api` external, and the browser resolves those bare specifiers (blob-URL
-             modules included) to shims re-exporting the app's own instances (src/extension-host/hostModules.ts)
-             — one shared vue, or reactivity breaks across the boundary. App code never hits this map: Vite
-             rewrites its imports before the browser sees them. -->
+<!-- Import map for EXTENSION bundles only: they are single-file ESM with `vue` and `@intentic/extension-api` external. -->
         <script type="importmap">
             {
                 "imports": {
@@ -38,16 +26,7 @@
                 }
             }
         </script>
-        <!-- Anti-flash: restore the saved accent colour and text size before first paint (same idea as the static
-             data-mode above, but a per-user choice can't be static). A text size arriving late is worse than a
-             late colour — the whole layout reflows — so it is restored here rather than only in useTextSize.ts.
-             Compact (100%, the shipped default) carries no attribute; Comfortable and Large set data-text-size.
-
-             The accent is written as the ramp declarations themselves, which useTheme.ts keeps serialized in
-             `ui-accent-vars` for exactly this: the colour maths that expands one hex into two twelve-step ramps
-             lives in themeColor.ts, and a copy of it inlined here to survive one frame would be a second one to
-             keep in step. Assigning `style` outright is safe only because nothing else has written to the root
-             element this early — from here on useTheme sets the properties one at a time. -->
+<!-- Restore saved display preferences before first paint. -->
         <script>
             try {
                 var accentVars = localStorage.getItem("ui-accent-vars");
@@ -62,34 +41,16 @@
                 else if (uiSkin === "sanctum") document.documentElement.setAttribute("data-skin", uiSkin);
             } catch (e) {}
         </script>
-        <!-- Google Identity Services — browser-side sign-in for the direct-to-sandbox ID token. Loads async;
-             useGoogleIdentity waits on this tag's load event before initializing. The preconnects open the two
-             connections that flow costs before it can show anything: the script's own origin, and the account
-             endpoint the prompt then talks to. On /desktop-auth the entire screen is that wait. -->
+<!-- Google Identity Services — browser-side sign-in for the direct-to-sandbox ID token. -->
         <link rel="preconnect" href="https://accounts.google.com" crossorigin />
         <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
         <script src="https://accounts.google.com/gsi/client" async></script>
-        <!-- The .ico is first and unqualified because that is the one every crawler, feed reader and pinned-tab
-             list asks for by convention; the SVG is what a modern browser actually draws. -->
+<!-- The .ico is first and unqualified because that is the one every crawler, feed reader and pinned-tab list asks for by convention. -->
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <!-- The app's two faces: Inter for --font-sans, JetBrains Mono for --font-mono. display=swap keeps it
-             non-blocking. (Space Grotesk and DM Sans were loaded here for two of the brand themes; the accent
-             picker that replaced them changes colour, never type.)
-             INTER IS ASKED FOR AS A RANGE, AND THAT IS LOAD-BEARING. `wght@100..900` is what keeps the weight
-             axis live, which is what lets the dark scheme write ~30 units lighter than the light one
-             (tokens.css). Listing weights instead — `wght@400;500;600;700` — pins each @font-face to a single
-             value, and every fractional weight in that block silently snaps to the nearest static instance
-             with nothing failing. It is also not a saving: Google serves the identical variable file either
-             way, so the discrete form downloads the same 48KB once per weight, per subset.
-             Baloo 2 is here for the WORDMARK alone, at one weight: the brand's own face, which the marketing
-             pages set the name in, so the logo on this app's entry screens is the same object as the logo on
-             the page the visitor arrived from. One family added to a request that was already being made
-             rather than a second request, and it carries no fallback risk — the mark beside the word is drawn,
-             not typed. (The sanctum skin asks for the same family plus Playfair through its own link; a
-             duplicate family costs nothing, the browser serves the second from cache.) -->
+<!-- The app's two faces: Inter for --font-sans, JetBrains Mono for --font-mono. -->
         <link
             href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500&family=Inter:wght@100..900&family=JetBrains+Mono:wght@400;500;600&display=swap"
             rel="stylesheet"

@@ -20,7 +20,7 @@ const query = async (): Promise<PermissionStatus | undefined> => {
     }
     for (const name of NAMES) {
         try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- the second name is only worth asking about once the first has been refused as unknown
+            // oxlint-disable-next-line eslint/no-await-in-loop -- Ask the second candidate only after the first fails.
             return await permissions.query({ name } as unknown as PermissionDescriptor);
         } catch {
             // An unknown name rejects: this browser calls the permission something else, or has none.

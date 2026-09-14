@@ -126,14 +126,7 @@ pub fn run() {
                 update::start(app.handle());
             }
 
-            /* BEFORE the link, nothing opens. A first-time user's very first act is clicking "Set up on this
-             * device" in their browser, which starts this process WITH that link — and opening the workspace
-             * first would load app.intentic.dev only for the setup face to take the frame a moment later. What
-             * they would see is the app opening something and immediately throwing it away.
-             *
-             * So the link chooses the face, and this is the fallback for every start that had no link (or had
-             * one that only opened a browser, like sign-in): whatever happened above, if it left nothing on
-             * screen, the app opens on the thing it is for. */
+/* BEFORE the link, nothing opens. */
             if app.webview_windows().is_empty() {
                 windows::show_workspace(app.handle());
             }
@@ -142,14 +135,7 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("intentic desktop failed to start");
 
-    /* THE WAY OUT IS ALSO THE WAY A DOWNLOADED UPDATE GETS APPLIED.
-     *
-     * Quitting is the one moment with nothing to interrupt: the window is going anyway, no script run is being
-     * watched, and the next launch is simply the new version with nobody having been asked about it. This is
-     * what the launcher's notice used to CLAIM happened while nothing in the crate installed anything.
-     *
-     * `Exit` rather than `ExitRequested`, because the latter can still be cancelled and an app that installed
-     * its update and then stayed open would be running one version while its files are another. */
+/* Quitting is the one moment with nothing to interrupt: the window is going anyway, no script run is being watched. */
     app.run(|app, event| {
         if matches!(event, RunEvent::Exit) {
             update::install_on_exit(app);
@@ -166,23 +152,11 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     // "This device", matching the window it opens — the screen covers the machine's sandboxes AND its desktop
     // sync, and a tray entry naming only half of that is the reason nobody looked there for the other half.
     let manager = MenuItemBuilder::with_id("manager", "This device").build(app)?;
-    /* THE APP'S OWN VERSION, ON THE ONE SURFACE THAT IS THERE WHEN NO WINDOW IS.
-     *
-     * This app spends most of its life as a tray icon with nothing on screen, so a "an update is ready" that
-     * lives only in a window is one most people will never meet. The row is always present and always says
-     * something true — up to date, downloading, ready — rather than appearing out of nowhere on the day there
-     * is news, because a menu that changes shape is a menu nobody learns. It is clickable in exactly the two
-     * states where a click does something: the swap is downloaded, or this copy cannot swap itself at all
-     * (update.rs `Stage::tray`).
-     */
+/* This app spends most of its life as a tray icon with nothing on screen. */
     let update = MenuItemBuilder::with_id("update", "Checking for updates…")
         .enabled(false)
         .build(app)?;
-    /* THE MACHINE AGENT'S ROW, same reasoning as the update row: the agent is a headless resident process with
-     * no face of its own (its logon start maps no window, by design), and the tray is the one surface a user
-     * meets without opening anything. The sentence is the agent's own `status --json` summary (agent_status.rs),
-     * so this row and `intentic-machine status` in a terminal cannot disagree. Clickable, and the click opens
-     * the "This device" screen, which renders the full report behind the sentence. */
+/* The machine agent has no window because it runs headlessly at logon. */
     let agent = MenuItemBuilder::with_id("agent", "Machine agent: checking…").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
     let menu = MenuBuilder::new(app)

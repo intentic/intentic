@@ -1,7 +1,4 @@
-<!--
-    Loading outline for a <SplitView>-shaped route (asyncView) while its chunk loads; title and description are passed in at registration. Renders
-    the real <SplitView> and <SkeletonRows>, not an approximation. Reveal-delay and minimum-hold timing live in asyncView, not here.
--->
+<!-- Loading outline for a <SplitView>-shaped route (asyncView) while its chunk loads; title and description are passed in at registration. -->
 <script setup lang="ts">
 import { SkeletonRows, SplitView } from "@intentic/ui";
 
@@ -31,8 +28,7 @@ const PILL_WIDTHS = [`w-20`, `w-16`, `w-24`, `w-14`, `w-20`];
             </div>
         </template>
         <template #detail>
-            <!-- The one status region for the whole wait: the bars themselves are decoration (SkeletonRows
-                 marks its rows aria-hidden), so the outline announces once rather than per skeleton. -->
+<!-- The one status region for the whole wait: the bars themselves are decoration (SkeletonRows marks its rows aria-hidden). -->
             <div role="status" aria-busy="true" aria-label="Loading">
                 <SkeletonRows :rows="bodyRows" description />
             </div>

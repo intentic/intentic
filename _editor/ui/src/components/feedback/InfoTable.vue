@@ -1,7 +1,4 @@
-<!--
-    Compact reference/comparison table for explainer bodies (<InfoDialog>, <InfoHint>): a lookup list or an A-vs-B comparison. Cells are plain
-    strings; the first column is the row subject. `headers` is optional; a leading "" blanks the subject heading.
--->
+<!-- Compact reference/comparison table for explainer bodies (<InfoDialog>, <InfoHint>): a lookup list or an A-vs-B comparison. -->
 <script setup lang="ts">
 defineProps<{ headers?: string[]; rows: string[][] }>();
 </script>

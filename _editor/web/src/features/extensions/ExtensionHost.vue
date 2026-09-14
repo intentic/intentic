@@ -8,12 +8,7 @@ import { usePanels } from "./usePanels";
 import { detectActivations } from "../../core-views/registry";
 import ExtensionView from "../../core-views/ExtensionView.vue";
 
-/* Hosts one extension activation (/ext/:ext/:key?): re-runs the registry's detection over the live repo facts
- * and capability manifest, and renders the matched activation via ExtensionView. An activation that no longer
- * detects (repo deleted, marker removed, capability disconnected) shows a plain empty state: its rail tile
- * disappears on the same poll. A switched-off extension's views are disposed the same way, so the two are
- * indistinguishable from the registry alone: name that case from the extension list rather than telling
- * someone their content left the workspace when they turned it off themselves (a bookmark still resolves here). */
+/* Hosts one extension activation (/ext/:ext/:key?): re-runs the registry's detection over the live repo facts and capability manifest. */
 
 const route = useRoute();
 const { panels, isLoading } = usePanels();

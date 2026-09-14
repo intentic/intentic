@@ -1,7 +1,4 @@
-<!--
-    Renders a ```dag fence as a graph canvas (Vue Flow + dagre); loaded lazily by <MarkdownFigure> since the canvas is heavy and most documents hold
-    none. Nothing here reads colour or coordinates from the document.
--->
+<!-- Renders a ```dag fence as a graph canvas (Vue Flow + dagre); loaded lazily by <MarkdownFigure> since the canvas is heavy and most documents hold none. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import type { DagFigure } from "../../markdown/figures.js";
@@ -29,28 +26,19 @@ const nodes = computed<DagNode<NodeData>[]>(() =>
 
 const edges = computed<DagEdge[]>(() => figure.edges.map((edge) => ({ from: edge.from, to: edge.to, dashed: edge.dashed })));
 
-/* A prose column cannot host a pannable canvas of unknown height, so the figure gets a fixed one and DagGraph
- * fits its content into it. Scaled to the node count rather than fixed: a three-box diagram in a 24rem frame is
- * mostly empty space, and a twenty-box diagram in one is unreadable. Bounded at both ends: past the ceiling the
- * graph is pannable, which is what the canvas is for.
- *
- * It is computed from the FIGURE, not measured from the canvas, which is also what makes the lazy load invisible:
- * the frame stands at its final height before the graph inside it has arrived, so nothing on the page moves. */
+/* DagGraph owns the fixed-height pannable canvas. */
 const height = computed(() => Math.min(30, Math.max(12, figure.nodes.length * 3.5)));
 </script>
 
 <template>
     <figure class="my-4 flex flex-col gap-2">
         <figcaption v-if="figure.title !== undefined" class="text-xs font-medium text-content">{{ figure.title }}</figcaption>
-        <!-- DagGraph requires its parent to size it (single root, h-full w-full). The frame is a tint and not a
-             stroke: the diagram inside is already a field of bordered boxes, and an outline around it turned a
-             figure into a box of boxes. A wash off the text colour lifts the same area in both schemes. -->
+<!-- DagGraph requires its parent to size it (single root, h-full w-full). -->
         <div class="w-full rounded-lg bg-content/[0.04]" :style="{ height: `${height}rem` }">
             <DagGraph :nodes="nodes" :edges="edges" :direction="figure.direction" :node-height="56">
                 <template #node="{ node }">
                     <div class="flex h-full items-center gap-2 px-2.5">
-                        <!-- Identity is a colour BESIDE the text, never the text's own colour: the palette's
-                             lighter slots are illegible as type on this surface. -->
+                        <!-- The node identity swatch is separate from the text color for contrast. -->
                         <span class="size-2 shrink-0 rounded-full" :style="{ background: node.data.swatch }" />
                         <span class="flex min-w-0 flex-col">
                             <span class="truncate text-xs font-medium text-content">{{ node.data.label }}</span>

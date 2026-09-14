@@ -1,7 +1,4 @@
-<!--
-    One field of a capability's form, laid out inline or stacked per inlineField(). The page computes every verdict (alarms, parsed values); this
-    component only renders what it is given.
--->
+<!-- One field of a capability's form, laid out inline or stacked per inlineField(). -->
 <script setup lang="ts">
 import type { CapabilityField } from "@intentic/extension-manifest";
 import { SegmentedControl, StatusBadge, ui } from "@intentic/ui";
@@ -32,8 +29,7 @@ const emit = defineEmits<{ edited: []; pasted: [event: ClipboardEvent]; left: []
 </script>
 
 <template>
-    <!-- AN ANSWERED QUESTION SITS BESIDE ITS LABEL, NOT UNDER IT: see inlineField() for where the line is
-         drawn and why it is drawn on the width of the answers rather than on their number. -->
+<!-- Keep answered fields beside their labels at the width of the answers. -->
     <label v-if="inline" class="flex items-start justify-between gap-4">
         <span class="min-w-0">
             <span class="ui-field-label">{{ field.label }}</span>
@@ -59,8 +55,7 @@ const emit = defineEmits<{ edited: []; pasted: [event: ClipboardEvent]; left: []
         <span class="ui-field-label">
             {{ field.label }}{{ field.optional ? " (optional)" : "" }}
             <StatusBadge v-if="field.rebuild" variant="neutral" size="xs" label="needs rebuild" class="ml-1.5 align-middle" />
-            <!-- The check a rule can vouch for (a URL that parses, a full sha, a port in range), on the label
-                 where the eye returns after a paste. -->
+            <!-- The check marks a value that passed the field's validation rule. -->
             <Icon v-if="checked" name="check-circle" class="ml-1 align-middle text-2xs text-success" />
         </span>
         <SegmentedControl
@@ -92,15 +87,12 @@ const emit = defineEmits<{ edited: []; pasted: [event: ClipboardEvent]; left: []
             @paste="emit('pasted', $event)"
             @blur="emit('left')"
         />
-        <!-- What sits under the box, one line, by severity: a real refusal in red; the localhost trap's
-             one-click fix; a quiet "Required" for a box merely tabbed past; the account of what a paste was
-             unpacked into; what a config blob was read as; the field's own hint. -->
+<!-- Field messages use one severity-ordered line below the control. -->
         <span v-if="alarm" class="ui-field-error">
             <Icon name="exclamation-triangle" class="text-2xs" />
             {{ alarm }}
         </span>
-        <!-- The fix is a LINK, underlined, because the sentence beside it is a diagnosis and this is the act:
-             at the same weight and colour as the warning it sits in, it reads as more of the warning. -->
+<!-- Fix messages use an underlined action link. -->
         <span v-else-if="urlFix" class="flex flex-wrap items-center gap-x-1.5 text-2xs text-warning">
             <Icon name="exclamation-triangle" class="text-2xs" />
             The sandbox is a container: localhost points at the sandbox itself.

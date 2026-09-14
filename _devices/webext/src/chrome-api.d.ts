@@ -1,15 +1,4 @@
-/* THE SLICE OF CHROME THIS EXTENSION TOUCHES, declared by hand.
- *
- * Not @types/chrome, and the reason is the same one that makes this file worth reading: an extension is judged
- * — by a Web Store reviewer, and by the person installing it — on exactly which browser APIs it reaches for.
- * The ambient package declares all of them, so nothing in a type error ever tells you that a new call reached
- * into a new capability. Here, using an API this file does not declare is a compile error, and adding it is a
- * diff somebody has to justify. That is the property worth more than the convenience.
- *
- * Everything below is what manifest.json's `permissions` already announce, and nothing else: storage, scripting,
- * alarms, cookies, the action badge, and the tabs surface that works WITHOUT the `tabs` permission (see
- * `tabs.query` — url and title arrive only for origins the person granted, which is not a limitation to work
- * around but the privacy property this connector is built on). */
+/* THE SLICE OF CHROME THIS EXTENSION TOUCHES, declared by hand. */
 
 declare namespace chrome {
     namespace runtime {
@@ -82,10 +71,7 @@ declare namespace chrome {
             result?: T;
             frameId: number;
         }
-        /* The one call that reaches into a page. `func` is SERIALIZED and re-parsed in the tab, so it may not
-         * close over anything in this bundle — see page/driver.ts, where every injected function is written to
-         * that rule. Chrome refuses the call outright for a tab whose origin was never granted, which is the
-         * layer of enforcement below this extension's own. */
+/* The one call that reaches into a page. */
         function executeScript<Args extends unknown[], Result>(injection: {
             target: InjectionTarget;
             func: (...args: Args) => Result;
@@ -107,12 +93,7 @@ declare namespace chrome {
             session: boolean;
         }
         function getAll(details: { domain?: string; url?: string }): Promise<Cookie[]>;
-        /* Writing one, for the session a sandbox account lends to this browser (tools/lend.ts).
-         *
-         * `url` rather than a domain is Chrome's own shape, and the pair decides the scope: `url` alone stores
-         * a HOST-ONLY cookie, while `domain` present stores one covering subdomains. Which of the two a cookie
-         * was is part of what makes a session work, so the caller reproduces it rather than picking one.
-         * Answers null for a cookie the browser declined (a bad domain, a `secure` cookie on http). */
+/* Writing one, for the session a sandbox account lends to this browser (tools/lend.ts). */
         function set(details: {
             url: string;
             name: string;

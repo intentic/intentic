@@ -2,14 +2,7 @@ import { oc } from "@orpc/contract";
 import { IssueIdParamSchema, IssueInstallsSchema, IssueIntakeIdParamSchema, IssuesListSchema, IssueStatusInputSchema } from "../schemas/issues.js";
 import { OkSchema } from "../schemas/shared.js";
 
-/* The issues inbox: bug reports that arrived from the owner's own sites and apps, grouped by fingerprint.
- *
- * THE OWNER'S SIDE ONLY. Reports come in through the public `/intake/…` routes, which are deliberately a
- * different prefix rather than a verb on this one: those are reachable by any browser on the internet, these
- * are not, and two id spaces (an automation's public id out there, an issue's fingerprint in here) sharing one
- * path prefix is how a widened rule stops being visible.
- *
- * Nothing here creates an issue. The daemon writes them; this is triage. */
+/* The issues inbox: bug reports that arrived from the owner's own sites and apps, grouped by fingerprint. */
 export const issuesContract = {
     list: oc
         .route({

@@ -5,12 +5,7 @@ use crate::selfhost::Root;
 use crate::tty;
 use crate::util::{bail, Result};
 
-/* Remove EVERYTHING intentic put on THIS machine as a deploy target — cleanup-host.sh as a verb: the mirror
- * of enrolment plus what `intentic deploy apply` deployed here. It discovers the full local footprint,
- * prints exactly what it found, asks once, then removes. It does NOT uninstall shared software (Docker,
- * openssh-server, the cloudflared binary), and it CANNOT reach the user's Cloudflare account: this host's
- * tunnels + DNS records are owned by the sandbox — remove the server on the Infra screen and apply (or run
- * `intentic deploy destroy` there) so the prune deletes them. */
+/* Remove EVERYTHING intentic put on THIS machine as a deploy target — cleanup-host.sh as a verb. */
 
 const STATE_DIR: &str = "/opt/intentic";
 const TUNNEL_UNIT: &str = "intentic-host-ssh-tunnel.service";

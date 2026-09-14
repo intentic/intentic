@@ -1,9 +1,4 @@
-/* THE FLAG PARSER. Small on purpose: this tool is typed by a model, and the shapes a model reaches for are
- * `--to a@b.com`, `--to=a@b.com` and `-n 20`. Anything cleverer (short-flag clustering, negation, arrays by
- * repetition) is surface nobody uses and behaviour nobody can predict from the help text.
- *
- * A repeated flag keeps the LAST value, which is what a shell does; a comma splits a list, which is what the
- * help text shows. `--` ends flag parsing so a subject line starting with a dash can still be sent. */
+/* THE FLAG PARSER. */
 
 export class UsageError extends Error {
     constructor(message: string) {

@@ -45,8 +45,7 @@ const MIN_POLL_INTERVAL_MS = 2_000;
 const MAX_CONSECUTIVE_POLL_ERRORS = 5;
 // How long to wait for a mainland grant to be pasted back, when the vendor publishes no deadline of its own.
 const REDIRECT_WINDOW_MS = 10 * 60_000;
-// One control request; generous for a cold edge, bounded so a hung socket cannot hold a poll tick open past the next
-// one.
+// Bound each control request below the next polling tick.
 const REQUEST_TIMEOUT_MS = 30_000;
 // The mainland exchange can answer with a transient `2007 http error` while it validates the code; worth retrying.
 const EXCHANGE_ATTEMPTS = 3;

@@ -109,15 +109,9 @@ const shellCaveat = computed(
 
 <template>
     <div class="@container">
-        <!--
-            Folds at @2xl, not higher: a rem threshold reads about 10% wider than this app's 17.6px root font, and @3xl kept an opened card
-            single-column below ~1100px.
-        -->
+<!-- Persona powers fold at @2xl to keep opened cards readable. -->
         <div class="grid items-start gap-x-10 gap-y-6 @2xl:grid-cols-2">
-            <!--
-                What changes what this box holds, then where in it the card may stand; location fields arrive through the slot, since only the
-                editor, not the quick panel, has them.
-            -->
+            <!-- This section controls carried resources and the persona's location. -->
             <div class="flex flex-col gap-6">
                 <div class="flex flex-col gap-3">
                     <span :class="ui.sectionLabel()">In your workspace</span>
@@ -155,19 +149,13 @@ const shellCaveat = computed(
                     <span :class="HINT">{{ shelf.hint }}</span>
                 </label>
 
-                <!--
-                    Shown only when it's load-bearing: something is bounded while the shell stays on. Silent otherwise, since a full-powers card has
-                    nothing to be misled about.
-                -->
+                <!-- Shown only when it's load-bearing: something is bounded while the shell stays on. -->
                 <Notice v-if="shellCaveat" tone="warning">
                     With <strong>Run commands</strong> on, every other limit on this card is a strong default rather than a wall: a session with a
                     shell can reach a credential it wasn't granted. Turn it off for a persona that has to be fenced in.
                 </Notice>
 
-                <!--
-                    Collapsed to one line while a group is set to everything (the default), so a checkbox wall for a question nobody asked doesn't
-                    bury the switches above.
-                -->
+                <!-- The default all-access state collapses to one line. -->
                 <div v-for="group in GRANT_GROUPS" :key="group.key" class="flex flex-col gap-1.5">
                     <label class="flex flex-col gap-0.5">
                         <span class="flex items-center gap-2">
@@ -189,10 +177,7 @@ const shellCaveat = computed(
                             }}
                         </span>
                     </label>
-                    <!--
-                        Indented to the label, not a vanished label column, so the chips read as that row's answer; kept outside the <label> so a
-                        chip click doesn't toggle the group off.
-                    -->
+                    <!-- Scoped values align with their row label and stay outside the checkbox control. -->
                     <div v-if="!grantsAll(group.key) && groupItems(group.kind).length > 0" class="flex flex-wrap gap-2 pl-6">
                         <button
                             v-for="item in groupItems(group.kind)"

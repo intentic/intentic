@@ -1,5 +1,4 @@
-/* Type-checks this package's TESTS along with its source: the build config excludes *.test.ts to keep test
- * code out of the published tree, which would otherwise leave the tests in no type-check program at all. */
+/* Type-checks this package's TESTS along with its source: the build config excludes *.test.ts to keep test code out of the published tree. */
 {
     "extends": "./tsconfig.json",
     "compilerOptions": {

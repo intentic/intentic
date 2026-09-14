@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SHARE_ID, shareId, shareStem } from "./share-paths.js";
 
-/* The id a shared conversation is filed under is two things at once: the readable half of a link somebody
- * pastes, and the half of the address that has to be safe to join onto a directory path. Both halves are
- * checked here, because the id is minted from a TITLE the user typed. */
+/* The id a shared conversation is filed under is two things at once: the readable half of a link somebody pastes. */
 
 describe("the readable half", () => {
     it("makes a link that says what it points at", () => {
@@ -25,8 +23,7 @@ describe("the readable half", () => {
 });
 
 describe("the safe half", () => {
-    /* The id is joined onto a path, so a title is the one attacker-shaped input in it. These are the shapes
-     * that would matter if the alphabet were not closed. */
+    /* The id is joined onto a path, so a title is the one attacker-shaped input in it. These are the shapes. */
     it.each([
         ["../../etc/passwd", "etc-passwd"],
         ["a/b", "a-b"],

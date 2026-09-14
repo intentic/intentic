@@ -1,6 +1,4 @@
-<!-- The itemized "what adding this does to your sandbox" disclosure: the structured counterpart of the catalog's
-     prose hints, derived by capabilityEffects (capability-catalog). Full mode is the pre-add panel on the "+" config
-     form; `compact` is the icon-only strip under a connected instance (labels move into title tooltips). -->
+<!-- The itemized "what adding this does to your sandbox" disclosure: the structured counterpart of the catalog's prose hints. -->
 <script setup lang="ts">
 import type { CapabilityEffect } from "@intentic/capability-catalog";
 import type { IconName } from "@intentic/ui";
@@ -119,10 +117,7 @@ const rows = computed<readonly EffectRow[]>(() => effects.map(describe));
             <Icon :name="row.icon" />
         </span>
     </div>
-    <!--
-        Full panel shares the same card and heading tier as <CredentialGuide>, since both live in the same reference
-        column read beside the form.
-    -->
+<!-- Full panel shares the same card and heading tier as <CredentialGuide>, since both live in the same reference column read beside the form. -->
     <div v-else-if="rows.length > 0" class="ui-card">
         <div class="mb-3 text-sm font-semibold text-content">This will add to your sandbox</div>
         <ul class="flex flex-col gap-2">

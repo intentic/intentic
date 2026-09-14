@@ -1,9 +1,7 @@
 import { expect, test } from "vitest";
 import { focusRefusal, looksLikeUrl, parseSessionJson, parseSwayTree, parseWindowsJson, parseWmctrl } from "./parse.js";
 
-/* Reading a platform's window list. Every case here is one somebody has actually been bitten by — a title with
- * spaces truncated at the first one, a single window arriving as an object instead of an array, the same window
- * called 0x0340_0007 by one tool and 54525959 by another. */
+/* Reading a platform's window list. */
 
 const WMCTRL = [
     "0x03400007  0 4242   0    0    1920 1080 code.Code            box  intentic — device.ts — Visual Studio Code",
@@ -85,8 +83,7 @@ test("unparseable output is an empty list, not a crash", () => {
     expect(parseWindowsJson("not json")).toEqual([]);
 });
 
-/* PowerShell's ConvertTo-Json emits a bare object when the pipeline produced exactly one row, and an array
- * otherwise. Accepting both is cheaper than requiring PowerShell 7's -AsArray, which many machines do not have. */
+/* PowerShell emits one pipeline row as an object and multiple rows as an array. */
 test("PowerShell's single-window output is read as a list", () => {
     const one = parseWindowsJson('{"id":"263248","title":"Untitled - Notepad","app":"notepad","x":0,"y":0,"width":800,"height":600,"focused":true}');
     expect(one).toHaveLength(1);
@@ -123,10 +120,7 @@ test("what counts as something to OPEN rather than a program to run", () => {
     expect(looksLikeUrl("/usr/bin/firefox")).toBe(false);
 });
 
-/* Reading the session, which is the read `windows()` cannot make: on the machine this was written for, the
- * Windows smoke tier's doctor printed "9 window(s) currently open, none holding the foreground" while the
- * keyboard was held by the lock screen — a window EnumWindows does not return — and every focus after it was
- * refused. Searching a window list for the foreground answers "nobody" in exactly the case that matters. */
+/* Reading the session, which is the read `windows()` cannot make: on the machine this was written for,. */
 
 test("the foreground holder comes back even when it is the lock screen's own window", () => {
     const state = parseSessionJson('{"locked":true,"id":"66048","title":"Windows Default Lock Screen","app":"LockApp"}');

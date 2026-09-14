@@ -7,11 +7,7 @@ export interface AdminUsersInput {
     readonly limit: number;
 }
 
-/* The account directory, newest first, cursor-paged on the row id (unique, so the page boundary is exact
- * even when several accounts share a createdAt). Counts ride each row via `_count` rather than a per-row
- * query, and the same filter feeds the list and the total so the two can never describe different sets.
- * Nothing selected here is a secret — the GDPR export already shows every subject strictly more about
- * themselves than this row tells the operator. */
+/* The account directory, newest first, cursor-paged on the row id (unique, so the page boundary is exact even when several accounts share a createdAt). */
 export const adminUsers = async (prisma: PrismaClient, input: AdminUsersInput): Promise<AdminUserList> => {
     const query = input.query?.trim();
     const where: Prisma.UserWhereInput | undefined = query

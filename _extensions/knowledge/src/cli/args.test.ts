@@ -13,8 +13,7 @@ describe(`parseArgs`, () => {
         expect(flag(parseArgs([`find`, `--type=person`]), `type`)).toBe(`person`);
     });
 
-    /* The agent will repeat a flag without being told it can, and dropping one of the two would silently
-     * discard half of what it asked for. */
+    /* Repeated flags preserve every value requested by the agent. */
     it(`collects a repeated flag rather than keeping one`, () => {
         expect(flagAll(parseArgs([`new`, `Ada`, `--tag`, `colleague`, `--tag`, `math`]), `tag`)).toEqual([`colleague`, `math`]);
     });

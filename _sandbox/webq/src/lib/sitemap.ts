@@ -1,8 +1,4 @@
-/* Sitemap seeding: the URLs a site already published as its own map, so a crawl starts from the real
- * table of contents instead of discovering it hop by hop. Reads the sitemaps robots.txt names (falling
- * back to /sitemap.xml), follows one level of <sitemapindex>, inflates .gz payloads, and stops at a hard
- * cap — a million-URL commerce sitemap must not become the frontier. The "parser" is a <loc> scan, which
- * is all a urlset carries that we want. */
+/* Sitemap seeding: the URLs a site already published as its own map, so a crawl starts from the real table of contents instead of discovering it hop by hop. */
 import { gunzipSync } from "node:zlib";
 import { normalizeUrl } from "./links.js";
 

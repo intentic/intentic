@@ -1,31 +1,4 @@
-<!-- THE PICTURE ON A RUNG, where the sandbox would live, drawn rather than labelled.
-
-     The rungs wore a 16px glyph beside the title for a release, on the argument that a stacked icon bought a
-     row of its own for a decoration. That argument is right about a GLYPH: a bolt is a synonym for the word
-     next to it, so the space it takes says nothing twice. It is wrong about a SCENE. This choice is the one
-     thing on the page a newcomer cannot look up, where does the machine live, and whose is it, and a cloud
-     beside a monitor answers it before the titles are read.
-
-     DRAWN IN THE APP'S OWN HAND, which is the whole of what the first attempt got wrong. That one was chunky:
-     2.5px rounded strokes around shapes filled with a wash, which is a sticker-illustration language this
-     product does not speak anywhere else. The app's custom icon pack (ui/src/icons) uses hollow shapes,
-     an even band, sharp geometry and small solid details. These scenes share that vocabulary at a larger
-     scale: 2px on a 132×76 stage, hollow, with one solid accent apiece. The
-     bolt is literally `ri:flashlight-line`'s own silhouette; the cloud is the one shape drawn fresh, and the
-     comment on it says why a scaled-up `ri:cloud-line` had to be given up.
-
-     OPACITY IS AN SVG ATTRIBUTE HERE, NEVER A UTILITY CLASS. The first version dimmed its fills with
-     `opacity-[0.07]`, a value used nowhere else in the app, so the class existed only in this file, a file the
-     running dev server had not yet scanned, and the artwork shipped at FULL opacity: a solid white cloud and a
-     solid orange monitor. Colour still worked, because `text-link` was already generated elsewhere. A drawing's
-     own opacity is a property of the drawing; keeping it in the markup means it cannot depend on whether a
-     stylesheet was rebuilt.
-
-     ONE STAGE, TWO SCENES, at one optical weight, so the pair reads as two of one kind, which the old glyph
-     set (bolt, desktop) could not, a bolt being an event where the other is an object.
-
-     No text inside the artwork, ever. A label in an illustration cannot be translated, cannot be selected, and
-     re-states the title six pixels above it. -->
+<!-- THE PICTURE ON A RUNG, where the sandbox would live, drawn rather than labelled. -->
 <script setup lang="ts">
 // `kind` picks which scene renders. `selected` is passed rather than computed: the picker owns which rung is
 // chosen.
@@ -47,10 +20,7 @@ const BAND = 2;
 </script>
 
 <template>
-    <!--
-        Capped rather than stretched, or past ~132px the drawings read as a banner. `aria-hidden`: the words below say
-        what this shows.
-    -->
+<!-- Capped rather than stretched, or past ~132px the drawings read as a banner. -->
     <svg
         viewBox="0 0 132 76"
         class="mx-auto h-auto w-full max-w-[8.25rem]"

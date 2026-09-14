@@ -2,15 +2,7 @@ use crate::docker;
 use crate::logfile::Log;
 use crate::util::{bail, Result};
 
-/* THE RUN CONTRACT STAYS WITH THE IMAGE — this module is a caller, never an author.
- *
- * How a sandbox container is run (volumes, network + alias, capability posture, env allowlist) is defined
- * once, in TypeScript (@intentic/sandbox-run), and the image speaks it: `intentic sandbox run-command`
- * prints the docker argv, `intentic sandbox host-probes` prints what to ask the host first. This binary
- * executes those answers verbatim. Re-stating the shape here would recreate the exact drift the contract
- * was built to end (the SYS_ADMIN incident: six hand-copied run blocks, updated across three commits, while
- * sandboxes created the ordinary way silently lost turn isolation) — and it would break the property that a
- * stale ic still runs a NEW image correctly, because the contract ships with the image, not with ic. */
+/* THE RUN CONTRACT STAYS WITH THE IMAGE — this module is a caller, never an author. */
 
 pub struct RunRequest<'a> {
     pub image: &'a str,
@@ -51,21 +43,7 @@ fn run_command_argv(
         .iter()
         .map(|s| s.to_string())
         .collect();
-    /* ONE-TIME SEEDS for the owner's standing asks — the memory cap, the CPU cap, their own runtime
-     * directives — forwarded into the probe as its environment.
-     *
-     * Each ask lives ON the sandbox: SANDBOX_MEMORY / SANDBOX_CPUS / SANDBOX_RUNTIME are in the contract's
-     * replay allowlist, so they are emitted onto the container they shape and every later recreate reads the
-     * same values back. But "said once" needs a first time, and a container that does not carry a value yet
-     * has nowhere to be read from. So `SANDBOX_MEMORY=10g ic …` (or `ic sandbox reshape`) hands it to the
-     * image here, exactly once, and the image writes it onto the container it emits. (`docker update` is the
-     * tempting alternative and the wrong one: it retunes a RUNNING cgroup and is discarded by the next
-     * recreate, which is how an owner ends up re-widening the same container after every rebuild.)
-     *
-     * FORWARDED, NEVER INTERPRETED. What a valid cap is, how much of a machine one may claim, and which
-     * directives exist, is the contract's business (@intentic/sandbox-run), which is also where a malformed
-     * value is rejected by name. Parsing any of it here would be the hand-copied second opinion this whole
-     * module exists to not have. An empty value rides too: it is the contract's spelling for "clear this". */
+/* One-time seeds pass owner limits and directives to the probe. */
     for (name, value) in seeds {
         args.push("-e".to_string());
         args.push(format!("{name}={value}"));
@@ -164,11 +142,7 @@ pub fn run_command(
     Ok(argv)
 }
 
-/* The one seed a flow may pick up from ITS OWN environment: `SANDBOX_MEMORY=10g ic sandbox connect`, the
- * headless spelling that predates `reshape`. Appended behind the explicit seeds and only when none of them
- * already names it — a verb that was handed a value on its command line was told something more specific
- * than the shell around it. Empty reads as unset here: an exported-but-blank variable is a shell accident,
- * not an ask, and forwarding it would CLEAR a cap nobody asked to clear. */
+/* The one seed a flow may pick up from ITS OWN environment: `SANDBOX_MEMORY=10g ic sandbox connect`, the headless spelling that predates `reshape`. */
 fn with_env_seed(seeds: &[Seed], env_memory: Option<String>) -> Vec<Seed> {
     let mut all: Vec<Seed> = seeds.to_vec();
     if let Some(memory) = env_memory.filter(|value| !value.trim().is_empty()) {
@@ -326,10 +300,7 @@ mod tests {
         assert_eq!(value_of(&argv, "--format"), Some("json"));
     }
 
-    /* A seed rides as a docker `-e` on the PROBE, which is a different thing from the `--flag` every other
-     * input here uses, and the difference is load-bearing: the image reads it as an environment variable and
-     * writes it back onto the sandbox it emits, which is what makes one `SANDBOX_MEMORY=10g` outlive every
-     * later recreate. A flag would be read, used once, and forgotten. */
+/* A seed rides as a docker `-e` on the PROBE, which is a different thing from the `--flag` every other input here uses, and the difference is load-bearing. */
     #[test]
     fn seeds_ride_as_probe_env_before_the_image_and_are_absent_when_none_were_given() {
         let seeds = vec![
@@ -354,9 +325,7 @@ mod tests {
         assert!(!bare.contains(&"-e".to_string()));
     }
 
-    /* The headless spelling, `SANDBOX_MEMORY=10g ic sandbox connect`, still works — and loses to a value the
-     * verb was handed explicitly, because the command line is the more specific of the two. A blank export is
-     * a shell accident and must not become a CLEAR. */
+/* The headless spelling, `SANDBOX_MEMORY=10g ic sandbox connect`, still works — and loses to a value the verb was handed explicitly. */
     #[test]
     fn the_shell_memory_seed_is_appended_only_when_no_explicit_seed_names_it_and_never_when_blank()
     {

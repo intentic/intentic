@@ -391,22 +391,9 @@ const grab = (event: PointerEvent): void => {
         :aria-label="`Focus agent: ${displayTitle}`"
         class="session-card group flex w-full select-none flex-col rounded-xl border text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
-            /* A LIVE CARD IS A BIGGER CARD (see `live`): the two lanes about work in flight get 16px of padding and
-               a 14px title, the ledger keeps 14 and 12. This is the hierarchy signal, in place of widening the two
-               live columns — the fact being told is that this one is happening, and a card is where that belongs.
-               No double quotes in here: the whole array is one double-quoted attribute, and one closes it. */
+/* A LIVE CARD IS A BIGGER CARD (see `live`): the two lanes about work in flight get 16px of padding and a 14px title, the ledger keeps 14 and 12. */
             live ? 'gap-2.5 p-4' : 'gap-2 p-3.5',
-            /* TWO STATES, TWO CHANNELS, AND NEITHER IS DRAWN HERE. `selected` (this card's chat is on screen)
-               and the Attention lane are unrelated facts, told apart by WHERE they are drawn: selection is a
-               ring around the whole card plus a lifted surface, attention is a bar down the left edge. Both,
-               with the fill, the border and the hover, are `.session-card` in styles.css — the same surface
-               the chat rail's row wears, because a board card and a rail row are one card in two frames and
-               every time this skin was written twice the two drifted.
-
-               THE BAR STACKS WITH SELECTION rather than standing down under it. The ring is an INSET hairline
-               now, so the bar paints over it instead of doubling an outward edge beside it — which is what
-               once forced the either/or — and opening the card that needs you no longer erases the reason it
-               is in the lane. */
+/* TWO STATES, TWO CHANNELS, AND NEITHER IS DRAWN HERE. */
             lane === 'attention' ? 'session-card-attention' : '',
             selected ? 'session-card-on' : '',
             dragging ? 'opacity-40' : '',
@@ -419,38 +406,7 @@ const grab = (event: PointerEvent): void => {
         @keydown.space.self.prevent="openCard()"
     >
         <div class="flex items-center gap-2.5">
-            <!--
-                Kind-of-work glyph tinted by the title's category (sessionCategory: audit=blue magnifier,
-                redesign=purple arrows, new=green plus, fix=red wrench), ringed by how much of the model's context
-                window this session has spent (see `ringTone`).
-                Tooltip is the legend for both; an unreadable title falls back to the provider mark on neutral chrome.
-
-                The box is a fixed 28px whether or not a ring is drawn in it, so a lane of cards keeps its titles on
-                one axis rather than shifting left on every card the daemon hasn't reported context for yet.
-                TWO CONCENTRIC CIRCLES, which is the whole reason IdentityTile is round: the square this replaced had
-                a gap running from 4px at the flats to under 1px at the corners, so the arc read as a flourish beside
-                the tile instead of its rim.
-
-                THE THREE NUMBERS ARE A PROPORTION, not three independent choices, and getting them wrong is what a
-                correct centre calculation cannot save you from — measured dead concentric, the first attempt still
-                looked wrong. A ring's own geometry: its outer edge is always at `size / 2` and its inner edge at
-                `size / 2 - stroke`. So 28/1.5 puts the inner edge at 12.5, and a 22px disc (radius 11) sits 1.5px
-                inside it.
-                It replaced 28/2 around a 20px disc, which measured perfectly and read as a heavy donut with a small
-                glyph adrift in it: the stroke was a tenth of the disc it circled, and the disc only 71% of the ring,
-                so the eye read the ring as the object and the icon as filler. At 79% with a hairline the disc is the
-                object and the ring is its rim, which is the thing being drawn.
-                `stroke` is passed here rather than changed in ProgressRing: five other surfaces (UsageRing,
-                ApplyProgress, ChatPaneStatus, the design kit) draw that component at its own weight and none of them
-                is circling an icon.
-
-                A CARD WITH NO CONTEXT WEARS THE EMPTY TRACK, and this is the other half of "the sizes look off": a
-                bare 22px disc beside a ringed 28px one reads as two sizes of mark in one lane, even though both
-                discs are identical. So the rim is always drawn and only the ARC is conditional. The inset ring
-                reproduces ProgressRing's own track exactly — same 1.5px band with its outer edge at 14 — which is
-                why the two can stand in for each other without a seam.
-                Same size in every lane: lane weight is carried by the padding and the title, which have room for it.
-            -->
+<!-- Kind-of-work glyph tinted by the title's category (sessionCategory: audit=blue magnifier, redesign=purple arrows, new=green plus, fix=red wrench). -->
             <span
                 v-tooltip.top="tileHint"
                 class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
@@ -474,20 +430,7 @@ const grab = (event: PointerEvent): void => {
                 @vue:mounted="edit.focusInput"
             />
             <template v-else>
-                <!--
-                    A LIVE CARD'S TITLE WRAPS, a receipt's clips. The step up to 14px costs about four characters
-                    against the same column, and beside a wide standing chip (`Question for you`, `Land conflict`)
-                    that was the difference between reading the title and reading `Refactor the a…`. A live lane
-                    holds a handful of cards and can spend the second line; Finished holds six and cannot, so it
-                    keeps one clipped line, which is also what makes the two lanes scan differently at a glance.
-
-                    `break-words` IS WHAT MAKES THE CLAMP TERMINATE, and it is not decoration. A clamp only draws
-                    its ellipsis when the text overruns VERTICALLY; a title with one unbreakable run in it (a
-                    branch, a path, a URL, anything a rename can put here) overruns sideways instead, so the box
-                    cut it mid-glyph with no ellipsis and left the second line empty. `truncate` never had the
-                    problem because nowrap plus text-overflow answers it in one. Breaking the long word puts the
-                    overrun back on the axis the clamp reads.
-                -->
+<!-- A LIVE CARD'S TITLE WRAPS, a receipt's clips. -->
                 <span
                     class="min-w-0 flex-1 font-semibold text-content"
                     :class="[live ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs', peek ? 'italic' : '']"
@@ -495,16 +438,10 @@ const grab = (event: PointerEvent): void => {
                     <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
                         run.text
                     }}</span>
-                    <!--
-                        Italic is invisible to a screen reader, so the peek state rides along as text, not an
-                        aria-label with no role.
-                    -->
+<!-- Italic is invisible to a screen reader, so the peek state rides along as text, not an aria-label with no role. -->
                     <span v-if="peek" class="sr-only">, temporary</span>
                 </span>
-                <!--
-                    Keeps a peeked chat open; leads the affordance row since it's the one press with a deadline (the
-                    tab closes on the next click elsewhere).
-                -->
+<!-- Keeps a peeked chat open; leads the affordance row since it's the one press with a deadline (the tab closes on the next click elsewhere). -->
                 <button
                     v-if="peek"
                     type="button"
@@ -557,11 +494,7 @@ const grab = (event: PointerEvent): void => {
                 >
                     <Icon name="undo" class="text-sm" />
                 </button>
-                <!--
-                    An icon, not a spelled-out link, so it costs no space at rest; the words move to the tooltip.
-                    Exception: a card that needs the user keeps the label spelled out on the summary line, where it's
-                    always visible.
-                -->
+<!-- An icon, not a spelled-out link, so it costs no space at rest; the words move to the tooltip. -->
                 <button
                     v-if="review !== undefined && lane !== 'attention'"
                     type="button"
@@ -583,74 +516,38 @@ const grab = (event: PointerEvent): void => {
                 class="ui-status-pill shrink-0 bg-primary-600/15 text-2xs font-semibold text-link"
                 >{{ unread.label }}</span
             >
-            <!--
-                The resting standing for a card with no reason or unread mark; carries meta.label as a word in its
-                hover, not just a glyph, and the one thing a resting status can't say alone: that the turn which
-                settled it stopped short (a dot on the glyph, the sentence in the hover). The daemon sends
-                `unfinished` only for a card at rest, so no status check is needed here.
-                Deliberately not chip-styled like the exceptions above: a board of forty "Idle" pills would spend its
-                whole attention budget on nothing, and an "Unfinished" pill per stopped-short card was the same spend.
-            -->
+<!-- The resting standing for a card with no reason or unread mark; carries meta.label as a word in its hover, not just a glyph. -->
             <StatusGlyph v-else :meta="statusMeta" :unfinished="agent.unfinished" :now="now" class="text-sm" />
         </div>
         <p v-if="edit.error !== undefined" class="text-2xs text-danger">{{ edit.error }}</p>
 
-        <!--
-            Card body, column or row depending on `dense`: column stacks one block per row; row wraps the same blocks
-            along one line, each shrinking or wrapping on its own as the board narrows.
-        -->
+<!-- Card body, column or row depending on `dense`: column stacks one block per row; row wraps the same blocks along one line. -->
         <div :class="dense ? 'flex flex-wrap items-center gap-x-3.5 gap-y-1.5' : 'flex flex-col gap-2'">
-            <!--
-                Why this card matched the filter; leads the body while a filter is active. Skipped when the hit was the
-                title, marked in place above instead.
-                Two lines before clamping, so the snippet isn't cut mid-phrase.
-            -->
+<!-- Why this card matched the filter; leads the body while a filter is active. -->
             <p v-if="match !== undefined" class="flex min-w-0 items-start gap-2 text-2xs text-muted" :class="dense ? 'w-full' : ''">
                 <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
                 <MatchLine :snippet="match" :needle="needle" :match-case="matchCase" class="line-clamp-2 min-w-0 flex-1 leading-4" />
             </p>
 
-            <!--
-                `failure` is present only while the card reads as failed, so no extra status check is needed here.
-                Leads above provenance and the model line: on a failed card, nothing else here is what the reader came
-                for.
-            -->
+<!-- `failure` is present only while the card reads as failed, so no extra status check is needed here. -->
             <p v-if="agent.failure && !limited(agent)" class="flex min-w-0 items-start gap-2 text-2xs text-danger" v-tooltip.top="agent.failure">
                 <Icon name="exclamation-circle" class="mt-px shrink-0 text-2xs" />
                 <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ agent.failure }}</span>
             </p>
 
-            <!--
-                Provenance, ahead of the model/branch line: for an agent the user didn't start, who asked for it
-                outranks what it runs on.
-                All three render nothing for a user-started agent.
-            -->
+<!-- Provenance, ahead of the model/branch line: for an agent the user didn't start, who asked for it outranks what it runs on. -->
             <OriginMark :origin="agent.origin" />
             <StartedByMark :started-by="agent.startedBy" />
             <WorkflowMark :workflow="agent.workflow" />
 
-            <!--
-                WRAPS, which is what lets the unsent mark ride this line instead of taking one of its own. Unsent
-                used to lead the body as a row of its own, and on the cards that actually carry it — a chat you
-                typed into and left — the two rows below the title were a lone chip and a lone model name, both
-                mostly empty. Here it costs a row only on a card whose line is genuinely full (sandbox, model,
-                runner, branch and account all present), and nothing on the rest.
-                It still LEADS this line: the reader's own unfinished business comes before what the agent is
-                running on. The provenance marks above it render nothing for a user-started agent, which is nearly
-                every card that has an unsent message in it.
-            -->
+<!-- WRAPS, which is what lets the unsent mark ride this line instead of taking one of its own. -->
             <div
                 v-if="agent.unsent || box !== undefined || model !== undefined || agent.branch !== undefined || account !== undefined"
                 class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle"
             >
                 <!-- Shape, wording and hover live in UnsentMark, shared with the rail row. -->
                 <UnsentMark v-if="agent.unsent" :preview="agent.preview" :at="agent.draftAt" :now="now" />
-                <!--
-                    Which sandbox this agent is in, shown only when it isn't the reader's own; leads the line since it
-                    changes what every other number means.
-                    Same ink-tint wash as the reason chip, and for the same reason: it must survive the selected card's
-                    lifted fill and the light scheme.
-                -->
+<!-- Which sandbox this agent is in, shown only when it isn't the reader's own; leads the line since it changes what every other number means. -->
                 <span
                     v-if="box !== undefined"
                     class="flex min-w-0 shrink-0 items-center gap-1 truncate rounded bg-content/10 px-2.5 py-1 text-muted"
@@ -661,18 +558,12 @@ const grab = (event: PointerEvent): void => {
                     <span class="truncate">{{ box.name }}</span>
                 </span>
                 <span v-if="model !== undefined" class="truncate">{{ model }}</span>
-                <!--
-                    Where it's running, shown only when that's somewhere other than here: the fleet spreads work across
-                    machines without a per-agent choice.
-                -->
+<!-- Where it's running, shown only when that's somewhere other than here: the fleet spreads work across machines without a per-agent choice. -->
                 <span v-if="agent.runner !== undefined" class="flex shrink-0 items-center gap-1 truncate" :title="`Runs on ${agent.runner}`">
                     <Icon name="desktop" class="text-2xs" />
                     {{ agent.runner }}
                 </span>
-                <!--
-                    Abbreviated on the card, full string on hover; a label, not a control (copy is on the right-click
-                    menu).
-                -->
+<!-- Abbreviated on the card, full string on hover; a label, not a control (copy is on the right-click menu). -->
                 <!-- Clipped on the card, full identity on hover; nothing renders if the sandbox can't name the account. -->
                 <span v-if="agent.branch !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
                     <span v-if="model !== undefined">·</span>
@@ -687,22 +578,13 @@ const grab = (event: PointerEvent): void => {
                 </span>
             </div>
 
-            <!--
-                Never replaces the live readout below: this says what the loop is working toward, that says what it's
-                doing right now.
-                Survives the loop ending, since how it stopped is what the card gets read for afterward.
-            -->
+<!-- Never replaces the live readout below: this says what the loop is working toward, that says what it's doing right now. -->
             <p v-if="agent.loop !== undefined" class="flex min-w-0 items-center gap-1.5 text-2xs" :class="loopLine?.class">
                 <Icon name="repeat" :spin="loopLine?.spin" class="shrink-0 text-2xs" />
                 <span class="truncate">{{ loopLine?.text }}</span>
             </p>
 
-            <!--
-                The one board state that's a decision, not a report: the agent redoes the merge in its own worktree, so
-                a wrong answer costs nothing.
-                A real button, not a hover link, so touch and keyboard reach it; the mechanics are prose under it
-                rather than a tooltip, so they're readable without a pointer.
-            -->
+<!-- The one board state that's a decision, not a report: the agent redoes the merge in its own worktree, so a wrong answer costs nothing. -->
             <div v-if="resolvable" class="flex min-w-0 flex-col gap-1">
                 <Button size="small" class="self-start whitespace-nowrap" @click.stop="emit('resolve')">
                     <Icon :name="handingOver ? 'spinner' : 'sparkles'" :spin="handingOver" />{{
@@ -714,12 +596,7 @@ const grab = (event: PointerEvent): void => {
                 >
             </div>
 
-            <!--
-                One row (fact left, press right), not a stack: this is a fact the card owes the reader regardless of
-                action, unlike the decision blocks above.
-                The press is deliberately quiet (muted secondary, not the success-filled "Land now"): discarding is
-                often a rejection, and a bright button would argue with it.
-            -->
+<!-- One row (fact left, press right), not a stack: this is a fact the card owes the reader regardless of action, unlike the decision blocks above. -->
             <div v-if="away !== undefined" class="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
                 <span v-tooltip.top="away.title" class="inline-flex shrink-0 items-start gap-1.5 text-2xs leading-snug text-warning">
                     <Icon :name="away.icon" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0"
@@ -729,21 +606,13 @@ const grab = (event: PointerEvent): void => {
                         ></span
                     >
                 </span>
-                <!--
-                    No resting glyph: the line above it already leads with this exact icon, and a repeat would read as
-                    a stutter.
-                -->
+<!-- No resting glyph: the line above it already leads with this exact icon, and a repeat would read as a stutter. -->
                 <Button size="small" severity="secondary" :text="true" class="shrink-0 whitespace-nowrap" @click.stop="emit('reland')">
                     <Icon v-if="relanding" name="spinner" spin class="text-2xs" />{{ relanding ? "Landing…" : "Land again" }}
                 </Button>
             </div>
 
-            <!--
-                Success-styled with the check glyph, matching the review panel's own Land now: the same action on the
-                same work must read as such.
-                Carries no explanatory prose, unlike the resolve/request-land blocks: this button's mechanics are
-                routine to a user who already opted into auto-land-off.
-            -->
+<!-- Success-styled with the check glyph, matching the review panel's own Land now: the same action on the same work must read as such. -->
             <div v-if="(landable || shipping) && canShip" class="flex min-w-0 flex-col gap-1">
                 <!-- The standing ask leads the button it's about, so a maintainer meets the reason before the press. -->
                 <p v-if="landAsk" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-warning">
@@ -755,11 +624,7 @@ const grab = (event: PointerEvent): void => {
                 </Button>
             </div>
 
-            <!--
-                The same Ready card for a collaborator: land is a maintainer's press, so this offers the ask instead,
-                same spot and size but quieter chrome.
-                Once asked, the card says so and stands down; a viewer gets neither.
-            -->
+<!-- The same Ready card for a collaborator: land is a maintainer's press, so this offers the ask instead, same spot and size but quieter chrome. -->
             <div v-else-if="landable && canDrive" class="flex min-w-0 flex-col gap-1">
                 <p v-if="landAsk" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-muted">
                     <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{ landAsk }}: waiting for a maintainer</span>
@@ -772,47 +637,23 @@ const grab = (event: PointerEvent): void => {
                 </template>
             </div>
 
-            <!--
-                The closing summary line: counted stats, then the drill-in and time held to the line's right (see
-                `summary`).
-            -->
+<!-- The closing summary line: counted stats, then the drill-in and time held to the line's right (see `summary`). -->
             <div
                 v-if="summary"
                 class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted"
                 :class="dense ? 'min-w-32 flex-1' : ''"
             >
-                <!--
-                    No hover labels: a stat you can't name from its icon doesn't belong in this row.
-                    Tokens, file counts and turn counts were dropped from this line since a scanned board only needs
-                    stats that change what to do next; each still lives where it's actually read (Usage tab, Changes
-                    panel, chat rail).
-                -->
+<!-- No hover labels: a stat you can't name from its icon doesn't belong in this row. -->
 
-                <!--
-                    Red and green only while the diff is a live signal. On a receipt the pair keeps its signs, its
-                    monospace and its numbers and drops to the row's own ink: a lane of them was two saturated
-                    numbers per row, repeated six times, saying nothing that the `+` and `−` don't already say.
-                -->
+<!-- Red and green only while the diff is a live signal. -->
                 <span v-if="agent.diff !== undefined && (agent.diff.insertions > 0 || agent.diff.deletions > 0)" class="font-mono">
                     <span :class="receipt ? '' : 'text-success'">+{{ agent.diff.insertions }}</span>
                     <span :class="receipt ? '' : 'text-danger'"> −{{ agent.diff.deletions }}</span>
                 </span>
-                <!--
-                    Lifetime cost total, read-only here.
-                    The Usage tab breaks it down; a route change inside this chip row would cost more misfires than the
-                    shortcut saves.
-                -->
+<!-- Lifetime cost total, read-only here. -->
                 <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
-                <!--
-                    Counts this agent's own children, live-of-total while any are running and settling to the lifetime
-                    total once none are.
-                    A nested link to the Subagents area narrowed to just this agent's children, not the whole
-                    sandbox's.
-                -->
-                <!--
-                    A real link (underlines on hover, tints live), so Ctrl/Cmd-click opens the list in its own tab.
-                    `.stop` only keeps the card underneath from also opening.
-                -->
+<!-- Counts this agent's own children, live-of-total while any are running and settling to the lifetime total once none are. -->
+<!-- A real link (underlines on hover, tints live), so Ctrl/Cmd-click opens the list in its own tab. -->
                 <RouterLink
                     v-if="agent.subagents !== undefined"
                     :to="{ name: `subagents`, query: { agent: agent.id } }"
@@ -828,22 +669,10 @@ const grab = (event: PointerEvent): void => {
                     }}
                 </RouterLink>
 
-                <!--
-                    Standing and clock pinned right by margin, not a spacer, so wrapping doesn't strand them on an
-                    empty line.
-                -->
+<!-- Standing and clock pinned right by margin, not a spacer, so wrapping doesn't strand them on an empty line. -->
                 <span class="ml-auto inline-flex min-w-0 items-center gap-2 text-subtle">
-                    <!--
-                        Spelled out only for the one card that's earned the width: an agent waiting on the user, whose
-                        label is itself the instruction (Answer, Approve spend...).
-                        Every other card carries this same press as the header's arrow, at no extra height.
-                    -->
-                    <!--
-                        For a stranded turn, the instruction is the action, not a trip to one: the daemon still holds
-                        the exact turn to resend, so the slot is the press itself.
-                        Offered even before the reset window reopens, since the provider's estimate runs early and a
-                        premature press likely still succeeds; absent once the daemon drops the hold (a restart).
-                    -->
+<!-- Waiting agents show their instruction when the card has room. -->
+<!-- Stranded turns expose the held instruction as the action. -->
                     <button
                         v-if="limited(agent) && agent.limitHeld === true"
                         type="button"
@@ -865,15 +694,9 @@ const grab = (event: PointerEvent): void => {
                     <span v-else-if="review === undefined && completed" class="inline-flex shrink-0 items-center gap-1">
                         <Icon name="check" class="text-2xs" />Completed
                     </span>
-                    <!--
-                        Archived card dates itself by when it left the board, the same "when" slot a running card's
-                        elapsed uses.
-                    -->
+<!-- Archived card dates itself by when it left the board, the same "when" slot a running card's elapsed uses. -->
                     <span v-if="agent.archivedAt !== undefined" class="shrink-0"> Archived {{ relativeTime(agent.archivedAt) }} </span>
-                    <!--
-                        Takes the date's slot: "back at X" tells the reader something to plan around, unlike "last
-                        active".
-                    -->
+<!-- Takes the date's slot: "back at X" tells the reader something to plan around, unlike "last active". -->
                     <span
                         v-else-if="limitBackAt !== undefined"
                         class="inline-flex shrink-0 items-center gap-1"
@@ -886,28 +709,15 @@ const grab = (event: PointerEvent): void => {
                         relativeTime(agent.updatedAt)
                     }}</span>
 
-                    <!--
-                        Same slot and grammar as the running tool and the settled date: a card is only ever one of
-                        those three things at a time.
-                        Takes the date's place, except on an archived card, which keeps both: a watch is exactly what
-                        would drag a filed-away agent back onto the board.
-                    -->
+<!-- Same slot and grammar as the running tool and the settled date: a card is only ever one of those three things at a time. -->
                     <span v-if="watch !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
-                        <!--
-                            Readout and its hint wrap together, separately from the press beside them.
-                            A second nested tooltip would raise both boxes over the same words.
-                        -->
+<!-- Readout and its hint wrap together, separately from the press beside them. -->
                         <span class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link" v-tooltip.top="watch.hint">
                             <Icon name="eye" class="shrink-0 text-2xs" />
                             <span class="min-w-0 truncate">{{ watch.text }}</span>
                             <span class="shrink-0 tabular-nums">{{ watch.countdown }}</span>
                         </span>
-                        <!--
-                            The one visible way to disarm a watch; previously only a right-click menu or a drag,
-                            neither discoverable from the readout that announces it.
-                            The one exception to withholding presses in the archive: every other press there could
-                            un-file the agent, but this one only prevents an unwanted return.
-                        -->
+<!-- The one visible way to disarm a watch; previously only a right-click menu or a drag, neither discoverable from the readout that announces it. -->
                         <Button
                             size="small"
                             severity="secondary"
@@ -922,17 +732,9 @@ const grab = (event: PointerEvent): void => {
                         </Button>
                     </span>
 
-                    <!--
-                        Same corner as the settled card's date, so the eye finds one readout per card instead of two at
-                        different heights.
-                        Shows "Working…" even with no activity frame yet, since dropping it would take the clock with
-                        it, and a running card with no clock can't be triaged.
-                    -->
+<!-- Same corner as the settled card's date, so the eye finds one readout per card instead of two at different heights. -->
                     <span v-if="working" class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link">
-                        <!--
-                            Glyph follows whichever fact leads: running children if any, else the tool the agent itself
-                            is using.
-                        -->
+<!-- Glyph follows whichever fact leads: running children if any, else the tool the agent itself is using. -->
                         <Icon :name="(agent.subagents?.running ?? 0) > 0 ? 'users' : activityIcon(agent.activity?.tool)" class="shrink-0 text-2xs" />
                         <span class="min-w-0 truncate">{{ activityText ?? "Working…" }}</span>
                         <span v-if="agent.startedAt !== undefined" class="shrink-0 tabular-nums">{{ formatElapsed(agent.startedAt, now) }}</span>

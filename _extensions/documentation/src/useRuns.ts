@@ -34,18 +34,7 @@ export interface RunManifest {
     readonly repo: string;
     // Packages in scope, or absent for whatever the map finds; a later run can narrow once an index exists.
     readonly packages?: readonly string[];
-    /* The model every session in this run opens on, when the reader used the caret beside Generate. Absent ⇒
-     * the sandbox's agent-run list answers, which is the ordinary path.
-     *
-     * ON THE MANIFEST rather than held in the view, because a run OUTLIVES the press that started it: only the
-     * map agent starts immediately, and the fan-out is started later by `advance()`, on a later poll, quite
-     * possibly in a browser that has been reloaded since. A pick kept in memory would document the first
-     * package on the model the user chose and the other forty on the standing one.
-     *
-     * THE WHOLE PICK is recorded, not merely the pair, for the same reason: a fan-out where the first session
-     * thinks at Max on the account the reader chose and the rest at the model's default on whichever account
-     * came first is not the run they asked for. The contract's own shape (AgentRunPickSchema), so this manifest
-     * cannot fall behind what the picker can set. */
+/* The model every session in this run opens on, when the reader used the caret beside Generate. */
     readonly pick?: NonNullable<AgentRunPick>;
 }
 

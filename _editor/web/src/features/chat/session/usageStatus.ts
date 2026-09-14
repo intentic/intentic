@@ -142,10 +142,7 @@ const poolWords = (pool: Pick<PlanLimitPool, `kind` | `label`>): string =>
         .replaceAll(/[^a-z0-9]+/gu, ` `)
         .trim()} `;
 
-/**
- * Window length behind a pool, and the short token a narrow column names it by. Undefined when the provider's
- * period text isn't recognised; caller falls back to the pool's own label.
- */
+/** Window length behind a pool, and the short token a narrow column names it by. */
 export const poolPeriod = (pool: Pick<PlanLimitPool, `kind` | `label`>): PoolPeriod | undefined => {
     const words = poolWords(pool);
     const hours = /\b(\d+) hours?\b/u.exec(words)?.[1];

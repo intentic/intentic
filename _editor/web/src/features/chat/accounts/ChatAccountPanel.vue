@@ -66,18 +66,12 @@ const connect = async (): Promise<void> => {
 </script>
 
 <template>
-    <!--
-        Shown until `accessKnown`: "not connected" is a claim this panel can't make before both account and
-        endpoint reads land. One quiet line, no button, while the question isn't settled.
-    -->
+<!-- Shown until `accessKnown`: "not connected" is a claim this panel can't make before both account and endpoint reads land. -->
     <p v-if="!accessKnown" class="flex items-center justify-center gap-2 px-4 py-3 text-center text-2xs text-subtle">
         <Icon name="spinner" spin class="shrink-0" />Checking your AI accounts…
     </p>
 
-    <!--
-        The sign-in, once running, takes the whole strip; Cancel is the only other control, and abandoning
-        it restores the line below.
-    -->
+<!-- The sign-in, once running, takes the whole strip; Cancel is the only other control, and abandoning it restores the line below. -->
     <div v-else-if="live" class="flex flex-col gap-2 rounded-2xl border border-line bg-card px-4 py-3">
         <div class="flex items-center gap-2">
             <ProviderLogo :provider="live.provider" class="shrink-0 text-link" />
@@ -94,10 +88,7 @@ const connect = async (): Promise<void> => {
         <ConnectFlow :kind="live.kind" :provider="live.provider" />
     </div>
 
-    <!--
-        Names what this chat is pointed at; the model list leads (free to look at, holds every option),
-        the provider's own sign-in follows.
-    -->
+<!-- Names what this chat is pointed at; the model list leads (free to look at, holds every option), the provider's own sign-in follows. -->
     <div
         v-else-if="!connected && !trialSpent"
         class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl border border-line bg-card px-4 py-3 text-2xs text-muted"

@@ -57,8 +57,7 @@ describe("every provider in the table", () => {
                     /\/v\d+$/,
                 );
                 expect(variant.label.trim(), `${id}/${variant.id} has no estate label`).not.toBe("");
-                // The lookup every surface goes through, not the row behind it: a named variant must resolve to itself
-                // only.
+                // Resolve each named variant exactly to itself.
                 expect(mintedVariant(id, variant.id), `${id}/${variant.id} does not resolve`).toEqual(variant);
             }
             // An absent variant defaults to the list's head: what a single-estate row or a choice-less login/start

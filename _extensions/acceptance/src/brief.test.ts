@@ -66,9 +66,7 @@ describe(`briefFor`, () => {
         expect(text).toContain(`"story": "01-sign-in"`);
     });
 
-    /* The authored criteria are the contract the report is graded against: see brief.ts. They are numbered in
-     * the instructions AND seeded verbatim into the result shape, because a positional array whose entries the
-     * agent paraphrased cannot be lined up with what the story's author promised. */
+/* The authored criteria are the contract the report is graded against: see brief.ts. */
     describe(`the authored criteria`, () => {
         const criteria = [`A wrong password shows an error`, `The email field keeps its value`];
 

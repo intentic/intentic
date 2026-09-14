@@ -626,7 +626,7 @@ const cycleTab = (delta: number): void => {
     if (names.length < 2) {
         return;
     }
-    // oxlint-disable-next-line unicorn/prefer-array-index-of -- activeName.value is `string | undefined`, which indexOf will not accept.
+    // oxlint-disable-next-line unicorn/prefer-array-index-of -- indexOf rejects string | undefined.
     const index = names.findIndex((name) => name === activeName.value);
     const next = names[(index + delta + names.length) % names.length];
     if (next !== undefined) {
@@ -968,10 +968,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
         :class="[vertical ? 'flex-row' : 'flex-col', { 'h-full': !resizable }]"
         :style="resizable ? { height: `${height}px` } : undefined"
     >
-        <!--
-            Seam rides the panel's top edge in flow; its negative margin gives back the height it takes. `pane="after"` since the panel is below it,
-            so dragging up grows it.
-        -->
+        <!-- Seam rides the panel's top edge in flow; its negative margin gives back the height it takes. -->
         <ResizeSeam
             v-if="resizable"
             v-model="seamHeight"
@@ -988,11 +985,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
             :class="vertical ? 'w-40 flex-col items-stretch border-r px-1 py-1.5' : 'items-center border-b px-2 py-0.5'"
             @contextmenu="onBarContextMenu"
         >
-            <!--
-                One pill per split group, one segment per session, styled like FileTabs: glyph, label, and a hover ×. Click switches,
-                Shift/Ctrl+click multi-selects, × kills. Pills wrap after one row (never sideways) up to a two-row cap, so a tab stays visible
-                without pushing others off-screen.
-            -->
+            <!-- One pill per split group, one segment per session, styled like FileTabs: glyph, label, and a hover ×. -->
             <div
                 class="scrollbar-thin flex min-w-0 flex-1 gap-x-0.5 gap-y-1 overflow-x-hidden overflow-y-auto"
                 :class="vertical ? 'min-h-0 flex-col items-stretch' : 'max-h-13 flex-wrap items-center'"
@@ -1033,10 +1026,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                                 "
                                 :style="segmentColor(name) === undefined ? undefined : { color: segmentColor(name) }"
                             />
-                            <!--
-                                Sizes to the pill (fixed width, so the strip doesn't jump while typing) and swallows its own clicks so a caret drag
-                                isn't also a tab switch.
-                            -->
+                            <!-- The strip keeps a fixed pill width and owns its clicks. -->
                             <input
                                 v-if="renamingName === name"
                                 v-model="renameDraft"
@@ -1053,10 +1043,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                                 @vue:mounted="focusRename"
                             />
                             <span v-else :class="vertical ? 'min-w-0 flex-1 truncate text-left' : undefined">{{ segmentLabel(name) }}</span>
-                            <!--
-                                What it's running, live, on the pill: the reason a mis-close is rare, since look-alike pills otherwise give no way to
-                                tell an idle shell from one mid-build. Dropped on a split segment (no room); the dot alone still says busy.
-                            -->
+                            <!-- The pill identifies the live terminal target. -->
                             <span
                                 v-if="isBusy(name) && (vertical || group.length === 1)"
                                 class="min-w-0 max-w-24 shrink truncate font-mono text-[0.6rem] text-muted"
@@ -1077,10 +1064,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                         </div>
                     </template>
                 </div>
-                <!--
-                    Shape of the strip this sandbox was left with, before its sessions are known: one block per remembered pill, inert and hidden
-                    from screen readers since it names nothing yet.
-                -->
+                <!-- Remembered terminals keep their own placeholder blocks until sessions load. -->
                 <div
                     v-for="(group, gi) in placeholders"
                     :key="`held-${gi}`"
@@ -1131,10 +1115,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 >
                     <Icon name="refresh" class="text-xs" />
                 </button>
-                <!--
-                    Pop out into its own window, and back; was buried as a menu row only, now on the toolbar beside close since both answer 'where
-                    does this panel live'.
-                -->
+            <!-- Keep the pop-out action beside close because both change the window. -->
                 <button type="button" :class="ui.iconButton()" @click="floating.toggle()" v-tooltip.top="floatHint" :aria-label="floatHint">
                     <Icon :name="floating.floats.value ? 'arrow-down-left' : 'external-link'" class="text-xs" />
                 </button>
@@ -1145,10 +1126,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
         </div>
         <!-- Panes and the touch keys under them: always a column, whichever side the bar is on. -->
         <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
-            <!--
-                Agent asking for hands: sits between strip and pane, directly over the prompt it's about; its buttons settle the request, and it
-                closes on the daemon's own push. Mirrors the Browsers banner.
-            -->
+            <!-- Agent requests appear above the prompt they concern. -->
             <div v-if="help" class="flex shrink-0 flex-col gap-2 border-b border-line bg-warning/10 px-3 py-2">
                 <div class="flex items-start gap-2">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-sm text-warning" />
@@ -1170,15 +1148,9 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                     <Button size="small" severity="secondary" class="shrink-0" @click="() => resolveHelp(false)"> Can't help now </Button>
                 </div>
             </div>
-            <!--
-                xterm sizes to this container; each split's fit observer fills its own cell. Right-click is caught here, not per cell, and reads
-                which session it landed in off the cell's dataset.
-            -->
+            <!-- xterm sizes to this container; each split's fit observer fills its own cell. -->
             <div ref="container" class="term-body flex min-h-0 min-w-0 flex-1 bg-terminal p-2" @contextmenu="onGridContextMenu"></div>
-            <!--
-                Find sits over the pane's top-right corner (VSCode's placement) so highlighted rows stay visible under it. Enter/Shift+Enter walk
-                matches; Esc hands the keyboard back.
-            -->
+            <!-- Find sits over the pane's top-right corner (VSCode's placement) so highlighted rows stay visible under it. -->
             <div
                 v-if="finding"
                 class="absolute top-1 right-4 z-10 flex items-center gap-1 rounded-md border border-line bg-card px-1.5 py-1 shadow-md"
@@ -1213,10 +1185,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                     <Icon name="times" />
                 </button>
             </div>
-            <!--
-                Nothing to show, said explicitly: a panel opened FOR a session normally has it seconds away, but the target can simply not exist. An
-                overlay, not a v-if, since the container must stay mounted at its real size.
-            -->
+            <!-- State explicitly when the selected session has no terminals. -->
             <div
                 v-if="order.length === 0 && awaiting !== undefined && !waited"
                 class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
@@ -1232,10 +1201,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 <!-- Command behind it, so a check that opened this terminal can say what it's running, not just its name. -->
                 <p v-if="about?.detail" class="max-w-md truncate font-mono text-2xs text-subtle">{{ about.detail }}</p>
             </div>
-            <!--
-                Unknown moment gets its own shape: between opening the panel and the daemon saying what it runs, there's nothing to show yet, which
-                is not the same claim as 'No terminals open.'
-            -->
+            <!-- Show a distinct state while the daemon identifies the terminals. -->
             <div
                 v-else-if="order.length === 0 && answer === 'waiting'"
                 class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
@@ -1266,7 +1232,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                     <template #icon><Icon name="plus" class="text-2xs" /></template>
                 </Button>
             </div>
-            <!-- Touch extra-keys row (coarse pointers only); pointerdown.prevent keeps the terminal focused so the soft keyboard stays up. -->
+            <!-- Touch extra keys preserve terminal focus while the keyboard is open. -->
             <div v-if="coarse" class="scrollbar-thin flex shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-card px-1.5 py-1.5">
                 <button
                     type="button"
@@ -1281,16 +1247,13 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
             </div>
         </div>
 
-        <!-- Right-click pill menu: split/join/unsplit/kill plus per-terminal color/icon; rendered into the floating window while it floats. -->
+        <!-- The pill menu owns terminal split, join, kill, color, and icon actions. -->
         <ContextMenu ref="menu" :model="menuItems" :min-width="14" />
 
         <!-- Right-click inside a terminal: clipboard verbs and the deeper scrollback. -->
         <ContextMenu ref="gridMenu" :model="gridItems" :min-width="12" />
 
-        <!--
-            Pane's history as selectable text, beyond what the live grid holds: attach replays only the last few thousand lines into xterm, and tmux
-            keeps far more.
-        -->
+        <!-- Scrollback replays a bounded history beyond the live grid. -->
         <Modal
             :open="scrollbackName !== undefined"
             size="xl"
@@ -1298,10 +1261,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
             :header="scrollbackName === undefined ? '' : `Scrollback, ${segmentLabel(scrollbackName)}`"
             @update:open="closeScrollback"
         >
-            <!--
-                Lays out its own height (`:scroll="false"`): the <pre> below is the scroller, so a second one around it wouldn't leave the Copy-all
-                row reachable.
-            -->
+            <!-- The pre element scrolls; its parent only provides the layout height. -->
             <div class="flex h-panel-lg min-h-0 flex-col gap-2">
                 <div class="flex shrink-0 items-center gap-2 text-xs text-muted">
                     <template v-if="scrollback">
@@ -1320,10 +1280,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
             </div>
         </Modal>
 
-        <!--
-            Confirm shown only when there's something to lose: a busy session, or a bulk kill the gesture never named. Each row shows what that
-            terminal is doing, the only thing distinguishing look-alike pills.
-        -->
+        <!-- Confirm shown only when there's something to lose: a busy session, or a bulk kill the gesture never named. -->
         <ConfirmDialog
             :open="pendingKill !== undefined"
             :header="killHeader"
@@ -1393,10 +1350,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
 </template>
 
 <style scoped>
-/*
- * Split cells (plain elements from useTerminal's mount, hence :deep): equal flex columns with a hairline between, and a
- * top accent marking the focused pane in a split.
- */
+/* Split cells (plain elements from useTerminal's mount, hence :deep): equal flex columns with a hairline between. */
 .term-body :deep(.term-cell) {
     display: flex;
     flex: 1 1 0;

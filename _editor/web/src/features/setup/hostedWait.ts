@@ -81,10 +81,7 @@ const COLD_SPENT_MS = 5 * MINUTE_MS;
 // Ceiling for a stuck machine: SILENT_MS never fires while the provider reports `starting`/`created`.
 const MACHINE_STUCK_MS = 10 * MINUTE_MS;
 
-/* WHAT THE SANDBOX ITSELF IS SAYING, while it is still saying it. The daemon reports why its own address did
- * not answer on every probe, and the card used to hold all of it back until the give-up window was spent —
- * five minutes of a bare spinner over a diagnosis already in hand. Quoted verbatim (reach-report.ts writes it
- * for this screen) and never as a verdict: the probe is still running, and most of these clear themselves. */
+/* WHAT THE SANDBOX ITSELF IS SAYING, while it is still saying it. */
 const stillTrying = (input: HostedWaitInput, inFor: string): string | undefined => {
     const detail = input.boot?.reach === `unreachable` ? input.boot.detail : undefined;
     return detail === undefined || input.waitedMs < PROBE_LOUD_MS ? undefined : `${inFor}${detail} Still trying.`;
@@ -114,16 +111,7 @@ const noteFor = (input: HostedWaitInput): string => {
 // States meaning the machine won't come up on its own: `failed` outright, or sitting `stopped`/`destroyed`.
 const DEAD_MACHINE = new Set([`stopped`, `suspended`, `destroying`, `destroyed`, `failed`]);
 
-/* A DOWN READING IS A SNAPSHOT, AND EVERY BOOT PASSES THROUGH ONE. Claiming a warm machine starts from a
- * `stopped` pool machine; a restart stops before it starts; a rebuild destroys the machine and makes another,
- * so the provider answers `gone` for a stretch. Fly reports each of those honestly, and this card used to act
- * on the first one it saw: within seconds of the platform issuing a stop, the page told the reader their
- * machine was not running, and its one button — start it over — issued another stop and put them back through
- * the same window. Measured in production: two presses three minutes apart against a machine that went on to
- * bill twenty-five minutes of uptime, because nothing about it was ever wrong.
- *
- * So a down reading has to HOLD before it is a verdict. The page times how long the current one has (Setup.vue
- * `downForMs`), and until it settles the wait reads as what it is — a machine being started. */
+/* A downward hosted reading is the snapshot every boot starts from. */
 export const machineIsDown = (machine: HostedStatus[`machine`] | undefined): boolean =>
     machine === `gone` || (machine !== undefined && DEAD_MACHINE.has(machine));
 
@@ -190,10 +178,7 @@ const finalFailure = (input: HostedWaitInput): Stall | undefined => {
 // `checking` counts here too, once spent.
 const unreachableFailure = (input: HostedWaitInput): Stall | undefined => {
     const failing = input.boot?.reach === `unreachable` || input.boot?.reach === `checking`;
-    /* THE DAEMON'S OWN GIVE-UP OUTRANKS THIS PAGE'S CLOCK. `retrying: false` means the probe loop has stopped
-     * for good (its window spent, or a posture that can never answer, which is settled the moment it is asked),
-     * so waiting out a window of our own only holds a spinner over a finished verdict — and a page opened late
-     * has no clock worth waiting on anyway. Absent on an older daemon, which is what UNREACHABLE_MS still covers. */
+/* THE DAEMON'S OWN GIVE-UP OUTRANKS THIS PAGE'S CLOCK. */
     const spent = input.boot?.retrying === false || input.waitedMs > UNREACHABLE_MS;
     if (!failing || !spent) {
         return undefined;
@@ -202,12 +187,7 @@ const unreachableFailure = (input: HostedWaitInput): Stall | undefined => {
         step: `connecting`,
         failure: {
             problem: input.boot?.detail ?? `Your sandbox is running, but it can't be reached at its address.`,
-            /* PROMISES NOTHING A RESTART CANNOT KEEP. This used to read "Starting it over sets that up again",
-             * which is true on the tunnel lane and false on this one: a hosted sandbox dials nothing, and when
-             * the fault is the edge in front of it — an old build, a missing prefix — restarting the sandbox
-             * puts a healthy machine back behind the same wall. People pressed it repeatedly and read the
-             * unchanged result as their own fault. The last clause is now a fact rather than a courtesy: the
-             * platform alarms on exactly this (hosted-health.ts `edge`), so somebody is genuinely told. */
+/* PROMISES NOTHING A RESTART CANNOT KEEP. */
             remedy: `Nothing on your side causes this and nothing on the sandbox is lost: it's the connection in front of it that isn't routing. Starting it over is worth one try. If it comes back, it's ours to fix and we're already being told.`,
             // Box and files are healthy; only the boot's networking half could need rerunning.
             action: `reboot`,

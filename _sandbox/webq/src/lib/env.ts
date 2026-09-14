@@ -1,7 +1,4 @@
-/* Where webq keeps things, resolved once per process. Everything lives under one home directory so a human
- * (or a chore) can delete a single tree: cache/ holds fetched HTML keyed by URL, out/ holds the markdown
- * the commands write. WEBQ_HOME moves the whole tree (the sandbox image points it at workspace-visible
- * storage); the default follows XDG so a bare `npx @intentic/webq` behaves like any other CLI. */
+/* Where webq keeps things, resolved once per process. */
 import { homedir } from "node:os";
 import { join } from "node:path";
 

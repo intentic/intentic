@@ -65,7 +65,7 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
     <div class="flex flex-col gap-3">
         <Notice v-if="error" :of="noticeOf(error)" />
 
-        <!-- Sits above the feed so it doesn't scroll away with it; `flush` is set since the bordered box outside already owns the padding. -->
+        <!-- The feed heading stays above the scrolling activity rows. -->
         <div v-if="status?.voice" class="rounded-lg border border-line bg-card px-3 py-2">
             <Row icon="microphone" tone="info" density="compact" :flush="true" :title="`#${status.voice.channelName}`">
                 <template #description>
@@ -94,7 +94,7 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
             </template>
         </FilterBar>
 
-        <!-- Unbounded height: the feed scrolls with the page, since the section index is sticky and stays reachable without an inner scroller. -->
+        <!-- Activity scrolls with the page so the sticky section index stays reachable. -->
         <ActivityTimeline :episodes="visible" :source="selected" :window="window" :truncated="truncated" :is-loading="isLoading" />
     </div>
 </template>

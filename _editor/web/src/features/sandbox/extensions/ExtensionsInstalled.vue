@@ -118,10 +118,7 @@ const toggle = async (extension: ExtensionSummary, enabled: boolean): Promise<vo
 
 <template>
     <div class="flex flex-col gap-5">
-        <!--
-            Each count is what the section holds, not the total: rows leave it for the pinned group above and for the filter. No density passed: a
-            RowGroup is compact by default.
-        -->
+        <!-- Each count is what the section holds, not the total: rows leave it for the pinned group above and for the filter. -->
         <RowGroup v-for="section in sections" :key="section.id" :label="section.label" :count="section.entries.length" :caption="section.caption">
             <ExtensionRow
                 v-for="entry in section.entries"
@@ -149,20 +146,14 @@ const toggle = async (extension: ExtensionSummary, enabled: boolean): Promise<vo
             <button v-if="entries.length === 0" type="button" :class="ui.linkButton(`text-xs`)" @click="emit(`browse`)">
                 Discover what people have published →
             </button>
-            <!--
-                Stands where the disappointment is, above clearing the filter: it answers what was actually asked, 'do I have something that does
-                this'.
-            -->
+            <!-- The empty state answers the active filter before offering reset. -->
             <button v-if="matches.length === 0 && publishedMatches > 0" type="button" :class="ui.linkButton(`text-xs`)" @click="emit(`browse`)">
                 {{ publishedMatches }} published {{ publishedMatches === 1 ? `extension matches` : `extensions match` }} “{{ query.trim() }}” →
             </button>
             <Button v-if="matches.length === 0 && entries.length > 0" size="small" label="Clear filter" @click="emit(`clear`)" />
         </div>
 
-        <!--
-            Workspace-extension directories the daemon couldn't enumerate (missing or unparsable manifest, a colliding id); named per directory,
-            since nothing install-shaped ever refused them.
-        -->
+        <!-- Unenumerated workspace extensions are listed with their reason. -->
         <RowGroup v-if="invalid.length > 0" label="Not loadable">
             <Row v-for="entry in invalid" :key="entry.dir">
                 <template #title>

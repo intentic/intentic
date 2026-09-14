@@ -24,10 +24,7 @@ const { open, anchor, header, pin, knobs, taken } = defineProps<{
 </script>
 
 <template>
-    <!--
-        Same 26rem panel as the shell's picker. Opens downward, unlike the composer's pinned-to-bottom trigger: these triggers sit mid-page, where
-        opening upward would cover the rows above; still flips if room runs out below.
-    -->
+    <!-- Same 26rem panel as the shell's picker. -->
     <ResponsiveOverlay
         :model-value="open"
         :anchor="anchor"

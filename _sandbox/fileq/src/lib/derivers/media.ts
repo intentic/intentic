@@ -1,10 +1,7 @@
 import { parseFile } from "music-metadata";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
-/* Audio and video containers, the deterministic tier: duration, codec facts and embedded tags — what the
- * file says about itself without decoding a single frame. No transcript here, on purpose: transcription is
- * whisper work measured in minutes of CPU, which is a later tier the owner switches on, and the note says so
- * in the sidecar rather than letting an empty shadow read as a silent recording. */
+/* Media derivation reads container duration, codecs, and tags without decoding frames. */
 
 const formatDuration = (seconds: number): string => {
     const whole = Math.round(seconds);

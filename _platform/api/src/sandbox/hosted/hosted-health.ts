@@ -41,30 +41,9 @@ export interface EdgeReading {
     readonly fault: string | undefined;
 }
 
-/* THE COMPONENT WITH NO ROW, NO MIGRATION AND, UNTIL THIS, NOTHING WATCHING IT. Everything else in this sweep
- * compares the platform's own database against Fly. The edge is in neither: it is a process on Fly holding
- * live connections, and the hosted lane is exactly as reachable as whatever build happens to be running on it.
- *
- * That gap is not hypothetical. CI pushed `ingress:latest` on every platform push and nothing ever rolled the
- * machines (now deploy-ingress.sh), so production served a ten-day-old edge while the sandbox image moved onto
- * `fly-replay`. The old build had no replay in it, so every hosted sandbox answered 502 at its own public name,
- * probed itself for five minutes and told its owner to start it over. Every check this platform had stayed
- * green: the rows were right, the machines were up, the api was healthy, and the one process between a person
- * and their sandbox was never asked anything.
- *
- * Asked over the PUBLIC address on purpose — that is the path a browser takes, and a private probe would have
- * passed for all ten days. */
-/* ABSENCE IS THE SIGNAL, and reading it is the whole point. An edge that does not report `replay` is not an
- * edge with the lane switched off — it is a build from before the lane existed, which will never route a
- * hosted sandbox no matter how long anyone waits or how many times they press start it over. Told apart from
- * `replay: false` because the remedies differ: one is a deploy, the other is one missing variable. */
-/* AND THE SAME ABSENCE ONE FIELD OVER, which is the one this check kept missing. `replay` catches an edge so
- * old it predates the hosted lane; it says nothing about an edge merely older than the code, because a stale
- * edge that HAS the lane answers `replay: true` and passes every reading here forever. The field that dates a
- * build is `build`, deploy-ingress.sh refuses a deploy that does not serve the expected one, and its own error
- * text spells out the rule this now enforces at runtime: an answer with no `build` field at all is an edge
- * older than the change that added it, whose machines were never rolled. Production served exactly that for
- * days with this sweep reporting the lane healthy every fifteen minutes. */
+/* THE COMPONENT WITH NO ROW, NO MIGRATION AND, UNTIL THIS, NOTHING WATCHING IT. */
+/* ABSENCE IS THE SIGNAL, and reading it is the whole point. */
+/* AND THE SAME ABSENCE ONE FIELD OVER, which is the one this check kept missing. */
 const edgeFault = (where: string, replay: boolean | undefined, stamped: boolean): string | undefined => {
     if (replay === undefined) {
         return `${where} is an OLD BUILD: it does not report the hosted replay lane, so it predates it and cannot route a hosted sandbox at all. Its machines were never rolled onto the image CI pushed. Every hosted sandbox answers 502 at its own address until they are.`;
@@ -107,12 +86,7 @@ const edgeReading = async (config: Config): Promise<EdgeReading | undefined> => 
     return { build, stamped, replay, fault: edgeFault(where, replay, stamped) };
 };
 
-/* THE READING THAT COMES FROM THE SANDBOXES THEMSELVES. Every other check here describes what this platform
- * configured; each daemon probes its own public address from the inside and posts the verdict
- * (reach-report.ts), so the rows already hold the one fact nothing else can establish — whether anybody could
- * get in. A lane that routes to nobody looks perfect from every other angle: rows right, machines up, edge
- * answering its own /health, and not one sandbox reachable. Read here rather than left to the admin panel,
- * because a fault nobody is told about is a fault nobody fixes. */
+/* Lane health reads reachability reported by sandboxes, not platform configuration alone. */
 export interface LaneReading {
     // Hosted sandboxes that checked in within the window and last said their address answered with their own id.
     readonly reachable: number;

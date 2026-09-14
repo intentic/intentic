@@ -168,17 +168,7 @@ const parseFlags = (argv, known, booleans = []) => {
     return { flags, positional };
 };
 
-/* ---------------------------------------------------------------------------------------------------------
- * LOOKING UP. The daemon answers data; the writing-out lives here, because this is the half that knows it is
- * talking to a terminal and to a context window. Two rules run through all of it:
- *
- *   · THE CAPSULE FIRST. Everything a caller needs to decide "is this the conversation I meant" comes before
- *     anything long, and every answer that has more behind it ends with the exact command that gets it. The
- *     whole point of the surface is to cost less than the hunt it replaces, and an answer nobody can stop
- *     reading halfway costs the same as the hunt.
- *   · `--json` IS THE ROUTE'S OWN ANSWER, unedited, so a caller that wants to compute rather than read never
- *     has to parse this formatting back.
- * ------------------------------------------------------------------------------------------------------- */
+/* Search output is capsule-first, while JSON mode returns the route response unchanged. */
 
 // Whole units, biggest that fits: a token count is read for its order of magnitude, and "5.0M" says that
 // where "5005546" makes the reader do the work. One decimal only below ten units, where it is the difference
@@ -282,9 +272,7 @@ const find = async (argv) => {
         writeRoster(answer.agents);
         process.stdout.write("more: agents show <id>\n");
     }
-    /* The index can still be filling on a fresh sandbox, so a search that found nothing has two possible
-     * meanings. Saying which is the difference between a caller that tries again and one that concludes the
-     * conversation never existed. */
+    /* An empty result may be incomplete while the phrase index is still building. */
     if (answer.indexing === true) {
         process.stderr.write("The phrase index is still building; this answer can still grow.\n");
     }
@@ -323,9 +311,7 @@ const writeRecall = (agent) => {
     if (agent.landedSubject !== undefined) {
         process.stdout.write(`  landed as: ${agent.landedSubject}\n`);
     }
-    /* Only the repos with something to say, and a count for the rest. A conversation here spans seven repos
-     * and touches one of them; listing the six untouched ones is six lines of "clean" between the reader and
-     * the line they came for. */
+    /* Show changed repositories and summarize the unchanged remainder. */
     const interesting = agent.repoStates.filter((repo) => repo.files !== 0 || repo.landed);
     for (const [index, repo] of interesting.entries()) {
         process.stdout.write(`  ${index === 0 ? "repos:" : "      "} ${repoLine(repo)}\n`);
@@ -404,9 +390,7 @@ const spawn = async (argv) => {
     if (prompt === "") {
         return die(`agents: spawn needs a task\n\n${USAGE}`);
     }
-    /* BOTH HALVES, REFUSED HERE RATHER THAN AT THE DAEMON, so the message can name what is spendable: a child
-     * spends a real allowance and nothing is chosen for it, and a bare "required" would leave the caller to
-     * guess a provider id or make a second trip. The daemon refuses the same way if this is bypassed. */
+    /* Provider and model are required so the child has an explicit allowance source. */
     if (flags.provider === undefined || flags.model === undefined) {
         const { status, text } = await call("GET", "/children/providers");
         const listing = status === 200 ? `\n\nConnected right now:\n${JSON.parse(text).text}` : ``;

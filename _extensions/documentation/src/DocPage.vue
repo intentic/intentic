@@ -1,7 +1,4 @@
-<!--
-    One document page: rendered prose, via the shared <Markdown> also used by chat and the file viewer, plus clickable workspace anchors and a
-    staleness line. Draws no frame, scroller or padding of its own — each host (routed area, Workspace tab) decides how much room it gets.
--->
+<!-- A document page renders Markdown, workspace anchors, and staleness. -->
 <script setup lang="ts">
 import { appLink, ui, Icon, Markdown, StatusBadge, timeAgo } from "@intentic/extension-ui";
 import { computed } from "vue";
@@ -36,10 +33,7 @@ const rev = computed((): string => provenance?.sourceRev ?? staleness?.readmeRev
 <template>
     <!-- Keyed per page by the caller: the fade is one page arriving, not a list animating. -->
     <article class="flex flex-col gap-5">
-        <!--
-            Staleness renders above the prose, naming the specific reason rather than just the verdict. Plain text, not a bordered panel; the dot
-            matches the sidebar's amber marks.
-        -->
+        <!-- Staleness renders above the prose, naming the specific reason rather than just the verdict. -->
         <p v-if="staleness?.stale === true" class="flex items-center gap-2 text-xs text-muted">
             <span class="size-1.5 shrink-0 rounded-full bg-warning/70" aria-hidden="true"></span>
             May be out of date: {{ staleness.reason }}.

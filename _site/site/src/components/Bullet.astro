@@ -1,17 +1,5 @@
 ---
-/* A MARK ON A LINE OF TEXT. The bullet of a list, the flower on a heading, the tick on a FAQ summary, a
- * provider's logo in a row: anything small that has to sit beside words and look level with them.
- *
- * This exists so that no caller ever places a mark by hand again. The vertical relation between a mark
- * and the text beside it is a computed one (`.mark` in global.css centres the mark on one line box), and
- * every time it was left to the call site it was written as a constant tuned against whatever type size
- * that call site happened to use — which then went stale the first time the type around it changed. So
- * this component takes no class and no offset for the box it draws: `markClass` reaches the DRAWING
- * (colour, a transition, a rotation on open) and nothing it can say moves the box. A caller that needs a
- * mark somewhere new adds it here, next to the reason.
- *
- * Pass a mark as children for anything that is not one of the two house ornaments — an SVG logo, say —
- * and it is centred by the same rule. */
+/* A MARK ON A LINE OF TEXT. */
 import Lotus from "./Lotus.astro";
 import Lozenge from "./Lozenge.astro";
 

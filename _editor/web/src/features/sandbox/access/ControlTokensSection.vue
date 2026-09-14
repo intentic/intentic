@@ -164,14 +164,8 @@ const describe = (token: ControlToken): string =>
             <div class="flex flex-col gap-3">
                 <Notice v-if="notice" :of="notice" />
                 <form class="flex flex-col gap-2" @submit.prevent="submit">
-                    <!--
-                        Wraps by the column's width, not the viewport's, since a docked chat can make this column phone-width on a wide screen. Field
-                        keeps a minimum and takes the rest; controls drop to their own line below that.
-                    -->
-                    <!--
-                        Compact tier, like the invite form above it: this sits under rows with a 26px Revoke button, in mounts that are both dense.
-                        Field, pickers and button share one height instead of mixing sizes.
-                    -->
+                    <!-- Token rows wrap to the column, including when chat is docked. -->
+                    <!-- Compact spacing keeps revoke rows aligned with the invite form. -->
                     <div class="flex flex-wrap items-center gap-2">
                         <input
                             v-model="label"

@@ -1,11 +1,6 @@
-<!--
-    Loading placeholder for a document page, shared by DocTab and DocsView. Shaped like the page itself — title, paragraph, sections — rather than a
-    centred spinner, since the real document starts at the top of the pane, not the middle.
--->
+<!-- Loading placeholder for a document page, shared by DocTab and DocsView. -->
 <script setup lang="ts">
-/* Widths as a fixed uneven set walked in order: prose wraps unevenly and a placeholder that reshuffles on
- * every re-render is an animation nobody asked for. The last line of a paragraph is short because the last
- * line of a wrapped paragraph is. */
+/* Widths as a fixed uneven set walked in order: prose wraps unevenly and a placeholder that reshuffles on every re-render is an animation nobody asked for. */
 const PARAGRAPHS = [
     [`w-full`, `w-full`, `w-11/12`, `w-2/3`],
     [`w-full`, `w-5/6`, `w-1/2`],

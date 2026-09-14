@@ -72,9 +72,7 @@ describe(`resolveHostedImage`, () => {
         expect(seen.some((entry) => entry.includes(`scope=repository%3Aintentic%2Fsandbox%3Apull`))).toBe(true);
     });
 
-    /* FAILS OPEN TO THE TAG, which is the whole reason this can sit on the provisioning path. A registry that is
-     * down must cost what today already costs — a claim that may have to pull — and never a sign-up that cannot
-     * be served at all. */
+    /* Image resolution falls back to the configured tag when the registry is unavailable. */
     it(`falls back to the configured tag when the registry cannot be reached`, async () => {
         vi.stubGlobal(`fetch`, () => Promise.reject(new Error(`ENOTFOUND`)));
         expect(await resolveHostedImage(config(`ghcr.io/intentic/sandbox:stable`), logger)).toBe(`ghcr.io/intentic/sandbox:stable`);

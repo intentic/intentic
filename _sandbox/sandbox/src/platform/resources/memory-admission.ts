@@ -111,7 +111,7 @@ export const waitForMemoryHeadroom = async (
         // First reading admits without touching the interval.
         return { admitted: true, waitedMs: 0 };
     }
-    // oxlint-disable-next-line no-unmodified-loop-condition -- `signal.aborted` is flipped by the AbortController, not by this loop; the rule cannot see the external writer.
+    // oxlint-disable-next-line no-unmodified-loop-condition -- AbortController changes signal.aborted.
     while (!verdict.admit && Date.now() - startedAt < deadlineMs && signal?.aborted !== true) {
         await sleep(intervalMs, { signal });
         verdict = admitTurn(await read(), true);

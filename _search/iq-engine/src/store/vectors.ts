@@ -67,10 +67,7 @@ export interface VectorHit {
     readonly score: number;
 }
 
-/**
- * The `k` nearest chunks to `queryVec`, restricted to `allowedFileIds` when given; pass undefined to search every
- * indexed file.
- */
+/** The `k` nearest chunks to `queryVec`, restricted to `allowedFileIds` when given; pass undefined to search every indexed file. */
 export const nearestChunks = (db: IndexDb, queryVec: Float32Array, k: number, allowedFileIds: readonly number[] | undefined): VectorHit[] => {
     if (allowedFileIds?.length === 0) {
         return [];

@@ -222,10 +222,7 @@ const startKnowledge = async (): Promise<void> => {
 
         <!-- Unclamped, so the hub page scrolls the note; `items-start` stops the sticky index stretching to its height. -->
         <div v-else class="flex gap-4" :class="stacked ? `flex-col` : `items-start`">
-            <!--
-                Folds above the note, not beside it, in a narrow body; unframed, like the shared rail. 14rem here (the rail's is 16), since these
-                rows fit more per width; sticky, bounded by `--pinned-top`.
-            -->
+            <!-- Folds above the note, not beside it, in a narrow body; unframed, like the shared rail. -->
             <div
                 class="flex min-w-0 shrink-0 flex-col"
                 :class="stacked ? `max-h-56` : `sticky top-(--pinned-top) max-h-[calc(100dvh-var(--pinned-top))] w-56`"

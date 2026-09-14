@@ -771,8 +771,7 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                     ...(turn.options.modelReasoningEffort !== undefined ? { effort: turn.options.modelReasoningEffort } : {}),
                 }),
             );
-            // Turn ids this run watches; a steer adds one, since the old turn may keep completing, only the latest ends
-            // it.
+            // Observe every turn id so a steer cannot let an old turn win.
             const turnIds = new Set([startedTurnId]);
             let turnId = startedTurnId;
 

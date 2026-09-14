@@ -1,8 +1,4 @@
-/* Chrome + theming for ui-code's Shiki output. Shiki emits its own <pre class="shiki"> with
- * inline token colors for the light theme plus a `--shiki-dark` CSS var per token; we restyle
- * the container to match the app's surfaces and flip token colors to the dark var when the
- * app is in dark mode. Keyed off [data-mode="dark"] (set by useTheme) so toggling the
- * theme recolors code with zero re-highlighting. */
+/* Chrome + theming for ui-code's Shiki output. */
 @layer components {
     .ui-code .shiki {
         margin: 0;
@@ -19,15 +15,7 @@
         line-height: 1rem;
     }
 
-    /* ROOM FOR THE COPY BUTTON, which sits ON the block rather than in a row above it (see Code.vue). Without
-     * this the chip lands on the first line's own text — which for a one-line command is the whole command,
-     * and for a scrolling block is whatever happens to be under it. Reserved in the padding rather than by
-     * hiding the button until hover: an affordance nobody can see is one nobody uses, and this is a surface
-     * whose entire purpose is getting the text onto a clipboard.
-     *
-     * `pre` as well as `.shiki` because the fallback block (highlighting still in flight, or a language we
-     * ship no grammar for) is the one a reader meets first and would otherwise reflow the instant Shiki
-     * answers. */
+/* ROOM FOR THE COPY BUTTON, which sits ON the block rather than in a row above it (see Code.vue). */
     .ui-code.ui-code-copyable .shiki,
     .ui-code.ui-code-copyable pre {
         padding-right: calc(var(--spacing) * 18);
@@ -40,11 +28,7 @@
         overflow-wrap: break-word;
     }
 
-    /* Clamped to `--ui-code-clamp-lines` visible lines (Code's `clampLines`), the block's own fade + toggle
-     * on top. The arithmetic lives here rather than in the component because every term of it does: `1lh` is
-     * the line-height set above, and the padding and border are this rule block's too. Only the TOP padding
-     * counts — an overflowing box paints through its bottom padding, so budgeting for that one shows half of
-     * the line the clamp meant to cut. */
+/* Clamped to `--ui-code-clamp-lines` visible lines (Code's `clampLines`), the block's own fade + toggle on top. */
     .ui-code.ui-code-clamp .shiki,
     .ui-code.ui-code-clamp pre {
         max-height: calc(var(--ui-code-clamp-lines) * 1lh + var(--spacing) * 2 + 2px);
@@ -64,11 +48,7 @@
         width: 6px;
     }
 
-    /* THE BOX <CodeField> STACKS ITS TWO HALVES IN. The coloured <pre> and the transparent <textarea> over it
-     * occupy the same grid cell, so every property that can move a glyph has to be identical in both — which
-     * is why this is one rule listing all of them rather than a class on each. Shiki's own <pre> is in the
-     * list because it arrives with a background, a border-radius and a type scale of its own (this file gives
-     * it those, three rules up) and has to be flattened back onto the same box. */
+/* THE BOX <CodeField> STACKS ITS TWO HALVES IN. */
     .ui-code-field-box,
     .ui-code-field .shiki,
     .ui-code-field .shiki code {
@@ -77,15 +57,9 @@
         background: transparent !important;
         font-family: var(--font-mono);
         font-feature-settings: var(--font-mono--font-feature-settings);
-        /* THIS SIZE HAS TO BEAT `.field-bare`'s, and the only thing making it do so is that code.css is imported
-         * after primeng.css into the same layer at the same specificity. Both are bundled sheets in a fixed
-         * order, so that is a promise this repo can keep — but it is worth knowing, because losing it is not
-         * cosmetic. The editable <textarea> and the coloured <pre> beneath it are stacked in one grid cell and
-         * line up only while their metrics are identical; a field one step larger than the text it is
-         * transparent over puts every caret in the wrong place. */
+/* THIS SIZE HAS TO BEAT `.field-bare`'s, and the only thing making it do so is that code.css is imported after primeng.css into the same layer at the same. */
         font-size: 0.75rem;
-        /* Roomier than a <Code> block's 1rem: this is text somebody puts a caret into, and the leading is what
-         * makes a wrapped line findable. prose.css's ~1.7 for the same reason it applies it to prose. */
+/* Roomier than a <Code> block's 1rem: this is text somebody puts a caret into, and the leading is what makes a wrapped line findable. */
         line-height: 1.7;
         letter-spacing: normal;
         tab-size: 4;
@@ -101,9 +75,7 @@
         padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
     }
 
-    /* The half that takes the keystrokes: its own text is invisible, and the caret and the selection are the
-     * only ink it contributes. The selection has to be TRANSLUCENT — an opaque highlight is painted over the
-     * colours underneath, so selecting a paragraph would blank it. */
+/* The half that takes the keystrokes: its own text is invisible, and the caret and the selection are the only ink it contributes. */
     .ui-code-field-input {
         color: transparent;
         caret-color: var(--color-content);
@@ -113,8 +85,7 @@
         color: transparent;
     }
 
-    /* An empty field shows its placeholder in the <pre> rather than through the textarea's own — one string,
-     * one element, and the box is sized by the words the reader can actually see. */
+/* An empty field shows its placeholder in the <pre> rather than through the textarea's own — one string, one element. */
     .ui-code-field-placeholder .ui-code-field-box,
     .ui-code-field-placeholder .ui-code-field-html {
         color: var(--color-subtle);

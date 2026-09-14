@@ -67,9 +67,7 @@ describe(`collecting the machines nobody came back to`, () => {
         expect(prisma.sandbox.update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { daemonUrl: null } });
     });
 
-    /* THE MINUTES GO WITH THE ROW unless they are charged first. The used figure reads an open stretch live off
-     * the machine row (hosted-usage.ts), so a collection that dropped the row with `wokeAt` still set erased
-     * whatever the owner had not yet been charged. Closed at the stop Fly reports, before the app and the row go. */
+/* THE MINUTES GO WITH THE ROW unless they are charged first. */
     it(`charges a machine's open awake stretch to its owner's month before dropping its row`, async () => {
         stubFly(`stopped`);
         const upsert = vi.fn().mockResolvedValue({});
@@ -83,11 +81,7 @@ describe(`collecting the machines nobody came back to`, () => {
         expect(upsert.mock.invocationCallOrder[0]).toBeLessThan(deleteCall);
     });
 
-    /* THE ROW THAT OUTLIVED ITS MACHINE, and the reason this sweep threw every night for weeks: a machine
-     * destroyed provider-side (here, by a second deployment's orphan sweep) left a row that could never be
-     * read again. The row is not inert, `hostedOffer` counts rows against the one-machine allowance, so its
-     * owner could not be given a replacement either. Dropping it is the whole fix, and it is safe for the same
-     * reason a collection is: the SANDBOX stays. */
+/* A provider-deleted machine must not leave a hosted row behind. */
     it(`drops the row of a machine Fly no longer has, whatever the clock says about it`, async () => {
         vi.stubGlobal(`fetch`, () => Promise.resolve(new Response(JSON.stringify({ error: `machine not found` }), { status: 404 })));
         const prisma = prismaWith([machine({ sandbox: { ...machine().sandbox, lastSeenAt: daysAgo(15) } })]);

@@ -56,12 +56,7 @@ const answer = (harness: Harness, refusal: string | undefined): void => {
 // the first sighting.
 const DUPLICATE_SETTLE_MS = 3_000;
 
-/* ONE LINK, ONE QUESTION — the row neither smoke tier had, and the reason a duplicate shipped on Linux.
- *
- * A running app is reached by a second copy whose argv the single-instance plugin forwards, and
- * tauri-plugin-deep-link turns that same argv into `on_open_url`: a lib.rs that also dispatched argv itself asked
- * twice, and a user who answered both prompts redeemed one setup code twice. Every other verb hides that behind a
- * take-once park, so this dialog is the only place it is visible at all. */
+/* ONE LINK, ONE QUESTION — the row neither smoke tier had, and the reason a duplicate shipped on Linux. */
 const assertAskedOnce = async (harness: Harness, app: string): Promise<void> => {
     await delay(DUPLICATE_SETTLE_MS);
     const asked = (await appWindows(app)).filter((window) => window.title.includes(CONFIRM_TITLE)).length;

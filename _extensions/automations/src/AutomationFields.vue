@@ -213,10 +213,7 @@ const bindRung = (index: number, el: unknown): void => {
     }
 };
 
-/* WHERE THE PICKER OPENS FROM: the rung being edited, or an empty selection for the slot past the end.
- * `chooseRun` is on because a rung STORES all three of them now (ModelPin carries effort, thinking and speed) —
- * the flag exists to stop a form showing controls whose answers it would drop, and this form drops none.
- * The verb is left to default ("Use this model"): a rung is stored, not spent, and the press is the save. */
+/* WHERE THE PICKER OPENS FROM: the rung being edited, or an empty selection for the slot past the end. */
 const pickerOptions = (anchor: HTMLElement, current: ModelPin | undefined) => {
     // Blank provider and model are what "nothing chosen yet" looks like to the picker, which is the state the
     // add button opens in; an existing rung opens on itself.
@@ -310,7 +307,7 @@ const setProvider = (provider: string): void => {
 <template>
     <!-- `divide-y` puts a hairline between steps only, not around each one, so the panel reads as three sections, not three boxes. -->
     <div class="@container flex flex-col divide-y divide-line-subtle">
-        <!-- The name is the daemon's upsert key; retyping it while editing would fork a new automation, not rename this one. Hidden once it exists. -->
+        <!-- The name is the daemon's upsert key; retyping it while editing would fork a new automation, not rename this one. -->
         <section v-if="!nameLocked" class="flex flex-col gap-2 pb-4 @2xl:flex-row @2xl:gap-6">
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
                 <span :class="ui.sectionLabel()">Name</span>
@@ -331,22 +328,18 @@ const setProvider = (provider: string): void => {
             </label>
         </section>
 
-        <!-- ── WHEN ──────────────────────────────────────────────────────────────────────────────────────── -->
+        <!-- WHEN -->
         <section class="flex flex-col gap-3 py-4 first:pt-0 @2xl:flex-row @2xl:gap-6">
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
                 <span :class="ui.sectionLabel()">When</span>
                 <span class="text-2xs text-subtle">What wakes the agent.</span>
             </div>
             <div class="flex min-w-0 flex-1 flex-col gap-3">
-                <!--
-                    Capped at `max-w-2xl`, not full width: `stretch` would otherwise blow up four one-word tabs into slabs wider than the choice they
-                    represent.
-                -->
+                <!-- Cap the tabs at `max-w-2xl` so one-word choices do not become wide slabs. -->
                 <SegmentedControl v-model="kind" :options="TRIGGER_TABS" stretch class="max-w-2xl" />
                 <p class="text-2xs text-subtle">{{ whenCaption }}</p>
 
-                <!-- A chore's trigger: which moment in the fleet's own work wakes it, and optionally one repo of
-                     the change to care about. -->
+                <!-- The trigger selects the event and optional repository to watch. -->
                 <template v-if="form.kind === 'workspace'">
                     <div class="ui-field">
                         <span class="ui-field-label">Wake when</span>
@@ -374,10 +367,7 @@ const setProvider = (provider: string): void => {
                 </template>
 
                 <template v-if="form.kind === 'listener'">
-                    <!--
-                        Chips, not cards: the kit's chip already says "this one" in one signal, and a chip row wraps where a card wall would just
-                        grow. The logo stays, so a reader finds Discord without reading a word.
-                    -->
+                    <!-- Chips identify choices compactly and wrap when needed. -->
                     <div class="ui-field">
                         <span class="ui-field-label">Source</span>
                         <div class="flex flex-wrap gap-1.5">
@@ -399,10 +389,7 @@ const setProvider = (provider: string): void => {
                         </div>
                     </div>
 
-                    <!--
-                        A Front Desk is configured by where it embeds and who may talk to it, not the shared listener fields, which fold away. Eight
-                        fields flow two-up instead of stacking eight rows.
-                    -->
+                    <!-- Front Desk settings describe its embed location and audience. -->
                     <div v-if="isFrontDesk" class="grid gap-3 @2xl:grid-cols-2">
                         <label class="ui-field @2xl:col-span-2">
                             <span class="ui-field-label">Allowed sites</span>
@@ -600,10 +587,7 @@ const setProvider = (provider: string): void => {
                         <template v-if="'runs' in cronPreview">Next runs: {{ cronPreview.runs.map(formatDateTime).join(" · ") }}</template>
                         <template v-else>{{ cronPreview.error }}</template>
                     </p>
-                    <!--
-                        Gates on sessions since the last wake, not elapsed time; a due run short of the bar shows as skipped, with the count, not as
-                        a failure.
-                    -->
+                    <!-- Gates use sessions since the last wake, not elapsed time. -->
                     <label class="flex flex-wrap items-center gap-2 text-xs text-muted">
                         Only once
                         <input
@@ -621,10 +605,7 @@ const setProvider = (provider: string): void => {
                     </p>
                 </template>
 
-                <!--
-                    CI has no held-open gateway: its events arrive by webhook, or by polling if that couldn't register. Stated here, or a silently
-                    dead row is only found from an empty run history.
-                -->
+                <!-- CI has no held-open gateway: its events arrive by webhook, or by polling if that couldn't register. -->
                 <p v-if="isCi && delivery" class="flex items-start gap-1.5 text-xs" :class="DELIVERY_TONE[delivery.state]">
                     <Icon :name="DELIVERY_ICON[delivery.state]" class="mt-0.5 shrink-0 text-2xs" />
                     <span>
@@ -635,25 +616,19 @@ const setProvider = (provider: string): void => {
             </div>
         </section>
 
-        <!-- ── THEN ──────────────────────────────────────────────────────────────────────────────────────── -->
+        <!-- THEN -->
         <section class="flex flex-col gap-3 py-4 @2xl:flex-row @2xl:gap-6">
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
                 <span :class="ui.sectionLabel()">Then</span>
                 <span class="text-2xs text-subtle">What it wakes with.</span>
-                <!--
-                    Unvalidated, but must agree with the trigger above (a Discord briefing on a CI trigger reads a payload it never gets); the rail
-                    names its starting point while it's still unedited.
-                -->
+                <!-- Validation must agree with the trigger's payload shape. -->
                 <span v-if="recipeNote" class="mt-1 text-2xs text-subtle">Starter from {{ recipeNote }}.</span>
                 <span v-else-if="starterPrompt && form.prompt === starterPrompt" class="mt-1 text-2xs text-subtle">
                     {{ listenerSource.label }}'s starter, yours to rewrite.
                 </span>
             </div>
             <label class="ui-field min-w-0 flex-1 cursor-text">
-                <!--
-                    A writing surface, not a form control, using the same bare field the story editor does: no box, no fill, focus lights the line,
-                    not a rectangle. `-mx-2` aligns its text with the column; `min-h-24` keeps an empty prompt clickable.
-                -->
+                <!-- Use the story editor's borderless prose field for this writing surface. -->
                 <ProseField
                     ref="promptField"
                     v-model="form.prompt"
@@ -674,30 +649,18 @@ const setProvider = (provider: string): void => {
             </label>
         </section>
 
-        <!-- ── RUNS AS ───────────────────────────────────────────────────────────────────────────────────── -->
-        <!--
-            Decides who the agent is outside the sandbox, what pays for the wake, and whether it can act unwatched: exactly what a reader of someone
-            else's automation most wants to see, so nothing here folds away.
-        -->
+        <!-- RUNS AS -->
+        <!-- This group defines the agent, wake cost, and unattended authority. -->
         <section class="flex flex-col gap-3 pt-4 @2xl:flex-row @2xl:gap-6">
-            <!--
-                "How", not "Runs as": that label sat inches from a field called "Runs on", one letter apart and meaning different things (what pays
-                vs. whose accounts). Also completes the sentence When · Then · How.
-            -->
+            <!-- “How” distinguishes the agent's behavior from where it runs. -->
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
                 <span :class="ui.sectionLabel()">How</span>
                 <span class="text-2xs text-subtle">Who it runs as, and what pays for it.</span>
             </div>
             <div class="flex min-w-0 flex-1 flex-col gap-3">
-                <!--
-                    Side by side, not stacked, since stacking these two same-shaped pickers invited confusing what pays ("Runs on") with who it acts
-                    as ("Runs as").
-                -->
+                <!-- Keep the same-shaped behavior and runtime pickers side by side. -->
                 <div class="grid gap-3 @xl:grid-cols-2">
-                    <!--
-                        In the order the daemon walks it: row 1 is preferred, the rest catch it when that account is out, the difference between a
-                        quiet morning and a wake that never happened.
-                    -->
+                    <!-- Preserve the daemon's preference order so fallback remains predictable. -->
                     <div class="ui-field min-w-0">
                         <span class="ui-field-label">Runs on</span>
                         <div class="flex min-w-0 flex-col gap-1.5">
@@ -715,10 +678,7 @@ const setProvider = (provider: string): void => {
                                     <span class="min-w-0 flex-1 truncate">{{ label }}</span>
                                     <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
                                 </button>
-                                <!--
-                                    Invisible, not absent, on the first row: removing it would shorten that row's chip and misread as a layout
-                                    mistake.
-                                -->
+                                <!-- Keep the first-row spacer so its chip aligns with later rows. -->
                                 <button
                                     type="button"
                                     v-tooltip.top="`Try this one earlier`"
@@ -754,7 +714,7 @@ const setProvider = (provider: string): void => {
                         <Picker v-model="form.actsAs" :options="personaOptions" aria-label="Persona this automation runs as" class="w-full" />
                     </div>
                 </div>
-                <!-- Blank on a Front Desk isn't "unbounded": saving writes a read-only front-desk persona, which no control on screen shows. -->
+                <!-- A blank Front Desk uses the saved read-only persona's boundary. -->
                 <p v-if="isFrontDesk && form.actsAs === ``" class="-mt-1 text-2xs text-subtle">
                     Strangers write these prompts, so saving adds a read-only front desk to your personas.
                 </p>
@@ -786,10 +746,7 @@ const setProvider = (provider: string): void => {
                     Visitors get no answer in the widget: approved replies land in your chat instead.
                 </p>
 
-                <!--
-                    Folded away since it's not the usual answer: the persona above is reusable, this only narrows one job further, and can never
-                    grant back what the persona's card switched off.
-                -->
+                <!-- Keep the extra job restriction folded because it is uncommon. -->
                 <details v-if="form.actsAs !== ``" class="text-xs">
                     <summary class="cursor-pointer text-muted hover:text-content">Narrow this one job further</summary>
                     <div class="ui-field mt-2 max-w-sm">

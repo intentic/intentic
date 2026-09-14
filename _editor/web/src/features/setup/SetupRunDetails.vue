@@ -1,7 +1,4 @@
-<!--
-    Reference for what the install command creates, and the line that removes it again. Renders in two places (a docked column above `xl`, or under
-    step 3's hint below it); only one is ever visible, via `display:none`, so nothing renders twice.
--->
+<!-- Reference for what the install command creates, and the line that removes it again. -->
 <script setup lang="ts">
 import { Button, Code, CopyButton, commandLang, useOsPreference } from "@intentic/ui";
 import { computed } from "vue";
@@ -14,22 +11,14 @@ const { cmdOs } = useOsPreference();
 // it, are the same facts whichever window is reading them.
 const desktop = computed(() => desktopVersion() !== undefined);
 
-/* `cleanup` is the undo, passed in because it tracks the same OS choice as the command itself.
- *
- * `downloads` is off wherever the step itself now leads with an installer for the reader's own machine: the
- * two offers were the same offer, and the one on the card is the one with a verb on it. It stays ON for the
- * reader whose card has no button, a Mac, where the app is nothing to do with the machine being set up but is
- * still the thing that will manage it afterwards. */
+/* `cleanup` is the undo, passed in because it tracks the same OS choice as the command itself. */
 const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?: boolean }>();
 </script>
 
 <template>
     <div class="flex flex-col gap-3">
         <p class="text-sm font-medium text-content">What this does</p>
-        <!-- ONE CLAUSE A LINE. Each of these used to carry its own footnote (the container names, "nothing
-             deployed", "runs as you, no root") and a reference panel nobody finishes reading answers nothing.
-             The line naming the dotfiles it writes is gone outright: where a log lands is not a fact anybody
-             is weighing while deciding whether to paste a command. -->
+<!-- ONE CLAUSE A LINE. -->
         <ul class="flex flex-col gap-2 text-xs leading-relaxed text-muted">
             <li class="flex items-start gap-2">
                 <Icon name="box" class="mt-0.5 shrink-0 text-link" />
@@ -47,16 +36,12 @@ const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?:
             </li>
             <li class="flex items-start gap-2">
                 <Icon name="cloud" class="mt-0.5 shrink-0 text-link" />
-                <!-- The fabric changed under this line and the line did not: it named Cloudflare long after
-                     the box stopped dialling one. What the reader is weighing has not changed — nothing is
-                     opened ON their machine — so the promise is the same and only the vendor claim goes. -->
+<!-- The fabric changed under this line and the line did not: it named Cloudflare long after the box stopped dialling one. -->
                 <span class="min-w-0">Dials <span class="text-content">out</span> to reach your browser, no inbound ports</span>
             </li>
         </ul>
 
-        <!-- A visible alternative to the terminal path, kept in the reference column where it can be weighed
-             before somebody commits to the command. The Linux vanity URL serves the AppImage, which works
-             across distributions without asking the reader to choose a package format here. -->
+<!-- A visible alternative to the terminal path, kept in the reference column where it can be weighed before somebody commits to the command. -->
         <div v-if="!desktop && downloads" class="flex flex-col gap-2 border-t border-line pt-3">
             <p class="text-xs text-subtle">Or use the desktop app</p>
             <div class="grid grid-cols-2 gap-2">
@@ -69,21 +54,15 @@ const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?:
             </div>
         </div>
 
-        <!-- The undo. It used to sit on the card, on the argument that knowing the undo exists is worth a row of
-             the install step: true, but it earned that row by being the only place it could go. Here it is
-             permanently visible on a wide screen instead of one row among eight, and on a narrow one it is a tap
-             away in the same panel as the rest of what running this means. -->
+<!-- The undo. -->
         <div class="flex flex-col gap-1 border-t border-line pt-3 text-xs text-muted">
-            <!-- The copy button rides the label, not the command. Beside the command it took ~25px off the
-                 one line that has to survive intact, and a one-liner that wraps stops looking like a thing you
-                 run: the docked column is sized (Setup.vue's aside) so the command clears its full width. -->
+<!-- The copy button rides the label, not the command. -->
             <span class="flex items-center gap-2">
                 <Icon name="undo" class="shrink-0 text-subtle" />
                 Removes all of it
                 <CopyButton :text="cleanup" class="-my-1 ml-auto" />
             </span>
-            <!-- Same highlighted block as the install command: the OS tab on the run step picks bash vs
-                 PowerShell, and this line tracks that choice via the parent's cleanup prop. -->
+<!-- Same highlighted block as the install command: the OS tab on the run step picks bash vs PowerShell. -->
             <Code :code="cleanup" :lang="commandLang(cmdOs)" :wrap="true" :copyable="false" />
         </div>
     </div>

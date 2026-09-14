@@ -223,11 +223,8 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
 </script>
 
 <template>
-    <!-- Switches on the query rather than layering modals, since the designer and a run each need the whole page; `h-full` since neither scrolls. -->
-    <!--
-        Closes to the list on save rather than navigating `?edit=new` to `?edit=<id>`, which would remount the designer (`editing` is its `:key`) as
-        a visible flicker.
-    -->
+    <!-- The query selects the full-page designer or run view. -->
+    <!-- Saving returns to the list without remounting the designer. -->
     <WorkflowDesigner
         v-if="designing"
         :key="editing"
@@ -255,7 +252,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
         </Notice>
 
         <div class="flex flex-col gap-6">
-            <!-- Live runs sit above saved designs. A progress bar, not a sentence, per-step and tinted by the same table the canvas uses. -->
+            <!-- Live runs precede saved designs and show per-step progress. -->
             <section v-if="live.length > 0">
                 <div class="mb-2 flex items-center gap-2 px-0.5">
                     <Icon name="spinner" spin class="text-2xs text-link" />
@@ -303,10 +300,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                             </div>
                             <span class="skeleton block h-6 w-16 shrink-0" />
                         </div>
-                        <!--
-                            Keeps the frame's own wash instead of filling it with skeleton; `h-36` matches WorkflowCard's frame height for a two-node
-                            graph, and must stay on the surface's allowed scale.
-                        -->
+                        <!-- Loading cards preserve the workflow frame and height. -->
                         <div class="flex h-36 w-full flex-col items-center justify-center gap-3 rounded-lg bg-content/4">
                             <span v-for="node in 2" :key="node" class="skeleton block h-14 w-52 rounded-md" />
                         </div>
@@ -435,10 +429,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                 </Row>
             </RowGroup>
 
-            <!--
-                Same dashed card as a saved workflow, not a bare box, so it reads as one of those, ready-made. Stacked, not gridded: the two
-                templates differ in machinery, best read down a row rather than spotted in thumbnails.
-            -->
+<!-- Same dashed card as a saved workflow, not a bare box, so it reads as one of those, ready-made. -->
             <section>
                 <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5">
                     <span :class="ui.sectionLabel()">Start from a template</span>

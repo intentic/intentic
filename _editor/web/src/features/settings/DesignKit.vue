@@ -1,8 +1,4 @@
-<!--
-    Dev-only page (behind `import.meta.env.DEV`) showing every shared component, state and scale together so drift between them is visible on one
-    screen. Scales render before components, each token name printed beside its sample. Excludes anything needing the daemon, an agent, a repository
-    or a signed-in user.
--->
+<!-- Dev-only page (behind `import.meta.env.DEV`) showing every shared component, state and scale together so drift between them is visible on one screen. -->
 <script setup lang="ts">
 import {
     AnchoredOverlay,
@@ -393,10 +389,7 @@ const pickedTier = ref(`collaborator`);
                     </RowGroup>
                 </div>
 
-                <!--
-                    compact is <RowGroup>'s default; dense is the navigator rail, comfortable a card's masthead. Neither the rows, the outline, nor
-                    the notes vary by size on their own.
-                -->
+                <!-- compact is <RowGroup>'s default; dense is the navigator rail, comfortable a card's masthead. -->
                 <h3 :class="ui.sectionLabel(`text-2xs`)">Tiers, and the lines that are not rows</h3>
                 <div class="grid gap-4 md:grid-cols-3">
                     <RowGroup
@@ -417,10 +410,7 @@ const pickedTier = ref(`collaborator`);
                     </RowGroup>
                 </div>
 
-                <!--
-                    Every disclosure-row shape, side by side, both hit areas and bodies open at once, so the next one added is picked from a picture,
-                    not guessed.
-                -->
+                <!-- Show each disclosure shape with its hit area and body. -->
                 <h3 :class="ui.sectionLabel(`text-2xs`)">Disclosure rows</h3>
                 <div class="grid gap-4 md:grid-cols-2">
                     <RowGroup label="hit=header · body=rail" caption="evidence about the row, hung off its title">
@@ -443,7 +433,7 @@ const pickedTier = ref(`collaborator`);
                     <RowGroup label="hit=pair · body=drawer" caption="a place of its own; the headline's link keeps its own press">
                         <DisclosureRow v-model:open="kitDrawer" body="drawer" hit="pair">
                             <template #lead><Icon name="wrench" class="text-sm text-subtle" /></template>
-                            <!-- `w-fit` keeps the underline on the text; `block` would let the link's hit area span the row's full width. -->
+                            <!-- The link underline follows its text, not the full row. -->
                             <template #title>
                                 <a href="#" class="block w-fit max-w-full hover:text-link hover:underline">A headline that navigates</a>
                             </template>
@@ -454,7 +444,7 @@ const pickedTier = ref(`collaborator`);
                             </template>
                         </DisclosureRow>
                         <DisclosureRow v-model:open="kitBefore" body="drawer">
-                            <!-- Selection column sits outside the toggle (a checkbox nested in a button is invalid) but inside the tint. -->
+                            <!-- Selection stays beside, not inside, the row toggle. -->
                             <template #before><Checkbox :model-value="true" binary size="small" class="ml-4" /></template>
                             <template #title>With a #before selection column</template>
                             <template #meta><StatusBadge variant="success" label="pass" size="xs" /></template>
@@ -529,10 +519,7 @@ const pickedTier = ref(`collaborator`);
                 </p>
                 <StatusTally :items="COUNTS" />
                 <StatStrip :items="STATS" />
-                <!--
-                    No container or margin of its own; the caller supplies both, on a card or inside a row's #below alike. With no figure, the value
-                    is a plain word.
-                -->
+                <!-- No container or margin of its own; the caller supplies both, on a card or inside a row's #below alike. -->
                 <div class="flex flex-wrap items-start gap-x-10 gap-y-4">
                     <Verdict size="lg" tone="success" value="25%" unit="of command output removed" />
                     <Verdict tone="success" value="↓12%" unit="searches per turn" detail="±3.1pp (95%)" evidence="329 taught · 94 cold" />
@@ -556,7 +543,7 @@ const pickedTier = ref(`collaborator`);
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Controls</h2>
 
-                <!-- Every tier in every state, one grid, since the differences are only checkable side by side. Read down for rank, across for state. -->
+                <!-- Every tier in every state, one grid, since the differences are only checkable side by side. -->
                 <div class="overflow-x-auto">
                     <table class="w-full min-w-[34rem] border-separate border-spacing-x-3 border-spacing-y-2 text-left">
                         <thead>
@@ -603,10 +590,7 @@ const pickedTier = ref(`collaborator`);
                     <PageAction label="Refresh" icon="refresh" hint="Re-read everything" />
                     <PageAction label="Quiet" icon="cog" quiet />
                 </div>
-                <!--
-                    tabindex isn't needed to see focus — click into any field. The disabled column is the one to check per skin: fields dim rather
-                    than repaint.
-                -->
+                <!-- tabindex isn't needed to see focus — click into any field. -->
                 <div class="flex flex-col gap-2">
                     <span :class="ui.sectionLabel(`text-2xs`)">Fields: every variant against every state</span>
                     <!-- `minmax(0, 1fr)`, not bare `1fr`: a grid item's implicit min-width is auto and won't shrink otherwise. -->
@@ -700,10 +684,7 @@ const pickedTier = ref(`collaborator`);
                     <span class="ui-field-label">Code</span>
                     <Code :code="source" lang="typescript" />
                 </div>
-                <!--
-                    Not a code field or a prose field: a markdown document is neither source nor a plain paragraph. Both save modes (auto, explicit)
-                    are shown since that's the caller's one real choice.
-                -->
+                <!-- Not a code field or a prose field: a markdown document is neither source nor a plain paragraph. -->
                 <div class="grid max-w-read-lg gap-6 md:grid-cols-2">
                     <div class="flex flex-col gap-1">
                         <span class="ui-field-label">MarkdownDocument · save="auto"</span>
@@ -778,10 +759,7 @@ const pickedTier = ref(`collaborator`);
             <p class="mt-3 text-xs text-muted">This can't be undone.</p>
         </ConfirmDialog>
 
-        <!--
-            Same fixture the Share line above reads from, so the two views can't drift apart. Engine is 32 GiB / 8 cores so the rails read as real
-            numbers; `work` needs --privileged, so its switch draws locked.
-        -->
+        <!-- Same fixture the Share line above reads from, so the two views can't drift apart. -->
         <SandboxResourcesDialog
             :open="resourcesOpen"
             name="work"

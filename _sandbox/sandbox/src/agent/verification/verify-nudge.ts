@@ -12,7 +12,7 @@ import { startConversationTurn } from "../run/turn/turn-resume.js";
 import { seedFields } from "../run/turn/turn-seed.js";
 
 // Delivers the turn.ending follow-up on the runtimes with no Stop hook: the built-ins read off the frame ledgers, and
-// what the daemon's own run of the command rules found. Sends a fresh daemon-started turn rather than a steer, since a steer queue can vanish mid-unwind;
+// what the daemon's own run of the command rules found.
 // Claude keeps its cheaper in-turn hook. Spends a turn on the user's behalf, so it is gated: the rule must stand, its
 // conditions must hold, the work unproven, and a nudge never answers a nudge.
 
@@ -45,14 +45,7 @@ const builtinRule = (rules: readonly Rule[], name: RuleBuiltin, paths: readonly 
 
 export interface VerifyNudge {
     readonly conversationId: string;
-    /* The turn that just ended. Its whole identity is copied onto the follow-up (agent/run/turn/turn-seed.ts) —
-     * provider, harness, account, model, effort, reasoning, speed, persona, posture and job — because the
-     * follow-up has to run WHERE the work ran, or it is asking a different agent about somebody else's edits.
-     *
-     * "Whole" is load-bearing and was not true: this copied five of those and dropped `thinking`, `fast` and
-     * `actsAs`, so a nudge on a reasoning-off turn came back reasoning, and a nudge on a persona's turn came
-     * back as nobody — with that card's toolbox and signed-in accounts gone, in a follow-up whose entire job is
-     * to go and run something. */
+/* The turn that just ended. */
     readonly seed: AgentTurn;
     readonly rules: readonly Rule[];
     readonly ledger: VerificationLedger;
@@ -137,15 +130,7 @@ const deliver = async (live: VerifyNudgeRuntime, nudge: VerifyNudge, message: st
                 prompt: message,
                 conversationId,
                 ...(sessionId !== undefined ? { sessionId } : {}),
-                /* THE NUDGED TURN, WHOLE (agent/run/turn/turn-seed.ts): same provider, same model, same reasoning,
-                 * same persona, same job. This module's standing rule is that a follow-up on a different model
-                 * is a different agent asked about somebody else's edits, and it meets them cold — the whole
-                 * value of resuming the session above is a context the provider has already cached.
-                 *
-                 * It used to fall back to a `verify-nudge` model role when the nudged turn named no model, which
-                 * could not happen and would have been wrong if it had: the fill step that reads a role only
-                 * looks at a turn that is unattended and names neither model nor provider (turn-resume.ts), so
-                 * the row bound for nothing while advertising exactly the model switch this rule forbids. */
+/* THE NUDGED TURN, WHOLE (agent/run/turn/turn-seed.ts): same provider, same model, same reasoning, same persona, same job. */
                 ...seedFields(seed),
             });
             if (started) {

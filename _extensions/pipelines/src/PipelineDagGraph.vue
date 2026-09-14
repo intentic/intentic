@@ -171,10 +171,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                             :spin="toneOf(member.job).spin"
                             :class="toneOf(member.job).text"
                         />
-                        <!--
-                            Name first, one line: the stage would only repeat the card's own column, and duration needs its own comparison across a
-                            fan-out.
-                        -->
+                        <!-- Stage names lead the row; duration has its own metadata slot. -->
                         <!-- One size below body text: at the larger size, most names in a 184px card truncated to ellipsis. -->
                         <span
                             class="min-w-0 flex-1 truncate text-2xs font-medium leading-tight"

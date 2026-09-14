@@ -1,7 +1,4 @@
-<!--
-    Grouped-list section: an optional uppercase label (with a count/`#actions`) above one bordered surface of hairline-divided rows. Pairs with
-    <Row>; stack multiple groups in a `flex flex-col gap-6` wrapper.
--->
+<!-- Grouped-list section: an optional uppercase label (with a count/`#actions`) above one bordered surface of hairline-divided rows. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import { ui } from "../../lib/ui.js";
@@ -42,10 +39,7 @@ provideRowDensity(computed(() => density));
             <slot name="label"
                 ><span v-if="label !== undefined" :class="ui.sectionLabel()">{{ label }}</span></slot
             >
-            <!--
-                Butted against the label (like PageHeader's `#info`) so an <InfoHint>/<InfoDialog> reads as belonging
-                to the group's name, not to the first row under it.
-            -->
+<!-- Info controls stay attached to the group label. -->
             <slot name="info" />
             <span v-if="count !== undefined" class="text-2xs font-medium text-subtle">{{ count }}</span>
             <span v-if="caption !== undefined" class="min-w-0 text-2xs text-subtle">{{ caption }}</span>

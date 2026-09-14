@@ -3,8 +3,7 @@ import type { IconName } from "@intentic/ui";
 import { computed } from "vue";
 import { Button, formatBytes } from "@intentic/ui";
 
-/* The non-renderable states of the viewer: a binary file (no inline preview), a file too large to preview, or
- * an empty file. Binary/too-large offer a Download (the dispatcher fetches the bytes and saves them). */
+/* The non-renderable states of the viewer: a binary file (no inline preview), a file too large to preview, or an empty file. */
 
 const { mode, size } = defineProps<{ mode: `binary` | `too-large` | `empty`; size?: number }>();
 const emit = defineEmits<{ download: [] }>();

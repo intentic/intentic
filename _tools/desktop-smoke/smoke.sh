@@ -197,7 +197,7 @@ app_died() {
 
 echo "==> smoke: ${KIND}"
 
-# ── 1. install ────────────────────────────────────────────────────────────────────────────────────────────────
+# 1. install
 case "$KIND" in
     deb)
         artifact="$(desktop_artifact /artifacts deb)"
@@ -251,7 +251,7 @@ case "$KIND" in
         ;;
 esac
 
-# ── 2. what the install put on disk ───────────────────────────────────────────────────────────────────────────
+# 2. what the install put on disk
 if [ -n "$BINARY" ] && [ -x "$BINARY" ]; then
     pass "executable at $BINARY"
 else
@@ -283,7 +283,7 @@ if [ "$KIND" = "deb" ]; then
     fi
 fi
 
-# ── 3. a display, a session bus, and something to load ────────────────────────────────────────────────────────
+# 3. a display, a session bus, and something to load
 Xvfb ":${DISPLAY_NUM}" -screen 0 1600x1000x24 >/tmp/xvfb.log 2>&1 &
 until_true 20 "Xvfb is up on ${DISPLAY}" xdpyinfo -display "$DISPLAY" || exit 1
 
@@ -294,7 +294,7 @@ python3 -m http.server 8099 --directory /srv/stub >/tmp/stub.log 2>&1 &
 until_true 15 "stub workspace origin is serving" \
     python3 -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8099').read()" || exit 1
 
-# ── 4. the deep link a FRESH INSTALL gets, before the app has ever run ─────────────────────────────────────────
+# 4. the deep link a FRESH INSTALL gets, before the app has ever run
 # Deb only, and FIRST — this is the one moment the package's OWN .desktop entry is the handler. The app rewrites
 # that registration on its first run (register_all in lib.rs, with an Exec of its own), so every assertion made
 # after a single launch tests the app's handler and none of them test the shipped one. Which is how an entry
@@ -319,7 +319,7 @@ if [ "$KIND" = "deb" ]; then
     quit_app
 fi
 
-# ── 5. launch ─────────────────────────────────────────────────────────────────────────────────────────────────
+# 5. launch
 setsid "${LAUNCH[@]}" >"$LOG" 2>&1 &
 APP_PID=$!
 
@@ -336,7 +336,7 @@ else
     app_died "the process exited during startup"
 fi
 
-# ── 6. the registration an AppImage does for itself ───────────────────────────────────────────────────────────
+# 6. the registration an AppImage does for itself
 # The AppImage has no installer, so lib.rs registers the scheme itself on first run. That is the fallback the
 # whole AppImage deep-link path rests on, and it is best-effort in the code — so assert it actually happened.
 if [ "$KIND" = "appimage" ]; then
@@ -346,7 +346,7 @@ if [ "$KIND" = "appimage" ]; then
     fi
 fi
 
-# ── 7. the deep link, into the app that is already running ────────────────────────────────────────────────────
+# 7. the deep link, into the app that is already running
 # xdg-open, not a direct argv call: this is the route a link takes from an external browser, and it exercises
 # the MIME entry and the handler lookup along with the app's own forwarding.
 xdg-open "$LINK" >/tmp/xdg-open.log 2>&1 || true
@@ -408,7 +408,7 @@ else
     app_died "the original instance died while handling the link"
 fi
 
-# ── 8. the deep link an AppImage gets once it has been run and quit ────────────────────────────────────────────
+# 8. the deep link an AppImage gets once it has been run and quit
 # The AppImage's own tier of section 4, and it has to come last: nothing installs an AppImage's .desktop entry,
 # so until the app has run once and registered itself there is no handler at all and a link goes nowhere. This
 # is the state a user leaves it in — downloaded, run, closed — and the next link they click has to start it

@@ -1,9 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-/* The trip between the two units. What this really guards is the round trip: a reader drags a column to some
- * position on screen, and what comes back out on the next paint has to be that same position: at every text
- * size, or a column would creep every time it was touched. */
+/* The trip between the two units. */
 
 const load = async () => ({ ...(await import("./uiScale")), ...(await import("@intentic/ui/text-size")) });
 

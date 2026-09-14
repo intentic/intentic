@@ -1,7 +1,4 @@
-/* Link harvesting for the crawler, off the ORIGINAL tree — pruning strips navigation, and navigation is
- * exactly where a site's structure lives, so the frontier reads the page before fit-mode touched it.
- * URLs are normalized to their crawl identity: fragment gone (same document), default port folded away,
- * http(s) only. The anchor text rides along because it is the best-first scorer's main signal. */
+/* Link harvesting for the crawler, off the ORIGINAL tree — pruning strips navigation, and navigation is exactly where a site's structure lives. */
 import { attr, elementsByTag, type Node, textOf } from "./dom.js";
 
 export interface Link {

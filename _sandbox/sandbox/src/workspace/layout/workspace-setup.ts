@@ -131,8 +131,7 @@ export const startInstall = async (root: string, project: WorkspaceProject, proc
 // The one paragraph a turn is told when /work isn't installed; native runtimes have no other seam for it.
 // A stale project is never told to install; the daemon reconciles it, since an in-turn install rewrites other turns'
 // mounted tree.
-// Says NEXT turn, not "once idle": the reconciler defers while any turn is live, so idle depends on the turn reading
-// it.
+// Schedule the note for the next turn, not merely the next idle period.
 
 // Fixed opening stripTurnPreamble anchors on to recognize an injected note in a stored message.
 export const SETUP_NOTICE_HEADER =

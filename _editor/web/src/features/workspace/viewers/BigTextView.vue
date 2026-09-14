@@ -167,10 +167,7 @@ watch(
             >
                 <Icon :name="following ? `wave-pulse` : `chevron-down`" class="text-[0.7rem]" /> Follow
             </Button>
-            <!--
-                Shown only when download would work: /workspace/raw 413s past RAW_MAX_BYTES, and a button whose only job is
-                to fail is worse than none.
-            -->
+<!-- Shown only when download would work: /workspace/raw 413s past RAW_MAX_BYTES, and a button whose only job is to fail is worse than none. -->
             <Button
                 v-if="size <= RAW_MAX_BYTES"
                 size="small"

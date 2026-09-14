@@ -968,11 +968,7 @@ const refuseSubmit = (entry: NonNullable<typeof selected.value>): void => {
     });
 };
 
-/* THE WALLET'S CAPS ARE THE PLATFORM'S TO ENFORCE, so its card is two writes (model/walletPolicy.ts): the
- * daemon's, then the platform's, over this browser's session. Second, so a card the daemon refused sets
- * nothing. Its failure is SAID rather than folded into a saved card: the daemon now shows the new numbers while
- * the signer still holds the old ones, which is a state the reader has to know they are in. Answers whether the
- * submit may go on to leave the card. */
+/* THE WALLET'S CAPS ARE THE PLATFORM'S TO ENFORCE, so its card is two writes (model/walletPolicy.ts):. */
 const pushedWalletPolicy = async (entry: NonNullable<typeof selected.value>, config: Record<string, string>): Promise<boolean> => {
     if (entry.kind !== `wallet`) {
         return true;
@@ -1002,9 +998,7 @@ const submit = async (): Promise<void> => {
     }
     submitting.value = true;
     error.value = null;
-    /* One write for both, because the daemon's is one write: adding and editing are the same upsert over the
-     * same id. The only difference is what a blank credential box means, and `keptSecrets` is what carries that
-     *: a kept one goes down as the marker the daemon resolves back into the stored value. */
+    /* One write for both, because the daemon's is one write: adding and editing are the same upsert over. */
     const config = buildConfig(entry, values, keptSecrets.value);
     const input: AddCapabilityInput = { id: savedName.value, kind: entry.kind, config };
     // Read BEFORE the write, like `next` below: a one-per-sandbox card that is being connected for the first
@@ -1128,22 +1122,13 @@ const submitLabel = computed(() => {
             <Notice v-if="topError" :of="topError" />
         </template>
 
-        <!--
-            The rail narrows the grid rather than replacing it, so on mobile <SplitView> folds it above the grid
-            (`mobile="collapse"`, the default).
-        -->
+<!-- The rail narrows the grid rather than replacing it, so on mobile <SplitView> folds it above the grid (`mobile="collapse"`, the default). -->
         <template #rail>
             <CapabilityRail v-model="railScope" :pinned="pinnedScopes" :categories="categoryScopes" />
         </template>
 
         <template #detail>
-            <!--
-                Configure + apply the picked capability, in two columns: the form keeps reading width and everything
-                the card
-                says docks beside it (<CapabilityContext>). A @container breakpoint, not viewport, since the pane
-                shares room
-                with the shell.
-            -->
+<!-- Capability configuration and apply share the card layout. -->
             <div v-if="selected" class="scrollbar-thin scrollbar-stable @container min-h-0 flex-1 overflow-y-auto pr-2">
                 <div class="mx-auto flex max-w-xl flex-col @3xl:max-w-none @3xl:flex-row @3xl:items-start @3xl:justify-center @3xl:gap-6">
                     <!-- Capped below the reading measure: this column holds single-line inputs, not prose. -->
@@ -1153,11 +1138,7 @@ const submitLabel = computed(() => {
                             <Icon name="arrow-left" class="text-2xs" /> {{ activeScope.label }}
                         </button>
 
-                        <!--
-                            The walk's own strip: position in it, and a way past a card. Counts what's left, not a step
-                            number, since a
-                            connected card leaves the queue.
-                        -->
+<!-- The walk's own strip: position in it, and a way past a card. -->
                         <div v-if="walking" class="mb-4 flex items-center gap-2 rounded-lg border border-line bg-card px-3 py-2">
                             <Icon name="sparkles" class="text-info" />
                             <span class="text-xs text-content">Recommended setup</span>
@@ -1165,11 +1146,7 @@ const submitLabel = computed(() => {
                             <Button class="ml-auto" label="Skip" size="small" severity="secondary" text @click="skip" />
                         </div>
 
-                        <!--
-                            Card heading plus, for a singleton card, its state (which describes the whole screen, not
-                            one row) and its
-                            removal control.
-                        -->
+<!-- Card heading plus, for a singleton card, its state (which describes the whole screen, not one row) and its removal control. -->
                         <div class="mb-4 flex items-center gap-3">
                             <BrandMark :size="32" :name="selected.name" :logo="selected.logo" :icon="entryIcon(selected)" />
                             <div class="min-w-0 flex-1">
@@ -1197,10 +1174,7 @@ const submitLabel = computed(() => {
                             </Button>
                         </div>
 
-                        <!--
-                            A singleton card with no finished setup has no row to carry its pending step, so it goes
-                            here instead.
-                        -->
+<!-- A singleton card with no finished setup has no row to carry its pending step, so it goes here instead. -->
                         <RouterLink
                             v-if="soleInstance && soleRebuildStep(soleInstance)"
                             to="/sandbox/environment"
@@ -1216,12 +1190,7 @@ const submitLabel = computed(() => {
                         </Notice>
 
                         <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
-                            <!--
-                                What you already have of this card, suppressed on a singleton card. A VPN's list is its
-                                own component since a
-                                tunnel's state (address, routes, live client progress) isn't the generic {state,
-                                detail}.
-                            -->
+<!-- What you already have of this card, suppressed on a singleton card. -->
                             <VpnConnections
                                 v-if="selected.kind === 'vpn' && selectedInstances.length > 0"
                                 :instances="selectedInstances"
@@ -1254,10 +1223,7 @@ const submitLabel = computed(() => {
                                     @rename="askRename(instance.id)"
                                     @remove="askRemove(instance.id)"
                                 />
-                                <!--
-                                    Last, after what is actually connected: machines already reachable through
-                                    desktop sync, which this card would give commands, files and screen.
-                                -->
+<!-- Last, after what is actually connected: machines already reachable through desktop sync, which this card would give commands, files and screen. -->
                                 <SyncOnlyDeviceRow
                                     v-for="device in selectedDevices"
                                     :key="device.id"
@@ -1266,11 +1232,7 @@ const submitLabel = computed(() => {
                                 />
                             </RowGroup>
 
-                            <!--
-                                The gateway serving these connections, answering "is this still working" where the
-                                connector page is actually
-                                read.
-                            -->
+<!-- The gateway serving these connections, answering "is this still working" where the connector page is actually read. -->
                             <RowGroup
                                 v-if="cardProcesses.length > 0"
                                 label="Background process"
@@ -1317,17 +1279,10 @@ const submitLabel = computed(() => {
                                 </Row>
                             </RowGroup>
 
-                            <!--
-                                Fills this form from FortiClient's own file; keyed on the card so switching cards
-                                clears the zone.
-                            -->
+<!-- Fills this form from FortiClient's own file; keyed on the card so switching cards clears the zone. -->
                             <ForticlientImport v-if="selected.kind === 'vpn'" :key="selected.id" @pick="pickForticlient" @notice="error = $event" />
 
-                            <!--
-                                Where extensions are found, on the card people arrive at wanting one. This form stays
-                                the "I already have a repo
-                                and commit" path; browsing published ones is a separate surface, one link away.
-                            -->
+<!-- Where extensions are found, on the card people arrive at wanting one. -->
                             <RouterLink
                                 v-if="selected.kind === 'extension'"
                                 to="/sandbox/extensions?view=browse"
@@ -1356,41 +1311,26 @@ const submitLabel = computed(() => {
                                 @notice="error = $event"
                             />
 
-                            <!--
-                                States the form's intent up front, since the same fields mean "add" or "change this
-                                one". The name is worded
-                                into the sentence when editing, not a box, since there's nothing left to type.
-                            -->
+<!-- States the form's intent up front, since the same fields mean "add" or "change this one". -->
                             <div
                                 v-if="editing || selected.singleton || selectedInstances.length > 0"
                                 class="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"
                             >
                                 <div :class="ui.sectionLabel()">
-                                    <!--
-                                        A singleton card always says "Settings": it never adds a second anything, and
-                                        has no name to show.
-                                    -->
+<!-- A singleton card always says "Settings": it never adds a second anything, and has no name to show. -->
                                     <template v-if="selected.singleton">Settings</template>
                                     <template v-else-if="editing">
                                         Editing <span class="font-mono normal-case">{{ editing.id }}</span>
                                     </template>
                                     <template v-else>Add another</template>
                                 </div>
-                                <!--
-                                    Way out of an edit, beside what it's editing, not by the submit button, which stays
-                                    reachable from anywhere
-                                    already.
-                                -->
+<!-- Way out of an edit, beside what it's editing, not by the submit button, which stays reachable from anywhere already. -->
                                 <button v-if="editing && !selected.singleton" type="button" :class="ui.linkButton(`text-2xs`)" @click="stopEditing">
                                     Cancel: add another instead
                                 </button>
                             </div>
 
-                            <!--
-                                No name box while editing or on a singleton card: renaming moves state a form can't
-                                (askRename), so a second box
-                                here would be a lossy shortcut for it.
-                            -->
+<!-- No name box while editing or on a singleton card: renaming moves state a form can't (askRename), so a second box here would be a lossy shortcut for it. -->
                             <label v-if="!selected.singleton && !editing" class="ui-field">
                                 <span class="ui-field-label">Name</span>
                                 <input
@@ -1400,11 +1340,7 @@ const submitLabel = computed(() => {
                                     @input="nameEdited = true"
                                     @blur="finishName"
                                 />
-                                <!--
-                                    A taken name is refused, not saved over: this form holds the card's defaults, which
-                                    would overwrite a live
-                                    connection's settings.
-                                -->
+<!-- A taken name is refused, not saved over: this form holds the card's defaults, which would overwrite a live connection's settings. -->
                                 <span v-if="nameCollision" class="ui-field-error">
                                     <Icon name="exclamation-triangle" class="text-2xs" />
                                     "{{ savedName }}" already exists: open it above to change it, or pick another name.
@@ -1413,11 +1349,7 @@ const submitLabel = computed(() => {
                                     <Icon name="exclamation-triangle" class="text-2xs" />
                                     {{ nameProblem }}
                                 </span>
-                                <!--
-                                    Shows the repair (spaces/punctuation to hyphens) rather than applying it silently;
-                                    blur commits it, after which
-                                    there's nothing to show.
-                                -->
+<!-- Shows the repair (spaces/punctuation to hyphens) rather than applying it silently; blur commits it, after which there's nothing to show. -->
                                 <span v-else-if="namePreview" class="mt-1 flex items-center gap-1 text-2xs text-muted">
                                     <Icon name="check" class="text-2xs text-success" />
                                     Saved as <span class="font-mono text-content">{{ namePreview }}</span>
@@ -1426,16 +1358,9 @@ const submitLabel = computed(() => {
                                     What your agent will call this connection.
                                 </span>
                             </label>
-                            <!--
-                                Narrow reference column shown inline below @3xl; the docked aside version takes over
-                                above it.
-                            -->
+<!-- Narrow reference column shown inline below @3xl; the docked aside version takes over above it. -->
                             <CapabilityContext :entry="selected" :values="values" :effects="liveEffects" class="@3xl:hidden" />
-                            <!--
-                                A device's access as a posture: the preset sets all switches at once; the sentence
-                                states what they currently
-                                spell. A hand-tuned mix selects no preset.
-                            -->
+<!-- A device's access as a posture: the preset sets all switches at once; the sentence states what they currently spell. -->
                             <label v-if="selected.kind === 'host'" class="flex items-start justify-between gap-4">
                                 <span class="min-w-0">
                                     <span class="ui-field-label">Access</span>
@@ -1449,11 +1374,7 @@ const submitLabel = computed(() => {
                                 />
                             </label>
 
-                            <!--
-                                Main fields first, rarely-changed ones folded behind Advanced. The fold opens itself
-                                when an edit holds a
-                                non-default advanced value or a refused submit is blocked by one.
-                            -->
+<!-- Main fields first, rarely-changed ones folded behind Advanced. -->
                             <CapabilityFieldRow
                                 v-for="field in mainFields(selected)"
                                 :key="field.key"
@@ -1499,14 +1420,8 @@ const submitLabel = computed(() => {
                                     />
                                 </template>
                             </template>
-                            <!--
-                                Why the grid badged this one: the claim plus the evidence that produced it, which "Not
-                                needed" dismisses.
-                            -->
-                            <!--
-                                The sentence the answers add up to, computed live so it matches what submit actually
-                                agrees to.
-                            -->
+<!-- Why the grid badged this one: the claim plus the evidence that produced it, which "Not needed" dismisses. -->
+<!-- The sentence the answers add up to, computed live so it matches what submit actually agrees to. -->
                             <p v-if="formSummary" class="flex items-start gap-2 rounded-lg border border-line bg-card px-3 py-2 text-xs text-content">
                                 <Icon name="info-circle" class="mt-0.5 shrink-0 text-2xs text-subtle" />
                                 {{ formSummary }}
@@ -1529,15 +1444,8 @@ const submitLabel = computed(() => {
                                 </div>
                             </Notice>
 
-                            <!--
-                                Submit stays stuck to the pane's foot: some cards (VPN, a device's permissions) are
-                                long, and losing the only
-                                button off-screen while scrolling made them unusable.
-                            -->
-                            <!--
-                                What the probe itself said, shown above the submit since "will this work" belongs
-                                before the commitment.
-                            -->
+<!-- Submit stays stuck to the pane's foot: some cards (VPN, a device's permissions) are long. -->
+<!-- What the probe itself said, shown above the submit since "will this work" belongs before the commitment. -->
                             <p
                                 v-if="probeResult"
                                 class="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs"
@@ -1565,11 +1473,7 @@ const submitLabel = computed(() => {
                                 ]"
                                 @animationend="shaking = false"
                             >
-                                <!--
-                                    The read sits beside the approval, since that's when it matters. Starts an ordinary
-                                    chat; the form and this same
-                                    install button are unaffected.
-                                -->
+<!-- The read sits beside the approval, since that's when it matters. -->
                                 <button v-if="auditable" type="button" :class="ui.linkButton(`text-2xs`)" @click="startAudit">
                                     {{
                                         updateFrom !== undefined
@@ -1577,10 +1481,7 @@ const submitLabel = computed(() => {
                                             : `Have an agent read it first, what the code does, route by route`
                                     }}
                                 </button>
-                                <!--
-                                    Testing is optional and stays secondary to Save; hidden once a card has answered
-                                    that no test exists (canProbe).
-                                -->
+<!-- Testing is optional and stays secondary to Save; hidden once a card has answered that no test exists (canProbe). -->
                                 <Button
                                     v-if="canProbe"
                                     class="ml-auto"
@@ -1600,13 +1501,7 @@ const submitLabel = computed(() => {
                         </form>
                     </div>
 
-                    <!--
-                        Docked reference column, shown only above @3xl (below that width, the inline version renders in
-                        the form
-                        instead). Flows with the pane rather than sticking, since it holds more than a short guide;
-                        widens up to 24rem,
-                        past which lines get harder to scan.
-                    -->
+<!-- Docked reference column, shown only above @3xl (below that width, the inline version renders in the form instead). -->
                     <aside class="hidden @3xl:block @3xl:w-80 @3xl:shrink-0 @4xl:w-96">
                         <CapabilityContext :entry="selected" :values="values" :effects="liveEffects" />
                     </aside>
@@ -1615,11 +1510,7 @@ const submitLabel = computed(() => {
 
             <!-- Step 1: the catalog. -->
             <div v-else class="flex min-h-0 flex-1 flex-col gap-3">
-                <!--
-                    Offered as one action rather than badges to hunt for, above the filter since it's not one. Shown
-                    only when the
-                    scan found something, so an empty result isn't a standing invitation to nothing.
-                -->
+<!-- Offered as one action rather than badges to hunt for, above the filter since it's not one. -->
                 <div v-if="walkQueue.length > 0" class="flex flex-wrap items-center gap-3 rounded-lg border border-info/30 bg-info/5 px-4 py-3">
                     <Icon name="sparkles" class="text-info" />
                     <div class="min-w-0 flex-1">
@@ -1635,51 +1526,26 @@ const submitLabel = computed(() => {
                     </Button>
                 </div>
 
-                <!--
-                    Bar sits on the grid it narrows, spanning it; picking the slice is the rail's job, not repeated
-                    here.
-                -->
+<!-- Bar sits on the grid it narrows, spanning it; picking the slice is the rail's job, not repeated here. -->
                 <FilterBar
                     v-model="search"
                     :placeholder="showingConnections ? `Filter by name, host, kind…` : `Filter by name, what it does, kind…`"
                     :count="visibleCount"
                 />
 
-                <!--
-                    `pr-2` keeps tiles clear of the scrollbar; the reserved gutter stops the grid shifting when a
-                    filter removes the
-                    last row.
-                -->
+<!-- `pr-2` keeps tiles clear of the scrollbar; the reserved gutter stops the grid shifting when a filter removes the last row. -->
                 <div class="scrollbar-thin scrollbar-stable @container flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pr-2">
-                    <!--
-                        The one slice that isn't a shorter catalog: it answers "what have I got" with the connections
-                        themselves, named
-                        and stated, not tiles (see <CapabilityConnections>).
-                    -->
+<!-- The one slice that isn't a shorter catalog: it answers "what have I got" with the connections themselves, named and stated. -->
                     <CapabilityConnections v-if="showingConnections" :groups="connectionGroups" @open="openConnection" />
 
-                    <!--
-                        Headings only when the grid spans more than one category; a single category's heading is
-                        already the page
-                        description.
-                    -->
+<!-- Headings only when the grid spans more than one category; a single category's heading is already the page description. -->
                     <template v-else>
                         <div v-for="group in groupedCatalog" :key="group.label" class="flex flex-col gap-2">
-                            <!--
-                                Label alone: the category's own sentence is already the page description once the rail
-                                points at it.
-                            -->
+<!-- Label alone: the category's own sentence is already the page description once the rail points at it. -->
                             <div v-if="!inCategory" :class="ui.sectionLabel()">{{ group.label }}</div>
-                            <!--
-                                Container query, not viewport: how many tiles fit is a fact about this pane, not the
-                                screen.
-                            -->
+<!-- Container query, not viewport: how many tiles fit is a fact about this pane, not the screen. -->
                             <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4">
-                                <!--
-                                    Padding is the text's, not the tile's, so the mark can reach the tile's edges;
-                                    `overflow-hidden` clips it to the
-                                    radius.
-                                -->
+<!-- Padding is the text's, not the tile's, so the mark can reach the tile's edges; `overflow-hidden` clips it to the radius. -->
                                 <button
                                     v-for="card in group.entries"
                                     :key="card.entry.id"
@@ -1687,12 +1553,7 @@ const submitLabel = computed(() => {
                                     class="flex h-full w-full items-stretch overflow-hidden rounded-lg border border-line-subtle bg-card text-left transition-colors hover:border-line-strong hover:bg-overlay"
                                     @click="pick(card.entry)"
                                 >
-                                    <!--
-                                        Mark spans the tile's full height as a left-edge band, for scanning a grid of
-                                        many by logo. `flush` stretches it
-                                        to the row and drops its own border/radius; `size` only scales what's inside
-                                        the plate.
-                                    -->
+<!-- Mark spans the tile's full height as a left-edge band, for scanning a grid of many by logo. -->
                                     <BrandMark
                                         flush
                                         class="border-r border-line"
@@ -1702,12 +1563,7 @@ const submitLabel = computed(() => {
                                         :icon="entryIcon(card.entry)"
                                     />
                                     <div class="min-w-0 flex-1 px-2.5 py-2">
-                                        <!--
-                                            One line only: a grid row is as tall as its tallest tile, so any growing
-                                            line costs every tile beside it. The
-                                            name truncates before the badges do, since badges are the fixed-width state
-                                            a scanner reads down the column.
-                                        -->
+<!-- One line only: a grid row is as tall as its tallest tile, so any growing line costs every tile beside it. -->
                                         <div class="flex items-center gap-x-1.5">
                                             <span class="truncate text-xs font-semibold text-content">{{ card.entry.name }}</span>
                                             <!-- Count shown only above one: a lone tick already means connected. -->
@@ -1720,10 +1576,7 @@ const submitLabel = computed(() => {
                                                 <Icon name="check-circle" />
                                                 <template v-if="card.connected > 1">{{ card.connected }}</template>
                                             </span>
-                                            <!--
-                                                The scan's finding rides its own badge; the tooltip carries the claim
-                                                and the evidence so it stays checkable.
-                                            -->
+<!-- The scan's finding rides its own badge; the tooltip carries the claim and the evidence so it stays checkable. -->
                                             <span
                                                 v-if="card.recommendation"
                                                 v-tooltip.top="`${card.recommendation.reason}: ${card.recommendation.evidence}`"
@@ -1742,11 +1595,7 @@ const submitLabel = computed(() => {
                                             </span>
                                             <CapabilityEffects :effects="badgeEffects(card.entry)" :compact="true" />
                                         </div>
-                                        <!--
-                                            Truncated, not just short: a derived card's description comes from a
-                                            manifest nobody here wrote and must not set
-                                            row height.
-                                        -->
+<!-- Truncated, not just short: a derived card's description comes from a manifest nobody here wrote and must not set row height. -->
                                         <div class="truncate text-2xs text-muted">{{ card.entry.description }}</div>
                                     </div>
                                 </button>
@@ -1754,11 +1603,7 @@ const submitLabel = computed(() => {
                         </div>
                     </template>
 
-                    <!--
-                        Reachable only via the filter, since every slice the rail offers has something in it; answers
-                        about whichever
-                        list is actually on screen.
-                    -->
+<!-- Reachable only via the filter, since every slice the rail offers has something in it; answers about whichever list is actually on screen. -->
                     <div v-if="nothingMatches" :class="ui.emptyState()">
                         <p class="text-sm">Nothing in {{ activeScope.label }} matches "{{ search.trim() }}".</p>
                         <p v-if="showingConnections" class="mt-1 text-xs text-muted">

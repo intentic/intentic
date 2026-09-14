@@ -6,10 +6,7 @@ import type { OrpcContext } from "../context.js";
 import type { CustodyGateway } from "./wallet-custody.js";
 import { walletRoutes } from "./wallet.orpc.js";
 
-/* THE CAPS COME FROM THE OWNER'S SESSION, and this is the only door they come through (wallet.routes.test.ts
- * pins the other door shut). What is checked here: a session is required, a platform without a custody
- * provider has no caps to set, a wallet is created for the caps when the account has none, and one the sandbox
- * created first is found and updated rather than minted again. */
+/* THE CAPS COME FROM THE OWNER'S SESSION, and this is the only door they come through (wallet.routes.test.ts pins the other door shut). */
 
 const user = { id: `user-1`, email: `owner@example.test`, name: `Owner`, image: null };
 const ADDRESS = `0x857b06519E91e3A54538791bDbb0E22373e36b66`;

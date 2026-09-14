@@ -97,10 +97,7 @@ describe(`runManifestOf`, () => {
         expect(manifest.targets).toEqual({ "app/site": `http://localhost:4321`, api: `http://localhost:3000` });
     });
 
-    /* THE WHOLE PICK IS RECORDED, and it has to be: the fan-out is one session per story and Retry starts more
-     * of them off this file minutes later, so a knob the reader chose and the manifest dropped would run the
-     * first story the way they asked and every later one on the sandbox's defaults. Whatever was not chosen is
-     * simply absent, which is how every reader of a pick spells "the model's own default". */
+/* THE WHOLE PICK IS RECORDED, and it has to be: the fan-out is one session per story and Retry starts more of them off this file minutes later. */
     it(`records the whole pick the reader configured`, () => {
         const pick = { agent: `claude`, model: `claude-sonnet-4-5`, account: `acc-1`, effort: `xhigh`, thinking: false, fast: true } as const;
         expect(runManifestOf({ ...manifest, pick, stories: [story(`login`)] }).pick).toEqual(pick);

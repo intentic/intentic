@@ -5,9 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Services } from "../composition.js";
 import { readAutostart, recordAutostart, runAutostart } from "./autostart.js";
 
-/* WHAT EVERY BOOT AFTER THE FIRST DEPENDS ON. The seed records the starter here and the boot step starts what is
- * recorded; a woken hosted machine, a restarted daemon and a prewarmed pool volume all reach the starter's dev
- * server only through this file, so its two halves are tested against a real workspace directory. */
+/* WHAT EVERY BOOT AFTER THE FIRST DEPENDS ON. */
 
 let root: string;
 let started: { key: string; spec: { command: string; cwd: string } }[];

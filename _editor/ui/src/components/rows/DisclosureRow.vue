@@ -1,8 +1,4 @@
-<!--
-    A record row, built on <Row>, that opens into its own evidence below. The toggle is a leading chevron whose rotation is the state; `rail` hangs
-    the opened block off the row's title, `drawer` gives it a full-width surface of its own. `#lead` must be presentational only, since it's mirrored
-    to derive the indent.
--->
+<!-- A record row, built on <Row>, that opens into its own evidence below. -->
 <script setup lang="ts">
 import { computed, useId } from "vue";
 import Icon from "../primitives/Icon.vue";
@@ -112,10 +108,7 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
 
 <template>
     <div class="group" :class="[tint, wrapperSelect, $slots[`before`] ? `flex flex-col` : ``]" @pointerdown="onPointerDown">
-        <!--
-            The selection column, outside the toggle: a checkbox can't nest in the button that opens the row. Rides
-            inside the tint so the whole line still lights up as one row.
-        -->
+<!-- The selection column, outside the toggle: a checkbox can't nest in the button that opens the row. -->
         <div :class="$slots[`before`] ? `flex w-full items-center` : `contents`">
             <div v-if="$slots[`before`]" class="flex shrink-0 items-center"><slot name="before" /></div>
             <Row
@@ -134,12 +127,7 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
                 @click="onRowClick"
             >
                 <template #lead>
-                    <!--
-                        In `pair` this cluster IS the keyboard's way into the toggle, since the row-wide click handler
-                        only
-                        reaches pointers. `.stop` here keeps it from also bubbling to that handler and toggling
-                        straight back.
-                    -->
+<!-- In `pair` this cluster IS the keyboard's way into the toggle, since the row-wide click handler only reaches pointers. -->
                     <component
                         :is="hit !== `header` && !disabled ? `button` : `span`"
                         :type="hit !== `header` && !disabled ? `button` : undefined"
@@ -154,10 +142,7 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
                         ]"
                         @click="onPairClick"
                     >
-                        <!--
-                            Rotation, not an icon swap: `chevron-up`/`chevron-down` are two names a caller could get
-                            backwards.
-                        -->
+<!-- Rotation, not an icon swap: `chevron-up`/`chevron-down` are two names a caller could get backwards. -->
                         <Icon
                             v-if="!disabled"
                             name="chevron-right"
@@ -165,10 +150,7 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
                             :class="[chevronSize, open ? `rotate-90` : ``]"
                             aria-hidden="true"
                         />
-                        <!--
-                            The tier's mark size, forwarded so a disclosure row's lead is written exactly like a plain
-                            row's.
-                        -->
+<!-- The tier's mark size, forwarded so a disclosure row's lead is written exactly like a plain row's. -->
                         <slot name="lead" :mark="mark" :icon-class="ROW_TIERS[tier].icon" />
                     </component>
                 </template>
@@ -178,28 +160,17 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
                 <template v-if="$slots[`meta`]" #meta><slot name="meta" /></template>
                 <template v-if="$slots[`control`]" #control><slot name="control" /></template>
 
-                <!--
-                    The rail: inside <Row>'s padding so it aligns with the row above, offset by a hidden copy of the
-                    toggle cluster so it starts under the title.
-                -->
+<!-- The rail: inside <Row>'s padding so it aligns with the row above, offset by a hidden copy of the toggle cluster so it starts under the title. -->
                 <template v-if="open && body === `rail`" #below>
                     <div class="flex" :class="gap">
-                        <!--
-                            Runs the full height of an open row so it can be clicked to close, not only from the header
-                            line above.
-                            Bubbles to the row-wide handler rather than having its own, since both live inside <Row>.
-                        -->
+<!-- Runs the full height of an open row so it can be clicked to close, not only from the header line above. -->
                         <span class="flex shrink-0 cursor-pointer items-center" aria-hidden="true">
                             <span class="invisible flex items-center" :class="toggleGap">
                                 <Icon v-if="!disabled" name="chevron-right" class="shrink-0" :class="chevronSize" />
                                 <slot name="lead" :mark="mark" :icon-class="ROW_TIERS[tier].icon" />
                             </span>
                         </span>
-                        <!--
-                            `.stop`: this sits inside <Row>, whose row-wide handler would otherwise read a press on the
-                            evidence
-                            as "close what you just opened."
-                        -->
+<!-- `.stop`: this sits inside <Row>, whose row-wide handler would otherwise read a press on the evidence as "close what you just opened.". -->
                         <div :id="bodyId" class="min-w-0 flex-1 cursor-auto border-l border-line-strong pl-3" @click.stop>
                             <slot name="below" />
                         </div>
@@ -208,10 +179,7 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
             </Row>
         </div>
 
-        <!--
-            The drawer: a sibling of <Row>, not its `#below`, since it's full-bleed and pulling it out of <Row>'s
-            padding would need tier-matched negative margins.
-        -->
+<!-- The drawer: a sibling of <Row>, not its `#below`, since it's full-bleed and pulling it out of <Row>'s padding would need tier-matched negative margins. -->
         <div v-if="open && body === `drawer`" :id="bodyId" class="cursor-auto border-t border-line-subtle" :class="ROW_DRAWER_PAD[tier]">
             <slot name="below" />
         </div>

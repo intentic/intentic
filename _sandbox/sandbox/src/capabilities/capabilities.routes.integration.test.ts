@@ -57,9 +57,7 @@ test("capabilities.dismiss takes a recommendation off the catalog and records wh
     expect(await errorCode(client.capabilities.dismiss({ card: "github" }))).toBe("NOT_FOUND");
 });
 
-// Rename can't be add-plus-remove: that deletes the profile (signing every account out) and orphans the account's name.
-// The identity's browser must arrive at the new name, and every account living in it must still know whose browser it
-// is.
+// Preserve the browser profile and its accounts across capability renames.
 test("capabilities.rename carries the browser profile and repoints everything that named the old id", async () => {
     const workspace = tempWorkspace([]);
     const personas = memoryPersonasStore([{ id: "front", capabilities: ["me", "reddit"] }]);

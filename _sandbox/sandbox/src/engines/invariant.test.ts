@@ -2,8 +2,7 @@ import { expect, test } from "vitest";
 import type { EngineState } from "./engine-store.js";
 import { checks } from "./invariant.js";
 
-/* The pointer and the directory are two records of one fact. The turn path reads the pointer, finds nothing
- * behind it, and quietly serves the image's copy, which is the failure this check exists to name. */
+/* The pointer and the directory are two records of one fact. */
 
 const fail = (message: string): never => {
     throw new Error(message);

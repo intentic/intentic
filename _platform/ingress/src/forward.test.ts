@@ -5,10 +5,7 @@ import { HOP_HEADER } from "./cluster.js";
 import { forwardRequest, forwardUpgrade, PeerUnreachable } from "./forward.js";
 import type { Peer } from "./peers.js";
 
-/* A REQUEST HANDED FROM ONE EDGE TO ANOTHER, over real sockets: a "peer" that answers like the holding machine
- * would, an "edge" that forwards everything to it, and a client that only ever talks to the edge. What has to
- * survive the hop is the Host (it is the whole of routing on the far side), the body in both directions, and
- * an upgrade — and a failure has to be a readable answer rather than a hang. */
+/* The peer answers for the holding machine while the edge forwards requests. */
 
 const portOf = (server: Server): number => (server.address() as AddressInfo).port;
 

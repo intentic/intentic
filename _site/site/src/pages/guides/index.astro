@@ -5,15 +5,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
 
-/* The guides hub.
- *
- * Every row carries the question AND its answer rather than a title and a teaser, so the hub itself answers
- * five questions instead of promising that five pages will. A crawler that reads only this page still leaves
- * with the substance, and a reader who came for one of the five gets it without a second navigation.
- *
- * The rows are also the page's FAQPage schema, from the same list, so the hub cannot advertise a question
- * whose answer it does not carry.
- */
+/* The guides hub. */
 
 const faqEntries = guidePages.map((page) => ({ question: page.question, answer: page.answer }));
 ---

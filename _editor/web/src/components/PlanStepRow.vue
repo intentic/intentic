@@ -2,11 +2,7 @@
 import { StatusBadge } from "@intentic/ui";
 import { type ReconcileContext, statusGerund, statusLabel, statusVariant } from "../features/extensions/reconcileStatus";
 
-/* One resource's reconcile verdict as a row: its id (mono) beside a status badge, with the reason (if any) as
- * a muted second line. The single row renderer shared by the live apply progress and the live-status "live
- * check", so the vocabulary and layout stay in one place. `pending` (an apply node still in flight) swaps the
- * badge for a spinner + a present-tense label; `context` shifts the wording between the live board ("Drift")
- * and a plan/apply ("Update"). */
+/* One resource's reconcile verdict as a row: its id (mono) beside a status badge, with the reason (if any) as a muted second line. */
 const {
     id,
     action,

@@ -13,9 +13,7 @@ export interface ChatMessage extends TranscriptRow {
     readonly local?: true;
 }
 
-/* Older retries recorded the restored checklist even when the provider refused before doing any work.
- * Hide only identical checklist-only copies across notices. Keep the rows in the record and in turn counts
- * so fork/rewind positions remain exact, and preserve every changed list or intervening user/agent message. */
+/* Older retries recorded the restored checklist even when the provider refused before doing any work. */
 export const repeatedChecklistIds = (messages: readonly ChatMessage[]): Set<number> => {
     const hidden = new Set<number>();
     let previous: TranscriptRow["todos"];
@@ -46,9 +44,7 @@ export const repeatedChecklistIds = (messages: readonly ChatMessage[]): Set<numb
     return hidden;
 };
 
-/* A file the user attached to a turn, already uploaded to the workspace before send, as the COMPOSER holds it.
- * A row carries the path alone (TranscriptRow.attachments): the name is the path's last segment, and the
- * thumbnail is keyed by path in attachmentPreviews, which every redraw can ask. */
+/* A file the user attached to a turn, already uploaded to the workspace before send, as the COMPOSER holds it. */
 export interface ChatAttachment {
     readonly name: string;
     // Workspace-relative upload path (.intentic/records/artifacts/attachments/<uuid>/<name>).

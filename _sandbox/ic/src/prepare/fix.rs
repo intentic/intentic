@@ -13,16 +13,7 @@ use super::plan::Facts;
 #[cfg(windows)]
 use super::shell;
 
-/* DOING SOMETHING ABOUT IT — one function per requirement, each one honest about what it achieved.
- *
- * The rule this file is organised around: a fix reports what it CHANGED, not what it attempted. Turning on an
- * optional feature succeeds instantly and does nothing until the machine restarts; adding somebody to a group
- * succeeds instantly and does nothing until they sign in again. A fix that returned a bare "done" for either
- * of those produces the worst outcome in this whole flow — a setup that carries on, fails on the very thing it
- * just "fixed", and reports it as a second, unrelated problem.
- *
- * So [`Done`] has three values, and the two that are not `Now` are what the restart and sign-out screens are
- * built from. */
+/* DOING SOMETHING ABOUT IT — one function per requirement, each one honest about what it achieved. */
 
 /// What a fix actually accomplished.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,15 +78,7 @@ fn from_exit(output: &shell::Output, what: &str, on_success: Done) -> Fixed {
     }))
 }
 
-/* WSL2, WHICH IS TWO WINDOWS FEATURES AND A KERNEL.
- *
- * `wsl --install --no-distribution` is the modern one-liner for all three, and `--no-distribution` matters:
- * without it Windows also installs Ubuntu, which is a gigabyte nobody asked for and a first-run wizard that
- * wants a username and password — inside a hidden elevated window, where nobody can answer it.
- *
- * The flag arrived in Windows 11 21H2 / Windows 10 build 19044-era servicing, and on anything older
- * `wsl --install` either does not exist or ignores it. So the fallback enables the same two features through
- * dism, which has worked unchanged since WSL2 shipped. Either way the machine has to restart. */
+/* `wsl --install --no-distribution` is the modern one-liner for all three, and `--no-distribution` matters: without it Windows also installs Ubuntu. */
 const ENABLE_WSL: &str = "\
 wsl.exe --install --no-distribution *>> $Log\n\
 if ($LASTEXITCODE -eq 0) { exit 0 }\n\
@@ -131,15 +114,7 @@ pub fn update_wsl_kernel() -> Fixed {
     from_exit(&shell::run_elevated(UPDATE_WSL), "updating WSL2", Done::Now)
 }
 
-/* INSTALLING DOCKER DESKTOP, BY WHICHEVER ROUTE THIS PC HAS.
- *
- * The package manager when there is one: it handles the download, the hash and the elevation itself, and a PC
- * that has it is a PC where this is one line.
- *
- * And when there is not — Windows Server, plenty of Windows 10, any machine where the App Installer was never
- * provisioned — the installer is fetched from Docker's own permanent URL and run with its silent-install
- * flags. That branch is this whole change's original reason for existing: the shim used to stop here with
- * "winget is unavailable", which told the user to go and do by hand the two steps below. */
+/* The package manager when there is one: it handles the download, the hash and the elevation itself, and a PC that has it is a PC where this is one line. */
 const INSTALL_WITH_WINGET: &str = "\
 winget.exe install --id Docker.DockerDesktop --exact --silent --accept-package-agreements --accept-source-agreements *>> $Log\n\
 # -1978335189 is winget's \"already installed\", which is a success for our purposes.\n\
@@ -179,13 +154,7 @@ pub fn install_docker_desktop(facts: &Facts) -> Fixed {
     outcome
 }
 
-/* THE DOWNLOAD, WITH A NUMBER ON IT.
- *
- * 600 MB with no output is the single longest silence in this whole flow, and the desktop app draws its
- * progress from these lines — so this reports every 25 MB rather than streaming quietly and hoping.
- *
- * Streamed to disk, never buffered: the alternative is holding the installer in memory on a machine we have
- * just established is short of resources, for no benefit at all. */
+/* 600 MB with no output is the single longest silence in this whole flow, and the desktop app draws its progress from these lines. */
 #[cfg(windows)]
 fn download(url: &str, into: &std::path::Path) -> Result<(), String> {
     let agent = ureq::Agent::config_builder()
@@ -284,28 +253,7 @@ pub fn put_docker_on_path(facts: &Facts) -> Fixed {
     }
 }
 
-/* THE `docker-users` GROUP, AND WHY `net.exe`'S ANSWER IS NOT WORTH READING.
- *
- * `net localgroup` reports every one of these as exit code 2:
- *
- *     System error 1379 — the specified local group already exists.
- *     System error 1378 — the specified account name is already a member of the group.
- *     System error 1387 — no such account.
- *
- * The first two mean THIS IS ALREADY DONE and the third means it cannot be. Believing the exit code puts all
- * three on the same screen, and a real install ended there: Docker Desktop's own installer adds whoever ran
- * it to `docker-users`, so by the time this ran — seconds after that installer finished, in the same pass —
- * the account was already a member, `net` said 2, and a setup that had just done everything right stopped at
- * 8% claiming it could not grant a permission the machine had already granted.
- *
- * So the verdict is "the add worked, OR the account is in the group either way" — which is the fact this fix
- * is actually about, and is true whichever order things happened in. It is the same question
- * [`super::facts`] asks before deciding whether to come here at all. Failing means BOTH: the add was refused
- * and the roster does not have them, which is unambiguous and worth printing.
- *
- * The account name is passed IN rather than read inside the elevated script, because that script may be
- * running as somebody else entirely — whoever the UAC prompt was answered as — and adding the wrong account
- * to the group is a fix that changes nothing and says it worked. */
+/* THE `docker-users` GROUP, AND WHY `net.exe`'S ANSWER IS NOT WORTH READING. */
 const ADD_TO_DOCKER_USERS: &str = "\
 $name = '%NAME%'\n\
 $short = $name\n\
@@ -391,12 +339,7 @@ pub fn wait_for_daemon() -> Fixed {
         }
         if !hinted && started.elapsed() >= HINT_AFTER {
             hinted = true;
-            /* THE THING THAT IS ACTUALLY ON SCREEN, SAID WHILE IT STILL HELPS.
-             *
-             * Docker Desktop's first run puts up a licence screen and, depending on the build, an offer to
-             * sign in — and it does it in its OWN window, which on a machine where the setup was started from
-             * a browser is behind everything else. Until somebody answers it there is no engine, forever. The
-             * wait cannot tell that apart from a slow boot, so it stops trying to and names both. */
+/* Docker Desktop's first run puts up a licence screen and, depending on the build, an offer to sign in — and it does it in its OWN window. */
             super::progress(
                 "Docker Desktop may be asking you something - check its window for a licence or sign-in screen; a first start also just takes a couple of minutes",
             );
@@ -475,9 +418,7 @@ mod tests {
     // pure, so the test that guards it runs on every runner.
     use crate::prepare::plan::Facts;
 
-    /* The bodies above are Windows-only and are covered by the Windows smoke tiers. What is worth asserting
-     * on every runner is the constants they are built from: a download URL and a flag set are the two things
-     * here that can be silently wrong for months. */
+/* The bodies above are Windows-only and are covered by the Windows smoke tiers. */
 
     #[test]
     fn the_installer_url_is_dockers_own_permanent_one() {
@@ -492,13 +433,7 @@ mod tests {
         );
     }
 
-    /* THE REPORTED FAILURE, PINNED AT ITS CAUSE. `net localgroup` answers exit 2 for "the group already
-     * exists", exit 2 for "already a member", and exit 2 for a genuine refusal. A real install stopped at 8%
-     * with "adding this account to docker-users failed (exit 2)" seconds after Docker Desktop's own installer
-     * had added that very account — the fix had succeeded before it ran, and it called that a failure.
-     *
-     * So the script must decide from the ROSTER and never from the exit code, and this is the assertion that
-     * keeps a future edit from quietly putting `exit $LASTEXITCODE` back on the end. */
+/* THE REPORTED FAILURE, PINNED AT ITS CAUSE. */
     #[test]
     fn the_group_fix_reads_the_roster_rather_than_believing_net_exes_exit_code() {
         assert!(

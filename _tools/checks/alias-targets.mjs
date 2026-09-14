@@ -40,8 +40,7 @@ for (const path of configs) {
         [HERE, join(root, dirname(path))],
     ]) {
         for (const match of text.matchAll(pattern)) {
-            // The same helpers also name where a build writes (outDir, publicDir); only inputs claim the checkout has
-            // it.
+            // Treat only input paths as checkout dependencies; output paths are build destinations.
             const line = text.slice(text.lastIndexOf("\n", match.index) + 1, text.indexOf("\n", match.index));
             // A path with `${...}` is a shape the config computes per package, not a location this repo spells.
             if (/\b(outDir|publicDir|cacheDir|emptyOutDir|dir)\s*:/.test(line) || match[1].includes("${")) {

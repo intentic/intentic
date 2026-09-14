@@ -4,10 +4,7 @@ use std::process::{Command, Stdio};
 use crate::logfile::Log;
 use crate::util::{bail, Fail, Result};
 
-/* The docker CLI as a subprocess — deliberately NOT a docker API crate. The shell flows this binary replaces
- * spoke to docker the way the user does, which means every failure they can hit is one the user can reproduce
- * by pasting the same command; an API socket client would trade that for a second connection path with its
- * own auth/socket-location matrix (Docker Desktop, rootless, remote contexts) that `docker` already solves. */
+/* The docker CLI as a subprocess — deliberately NOT a docker API crate. */
 
 fn docker(args: &[&str]) -> Command {
     let mut cmd = Command::new("docker");
@@ -40,21 +37,7 @@ pub fn server_os() -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-/* A REACHABLE DAEMON THAT CANNOT RUN OUR CONTAINERS.
- *
- * A sandbox is a Linux container, and until now nothing on any path asked whether the daemon could run one.
- * Every probe this file makes — the CLI is present, the daemon answers — succeeds against a Docker Desktop in
- * WINDOWS-container mode, and the run then dies several minutes later on an image pull, with a manifest error
- * that names no remedy and reads as a broken release.
- *
- * That is not a corner case: Windows-container mode is the DEFAULT of the docker preinstalled on Windows CI
- * images, and it is one tray-menu click away on any developer's machine. The check is a string comparison; the
- * value it adds is the sentence.
- *
- * An unknown platform is NOT a refusal. A daemon too old to report `Server.Os`, or a context that answers
- * something unexpected, is a daemon that has done nothing wrong — and a preflight that refuses what it cannot
- * identify would turn "we could not tell" into "you are misconfigured", which is the failure mode this whole
- * function exists to avoid. Only an explicit non-linux answer refuses. */
+/* A sandbox is a Linux container, and until now nothing on any path asked whether the daemon could run one. */
 pub fn wrong_container_platform(server_os: Option<&str>) -> Option<(String, String)> {
     match server_os {
         Some(os) if os != "linux" => Some((
@@ -226,16 +209,7 @@ fn tee(mut from: impl Read, log: &Log, terminal: &mut impl Write) {
     }
 }
 
-/* `stream`, but the terminal sees LINES and gets to refuse them — the pull's shape when a person is watching.
- *
- * Spawned without a terminal of its own, `docker pull` cannot draw its bars and prints one line per layer per
- * state change instead: forty-odd `6e3729cf69e0: Extracting` during the longest step of the install, which is
- * both the least readable thing on the screen and, counted, the only REAL progress the install has. So the
- * lines are offered to `keep`, which folds the layer reports into the live progress line and returns false to
- * swallow them; everything else — the digest, a warning, an "unauthorized" that is the whole diagnosis of a
- * failed pull — is printed, above the live line, exactly as it arrived.
- *
- * The log still gets every byte either way: it is the postmortem, and it is not the thing being decluttered. */
+/* `stream`, but the terminal sees LINES and gets to refuse them — the pull's shape when a person is watching. */
 pub fn stream_lines(
     args: &[&str],
     log: &Log,
@@ -465,9 +439,7 @@ fn pull_once(image: &str, log: &Log) -> Result<bool> {
 mod tests {
     use super::wrong_container_platform;
 
-    /* The one decision in this file that is pure, and the one whose absence let a whole class of Windows
-     * install failure through: the daemon answers, so every existing probe passes, and the run dies minutes
-     * later on an image pull. */
+/* The one decision in this file that is pure, and the one whose absence let a whole class of Windows install failure through: the daemon answers. */
 
     #[test]
     fn a_linux_daemon_is_what_we_want() {

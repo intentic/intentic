@@ -9,9 +9,7 @@ import ProductFigure from "../../components/figures/ProductFigure.astro";
 import ProductShotFigure from "../../components/figures/ProductShotFigure.astro";
 import { COLUMN_SIZES, HALF_COLUMN_SIZES, shotAsset } from "../../lib/shots";
 
-/* One template, six pages. The pages are content (`_site/site-content/src/product.ts`) rather than six near
- * identical .astro files, so a new surface is an entry in an array and its nav row, footer link, page meta
- * and llms.txt entry all follow from it. */
+/* One template, six pages. */
 
 export function getStaticPaths() {
     return productPages.map((page) => ({ params: { slug: page.slug }, props: { page } }));
@@ -25,11 +23,7 @@ const { page } = Astro.props;
 const index = productPages.indexOf(page);
 const next = productPages[(index + 1) % productPages.length];
 
-/* A portrait hero (the docked chat, a phone) is a panel, not a page: stretched to the 6xl column it would be
- * three screens tall. Sit it in a narrow centred column instead. A diagram-led page (Automate) has no shot at
- * all: it leads with a figure, in a column wide enough for the drawing's own wide arrangement — the machine
- * lays itself out from the width it is GIVEN (see `AutomateFigure.astro`), so a half-width column here would
- * hand a 1440px screen the stacked phone shape and three screens of scrolling with it. */
+/* A portrait hero (the docked chat, a phone) is a panel, not a page: stretched to the 6xl column it would be three screens tall. */
 const heroShot = page.hero;
 const heroImage = heroShot ? shotAsset(heroShot.name) : undefined;
 const portraitHero = heroImage ? heroImage.height > heroImage.width : false;
@@ -80,10 +74,7 @@ const portraitHero = heroImage ? heroImage.height > heroImage.width : false;
             </div>
         </section>
 
-        <!-- The blocks. The layout follows the SHOT, not the index: a landscape screenshot is 1072 CSS px of real
-             interface, so it takes the whole column with its prose above it rather than being halved into a
-             side-by-side that renders the app's own text at half size. A phone shot and a drawn figure are
-             narrow by nature and keep the side-by-side, alternating so the page doesn't read as one column. -->
+<!-- The blocks. -->
         <section>
             <div class="mx-auto max-w-7xl space-y-20 px-6 py-20 lg:space-y-28 lg:py-24">
                 {
@@ -110,9 +101,7 @@ const portraitHero = heroImage ? heroImage.height > heroImage.width : false;
                         if (!sideVisual) {
                             return (
                                 <div class="fade-in">
-                                    {/* The cap is on the paragraph, not on this box: the bullets below it are a
-                                        two-column grid that wants the wider column, and a `ch` cap only counts
-                                        characters correctly on the element whose type size it is capping. */}
+                                    {/* The paragraph is capped; the bullet grid uses the full box width. */}
                                     <div class="max-w-3xl">
                                         <h2 class="text-xl font-semibold tracking-tight text-content">{block.title}</h2>
                                         <p class="mt-3 max-w-copy text-base leading-relaxed text-muted">{block.body}</p>
@@ -141,9 +130,7 @@ const portraitHero = heroImage ? heroImage.height > heroImage.width : false;
             </div>
         </section>
 
-        <!-- The question underneath the surface. It sits ABOVE the next-surface rail on purpose: the rail
-             walks the shelf, and this steps off it, to the page written for somebody who has the problem but
-             not yet the vocabulary this page is written in. -->
+<!-- The question underneath the surface. -->
         <section class="border-t band-rule">
             <div class="mx-auto max-w-7xl px-6 py-12">
                 <a href={guidesHref(page.guide.slug)} class="group card block max-w-3xl p-6 transition-colors hover:border-primary-600/40">

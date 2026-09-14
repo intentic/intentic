@@ -1,12 +1,4 @@
-<!-- THE APP'S INSTALL, DRAWN ON THE PAGE IT WAS STARTED FROM.
-     The desktop app runs the install in its own card and hands the window back to this page when the user
-     presses "Back to your workspace"; what this page could say about it afterwards was nothing, which is the
-     reported problem: no way to tell whether leaving the card stopped the install, or how it was going. So the
-     app reports its bar here on every change (desktopSetup.ts) and this draws the same bar: the same
-     percentage, the same "Step 4 of 10", the same estimate, and the way back to the card for the detail.
-     Five states, one sentence each, because the reader of this strip is deciding one thing: wait, or go and
-     look. A run that needs them (the requirements list) says so; a run that stopped says whether they stopped
-     it; a run that has gone quiet says the app may have gone. -->
+<!-- THE APP'S INSTALL, DRAWN ON THE PAGE IT WAS STARTED FROM. -->
 <script setup lang="ts">
 import { Button, Notice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
@@ -25,8 +17,7 @@ const showSetup = (): void => openDesktopLink(DESKTOP_LAUNCHER_LINK);
 </script>
 
 <template>
-    <!-- `done` draws nothing: the app opens the workspace itself the moment the run ends well, and a strip
-         saying "done" under a page that is about to navigate away is a flash of the wrong screen. -->
+<!-- `done` draws nothing: the app opens the workspace itself the moment the run ends well. -->
     <div v-if="report.state !== `done`" class="flex flex-col gap-2 rounded-lg border border-line bg-card p-3">
         <template v-if="report.state === `running` || report.state === `waiting`">
             <div class="flex items-baseline gap-2 text-2xs">
@@ -67,8 +58,7 @@ const showSetup = (): void => openDesktopLink(DESKTOP_LAUNCHER_LINK);
             </div>
         </template>
 
-        <!-- Stopped by the user, or by something going wrong: told apart, because "you stopped it" needs no
-             investigation and "it stopped" needs the card that has the reason. -->
+<!-- Stopped by the user, or by something going wrong: told apart. -->
         <template v-else>
             <Notice :tone="report.state === `failed` ? `danger` : `info`" class="items-center text-2xs">
                 <span class="flex-1">

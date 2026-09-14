@@ -1,8 +1,4 @@
-<!--
-    The design system's one prose surface: sanitized HTML (markdown/render.ts) styled by prose.css, with Shiki-coloured code blocks whose copy
-    buttons are wired here. A document with figure fences renders as alternating prose runs and figure components; one without renders as a single
-    byte-identical v-html.
--->
+<!-- The design system's one prose surface: sanitized HTML (markdown/render.ts) styled by prose.css. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import { copyCodeFromEvent } from "../../markdown/code.js";

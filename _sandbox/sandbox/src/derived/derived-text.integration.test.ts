@@ -6,9 +6,7 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import { deriveText } from "./derived-text.js";
 import type { ExecFn } from "./fileq.js";
 
-/* The on-demand half: what a reader gets back when they ask for a file to be rendered now. The spawn is a seam,
- * so what is pinned here is how fileq's three answers — it worked, it refused this file, it is not installed —
- * reach the person who asked. */
+/* The on-demand half: what a reader gets back when they ask for a file to be rendered now. */
 
 let root: string;
 beforeEach(async () => {

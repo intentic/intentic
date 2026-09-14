@@ -6,16 +6,7 @@ import { type FilePeek, peekLead, peekLines, peekOmitted } from "../drafts/fileP
 import ChatImageThumb from "./ChatImageThumb.vue";
 import { useChatSurface } from "../tools/chatToolSurface";
 
-/* One attached file, at three depths: the tile says what it is (glyph, name, size, its own first lines), hovering it
- * reads the head and the tail, and clicking it opens the real file in the workspace. Used by the composer, the sent
- * bubble and a session's hover card alike, so an attachment looks like one thing wherever it is named.
- *
- * A bubble is speech; an attachment is an object, and is drawn like the screenshot beside it — the file's own text is
- * framed, the naming around it is not. Only the composer asks for `framed`, where a chip has to read as a token you
- * can take back out.
- *
- * Presentational: the bytes arrive as `peek` (attachmentPeeks.ts) and the workspace comes from the injected surface
- * (chatToolSurface.ts), so a published page draws the same tile with nothing fetched and nothing to click. */
+/* One attached file, at three depths: the tile says what it is (glyph, name, size, its own first lines), hovering it reads the head and the tail. */
 
 const {
     name,
@@ -210,10 +201,7 @@ onBeforeUnmount(() => clearTimeout(timer));
 
 <template>
     <div ref="root" class="group relative flex" :class="frame" @pointerenter="onEnter" @pointerleave="onLeave">
-        <!--
-            The target, drawn only on approach. A bare tile has no resting box to press, so the wash stands in for one;
-            it sits behind the content rather than on the tile, which would inset the page from the bubble's own edge.
-        -->
+<!-- The target, drawn only on approach. -->
         <div
             v-if="!framed && openable"
             class="pointer-events-none absolute -inset-1.5 rounded-lg bg-overlay/50 opacity-0 transition-opacity group-hover:opacity-100"
@@ -233,12 +221,7 @@ onBeforeUnmount(() => clearTimeout(timer));
                 <!-- A picture stands in for its own glyph; everything else gets its category's. -->
                 <ChatImageThumb v-if="previewUrl" :src="previewUrl" :alt="name" size="h-8 w-8" />
                 <Icon v-else :name="icon" class="shrink-0 text-xs" :class="iconColor" />
-                <!--
-                    Two spans, one clipping and one fixed: the name's ending survives a narrow tile, and it is the
-                    ending — a timestamp, a hash — that says WHICH capture this is. No tooltip on either: the peek card
-                    this tile opens already carries the whole name and its path, and a label under an opening card is
-                    the two-boxes-at-once case (see tooltip.ts).
-                -->
+<!-- Preserve the capture identifier at narrow widths. -->
                 <span class="flex min-w-0 items-center text-xs text-content">
                     <!-- Softened at the cut, so a half-drawn glyph reads as the name running into its mark. -->
                     <span
@@ -253,10 +236,7 @@ onBeforeUnmount(() => clearTimeout(timer));
                 <Icon v-if="progress !== undefined" name="spinner" spin class="shrink-0 text-2xs text-link" />
                 <Icon v-else-if="error !== undefined" name="exclamation-circle" class="shrink-0 text-2xs text-danger" v-tooltip.top="error" />
             </span>
-            <!--
-                The text equivalent of a thumbnail, and framed for the same reason the screenshot is: this is the file
-                itself, not a label for it. Clipped, never wrapped — one long line would otherwise claim the whole tile.
-            -->
+<!-- The text equivalent of a thumbnail, and framed for the same reason the screenshot is: this is the file itself, not a label for it. -->
             <span v-if="leadLines.length" class="block overflow-hidden rounded-md border border-line bg-canvas/40 px-2 py-1">
                 <!-- The fade masks the LINES, never the box: masking the box would dissolve its border mid-curve. -->
                 <span class="flex flex-col" :class="truncated ? `mask-b-from-70%` : ``">
@@ -282,11 +262,7 @@ onBeforeUnmount(() => clearTimeout(timer));
             :style="{ width: `${Math.round(progress * 100)}%` }"
         ></div>
 
-        <!--
-            The peek, teleported out of this chip by the overlay. Head and tail, with what sits between them stated
-            rather than silently dropped: a log is attached for what is at its end, so a preview that showed only the
-            beginning would be the wrong half every time.
-        -->
+<!-- The peek, teleported out of this chip by the overlay. -->
         <AnchoredOverlay v-model="peeking" :anchor="root" :side="side" cross="start" :gap="GAP">
             <div class="flex max-h-[min(32rem,70vh)] w-[min(34rem,80vw)] flex-col" @pointerenter="onCardEnter" @pointerleave="onLeave">
                 <div class="flex shrink-0 items-start gap-2 border-b border-line px-3 py-2">

@@ -4,9 +4,7 @@ import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
 import ReferenceLayout from "../../components/ReferenceLayout.astro";
 import { groupCounts } from "../../lib/api-reference";
 
-/* The count is COUNTED, not typed. A page whose whole argument is "two rules cover every route" is the one
- * page that must not name a number that has stopped being true, and this section's heading is the sentence a
- * reader is most likely to check. */
+/* The count is COUNTED, not typed. */
 const total = Object.values(await groupCounts()).reduce((sum, count) => sum + count, 0);
 
 const health = `curl https://sandbox-a1b2c3d4e5f6.intentic.dev/health

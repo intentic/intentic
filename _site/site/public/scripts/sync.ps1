@@ -11,7 +11,7 @@
 # once, in the agent (_devices/machine/src/install.ts), where they are compiled and tested.
 #
 # Usage (the platform's Desktop sync card hands you this):
-#   $env:SANDBOX_URL='https://sandbox-<id>.<zone>'; $env:PAIR_TOKEN='<token>'; $env:SYNC_DIR="$HOME\intentic\<name>-<id>"; irm https://intentic.dev/sync.ps1 | iex
+# Set SANDBOX_URL, PAIR_TOKEN, and SYNC_DIR before invoking the sync script.
 #
 # Required env: SANDBOX_URL, PAIR_TOKEN (the one-time token from the card).
 # Optional: SYNC_DIR - local folder to sync (default: ~/intentic/<id>, the same id the sandbox's own URL carries)

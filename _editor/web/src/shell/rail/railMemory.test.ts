@@ -6,10 +6,7 @@ import { type RailSeat, useRailMemory } from "./railMemory";
 // The environment read this module's import chain reaches (via useSandbox) at module eval: the same edge
 // daemonRestart.test.ts cuts, and jsdom plus this is the whole of what it wants.
 
-/* The rail's memory, exercised through the composable itself rather than a pure helper: the rules worth pinning
- * are both about WHEN it acts: hold a seat until the run is complete, write only when the seats themselves
- * change, and a helper handed the answer would test neither. No sandbox is selected here, so the memory lands
- * under the no-sandbox key. */
+/* The rail's memory, exercised through the composable itself rather than a pure helper: the rules worth pinning are both about WHEN it acts. */
 
 const KEY = `intentic.railSeats.local`;
 

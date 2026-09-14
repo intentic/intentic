@@ -3,10 +3,7 @@ import { describe, expect, it } from "vitest";
 import { LOCKED_FILE_ENTRIES, lockedFile } from "./lockedFile";
 
 describe(`lockedFile`, () => {
-    /* THE ASSERTION THIS TABLE EXISTS FOR. The sentences used to be keyed on the leaf names the state dir had
-     * before it was regrouped, so after the move every lookup missed and every locked file in the product fell
-     * through to "something only the sandbox itself uses" with no way out. Nothing failed, which is exactly why
-     * this is mechanical: the contract declares the entries, and each one owes the reader a sentence. */
+/* THE ASSERTION THIS TABLE EXISTS FOR. */
     it(`has a sentence for every entry the contract locks`, () => {
         for (const entry of LOCKED_STATE_ENTRIES) {
             expect([entry, LOCKED_FILE_ENTRIES[entry] !== undefined]).toEqual([entry, true]);

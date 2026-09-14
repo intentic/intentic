@@ -1,5 +1,4 @@
-/* Same cascade-layer bootstrap as the web app — see _editor/web/src/styles.css for why the order
- * must be declared before Tailwind/PrimeVue introduce their layers. */
+/* This app uses the web app's cascade-layer order. */
 @layer theme, base, primeng, components, utilities;
 
 @import "tailwindcss";

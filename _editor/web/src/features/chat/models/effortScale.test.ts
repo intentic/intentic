@@ -27,10 +27,7 @@ describe(`the effort scale`, () => {
         expect(values(effortsFor(`claude`, `claude-opus-5`, undefined))).toContain(`max`);
         expect(values(effortsFor(`claude`, `claude-opus-5`, false))).not.toContain(`max`);
 
-        /* ABSENT AND ON ARE THE SAME OFFER, and this is what lets the pickers carry no "leave it to the model"
-         * state: they seed thinking ON where a caller named none, and a seed that changed which rungs a reader
-         * could reach would be a silent downgrade of somebody's run. OFF is the only value that moves the
-         * scale, so it is the only one a reader has to be shown deliberately. */
+/* Absent and enabled settings use the same offer. */
         expect(effortsFor(`claude`, `claude-opus-5`, undefined)).toEqual(effortsFor(`claude`, `claude-opus-5`, true));
         expect(effortsFor(`claude`, `claude-opus-5`, false)).not.toEqual(effortsFor(`claude`, `claude-opus-5`, undefined));
         // Dropping the top rung must not disturb the rest of the scale.

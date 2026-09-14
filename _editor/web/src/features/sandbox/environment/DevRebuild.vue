@@ -198,21 +198,14 @@ const hiccup = computed(() => (live.value ? run.trouble : undefined));
                 </div>
             </AnchoredOverlay>
 
-            <!--
-                The whole point of this block: a build detached on another machine, drawn as something in progress. The
-                clock is this page's own, the lines are the machine's log, and both survive leaving the tab, reloading,
-                and the sandbox restarting underneath it.
-            -->
+            <!-- Detached builds expose device progress and logs. -->
             <div v-if="progress" class="flex items-center gap-2 text-2xs text-muted">
                 <Icon name="refresh" spin />
                 <span>{{ progress }}</span>
                 <span v-if="elapsedLabel" class="ml-auto shrink-0 font-mono tabular-nums text-subtle">{{ elapsedLabel }}</span>
             </div>
 
-            <!--
-                Shown from the first phase, before a single line exists, because an empty pane that says what it is
-                waiting for is the signal: this is the difference between "running" and "nothing happened".
-            -->
+            <!-- The log appears before its first line so running is distinct from no activity. -->
             <DeviceRunLog
                 v-if="live || run.lines.length > 0"
                 :lines="run.lines"
@@ -230,7 +223,7 @@ const hiccup = computed(() => (live.value ? run.trouble : undefined));
                 <span>{{ done }}</span>
             </p>
 
-            <!-- The log is named under every ending, since it is the only full account of a build nobody watched. -->
+            <!-- Failure and completion retain the full log path. -->
             <div v-if="failure || done" class="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <p class="text-2xs text-subtle">
                     The full output is in <span class="font-mono">{{ logPath }}</span> on that device.

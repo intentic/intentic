@@ -4,9 +4,7 @@
         <meta charset="utf-8" />
         <title>Intentic</title>
         <style>
-            /* Deliberately plain. A popup is 360 pixels of somebody's attention, opened when they want to know
-               one of three things: is it connected, what can it touch, and how do I stop it. Anything that
-               competes with those answers is in the way. */
+/* Deliberately plain. */
             :root {
                 color-scheme: light dark;
                 --line: color-mix(in srgb, currentColor 15%, transparent);
@@ -71,11 +69,7 @@
                 color: inherit;
                 cursor: pointer;
             }
-            /* The ember, from the product's own palette (_site/site/src/styles/global.css --color-primary-500),
-               stated rather than derived. `background: currentColor` with `filter: invert(1)` was the clever
-               version and it rendered a white button on a white panel in light mode — which is to say it
-               rendered the two controls that matter (Allow this site, Connect) as blank space. The label is
-               the warm near-black rather than white: on ember that is 6.4:1 instead of 2.9:1. */
+/* The ember, from the product's own palette (_site/site/src/styles/global.css --color-primary-500), stated rather than derived. */
             button.primary {
                 background: #e07b27;
                 border-color: #e07b27;

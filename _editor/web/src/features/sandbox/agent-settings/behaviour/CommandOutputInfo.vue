@@ -121,10 +121,7 @@ const GLOBAL_CLEANERS = [
         <InfoTable class="mt-4" :headers="[`Every command`, `Removes`]" :rows="GLOBAL_CLEANERS" />
         <p class="mt-1.5 text-2xs text-subtle">Dedupe and redaction run on failures too: neither can cost you a detail.</p>
 
-        <!--
-            Per-mechanism figures and the holdout measure different things: one is bookkeeping within a command, the
-            other compares two populations of commands.
-        -->
+<!-- Per-mechanism figures and the holdout measure different things: one is bookkeeping within a command, the other compares two populations of commands. -->
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">What the savings numbers mean</h3>
         <p class="mt-1.5 text-2xs text-muted">
             Every command is weighed before and after each rule runs, so the figure beside a switch is what that rule actually removed, counted rather than

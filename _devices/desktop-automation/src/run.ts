@@ -1,11 +1,7 @@
 import { execFile } from "node:child_process";
 import { DesktopError } from "./types.js";
 
-/* Running the one external program a backend needs, with the two failures that matter told apart.
- *
- * "Not installed" and "ran and refused" are different problems with different fixes, and a caller that collapses
- * them reports "could not click" for a machine that only needed `apt install xdotool`. ENOENT is the first; a
- * non-zero exit is the second, and its own stderr is a better message than anything invented here. */
+/* Running the one external program a backend needs, with the two failures that matter told apart. */
 
 // No desktop action should take this long. A hung `xdotool` (a display that stopped answering) would otherwise
 // hold a tool call open until something far upstream gave up.

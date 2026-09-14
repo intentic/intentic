@@ -7,9 +7,7 @@ pub mod staged;
 use crate::docker;
 use crate::util::{bail, Result};
 
-/* The name shapes shared with the run contract (@intentic/sandbox-run sandboxNames) and cleanup.sh — this
- * module never CREATES containers from these (creation goes through the image's run contract), it only has
- * to recognise and remove what any flow created. Keep the prefixes in lockstep with both. */
+/* The name shapes shared with the run contract (@intentic/sandbox-run sandboxNames) and cleanup.sh. */
 pub const CONTAINER_PREFIX: &str = "intentic-sandbox-";
 pub const TUNNEL_PREFIX: &str = "intentic-sandbox-tunnel-";
 pub const DIND_PREFIX: &str = "intentic-dind-host-";

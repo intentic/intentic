@@ -94,22 +94,13 @@ const remeasureLabel = computed(() =>
 </script>
 
 <template>
-    <!--
-        No surface of its own: whitespace and the heading mark it as a region, not a panel with a border or fill.
-        Lifted
-        out of flow rather than taking flex width, so the transcript keeps the full pane and its scrollbar the true
-        edge; sits one bar in from that edge so it doesn't sit over the scrollbar strip.
-    -->
+<!-- No surface of its own: whitespace and the heading mark it as a region, not a panel with a border or fill. -->
     <aside
         class="absolute inset-y-0 z-10 flex min-h-0 flex-col"
         :style="{ width: uiLength(CAPACITY_RAIL_PX), right: `var(--chat-scrollbar)` }"
         aria-label="Plan headroom"
     >
-        <!--
-            The header names the question this column answers, not the data ("Plan limits" is the Usage tab's heading);
-            age
-            sits beside it.
-        -->
+<!-- The header names the question this column answers, not the data ("Plan limits" is the Usage tab's heading); age sits beside it. -->
         <div class="flex shrink-0 items-center gap-2 px-3 py-2">
             <span class="min-w-0 flex-1 truncate text-2xs font-medium uppercase tracking-wide text-muted">Ready to run</span>
             <button
@@ -124,11 +115,7 @@ const remeasureLabel = computed(() =>
             </button>
         </div>
 
-        <!--
-            Unread isn't empty: until accounts load, this must not claim the fleet has nothing — drawn as the shape
-            that's
-            coming, not stated in words.
-        -->
+<!-- Unread isn't empty: until accounts load, this must not claim the fleet has nothing — drawn as the shape that's coming, not stated in words. -->
         <div v-if="!accountsLoaded" class="flex min-h-0 flex-1 flex-col gap-4 px-3 py-1" role="status" aria-busy="true">
             <span class="sr-only">Reading your connections…</span>
             <div v-for="index in 3" :key="index" class="flex flex-col gap-1.5" aria-hidden="true">
@@ -138,32 +125,17 @@ const remeasureLabel = computed(() =>
         </div>
 
         <template v-else>
-            <!--
-                Gap widens with nesting depth (lane < account < provider); it must grow with lane count or multi-bar
-                accounts
-                read as one long ladder.
-            -->
+<!-- Gap widens with nesting depth (lane < account < provider); it must grow with lane count or multi-bar accounts read as one long ladder. -->
             <div class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-3">
-                <!--
-                    Every provider spent at once is an ordinary end-of-week state, not an error, so it's stated
-                    plainly.
-                -->
+<!-- Every provider spent at once is an ordinary end-of-week state, not an error, so it's stated plainly. -->
                 <p v-if="capacity.providers.length === 0" class="text-2xs text-muted">Nothing has room right now.</p>
 
-                <!--
-                    One block per provider: the provider is the reader's actual choice here (accounts within it balance
-                    automatically). No card per provider — the column draws no surface, so a border would be the only
-                    box on screen.
-                -->
+<!-- One block per provider: the provider is the reader's actual choice here (accounts within it balance automatically). -->
                 <div v-for="entry in measuredProviders" :key="entry.provider" class="flex flex-col gap-2.5">
                     <div class="flex items-center gap-1.5">
                         <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
                         <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
-                        <!--
-                            Count, never a mean: 30 idle plus one spent isn't "3% used", it's one account you can't
-                            use. Hidden for a lone
-                            account.
-                        -->
+<!-- Count, never a mean: 30 idle plus one spent isn't "3% used", it's one account you can't use. -->
                         <span
                             v-if="entry.total > 1"
                             class="shrink-0 text-2xs tabular-nums text-subtle"
@@ -172,20 +144,8 @@ const remeasureLabel = computed(() =>
                         >
                     </div>
 
-                    <!--
-                        One lane per allowance (the 5-hour session and the week run out separately; one tightest-of-two
-                        bar couldn't say
-                        which). Pool names shrink to their window length ("5h", "wk") so two bars need no legend. A
-                        grid keeps columns
-                        aligned so same-window rows compare directly; the label column is content-sized so a longer
-                        scope only costs
-                        bar width.
-                    -->
-                    <!--
-                        Drawn row is decoration, the sentence below is the content (same split as UsageRing): a bar
-                        means nothing to a
-                        screen reader, so the row is aria-hidden and the full sentence spoken once, not both halves.
-                    -->
+<!-- One lane per allowance (the 5-hour session and the week run out separately; one tightest-of-two bar couldn't say which). -->
+<!-- Drawn row is decoration, the sentence below is the content (same split as UsageRing): a bar means nothing to a screen reader. -->
                     <div v-for="row in entry.rows" :key="row.id" class="flex flex-col gap-1">
                         <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1" aria-hidden="true">
                             <span
@@ -196,18 +156,11 @@ const remeasureLabel = computed(() =>
                             </span>
 
                             <template v-for="lane in row.lanes" :key="lane.kind">
-                                <!--
-                                    Below the account name, not beside it at the same size: this is the little chart's
-                                    axis, not another name.
-                                -->
+<!-- Below the account name, not beside it at the same size: this is the little chart's axis, not another name. -->
                                 <span class="max-w-18 truncate text-3xs text-subtle">
                                     {{ lane.short }}<span v-if="lane.scope !== undefined">&nbsp;·&nbsp;{{ lane.scope }}</span>
                                 </span>
-                                <!--
-                                    A pool at 0% still draws a sliver (min 1%), since an empty track reads as "no
-                                    reading" — the opposite meaning. A
-                                    row with genuinely no reading draws no lane and says so in words.
-                                -->
+<!-- A pool at 0% still draws a sliver (min 1%), since an empty track reads as "no reading" — the opposite meaning. -->
                                 <span class="block h-1 overflow-hidden rounded-full bg-content/10">
                                     <span
                                         class="ui-meter-fill block h-full rounded-full"
@@ -255,29 +208,15 @@ const remeasureLabel = computed(() =>
                     </div>
                 </div>
 
-                <!--
-                    Without this, an absent provider could mean spent-until-Sunday or never-connected, with no way to
-                    tell apart
-                    short of leaving the window; each line says which. In flow under the offers, not pinned to the
-                    bottom, since
-                    this rail is opened to find what IS available.
-                -->
+<!-- Provider rows distinguish spent capacity from an unconnected provider. -->
                 <div v-if="capacity.out.length > 0 || capacity.blocked.length > 0" class="flex flex-col gap-1 border-t border-line pt-3">
                     <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Unavailable</span>
                     <div v-for="entry in capacity.out" :key="entry.provider" class="flex items-baseline gap-2">
                         <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ entry.label }}</span>
                         <span class="shrink-0 text-2xs text-subtle">{{ outNote(entry) }}</span>
                     </div>
-                    <!--
-                        Counted, not listed, one line per condition: a credential that stays broken until a person acts
-                        is the one thing a fleet's percentages cannot say, and connecting another account is exactly
-                        when a reader needs to see it.
-                    -->
-                    <!--
-                        The condition is the alarm; the instruction stays quiet beside it (as in the Usage tab's
-                        attention block), so
-                        the sentence doesn't shout twice.
-                    -->
+<!-- Counted, not listed, one line per condition: a credential that stays broken until a person acts is the one thing a fleet's percentages cannot say. -->
+<!-- The condition is the alarm; the instruction stays quiet beside it (as in the Usage tab's attention block), so the sentence doesn't shout twice. -->
                     <p v-for="entry in capacity.blocked" :key="entry.reason" class="text-2xs">
                         <span class="text-warning">{{ entry.count }} can't serve</span>
                         <span class="text-subtle"> · {{ entry.reason }}</span>

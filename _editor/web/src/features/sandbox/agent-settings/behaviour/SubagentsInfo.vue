@@ -1,14 +1,7 @@
 <script setup lang="ts">
 import { InfoDialog, InfoTable } from "@intentic/ui";
 
-/* The (i) beside the Agent tab's "Subagents" group. Three numbers that all sound like "how many agents", so the
- * dialog's whole job is to say which question each one answers and where you meet it: the wall you hit tells
- * you which row to move, and without that all three read as the same setting spelled three ways.
- *
- * The posture above them is named but not explained at length: "may it delegate at all" is legible from its own
- * four labels, and the reason this dialog exists is that the three numbers are not.
- *
- * Defaults quoted here come from SandboxSettingsSchema: 20 / 200 / 3, which are the Claude Code CLI's own. */
+/* The (i) beside the Agent tab's "Subagents" group. */
 
 const WHICH_CAP = [
     [`Subagents at once`, `A single fan-out stops part-way and the rest run after`, `A wide sweep: many files, many checks, all at the same time`],

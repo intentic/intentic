@@ -112,15 +112,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     );
     app.use(`*`, secureHeaders({ crossOriginEmbedderPolicy: false }));
 
-    /* HOW MUCH BODY A REQUEST MAY CARRY, decided before any route reads one. Hono buffers a JSON body whole
-     * and Node puts no ceiling under that, so every route that parses before it looks anything up
-     * (/setup/claim, /setup/report, /sandbox/announce, all sessionless) was a way to hand this process as much
-     * heap as a client cared to send, and the authenticated ones were no better once past their token check.
-     * A megabyte covers everything the platform is legitimately sent; the largest body in the contract is a
-     * sandbox logo (ImageDataUrlSchema, 150 KB). The trial's chat completions are the exception and get a
-     * ceiling of their own: a conversation is sent whole on every turn, and a long one with tool output in it
-     * runs to megabytes. The build report keeps the tighter cap it declares itself. A Content-Length over the
-     * limit is refused before a byte is read; a chunked body is read up to the limit and no further. */
+/* HOW MUCH BODY A REQUEST MAY CARRY, decided before any route reads one. */
     app.use(`*`, (c, next) =>
         bodyLimit({
             maxSize: c.req.path.startsWith(`/trial/`) ? TRIAL_BODY_LIMIT_BYTES : BODY_LIMIT_BYTES,
@@ -235,15 +227,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         return announced.count === 0 ? c.text(`error: unknown sandbox`, 404) : c.json({ ok: true });
     });
 
-    /* THE ONE THING ABSENCE CANNOT TELL US, posted by whoever is about to delete the container (`ic sandbox
-     * remove`, the device tool that shells out to it) while the connect token is still readable from the box.
-     *
-     * Without it the editor is left inferring from silence, and silence is the same shape for a closed laptop, a
-     * stopped container and a deleted one — so it either spins forever (what it does) or accuses the user of
-     * having deleted a sandbox that is merely asleep (worse). One POST turns the worst case into the certain one.
-     *
-     * Same sessionless door and same credential as announce above: the caller is the machine, not a browser. The
-     * row is NOT deleted — that is the owner's press, on a screen that can now tell them what happened. */
+    /* A deletion report records that the container is gone when absence alone is ambiguous. */
     app.post(`/sandbox/farewell`, async (c) => {
         const token = c.req.header(`x-intentic-connect`);
         if (token === undefined || token === ``) {
@@ -258,16 +242,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         return removed.count === 0 ? c.text(`error: unknown sandbox`, 404) : c.json({ ok: true });
     });
 
-    /* HOW A SANDBOX PRESENTS ITSELF, read by the sandbox itself. Same sessionless door as announce above and the
-     * same credential (possession of the connect token), because the caller is the daemon, not a browser.
-     *
-     * It exists for portability. A sandbox's display name and switcher logo are columns on this row and live
-     * nowhere in /work or /history, so the daemon does not know either one — which meant a bundle could not carry
-     * them and a migrated sandbox arrived wearing the auto-name it was minted with. The daemon asks for them when
-     * it packs a bundle, writes them into the manifest, and the target's browser applies them through
-     * `sandbox.update` after the arrival.
-     *
-     * Read-only, and narrower than the row: no token, no daemonUrl, nothing another lane could use. */
+    /* The sandbox presents itself through the same sessionless credentialed door as announce. */
     app.post(`/sandbox/presentation`, async (c) => {
         const token = c.req.header(`x-intentic-connect`);
         if (token === undefined || token === ``) {

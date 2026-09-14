@@ -1,14 +1,5 @@
 ---
-/* A DISCORD CHANNEL, drawn as Discord draws one. It used to share a component with the /earn figure, on the
- * reasoning that two chats on one site should be one drawing — but the two are not one surface. This thread
- * happens in Discord, where a teammate types; the /earn thread happens in the product's own panel. Making
- * them match meant one of them was lying about where it takes place, and the one that lost was this one:
- * an agent reached through a chat app is the whole claim of the figure, so the chat app has to be legible AS
- * a chat app.
- *
- * So this is Discord's anatomy rather than ours: an avatar gutter, a bold display name with the APP tag every
- * bot carries beside it, a timestamp, and the message as plain text under the name — Discord has no bubbles.
- * Our palette, because the site is one brand and a figure is not a screenshot. */
+/* A DISCORD CHANNEL, drawn as Discord draws one. */
 
 export interface DiscordMsg {
     author: string;
@@ -74,8 +65,7 @@ const plusGlyph =
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                             <span class={`text-sm font-medium ${msg.app ? "text-link" : "text-content"}`}>{msg.author}</span>
-                            {/* Discord's own bot marker, and the one thing on this figure that says the
-                                thing answering is not a person. */}
+                            {/* Mark app messages so they are not mistaken for human messages. */}
                             {msg.app && (
                                 <span class="rounded bg-primary-600/20 px-1 py-px text-[0.625rem] font-semibold tracking-wide text-link uppercase">
                                     App
@@ -83,8 +73,7 @@ const plusGlyph =
                             )}
                             {msg.time && <span class="text-2xs text-subtle">{msg.time}</span>}
                         </div>
-                        {/* Plain text under the name — Discord draws no bubble, and a bubble here was the
-                            clearest tell that this was our chat wearing a Discord header. */}
+                        {/* Keep message text plain because Discord does not use chat bubbles. */}
                         <p class="mt-0.5 text-sm leading-relaxed text-muted">{msg.text}</p>
                     </div>
                 </div>

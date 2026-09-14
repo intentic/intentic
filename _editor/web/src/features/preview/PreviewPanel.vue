@@ -242,11 +242,7 @@ const startHint = computed<string | undefined>(() => {
     return `Runs ${what} in the sandbox. It appears in the terminal ${startSession.value}. ${cost}`;
 });
 
-/* HOW LONG THIS WAIT HAS BEEN GOING, because the screen below is a promise ("the preview opens the moment it
- * answers") and a promise with no clock on it is what the reported spinner was: "Its dev server is starting"
- * over a start that had been going for ten minutes reads exactly like one that has been going for ten
- * seconds. Stamped when the wait begins (the same condition the fallback poll runs on, below) and cleared
- * when it ends, so a target that comes up and goes down again starts a fresh clock. */
+/* The wait duration stays visible while the preview is starting. */
 const waitingSince = ref<number | undefined>(undefined);
 const now = useNow(() => waitingSince.value !== undefined);
 const waitedMs = computed(() => (waitingSince.value === undefined ? 0 : now.value - waitingSince.value));
@@ -260,11 +256,7 @@ const waitedFor = computed(() => {
     return minutes < 1 ? `${Math.floor(waitedMs.value / 1000)}s` : `${minutes} min`;
 });
 
-/* WHAT THE STARTING SCREEN SAYS, off the daemon's own account of where the start has got to (PanelLaunch)
- * rather than a fixed sentence about installs. `exited` is the one that matters most: a dev command that died
- * on its first line used to sit behind "Preparing the preview…" for as long as anyone cared to wait. Each
- * state has two sentences, the wait and the verdict, because a start that has outlived any reasonable start
- * is no longer a wait: the screen stops promising an iframe and starts pointing at the terminal. */
+/* Launch hints describe the daemon's starting phase, not generic preview health. */
 const LAUNCH_HINTS: Record<PanelLaunch, { readonly waiting: string; readonly overdue: (waited: string) => string }> = {
     launching: {
         waiting: `Opening its terminal.`,
@@ -303,19 +295,14 @@ const launchHint = computed<string | undefined>(() => {
     return probeSlow.value ? `The address is taking a while to answer: its terminal shows the dev server live.` : undefined;
 });
 
-/* THE WAY OUT OF A STUCK START: end the pane and start it again, which is what a person does in the terminal
- * once they have looked. One press rather than Stop then Start, because by the time this button is drawn the
- * screen has already told them the start is stuck, and two presses to act on that is one too many. */
+/* THE WAY OUT OF A STUCK START: end the pane and start it again, which is what a person does in the terminal once they have looked. */
 const restart = (): Promise<void> =>
     act(async (entry) => {
         await stop(entry);
         await start(entry);
     });
 
-/* THE WAIT'S OWN FALLBACK. The daemon pushes the flip from starting to serving, and this panel re-probes when
- * the pushed list carries the address; a frame dropped across a reconnect left both waiting for ever. While a
- * start is being watched, ask again every few seconds. Cheap (one invalidation of two shared entries), and it
- * stops the moment the wait does. */
+/* THE WAIT'S OWN FALLBACK. */
 const STARTING_POLL_MS = 10_000;
 let startingPoll: ReturnType<typeof setInterval> | undefined;
 const stopStartingPoll = (): void => {
@@ -367,10 +354,7 @@ onUnmounted(stopStartingPoll);
                     aria-label="Which app to preview"
                     header="Preview"
                 />
-                <!--
-                    Shown for repo/app kinds regardless of startable; a monorepo with no root `dev` can't be started here but is still running or
-                    not.
-                -->
+                <!-- Repository and app targets always show their kind. -->
                 <StatusBadge
                     v-if="target && (target.kind === `repo` || target.kind === `app`)"
                     :variant="statusVariant"
@@ -436,10 +420,7 @@ onUnmounted(stopStartingPoll);
                 >
                     <Icon name="code" />
                 </button>
-                <!--
-                    Shown only once the target answers, so a copied link never 502s; `arrow-up-right` here since `external-link` is reserved for the
-                    window pop-out below.
-                -->
+                <!-- The external link appears only after the target has answered. -->
                 <template v-if="target.url && target.healthy">
                     <CopyButton :text="target.url" :aria-label="copyHint" v-tooltip.bottom="copyHint" />
                     <a
@@ -467,10 +448,7 @@ onUnmounted(stopStartingPoll);
             </button>
         </div>
 
-        <!--
-            Reports in flow, not through the notification lane: a view-local failure belongs beside the controls that raised it, pushing the preview
-            down rather than covering it.
-        -->
+        <!-- Preview errors stay beside the controls that caused them. -->
         <div class="flex min-h-0 flex-1 flex-col">
             <Notice v-if="actionError" :of="noticeOf(actionError)" class="mx-3 mt-3" />
 
@@ -502,10 +480,7 @@ onUnmounted(stopStartingPoll);
                 ></iframe>
             </div>
 
-            <!--
-                Something answered, but not this sandbox's preview proxy: no route was ever attached, or the record is still propagating. Forwarded
-                ports don't depend on a per-panel name.
-            -->
+            <!-- A missing route means this sandbox has no preview proxy. -->
             <div v-else-if="reach?.outcome === `unreachable`" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <Icon name="exclamation-triangle" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">This preview address doesn't reach your sandbox.</p>
@@ -524,10 +499,7 @@ onUnmounted(stopStartingPoll);
                 </div>
             </div>
 
-            <!--
-                Ordinary monorepo shape: `dev` fans out across packages on their own ports, so no single preview address applies. Forwarding one, in
-                one press, is what makes it previewable.
-            -->
+            <!-- Ordinary monorepo shape: `dev` fans out across packages on their own ports, so no single preview address applies. -->
             <div v-else-if="!target.url && target.servers.length > 0" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <Icon name="globe" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">
@@ -560,13 +532,11 @@ onUnmounted(stopStartingPoll);
                 </p>
             </div>
 
-            <!-- STARTED, NOT YET SERVING: installing, compiling, or failing in its terminal, which is the one
-                 place that says which. Also covers the wait on a freshly minted name. -->
+<!-- STARTED, NOT YET SERVING: installing, compiling, or failing in its terminal, which is the one place that says which. -->
             <div v-else-if="probing || target.running" class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
                 <Icon v-if="target.launch === `exited` || waitingLong" name="exclamation-triangle" class="text-2xl text-subtle" />
                 <Icon v-else name="spinner" class="text-muted" spin />
-                <!-- Three headings for three states: a verdict, a wait that has gone on too long to still be
-                     called one, and the wait itself. -->
+                <!-- The heading identifies the preview's verdict, timeout, or active wait state. -->
                 <p class="text-sm text-muted">
                     {{ target.launch === `exited` ? `Its dev server stopped.` : waitingLong ? `This is taking too long.` : `Preparing the preview…` }}
                 </p>
@@ -579,8 +549,7 @@ onUnmounted(stopStartingPoll);
                         severity="secondary"
                         @click="terminal.openFocused(target.session!)"
                     />
-                    <!-- Offered only once the wait has become a verdict: a Restart beside a ten-second spinner
-                         invites the click that turns a slow start into a slower one. -->
+                    <!-- Restart appears only after the wait becomes a verdict. -->
                     <Button
                         v-if="target.startable && (waitingLong || target.launch === `exited`)"
                         label="Restart"
@@ -593,7 +562,7 @@ onUnmounted(stopStartingPoll);
                 </div>
             </div>
 
-            <!-- Not running, the one screen where the button is about to do something substantial, so it says what, where, and how long. -->
+            <!-- The stopped state explains the next action and its destination. -->
             <div v-else class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
                 <p class="text-sm text-muted">
                     <span class="font-mono">{{ target.label }}</span> isn't running.

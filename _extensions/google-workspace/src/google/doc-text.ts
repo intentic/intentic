@@ -1,9 +1,4 @@
-/* A GOOGLE DOC AS TEXT. The Docs API describes a document as a tree of structural elements whose leaves are
- * runs of styled text, and every consumer here wants the prose back out of it.
- *
- * Headings, lists and tables are marked in the flattened text rather than dropped, because a model asked to
- * summarize or edit a document needs to know which line was a heading, and `#` is both the cheapest marker
- * and the one it already reads everywhere else. */
+/* A GOOGLE DOC AS TEXT. */
 
 interface TextRun {
     readonly content?: string;

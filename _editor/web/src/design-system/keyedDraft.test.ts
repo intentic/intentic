@@ -3,9 +3,7 @@ import { expect, it } from "vitest";
 import { useKeyedDraft } from "@intentic/ui";
 import { effectScope, ref } from "vue";
 
-/* What the memory and knowledge panes rely on and neither could pin (extensions have no runner for a kit
- * composable either): an unsaved edit survives reading another note and coming back, which is the whole reason
- * the draft lives above the pane rather than in it. */
+/* What the memory and knowledge panes rely on and neither could pin (extensions have no runner for a kit composable either). */
 it(`keeps one draft per selection, and forgets the one that is cleared`, () => {
     const selected = ref<string | undefined>(`a`);
     const scope = effectScope();

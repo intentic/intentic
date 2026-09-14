@@ -5,10 +5,7 @@ import { WORKSPACE_STATE } from "../../lib/queryKeys";
 import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
 import { projectWorkspaceState } from "./workspaceStateProjection";
 
-/* The infrastructure read-model: the sandbox's desired-state graph joined with the last reconcile result,
- * read DIRECTLY from the daemon (desired-state.json + status.json via its git file routes) and shaped locally
- * (see workspaceStateProjection). Shared by the infrastructure + live-status extensions, one sandbox-scoped
- * query, so a provision from one tab refreshes the other through the shared cache. */
+/* The infrastructure read-model: the sandbox's desired-state graph joined with the last reconcile result. */
 
 // Read + parse one JSON file from the desired-state repo via the daemon; undefined when absent (the daemon
 // answers a missing/denylisted file with a non-200 or an { error } body, both mean "not resolved yet").

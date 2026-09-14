@@ -122,10 +122,7 @@ const add = async (): Promise<void> => {
 </script>
 
 <template>
-    <!--
-        "on this device", not "for this sandbox": this list sits under the machine's own sandbox list, and two
-        adjacent headings whose "this" means different things is how the old page read.
-    -->
+<!-- "on this device", not "for this sandbox": this list sits under the machine's own sandbox list. -->
     <RowGroup v-if="device.hostId !== undefined" label="Runners on this device" :count="mine.length === 0 ? undefined : mine.length">
         <template #actions>
             <Button
@@ -168,15 +165,9 @@ const add = async (): Promise<void> => {
                     </span>
                 </span>
                 <StatusBadge v-if="!runner.online" variant="neutral" size="xs" label="offline" />
-                <!--
-                    A runner behind the parent runs fine until it doesn't, then fails as a link error rather than an old
-                    machine; drift is said here instead.
-                -->
+<!-- A runner behind the parent runs fine until it doesn't, then fails as a link error rather than an old machine; drift is said here instead. -->
                 <StatusBadge v-else-if="runner.parity === `outdated`" variant="warning" size="xs" label="outdated" />
-                <!--
-                    Update rebuilds an outdated container; Sync pushes the fixable half over the runner's live link. Each shows
-                    only when it has something to do.
-                -->
+<!-- Update rebuilds an outdated container; Sync pushes the fixable half over the runner's live link. -->
                 <span class="ml-auto flex items-center gap-1">
                     <Button
                         v-if="runner.parity === `outdated` && runner.online"

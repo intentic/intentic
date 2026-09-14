@@ -180,17 +180,10 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
 </script>
 
 <template>
-    <!--
-        Header and panel share one tint while open, reading as a single block; the wash, chevron and rail are
-        <DisclosureRow>'s. `body="rail"` since what opens is the secret's record.
-    -->
+<!-- Header and panel share one tint while open, reading as a single block; the wash, chevron and rail are <DisclosureRow>'s. -->
     <DisclosureRow class="@container" :open="expanded" @update:open="emit(`update:expanded`, !expanded)">
         <template #lead="{ mark }">
-            <!--
-                The only non-text element, findable without reading (accounts differing only in a last character).
-                Sized by the
-                row's tier (from the enclosing <RowGroup>), not fixed here.
-            -->
+<!-- The only non-text element, findable without reading (accounts differing only in a last character). -->
             <BrandMark :size="mark" :name="row.title" :logo="row.logo" :icon="row.icon" />
         </template>
 
@@ -202,10 +195,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     :class="row.mono ? `font-mono` : ``"
                     >{{ row.title }}</span
                 >
-                <!--
-                    Dropped rather than wrapped at rail width: the name is what the row is for; the panel below repeats
-                    the detail.
-                -->
+<!-- Dropped rather than wrapped at rail width: the name is what the row is for; the panel below repeats the detail. -->
                 <span
                     v-if="row.detail"
                     v-tooltip.top.overflow="row.detail"
@@ -297,11 +287,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     <span v-else class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span>
                 </template>
             </p>
-            <!--
-                Who has to release this: off for nearly everything by design, since gating is for the few credentials
-                where one
-                wrong use is the incident. Owner-only to change; shown only on rows with something to release.
-            -->
+<!-- Who has to release this: off for nearly everything by design, since gating is for the few credentials where one wrong use is the incident. -->
             <div v-if="row.gateSubject !== undefined" class="mt-3 border-t border-line pt-2">
                 <div class="flex items-center justify-between gap-2">
                     <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Needs approval</span>
@@ -318,11 +304,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     />
                 </div>
 
-                <!--
-                    Not the owner: states the gate's status and that only the owner can change it, rather than hiding
-                    the controls
-                    silently.
-                -->
+<!-- Not the owner: states the gate's status and that only the owner can change it, rather than hiding the controls silently. -->
                 <p v-if="!isOwner" class="pt-0.5 text-2xs text-muted">
                     <template v-if="gate">
                         Only {{ gate.approvers.join(` or `) }} can release this, and
@@ -333,11 +315,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                 </p>
 
                 <template v-else-if="gateOn">
-                    <!--
-                        Approvers are an exact list, not a role floor ("only Bob"); the owner appears here too, since
-                        they aren't an
-                        implicit approver.
-                    -->
+<!-- Approvers are an exact list, not a role floor ("only Bob"); the owner appears here too, since they aren't an implicit approver. -->
                     <p class="pt-1 text-2xs text-muted">Who can release it</p>
                     <div class="flex flex-wrap gap-1 pt-1">
                         <button
@@ -352,11 +330,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                             {{ email }}
                         </button>
                     </div>
-                    <!--
-                        Names come from the Access roster plus the owner; the daemon refuses anyone else. Tells an
-                        owner alone on a fresh
-                        sandbox that this isn't the whole feature.
-                    -->
+<!-- Names come from the Access roster plus the owner; the daemon refuses anyone else. -->
                     <p v-if="approverChoices.length === 0" class="pt-1 text-2xs text-muted">
                         Nobody can be named yet. Give somebody access on the
                         <RouterLink to="/sandbox/access" class="text-link hover:underline">Access tab</RouterLink> first.
@@ -366,11 +340,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                         <RouterLink to="/sandbox/access" class="text-link hover:underline">Access tab</RouterLink> can be named here.
                     </p>
 
-                    <!--
-                        How long one release lasts, except where it isn't a choice: a signed-in profile or running MCP
-                        server is mounted
-                        for a whole turn, so the daemon forces that scope regardless of the switch.
-                    -->
+<!-- How long one release lasts, except where it isn't a choice: a signed-in profile or running MCP server is mounted for a whole turn. -->
                     <p class="pt-2 text-2xs text-muted">How long one release lasts</p>
                     <p v-if="row.sessionShaped" class="pt-0.5 text-2xs text-subtle">
                         For the rest of the conversation. A signed-in account is loaded for a whole turn, so it cannot be released for a single use.

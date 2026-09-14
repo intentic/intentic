@@ -45,7 +45,7 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
             open: async (id, config) => {
                 // Assigned once open() returns; the message callback closes over this binding and needs it defined
                 // first.
-                // oxlint-disable-next-line prefer-const -- the message callback passed into openWhatsAppConnection closes over this binding, so it has to exist before the call that assigns it.
+                // oxlint-disable-next-line prefer-const -- The callback assigns this binding later.
                 let connection: WhatsAppConnection | undefined;
                 connection = await openWhatsAppConnection({
                     capabilityId: id,

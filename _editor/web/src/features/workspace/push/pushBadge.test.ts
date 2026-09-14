@@ -22,8 +22,7 @@ test(`a question owed is the danger mark, wherever the user is`, () => {
     expect(pushBadge(undefined, QUESTION)).toMatchObject({ mark: `exclamation-triangle`, tone: `danger` });
 });
 
-/* The tile going quiet the moment the card is closed is the app agreeing the failure is over, when the push is still
- * unsent and the tree still fails. Same glyph, one tone down: no longer interrupting, still owed. */
+/* The tile going quiet the moment the card is closed is the app agreeing the failure is over, when the push is still unsent and the tree still fails. */
 test(`a verdict whose card was closed keeps the mark, in the tone of something no longer interrupting`, () => {
     const badge = pushBadge(undefined, undefined, HELD);
     expect(badge).toMatchObject({ mark: `exclamation-triangle`, tone: `warning` });

@@ -1,19 +1,7 @@
 import { readonly, ref, type Ref } from "vue";
 import { DESKTOP_SETUP_EVENT, readDesktopSetupReport, type DesktopSetupReport } from "../../app/environments/desktop";
 
-/* THE INSTALL THE DESKTOP APP IS RUNNING, AS THIS PAGE LAST HEARD OF IT.
- *
- * The app's setup card can be stepped aside ("Back to your workspace") while its run keeps going, and the
- * page the user then lands on is this one, the setup page, which until now could only say "follow it in the
- * Intentic window" about a window that had just left. The app announces every change of its own bar into
- * this webview (environments/desktop.ts `DESKTOP_SETUP_EVENT`); this holds the last one, for the strip the
- * page draws beside its wait line (DesktopSetupProgress.vue).
- *
- * Module state rather than component state because the event arrives whether or not the page is mounted,
- * and a page that mounts after the last tick must still show it: the app reports every second while a run is
- * live, so the gap is never long, but a run that has STOPPED reports once and then falls silent, and that
- * one report is exactly the one a page must not miss. `heardAt` is for the strip's own staleness reading: a
- * run that says "running" and has said nothing for a while is an app that went away. */
+/* The setup page remains available while setup runs in the background. */
 const report = ref<DesktopSetupReport | undefined>(undefined);
 const heardAt = ref<number | undefined>(undefined);
 let listening = false;

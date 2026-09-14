@@ -13,15 +13,7 @@ interface DesktopWebview {
     installId: string;
     update: string | null;
     loopbackUngated?: boolean;
-    /* THIS WINDOW HAS NO TITLE BAR OF ITS OWN, so the page draws one. The app's window is undecorated
-     * (desktop-app windows.rs): the platform's strip carried a logo and three buttons above a product whose own
-     * top row is already a full-width bar, and this is the page being told those three buttons are now its to
-     * draw (shell/window/WindowControls.vue).
-     *
-     * OPTIONAL FOR THE REASON THE FLAG ABOVE IS, and this one is load-bearing: the app is a binary somebody
-     * installed once and this SPA is deployed continuously, so a window older than the page is an ordinary
-     * state. An app that still opens a decorated window never says this word, and the page then draws no
-     * controls — where a page that drew them regardless would put a second set of buttons under the first. */
+/* THIS WINDOW HAS NO TITLE BAR OF ITS OWN, so the page draws one. */
     frameless?: boolean;
 }
 
@@ -52,13 +44,7 @@ export interface DesktopUpdateEvent {
 // (setup_link.rs).
 export const DESKTOP_UPDATE_LINK = `intentic://update`;
 
-/* THE APP ANNOUNCING WHERE THE INSTALL IT IS RUNNING HAS GOT TO (desktop-app's windows.rs `announce_setup`),
- * for the setup page to draw once the app's own card has stepped aside. The same channel as the update, for
- * the same reasons: a DOM event, nothing exposed to the page, and a browser with no app around it simply
- * never hears one. Every tick of the app's own bar arrives here, so the page's copy is as live as the card's.
- *
- * `closed` is not a state of the install but of the card: the user put a finished one away, and the page
- * takes its strip down with it. */
+/* THE APP ANNOUNCING WHERE THE INSTALL IT IS RUNNING HAS GOT TO (desktop-app's windows.rs `announce_setup`). */
 export const DESKTOP_SETUP_EVENT = `intentic-desktop-setup`;
 
 export type DesktopSetupState = `running` | `waiting` | `failed` | `stopped` | `done` | `closed`;
@@ -79,9 +65,7 @@ export interface DesktopSetupReport {
 
 const SETUP_STATES: readonly DesktopSetupState[] = [`running`, `waiting`, `failed`, `stopped`, `done`, `closed`];
 
-/* The event's detail read back as a report, or nothing. It crossed a process boundary as an object the app
- * serialised, and a page must not draw a bar off a shape it never checked: an older or newer app that spells
- * the state differently is a report this page has no screen for, and says nothing rather than something wrong. */
+/* The event's detail read back as a report, or nothing. */
 export const readDesktopSetupReport = (detail: unknown): DesktopSetupReport | undefined => {
     if (detail === null || typeof detail !== `object`) {
         return undefined;
@@ -106,29 +90,13 @@ export const readDesktopSetupReport = (detail: unknown): DesktopSetupReport | un
     };
 };
 
-/* The way back to the app's setup card once "Back to your workspace" has stepped it aside: the same face,
- * holding the same run. App-window only on the Rust side, like the update: it raises a window of the app,
- * which is the app's own page's business and no outside page's. */
+/* The way back to the app's setup card once "Back to your workspace" has stepped it aside: the same face, holding the same run. */
 export const DESKTOP_LAUNCHER_LINK = `intentic://launcher`;
 
-/* --- THE TITLE BAR THIS PAGE DRAWS FOR A WINDOW THAT HAS NONE ------------------------------------------
- *
- * `frameless` above says the window arrived without a platform frame; these are the presses that work it.
- * Links, like everything else here, which is what lets a window whose page has NO command surface still be
- * minimised, maximised, closed and DRAGGED by its own bar: `drag` hands the window to the platform's own move
- * loop from Rust, exactly as a Tauri drag region would, and that call is asynchronous either way.
- *
- * `ready` is the page saying its bar is up. It is not decoration: the app opens undecorated and hands the
- * platform's frame BACK if nothing announces one within a few seconds (windows.rs `arm_frame_fallback`), so a
- * page that failed to load, or an app newer than the page it loaded, is a window with a frame rather than a
- * rectangle nobody can move. */
+/* `frameless` above says the window arrived without a platform frame; these are the presses that work it. */
 export type DesktopWindowVerb = "ready" | "minimize" | "maximize" | "close" | "drag";
 
-/* A drag is the one verb that cannot be held back the way `openDesktopLink` holds every early link: it is a
- * press, and the platform's move loop wants the button still down when it starts. Before the page has loaded
- * it is dropped rather than deferred — a move loop started after the release is a window glued to the pointer
- * — and that costs nothing anyone will meet: the window can be dragged the moment the page has loaded, which
- * is before most people have found the bar. */
+/* A drag is the one verb that cannot be held back the way `openDesktopLink` holds every early link: it is a press. */
 export const workDesktopWindow = (verb: DesktopWindowVerb): void => {
     if (verb === `drag` && !pageLoaded()) {
         return;
@@ -136,9 +104,7 @@ export const workDesktopWindow = (verb: DesktopWindowVerb): void => {
     openDesktopLink(`intentic://window?do=${verb}`);
 };
 
-/* What the app tells the page BACK about the window, on the update banner's channel (a DOM event dispatched by
- * `eval` from Rust) and for the same reason: the maximise button's glyph is a fact about the window, and half
- * the ways a window gets maximised never touch that button — Win+↑, a drag to the top edge, a snap layout. */
+/* The app reports window state to the page through the update-banner DOM event. */
 export const DESKTOP_WINDOW_EVENT = `intentic-desktop-window`;
 
 export interface DesktopWindowEvent {
@@ -225,25 +191,10 @@ export const desktopRecreateLink = (slug: string, hash?: string, rollback = fals
     return `intentic://recreate?${params.toString()}`;
 };
 
-/* `readyState` is "complete" from the moment the document's `load` event is about to fire, which is the one
- * moment this file cares about (below). */
+/* Page load is complete only when the document reports `readyState === "complete"`. */
 const pageLoaded = (): boolean => document.readyState === `complete`;
 
-/* A navigation, not a fetch, since that's what the app intercepts. In a browser with no app it's a silent no-op,
- * which is why every caller shows download links beside it.
- *
- * NEVER BEFORE THE DOCUMENT HAS LOADED — and this is load-bearing, not tidiness. Starting a navigation, even one
- * the app cancels a millisecond later, aborts whatever the current document is still fetching: the renderer
- * drops the pending loads, `load` never fires, and the page is left in Chromium's loading regime for the rest
- * of its life, where every frame costs three to four times what it should. Measured on the login page in the
- * app's own dev server: 16.7ms a frame on a page that loaded, 50–66ms a frame on one whose load a link had
- * cut short, with nothing else different. That was the desktop app's "everything is slow": the page's own
- * title bar announced itself (`intentic://window?do=ready`, WindowControls.vue) from `onMounted`, while the
- * fonts and the sign-in script were still arriving.
- *
- * So a link asked for early waits for `load` and fires then. For the announcement that is invisible — a second
- * at most, and the app's frame fallback allows for it (windows.rs `CHROME_GRACE`). For a press it is the same
- * second, on a button pressed while the page was still loading. */
+/* A navigation, not a fetch, since that's what the app intercepts. */
 export const openDesktopLink = (link: string): void => {
     if (pageLoaded()) {
         globalThis.location.href = link;

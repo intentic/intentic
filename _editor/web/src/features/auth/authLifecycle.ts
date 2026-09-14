@@ -15,7 +15,7 @@ export const onPlatformAuthInvalidated = (listener: InvalidationListener): (() =
 
 export const invalidatePlatformAuth = async (broadcast = true): Promise<void> => {
     if (broadcast) {
-        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel, not window: this postMessage takes no targetOrigin
+        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin.
         channel?.postMessage(`invalidated`);
     }
     await Promise.all([...listeners].map((listener) => listener()));

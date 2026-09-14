@@ -183,10 +183,7 @@ const hasSpend = computed(() => current.value.length > 0);
 
         <!-- Refetch dims the previous render instead of swapping in skeletons: no layout jump, numbers stay readable. -->
         <div class="flex flex-col gap-6 transition-opacity" :class="isFetching && !isLoading ? `opacity-60` : ``">
-            <!--
-                Skeleton mirrors the real layout (hero, tiles, chart) so a returning reader recognises it while the ledger
-                sums. Not sized to the real figure though: a big grey bar there would read as a failed load, not a wait.
-            -->
+<!-- Skeleton mirrors the real layout (hero, tiles, chart) so a returning reader recognises it while the ledger sums. -->
             <div v-if="isLoading && outline" role="status" aria-busy="true" class="flex flex-col gap-6">
                 <span class="sr-only">Reading the ledger…</span>
                 <div class="grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-4" aria-hidden="true">
@@ -201,8 +198,7 @@ const hasSpend = computed(() => current.value.length > 0);
                         <span class="skeleton block h-3.5 w-32" />
                         <span class="skeleton block h-3.5 w-16" />
                     </div>
-                    <!-- Columns of uneven height: a flat row of equal bars is the one thing a real chart never
-                         looks like. -->
+                    <!-- Uneven column heights preserve the chart's data shape. -->
                     <div class="flex h-28 items-end gap-1.5">
                         <span
                             v-for="(height, index) in [`h-1/3`, `h-2/3`, `h-1/2`, `h-full`, `h-1/4`, `h-3/5`, `h-4/5`, `h-2/5`, `h-3/4`, `h-1/2`]"
@@ -220,11 +216,7 @@ const hasSpend = computed(() => current.value.length > 0);
             </p>
 
             <template v-else-if="!isLoading">
-                <!--
-                    Spend alone is hero-sized, the rest are stat tiles. Sized against each tile (`@container`+cqi), not the
-                    viewport, since a viewport breakpoint measures the wrong thing for whether a figure fits; `truncate` backstops a disagreeing
-                    locale.
-                -->
+                <!-- Spend alone is hero-sized, the rest are stat tiles. -->
                 <div class="grid gap-3 @lg:grid-cols-2 @3xl:grid-cols-4">
                     <Card class="@container flex min-w-0 flex-col">
                         <div class="text-xs text-muted">Spend</div>
@@ -296,20 +288,13 @@ const hasSpend = computed(() => current.value.length > 0);
                     </Card>
                 </div>
 
-                <!--
-                    Separate cards, not one ranking: one is measured exactly, the other is an experiment needing a control and
-                    margin, mixing would lend it false confidence. Different units of value too (a saved tool token compounds, an output token
-                    doesn't), so none total into another; each shares one shape (SavingsCard) and the grid is container-based, not viewport.
-                -->
+                <!-- Keep measured usage separate from the experimental comparison. -->
                 <section v-if="hasSavings" class="@container">
                     <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
                         <span :class="ui.sectionLabel()">Token savings</span>
                     </div>
 
-                    <!--
-                        `items-start`: a short card stays short, not stretched to the tallest. Two columns: the composition card spans
-                        the left column's height, the two experiment cards stack beside it (plain flow would leave a gap under one).
-                    -->
+<!-- `items-start`: a short card stays short, not stretched to the tallest. -->
                     <div class="grid items-start gap-3 @2xl:grid-cols-2">
                         <SavingsCard
                             title="Tool output → assistant"
@@ -328,7 +313,7 @@ const hasSpend = computed(() => current.value.length > 0);
                             <SavingsStackBar v-if="composition !== undefined && composition.rawTokens > 0" :composition="composition" />
                             <p v-else :class="ui.emptyState()">No shell output was cleaned in this range.</p>
 
-                            <!-- Whole-pipeline counterfactual (commands left raw at random), unlike the rest of this card's attribution. -->
+                            <!-- This comparison measures the whole pipeline, including raw commands. -->
                             <p v-if="savings?.input.holdout.measuredSavedPct !== undefined" class="mt-2 text-2xs text-muted">
                                 Holdout control
                                 <span class="tabular-nums text-content">{{ savings.input.holdout.measuredSavedPct }}%</span>: measured against
@@ -378,10 +363,7 @@ const hasSpend = computed(() => current.value.length > 0);
                             <tbody class="tabular-nums text-muted">
                                 <tr v-for="(row, index) in tableRows.slice(0, TABLE_LIMIT)" :key="index" class="border-b border-line/50">
                                     <td class="py-1.5 pr-3 whitespace-nowrap">{{ row.day }}</td>
-                                    <!--
-                                        Swatch is the series (matches the chart/legend), the name is the actual billing card: folding locals into one
-                                        word here would hide which one, unlike the chart above.
-                                    -->
+                                    <!-- Swatches identify chart series; names identify billing cards. -->
                                     <td class="py-1.5 pr-3">
                                         <span class="flex items-center gap-1.5">
                                             <span

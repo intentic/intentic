@@ -5,9 +5,7 @@ import { computed, reactive } from "vue";
 import { statusLabel, statusVariant } from "../../features/extensions/reconcileStatus";
 import { groupAccent, resourceIcon, resourceLogoUrl } from "../../features/extensions/resourceVisual";
 
-/* Details for the selected planned resource, shown below the dependency graph. Read-model only: everything is
- * already on the ResourceView (config, dependsOn, url, reason) or joined by id from the live deployments; the
- * dependency chips re-select through the shared `selectedId` model so the graph highlight moves with them. */
+/* Details for the selected planned resource, shown below the dependency graph. */
 
 const { resource, resources, deployments } = defineProps<{
     resource: ResourceView;

@@ -1,7 +1,4 @@
-/* Chrome for the workspace file viewer that Monaco does NOT own: the transparency checkerboard behind previewed
- * images/SVGs, and the temporary line highlight applied when a content-search match is revealed (CodeView.flash
- * → a whole-line Monaco decoration carrying .ws-line-flash). Monaco owns all code rendering + light/dark theming
- * itself (see useMonaco), so there is no Shiki-HTML chrome or --shiki-dark flip here anymore. */
+/* Chrome for the workspace file viewer that Monaco does NOT own: the transparency checkerboard behind previewed images/SVGs. */
 @layer components {
     /* Transparency checkerboard behind previewed images/SVGs (theme-agnostic, the conventional indicator). */
     .image-checker {
@@ -15,16 +12,12 @@
         background-position: 0 0, 0 10px, 10px -10px, -10px 0;
     }
 
-    /* The decoration is removed after 1.5s by CodeView; keeping its paint still avoids making navigation start
-       a CSS animation, which makes Chrome DevTools rebuild an open Styles editor. */
+/* The decoration is removed after 1.5s by CodeView; keeping its paint still avoids making navigation start a CSS animation. */
     .monaco-editor .ws-line-flash {
         background: color-mix(in srgb, var(--color-primary-500) 20%, transparent);
     }
 
-    /* The seam between two changed regions of a file too big to diff whole (DiffView → diffPatch.ts). The
-       lines either side of it are thousands apart in the real file, so it has to read as a join in the view
-       rather than as a line of code that happens to say "⋯" — dimmed, on its own band, and with no number in
-       the gutter beside it. The descendant rule is for the token spans Monaco may nest inside the mark. */
+/* The seam between two changed regions of a file too big to diff whole (DiffView → diffPatch.ts). */
     .monaco-editor .ws-diff-gap,
     .monaco-editor .ws-diff-gap span {
         color: var(--color-subtle);

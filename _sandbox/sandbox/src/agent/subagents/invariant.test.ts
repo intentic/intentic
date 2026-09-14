@@ -1,8 +1,7 @@
 import { expect, test } from "vitest";
 import { checks } from "./invariant.js";
 
-/* The failure the owner pays for: a child the parent has been told is finished, still running against the
- * allowance with nobody supervising it. */
+/* The failure the owner pays for: a child the parent has been told is finished, still running against. */
 
 const fail = (message: string): never => {
     throw new Error(message);

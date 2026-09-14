@@ -1,18 +1,4 @@
-/* Marketing screenshot harness. Drives the REAL Vue SPA — the demo build of it (`@intentic/demo`, which
- * enters the app's own source with the recorded fixture installed in place of a daemon and lands in the site's
- * `public/demo/`). That makes the shots hermetic: no postgres, no platform API, no tunnel, no seeded session;
- * one world, the same "acme-shop" workspace a visitor meets at the live demo, so the site and the demo can't
- * tell two stories.
- *
- *   pnpm --filter @intentic/demo build
- *   node --experimental-strip-types _tools/e2e/shots/capture.mts            # every shot
- *   node --experimental-strip-types _tools/e2e/shots/capture.mts fleet-board sandbox-usage
- *
- * Output: _site/site/src/assets/product/<name>.png at 2× (3× where the source is narrow) — src/, not public/, because the site
- * build resizes and re-encodes them (`_site/site/src/lib/shots.ts`). Whole surfaces, not crops — a page
- * that wants the Attention lane alone crops in CSS (the landing hero does), so a layout change on the site
- * doesn't mean a re-shoot.
- */
+/* Marketing screenshot harness. */
 import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
@@ -23,97 +9,34 @@ const DEMO_DIR = join(repoRoot(import.meta.url), "_site/site/public/demo");
 const OUT_DIR = join(repoRoot(import.meta.url), "_site/site/src/assets/product");
 const PORT = 47_147;
 const ORIGIN = `http://localhost:${PORT}`;
-/* The demo builds under a base, because it ships inside the site's own deploy rather than on an origin of its
- * own — so its assets are `/demo/assets/…` and vue-router's history paths are `/demo/agents`. Serve it where it
- * expects to be, or the app boots to a blank page and every shot is of nothing. */
+/* Serve the demo under its configured /demo base. */
 const BASE = "/demo";
 const demoUrl = (path: string): string => `${ORIGIN}${BASE}${path}`;
 
-/* 1760 rather than the 1440 this used to shoot at, for a reason that is about the SITE, not the app: the
- * workspace pane left of the docked chat is what a desktop shot contains, and at 1440 that pane was 1038 CSS
- * px — 2076 device px at 2×, painted into a column the site gives 1232 CSS px. Every desktop shot was being
- * upscaled ~19%, which is what "blurry" was. At 1760 the pane is 1358 px, so a shot arrives at 2716 device px
- * and the browser downsamples into the 1232-px column instead of stretching. It also stops the fleet board
- * eliding its own card titles: the lanes get the width the app would give them on a real desktop. */
+/* Capture at 1760px so desktop surfaces fit without upscaling. */
 const DESKTOP = { width: 1760, height: 1000 };
 const MOBILE = { width: 430, height: 932 };
-/* The chat dock is a FIXED width, so the portrait shots cannot be made crisper by widening the window the way
- * the panes above can — the only axis left is resolution. 3× where the source is narrow (the docked chat, the
- * phone), 2× where 1358 CSS px already overshoots the column that paints it. */
+/* Narrow sources use 3× density; wide sources use 2×. */
 const DENSE_DPR = 3;
 const DEFAULT_DPR = 2;
 
-/* The demo's own switcher (`_site/demo/src/switcher.ts`) is the one thing on that page the product did not
- * draw — a fixed bar across the bottom saying how full the recording is. It belongs to the live demo, where a
- * visitor needs to know which of three states they are looking at, and to nothing on the marketing site. It is
- * hidden rather than left to the trim below because it sits BELOW the content: left in, every shot would be
- * padded out to it and the dead canvas it caused is exactly what this harness is trying to stop shooting. */
-/* …and the hover label, which is not the demo's chrome but is just as certainly not part of the picture. A
- * headless browser's pointer sits at the top-left corner of the window, which in this app is the sandbox
- * avatar — so a shot taken without a click landing somewhere else came back with the rail's tooltip open
- * across the page title. Suppressed rather than dodged by parking the pointer, because there is no square of
- * a full-bleed workspace that is reliably inert: an empty lane on one surface is a card on the next. */
+/* Hide demo-only chrome and tooltips from screenshots. */
 const HIDE_DEMO_CHROME = `#demo-switcher, .ui-tooltip { display: none !important; }`;
 
 // The composer's textarea is the docked chat's left edge — every desktop surface shares the shell, so one
 // landmark decides where the workspace ends and the chat begins.
 const COMPOSER = 'textarea[name="draft"]';
 
-/* The control that moves the chat out of the layout and into a window of its own (ChatTabs.vue). Matched on
- * the START of its label because the label carries the keyboard shortcut after it, and that string is the
- * reader's platform's, not ours. */
+/* Match the platform-independent start of the chat popout label. */
 const POPOUT_BUTTON = 'button[aria-label^="Move chat into new window"]';
 
-/* THE POPPED-OUT CHAT'S WINDOW, shared by both shots that take one — they alternate inside a single frame on
- * the landing page, so a difference between them would show up as the frame changing shape mid-rotation.
- *
- * Sized against the FRAME THAT SHOWS IT, which is the one thing a marketing capture of a window has to be:
- * the landing page paints this at roughly 600px, and a 1060px window painted there is 57% scale — a picture
- * of a conversation rather than a conversation. At 800 the rail keeps its fixed ~370 and the transcript gets
- * the rest, and the whole window fits its frame at four fifths size, which is the difference between reading
- * the names on the persona cards and recognising that there are some.
- *
- * The height is where these two transcripts END. A taller window would be a third of a frame of empty canvas
- * under the last message, which is the thing the trim below spends its whole existence preventing elsewhere. */
+/* Keep popped-out chat readable within the landing frame. */
 const POPOUT_WINDOW = { width: 800, height: 660 } as const;
 
-/* THE BIG FRAME'S WINDOW — the app window the landing page's two rotating surfaces are both shot in.
- *
- * ONE size for both, because they take turns inside a single frame and a frame that changed shape every
- * four seconds would be the only thing anybody noticed about it.
- *
- * The shared desktop width, deliberately, after trying to narrow it. The frame is ~840px and the workspace
- * pane is 1270, so a narrower capture is tempting: at 1440 the pane is ~950 and would fit across the frame
- * whole. It also makes the board elide its own card titles — "Add Stripe che…", "Migrate th…" — because the
- * lanes lose 110px each, and a hero whose every card ends in an ellipsis is a worse picture of the product
- * than one whose third lane runs past the edge. So the width stays and the frame crops, which is what a frame
- * is for.
- *
- * The height is likewise taller than the frame shows. It crops from the top, the way the hero's old single
- * shot already did, and that is what lets two surfaces of different lengths share it: the board is a few cards
- * and stops, the review runs its title, its Land button and the head of a diff and carries on past the fold,
- * and the crop — not the capture — decides where the picture ends. */
+/* Use one desktop window size for the hero's rotating surfaces. */
 const HERO_WINDOW = { width: DESKTOP.width, height: 860 } as const;
 
-/* THE VERB SHOWCASE'S WINDOW — 16:9 to the pixel, and that is the whole of why it exists.
- *
- * The landing page's tour is five frames of ONE rectangle, one screenful each (`home.css`, "the verbs"). A
- * capture that arrives at its own proportion has two ways to meet a frame like that and both are bad: the
- * frame bends to it, and five different silhouettes read as a section that has come loose, or the frame holds
- * and the picture letterboxes inside it. So these four are shot at the shape they will be printed at, and the
- * site scales them and nothing else.
- *
- * 1760×990 rather than a clip of it, because the SHAPE has to be guaranteed and a clip cannot guarantee it.
- * Every other desktop shot here keeps the workspace pane and trims to where its content stops, which is right
- * for a figure printed beside a paragraph and wrong here twice over: a curated board trims to 1322×330, a 4:1
- * strip, and capped out to 16:9 instead it is three fifths empty canvas. The docked chat is what makes the
- * picture full at this proportion — and it is not a concession, it is the app. Four pictures of the same
- * window with a different surface in it is also what makes them read as a set rather than as four screenshots.
- *
- * 1.5× rather than 2×. The site paints these 1296 CSS px wide (`STAGE_SIZES` in Landing.astro), so a 2×
- * display wants 2592 device px and this arrives at 2640 — one rung above the top of the site's own ladder and
- * nothing wasted. At 2× it would be 3520 across to paint 1296, which is a third of a megabyte per shot spent
- * below the pixel. */
+/* Capture showcase surfaces in the landing page's 16:9 frame. */
 const SHOWCASE = { width: 1760, height: 990 } as const;
 const SHOWCASE_DPR = 1.5;
 
@@ -121,9 +44,7 @@ interface Shot {
     name: string;
     path: string;
     mobile?: boolean;
-    /* A route to open and settle on first. The shell keeps ONE docked chat: land on an agent and the chat holds
-     * that conversation for every later navigation — without it the board shoots with an empty "New agent"
-     * draft card, which is a truthful screen and a confusing screenshot. */
+    /* Open this route first to establish the shared docked conversation. */
     openFirst?: string;
     /** Text or selector the surface is not itself until it renders. */
     waitFor?: string;
@@ -132,17 +53,9 @@ interface Shot {
     settleMs?: number;
     /** `area` keeps the workspace left of the docked chat; `chat` keeps the chat. Absent ⇒ the whole viewport. */
     clip?: "area" | "chat";
-    /* An EDITORIAL floor on the shot: stop here even if the surface carries on below. Two shots use it, both
-     * because what follows is the recording's own spend figures, which a marketing page must not quote as if
-     * they were a benchmark. It is a cap, not a height — the trim below still pulls the frame in to whatever
-     * the content actually reaches, so this number never invents empty canvas the way the old per-shot
-     * heights did. */
+    /* Stop trimming at this content-specific editorial floor. */
     stopAt?: number;
-    /* How full the recorded workspace is (`_site/demo/src/mode.ts`). Left unset, a shot gets the demo's own
-     * curated opening: three agents, three extensions — right for the surfaces whose story is ONE screen, where
-     * a full rail and a nine-card board are furniture the caption never mentions. `full` is for the board
-     * itself, whose section sells running ten at once: three cards in three lanes would undersell the sentence
-     * printed beside it. */
+    /* Select the demo fixture density used for this shot. */
     mode?: "minimal" | "default" | "full";
     /** Overrides the shared desktop window, for a shot whose subject is not our app. */
     viewport?: { width: number; height: number };
@@ -150,45 +63,24 @@ interface Shot {
     dpr?: number;
     /** Scroll the main column before shooting — for the tabs whose story is below the fold. */
     scrollTo?: number;
-    /* Serve `path` straight off the harness origin instead of under the demo's `/demo` base — for the one shot
-     * whose subject is NOT the app: the Front Desk widget as a visitor meets it, on a page that is not ours. */
+    /* Serve this path directly from the harness origin. */
     raw?: true;
     /** Type into a field once the surface is up, for a shot whose story is a conversation. */
     type?: { target: string; text: string; settleMs?: number };
-    /* SHOOT THE POPPED-OUT CHAT INSTEAD OF THE APP. The chat is the one panel the product itself lifts out of
-     * the layout into a real OS window (composables/usePopout.ts), so a picture of it is a picture of a WINDOW
-     * — not a crop of a column, which is what `clip: "chat"` can only ever be. Pressing the control opens the
-     * window; everything after that happens inside it, and the frame is the whole of it, so no clip applies.
-     *
-     * The size is the window's, chosen per shot: the rail is a fixed width, so what widening buys is entirely
-     * conversation, and how much of that a shot wants depends on how small the page paints it. */
+    /* Capture the conversation in a separate browser window. */
     popout?: {
         width: number;
         height: number;
-        /* Controls to press INSIDE the popped-out window, in order — the rail's cut, for these two shots.
-         * Named `press` rather than `then`, which would make this object thenable and so a hazard the day
-         * anybody awaits one. */
+        /* Press these controls inside the popped-out window in order. */
         press?: string[];
         settleMs?: number;
     };
-    /* KEEP THE WHOLE WINDOW HEIGHT, instead of trimming to where the content stops.
-     *
-     * The trim is right for a figure printed beside a paragraph: that picture is as tall as it needs to be and
-     * a page can lay out around whatever comes back. It is wrong for the landing page's first frame, which is
-     * one FRAME that several shots take turns inside — trimmed, the fleet board comes back at 3.8:1 and the
-     * changes view at 1.4:1, and the frame lurches into a different shape every time the picture behind it
-     * changes.
-     *
-     * So these say what they are: a screen, of a fixed size, with an app in it — and a board with three agents
-     * on it leaves room under the lanes, exactly as it does on the monitor this is a picture of. */
+    /* Preserve the full window height instead of trimming content. */
     fullHeight?: true;
 }
 
 const SHOTS: Shot[] = [
-    /* The Front Desk, from the visitor's side — the REAL built widget bundle on a page that is not ours, which is
-     * the only honest way to show a surface that by definition lives on someone else's site. The page and the
-     * endpoints behind it are the harness's own (below); the widget is `_sandbox/webchat-widget/dist/widget.js`
-     * exactly as a customer's browser would load it, so what the shot shows is what it renders. */
+    /* Capture the built Front Desk widget in a standalone visitor page. */
     {
         name: "front-desk",
         path: "/front-desk/",
@@ -211,30 +103,7 @@ const SHOTS: Shot[] = [
         clip: "area",
         mode: "full",
     },
-    /* ── THE VERB SHOWCASE ───────────────────────────────────────────────────────────────────────────────
-     *
-     * One per verb on the landing page's tour, all four at `SHOWCASE` — 16:9, whole window, no clip and no
-     * trim. That const carries the reasoning for the shape and for the chat being in frame.
-     *
-     * ON THE CURATED RECORDING, which is the other half of what these are for. `full` is nine agents across
-     * three lanes and fourteen extension tiles down the icon rail: an honest picture of a team's Tuesday, and
-     * a bloated one of the product — the rail alone reads as a toolbar somebody has been collecting. The
-     * curated opening is one card per lane and the extensions somebody actually switched on, which is both the
-     * calmer picture and the one a reader who presses "Open the live workspace" will actually meet.
-     * `stage-connect` is the one exception and says why on itself.
-     *
-     * EVERY ONE OPENS A CONVERSATION FIRST AND THEN WAITS ~3s. The docked chat is a quarter of each of these
-     * pictures, and an unopened one is the words "Start a conversation with Claude Code." across an empty
-     * panel — a quarter of every shot in the set spent on a placeholder. The settle is what decides WHAT is
-     * in it: the fixture's turn keeps streaming across the navigation (turn.ts), so at 1.5s the panel reads
-     * "Waiting on 2 subagents…" and at 3s it holds the written plan with Approve under it, which is the same
-     * moment in the same conversation in all four and the reason they read as one set.
-     *
-     * Shot SEPARATELY from the `fleet-board`, `capabilities`, `workspace-changes` and `sandbox-overview`
-     * captures further down this list, even though three of the four stand on the same addresses. Those are
-     * figures for the feature pages, printed a column or half a column wide, framed to the surface and trimmed
-     * to its content; a whole 1760-px window shrunk into half a column is a picture of nothing. Same reason
-     * the hero shoots its own. */
+    /* Showcase captures use whole 16:9 windows with settled curated conversations. */
     {
         name: "stage-run",
         path: "/agents",
@@ -245,11 +114,7 @@ const SHOTS: Shot[] = [
         dpr: SHOWCASE_DPR,
     },
     {
-        /* THE ONE SHOT IN THE SET ON THE FULL RECORDING, and the catalogue is why: a capability an extension
-         * contributes is not in the catalogue while that extension is switched off, so the curated mode serves
-         * this page eleven tiles with no GitHub, no Postgres, no Sentry and no Discord among them — under a
-         * caption that names four of those five. The rail it comes with is the price, and it is the only shot
-         * here paying it. */
+        /* Use the full fixture so this catalogue includes the connected capability tiles. */
         name: "stage-connect",
         path: "/capabilities",
         openFirst: "/agents/cnv_checkout_stripe",
@@ -260,12 +125,7 @@ const SHOTS: Shot[] = [
         mode: "full",
     },
     {
-        /* Opens the Changes tab rather than the Files tab it lands on (a "drop your work here" pane, which is a
-         * screenshot of nothing), then opens `CheckoutPanel.tsx` — a real +24/−4 of a component, chosen over
-         * the three-line schema change the feature page's figure uses. That one is the better FIGURE: short,
-         * clean, followable in a paragraph's width. Here the diff has a whole 16:9 pane to fill and a
-         * three-line change fills a fifth of it, which is how this stage came to be "wide and short" with a
-         * picture floating in the middle of it. */
+        /* Open the Changes tab and select CheckoutPanel.tsx for the review frame. */
         name: "stage-review",
         path: "/workspace",
         openFirst: "/agents/cnv_checkout_stripe",
@@ -276,12 +136,7 @@ const SHOTS: Shot[] = [
         dpr: SHOWCASE_DPR,
     },
     {
-        /* ACCESS, not the sandbox Overview the feature page's figure uses. Overview is the right FIGURE for a
-         * page about the box — its name, that it is online, the URL it answers on — and at a whole screenful
-         * it is one small card and a nav list against two thirds of empty canvas. Access carries the half of
-         * the caption a picture can actually show: the owner, an invite field with a role beside it, and a
-         * teammate under "Here now" with what she is looking at. "Runs without your laptop" is a claim about
-         * a machine and unphotographable; "invite your team into the same one" is a person on the screen. */
+        /* Capture sandbox access so the frame shows ownership and invitation controls. */
         name: "stage-host",
         path: "/sandbox/access",
         openFirst: "/agents/cnv_checkout_stripe",
@@ -290,23 +145,7 @@ const SHOTS: Shot[] = [
         viewport: SHOWCASE,
         dpr: SHOWCASE_DPR,
     },
-    /* ── THE HERO'S TWO SCREENS ──────────────────────────────────────────────────────────────────────────
-     *
-     * The landing page's first frame is no longer one picture: it is an app window with the chat lifted out
-     * of it into a second, smaller one — the arrangement the product itself offers (usePopout.ts), and the
-     * only honest way to show a workspace and a conversation at once without cropping one of them away.
-     *
-     * Both frames cycle. The big one walks three surfaces, the small one two cuts of the rail, and the two
-     * loops are different lengths on purpose so the pair never settles into a single repeating picture.
-     *
-     * These are shot SEPARATELY from the surfaces further down the page even where the address matches,
-     * because the hero asks a different question of a screenshot. Below the fold a shot illustrates a claim
-     * it is captioned with and can be as full as the truth allows; up here it is the first thing a stranger
-     * reads, at a fraction of its own width, with no caption. So every one of them runs on the CURATED
-     * recording rather than the full one, and opens exactly one thing.
-     *
-     * `clip: "area"` throughout: the docked chat is not in these pictures, because the chat is the other
-     * frame. */
+    /* Hero captures keep the workspace and popout chat in separate curated frames. */
     {
         name: "hero-agents",
         path: "/agents",
@@ -319,11 +158,7 @@ const SHOTS: Shot[] = [
         viewport: HERO_WINDOW,
         fullHeight: true,
     },
-    /* THE SECOND HERO SCREEN: a finished change waiting to land. Same window and crop as the board above, so the
-     * two take turns inside one frame without it changing shape. The soft-deletes agent's review is the calmest
-     * way to make the page's "you approve" claim in a picture — a plain title, a "Ready to land" badge over an
-     * unpressed Land button, and a short, clean diff. It replaces the raw split-diff and the CI board this frame
-     * used to cycle, which read to a stranger meeting the product cold as a wall of code and a wall of dots. */
+    /* Capture the hero review in the same window and crop as the hero board. */
     {
         name: "hero-review",
         path: "/agents/cnv_soft_deletes",
@@ -333,13 +168,7 @@ const SHOTS: Shot[] = [
         viewport: HERO_WINDOW,
         fullHeight: true,
     },
-    /* The chat in its own window, on the rail's two cuts. Agents first — the conversations this window holds,
-     * which is the cut the rail opens on — then Personas, the people this sandbox can send as.
-     *
-     * Both open on the featured agent, so the window has a real turn in it rather than an empty draft: the
-     * fixture's turn keeps streaming across the navigation, so the panel arrives mid-plan. The persona shot
-     * then walks the rail the way a reader would — press Personas, press a person — because that press is what
-     * puts their conversation on screen, and a deep link to it would prove nothing about the list beside it. */
+    /* Capture the popped-out chat on the Agents and Personas rail views. */
     {
         name: "hero-chat-agents",
         path: "/agents/cnv_checkout_stripe",
@@ -357,9 +186,7 @@ const SHOTS: Shot[] = [
         settleMs: 2600,
         popout: {
             ...POPOUT_WINDOW,
-            /* Press Personas, press Maya, then open the run she did the work in. The last press is the
-             * difference between a conversation and a picture of one: collapsed, the browser session she
-             * cleared the queue through is a pill reading "1"; opened, it is the screen she was looking at. */
+            /* Select Personas, Maya, and her run inside the popped-out chat. */
             press: ['button[role="tab"]:has-text("Personas")', "text=Maya · Customer Care", "button.chat-run-bar"],
             settleMs: 1_800,
         },
@@ -381,24 +208,16 @@ const SHOTS: Shot[] = [
         name: "workspace-changes",
         path: "/workspace",
         waitFor: 'button:has-text("Changes")',
-        /* Opens the Changes tab rather than the Files tab it lands on (a "drop your work here" pane, which is a
-         * screenshot of nothing), then opens a small, clean diff: the block this sits under is about reading a
-         * change file by file, and a short before/after reads as a review a person can actually follow, where
-         * the largest file in the tree fills the pane with a wall of red and green. */
+        /* Open the Changes tab and select a compact schema diff. */
         click: ['button:has-text("Changes")', "text=schema.ts"],
         settleMs: 1800,
         clip: "area",
     },
-    /* The environment — both on the full recording, because these two are the catalog and a connection in it.
-     * The curated mode leaves most extensions switched off, and a capability an extension contributes is not in
-     * the catalog when it is: the page came back with eleven tiles and three connections, no GitHub among them,
-     * under a heading that sells everything an agent can reach. */
+    /* Use the full fixture so the environment frame includes its capability catalog. */
     // Stops under Business & docs: the catalog scrolls on, and a frame that ends a fifth of the way into the
     // next row of tiles reads as a broken image rather than as a list with more below it.
     { name: "capabilities", path: "/capabilities", waitFor: "text=Connected", settleMs: 1200, clip: "area", mode: "full", stopAt: 900 },
-    /* Lands on the catalog and OPENS GitHub rather than deep-linking `/capabilities/github`: that address
-     * restores the catalog, and the panel this shot is of — what a connection adds, before you paste a token —
-     * is what opening the tile reveals. */
+    /* Open GitHub from the catalog so the frame includes the connection panel. */
     {
         name: "capability-github",
         path: "/capabilities",
@@ -414,10 +233,7 @@ const SHOTS: Shot[] = [
     // Stops above the token-savings cards on purpose: those numbers are the recording's, and a marketing page
     // that shows them reads as a benchmark we never measured.
     { name: "sandbox-spend", path: "/sandbox/usage", waitFor: "text=Spend per day", settleMs: 1800, clip: "area", scrollTo: 620, stopAt: 640 },
-    /* Opens Recipe, and stops at the Approve button. The tab it lands on is Contents — what the box HAS, which
-     * is a list of tools; the block beside this shot is about the recipe it was built FROM, and only Recipe
-     * carries the overlay diff and the two buttons that caption names. Below the card sits the export panel,
-     * a different subject entirely. */
+    /* Open the environment Recipe tab and stop at its Approve button. */
     {
         name: "sandbox-environment",
         path: "/sandbox/environment",
@@ -441,9 +257,7 @@ const SHOTS: Shot[] = [
         settleMs: 1400,
         dpr: DENSE_DPR,
     },
-    /* The turn keeps running in the fixture across navigations, so opening the conversation twice shows the
-     * chat a few seconds INTO it — the plan card — without sitting on one page long enough for the mobile
-     * shell to move on. */
+    /* Reopen the running fixture conversation so mobile chat shows its plan card. */
     {
         name: "mobile-chat",
         path: "/agents/cnv_checkout_stripe",
@@ -452,53 +266,14 @@ const SHOTS: Shot[] = [
         settleMs: 3200,
         dpr: DENSE_DPR,
     },
-    /* THE OTHER FOUR MOBILE SURFACES, shot so a person can look at them. The geometry gate next door
-     * (_tools/e2e/mobile/audit.mts) proves nothing is blank, off-screen or too small to hit, and that is all it
-     * can prove: it cannot see that a label is squeezed to two useless words, that a row reads as texture, or
-     * that a control landed in the wrong corner — every P0 in the audit that produced it was found by LOOKING.
-     * Two shots covered the fleet and the chat and left the rest of the shell unseen, which is how a blank
-     * Files tab shipped in the first place.
-     *
-     * One per thing that can go wrong differently: a drill-down list, a review panel dense with per-row
-     * controls, a menu of long-labelled rows, and a hub with a scrolling sub-nav under a title that varies in
-     * length. Named `mobile-*` like the two above; nothing on the marketing site references them, which is the
-     * point — they are for review, and the site picks what it publishes. */
+    /* Capture mobile files, changes, menu, and sandbox surfaces for visual review. */
     { name: "mobile-files", path: "/workspace", mobile: true, waitFor: "text=README.md", settleMs: 1600, dpr: DENSE_DPR },
     { name: "mobile-changes", path: "/workspace?panel=changes", mobile: true, waitFor: "text=CheckoutPanel.tsx", settleMs: 1600, dpr: DENSE_DPR },
     { name: "mobile-menu", path: "/menu", mobile: true, waitFor: "text=SANDBOXES", settleMs: 1400, dpr: DENSE_DPR },
     { name: "mobile-sandbox", path: "/sandbox", mobile: true, waitFor: "text=Installed version", settleMs: 1400, dpr: DENSE_DPR },
-    /* ── THE MEGA-MENU'S PREVIEW RAIL ────────────────────────────────────────────────────────────────────
-     *
-     * The Features menu previews the row you are hovering in a 16:10 box 544px wide (Nav.astro). Every row
-     * with a picture previewed its PAGE HERO there, and a hero is framed for a different job: it is printed a
-     * column wide, so it is a wide strip of a surface (the board at 2.4:1) or a tall column of one (the chat
-     * at 1:2). Dropped into a 16:10 box, a strip left a third of the box empty and a column showed its top
-     * inch blown up past legibility — the row's picture was of no particular thing.
-     *
-     * So two rows get their own captures, and their ONE rule is the shape of the box they are for: a `stopAt`
-     * of 0.625 × the clipped area's width, which is 16:10 exactly.
-     *
-     * The windows are NARROWER than the shared desktop, and that is about legibility rather than shape. A
-     * 16:10 frame fills the rail at any width — but the rail is 544px, so a frame taken off the usual 1270px
-     * area is painted at 43% and the app's own text stops being text. Shot at 800, the same frame paints at
-     * 68%: file names and line counts read, which is the entire job of a preview.
-     *
-     * `stopAt` rather than `fullHeight`, deliberately: a cap can only ever cut a surface short, never print
-     * canvas the content did not reach — and printing canvas is precisely what left the empty third. Should
-     * one of these grow, the frame stays 16:10; should one shrink below its cap, it comes back trimmed and the
-     * rail's `object-fit: cover` finishes the job. Neither failure mode puts a grey band back in the box.
-     *
-     * They are still whole surfaces, shot from the live demo like every other shot here. What is chosen is the
-     * MOMENT, not a crop: the one screen where the row's promise is legible at a glance. */
+    /* Preview captures use 16:10 frames sized for the 544px menu rail. */
     {
-        /* "Start an agent automatically from a schedule or event" — the automations screen, which this repo
-         * spent a while insisting did not exist: the feature page is diagram-led on the recorded grounds that
-         * there was no screen to shoot. There is. It needs the FULL recording, because the curated one leaves
-         * the extension switched off and the route answers "intentic.automations is switched off" — which is a
-         * truthful screen and a terrible advertisement, and is presumably how the belief started.
-         *
-         * What it shows is the whole claim in one frame: a wake held for approval, two chores on a schedule and
-         * a land, three integrations firing from outside, each with when it last ran and a switch. */
+        /* Capture automations from the full fixture so the extension is enabled. */
         name: "menu-automate",
         path: "/ext/automations",
         waitFor: "text=Wake your agent on a schedule",
@@ -509,15 +284,7 @@ const SHOTS: Shot[] = [
         stopAt: 500,
     },
     {
-        /* "It proposes, you approve, and nothing is merged unread" — so: the change itself, open in the review
-         * pane, file list beside it and nothing committed yet. The hero (`chat-plan`) is the same promise
-         * mid-sentence — a chat still thinking, its Approve buttons below the fold and off the bottom of the
-         * rail — and the agent's own review screen, which carries the better badge ("Ready to land", over an
-         * unpressed Land button), cannot be had at this shape: its four-file diff only grows tall enough to
-         * fill a 16:10 frame in a window narrow enough to lap the file name over the "not landed" pill.
-         *
-         * So the surface that IS this dense at full width gets the row, and the trade is a caption's worth of
-         * badge for a frame full of the actual reading. */
+        /* Capture the dense review surface with its file list and uncommitted diff. */
         name: "menu-review",
         path: "/workspace",
         waitFor: 'button:has-text("Changes")',
@@ -528,9 +295,7 @@ const SHOTS: Shot[] = [
         stopAt: 500,
     },
     {
-        /* "Run the sandbox on a server you control" — the box's own hub: named, online, its version and its
-         * URL, over the list of everything that lives inside it. Same surface as the hero, framed for the box
-         * rather than for a page column. */
+        /* Capture the hosted sandbox hub with its identity and status. */
         name: "menu-host",
         path: "/sandbox",
         waitFor: "text=Installed version",
@@ -557,16 +322,8 @@ const TYPES: Record<string, string> = {
     ".map": "application/json; charset=utf-8",
 };
 
-/* The demo is a history-mode SPA: `/demo/agents` and `/demo/workspace/api/src/db/schema.ts` are routes, not
- * files, so anything that isn't a real file on disk is served index.html — the same rule its dev server and the
- * site's worker use. The base is stripped first: on disk the build IS the `/demo/` directory, so its own
- * `/demo/assets/…` requests would otherwise look for `public/demo/demo/assets/…`. */
-/* ---- the Front Desk shot's world: a site that is not ours, and just enough daemon behind it ----
- *
- * The widget derives the daemon to call from its own <script> src, so serving both from this origin is all it
- * takes. The endpoints are stubs because the shot's subject is the WIDGET — what it renders, on someone else's
- * page — and a real daemon behind it would change nothing a reader can see. The bundle is not a stub: it is the
- * built artifact, so a regression in the widget's own rendering shows up here as a wrong screenshot. */
+/* History routes and demo assets are served from the /demo build root. */
+/* Serve the built widget with stubbed daemon endpoints for the visitor-page shot. */
 const WIDGET_BUNDLE = join(repoRoot(import.meta.url), "_sandbox/webchat-widget/dist/widget.js");
 
 const FRONT_DESK_CONFIG = {
@@ -685,19 +442,7 @@ const composerLeft = async (page: Page, fallback: number): Promise<number> => {
     return box === null ? fallback : Math.round(box.x);
 };
 
-/* WHERE THE CONTENT ACTUALLY STOPS, in CSS px from the top of the window.
- *
- * This replaces a per-shot height that had been hand-tuned once and then drifted: a surface whose fixture grew
- * got cut through the middle of a card, and one whose fixture shrank got shot with half a frame of empty
- * canvas under it — which the site then had to letterbox into a layout, and which read as "bloated" because
- * the interface occupied a third of the picture it was the subject of.
- *
- * The rule is the one a person applies by eye: find the lowest thing in this pane that put ink on the page.
- * Full-height chrome is skipped (the scroll containers are as tall as the window whatever is in them, so they
- * answer the question with the question), as is anything `fixed`, which by definition is pinned to the
- * viewport rather than sitting at the end of the content. The icon rail is skipped WHOLESALE rather than by
- * height, because it is not one tall element: it is a column with a button pinned at its foot, and that button
- * would hold every shot open to the full window on its own. */
+/* Trim screenshots to the last visible content pixel plus padding. */
 const contentBottom = async (page: Page, from: number, to: number): Promise<number> =>
     page.evaluate(
         ({ from: leftEdge, to: rightEdge }) => {
@@ -749,16 +494,7 @@ const clipFor = async (page: Page, shot: Shot): Promise<{ x: number; y: number; 
     return { x, y: 0, width, height };
 };
 
-/* Press the pop-out control, take the window that opens, and shoot THAT.
- *
- * Two things about it are not the ordinary Playwright dance. The window is opened by the app rather than by
- * this harness, so its size is whatever `window.open` asked for — set it here, because the whole point of the
- * shot is a window sized for reading. And what it displays is rendered by the OPENER's realm and teleported
- * across (usePopout.ts), so "loaded" tells us nothing: the wait is for the composer to actually exist in the
- * new window, which only happens once the panel has arrived in it.
- *
- * The keeper veils a window nobody is drawing in, so a shot taken too early is a picture of "Reconnecting…".
- * Waiting on the composer is what rules that out. */
+/* Resize and capture the browser window opened by the app. */
 const shootPopout = async (page: Page, shot: Shot, popout: NonNullable<Shot["popout"]>): Promise<void> => {
     const [window] = await Promise.all([page.context().waitForEvent("page"), page.click(POPOUT_BUTTON, { timeout: 20_000 })]);
     try {
@@ -776,16 +512,7 @@ const shootPopout = async (page: Page, shot: Shot, popout: NonNullable<Shot["pop
     }
 };
 
-/* SCROLL THE PANE THE SHOT IS OF, by finding the box that actually scrolls.
- *
- * This used to be a wheel event at a fixed point, and a wheel goes to whatever is under the pointer: on a
- * surface whose left third is a list of repositories in a column of its own, the scroll landed on a box with
- * nothing to scroll and the shot came back exactly as it was. Nothing announced that — a wheel over an
- * unscrollable element is not an error, it is a no-op — so the shot was simply wrong and looked deliberate.
- *
- * So the pane is ASKED which of its boxes scrolls, and the tallest one wins: on every surface here that is the
- * main column, because the columns beside it are as tall as the window and hold less than that. Bounded to the
- * clip's own half of the screen, so a shot of the workspace never scrolls the docked chat. */
+/* Scroll the tallest eligible pane inside the requested clip. */
 const scrollPane = async (page: Page, shot: Shot, by: number): Promise<void> => {
     const width = (shot.viewport ?? DESKTOP).width;
     const split = shot.clip === undefined ? width : await composerLeft(page, width);
@@ -820,8 +547,7 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
         hasTouch: shot.mobile ?? false,
         colorScheme: "dark",
     });
-    /* Set before the app boots rather than by loading `?mode=`, because the demo CONSUMES that parameter on
-     * arrival (mode.ts) — a shot that navigates twice would drop back to the default on its second page. */
+    /* Set fixture mode before app boot so every navigation keeps it. */
     if (shot.mode !== undefined) {
         await context.addInitScript((mode) => window.sessionStorage.setItem(`intentic.demo.mode`, mode), shot.mode);
     }

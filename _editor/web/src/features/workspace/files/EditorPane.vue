@@ -76,20 +76,14 @@ const diffOutline = useLoadingReveal(
 </script>
 
 <template>
-    <!--
-        Focus follows the pointer into a pane; commands (Close Tab, cycle, open-to-side) act on whichever pane had it last. `focusin` covers tabbing
-        in, which no pointer event sees.
-    -->
+    <!-- Focus follows the pointer into a pane; commands (Close Tab, cycle, open-to-side) act on whichever pane had it last. -->
     <section
         class="ws-pane relative flex min-h-0 min-w-0 flex-1 flex-col bg-canvas"
         :class="{ 'ws-pane-off': !focused && strip.side.tabs.length > 0 }"
         @pointerdown="focusPane(pane)"
         @focusin="focusPane(pane)"
     >
-        <!--
-            The pane's one bar: left slot, open tabs, the file's own context, right slot. Always rendered, so controls survive zero open tabs; the
-            breadcrumb and other controls arrive here by teleport (viewerChrome).
-        -->
+        <!-- The pane's one bar: left slot, open tabs, the file's own context, right slot. -->
         <div class="view-header flex items-stretch border-b border-line bg-card">
             <slot name="lead" />
             <FileTabs
@@ -101,16 +95,10 @@ const diffOutline = useLoadingReveal(
                 @close="emit('close', $event)"
                 @contextmenu="(id, event) => emit('contextmenu', id, event)"
             />
-            <!--
-                Where the file's breadcrumb and viewer controls land. Ruled off from the tabs (a clipped last tab would otherwise read as broken
-                text) and capped at 45% of the row, since navigating other files matters more.
-            -->
+            <!-- Where the file's breadcrumb and viewer controls land. -->
             <div :id="contextTarget(pane)" class="ws-context flex min-w-0 max-w-[45%] shrink items-center gap-2"></div>
             <slot name="status" />
-            <!--
-                Companion pane's own close, where a reader who opened a split looks for it. The main pane has none: closing it means closing its
-                tabs.
-            -->
+            <!-- Companion pane's own close, where a reader who opened a split looks for it. -->
             <button
                 v-if="pane === 'side'"
                 type="button"
@@ -132,10 +120,7 @@ const diffOutline = useLoadingReveal(
                 <FileViewer v-else :path="activeFile.path" :meta="openMeta" :line="line" @gone="emit('close', $event)" />
             </div>
         </template>
-        <!--
-            Tab strip names the file; this bar says how it's being read (side-by-side/inline, comments in/out), the same bar agent review uses. Sits
-            above every diff state, so even a binary or oversized diff keeps its controls.
-        -->
+        <!-- The file toolbar controls viewing mode and comment visibility. -->
         <template v-else-if="activeTab?.kind === 'diff'">
             <DiffToolbar
                 :path="activeTab.label"
@@ -145,10 +130,7 @@ const diffOutline = useLoadingReveal(
                 :deletions="activeTab.deletions"
             />
             <div class="min-h-0 flex-1">
-                <!--
-                    Still loading; whether the file is binary isn't known yet, so this branch comes first and the viewer mounts once, with content,
-                    never remounted.
-                -->
+                <!-- Wait for file type detection before mounting a viewer. -->
                 <template v-if="activeTab.pending"><DiffSkeleton v-if="diffOutline" /></template>
                 <!-- Bytes, a patch, or two whole sides: FileDiffPane decides, shared with the two other surfaces rendering this diff. -->
                 <FileDiffPane
@@ -176,27 +158,18 @@ const diffOutline = useLoadingReveal(
         <div v-else-if="activeTab?.kind === 'document'" class="min-h-0 flex-1">
             <ExtensionDocument :extension="activeTab.extension" :provider="activeTab.provider" :path="activeTab.path" :title="activeTab.title" />
         </div>
-        <!--
-            `empty` picks the silence: nothing in the workspace gets every way in, between files gets just the drop target. Gated on the tree having
-            loaded, so a full workspace never flashes the newcomer's screen first.
-        -->
+        <!-- `empty` picks the silence: nothing in the workspace gets every way in, between files gets just the drop target. -->
         <WorkspaceEmptyState v-else :empty="empty" @pick="emit('pick')" />
     </section>
 </template>
 
 <style scoped>
-/*
- * Which pane the keyboard is in: dims the bar of the one not listening, rather than ringing the one that is (a ring
- * would read as a diff selection).
- */
+/* The inactive pane's bar is dimmed; the active pane receives keyboard input. */
 .ws-pane-off .view-header {
     opacity: 0.75;
 }
 
-/*
- * `:empty` (not a v-if) draws the rule only when the teleported seat is filled, since this component can't know that
- * itself. Matches a tab's own right divider, so a clipped last tab still reads as a strip, not broken text.
- */
+/* `:empty` (not a v-if) draws the rule only when the teleported seat is filled, since this component can't know that. */
 .ws-context:not(:empty) {
     border-left: 1px solid var(--color-line);
     padding-left: 0.5rem;

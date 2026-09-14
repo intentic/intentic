@@ -66,8 +66,7 @@ export function useShellCommands(): void {
                 keybinding: `Ctrl+\``,
                 handler: () => (canShip.value ? terminal.toggle() : undefined),
             },
-            // Global, not panel-scoped: works with the panel closed; matched by physical key so Shift's "~" can't break
-            // it.
+            // Match the physical key globally so terminal.new works while its panel is closed.
             {
                 command: `terminal.new`,
                 title: `New Terminal`,

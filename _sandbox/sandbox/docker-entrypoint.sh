@@ -41,7 +41,7 @@ if [ "${SANDBOX_VM:-}" = "1" ]; then
     cd /work
 fi
 
-# ── HOW THIS SANDBOX IS REACHED ──────────────────────────────────────────────────────────────────────────
+# HOW THIS SANDBOX IS REACHED
 #
 # NOT FROM HERE, any more. ~150 lines used to sit at this spot enabling a zrok environment, claiming the
 # `sandbox-<id>` name, binding a share to it, and reclaiming whatever the previous container had left holding

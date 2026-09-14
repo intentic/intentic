@@ -6,8 +6,7 @@ import { afterEach, expect, test } from "vitest";
 import { lockShrinkage, shrunkSurfaces } from "@intentic/constants/contract-shrink";
 import { claimedContractShrink } from "./contract-shrink.js";
 
-/* The gate's own judgments (_tools/checks/contract-shrink.mjs reads the same module): the drafter and the gate must
- * call the same shapes shrunk, or a draft this module declared clean is a push that gate still refuses. */
+/* The gate's own judgments (_tools/checks/contract-shrink.mjs reads the same module): the drafter and the gate must call the same shapes shrunk. */
 
 test("a property removed is named by its dotted path", () => {
     const base = { AgentSchema: { properties: { body: { type: `string` }, id: { type: `string` } } } };

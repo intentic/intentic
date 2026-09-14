@@ -3,11 +3,7 @@
         "target": "ES2022",
         "module": "ESNext",
         "moduleResolution": "Bundler",
-        /* THE SAME SOURCE-FIRST CONDITIONS tsconfig.base.json sets, and for the same reason: a workspace
-         * package's exports map points every subpath at `dist/`, which pnpm's store copy does not carry until
-         * that package has been built. Without these, importing a sibling by its public subpath
-         * (`@intentic/sandbox-openapi/groups`) is an unresolved module whose every use then degrades to `any`,
-         * so the typecheck fails on the import and lies about the nine lines under it. */
+/* THE SAME SOURCE-FIRST CONDITIONS tsconfig.base.json sets, and for the same reason: a workspace package's exports map points every subpath at `dist/`. */
         "customConditions": ["@intentic/src", "@intentic/src", "@intentic/src"],
         "lib": ["ES2023", "DOM", "DOM.Iterable"],
         "strict": true,

@@ -7,11 +7,7 @@ import { ref, watch } from "vue";
 
 const { command, wrap = false } = defineProps<{
     command: string;
-    /**
-     * Let a long command take a second line instead of ending in an ellipsis. For the one place where the command is
-     * the decision rather than a detail of it — agreeing to run what a repository declares — since a command nobody
-     * can finish reading is not something anybody can agree to.
-     */
+/** Let a long command take a second line instead of ending in an ellipsis. */
     wrap?: boolean;
 }>();
 

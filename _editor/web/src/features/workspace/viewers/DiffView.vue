@@ -240,10 +240,7 @@ onBeforeUnmount(() => {
 <template>
     <div class="relative flex h-full min-h-0">
         <div ref="host" class="h-full min-w-0 flex-1 overflow-hidden bg-canvas"></div>
-        <!--
-            Explains an empty diff either way: hidden comments (one click undoes it) or genuinely identical sides
-            (nothing to offer).
-        -->
+<!-- Explains an empty diff either way: hidden comments (one click undoes it) or genuinely identical sides (nothing to offer). -->
         <div v-if="changeless !== undefined" class="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center px-9">
             <button
                 v-if="changeless === `comments`"

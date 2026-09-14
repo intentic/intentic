@@ -100,8 +100,7 @@ describe(`recognising the stack`, () => {
     });
 });
 
-// The stem normalizer is the component-overlap chore's only evidence; each case is a family that must form, or must
-// not.
+// Keep component-overlap cases explicit when stems must not form a family.
 describe(`the name two components share`, () => {
     test(`framework and qualifier noise falls away`, () => {
         expect(componentStem(`src/components/Button.vue`)).toBe(`button`);

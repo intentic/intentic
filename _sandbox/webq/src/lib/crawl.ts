@@ -120,8 +120,7 @@ export const crawl = async (startUrl: string, options: CrawlOptions): Promise<Cr
                 }
                 return;
             }
-            // A query crawl fetches one scout page first; anchor-text scores don't exist yet, so early fan-out wastes
-            // it.
+            // Start query crawls with one page so anchor scores exist before fan-out.
             const width = queryTerms.length > 0 && landed === 0 ? 1 : concurrency;
             while (inFlight < width && pending.size > 0 && landed + inFlight < maxPages) {
                 const next = takeBest(pending);

@@ -11,23 +11,7 @@ use serde::Serialize;
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Emitter, Manager};
 
-/* THE NATIVE LAYER, AND ALL OF IT — this app runs the same scripts the copy-paste one-liners run.
- *
- * The first attempt at this app reimplemented the machine work in Rust: an environment probe engine, a
- * reconcile plan, a docker-run builder, the /setup/claim call, tunnel provisioning, the sandbox lifecycle.
- * That is ~1400 lines whose ONLY job is to stay bit-identical to connect.sh — a lockstep that has never held
- * anywhere in this repo (see @intentic/sandbox-run's header for the last time it broke), and the reason the
- * experiment was shelved.
- *
- * So the app spawns the scripts instead. Parity is then structural: the desktop path and the terminal path are
- * the same file, and a fix to connect.sh reaches desktop users on the app's next release without anyone
- * remembering to port it. What is left here is the three things a script cannot do for itself — find itself,
- * get the elevation it needs, and say what it is doing to a window instead of a terminal.
- *
- * The scripts are BUNDLED as resources rather than downloaded at run time. A release of this app is cut from
- * one commit, so `Intentic 1.2.0` ships `connect.sh@1.2.0` and the updater is what keeps them fresh — one
- * version to reason about instead of "which script did it fetch". The bundle globs the whole scripts directory
- * (tauri.conf.json), so a script added to the site is bundled by construction and there is no list to drift. */
+/* THE NATIVE LAYER, AND ALL OF IT — this app runs the same scripts the copy-paste one-liners run. */
 
 /// Where a line came from. The app's own screen renders stderr as the failure detail when a run exits
 /// non-zero — the scripts write their progress to stdout and their diagnostics to stderr, and conflating them
@@ -62,16 +46,7 @@ pub enum RunEvent {
 
 pub const RUN_EVENT: &str = "desktop://run";
 
-/* THE TRANSCRIPT, ON DISK, WHETHER OR NOT ANYBODY IS LOOKING.
- *
- * Until now a run existed only as events in one webview: the lines a user could see were the lines that
- * window happened to still be holding, and closing the card destroyed them. A Windows install that stopped
- * with something unexplained therefore left NOTHING behind — not for the user, who has nothing to send, and
- * not for us, who get "it just said checking Docker" and no way to go further.
- *
- * Same directory and the same shape `ic` already writes its own logs to (_sandbox/ic/src/logfile.rs), so a
- * machine has one place where install evidence lives rather than two. Best-effort throughout: a log that
- * cannot be opened must never be the reason an install does not run. */
+/* Until now a run existed only as events in one webview: the lines a user could see were the lines that window happened to still be holding. */
 fn log_path(id: &str) -> Option<PathBuf> {
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
@@ -108,14 +83,7 @@ fn stamp() -> String {
     format!("{year:04}{month:02}{day:02}-{hour:02}{minute:02}{second:02}")
 }
 
-/* WHAT IS RUNNING RIGHT NOW, SO IT CAN BE STOPPED.
- *
- * There was no way to end one of these. The setup card says "you can close this — the install keeps going",
- * which is true and was the only option: a run that had gone wrong could be walked away from and not ended,
- * and the next attempt then raced the one still going. A pid per run id is all a stop needs, and keeping the
- * pid rather than the `Child` is what lets the stop happen from a different thread than the one blocked in
- * `wait`.
- */
+/* There was no way to end one of these. */
 fn running() -> &'static Mutex<HashMap<String, u32>> {
     static RUNNING: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
     RUNNING.get_or_init(|| Mutex::new(HashMap::new()))
@@ -298,22 +266,7 @@ fn own_group(command: Command) -> Command {
     command
 }
 
-/* HOW LONG A FINISHED RUN WAITS ON ITS OWN PIPES — and why it may not wait forever.
- *
- * A run ends when the script exits. It does NOT end when the pipes close, because on Windows those are not the
- * same event: setup installs resident background agents (the connected-device loop, the sync mirror watcher),
- * each spawned detached so it outlives the terminal that started it — and a detached process on Windows inherits
- * the inheritable handles of the process that spawned it, this app's stdout/stderr pipes among them. The agent
- * then holds the write end open for as long as it runs, which is forever by design.
- *
- * Joining the pump threads before reporting the exit therefore hung the whole screen: connect.ps1 had printed
- * its last line and exited, the sandbox was up, the device was connected — and the setup card span on
- * "connecting this device…" with no exit event, no error, and no way out but quitting the app.
- *
- * So the exit is emitted on the CHILD's exit and the pipes get a short window to hand over whatever is still
- * buffered in them. Threads still blocked on a read after that are abandoned rather than joined; they are
- * parked on a handle nobody will close, and the flag below is what stops a stray line from a background agent
- * being drawn into a run that finished minutes ago. */
+/* HOW LONG A FINISHED RUN WAITS ON ITS OWN PIPES — and why it may not wait forever. */
 const DRAIN_GRACE: Duration = Duration::from_millis(750);
 
 /// Wait for `pumps` pipe readers to report they reached the end of their stream, for at most `grace` in total.
@@ -621,13 +574,7 @@ mod tests {
         );
     }
 
-    /* THE HANG THIS APP SHIPPED WITH, AS TWO ASSERTIONS.
-     *
-     * A setup run installs resident background agents, and on Windows a detached process inherits the pipes of
-     * whoever spawned it — so the app's stdout pipe stays open for as long as the connected-device agent
-     * runs. Waiting on the readers before reporting the exit meant the setup card span forever on a machine
-     * whose sandbox was already up. The second test is the one that matters: a reader that never finishes must
-     * cost the grace and nothing more. */
+/* A setup run installs resident background agents, and on Windows a detached process inherits the pipes of whoever spawned it. */
     #[test]
     fn a_drain_that_completes_costs_nothing() {
         let (drained, drains) = channel::<()>();
@@ -672,21 +619,7 @@ mod tests {
         );
     }
 
-    /* THE ONE THING A .ps1 IN THIS REPO MAY NOT CONTAIN — a byte above 0x7F.
-     *
-     * The terminal path hands PowerShell a STRING (`irm <url> | iex`), decoded from the `charset=utf-8` the
-     * site worker sends, so UTF-8 prose survives it. This app hands PowerShell a FILE (`-File <path>`), and
-     * Windows PowerShell 5.1 — still the default `powershell.exe` on every Windows 10/11 — reads a file with
-     * no BOM in the machine's ANSI code page, not UTF-8.
-     *
-     * That is not a cosmetic difference. Through cp1252 an em dash (E2 80 94) decodes to `â€"`, whose last
-     * character is U+201D RIGHT DOUBLE QUOTATION MARK — and PowerShell honours typographic quotes as real
-     * string delimiters. So every em dash in a comment opened a string, the rest of the script was swallowed
-     * into it, and connect.ps1 died on a screenful of `Missing closing '}' in statement block` before it ran a
-     * line. `─`, `→` and `⇒` decode to smart quotes the same way.
-     *
-     * A BOM would fix the file path and put a U+FEFF in front of the string the terminal path pipes to `iex`.
-     * ASCII fixes both, because there is no decoder anywhere that reads an ASCII byte as anything else. */
+/* THE ONE THING A .ps1 IN THIS REPO MAY NOT CONTAIN — a byte above 0x7F. */
     #[test]
     fn every_bundled_powershell_script_is_ascii() {
         for (path, text) in powershell_scripts() {
@@ -706,20 +639,7 @@ mod tests {
         }
     }
 
-    /* THE SECOND 5.1 LANDMINE IN THE SAME FILES, and the one that outlived the first fix.
-     *
-     * These scripts ask docker questions and branch on `$LASTEXITCODE` themselves: `docker network inspect X
-     * *> $null` is a probe whose "no" arrives as a non-zero exit and a line on stderr, and the redirection is
-     * only there to keep that line off the user's screen. PowerShell 7.4+ has a switch for exactly this
-     * (`$PSNativeCommandUseErrorActionPreference = $false`) and every script sets it.
-     *
-     * 5.1 does not have that switch, and its rule is a different one: a native command's stderr becomes a
-     * NativeCommandError record the moment the stream is REDIRECTED, which `$ErrorActionPreference = 'Stop'`
-     * then promotes to terminating. Paired, they end the run ON the silenced probe — a first Windows install
-     * died at `docker network inspect` for a network that did not exist yet, one statement before the line
-     * that would have created it, having already pulled the image.
-     *
-     * So a script may set 'Stop', and a script may silence a probe. Not both. */
+/* THE SECOND 5.1 LANDMINE IN THE SAME FILES, and the one that outlived the first fix. */
     #[test]
     fn no_powershell_script_silences_a_probe_while_stop_is_in_force() {
         const REDIRECTIONS: [&str; 4] = ["*>", "2>&1", "2>$null", "2> $null"];
@@ -744,16 +664,7 @@ mod tests {
         }
     }
 
-    /* SPLATTING TAKES A VARIABLE, AND `@(...)` IS NOT ONE.
-     *
-     * `docker @($json | ConvertFrom-Json)` reads exactly like the splat it was meant to be, and PowerShell
-     * accepts it silently — `@(...)` is the array SUBEXPRESSION operator, so the argv array is stringified
-     * into ONE space-joined argument. The sandbox launched with `docker: unknown command: docker run -d
-     * --init ...`, docker quoting the entire run line back, after the image had already pulled. Only `@name`
-     * splats.
-     *
-     * There is no runtime that catches this on a Linux CI box, and the .sh twin cannot: it takes the shell
-     * form of the run contract and executes the file, so the whole splat question is PowerShell's alone. */
+/* SPLATTING TAKES A VARIABLE, AND `@(...)` IS NOT ONE. */
     #[test]
     fn no_powershell_script_fakes_a_splat_with_an_array_subexpression() {
         // The native commands these scripts hand argv to. A cmdlet taking `@(...)` as one array argument is
@@ -785,19 +696,7 @@ mod tests {
         }
     }
 
-    /* THREE COPIES OF ONE DOWNLOAD, HELD TO EACH OTHER.
-     *
-     * `connect.ps1`, `connect-host.ps1` and `recreate.ps1` are each handed to `irm | iex` as a standalone
-     * string: there is no import, no dot-sourcing and no shared file, so the block that fetches the `ic`
-     * binary genuinely has to exist three times. Each copy carries the fallback ladder (a failed download
-     * uses the installed binary, then one on PATH, then gives up), the download-then-rename that keeps a
-     * half-written executable from ever running, and the TLS 1.2 line that Windows PowerShell 5.1 needs
-     * before it will talk to GitHub at all.
-     *
-     * Those are the parts that go quietly wrong in a copy. Their comments have said "keep in lockstep" since
-     * the second copy appeared, which is a hope; this is the check. Only the narration line differs by design
-     * — one of them names a progress phase the desktop app watches for — so that line is dropped before the
-     * comparison rather than being an excuse not to make it. */
+/* `connect.ps1`, `connect-host.ps1` and `recreate.ps1` are each handed to `irm | iex` as a standalone string: there is no import. */
     #[test]
     fn every_copy_of_the_ic_download_is_the_same_download() {
         let scripts = powershell_scripts();
@@ -826,25 +725,7 @@ mod tests {
         }
     }
 
-    /* THE PROMISE AN INSTALLER MAKES THE MOMENT IT PRINTS A COMMAND NAME.
-     *
-     * Every downloading script here drops a binary into a folder under %USERPROFILE%\.intentic and then tells
-     * the user to run it BY NAME — `intentic-machine status`, `intentic-machine sync uninstall`, `ic sandbox doctor
-     * <slug>`. Nothing on Windows puts that folder on PATH. The .sh twins get it free with a symlink into
-     * ~/.local/bin, which is exactly why the gap survived: the shell side was right, so the shape looked
-     * finished from both directions.
-     *
-     * What that cost, on the first Windows device to connect: two green checkmarks, "This device is
-     * connected", then `intentic-host status` answering `The term 'intentic-host' is not recognized`. The
-     * install had worked perfectly and every instruction it printed was wrong.
-     *
-     * So a script that downloads a binary the USER runs by name calls Add-IntenticPath, and the copies stay
-     * identical — same reasoning as the ic download above, and the same reason it has to be a test: these
-     * files are handed to `irm | iex` one at a time and can never import anything. The function itself is the
-     * delicate part (a user's PATH is not ours to corrupt), which is what makes three hand-kept copies worth
-     * holding down. Only three: the two AGENT installers (device.ps1, sync.ps1) are bootstrap shims now,
-     * and the agent's own `setup` repairs PATH on every run (_devices/machine/src/install.ts) — the same
-     * promise, kept from one tested place instead of two more copies of this block. */
+/* Download scripts place binaries under %USERPROFILE%\.intentic and report their command name. */
     #[test]
     fn every_downloading_installer_puts_its_binary_on_path() {
         let mut blocks: Vec<(std::path::PathBuf, String)> = Vec::new();
@@ -888,18 +769,7 @@ mod tests {
         }
     }
 
-    /* THE WINDOWLESS LAUNCHER IS THE AGENT'S OWN JOB NOW, AND NO SCRIPT'S.
-     *
-     * A resident agent on Windows comes back after a reboot through a `HKCU\…\Run` value, and Explorer hands
-     * a CONSOLE-subsystem program a console window when it starts one: a black terminal on the desktop at
-     * every boot, measured at 1-2 seconds each. `intentic-launch.exe` is the GUI-subsystem stub that makes
-     * the entry silent, and the agent uses it ONLY if it is sitting next to the binary.
-     *
-     * The two agent installers used to fetch it, in two hand-identical copies this test held together. The
-     * agent's `setup` and `upgrade` fetch and refresh it themselves now (_devices/machine/src/install.ts),
-     * which is strictly better: a machine that never re-runs a card's command still gets a fixed stub with
-     * its next agent update. What is left to hold is the boundary: a script that grows its own launcher fetch
-     * is a second copy of that decision on its way back into shell, where fixes stop reaching machines. */
+/* Windows restarts the resident agent from its HKCU startup registration. */
     #[test]
     fn no_script_fetches_the_windowless_launcher() {
         for (path, text) in powershell_scripts() {

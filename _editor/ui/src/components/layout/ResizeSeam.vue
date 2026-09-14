@@ -1,7 +1,4 @@
-<!--
-    The drag strip between two panes that resizes one of them, via usePointerResize: pointer capture rather than window listeners, so a fast drag off
-    the strip keeps tracking. Reports a size, not a position; `pane` says which side is being sized.
--->
+<!-- The drag strip between two panes that resizes one of them, via usePointerResize: pointer capture rather than window listeners. -->
 <script setup lang="ts">
 import { computed, onBeforeUnmount } from "vue";
 import { usePointerResize } from "../../composables/usePointerResize.js";
@@ -81,10 +78,7 @@ const shape = computed<string>(() => (place === `between` ? SHAPE[`between-${axi
 </script>
 
 <template>
-    <!--
-        `between`: 6px to hit, 0px to lay out—the negative margin cancels the width so a seam never moves the panes.
-        `edge` costs nothing; it rides the pane's own border.
-    -->
+<!-- `between`: 6px to hit, 0px to lay out—the negative margin cancels the width so a seam never moves the panes. -->
     <div
         role="separator"
         :aria-orientation="axis === `x` ? `vertical` : `horizontal`"

@@ -1,8 +1,7 @@
 import { expect, it } from "vitest";
 import { workspaceRepoOf } from "./workspaceRepo";
 
-/* The row's title and its one link both come from here, so a wrong answer is either a repository the reader
- * cannot identify or a link that opens nothing. */
+/* Repository rows derive their title and link from the same source. */
 
 it("names the project and links the host's page for the https form", () => {
     expect(workspaceRepoOf(`https://github.com/radarsu/intentic-sandbox-0738cd.git`)).toEqual({

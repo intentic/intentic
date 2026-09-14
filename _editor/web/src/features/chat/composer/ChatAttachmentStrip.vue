@@ -3,11 +3,7 @@ import { attachmentPeek } from "../drafts/attachmentPeeks";
 import ChatFileChip from "../transcript/ChatFileChip.vue";
 import ChatImageThumb from "../transcript/ChatImageThumb.vue";
 
-/* What a sent prompt's attachments look like: a hover-previewable thumbnail per image, a bare tile with the file's own
- * first lines for everything else. Neither wears the bubble's surface — what the user SAID is a bubble; what they
- * brought with it is an object sitting beside one. Only the arrangement belongs to the caller: ChatMessageView mounts
- * one copy as the row above the bubble and a second beside it, and lets a container query pick which of the two is
- * shown. Extracted so the two can't drift apart. */
+/* What a sent prompt's attachments look like: a hover-previewable thumbnail per image, a bare tile with the file's own first lines for everything else. */
 
 defineProps<{ attachments: readonly { name: string; path: string; previewUrl?: string }[] }>();
 

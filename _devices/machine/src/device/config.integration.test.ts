@@ -91,10 +91,7 @@ test("the credential file is written so only this user can read it", async () =>
     });
 });
 
-/* THE STAMP THE RESIDENT LOOP LEAVES FOR `status`, whose whole point is that it AGES. The states it carries are
- * about sockets held in another process, so a stamp that outlives the loop that wrote it is worse than no stamp:
- * it would have `status` report a dead link as connected. What is asserted here is the boundary — inside the
- * window the stamp is the answer, outside it there is no answer at all. */
+/* A link stamp is valid only inside its freshness window; an expired stamp cannot report a live link. */
 test("a machine whose agent never stamped its links has no answer, rather than a wrong one", async () => {
     // Runs before anything below writes a stamp: this is an agent too old to have the code, seen from here.
     expect(await config.readLinkStates()).toBeUndefined();

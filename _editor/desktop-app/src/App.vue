@@ -76,67 +76,18 @@ import {
     type UpdateStage,
 } from "./desktop";
 
-/* THE APP'S OWN FACE: the other half of the one window, and deliberately not a wizard.
- *
- * The workspace face shows the real product (the hosted SPA), so everything about naming a sandbox, picking
- * reachability and minting a setup code stays there, where it already works and where a change ships without
- * an app release. What is left for this one is the two things a web page on another origin cannot do:
- *
- *   • run the setup the SPA just handed over (an `intentic://setup` link), showing what the script says
- *   • manage the containers on THIS machine afterwards: the sandbox rows and their verbs
- *
- * They are two SCREENS of one window, and they arrive the same way: this face comes up in the middle of the
- * workspace's frame and that one steps aside (windows.rs). The setup screen used to be the exception — a small
- * window in FRONT of the workspace, with that window left mapped behind it — and what it produced was two
- * Intentic windows during onboarding, which is the one flow where a new user has no idea which of them is the
- * product. An install is a screen of this app, so it looks like one.
- *
- * AND THE WINDOW IS THE CARD. This face used to be drawn as a card at the top of the workspace's whole frame,
- * under an OS title bar, over a dark void the size of a monitor; what is on screen now is the card and
- * nothing else. The window has no decorations, its header is the page's own (draggable, with a small × that
- * says where it goes), and its height follows the content below (`useFitToContent`), so ten plan rows and a
- * requirements list above them are exactly what the window is tall enough for and a two-line manager is not
- * a screenful of nothing.
- *
- * Nothing of the manager shows under it either way: a container list, a version and an "Open workspace"
- * button would be a set of decisions to make about a machine whose sandbox is still being built.
- *
- * The archived version had three personas here (a wizard, an environment checklist, a manager) in 527 lines.
- * The checklist is gone because the scripts do the reconciling and narrate it as they go; the wizard is gone
- * because it was a second copy of the SPA's setup screen.
- *
- * ONE LIST, AND IT IS THE WEB'S. This screen and the SPA's Devices tab manage the same containers on the same
- * machine, and they had drifted into two answers: this one printed its sandboxes as cards with their own buttons
- * and then printed the SAME sandboxes again underneath as folders and ports, under a second heading, with
- * nothing on screen relating the two: the exact double-rendering the Devices tab was rebuilt to remove. It
- * now hands its containers to <DeviceDetail>, the way that tab does, so a sandbox is one row carrying its
- * folder, its ports, its image and its verbs. The verbs are the kit's too (<SandboxVerbs>), so "which buttons
- * exist here" is no longer a thing two apps can disagree about: this window had a log tail and no Restart, the
- * tab had a Restart and no log tail, and neither offered the rollback both of their backends could already do. */
+/* THE APP'S OWN FACE: the other half of the one window, and deliberately not a wizard. */
 
 const info = ref<DesktopInfo | undefined>(undefined);
-/* The box the window is fitted to: whichever face is up, measured (fitWindow.ts). One ref for both faces
- * because the root around them is one element, and the window follows whatever it holds. */
+/* The box the window is fitted to: whichever face is up, measured (fitWindow.ts). */
 const content = ref<HTMLElement | undefined>(undefined);
 // Resources form parked on its row until Apply or Cancel answers it. Declared with the fit rather than beside
 // its handlers, because the window's height depends on whether it is open.
 const reshaping = ref<DeviceSandboxGroup | undefined>(undefined);
-/* A DIALOG NEEDS A WINDOW TO BE A DIALOG IN: an overlay is `position: fixed`, so a card-tall window clips it
- * to its first row. The floor is the SCREEN's height and never the window's, which would feed the next
- * resize; Rust clamps it to the work area (windows.rs `fit_to_content`). */
+/* A DIALOG NEEDS A WINDOW TO BE A DIALOG IN: an overlay is `position: fixed`, so a card-tall window clips it to its first row. */
 const dialogFloor = computed(() => (reshaping.value === undefined ? 0 : globalThis.screen.availHeight));
 useFitToContent(content, dialogFloor);
-/* WHETHER DOCKER ANSWERS, AND `undefined` UNTIL IT HAS BEEN ASKED — a third state this screen genuinely has
- * and used to pretend it did not.
- *
- * It rode `info` until the probe behind it turned out to be the slowest thing this window does (desktop.ts,
- * and the Rust command's own comment): tens of seconds on a machine where Docker is installed and stopped,
- * which is the ordinary machine an `intentic://setup` link lands on. Waiting for it meant a window that drew
- * nothing and was not even titled while the user who had just clicked "Set up" watched it.
- *
- * So it is asked apart and nothing waits for it. Everything that reads it below already had to say what it
- * does when the answer is missing, because `info` was itself absent for the first tick; the difference now is
- * that the gap is measured in the machine's terms rather than the window's, and is honest about it. */
+/* WHETHER DOCKER ANSWERS, AND `undefined` UNTIL IT HAS BEEN ASKED — a third state this screen genuinely has and used to pretend it did not. */
 const dockerReady = ref<boolean | undefined>(undefined);
 const sandboxes = ref<SandboxStatus[]>([]);
 const listError = ref<string | undefined>(undefined);
@@ -408,8 +359,7 @@ const planFor = (args: SetupArgs): readonly PlanStep[] =>
         os: info.value?.os ?? ``,
     });
 
-/* The sandbox's name as the user typed it, for every report that carries one (the workspace's strip says
- * "Installing work on this device"), absent rather than empty when there is none. */
+/* The sandbox name is copied into every report that carries one. */
 const nameOf = (args: SetupArgs | undefined): { name?: string } => (args?.name === undefined ? {} : { name: args.name });
 
 const runSetup = async (): Promise<void> => {
@@ -441,8 +391,7 @@ const runSetup = async (): Promise<void> => {
     await settleSetup(args, failure, startedAt);
 };
 
-/* HOW A RUN THAT HAS ENDED IS READ, apart from the run so each half stays readable. `failure` is what `start`
- * answered: nothing for a run that finished, the script's own words otherwise. */
+/* A completed run reports its outcome separately from its live state. */
 const settleSetup = async (args: SetupArgs, failure: string | undefined, startedAt: number): Promise<void> => {
     const ok = failure === undefined;
     // This run passed the examination; a stale list here would describe a different failure.
@@ -521,11 +470,7 @@ const dismissSetup = async (): Promise<void> => {
         ...(state === undefined ? {} : { percent: Math.round(state.percent), elapsedMs: Date.now() - state.startedAt }),
         ...(step === undefined ? {} : { step }),
     });
-    /* WALKING AWAY FROM A LIVE RUN KEEPS THIS A SETUP. The run is still going, and if it stops while nobody is
-     * looking `setupAlert` brings this window back — to THIS screen, holding the failure, which it could not
-     * do while the dismissal cleared `setupOpen` on the way out: the alert then raised the manager's list of
-     * containers, with the reason the install died nowhere on it. Only a card whose run has ended is closed
-     * for good here, which is also the one case the workspace's own strip should come down. */
+    /* A live run keeps setup open so a later failure can return here. */
     if (!running.value) {
         setupOpen.value = false;
         void setupProgress({ ...nameOf(pending.value), state: `closed`, percent: 0 });
@@ -533,19 +478,12 @@ const dismissSetup = async (): Promise<void> => {
     await workspaceOpen();
 };
 
-/* WHAT THE × SAYS IT DOES, because it was the reported question: "clicking Back to your workspace while the
- * sandbox is going through setup gives no clear way of understanding if that stops setup". It does not, and
- * the label says so while there is a run to say it about. The workspace then draws the run's progress for
- * itself, off `reportProgress` below, so the answer is on the next screen as well as on this button. */
+/* The dismiss label makes clear that leaving this screen does not stop a live setup run. */
 const dismissLabel = computed(() =>
     running.value ? `Back to your workspace. The install keeps running, and your workspace shows its progress.` : `Back to your workspace`,
 );
 
-/* THE BAR, TOLD TO THE WORKSPACE PAGE on every change (desktop.ts `setupProgress`, windows.rs
- * `announce_setup`), so the page a dismissed install lands on shows the same figures this card does instead
- * of "follow it in the Intentic window" about a window that just stepped aside. The state is the card's own
- * reading of the run, the same one its heading and its bar colour come from. Only while this is a setup: the
- * manager has nothing to report. */
+/* The workspace page receives setup progress after every change. */
 const reportState = computed<SetupReport[`state`]>(() => {
     if (running.value) {
         return `running`;
@@ -584,19 +522,7 @@ watch(
 );
 
 
-/* THE WAY OUT THAT IS NOT "GIVE UP".
- *
- * This app's whole premise is that the sandbox runs on THIS device, and for most people it should. But the
- * list this button sits under is the moment where that premise is being tested hardest: a PC with no WSL2
- * and no Docker is being asked for administrator, a 600 MB download and a restart, and some of those readers
- * are on a machine where none of that is going to happen: a work laptop, a locked-down build, a PC too
- * small for it. Until now the app had nothing to say to them, while the browser has handed that reader a
- * machine we host all along; it was hidden here on the argument that "this device" is the whole point of
- * being in the app.
- *
- * It is the point right up until it cannot work, and then it is a dead end. Local stays the loud default and
- * this stays one quiet line under it, in the one place where it is the more useful answer.
- */
+/* THE WAY OUT THAT IS NOT "GIVE UP". */
 const setUpElsewhere = async (): Promise<void> => {
     track(`desktop_install_elsewhere`, { requirements: requirements.value.map((requirement) => requirement.id) });
     setupOpen.value = false;
@@ -712,8 +638,7 @@ const reshape = async (slug: string, ask: ResourcesAsk): Promise<void> => {
     busy.value = undefined;
 };
 
-/* ESCAPE IS THE ×: this window has no title bar to find one on, and a card that can be dismissed by a key is
- * a card that reads as a card. Not while a dialog of this screen's own is open, whose Escape is its own. */
+/* Escape dismisses the card when no dialog is consuming the key. */
 const onKey = (event: KeyboardEvent): void => {
     if (event.key !== `Escape` || reshaping.value !== undefined) {
         return;
@@ -977,22 +902,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <!-- ONE ROOT, TWO FACES, AND THE WINDOW IS THE CARD. Both screens share this scroll container and the
-         measured column inside it (`content`): the window is fitted to the column's height (fitWindow.ts) and
-         the container is what scrolls once the screen has run out of room. There is no card drawn inside,
-         because the window's own edge is the card's edge now: this face has been all three shapes — a
-         chromeless sheet across the screen, a small dialog window over the workspace, and a card at the top of
-         the workspace's whole frame — and the last of those was a monitor's worth of dark canvas around one
-         card's worth of content, under an OS title bar. -->
+<!-- ONE ROOT, TWO FACES, AND THE WINDOW IS THE CARD. -->
     <div class="h-dvh overflow-auto bg-canvas text-content">
         <div ref="content" class="flex w-full flex-col gap-3 p-4">
-            <!-- SETUP: a SCREEN of this window, in the middle of the frame the workspace was filling (windows.rs),
-                 not a second window standing in front of it. Anchored to the TOP of its window rather than
-                 floating: the heading does not move as rows arrive under it, and the window grows downward. -->
+<!-- SETUP: a SCREEN of this window, in the middle of the frame the workspace was filling (windows.rs), not a second window standing in front of it. -->
             <template v-if="setupMode">
-                <!-- THE HEADER IS THE TITLE BAR. There is no OS one to drag the card by or to close it with, so
-                     this row is the drag region and carries the ×. The text inside is inert to the pointer so
-                     a press anywhere on the row is a press on the row. -->
+<!-- THE HEADER IS THE TITLE BAR. -->
                 <header data-tauri-drag-region class="flex items-start gap-2.5 select-none">
                     <Icon name="bolt" class="pointer-events-none mt-0.5 text-primary-400" />
                     <div class="pointer-events-none min-w-0 flex-1">
@@ -1002,11 +917,7 @@ onUnmounted(() => {
                             workspace once it answers.
                         </p>
                     </div>
-                    <!-- SAYS WHERE IT GOES, in its label, because a bare × on a screen that fills its window
-                         reads as "close Intentic", which is the one thing it does not do: it steps back to the
-                         workspace and nothing else, and the install carries on, being a process on this
-                         machine rather than something this window is holding up. The label says that too,
-                         while there is a run to say it about. -->
+<!-- SAYS WHERE IT GOES, in its label, because a bare × on a screen that fills its window reads as "close Intentic", which is the one thing it does not do. -->
                     <button
                         type="button"
                         :class="ui.iconButton(`-my-0.5 h-7 w-7`)"
@@ -1017,9 +928,7 @@ onUnmounted(() => {
                         <Icon name="times" />
                     </button>
                 </header>
-                <!-- The code this window came back to is older than the platform will accept. Said plainly, with
-                 the one thing that fixes it, instead of letting the run fail at the claim with something that
-                 reads like a bad code. -->
+<!-- The code this window came back to is older than the platform will accept. -->
                 <Notice v-if="expired" tone="warning" class="text-2xs">
                     Your setup code ran out while this device restarted. Open the setup page again for a fresh one: everything the restart was for
                     is already done.
@@ -1037,12 +946,7 @@ onUnmounted(() => {
                     <span v-else>Docker isn't running yet: setup installs it first, so your system will ask for your password once.</span>
                 </p>
 
-                <!--
-                    Leads above the progress bar, since it's the only thing here to act on and the machines that
-                    produce it have
-                    the most rows to scroll past. Replaces the red box rather than sitting beside it, to avoid saying
-                    it twice.
-                -->
+<!-- Leads above the progress bar, since it's the only thing here to act on and the machines that produce it have the most rows to scroll past. -->
                 <Requirements
                     v-if="requirements.length > 0 && !expired && !requirementsSettled"
                     :requirements="requirements"
@@ -1078,11 +982,7 @@ onUnmounted(() => {
                     </Button>
                 </div>
 
-                <!--
-                    Stop and Copy log: a run that goes wrong can now be ended, not just abandoned. The transcript is
-                    always written
-                    (scripts.rs); these are the two ways to reach it.
-                -->
+<!-- Stop and Copy log: a run that goes wrong can now be ended, not just abandoned. -->
                 <div v-if="!expired" class="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-2 text-2xs">
                     <button v-if="running" type="button" class="text-link hover:underline" :disabled="stopping" v-action="stopSetup">
                         {{ stopping ? `Stopping…` : `Stop` }}
@@ -1095,8 +995,7 @@ onUnmounted(() => {
                 </div>
             </template>
 
-            <!-- THE MANAGER: what this machine is running, once nothing is being handed over. The same card,
-                 the same header row doing the title bar's job, and a × that is the way back to the workspace. -->
+<!-- THE MANAGER: what this machine is running, once nothing is being handed over. -->
             <template v-else>
                 <header data-tauri-drag-region class="flex items-center gap-3 select-none">
                     <h1 class="pointer-events-none flex-1 text-base font-semibold">This device</h1>
@@ -1115,10 +1014,7 @@ onUnmounted(() => {
                     </button>
                 </header>
 
-            <!--
-                Describes what's true now, never what will happen later. Only `ready` gets a button (a restart, not a
-                download), since by then the installer is already on this machine.
-            -->
+<!-- Describes what's true now, never what will happen later. -->
             <Notice v-if="update.kind === `ready`" tone="info" class="items-center">
                 <span>Intentic {{ update.version }} is downloaded. It installs when you quit, or now:</span>
                 <Button class="ml-2" size="small" severity="secondary" label="Update and restart" @click="applyUpdate" />
@@ -1126,10 +1022,7 @@ onUnmounted(() => {
             <Notice v-else-if="update.kind === `downloading`" tone="info" class="items-center">
                 Downloading Intentic {{ update.version }}… {{ update.percent }}%
             </Notice>
-            <!--
-                Covers installs a .deb/.rpm release has no artifact for, and copies whose signature check can no longer
-                pass.
-            -->
+<!-- Covers installs a .deb/.rpm release has no artifact for, and copies whose signature check can no longer pass. -->
             <Notice v-else-if="update.kind === `manual`" tone="warning" class="items-center">
                 <span>{{ update.reason }}</span>
                 <a class="ml-2 text-link hover:underline" :href="update.url" target="_blank" rel="noreferrer">Get the latest version</a>
@@ -1145,11 +1038,7 @@ onUnmounted(() => {
                 No sandboxes here yet. Set one up from your workspace: this screen is where you manage it afterwards.
             </p>
 
-            <!--
-                A sync enrollment in flight: folder picked in the system dialog, same script as the card's one-liner,
-                narrating
-                here. Gone on success (the card polls and flips to "Enabled" itself); stays, with a retry, on failure.
-            -->
+<!-- A sync enrollment in flight: folder picked in the system dialog, same script as the card's one-liner, narrating here. -->
             <section v-if="syncSetup" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
                 <div class="flex items-start gap-2.5">
                     <Icon name="sync" class="mt-0.5 text-primary-400" />
@@ -1181,11 +1070,7 @@ onUnmounted(() => {
                     empty="Starting on this device…"
                     note="Installing the sync agent and starting the first sync."
                 />
-                <!--
-                    The pairing is single-use, so a failed-after-enrolling run needs a fresh one from the sandbox's
-                    Desktop sync
-                    card.
-                -->
+<!-- The pairing is single-use, so a failed-after-enrolling run needs a fresh one from the sandbox's Desktop sync card. -->
                 <div v-if="syncSetup.error" class="flex flex-wrap items-center gap-3">
                     <Button label="Try again" size="small" :disabled="running" @click="retrySync">
                         <template #icon><Icon name="refresh" /></template>
@@ -1194,11 +1079,7 @@ onUnmounted(() => {
                 </div>
             </section>
 
-            <!--
-                One row per sandbox with its folder, ports, image and verbs, matching the SPA's Devices tab. `syncDir`
-                only ever
-                fed connect.sh, so this is the only place these show for the same sandbox.
-            -->
+<!-- One row per sandbox with its folder, ports, image and verbs, matching the SPA's Devices tab. -->
             <section v-if="hasRows || reportError" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
                 <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
                 <!-- The agent's own refusal, in its words; the row above already shows whether the loop came back. -->
@@ -1252,22 +1133,14 @@ onUnmounted(() => {
                 <Button size="small" severity="secondary" label="Open workspace" @click="openWorkspace()">
                     <template #icon><Icon name="arrow-up-right" /></template>
                 </Button>
-                <!--
-                    The other screen that manages these same containers, reached through the machine's own connection
-                    rather than
-                    natively.
-                -->
+<!-- The other screen that manages these same containers, reached through the machine's own connection rather than natively. -->
                 <Button size="small" severity="secondary" :text="true" label="See all your devices" @click="openWorkspace(DEVICES_PATH)">
                     <template #icon><Icon name="desktop" /></template>
                 </Button>
                 <span v-if="info" class="truncate font-mono text-2xs text-subtle">{{ info.appUrl }}</span>
             </footer>
 
-            <!--
-                The sandbox's current share (from docker) and this engine's size for the form's rails; no self-warning,
-                since
-                this screen is never served by the sandbox it manages.
-            -->
+<!-- The sandbox's current share (from docker) and this engine's size for the form's rails; no self-warning. -->
             <SandboxResourcesDialog
                 :open="reshaping !== undefined"
                 :name="reshaping?.title ?? ``"

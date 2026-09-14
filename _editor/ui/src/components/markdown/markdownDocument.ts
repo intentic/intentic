@@ -4,11 +4,7 @@ import { computed, type ComputedRef, ref, watch } from "vue";
 // Reading a document must never write it; `stored` is the caller's copy of what disk says, so writing only happens when
 // the text actually differs from it.
 
-/**
- * `auto` writes on a debounce and on the way out: right for a document that IS the file.
- * `explicit` waits to be told: right for a document read at the start of every turn.
- * `none` never writes on its own: the document is one field of a form, and the form's submit is the save.
- */
+/** `auto` writes on a debounce and on the way out: right for a document that IS the file. */
 export type SavePolicy = "auto" | "explicit" | "none";
 
 export interface SaveDraftInput {

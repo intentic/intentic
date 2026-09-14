@@ -1,7 +1,4 @@
-<!--
-    Lists connected capability instances as individual rows, not catalog cards — one card can back several connections (three SSH boxes, two
-    accounts). Rows needing attention sort first. A row opens that connection's settings on its source card; it holds no controls of its own.
--->
+<!-- Lists connected capability instances as individual rows, not catalog cards — one card can back several connections (three SSH boxes, two accounts). -->
 
 <script lang="ts">
 import type { IconName, StatusVariant } from "@intentic/ui";
@@ -24,10 +21,7 @@ export interface CapabilityConnection {
     readonly tone: StatusVariant;
     /** What is still missing, when something is: the daemon's own sentence, already written for a reader. */
     readonly note?: string;
-    /**
-     * A code to type on another device to finish this connection (e.g. a link-a-device code); shown big on the card it
-     * leads to.
-     */
+/** A code to type on another device to finish this connection. */
     readonly code?: string;
 }
 
@@ -53,10 +47,7 @@ const emit = defineEmits<{ open: [cardId: string, connectionId: string] }>();
                 <template #lead="{ mark }">
                     <BrandMark :size="mark" :name="row.title" :logo="row.logo" :icon="row.icon" />
                 </template>
-                <!--
-                    The name leads: the one word the owner chose, and what distinguishes multiple connections on one
-                    card.
-                -->
+<!-- The name leads: the one word the owner chose, and what distinguishes multiple connections on one card. -->
                 <template #title>{{ row.title }}</template>
                 <!-- Conditional so a row with nothing to say doesn't reserve an empty second line. -->
                 <template v-if="row.card !== undefined || row.detail !== `` || row.note !== undefined" #description>

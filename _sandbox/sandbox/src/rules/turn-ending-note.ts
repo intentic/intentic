@@ -22,8 +22,7 @@ const whereClause = (rule: Rule): string => {
     return repo === undefined || repo === "root" ? "" : `, run in \`${repo}\``;
 };
 
-/* Command rules run without the model's help, so naming them prevents duplicate checks. Built-ins and
- * instructions need model action and are deliberately omitted. */
+/* Command rules run without the model's help, so naming them prevents duplicate checks. Built-ins. */
 export const turnEndingNote = (rules: readonly Rule[]): TurnNote | undefined => {
     const commands = standing(rules, "turn.ending").filter(isCommandRule);
     if (commands.length === 0) {

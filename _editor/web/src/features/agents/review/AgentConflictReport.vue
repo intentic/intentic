@@ -51,10 +51,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
 </script>
 
 <template>
-    <!--
-        Nothing was written yet: the worktree still holds every change, so this is a decision point, not a failure.
-        Shows how much is actually being held back, the cause of each blocker, and a ladder ordered by who can act.
-    -->
+<!-- Nothing was written yet: the worktree still holds every change, so this is a decision point, not a failure. -->
     <div class="flex shrink-0 flex-col gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5">
         <span class="text-2xs font-medium text-warning">
             <template v-if="blockedCount === 0">Couldn't reach your workspace's copy of this repo</template>
@@ -64,11 +61,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                 >
             </template>
         </span>
-        <!--
-            Grouped by cause, since that decides who acts next. The heading shares the file list's glyph so the group
-            reads
-            as a pointer at those rows; each path is a button that selects one.
-        -->
+<!-- Grouped by cause, since that decides who acts next. -->
         <div v-for="group in groups" :key="group.reason" class="flex flex-col">
             <span class="inline-flex items-center gap-1 text-2xs text-content">
                 <Icon :name="group.icon" class="shrink-0 text-2xs text-warning" />{{ group.title }}
@@ -91,11 +84,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
             Nothing was applied and nothing was lost: the agent's work is still on its branch.
         </p>
 
-        <!--
-            Replaces the ladder rather than sitting beside it: while the rebase runs, re-asking or landing over it is
-            not a
-            real choice.
-        -->
+<!-- Replaces the ladder rather than sitting beside it: while the rebase runs, re-asking or landing over it is not a real choice. -->
         <div v-if="working" :class="ROW">
             <span class="inline-flex items-center gap-1.5 text-2xs text-link">
                 <Icon name="spinner" spin class="text-2xs" />Resolving: the agent is bringing its branch up to date
@@ -109,18 +98,10 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
         </div>
 
         <template v-else>
-            <!--
-                Both rungs needing the agent's own box (resolving needs its conversation, committing needs its
-                workspace)
-                collapse into one cross-sandbox button instead of two that would address the wrong box.
-            -->
+<!-- Both conflict rows need the agent's conversation to resolve them. -->
             <div v-if="box !== undefined && (mine.length > 0 || theirs.length > 0)" :class="ROW">
                 <Button size="small" :class="INLINE" @click="emit('cross')"> <Icon name="arrow-right" />Open in {{ box }} </Button>
-                <!--
-                    Gated on `mergeable`, since git refuses a three-way apply while any path is held by uncommitted
-                    work; the
-                    promise must not appear where the surface can't honor it.
-                -->
+<!-- Gated on `mergeable`, since git refuses a three-way apply while any path is held by uncommitted work. -->
                 <span class="text-2xs text-subtle">
                     <template v-if="mine.length > 0">Asking the agent to rebase needs its conversation</template
                     ><template v-if="mine.length > 0 && theirs.length > 0">, and </template
@@ -131,11 +112,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                 </span>
             </div>
 
-            <!--
-                First: the one action costing the user nothing, the agent redoing its own merge. `mine` is empty only
-                when
-                every blocker is the user's own uncommitted work, which no rebase reaches.
-            -->
+<!-- First: the one action costing the user nothing, the agent redoing its own merge. -->
             <div v-if="box === undefined && mine.length > 0" :class="ROW">
                 <Button
                     size="small"
@@ -154,11 +131,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                 </span>
             </div>
 
-            <!--
-                The user's own half, which nothing else here can do for them; primary only when it's the sole thing
-                left
-                blocking, so the block always ends on somebody's next move.
-            -->
+<!-- The user's own half, which nothing else here can do for them; primary only when it's the sole thing left blocking. -->
             <div v-if="box === undefined && theirs.length > 0" :class="ROW">
                 <Button size="small" :severity="mine.length === 0 ? undefined : `secondary`" :class="INLINE" @click="emit('commit')">
                     <Icon name="file-edit" />Commit or stash yours

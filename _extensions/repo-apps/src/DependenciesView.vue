@@ -133,7 +133,7 @@ const dagEdges = computed<DagEdge[]>(() =>
                 </label>
             </div>
         </div>
-        <!-- Skeleton cards at real size, not a fake graph shape: the dependency tree's shape is what this view exists to show, not to guess. -->
+        <!-- Dependency skeletons use the real card dimensions and graph shape. -->
         <div v-if="isLoading && outline" class="min-h-0 flex-1 p-2" role="status" aria-busy="true">
             <span class="sr-only">Reading the workspace graph…</span>
             <div class="flex flex-wrap gap-3" aria-hidden="true">

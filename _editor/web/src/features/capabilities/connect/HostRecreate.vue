@@ -181,11 +181,7 @@ const command = computed(() => {
             </ConfirmDialog>
         </template>
 
-        <!--
-            Desktop deep link covers all three swaps including rollback. Download can't, since `intentic://recreate`
-            has no
-            parameter to stop before the container is touched, so it falls through to the command below instead.
-        -->
+<!-- Desktop deep link covers all three swaps including rollback. -->
         <template v-else-if="desktop && action !== `Download`">
             <Button
                 :label="`${action} now`"
@@ -213,15 +209,9 @@ const command = computed(() => {
                 ]"
             />
             <Code :code="command" :lang="commandLang(cmdOs)" :label="`${action} command`" :wrap="true" />
-            <!--
-                The cheaper way out where it exists: the machine is already talking to this sandbox, and one card
-                turns that into the button above. Offered before the download, which asks for an install instead.
-            -->
+<!-- The cheaper way out where it exists: the machine is already talking to this sandbox, and one card turns that into the button above. -->
             <ConnectDeviceHint :slug="slug" :gains="`${action.toLowerCase()} becomes a button here.`" />
-            <!--
-                Offered here, not just at setup, since this is the moment reaching for the app repeatedly starts to pay
-                off.
-            -->
+<!-- Offered here, not just at setup, since this is the moment reaching for the app repeatedly starts to pay off. -->
             <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle">
                 <span>Skip the terminal next time:</span>
                 <a :href="DESKTOP_DOWNLOADS.windows" class="text-link hover:underline">Intentic for Windows</a>

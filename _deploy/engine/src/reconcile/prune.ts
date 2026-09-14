@@ -41,9 +41,7 @@ const inOrder = (graph: DesiredStateGraph): ResourceNode[] =>
         .map((id) => graph.resources[id])
         .filter((node): node is ResourceNode => node !== undefined);
 
-// Tears down resources in `previous` absent from `current`, in reverse dependency order, using each node's
-// previous inputs. The store seeds from both graphs: a removed node may reference a kept node or another removed
-// one.
+// Prune removed resources in reverse dependency order using their previous inputs.
 export const prune = async (previous: DesiredStateGraph, current: DesiredStateGraph, config: EngineConfig): Promise<PruneOutcome> => {
     const env = config.env ?? process.env;
     const log = config.log ?? console.log;

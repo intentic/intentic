@@ -93,8 +93,7 @@ const configSchema = z.object({
                 .string()
                 .default("")
                 .transform((value) => value === "true" || value === "1"),
-            // Platform-signed proof of this sandbox's identity for the tunnel upgrade; empty ⇒ no tunnel, loopback
-            // only.
+            // An empty grant means loopback-only operation.
             grant: z.string().default("").meta({ secret: true }),
             // Bypasses the auth floor for gated e2e tests only; nothing that ships ever sets this.
             allowUnauthenticated: z

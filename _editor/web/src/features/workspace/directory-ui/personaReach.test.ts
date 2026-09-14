@@ -2,10 +2,7 @@ import type { Persona } from "@intentic/sandbox-contract";
 import { expect, it } from "vitest";
 import { reachOf, reachSentence } from "./personaReach";
 
-/* The lens is arithmetic on paths, and every one of these is a way it could be wrong on a real workspace: a
- * fence that greys out the road to its own folder, a prefix that isn't a folder, a card with no fence at all.
- * The daemon enforces the same rule in persona-scope.ts; these are the cases where a string-prefix version of
- * it and a segment-aware one disagree. */
+/* The lens is arithmetic on paths, and every one of these is a way it could be wrong on a real workspace: a fence that greys out the road to its own folder. */
 
 const card = (workspace?: Persona[`workspace`], powers?: Persona[`powers`]): Persona => ({
     id: `test`,
@@ -29,8 +26,7 @@ it(`refuses everything outside the folders it names`, () => {
     expect(reach.refuses(`apps`)).toBe(true);
 });
 
-/* THE ONE THAT MAKES THE LENS USABLE. A card fenced to `intentic/_editor` must not grey out `intentic`: that
- * is the only road to the one folder it CAN use, and a dimmed road reads as "nothing for you down there". */
+/* THE ONE THAT MAKES THE LENS USABLE. */
 it(`keeps a folder on the way to a reachable one lit`, () => {
     const reach = reachOf(card({ folders: [`intentic/_editor`] }));
     expect(reach.refuses(`intentic`)).toBe(false);

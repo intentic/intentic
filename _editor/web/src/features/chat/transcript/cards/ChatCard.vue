@@ -1,8 +1,4 @@
-<!--
-    Shared shell (header, body, answer row) for every card that asks the user something — plan, question, permission, browser/terminal help,
-    service/payment/capability offers. No ground and no rim: what holds a card together is one text column, which `.chat-card` states as an
-    inset, a mark box and the gap between them (chat.css). The title renders at the body tier when it is a sentence (`prose` prop).
--->
+<!-- Shared shell for cards that ask the user something. -->
 <script lang="ts">
 // Shared shell for every card that asks the user something: header, slot, and the answers below. A prose title sits at
 // the body tier. Every inset comes from `.chat-card`'s own measures in chat.css, not from each card.

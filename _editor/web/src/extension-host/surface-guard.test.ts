@@ -24,18 +24,9 @@ interface RecordedSurface {
     readonly sandboxApi?: readonly string[];
     // api.workspace's own members, recorded from 2.10.0 on; a top-level record can't see additions inside workspace.
     readonly workspaceApi?: readonly string[];
-    /* api.chat's own members, recorded from 2.11.0 on: `openAgent` was added there, and without a sub-surface
-     * record the entry would be indistinguishable from its predecessor's. Optional because earlier entries
-     * predate it. */
+/* api.chat's own members, recorded from 2.11.0 on: `openAgent` was added there. */
     readonly chatApi?: readonly string[];
-    /* What the PACKAGE exports, recorded from 2.6.0 on: the third grain, and the last one that was still
-     * unrecorded.
-     *
-     * `IntenticApi` is what an extension is HANDED, and everything above tracks it. But some of the contract
-     * cannot be handed over, because it is needed before `activate(api)` has run: `hostSlot` binds the handle
-     * itself, and `sandboxRef` declares module state at import time. Those are imported from the package, they
-     * are every bit as breakable as a member of the api object, and nothing here could see them: `hostSlot`
-     * arrived, and later so did the whole scope primitive, with no record either way. */
+/* What the PACKAGE exports, recorded from 2.6.0 on: the third grain, and the last one that was still unrecorded. */
     readonly moduleExports?: readonly string[];
 }
 

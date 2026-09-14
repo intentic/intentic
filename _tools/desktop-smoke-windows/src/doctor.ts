@@ -25,19 +25,7 @@ export interface DoctorOptions {
     readonly needsDocker: boolean;
 }
 
-/*
- * AN ASSERTION, NOT A NOTE, and the only check here that was once written as one.
- *
- * An empty desktop is normal and so is a busy one — this box has Docker Desktop and PowerToys resident on every
- * run — so the count was recorded and nothing was asserted. What a count cannot say is who holds the
- * FOREGROUND, and that is the one machine state that makes the tiers' `focusWindow` fail with nothing wrong
- * with the product. The line used to look for the holder in the window list, which is the one place a lock
- * screen is not: it printed "9 window(s) currently open, none holding the foreground", called the machine
- * ready, and a release then failed six assertions that all read as a broken deep link.
- *
- * The read is the OS's now (`sessionState`), and a desktop no tier could drive fails HERE, with its own remedy,
- * ten seconds in — which is the whole reason this command exists.
- */
+/* AN ASSERTION, NOT A NOTE, and the only check here that was once written as one. */
 const reportDesktop = async (harness: Harness): Promise<void> => {
     let session: SessionState;
     try {

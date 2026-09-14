@@ -39,14 +39,7 @@ export interface ViewBadge {
     readonly tone?: "neutral" | "info" | "warning" | "danger" | undefined;
     // What happened and how much; rendered after the view's name, so phrase it as a continuation, not a sentence.
     readonly tooltip?: string | undefined;
-    /* WORK IN FLIGHT BEHIND THIS TILE RIGHT NOW ("2 running"), phrased as a continuation like `tooltip`.
-     * A SECOND CHANNEL, not a second badge: the host draws it as a turning mark in the tile's own corner,
-     * never inside the chip. Running and broken are different claims that are true at the same time more
-     * often than not — a red branch with its fix already re-running is the ordinary case — and a chip can
-     * only hold one of them, so putting progress in there would cost the count of what is actually owed.
-     * No tone: running is never an errand, so it stays the one uncoloured thing a tile can say.
-     * Seats a tile like any other badge. The rail has always shown live work (an open browser, a subagent,
-     * a workflow run); a rule that seated those and not a running pipeline would be arbitrary. */
+/* WORK IN FLIGHT BEHIND THIS TILE RIGHT NOW ("2 running"), phrased as a continuation like `tooltip`. */
     readonly running?: string | undefined;
 }
 
@@ -135,16 +128,11 @@ export interface PickedModel {
     readonly effort?: string | undefined;
     // What the shell calls that tier ("X-High"); absent whenever `effort` is.
     readonly effortLabel?: string | undefined;
-    /* WHAT THE PRESS DOES TO THE ATTEMPT THE PICKER WAS OPENED OVER (`attempt` on `pick`): continue it, or start
-     * over from it. Absent when the picker was opened over no attempt, or ended by a bar that carried `action`. */
+/* WHAT THE PRESS DOES TO THE ATTEMPT THE PICKER WAS OPENED OVER (`attempt` on `pick`): continue it, or start over from it. */
     readonly resume?: "continue" | "start-over" | undefined;
-    /* WHETHER THE MODEL REASONS BEFORE IT ANSWERS, where that is a choice it offers. Three states and not two:
-     * absent means nobody said, and the turn goes out with no thinking field so the model's own default decides,
-     * which is NOT the same as `false`. The distinction is load-bearing — Claude refuses its top effort tier
-     * beside thinking explicitly disabled — so pass it on the turn exactly as it arrives. */
+/* WHETHER THE MODEL REASONS BEFORE IT ANSWERS, where that is a choice it offers. */
     readonly thinking?: boolean | undefined;
-    /* WHETHER THE WORK IS BOUGHT AT THE FASTER RATE, for a higher price. A request rather than a promise: the
-     * harness answers, and may decline (the plan, the account's own settings, the model). Absent ⇒ standard. */
+/* WHETHER THE WORK IS BOUGHT AT THE FASTER RATE, for a higher price. */
     readonly fast?: boolean | undefined;
 }
 
@@ -254,24 +242,9 @@ export interface IntenticApi {
         // Opens (or focuses) the tab for a stored session id. A session the daemon no longer holds opens an
         // empty tab rather than failing.
         openSession(sessionId: string): void;
-        /* Open (or focus) the docked chat for a fleet agent by its id: the same thing a card press on the
-         * agents board does. The agent's conversation appears in the chat panel beside the current view
-         * rather than navigating away from it. An agent the roster does not hold yet (archived, or between
-         * a start and the first roster frame) is looked up before opening. */
+/* Open (or focus) the docked chat for a fleet agent by its id: the same thing a card press on the agents board does. */
         openAgent(agentId: string): void;
-        /* AIM A NEW CHAT AT A WORKFLOW: the host opens a session exactly as "New agent" does, with the
-         * composer's workflow badge set to this design, so the next message the user types becomes that run's
-         * request instead of a turn on the chat.
-         *
-         * It hands over the START of the work rather than performing it, and that is the point. An extension
-         * with a Run button used to have two bad options: start the run itself behind its own dialog (a second
-         * way to begin agent work, with its own box that looks like nothing else in the product), or navigate
-         * to a page about the run. This is the third: the extension names the design, and the user starts it
-         * where they start everything else.
-         *
-         * A workflow id, not a run id, and the id is all it can be: sandbox-contract imports THIS package, so
-         * nothing here can name a `Workflow` type.
-         */
+/* AIM A NEW CHAT AT A WORKFLOW: the host opens a session exactly as "New agent" does, with the composer's workflow badge set to this design. */
         composeWorkflow(workflowId: string): void;
         // Like `composeWorkflow`, but arms the composer's loop badge: the next message becomes the loop's
         // goal, and Send starts it running.
@@ -294,25 +267,7 @@ export interface IntenticApi {
             readonly thinking?: boolean | undefined;
             readonly fast?: boolean | undefined;
         }): PickedModel;
-        /* Open the picker over `anchor`, a popover on desktop, a sheet on mobile, starting on the selection the
-         * caller is holding. Resolves with the pick, or undefined if it was dismissed. A second call supersedes
-         * the first, resolving it as a dismissal.
-         *
-         * IT IS A FORM AND IT ENDS IN A PRESS. Every row in the panel — the model list included — updates the
-         * open selection and leaves the panel open; the bar at the bottom, carrying your `action` as its label,
-         * is what resolves this promise. Nothing else does: Escape, a click outside and the sheet's backdrop are
-         * all a plain cancel, resolving undefined and keeping nothing, so a caller never has to guess whether a
-         * dismissal meant "as you were" or "yes, but from over there".
-         *
-         * The panel used to settle on the model row instead, which cost the callers that spend money a second
-         * click (leave the panel, then press the thing that starts the run) and made backing out of an effort
-         * change impossible. If your surface merely stores the answer, name your verb accordingly ("Use this
-         * model" is the default) and the press reads as the save it is.
-         *
-         * Picking a model under a DIFFERENT provider clears the account and harness with it: an account id is one
-         * provider's store key, so carrying it across would pin the work to an account that provider does not
-         * have. The RUN SETTINGS survive, because effort, thinking and speed are questions every model answers
-         * for itself. */
+/* Open the picker over `anchor`, a popover on desktop, a sheet on mobile, starting on the selection the caller is holding. */
         pick(options: {
             readonly anchor: HTMLElement;
             readonly provider: string;
@@ -322,21 +277,11 @@ export interface IntenticApi {
             readonly effort?: string | undefined;
             readonly thinking?: boolean | undefined;
             readonly fast?: boolean | undefined;
-            /* THE VERB ON THE PANEL'S OWN BUTTON — "Fix with agent", "Run all 21 stories", "Save this step".
-             * Yours, because only you know what the press does, and it is what lets configuring a run and
-             * starting it be one act instead of two. Defaults to "Use this model", which is honest for a form
-             * that is only storing the answer. */
+/* THE VERB ON THE PANEL'S OWN BUTTON — "Fix with agent", "Run all 21 stories", "Save this step". */
             readonly action?: string | undefined;
-            /* OFFER THE MODEL'S OWN RUN SETTINGS — reasoning effort, extended thinking, speed — for a caller
-             * that will carry them onto the turn it starts or the pin it stores. Off by default, and
-             * deliberately: a form that keeps a model and none of these (a workflow step) would be showing
-             * controls whose answers it drops, which is worse than showing none. Every <AgentRunButton> asks for
-             * them through `useAgentRunPick`, so a surface using that gets them already. */
+/* OFFER THE MODEL'S OWN RUN SETTINGS — reasoning effort, extended thinking, speed. */
             readonly chooseRun?: boolean;
-            /* THE ATTEMPT ALREADY MADE AT WHAT THIS RUN WOULD ANSWER, when there is one: a line naming it, and
-             * whether it can be continued from here. Given, the panel's bar ends in the verbs about that attempt —
-             * Continue, Start over — rather than in `action`, and the answer says which was pressed (`resume`).
-             * A run button beside a fix that already exists passes this through `useAgentRunPick`. */
+/* THE ATTEMPT ALREADY MADE AT WHAT THIS RUN WOULD ANSWER, when there is one: a line naming it, and whether it can be continued from here. */
             readonly attempt?: { readonly summary: string; readonly continuable: boolean } | undefined;
         }): Promise<PickedModel | undefined>;
     };

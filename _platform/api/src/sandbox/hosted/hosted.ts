@@ -64,28 +64,14 @@ export const hostedInstanceId = (config: Config): string => {
 const hostedAppName = (config: Config, sandboxId: string, connectToken: string): string =>
     `${config.hosted.appPrefix}-${sandboxIdFromToken(connectToken) ?? sandboxId}`;
 
-/* THE OWNER HAS NO SLOT LEFT, thrown where the row would have been written. Its own class for the route's sake:
- * this is a refusal in the owner's own words (BAD_REQUEST, "remove one first"), never a provider fault. */
+/* THE OWNER HAS NO SLOT LEFT, thrown where the row would have been written. Its own class for the route's sake. */
 export class HostedSlotsExhausted extends Error {}
 
 // The one sentence both refusals say, the route's early one and the write's binding one, so they cannot drift.
 export const slotsMessage = (used: number): string =>
     `you already have ${used === 1 ? `a hosted sandbox` : `${used} hosted sandboxes`}; remove one first, or add a slot to your plan`;
 
-/* WRITE THE MACHINE ROW UNDER THE OWNER'S SLOT COUNT, atomically.
- *
- * The route checks the allowance before anything is built (sandbox.routes.ts assertHostedAllowance), and that
- * check is a read with no lock behind it: `sandbox.create` is unlimited, so N sandboxes and N concurrent
- * provisions all read "0 of 1 used" and all proceed, and the only brake left was the provider's own refusal,
- * which on a platform with no ceiling configured is a hundred machines away. HostedMachine is unique per
- * SANDBOX, not per owner, so no constraint catches it either. This is the check that binds: a transaction-scoped
- * advisory lock keyed on the owner serializes every row-write for that owner, and the count taken under it sees
- * whatever a competing write just committed. Held for milliseconds (a count and an insert), never across a
- * provider call, which is why the lock is here and not around the whole provision.
- *
- * Every caller has already created or claimed a machine by the time it reaches this, so a refusal here costs one
- * provider create-and-destroy in the racing case (the cold path's own cleanup). That is the right price: the
- * alternative was an unbounded fleet on one free account. */
+/* WRITE THE MACHINE ROW UNDER THE OWNER'S SLOT COUNT, atomically. */
 const withHostedSlot = async <T>(
     prisma: PrismaClient,
     config: Config,
@@ -109,13 +95,7 @@ const withHostedSlot = async <T>(
         return result;
     });
 
-/* Did this sandbox get its machine from somewhere else while this call was building one?
- *
- * Asked of the DATABASE rather than read off the unique violation's `target`, which Prisma spells differently
- * per database: HostedMachine has TWO unique columns and they mean opposite things here. `sandboxId` is
- * another provision winning the race, which is terminal and answers with the winner's machine; `appName` is a
- * pool app that some other row already adopted, which is one bad candidate and nothing more. Only the first
- * may stop the claim loop, so the question is put to the column that decides it. */
+/* Did this sandbox get its machine from somewhere else while this call was building one?. */
 const alreadyProvisioned = async (prisma: PrismaClient, sandboxId: string, error: unknown): Promise<boolean> =>
     error instanceof Prisma.PrismaClientKnownRequestError &&
     error.code === `P2002` &&
@@ -145,11 +125,7 @@ export const hostedMachineConfig = (
     machineName: string,
     volumeId: string,
     overlay: HostedOverlay = STOCK_OVERLAY,
-    /* WHICH STOCK IMAGE TO BOOT, when the caller knows a more exact name for it than the configured tag —
-     * which, for a warm machine, is the digest already on its disk (hosted-image.ts). Passing it is what makes
-     * a claim a start rather than a pull: hand Fly the tag again and it re-resolves, and after a re-push that
-     * means a different digest, a fresh pull, and a claim that times out before the machine ever runs.
-     * `baseImage` stays the configured tag on purpose: it is the overlay bookkeeping's key, not the rootfs. */
+    /* A caller may override the configured stock image. */
     stockImage: string = config.hosted.image,
 ) => {
     const hostname = sandboxHostname(config.ingress.zone, args.connectToken);
@@ -256,10 +232,7 @@ const claimPoolMachine = async (
     if (ready.length === 0) {
         return undefined;
     }
-    /* ROWS ON ANY OTHER IMAGE ARE DRIFT, not stock. Their machine holds a digest the tag no longer names, so
-     * adopting one would rewrite its config onto the current image and make it pull before it could start —
-     * thirty seconds of settle budget against a minutes-long pull, which is exactly the failure this whole
-     * change exists to end. Reconcile destroys them on its own tick; the claim simply does not touch them. */
+/* ROWS ON ANY OTHER IMAGE ARE DRIFT, not stock. */
     const stockImage = await resolveHostedImage(config, logger);
     const candidates = ready.filter((row) => row.image === stockImage);
     for (const row of candidates) {

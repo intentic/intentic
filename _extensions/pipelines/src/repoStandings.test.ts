@@ -2,8 +2,7 @@ import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { repoStandings, standingNote } from "./repoStandings";
 
-/* The board's running order. It is worth pinning down because getting it wrong is invisible: every repository
- * still renders, just in an order that buries the one thing the page exists to show. */
+/* The board's running order. */
 
 const repo = (name: string, hookWarning?: string): CiRepo => ({
     repo: name,

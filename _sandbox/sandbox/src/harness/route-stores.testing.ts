@@ -79,9 +79,7 @@ export const memoryDismissalsStore = (initial: DismissedRecommendation[] = []): 
     };
 };
 
-/* One automation as the store is handed it, every required field answered, so a case names only what it is about.
- * The record's shape is the contract's to grow: when `models` became required, the same literal was rewritten by
- * hand in eight suites, and the next required field would have been too. Here it lands once. */
+/* One automation as the store is handed it, every required field answered, so a case names only what it is about. */
 export const automationConfig = (id: string, extra: Partial<Automation> = {}): Automation => ({
     id,
     trigger: { kind: "schedule", cron: "* * * * *" },

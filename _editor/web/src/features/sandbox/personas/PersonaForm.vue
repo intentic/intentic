@@ -144,9 +144,9 @@ const configure = (pin: ModelPin): void => {
 </script>
 
 <template>
-    <!-- As wide as the card's row, not a reading measure, so the powers block has room for two groups side by side; text fields cap their own width. -->
+    <!-- The form spans the card row; text fields keep their own reading width. -->
     <div class="flex max-w-4xl flex-col gap-5">
-        <!-- Bare pills, no rule under them: the opening row is already bordered, and a second border reads as two controls at one level. -->
+        <!-- Section pills rely on the surrounding field frame. -->
         <SegmentedControl v-model="section" :options="SECTIONS" aria-label="What to change about this persona" />
 
         <template v-if="section === `identity`">
@@ -168,7 +168,7 @@ const configure = (pin: ModelPin): void => {
                 <!-- Stated as a fact about the sandbox, not something missing: a persona with no accounts is finished, not half-made. -->
                 <p v-if="accounts.length === 0" class="text-xs text-subtle">No accounts connected in this sandbox yet.</p>
                 <template v-else>
-                    <!-- A chip is a picked account; clicking removes it (an ×, not the chooser's tick, since everything here is already picked). -->
+                    <!-- Picked accounts are removable chips; choosing happens in the adjacent control. -->
                     <div class="flex flex-wrap items-center gap-1.5">
                         <button
                             v-for="mark in pickedMarks"
@@ -211,10 +211,7 @@ const configure = (pin: ModelPin): void => {
                             aria-label="Filter accounts"
                             placeholder="Filter by name or site"
                         />
-                        <!--
-                            Toggles, not a <select>: picking several is normal, and each entry needs a second fact (signed in or not) a select has
-                            nowhere to show.
-                        -->
+                        <!-- Account toggles support multiple picks and show connection state. -->
                         <div class="flex max-h-44 flex-wrap gap-2 overflow-y-auto">
                             <button
                                 v-for="account in shown"
@@ -227,10 +224,7 @@ const configure = (pin: ModelPin): void => {
                                 ]"
                                 @click="toggleAccount(account.id)"
                             >
-                                <!--
-                                    Keeps its colour whether picked or not, since colour is how you find the right site in a list; `idle` means
-                                    signed out, not unpicked.
-                                -->
+                                <!-- Brand marks retain site colour in both selection states. -->
                                 <BrandMark
                                     :size="20"
                                     :name="account.site"
@@ -258,27 +252,18 @@ const configure = (pin: ModelPin): void => {
             <p class="text-xs text-subtle">Everything is on unless you turn it off. A session wearing this card gets exactly what is left.</p>
 
             <PersonaPowersFields :draft="draft" :grantables="grantables" :folder-bound="folderBound">
-                <!--
-                    Folder fence rides the workspace column since it's the same question as the toggles above it; lives here, not the shared block,
-                    since the quick panel has no pickers.
-                -->
+                <!-- Folder scope stays in the workspace column with the power toggles. -->
                 <template #where="{ rail }">
                     <div class="flex flex-col gap-3">
                         <div class="flex flex-col gap-0.5">
                             <span :class="ui.sectionLabel()">Where it works</span>
-                            <!--
-                                Stated, not asked: this used to be a three-way choice nobody could tell apart, on top of a default every surface
-                                already applied.
-                            -->
+                            <!-- The workspace copy is a fact, not a selectable mode. -->
                             <span class="text-xs text-subtle">
                                 Every session works in its own copy of the workspace, so several can run at once without touching each other's files.
                             </span>
                         </div>
 
-                        <!--
-                            Label sits above, not beside: a folder field needs the column's full width, and a fixed label column would crowd the
-                            chips.
-                        -->
+                        <!-- Folder labels sit above fields so the field gets the full column width. -->
                         <div class="flex flex-col gap-1">
                             <span class="flex items-center gap-2 text-sm text-content">
                                 <Icon name="folder-open" :class="rail" />
@@ -293,10 +278,7 @@ const configure = (pin: ModelPin): void => {
                                 Only these folders
                             </span>
                             <FolderPicker v-model="draft.folders" multiple label="Only these folders" placeholder="Anywhere in the workspace" />
-                            <!--
-                                Stated here, not just documented: the easiest promise on this field to over-read (it refuses tools, not paths a shell
-                                computes).
-                            -->
+                            <!-- Folder scope rejects file tools outside the selected folders. -->
                             <span class="text-xs text-subtle">
                                 File tools pointed outside are refused: this stops mistakes and misread instructions, not a shell.
                             </span>
@@ -352,7 +334,7 @@ const configure = (pin: ModelPin): void => {
                             <span class="truncate text-sm text-content">{{ repo }}</span>
                             <ToggleSwitch :model-value="draft.carries.includes(repo)" @update:model-value="(on: boolean) => setCarried(repo, on)" />
                         </label>
-                        <!-- Stated here, since this switch is easy to under-read: not a fence, the repository simply isn't in the checkout. -->
+                        <!-- An off repository is absent from the session tree. -->
                         <span class="text-xs text-subtle">
                             A repository that is off is not in the session's tree at all: nothing under it exists there. The workspace repository
                             is always carried.
@@ -373,7 +355,7 @@ const configure = (pin: ModelPin): void => {
             />
         </template>
 
-        <!-- One question, three answers: the prompt it runs on, the skills only it can reach, and what the sandbox says before the user does. -->
+        <!-- The kit section defines the prompt, skills, and briefing. -->
         <template v-else>
             <PersonaKitFields
                 :persona-id="draft.original"

@@ -116,11 +116,7 @@ onUnmounted(stop);
                 </div>
 
                 <template v-if="pairToken === undefined">
-                    <!--
-                        Machines this sandbox can already reach: the install runs out there over the connection they
-                        hold open, so no command is pasted anywhere. Hidden for a takeover, which only the one-liner
-                        carries (TAKEOVER=1).
-                    -->
+<!-- Machines this sandbox can already reach: the install runs out there over the connection they hold open, so no command is pasted anywhere. -->
                     <div v-if="candidates.length > 0 && !takeover" class="flex flex-col gap-1.5">
                         <div class="flex flex-wrap items-center gap-2">
                             <Button
@@ -154,10 +150,7 @@ onUnmounted(stop);
                         >
                             <template #icon><Icon name="desktop" /></template>
                         </Button>
-                        <!--
-                            Other mints are links, not buttons: only one enrollment is ever being set up at a time. Takeover shows only
-                            while a machine holds file sync.
-                        -->
+<!-- Other mints are links, not buttons: only one enrollment is ever being set up at a time. -->
                         <button
                             v-if="canOperate && !takeover && !mirrorOnly && holder"
                             type="button"
@@ -188,10 +181,7 @@ onUnmounted(stop);
                     </div>
                 </template>
                 <template v-else>
-                    <!--
-                        Inside the desktop app the button opens a system folder dialog; the command below stays since the device
-                        being enrolled need not be this one.
-                    -->
+<!-- Inside the desktop app the button opens a system folder dialog; the command below stays since the device being enrolled need not be this one. -->
                     <div v-if="desktopVersion() !== undefined && desktopLink !== undefined" class="flex flex-col gap-1.5">
                         <div>
                             <Button
@@ -222,10 +212,7 @@ onUnmounted(stop);
                             sandbox's dev servers on your localhost. No sign-in is needed.
                         </template>
                     </p>
-                    <!--
-                        Both forms share the switch above them since it rewrites the pair; the device being enrolled need not be
-                        this one either.
-                    -->
+<!-- Both forms share the switch above them since it rewrites the pair; the device being enrolled need not be this one either. -->
                     <ScriptSourceSwitch />
                     <Code :code="linuxCommand" lang="bash" label="Linux / macOS" :wrap="true" />
                     <Code :code="windowsCommand" lang="powershell" label="Windows (PowerShell)" :wrap="true" />
@@ -252,10 +239,7 @@ onUnmounted(stop);
                 </template>
             </template>
 
-            <!--
-                No SSH way in on a loopback/preview sandbox or one behind intentic's own tunnels (web traffic only): sync
-                has nothing to ride.
-            -->
+<!-- No SSH way in on a loopback/preview sandbox or one behind intentic's own tunnels (web traffic only): sync has nothing to ride. -->
             <div v-else :class="ui.emptyState()">
                 Desktop sync needs an SSH way into this sandbox. Sandboxes we connect for you don't have one yet, but one behind your own domain does.
             </div>

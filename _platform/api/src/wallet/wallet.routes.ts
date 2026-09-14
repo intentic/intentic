@@ -7,30 +7,7 @@ import type { Config } from "../config.js";
 import { type CustodyGateway, custodyGateway, type TypedData, walletEnabled } from "./wallet-custody.js";
 import { ensureWallet, NETWORKS } from "./wallet-store.js";
 
-/* THE WALLET SIGNER, the platform's two sandbox-facing routes, and the place where "the agent cannot spend
- * what its owner didn't release" stops being a policy and becomes arithmetic somebody else's process does.
- *
- * A sandbox reaches these with its connect token (the pool routes' ownerOf pattern), which names WHOSE
- * wallet signs. It sends a fully-specified transfer authorization, recipient, exact amount, validity
- * window, nonce, and gets back one EIP-712 signature or a refusal. It never sends "please pay this URL"
- * and it never receives key material: the key is held by a custody provider (wallet-custody.ts), and the
- * platform's own credential for it never leaves this process.
- *
- * THE CAPS ARE RE-CHECKED HERE, and that is the whole point of the route existing rather than the daemon
- * signing for itself. The sandbox checks policy too, that check is the UX, so a refusal reads well and
- * costs no round trip, but the container is not a trust boundary (its agent and its daemon are one root
- * process tree), so the number that actually binds is this one, computed from THIS database's own payment
- * rows. A compromised sandbox can at worst spend what its owner already delegated on the capability card.
- *
- * AND THE CAPS ARE NOT WRITTEN HERE, for the same reason. Nothing a connect token can reach may set the
- * number a connect token is then held to: the caps arrive over the owner's SESSION (wallet.orpc.ts, from the
- * editor as the card is saved), and a sandbox's ensure gets exactly the one thing it needs, an address.
- *
- * The row is written BEFORE the signature is returned, inside the same transaction that reads the day's
- * total, so two concurrent requests cannot both fit under one remaining cap. An authorization that is never
- * settled therefore counts against the day, the conservative direction, and it self-corrects tomorrow.
- *
- * Everything 404s when no custody provider is configured, the pool's pattern verbatim. */
+/* These routes enforce the wallet release policy for sandbox agents. */
 
 // USDC's six decimals as bigint units; arithmetic never touches a float, matching the sandbox's x402 module.
 const ATOMIC_PER_USD = 1_000_000n;
@@ -95,10 +72,7 @@ export const walletHttpRoutes = ({ config, prisma, custody, now = () => new Date
         return sandbox?.ownerId;
     };
 
-    /* Create-or-return this member's wallet: the ADDRESS, and nothing about the caps. Called by the wallet
-     * capability's apply so the card can show where to send funds. The caps this signer enforces are the
-     * owner's to state, over a session (wallet.orpc.ts); a wallet the sandbox brings into being here carries
-     * the schema's defaults until the owner does. */
+    /* The ensure route returns an address and does not set spending caps. */
     app.post(`/ensure`, async (c) => {
         if (!walletEnabled(config)) {
             return c.json({ error: `wallet signing is not enabled on this platform` }, 404);

@@ -1,8 +1,4 @@
-<!--
-    Fills the VPN add-form from a FortiClient export file read in this tab; only its text is sent, since the daemon cannot reach the user's
-    filesystem. Nothing is stored — the picked connection only pre-fills the form below. Credentials are never included; FortiClient encrypts them to
-    the exporting machine.
--->
+<!-- Fills the VPN add-form from a FortiClient export file read in this tab; only its text is sent, since the daemon cannot reach the user's filesystem. -->
 <script setup lang="ts">
 import type { ForticlientConnection } from "@intentic/sandbox-contract";
 import { type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
@@ -117,10 +113,7 @@ const protocolOf = (connection: ForticlientConnection): string => (connection.pr
                         <template v-else-if="dragging">Drop it to read its connections</template>
                         <template v-else>Drop the configuration file here</template>
                     </span>
-                    <!--
-                        Hidden, not unmounted: removing it would shrink the zone mid-drag and loop the pointer in and
-                        out.
-                    -->
+<!-- Hidden, not unmounted: removing it would shrink the zone mid-drag and loop the pointer in and out. -->
                     <span :class="['text-2xs text-subtle', importing || dragging ? 'invisible' : '']">or click to choose one</span>
                 </button>
                 <input ref="chooseFile" type="file" accept=".conf,.xml,text/xml,application/xml" class="hidden" @change="onPick" />

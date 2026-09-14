@@ -45,10 +45,7 @@ const body = computed(() => boardBody(row, needle, ownSlug, readAt));
                 </span>
             </template>
 
-            <!--
-                The doors this sandbox reaches the machine through, and the build its agent serves; the counts a
-                folded row used to carry are drawn as lines below instead.
-            -->
+<!-- The card lists machine connections and the agent build. -->
             <template #description>
                 <span class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-2xs">
                     <template v-for="(door, index) in body.doors" :key="door">
@@ -71,18 +68,12 @@ const body = computed(() => boardBody(row, needle, ownSlug, readAt));
 
             <template #below>
                 <div class="flex min-w-0 flex-col gap-1">
-                    <!--
-                        What is wrong with the machine itself, ABOVE the sandbox lines: it qualifies all of them, and at
-                        the foot of the list it read as the last one's own warning.
-                    -->
+<!-- Machine status qualifies every sandbox connection. -->
                     <p v-for="warning in body.warnings" :key="warning" class="flex min-w-0 items-center gap-1.5 text-2xs text-warning">
                         <Icon name="exclamation-circle" class="shrink-0 text-2xs" aria-hidden="true" />
                         {{ warning }}
                     </p>
-                    <!--
-                        One line per sandbox, at the same size as any other read value: the running dot, the name, and
-                        what its ports came to.
-                    -->
+<!-- One line per sandbox, at the same size as any other read value: the running dot, the name, and what its ports came to. -->
                     <div v-for="line in body.lines" :key="line.sandboxId" class="flex min-w-0 items-center gap-x-2">
                         <!-- Running is a dot alone, the resting state; a pairing with no container here gets a box. -->
                         <span

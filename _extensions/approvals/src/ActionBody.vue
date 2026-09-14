@@ -1,8 +1,4 @@
-<!--
-    Body of an action awaiting approval: `summary` (headline), `details` (Markdown), and the executing turn's own `instructions`, folded. Summary and
-    details share <PostBody>'s column and type, since reviewing an action is the same judgment as reviewing a post. Instructions render as code and
-    stay one click away, never hidden.
--->
+<!-- Body of an action awaiting approval: `summary` (headline), `details` (Markdown), and the executing turn's own `instructions`, folded. -->
 <script setup lang="ts">
 import type { ActionApprovalSummary } from "@intentic/sandbox-contract";
 import { ui, Code, Markdown } from "@intentic/extension-ui";
@@ -19,8 +15,7 @@ const showInstructions = ref(false);
 
 <template>
     <div :class="tone === `full` ? `max-w-read` : `max-w-read-lg`">
-        <!-- Quiet sections show the summary alone: the decision there is already made, so one line is enough
-             to tell one row from another. -->
+        <!-- Quiet sections show only their summary because no action remains. -->
         <template v-if="tone === `quiet`">
             <p class="truncate text-sm font-medium text-content">{{ action.summary }}</p>
         </template>

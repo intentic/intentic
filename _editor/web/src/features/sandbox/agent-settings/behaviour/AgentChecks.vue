@@ -115,40 +115,28 @@ const savePrepush = (): void => {
 
 <template>
     <RowGroup label="Checks">
-        <!--
-            Ledger of edited code against checks run for the turn; asks once if a turn ends with neither.
-            Off by default: a repo with failing baseline tests would get an ask it can't satisfy.
-        -->
+<!-- Ledger of edited code against checks run for the turn; asks once if a turn ends with neither. -->
         <Row icon="shield" title="Verify before finishing" description="Prompt the assistant to run a check after code changes.">
             <template #control>
                 <ToggleSwitch :model-value="verify()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setVerify" />
             </template>
         </Row>
 
-        <!--
-            Weighs deleted lines against repository history; asks once for a line that was deleted before, came from
-            a fix, or sat untouched. Off by default; silent on ordinary removals.
-        -->
+<!-- Weighs deleted lines against repository history; asks once for a line that was deleted before, came from a fix, or sat untouched. -->
         <Row icon="shield" title="Check what it deleted" description="Ask about removed code the project's history defends.">
             <template #control>
                 <ToggleSwitch :model-value="removals()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setRemovals" />
             </template>
         </Row>
 
-        <!--
-            Prompts a browser check after a turn edits a rendered surface, since a suite can't see a clipped label or a
-            misaligned border. Off by default; silent if nothing rendered changed.
-        -->
+<!-- Prompts a browser check after a turn edits a rendered surface, since a suite can't see a clipped label or a misaligned border. -->
         <Row icon="eye" title="Look at what it changed" description="Prompt the assistant to open the view after changes to the interface.">
             <template #control>
                 <ToggleSwitch :model-value="viewing()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setViewing" />
             </template>
         </Row>
 
-        <!--
-            Reads each touched test file against HEAD (for weakened assertions) and against pre-turn code (for a new
-            test that already passed). Reports rather than blocks, since legitimate refactors pass both; off by default.
-        -->
+<!-- Reads each touched test file against HEAD (for weakened assertions) and against pre-turn code (for a new test that already passed). -->
         <Row
             icon="list-check"
             title="Check what it did to the tests"
@@ -165,14 +153,7 @@ const savePrepush = (): void => {
             </template>
         </Row>
 
-        <!--
-            Runs the same check CI would, before the push leaves the machine. Full-width input, not a small control slot:
-            truncating a long shell command would make a configured check look mistyped.
-
-            Named for its reach now that a repository can carry its own (the group below): one command here runs before
-            EVERY push, whichever repository is going out, which is the right home for a workspace-wide check and the
-            wrong one for a build that belongs to one repository.
-        -->
+<!-- Runs the same check CI would, before the push leaves the machine. -->
         <Row
             icon="shield"
             title="Before every push"

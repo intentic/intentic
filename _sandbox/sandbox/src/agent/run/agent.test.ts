@@ -59,12 +59,7 @@ const withoutTmux = (): void => {
     vi.stubEnv("INTENTIC_AGENT_TMUX", "0");
 };
 
-/* THE GRACE WINDOW, WITHOUT THE WAIT. A steered stream ends on a second of silence after its last result
- * (sdk-stream.ts STEER_GRACE_MS), and four cases below reach that ending. Waited out in real time they were the
- * four slowest tests in this file, a second each, and what the second measured was the constant rather than the
- * ordering. So the work runs under a fake setTimeout and the clock is walked forward a window per pass until the
- * work settles: the same sequence of events, none of the waiting. Only setTimeout is faked, so Date and
- * everything else on the loop stay real. */
+/* THE GRACE WINDOW, WITHOUT THE WAIT. A steered stream ends on a second of silence after its last result. */
 const withoutTheGraceWait = async <T>(work: () => Promise<T>): Promise<T> => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {

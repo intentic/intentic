@@ -1,55 +1,6 @@
-/* ══ THE VESTIBULE — THE MATERIAL THE APP'S ENTRY SCREENS ARE BUILT OUT OF ═══════════════════════════════
- *
- * A visitor reaches these screens from intentic.dev, and for as long as there was only ONE of them the site's
- * vocabulary lived inside that one file. `pages/Login.vue`'s header said what it was doing and why: the
- * marketing page is a photographed temple wall with engraved display type and gold rules, so the door is too.
- * Then `/setup` — the screen *behind* that door, the one every new account meets second — was still the app's
- * ordinary chrome: flat cards on a flat canvas, a 16px heading, no ground, and nothing on it lit. Two screens,
- * thirty seconds apart, from two different companies.
- *
- * So the recipes moved here, where both can have them, and neither owns them. What is in this file is the
- * MATERIAL: the metals, the ink, the faces, the ground, the frame kit, the ornaments and the two button
- * plaques. What is NOT in it is COMPOSITION — where a column sits, what is centred, which panel takes the
- * finial. That stays in each screen, because it is the thing they legitimately differ on: the door is centred
- * on the art's empty middle and has one control; the vestibule is a working page with a picker, a command and
- * a reference column, and is laid out like one of the site's own article pages.
- *
- * THE METALS THEMSELVES COME FROM `@intentic/house-css`, one layer further out again, and for the same reason
- * one scale up: this file was a hand-kept copy of `_site/site/src/styles/global.css`, and "when a recipe moves
- * there it moves here" is a rule nobody can keep. Carved stone, cast bronze, the cartouche frame kit and the
- * ember glows are now `--house-*` and are read by the site, by this file and by the Sanctum skin. What is left
- * here is the VALUES ONLY THESE SCREENS HAVE — the ground, the ink, the faces, the plate — and the composition
- * of house material into the two plaques PrimeVue actually paints. The house metals are deliberately literal
- * rather than pulled from the app's tokens: those follow the accent the user picked in the workspace, and the
- * page a visitor is standing on when they meet these screens is one fixed set of colours. Structure is GOLD;
- * the ember is SPENT, never spread — a full stop on a headline beat, the mark on the rung you have chosen, a
- * ticked box.
- *
- * ── HOW IT REACHES THE APP'S OWN COMPONENTS ─────────────────────────────────────────────────────────────
- * `.entry` restates the design system's ROLE TOKENS in the site's values, which is the same move a skin makes
- * (`skins/README.md`) and it is what makes this affordable. Every `bg-card`, `border-line`, `text-muted` and
- * `text-link` inside — in this app's markup and in every component it nests, <Notice>, <Code>, <Checkbox>,
- * <SegmentedControl>, the seven setup satellites — resolves to gold-on-warm-black without one of them being
- * edited. A screen that had to hand-paint its children would be a screen nobody could add to.
- *
- * It restates `--color-*` and NOT `--role-*`, and that distinction is load-bearing. `--color-card: var(--role-card)`
- * is declared in `@theme`, i.e. on `:root`, and a custom property's var() references are substituted at
- * computed-value time ON THE ELEMENT THAT DECLARES IT. Children inherit the already-resolved value, so
- * re-pointing `--role-card` on a descendant changes nothing at all. A skin gets away with it because it sits
- * on <html>, which IS `:root`. This does not, so it names the tokens the utilities actually read.
- *
- * The RADIUS SCALE is deliberately left alone for the same reason in reverse: PrimeVue's `--p-*` tokens are
- * emitted on `:root` too and resolve there, so squaring `--radius-*` here would square the app's utilities and
- * leave every PrimeVue control rounded — half a decision, which is worse than either whole one. The site's
- * square corner is drawn where these screens draw a frame BY HAND (the door's gate, the vestibule's run card,
- * a chosen rung) and nested controls keep their own rounding, which is exactly how the door already composes:
- * Google's rounded button, in a square socket, inside a square frame.
- *
- * ── AND IT IS ALWAYS DARK ───────────────────────────────────────────────────────────────────────────────
- * Whatever scheme the app is in. Everything the visitor has seen up to this point is, the materials below are
- * built for a near-black ground, and this is the last stretch before the app's own look takes over. */
+/* Entry-screen styles for login and setup, using the site's design vocabulary. */
 
-/* ── THE METALS, THE GROUND AND THE INK ─────────────────────────────────────────────────────────────────── */
+/* THE METALS, THE GROUND AND THE INK */
 .entry {
     --gold: #c9a05c;
     --gold-bright: #e5c489;
@@ -67,8 +18,7 @@
     --face-read: "Mukta", ui-sans-serif, system-ui, sans-serif;
     --corner-size: 1.7rem;
 
-    /* The design system's roles, in the site's own values — see the header for why these are the `--color-*`
-       names and not the `--role-*` ones behind them. */
+    /* The design system's roles, in the site's own values — see the header for why these are the `--color-*`. */
     --color-canvas: var(--canvas);
     --color-card: var(--plate);
     --color-overlay: #1f1710;
@@ -78,27 +28,14 @@
     --color-content: var(--ink);
     --color-muted: var(--ink-muted);
     --color-subtle: var(--ink-subtle);
-    /* A link is gold, not the picked accent: on this ground the accent is the one colour being saved for the
-       thing you press, and spending it on every inline "use a different address" would leave the plaque
-       nothing to be brighter than. */
+/* A link is gold, not the picked accent: on this ground the accent is the one colour being saved for the thing you press. */
     --color-link: var(--gold-bright);
-    /* The statuses, warmed a step toward the page so a green tick does not arrive from another design. The
-       first three are the site's own, and they keep their HUES — a warning that stops being amber is not a
-       warning, and this is the same reason the button tiers below leave `danger`/`warn`/`success` alone.
-       `info` is the exception, and it is deliberately GOLD (hue 75, a hair off `--gold`'s 78) rather than the
-       app's blue. It is not a compromise: across both of these screens `info` paints nothing but SPINNERS and
-       the mark on the step that is currently running — never a tinted box, never a notice — so its whole job
-       here is "something is happening right now", and the page's own metal is what that should be lit in. A
-       blue would be the one object on the screen from another design. If a `tone="info"` NOTICE ever lands on
-       an entry screen, this is the line to revisit: as a filled box it would be gold on gold, and it would
-       stop reading as a status at all. */
+/* The statuses, warmed a step toward the page so a green tick does not arrive from another design. */
     --color-success: oklch(72% 0.12 148);
     --color-warning: oklch(78% 0.14 82);
     --color-danger: oklch(68% 0.17 30);
     --color-info: oklch(76% 0.09 75);
-    /* THE ONE PLACE THE EMBER IS SPENT ON A CONTROL: a ticked box, a filled radio. Everything else PrimeVue
-       paints solid from this token is either not on these screens or is a button, and the buttons below are
-       metal rather than accent. */
+/* THE ONE PLACE THE EMBER IS SPENT ON A CONTROL: a ticked box, a filled radio. */
     --color-primary-fill: var(--ember);
     --color-primary-fill-hover: #ef8f3c;
     --color-fill-content: #1a0f06;
@@ -113,33 +50,20 @@
     isolation: isolate;
 }
 
-/* THE SKIN STOPS HERE. These screens match the marketing site, not the workspace chrome, so a selected skin's
-   heading face, stone ink and cut shadow must not leak in — they are a different palette from the landing
-   hero, and the reader has not chosen one yet anyway. */
+/* THE SKIN STOPS HERE. */
 .entry :is(h1, h2, h3, h4, h5, h6) {
     font-family: var(--face-mark);
     color: unset;
     text-shadow: none;
 }
 
-/* Keyboard focus in the page's own metal. The default ring is a blue-white box, which on this ground is the
-   one thing here from another design — and the visitor arriving by keyboard is the one who most needs to see
-   where they are. */
+/* Keyboard focus in the page's own metal. */
 .entry :focus-visible {
     outline: 2px solid var(--gold-bright);
     outline-offset: 3px;
 }
 
-/* ── THE PLATE ──────────────────────────────────────────────────────────────────────────────────────────
- * The art is a framed plaque: a carved border, a figure standing in each outer third, an empty middle. The box
- * is pinned to the art's own ratio so `cover` is an exact fit and neither figure is ever cropped; what runs
- * out on a tall window is the BOTTOM, and the gradient below dissolves that edge into the canvas rather than
- * letting a carved rule stop against flat black.
- *
- * `--plate-reach` is how far down the page the picture is allowed to go. The door lets it fill the screen,
- * because the door is composed against it. A working page caps it to a band at the top: the picture is the
- * lintel over the masthead, and everything a reader has to WORK on sits on plain canvas below, where the
- * contrast of a caption is the same at the top of a card and the bottom of it. */
+/* THE PLATE The art is a framed plaque: a carved border, a figure standing in each outer third, an empty middle. */
 .entry-plate {
     --plate-reach: 100%;
 
@@ -176,22 +100,12 @@
     height: 38%;
     background: linear-gradient(180deg, transparent 0%, rgba(12, 9, 7, 0.55) 52%, var(--canvas) 100%);
 }
-/* The scrim is a WELL, not a ramp, and the symmetry of the art is why: a gradient run left to right darkens
-   one figure and leaves the other lit, which reads as a lighting fault. Sunk in the middle it follows the copy
-   and leaves both figures alone. Four layers, one paint: the well, a floor that holds down the ember glow
-   along the art's lower edge, a vignette off the corners, and a flat wash of canvas over all of it. */
+/* The scrim is a WELL, not a ramp, and the symmetry of the art is why: a gradient run left to right darkens one figure and leaves the other lit. */
 .entry-plate::after {
     content: "";
     position: absolute;
     inset: 0 0 auto;
-    /* NO TALLER THAN THE SCREEN. The door's plate runs the full height of the document, and on a window shorter
-       than the page that is more than a screen of four blended gradient layers — which the renderer repaints
-       whole on every frame of a resize. Measured in the app's own dev server: 16.7ms a frame with the scrim
-       held to the viewport, 50ms with it running to the page's foot, and any ONE of the four layers alone is
-       fine at either height; it is the stack over a box taller than the screen that costs. So the scrim stops
-       at the fold. Below it the plate is bare canvas, three parts in 255 lighter than the floor's last row — a
-       seam only a scrolled window shorter than the page can show, and only to someone looking for it. A page
-       that caps the plate to a band (`--plate-reach`) is untouched: its plate was already shorter than this. */
+/* NO TALLER THAN THE SCREEN. */
     height: min(100%, 100dvh);
     background:
         radial-gradient(58% 46% at 50% 34%, rgba(9, 6, 4, 0.78) 0%, rgba(9, 6, 4, 0.62) 42%, rgba(9, 6, 4, 0.3) 72%, transparent 100%),
@@ -199,31 +113,14 @@
         radial-gradient(128% 108% at 50% 40%, transparent 44%, rgba(9, 6, 4, 0.55) 100%), rgba(12, 9, 7, 0.14);
 }
 
-/* THE VEIL — the site's own (`.page-backdrop-veil` in global.css), and it exists for the same reason there.
- * The home page's hero is COMPOSED against this art; a page that is a masthead over a column of work is not,
- * and every line of that work would otherwise land on a devata. So the picture is kept where it is doing
- * structural work — the band the masthead stands in — and dissolved into canvas below it. Two lengths, both
- * passed in by the screen that renders it, because only that screen knows how deep its own masthead is. */
+/* THE VEIL — the site's own (`.page-backdrop-veil` in global.css), and it exists for the same reason there. */
 .entry-veil {
     --veil-clear: 8rem;
     --veil-hold: 22rem;
 
     position: absolute;
     inset: 0;
-    /* IT MUST BE THE LAST THING THE PLATE PAINTS, and that is what `z-index` is doing here rather than any
-     * question of layering over the page. The scrim above is an `::after`, which the spec generates as the
-     * element's LAST child, so at `z-index: auto` it paints over this div however the markup is ordered — and
-     * the scrim is built from `rgba(9, 6, 4, …)`, a black two levels DARKER than the canvas. On the door that
-     * is invisible, because the plate is the full height of the screen and its floor is the page's floor. On a
-     * page that caps the plate to a band it was a full-bleed horizontal seam exactly at `--plate-reach`: flat
-     * #090604 above it, flat #0c0907 below, the two meeting on a hard line with the veil's canvas buried under
-     * the darker wash. Painted last, this ends on the canvas colour and the plate's bottom edge is invisible
-     * because there is nothing left to disagree with. `.entry-plate` is itself a stacking context (positioned,
-     * `z-index: -1`), so the 1 is scoped to the scenery and cannot climb over the page.
-     *
-     * `min(…, 100%)` on the closing stops keeps that true even if a screen asks the veil to hold past the
-     * bottom of the plate: the canvas then lands exactly on the edge instead of the gradient being cut
-     * mid-ramp, which is the same seam again with an extra step in it. */
+/* IT MUST BE THE LAST THING THE PLATE PAINTS, and that is what `z-index` is doing here rather than any question of layering over the page. */
     z-index: 1;
     background: linear-gradient(
         180deg,
@@ -235,9 +132,7 @@
     );
 }
 
-/* ── THE BAND OPENER ────────────────────────────────────────────────────────────────────────────────────
- * An eyebrow, and the site's full stop worn as a mask so a caller sets the metal by setting a text colour —
- * which is what lets the same diamond be gold beside a greeting and ember beside the step you are standing on. */
+/* Band openers use the site's stop mark and caller-provided text colour. */
 .entry-eyebrow {
     display: inline-flex;
     align-items: center;
@@ -260,15 +155,7 @@
     mask-position: center;
 }
 
-/* ── CARVED STONE, NOT POLISHED METAL ───────────────────────────────────────────────────────────────────
- * …and the difference is texture rather than colour. The fill and the bevel are `--house-stone-*`; below is
- * only this screen's use of them.
- *
- * DESCENDERS ARE STRUCTURAL HERE. The letters are painted as a background clipped to their shape, and a
- * background stops at the padding box, so anything a glyph reaches below it is simply not painted and the tail
- * of a "g" or "y" vanishes. The clearance is bought with padding and taken straight back out with a matching
- * negative margin: the painted box grows by the depth of a descender while the laid-out box does not move, and
- * it holds at any leading. The pair must stay together — never set a bottom margin on a `.entry-display`. */
+/* Stone surfaces use texture rather than additional colours. */
 .entry-display {
     font-family: var(--face-display);
     font-weight: var(--font-weight-semibold);
@@ -296,10 +183,7 @@
     filter: var(--house-ember-stop-glow);
 }
 
-/* ── THE FRAME ──────────────────────────────────────────────────────────────────────────────────────────
- * A double rule with a turned corner in each elbow, and — where a caller asks for one — a lotus finial astride
- * the top rail. Opaque rather than tinted glass: small print sitting over a photograph reads at a different
- * contrast in every line. */
+/* Frames use double rules and optional corner finials. */
 .entry-frame {
     position: relative;
     border: 1px solid var(--rule-strong);
@@ -314,17 +198,14 @@
     pointer-events: none;
 }
 
-/* THE PLAIN PLATE — the site's `.card`, which is the frame at content scale: one rule, one warm panel, and no
-   ornament at all. What a surface gets when it holds reference material rather than a decision. Opaque, for
-   the reason the frame is: small print over a photograph reads at a different contrast in every line. */
+/* THE PLAIN PLATE — the site's `.card`, which is the frame at content scale: one rule, one warm panel, and no ornament at all. */
 .entry-card {
     position: relative;
     border: 1px solid var(--rule);
     background: var(--plate);
 }
 
-/* The corners keep their drawn weight at any frame size, which is why they are elements and not a stretched
-   border-image. One shape, rotated three times. */
+/* Corner elements preserve their drawn weight at every frame size. */
 .entry-corner {
     position: absolute;
     width: var(--corner-size);
@@ -356,9 +237,7 @@
     transform: scale(-1);
 }
 
-/* The finial carries no plate of its own: a filled box behind it reads as a sticker punched through the wall
-   the frame stands on. What separates it from the rail is a glow of its own colour, which the rail passes
-   behind without being cut. */
+/* The finial carries no plate of its own: a filled box behind it reads as a sticker punched through the wall the frame stands on. */
 .entry-finial {
     position: absolute;
     top: 0;
@@ -371,46 +250,10 @@
     pointer-events: none;
 }
 
-/* ── THE TWO PLAQUES ════════════════════════════════════════════════════════════════════════════════════
- *
- * A cartouche is an octagon: two concentric rules with a 45-degree notch taken out of all four corners, like a
- * chamfer off a stone slab. `clip-path` cuts the shape out of everything the element paints, and
- * `border-image` draws the rules — a nine-slice, because the corner is the one part of the frame that must NOT
- * stretch, so a wide button and a narrow one get the same notch. The chamfer is set in two places that have to
- * agree: the artwork's geometry and `--cut`. The diagonals are drawn heavier than the straight runs on
- * purpose: a corner tile is 13 source units painted into 13px while the artwork is authored on a 40 unit grid,
- * and a 45-degree stroke loses far more to that resampling than a horizontal one, so the outline visibly
- * changed colour wherever it turned.
- *
- * THIS IS WHERE THE DESIGN SYSTEM'S BUTTON TIERS ARE MET RATHER THAN REPLACED. `primeng.css` gives the app
- * four ranks; on these two screens the top two are METAL — the committing action is CAST BRONZE and the one
- * standing beside it is the plain stone cartouche — and `text` / `danger` / `warn` / `success` are left
- * exactly as the app draws them. That is not a courtesy: a destructive button repainted in the house metal is
- * a destructive button nobody reads as one, and `skins/README.md` has the same warning for the same reason.
- *
- * A DARK PRIMARY ON A DARK WINDOW IS NOT A PRIMARY, which is the whole argument for the bronze. The app's
- * accent tier is a 10% tint of the accent inside a 20% border — right on the workspace's neutral chrome, and
- * on THIS ground it is a dark box inside a warm rule, which is also the description of the card behind it, the
- * field beside it and every other edge on the page. The eye finds differences of LIGHTNESS before anything
- * else, so the one thing a visitor has to press would be the quietest object on the screen. Bronze, it is the
- * only light-on-dark thing here.
- *
- * Layered below `utilities` (`@layer components`) so a call site's own class still wins, and matched at TWO
- * classes so it beats the design system's one-class tier rules without an `!important` anywhere. Note that
- * every tier below repaints its own `box-shadow` in its hover rule: `:where()` contributes no specificity, so
- * the app's generic `:enabled:hover` is three simple selectors deep and would otherwise wipe the plate's bevel
- * the moment a pointer arrived (the same trap `skins/README.md` names).
- *
- * Two more details in the selectors, both of which cost a bug somewhere if they are dropped. The hover is
- * `:not(:disabled):hover`, not the `:enabled:hover` the design system writes: `:enabled` matches form controls
- * only, and the loudest button in this whole flow — "Download for Windows" — is an `<a href>` wearing
- * `.p-button`, so an `:enabled` hover simply never fires on it. And the exclusion lists are `primeng.css`'s
- * own MINUS `info` and `contrast`, two severities this app uses at no call site at all; if one ever appears,
- * add it to every list here rather than to one, or it gets a plaque's geometry with no plate in it. */
+/* Cartouches use two concentric rules with notched corners. */
 @layer components {
     .entry .p-button:where(:not(.p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)) {
-        /* The clip must land just OUTSIDE the outer rule, never on it: the frame's diagonal sits at x+y≈7.3 in
-           the artwork's units, which map 1:1 to px here. */
+        /* The clip must land just OUTSIDE the outer rule, never on it: the frame's diagonal sits at x+y≈7.3. */
         --cut: 7.3px;
 
         position: relative;
@@ -435,14 +278,10 @@
             0 calc(100% - var(--cut)),
             0 var(--cut)
         );
-        /* A stacking context, so the sheen below can sit at `z-index: -1`: inside one, a negative layer paints
-           after the element's own background and border but BEFORE its inline content, which is where a wash
-           belongs — over the frame, under the label. */
+/* A stacking context, so the sheen below can sit at `z-index: -1`: inside one. */
         z-index: 0;
     }
-    /* The compact cartouche. The notch shrinks with it: 15 units into 11px is 0.733px per unit, so the same
-       7.3-unit diagonal lands at 5.4px. Without this a `size="small"` button keeps a chamfer sized for a
-       control half again as tall, and the corner eats the label. */
+/* The compact cartouche. */
     .entry .p-button.p-button-sm:where(:not(.p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)) {
         --cut: 5.4px;
         padding: 0.4rem 0.9rem;
@@ -450,26 +289,20 @@
         border-image-slice: 15;
         border-image-width: 11px;
     }
-    /* An icon inside a control is a FLEX ITEM, not a letter: `block` so it stops sitting on the text baseline
-       with a descender's worth of space under it, and no shrinking, so a long label cannot squash it. */
+/* An icon inside a control is a FLEX ITEM, not a letter: `block` so it stops sitting on the text baseline with a descender's worth of space under it. */
     .entry .p-button svg {
         display: block;
         flex: none;
     }
 
-    /* ── THE STONE CARTOUCHE — the rank that stands BESIDE a committing action. Cut from the wall's own rock:
-       a warm dark plate inside a gold rule, with the frame lighting up as a second complete image faded in
-       over the first. It has to be a cross-fade rather than a new `border-image-source`, because the browser
-       cannot interpolate between two images and would repaint the frame on the first hovered frame — the lit
-       state snaps in rather than arriving. */
+/* THE STONE CARTOUCHE — the rank that stands BESIDE a committing action. */
     .entry .p-button-secondary:where(:not(.p-button-text, .p-button-link)) {
         color: var(--ink);
         background: rgba(20, 14, 10, 0.72);
         border-image-source: var(--house-cartouche);
         transition: color 0.22s ease;
     }
-    /* The lit frame, stacked and faded in. Inherits `--cut`, so its notch can never drift from the one the
-       button is clipped to. `inset: -1px` because the frame is painted in the border box. */
+/* The lit frame, stacked and faded in. */
     .entry .p-button-secondary:where(:not(.p-button-text, .p-button-link))::before {
         content: "";
         position: absolute;
@@ -496,9 +329,7 @@
         opacity: 1;
     }
 
-    /* ── CAST BRONZE — the committing action, and the only light-on-dark object on these screens. The metal
-       is `--house-bronze-*` and its argument is in house.css; what this rule adds is the cartouche the app's
-       version of the plaque is cut into, which the site's does not have to state twice. */
+/* CAST BRONZE — the committing action, and the only light-on-dark object on these screens. */
     .entry .p-button:where(:not(.p-button-secondary, .p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)) {
         font-weight: var(--font-weight-semibold);
         color: var(--house-bronze-ink);
@@ -510,8 +341,7 @@
         border-image-source: var(--house-cartouche-bronze);
         box-shadow: var(--house-bronze-bevel);
     }
-    /* Under the pointer the plate catches more of the same light rather than changing colour: one warm sheen,
-       one opacity, so the lift arrives as a single movement. */
+    /* Under the pointer the plate catches more of the same light rather than changing colour: one warm sheen. */
     .entry .p-button:where(:not(.p-button-secondary, .p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success))::after {
         content: "";
         position: absolute;
@@ -537,15 +367,7 @@
         .p-button:where(:not(.p-button-secondary, .p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)):focus-visible::after {
         opacity: 1;
     }
-    /* A plaque nobody may press is a plaque with the light off it — not a faded one. `disabled:opacity` alone
-       leaves a bronze bar still reading as the brightest thing on the card, and dimming only the FILL leaves
-       it in a cream-bright frame, which is the same claim made by the edge instead of the face. The rule goes
-       back to plain gold with the body, so the whole object is unlit at once.
-
-       `:not(.p-button-loading)` for the same reason the app's own rule carries it (primeng.css): PrimeVue counts
-       a loading button as disabled, so without this the sign-in plaque went unlit the instant it was pressed —
-       the one moment a person is looking at it to find out whether the press landed. A working plaque stays lit
-       and spins. */
+/* A plaque nobody may press is a plaque with the light off it — not a faded one. */
     .entry .p-button:disabled:not(.p-button-loading) {
         background-image: none;
         background-color: rgba(30, 22, 15, 0.8);
@@ -556,13 +378,7 @@
         border-image-source: var(--house-cartouche-dim);
     }
 
-    /* ── THE QUIET TIER — no chrome at all until a pointer arrives: an escape hatch, a Cancel, the way back.
-       It is named here for a reason worth knowing, and the same reason is why the checkbox below is named
-       too: PrimeVue's components paint from `--p-*` tokens, `theme.ts` points those at the app's `--color-*`
-       ones, and BOTH are declared on `:root`. A custom property's var() references are substituted where the
-       property is DECLARED, so `--p-button-text-secondary-color` has already resolved to the app's neutral by
-       the time anything inherits it — re-pointing `--color-muted` on `.entry` cannot reach back into it. Every
-       PrimeVue component these screens actually use therefore has to be named, and there are exactly two. */
+/* THE QUIET TIER — no chrome at all until a pointer arrives: an escape hatch, a Cancel, the way back. */
     .entry .p-button-text:where(:not(.p-button-danger, .p-button-warn, .p-button-success)) {
         color: var(--ink-muted);
         background: transparent;
@@ -574,9 +390,7 @@
         border-color: transparent;
     }
 
-    /* ── THE TICKED BOX — the third and last place the ember is spent on this page. A slot cut into the plate
-       while it is empty (the recess the sign-in screen cuts for Google's button, at control size), and the
-       one lit thing on its row once it is not. */
+/* THE TICKED BOX — the third and last place the ember is spent on this page. */
     .entry .p-checkbox-box {
         background: #0b0805;
         border-color: var(--rule-strong);

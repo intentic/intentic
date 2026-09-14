@@ -4,10 +4,7 @@ import { useRouter } from "vue-router";
 import { globalTerminalSource } from "./useTerminalPanel";
 import TerminalPanel from "./TerminalPanel.vue";
 
-/* The mobile terminal: the same sandbox-global tmux sessions the desktop panel docks below every view, as a
- * full-screen route. Same storage key, so the focused tab follows across form factors; the session cache in
- * useTerminal keeps shells and scrollback alive across navigation either way. The panel pads itself above
- * the on-screen keyboard. */
+/* The mobile terminal: the same sandbox-global tmux sessions the desktop panel docks below every view, as a full-screen route. */
 
 const router = useRouter();
 const { keyboardInset } = useDevice();

@@ -4,11 +4,7 @@ import { gunzipSync } from "fflate";
 import { gzipHead, listWithTar, looksLikeTar, tarEntries, tarOnPath, zipEntries, type ArchiveEntry } from "../archives.js";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
-/* Archives: what is inside, not what it says. A zip of forty files is a container, and the useful shadow of a
- * container is its manifest — the paths and sizes an agent needs before deciding whether to unpack anything —
- * so this deriver lists members and stops there. The one exception is a single compressed file (`server.log.gz`),
- * where the archive IS the document: there the member's text is the shadow, capped and announced like any other.
- * Nested archives are listed as members and never opened: one level is a fact about this file, two is a crawl. */
+/* Archives: what is inside, not what it says. */
 
 // Members listed before the table is more index than shadow; the count above it still states the whole truth.
 const MAX_ENTRIES = 500;

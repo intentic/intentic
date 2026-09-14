@@ -104,9 +104,7 @@ test("a redactor masks registered secret values out of every write, ignoring sho
     expect(rendered).toContain(`port ${port}`);
 });
 
-/* The chunk boundaries below are not the caller's to choose: providers stream a remote command's output, so
- * the split lands wherever the kernel's read sizes put it. A redactor that masks per chunk therefore leaks or
- * doesn't depending on timing \u2014 these assert on the STREAM. */
+/* Redaction must span provider chunks because stream boundaries are arbitrary. */
 
 test("a secret split across two writes is still masked", () => {
     const s = sink();

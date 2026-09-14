@@ -84,7 +84,7 @@ export const workerScorer = (options: WorkerScorerOptions): WorkerScorer => {
         const answered = new Promise<QueryWorkerResponse | undefined>((resolve) => {
             pending.set(id, resolve);
         });
-        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- worker_threads, not window: this postMessage takes no targetOrigin
+        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Worker messages have no targetOrigin.
         live().postMessage(message);
         const response = await answered;
         if (response?.type === "failed") {

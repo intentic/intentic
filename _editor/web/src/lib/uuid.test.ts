@@ -1,11 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { uuid } from "./uuid";
 
-/* The reason this file exists is one line of the platform's small print: `crypto.randomUUID` is a secure-context
- * api, so it is missing on plain http, which is where a self-hosted instance on a home network is served from.
- * Every id in the app comes through here, so "it throws there" is "the app does nothing there", and the way it
- * surfaced was a floating window that booted, crashed in its route's setup, wiped this origin's stored state and
- * came back empty. The tests below are the two contexts, told apart by nothing else. */
+/* The reason this file exists is one line of the platform's small print: `crypto.randomUUID` is a secure-context api, so it is missing on plain http. */
 
 const V4 = /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/;
 

@@ -112,16 +112,7 @@ const restartOrRebuild = async (
     }
 };
 
-/* THE GATES A NEW HOSTED MACHINE PASSES, together because they are all refusals and none of them is about
- * provisioning: kept out of the handler so it reads as the three things it actually does (mint the grant, build
- * the machine, answer with the row).
- *
- * The slot count here is the EARLY answer, not the binding one: it is a read with no lock behind it, so two
- * provisions racing the same slot both pass it. What binds is the count hosted.ts takes under the owner's lock
- * as it writes the row (withHostedSlot), which this saves the honest case a provider round-trip to reach.
- *
- * The hour ceiling applies to a NEW machine as much as to a wake: a machine boots the moment it is created, so
- * without it here, releasing a spent machine and provisioning another would be the way around the limit. */
+/* THE GATES A NEW HOSTED MACHINE PASSES, together because they are all refusals and none of them is about provisioning. */
 const assertHostedAllowance = async (context: OrpcContext, userId: string): Promise<void> => {
     const [used, slots] = await Promise.all([
         context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: userId } } }),
@@ -139,13 +130,7 @@ const assertHostedAllowance = async (context: OrpcContext, userId: string): Prom
     }
 };
 
-/* THE CONNECT TOKEN IS THE OWNER'S AND ONLY THE OWNER'S: decrypted onto their row, null on a member's. The
- * browser needs it for exactly one daemon-side act, the first-bind that seeds ownership, and that is the owner's
- * act by definition: a member reaches a daemon that is already bound, where the daemon's authorize never reads
- * the header. On the PLATFORM side the same token is a credential in its own right — it spends the owner's
- * trial allowance (/trial), asks the owner's wallet for signatures (/wallet), and speaks as the sandbox to
- * /sandbox/announce and its siblings — so handing it to every accepted member made a `viewer` invite worth the
- * owner's whole platform-side standing, past every role floor the daemon enforces. */
+/* THE CONNECT TOKEN IS THE OWNER'S AND ONLY THE OWNER'S: decrypted onto their row, null on a member's. */
 const connectTokenFor = (config: Config, encryptedToken: string, role: MemberRole): string | null =>
     role === `owner` ? decryptSecret(config, encryptedToken) : null;
 
@@ -350,9 +335,7 @@ export const sandboxRoutes = {
             if (error instanceof HostedAtCapacity) {
                 throw new ORPCError(`SERVICE_UNAVAILABLE`, { message: error.message });
             }
-            /* The allowance check above passed and the row-write's own count (hosted.ts withHostedSlot) did
-             * not: a provision for ANOTHER of this owner's sandboxes committed in between. The machine this
-             * call built is already torn down; the answer is the same sentence the early check would have said. */
+            /* A concurrent allocation can fail at the locked row write after the early check passes. */
             if (error instanceof HostedSlotsExhausted) {
                 throw new ORPCError(`BAD_REQUEST`, { message: error.message });
             }

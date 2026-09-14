@@ -6,12 +6,7 @@ import { useSandboxOutline } from "../../overview/useSandboxOutline";
 import RepoCheckRow from "./RepoCheckRow.vue";
 import RepoChecksInfo from "./RepoChecksInfo.vue";
 
-/* WHAT EACH REPOSITORY ASKS FOR, above the sandbox-wide checks it sits with. Here as well as on the repository's own
- * folder, because this page is where somebody comes to ask "what runs when I push?", and an answer that lives only in a
- * file tree is not an answer. The rows are read-only apart from the one decision that is the owner's: whether it runs.
- *
- * Repositories that declare nothing are not listed. A list of every folder in the workspace with "nothing here" beside
- * each would bury the two that have something to say. */
+/* Repository checks appear above the sandbox-wide checks. */
 
 const { repos, pending, error, adopt } = useRepoChecks();
 const outline = useSandboxOutline(computed(() => repos.value === undefined));
@@ -39,10 +34,7 @@ const waiting = computed(() => (repos.value ?? []).filter((entry) => !entry.adop
             :description="error"
         />
 
-        <!--
-            The empty state carries the whole feature for a workspace that has never used it: what the file is called
-            and what it is for. The (i) has the rest.
-        -->
+<!-- The empty state carries the whole feature for a workspace that has never used it: what the file is called and what it is for. -->
         <Row
             v-else-if="repos.length === 0"
             icon="shield"

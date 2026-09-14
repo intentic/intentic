@@ -1,8 +1,4 @@
-<!--
-    One port, explained: which port, what it is, and where it came from, with the raw command line, directory and pid one click down. Evidence opens
-    from a leading chevron, like every other expandable row (<DisclosureRow>); `hit` is 'pair' since the description already carries its own control,
-    the terminal link.
--->
+<!-- One port, explained: which port, what it is, and where it came from, with the raw command line, directory and pid one click down. -->
 <script setup lang="ts">
 import { Button, DisclosureRow, type IconName, Icon, InfoTable, StatusBadge, ui } from "@intentic/extension-ui";
 import type { PortSummary } from "@intentic/sandbox-contract";
@@ -43,14 +39,10 @@ const details = computed<string[][]>(() => [
 
 <template>
     <DisclosureRow v-model:open="open" density="compact" hit="pair">
-        <!-- The origin glyph and the port number ride INSIDE the toggle: the pair is the hit area, and a
-             fixed-width number is a wide, easy target that costs the row nothing. It also sets where the
-             evidence below starts, since <DisclosureRow> offsets that block by this cluster's own width. -->
+<!-- The origin glyph and the port number ride INSIDE the toggle: the pair is the hit area, and a fixed-width number is a wide. -->
         <template #lead="{ iconClass }">
             <Icon :name="ORIGIN_ICONS[entry.origin]" class="shrink-0 text-muted" :class="iconClass" />
-            <!-- The port number is what the reader came looking for, and a fixed width is what makes a column
-                 of them scannable rather than ragged. The "forwarded" badge rides in #meta rather than here
-                 for the same reason: a badge in the lead pushes that one row's name out of the column. -->
+<!-- The port number is what the reader came looking for, and a fixed width is what makes a column of them scannable rather than ragged. -->
             <span class="w-12 shrink-0 font-mono text-sm text-content">{{ entry.port }}</span>
         </template>
 
@@ -58,18 +50,7 @@ const details = computed<string[][]>(() => [
             <span class="block truncate" :title="entry.command">{{ entry.title }}</span>
         </template>
 
-        <!-- What it is for, and the terminal it lives in when there is one. The terminal is a link because
-             reaching it is the point: a port you can see and not reach is a port you can only wonder about.
-             The sentence WRAPS instead of truncating: this pane is regularly dragged to half a window, and half
-             an explanation is the failure the whole row exists to fix.
-
-             THE TERMINAL LINK DOES NOT SET THE ROW'S HEIGHT. It used to be `ui.linkButton`, whose geometry is
-             `min-h-9 -my-1.5` — 24px of net box hung on a 14px line of `text-2xs`, so every row in "Your
-             services" (the group whose ports have a session; internals mostly do not) stood ~10px taller than
-             the same compact row everywhere else in /sandbox. The thumb target comes from `touch-target`
-             instead, which grows the HIT AREA on a coarse pointer and leaves the drawn box alone — the same
-             trick `ui.iconButton` bakes in. `textAction` rather than `linkButton` for the second reason the
-             call site was already fighting with `hover:no-underline`: this opens a pane, it does not navigate. -->
+<!-- What it is for, and the terminal it lives in when there is one. -->
         <template #description>
             <span class="flex min-w-0 flex-wrap items-baseline gap-x-2">
                 <span>{{ entry.purpose }}</span>
@@ -90,9 +71,7 @@ const details = computed<string[][]>(() => [
             <StatusBadge variant="success" label="forwarded" size="xs" />
         </template>
 
-        <!-- VERBS ONLY. The disclosure used to lead this cluster, which put "tell me what this is" among "open
-             it", "share it" and "publish it to the internet", four presses of very different consequence in one
-             row of identical 32px squares. -->
+<!-- VERBS ONLY. -->
         <template #control>
             <a
                 v-if="entry.previewUrl"
@@ -110,9 +89,7 @@ const details = computed<string[][]>(() => [
             <Button v-if="entry.forwarded" label="Stop" size="small" severity="secondary" :disabled="busy" @click="emit(`stop`)">
                 <template #icon><Icon name="stop" /></template>
             </Button>
-            <!-- SECONDARY, LIKE THE STOP BESIDE IT AND LIKE EVERY OTHER ROW ACTION IN THE APP. The accent tier
-                 is the action a SCREEN exists to collect — one or two per page — and this is one verb on one
-                 line of a list that can run to twenty. -->
+<!-- SECONDARY, LIKE THE STOP BESIDE IT AND LIKE EVERY OTHER ROW ACTION IN THE APP. -->
             <Button v-else-if="entry.forwardable" label="Preview" size="small" severity="secondary" :disabled="busy" @click="emit(`preview`)">
                 <template #icon><Icon name="play" /></template>
             </Button>

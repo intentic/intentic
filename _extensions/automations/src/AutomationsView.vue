@@ -184,10 +184,7 @@ const toggleDetail = (id: string): void => {
 <template>
     <Page width="wide">
         <PageHeader title="Automations">
-            <!--
-                On the title row, not under it, to spend that height on the body instead. Hidden while loading, since "0 on" is a claim the list is
-                about to contradict.
-            -->
+            <!-- On the title row, not under it, to spend that height on the body instead. -->
             <template #info>
                 <StatusTally v-if="!isLoading && automations.length > 0" :items="tally" class="ml-2">
                     <span v-if="nextFire !== undefined" class="text-xs text-subtle">next {{ nextIn(nextFire) }}</span>
@@ -212,10 +209,7 @@ const toggleDetail = (id: string): void => {
                 @close="closeComposer"
             />
 
-            <!--
-                One line answering how many, how many on, anything broken, before a single row is read; shown only once the list is long enough to
-                need it.
-            -->
+            <!-- The summary reports total, active, and failing automations before the list. -->
             <div v-if="automations.length >= FILTER_FROM" class="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <SearchBar
                     v-model="search"
@@ -228,10 +222,7 @@ const toggleDetail = (id: string): void => {
                 <SegmentedControl v-model="view" :options="viewOptions" class="ml-auto" />
             </div>
 
-            <!--
-                `automations` is `[]` both before the read lands and once it lands truly empty; the skeleton says "rows are coming" without claiming
-                whether any exist, unlike the empty-state text below.
-            -->
+            <!-- Skeletons distinguish the pending list from a true empty state. -->
             <template v-if="isLoading">
                 <RowGroup v-if="outline" role="status" aria-busy="true">
                     <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
@@ -240,10 +231,7 @@ const toggleDetail = (id: string): void => {
                 </RowGroup>
             </template>
 
-            <!--
-                Names both doors out without drawing either as a button: New automation is already the page's one accent control, and the offers
-                below are real controls a click away.
-            -->
+            <!-- The header names both navigation destinations without adding another button. -->
             <div v-else-if="automations.length === 0" :class="ui.emptyState('flex flex-col items-center gap-1 py-6')">
                 <span class="text-sm text-content">Nothing runs on its own yet.</span>
                 <span>Take one of the offers below, or build your own with <b class="font-medium text-muted">New automation</b>.</span>
@@ -296,10 +284,7 @@ const toggleDetail = (id: string): void => {
                 />
             </RowGroup>
 
-            <!--
-                One section, one grid, not two rows of wrapping pills: a grid keeps every box the same size and lines up the note under the title.
-                Two labelled runs, matching the composer's own template gallery, since a chore's sentence genuinely differs from the rest's.
-            -->
+            <!-- Automation sections use one equal-width grid. -->
             <section v-if="availableChores.length > 0 || availableSuggestions.length > 0" class="@container">
                 <div class="mb-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-1">
                     <span :class="ui.sectionLabel()">Add an automation</span>
@@ -325,10 +310,7 @@ const toggleDetail = (id: string): void => {
                                     <span class="block truncate font-medium">{{ recipe.title }}</span>
                                     <span class="mt-0.5 block truncate text-2xs text-subtle">{{ recipe.note ?? recipe.description }}</span>
                                 </span>
-                                <!--
-                                    A chevron, not a plus: a recipe can't know which providers are connected, so this opens the composer prefilled
-                                    instead of guessing a model or creating a row that can't fire.
-                                -->
+                                <!-- The chevron opens the recipe details; it does not create a run. -->
                                 <Icon name="chevron-right" class="mt-0.5 shrink-0 text-2xs text-subtle" />
                             </button>
                         </div>

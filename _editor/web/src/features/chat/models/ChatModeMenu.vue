@@ -3,9 +3,7 @@ import { computed } from "vue";
 import { modeOptions } from "./catalog";
 import { usePaneView } from "../panel/useChat-view";
 
-/* The permission-mode picker body: width-agnostic (Popover on desktop, BottomSheet on mobile). Emits
- * `selected` so the host can close its overlay. Only the postures this conversation's runtime can actually be
- * put in are offered: a plan-only runtime shows two, because that is how many it has. */
+/* The permission-mode picker body: width-agnostic (Popover on desktop, BottomSheet on mobile). */
 
 const emit = defineEmits<{ selected: [] }>();
 

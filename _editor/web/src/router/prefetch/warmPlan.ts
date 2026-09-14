@@ -25,10 +25,7 @@ export const PLAN_LIMIT = 400;
 
 const sources = new Set<WarmSource>();
 
-/**
- * Registers a wish list. Returns a disposer; an unmounted surface that skips calling it leaves its list
- * warming a screen nobody can reach.
- */
+/** Registers a wish list. */
 export const registerWarmSource = (source: WarmSource): (() => void) => {
     sources.add(source);
     return () => void sources.delete(source);

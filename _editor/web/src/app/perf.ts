@@ -81,10 +81,7 @@ export const installPerfReporter = (reporter: SlowReporter): void => {
     reportSlow = reporter;
 };
 
-/**
- * Files a span. Also called by hand from the stream reducer and the typewriter, which re-enter too often to
- * afford a closure each.
- */
+/** Files a span. */
 export const recordPerf = (op: string, ms: number, fields: PerfFields = {}): void => {
     const stat = stats.get(op) ?? { op, count: 0, totalMs: 0, maxMs: 0, slowCount: 0 };
     stat.count += 1;

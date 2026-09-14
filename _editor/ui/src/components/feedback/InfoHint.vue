@@ -1,7 +1,4 @@
-<!--
-    Inline (i) affordance revealing a hover/focus card, teleported and positioned via placeAnchored so it escapes ancestor overflow clipping. Not
-    <AnchoredOverlay>: this is a hover card, not a dismissable dialog.
--->
+<!-- Inline (i) affordance revealing a hover/focus card, teleported and positioned via placeAnchored so it escapes ancestor overflow clipping. -->
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, reactive, ref } from "vue";
 import { placeAnchored } from "../../lib/anchorPlacement.js";

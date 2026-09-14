@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { effectiveKeybinding, keymapOverrides, useKeymap } from "./useKeymap";
 
-/* The keymap resolves a command's ACTIVE chord from three states: remapped (override wins), unbound (null override
- * = no shortcut), and default (no override falls through to the declared chord). The dispatcher and palette both
- * route through effectiveKeybinding, so these three cases are the whole contract that makes bindings rebindable. */
+/* The keymap resolves a command's ACTIVE chord from three states: remapped (override wins), unbound (null override = no shortcut). */
 
 afterEach(() => {
     keymapOverrides.value = {};

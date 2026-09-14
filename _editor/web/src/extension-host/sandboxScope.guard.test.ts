@@ -104,9 +104,7 @@ test("module-level reactive state in an extension is declared through sandboxRef
 });
 
 // A module-scope `let` is the same claim as a ref, without vue's help; refused rather than scoped, since the fix is the
-// same either way.
-// Per-sandbox state becomes a sandboxRef; per-app state becomes a constant or moves inside the function that mutates
-// it.
+// Keep extension module state immutable so sandbox-specific state cannot leak between sandboxes.
 test("an extension keeps no reassignable module-level binding", () => {
     const offenders = scanned.flatMap(({ path, text }) => [...text.matchAll(MODULE_LEVEL_LET)].map((match) => `${path}: let ${match[1]}`));
 

@@ -98,11 +98,7 @@ const stage = ref<PushStage | undefined>(undefined);
 // When the stage began; taken from the client, not the run, so check and push halves share one clock.
 const since = ref(0);
 const question = shallowRef<PushQuestion | undefined>(undefined);
-/* THE FIX A RED VERDICT PROPOSES: the failure it answers (its derived id, which attempt 1 wears), the opening prompt
- * a fresh attempt gets, and the shorter nudge a continued one gets. Not a composed Conversation, as it used to be:
- * WHICH conversation the press opens is decided at the press (planFixAttempt), from the fleet as it stands then,
- * since between the verdict and the press an attempt may have ended, landed, or been set aside. Composing at the
- * verdict also meant a proposal for an already-open conversation overwrote the draft sitting in its composer. */
+/* THE FIX A RED VERDICT PROPOSES: the failure it answers (its derived id, which attempt 1 wears), the opening prompt a fresh attempt gets. */
 export interface FixProposal {
     readonly base: string;
     readonly prompt: string;
@@ -116,10 +112,7 @@ export interface FixAttemptState {
     readonly stance: FixStance;
 }
 
-/* THE RED VERDICT THAT OUTLIVES ITS CARD. Closing the card answers nothing: the tree still fails and the push still
- * has not gone, so the fact is filed here for the panel to state and for a press to re-raise. Everything the card
- * needs rides along, since all of it is recoverable material rather than a live run: the question's own words, the
- * proposal (derived from the failure, not from the press), and the runs behind a refused send. */
+/* THE RED VERDICT THAT OUTLIVES ITS CARD. */
 export interface StandingVerdict {
     readonly push: PendingPush;
     readonly question: PushQuestion;
@@ -208,9 +201,7 @@ const enter = (push: PendingPush, next: PushStage): void => {
     fromMemory.value = false;
 };
 
-/* THE ONE DOOR EVERY RED OUTCOME COMES THROUGH: it raises the question and files the same material as the verdict
- * that stays behind once the card is closed. Two callers, the check's verdict and a refused send, so neither can
- * put something on screen the panel then cannot say. */
+/* Every red outcome raises the same question and records the same verdict material. */
 const raise = (push: PendingPush, asked: PushQuestion, filed: Pick<StandingVerdict, "fix" | "runs" | "check" | "at">): void => {
     question.value = asked;
     proposedFix.value = filed.fix;
@@ -235,9 +226,7 @@ const reopen = (push?: PendingPush): void => {
     fromMemory.value = true;
 };
 
-/* WHEN A STANDING VERDICT IS STILL THE ANSWER, and a press need not spend the suite again: a check that FAILED (the
- * only outcome that measured anything) on a tree nothing has been written to since. A refused send is never reused —
- * the code is not what refused it, and pressing again means try the remote again. */
+/* A standing failed verdict is reused until the checked tree changes. */
 const reusable = (): StandingVerdict | undefined => {
     const held = standing.value;
     return held?.check?.status === `failed` && !workspaceChangedSince(held.at) ? held : undefined;
@@ -329,10 +318,7 @@ const refusalQuestion = (push: PendingPush, refused: readonly string[]): PushQue
     return { kind: `push`, title: commandRunOutcome(only.run, push.verb), command: only.run.command, detail: only.detail };
 };
 
-/* WHICH PUSH RUNS THE MOMENT IS ABOUT: the ones a send in flight is writing, or the ones a refusal filed. Only a
- * refused send ever fills either list, so no check on the question's kind is needed to tell them apart. The standing
- * verdict's copy answers once the card is closed: the window the failure ran in is still open, and it is the one
- * thing about a failure the card never held itself. */
+/* WHICH PUSH RUNS THE MOMENT IS ABOUT: the ones a send in flight is writing, or the ones a refusal filed. Only. */
 const runsInQuestion = (): readonly ReturnType<typeof usePushRun>[] => {
     if (stage.value === `pushing`) {
         return (pending.value?.targets ?? []).filter((target) => target.push).map((target) => usePushRun(target.repo));
@@ -427,10 +413,7 @@ export function usePushFlow() {
             void send(push);
             return;
         }
-        /* A RED VERDICT NOTHING HAS BEEN WRITTEN OVER IS STILL THE ANSWER, so this press reprints it instead of
-         * spending the suite to reach the same verdict on the same bytes. Minutes are the cost of finding something
-         * out; spending them to be told what is already known is what makes a check feel like a toll. The card says
-         * it is from memory and offers to run it again for the reader who wants the suite regardless. */
+        /* A RED VERDICT NOTHING HAS BEEN WRITTEN OVER IS STILL THE ANSWER, so this press reprints it instead. */
         if (reusable() !== undefined) {
             reopen(push);
             return;
@@ -438,9 +421,7 @@ export function usePushFlow() {
         runChecks(push);
     };
 
-    /* THE CHECK, AND THE ONLY PLACE IT STARTS: a press with nothing standing, and the reader who rejects what does
-     * stand (Run again). A verdict landing on a superseded push is dropped rather than shown — the user answered
-     * already, and there is nobody left to interrupt. */
+    /* Checks start only when no standing verdict is being reused. */
     function runChecks(push: PendingPush): void {
         enter(push, `checking`);
         void prepush.start(pushedRepos(push)).then((settled) => {
@@ -496,11 +477,7 @@ export function usePushFlow() {
         }
     };
 
-    /* CLOSING THE CARD, WHICH ANSWERS NOTHING. The push doesn't happen and nothing new is left running; the suite
-     * isn't killed, for the same reason Push anyway doesn't kill it. What is NOT dropped is the verdict itself
-     * (`standing`): the tree still fails and the push is still owed, so the panel keeps saying so and a press brings
-     * the card back. The run is left with the watcher too, since forgetting it would take the terminal button's
-     * session with it — and that terminal is where the whole of the output is. */
+    /* Closing the card leaves the standing verdict and its run available. */
     const dismiss = (): void => {
         pending.value = undefined;
         stage.value = undefined;
@@ -551,14 +528,7 @@ export function usePushFlow() {
         }
     };
 
-    /* WHAT THE CARET CHOSE, ONTO THE DRAFT. Each field is applied only when the pick NAMED it: the draft was
-     * already composed on the pinned entry (`fixWith`), so an untouched knob leaves that standing rather than
-     * resetting a proposal the reader can still see. `setEffort` writes the PICK, which the draft then clamps to
-     * whatever the model just chosen actually offers.
-     *
-     * All five travel, because all five are things the picker sets and each is a different run: a fix re-pointed
-     * at a frontier model but not at the tier, the loop, the account or the speed it was configured under is not
-     * the fix the reader pressed for. */
+    /* Only explicitly selected fields overwrite the fix draft. */
     const applyPick = (fix: Conversation, pick: AgentRunChoice): void => {
         fix.selectModel({ provider: pick.provider as AgentProvider, value: pick.model });
         if (pick.account !== undefined) {
@@ -602,12 +572,7 @@ export function usePushFlow() {
         await archive([plan.retire]);
     };
 
-    /* HAND THE FAILURE TO AN AGENT, decided against the fleet as it stands NOW rather than at the verdict
-     * (planFixAttempt): a first attempt opens under the failure's own id; an ended one is continued with the nudge;
-     * a start-over files the latest away and opens the next on a clean worktree; and an attempt still in play is
-     * opened rather than raced. The push does NOT go in any of these: the point of accepting the fix is that this
-     * tree is not the one to push, and the agent's diff comes back for review like any other. `resume` is the verb
-     * the picker's bar was ended with; absent is the plain press. */
+    /* The agent is chosen from the current fleet, not the stale verdict. */
     const startFix = async (pick?: AgentRunChoice, resume?: FixResume): Promise<void> => {
         const fix = proposedFix.value;
         if (fix === undefined || fixBusy.value) {
@@ -650,9 +615,7 @@ export function usePushFlow() {
         stage: computed(() => stage.value),
         since: computed(() => since.value),
         question: computed(() => question.value),
-        /* THE VERDICT AS EVERY SURFACE BUT THE CARD SEES IT: absent while the card is up (it is saying all of this
-         * itself) and while anything is in flight (that is the news). What is left is the standing fact for the panel
-         * to state and the rail to mark, so neither has to work out when it is the card's turn to speak. */
+        /* The verdict is hidden while the card itself explains it. */
         held: computed(() => (question.value === undefined && stage.value === undefined ? standing.value : undefined)),
         // Whether the tree has been written to since the verdict settled: the difference between a red check that is
         // still the answer and one that is now history.

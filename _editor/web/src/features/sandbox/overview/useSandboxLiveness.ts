@@ -112,8 +112,7 @@ const stream = async (sandboxId: string): Promise<void> => {
         armWatchdog();
         // The daemon just registered this connection's blank roster entry; announce this tab's current activity.
         presenceStreamOpened(clientId);
-        // Refetches the tree on every (re)connect, since a disconnect drops file-change frames; empty means refetch
-        // only.
+        // Refetch the tree after reconnect because file-change frames may be lost.
         markWorkspaceChanged([]);
         for await (const frame of frames) {
             // Stamps, not just counts, each run of frames so a later break can be told from a daemon that never holds a
@@ -126,8 +125,7 @@ const stream = async (sandboxId: string): Promise<void> => {
             applySystemEvent(frame, sandboxId);
         }
     } finally {
-        // However the attempt ended, the permit is released for the next window's stream; backoff runs without holding
-        // one.
+        // Release the stream permit after every attempt, including backoff.
         slot();
     }
 };

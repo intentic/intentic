@@ -5,11 +5,7 @@ import { computed, reactive } from "vue";
 import { statusDot, statusLabel } from "../../features/extensions/reconcileStatus";
 import { groupAccent, resourceIcon, resourceLogoUrl } from "../../features/extensions/resourceVisual";
 
-/* The desired-state dependency graph: each resource as a node, laid out left→right by dependency depth,
- * edges flowing from a dependency to its dependents: rendered by the shared DagGraph (dagre layout + Vue
- * Flow pan/zoom/pinch). Node cards reuse the app's Tailwind tokens: title, type chip, reconcile-status dot.
- * Selecting a node lifts its id to `selectedId`, which the parent uses to highlight the matching actual-state
- * card across the split. */
+/* The desired-state dependency graph: each resource as a node, laid out left→right by dependency depth, edges flowing from a dependency to its dependents. */
 
 const { resources = [] } = defineProps<{ resources?: readonly ResourceView[] }>();
 // Two-way: which node is selected (shared with the actual-state side to cross-highlight).

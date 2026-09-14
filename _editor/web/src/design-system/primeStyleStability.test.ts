@@ -11,10 +11,7 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-/* PrimeVue's ripple directive reloads its core styles whenever a Button updates. The CSS is byte-for-byte
- * unchanged, but assigning style.textContent replaces its text node and makes Chrome DevTools rebuild the
- * selected element's Styles editor. Request-driven loading/disabled state updates buttons constantly, so pin
- * the real app-level plugin behavior here rather than testing a detached DOM helper. */
+/* PrimeVue's ripple directive reloads its core styles whenever a Button updates. */
 it(`does not rewrite an unchanged PrimeVue stylesheet when a button updates`, async () => {
     const label = ref(`Before request`);
     const root = document.createElement(`div`);

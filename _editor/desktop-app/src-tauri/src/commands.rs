@@ -15,12 +15,7 @@ type CommandResult<T> = Result<T, String>;
 const CONTAINER_PREFIX: &str = "intentic-sandbox-";
 const TUNNEL_PREFIX: &str = "intentic-sandbox-tunnel-";
 
-/* WHAT THIS APP IS — and NOTHING ABOUT THE MACHINE IT IS ON, which is a boundary this struct is now drawn
- * along rather than a list that happens to stop here.
- *
- * Every field is a value this process is already holding, so [`desktop_info`] answers in the time one IPC
- * round trip takes and can stay a plain sync command. `dockerReady` used to be the sixth field, and it was
- * the one that ran a subprocess: see [`docker_ready`] for what that cost and why it left. */
+/* This struct describes the app, not the machine running it. */
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopInfo {
@@ -38,24 +33,7 @@ pub struct DesktopInfo {
 /// every "is this a real release" decision below reads.
 pub const VERSION: &str = env!("INTENTIC_VERSION");
 
-/* THE `ic` A SCRIPT DOWNLOADS HAS TO BE THIS APP'S OWN `ic`.
- *
- * scripts.rs states the app's whole parity argument: the scripts are bundled rather than fetched, so
- * "Intentic 1.2.0 ships connect.sh@1.2.0" and a release is one commit. That was true of the `.ps1` files and
- * quietly false of the binary they spend their first ten lines downloading — every shim fetches
- * `releases/latest/download/ic-…`, unpinned, on every run. The app updates itself only when the user next
- * quits it, so an app a release or two behind drives a brand-new CLI.
- *
- * That is not a theoretical drift. The `intentic-requirement:` marker and the two-pass consent flow the
- * Windows setup screen is built around were added at one commit: an app older than it receives those lines,
- * has no parser for them, has no requirements list to draw, and does not know its first pass is SUPPOSED to
- * stop — which is exactly a Windows install that reports nothing and appears to hang on "checking Docker".
- *
- * So the app names the release it wants, through the `IC_URL` base every shim already honours (connect.sh,
- * connect.ps1, connect-host.ps1, recreate.ps1 — one spelling, four files). `None` for an unversioned build:
- * a developer running `tauri dev` out of a checkout has no matching release to pin to, and `latest` is the
- * right answer there.
- */
+/* THE `ic` A SCRIPT DOWNLOADS HAS TO BE THIS APP'S OWN `ic`. */
 pub fn ic_url(version: &str) -> Option<String> {
     if version.is_empty() || version == "0.0.0" {
         return None;
@@ -92,43 +70,13 @@ pub fn desktop_info(state: State<'_, AppState>) -> DesktopInfo {
     }
 }
 
-/* DOES A DOCKER DAEMON ANSWER RIGHT NOW — asked on its own, and off the main thread, because both of those
- * were load-bearing and neither was true when this lived inside [`desktop_info`].
- *
- * `async`, and that is the whole of the second half. A `#[tauri::command] fn` is dispatched INLINE on the
- * thread the IPC arrives on, which is the main thread — the one that pumps the window. Every other command
- * here that spawns a process is already `async fn` for that reason; this probe was the one that was not, and
- * it spawns `docker info`. On the machine this app exists to set up, Docker is often INSTALLED AND NOT
- * RUNNING, and `docker info` against a daemon that is not there does not fail fast: it spends tens of seconds
- * on the socket before giving up. For all of those seconds the launcher was frozen — no screen, no repaint,
- * and not even the window's own title, since setting that is an IPC of its own queued behind this one.
- *
- * What that looked like from outside is the bug this split fixes: a first-time user answers "Set up" to a
- * link from their browser and then watches an empty window for half a minute, on the one machine in the world
- * where the answer to this question is slow, in the one flow where they know least about the app. Both
- * desktop smoke tiers assert exactly that journey by window title and both caught it (smoke.sh section 4,
- * desktop-smoke-windows tier 1) — on the CI machines slow enough to be that user.
- *
- * Asked separately, and NOT waited for: App.vue starts this at mount and draws whichever face it is without
- * it. The answer only decides a step in the install plan and an analytics property, and the second caller of
- * `scripts::docker_ready` — the elevation decision in [`SetupContext::of`] — is unchanged and still exact,
- * being made inside an `async` command while the user watches the screen it belongs to.
- */
+/* DOES A DOCKER DAEMON ANSWER RIGHT NOW — asked on its own, and off the main thread. */
 #[tauri::command]
 pub async fn docker_ready() -> bool {
     scripts::docker_ready()
 }
 
-/* TAKEN, NOT READ — the same rule [`take_pending_recreate`] has always had, and for a sharper reason here.
- *
- * A parked setup is picked up from two directions: the `desktop://pending-setup` event, and the read the
- * launcher does when it mounts. Both call this, and whichever arrives second used to get a copy of the same
- * request — or, once `setup_run` had cleared the slot, a `None` that the screen then wrote back over its own
- * state as "there is no setup here". That is a live race between an arriving link and a mounting window, and
- * what it produces is the setup screen handing the window back to the manager mid-run, taking whatever the
- * run had to say with it. Taking it means exactly one of the two callers gets the work, and the other is
- * told plainly that somebody else has it.
- */
+/* TAKEN, NOT READ — the same rule [`take_pending_recreate`] has always had, and for a sharper reason here. */
 #[tauri::command]
 pub fn take_pending_setup(state: State<'_, AppState>) -> Option<SetupArgs> {
     state.pending.lock().unwrap().take()
@@ -162,16 +110,7 @@ pub struct SetupContext {
     pub host: Host,
     /// This build's version — the release its `ic` download is pinned to. See [`ic_url`].
     pub version: String,
-    /* THE USER HAS SEEN THE LIST AND SAID YES.
-     *
-     * The install flow asks its one question exactly once, and on this path there is no terminal to ask it
-     * on — so the run happens TWICE. The first pass changes nothing: `ic docker prepare` examines the machine,
-     * prints one `intentic-requirement:` line per thing that has to change, and stops. The window draws those
-     * as a list with one button. The second pass carries this flag, which becomes INSTALL_DOCKER=1, which is
-     * the same pre-consent the terminal path has always accepted for a headless install.
-     *
-     * A machine that needs nothing never sees the first pass end early — it has no requirements to report —
-     * so the two-pass shape costs nothing on the common path. */
+/* The install flow asks its one question exactly once, and on this path there is no terminal to ask it on — so the run happens TWICE. */
     pub consented: bool,
 }
 
@@ -206,17 +145,7 @@ fn setup_docker_ready(host: Host, probe: impl FnOnce() -> bool) -> bool {
     host == Host::Unix && probe()
 }
 
-/* THE WHOLE ONBOARDING, as an argument vector: connect.sh / connect.ps1 with the setup code the SPA minted.
- * Everything it does — claiming the code, installing Docker, provisioning the tunnel, running the container,
- * waiting on /health, enrolling desktop sync — is the script's, unchanged from the terminal path.
- *
- * NAMED on PowerShell, positional on sh, because they bind differently and only one of them forgives a
- * mistake: connect.ps1's first positional parameter is `-PlatformUrl`, so passing the code bare would silently
- * point the whole setup at a platform named after a setup code. connect.sh reads the first non-flag argument
- * as the code, which is what its own one-liner passes.
- *
- * The "don't prompt" flag rides both, because this run has no terminal and the "other sandboxes are already
- * running" question would hang it forever. */
+/* THE WHOLE ONBOARDING, as an argument vector: connect.sh / connect.ps1 with the setup code the SPA minted. */
 pub fn setup_script(args: &SetupArgs, ctx: &SetupContext) -> ScriptRun {
     let mut env: Vec<(String, String)> = app_env(&ctx.version);
     env.push((
@@ -239,15 +168,7 @@ pub fn setup_script(args: &SetupArgs, ctx: &SetupContext) -> ScriptRun {
         env.push(("SANDBOX_IMAGE".into(), image));
     }
 
-    /* Elevate only to install Docker, and only when there is none — the same trade the setup screen's "I
-     * already have Docker" checkbox makes. Windows never elevates the SCRIPT: `ic docker prepare` raises the
-     * individual steps that need administrator (turning on WSL2, running Docker's installer) through Windows'
-     * own prompt, which is both narrower and the thing users expect to see.
-     *
-     * INSTALL_DOCKER=1 is the pre-consent both hosts read, and it is set from different places for the same
-     * reason. On Unix it rides with the elevation: pkexec has already asked the user for a password, which is
-     * the consent. On Windows it waits for `consented` — the click on the requirements list, which is the
-     * only place the user has been shown what will change. */
+/* Elevate only to install Docker, and only when there is none — the same trade the setup screen's "I already have Docker" checkbox makes. */
     let elevate = ctx.host == Host::Unix && !ctx.docker_ready;
     if elevate || (ctx.host == Host::Windows && ctx.consented) {
         env.push(("INSTALL_DOCKER".into(), "1".into()));
@@ -313,17 +234,7 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs, install: bool) -> Comman
     Ok(())
 }
 
-/* --- THE RESTART, AND COMING BACK FROM IT ---
- *
- * Turning WSL2 on is the ordinary first step of a Windows install, and it does nothing at all until the
- * machine reboots. Every version of this flow that merely SAID so lost people there: they are several minutes
- * in, have answered an administrator prompt, and are now being asked to restart and then find their way back
- * to a setup code they no longer have on screen.
- *
- * So the app takes the whole thing on: the setup is written to disk, Windows is told to run this app once at
- * the next sign-in, and the machine restarts. The app comes back up, finds the parked setup, and carries on.
- * RunOnce is the right key for it — Windows deletes the entry as it runs it, so a setup that is picked up is
- * picked up exactly once and nothing is left behind on the machine afterwards. */
+/* Turning WSL2 on is the ordinary first step of a Windows install, and it does nothing at all until the machine reboots. */
 
 /// Park this setup, ask Windows to start this app after the next sign-in, and restart.
 #[tauri::command]
@@ -332,13 +243,7 @@ pub fn restart_for_setup(app: AppHandle, args: SetupArgs) -> CommandResult<()> {
     end_session(Session::Restart)
 }
 
-/* THE OTHER THING WINDOWS ONLY DOES BETWEEN SESSIONS, and the requirement that had no button.
- *
- * Adding an account to `docker-users` succeeds instantly and changes nothing that matters: group membership
- * lives in the login token, and Windows issues a new one only at sign-in. So that row's only control was
- * "Check again" — a button that could not possibly work, on a machine where every other step just had. The
- * fix is the same shape as the restart, one notch smaller: park the setup, register the resume, sign out.
- */
+/* THE OTHER THING WINDOWS ONLY DOES BETWEEN SESSIONS, and the requirement that had no button. */
 #[tauri::command]
 pub fn sign_out_for_setup(app: AppHandle, args: SetupArgs) -> CommandResult<()> {
     app.state::<AppState>().park_setup(&args);
@@ -456,13 +361,7 @@ pub struct SandboxStatus {
     pub resources: Option<SandboxResources>,
 }
 
-/* ONE CONTAINER'S SHARE OF THIS MACHINE, as docker enforces it right now — the same reading the machine agent
- * makes for the web's Devices tab (`@intentic/ui/device` resourcesFrom), in the sandbox contract's own shape
- * (SandboxResources) field for field, so the two screens describe one container in one vocabulary and the
- * kit's Resources form opens on either. The two token lists are the run contract's directive vocabulary split
- * by asker: what the approved environment demands (the form draws those locked) and what the owner asked for
- * on top and may withdraw. `privileged` and `gpu` are docker's own answer, which can differ from the ask: a
- * host without the NVIDIA runtime drops the GPU. */
+/* ONE CONTAINER'S SHARE OF THIS MACHINE, as docker enforces it right now. */
 #[derive(Serialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SandboxResources {
@@ -563,11 +462,7 @@ fn shares_of(names: &[String]) -> HashMap<String, SandboxResources> {
         .unwrap_or_default()
 }
 
-/* THE DOCKER ENGINE'S SIZE: the WSL guest on Windows, the Desktop VM on macOS, the host on Linux — the ceiling a
- * sandbox's share is bounded by, and the rails the Resources form draws. `docker info` rather than this
- * machine's own memory because on two of the three those are different computers: a 64 GiB laptop whose WSL
- * guest was given 20. The same reading the machine agent makes for the web (`@intentic/machine` describe.ts),
- * in the sandbox contract's HostFacts.engine shape. */
+/* THE DOCKER ENGINE'S SIZE: the WSL guest on Windows, the Desktop VM on macOS, the host on Linux — the ceiling a sandbox's share is bounded by. */
 #[derive(Serialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DockerEngine {
@@ -777,10 +672,7 @@ pub async fn sandbox_recreate(
         .map_err(|error| error.to_string())?
 }
 
-/* WHAT THE RESOURCES FORM ASKED FOR: the sandbox contract's SandboxResourcesAsk, as the webview sends it. Every
- * field is "leave it" when absent, and the two caps take `null` for "back to the default" (the share derived
- * from this machine; every core), a THIRD state JSON can say and a plain Option cannot — hence the double
- * Option, with [`present`] keeping an explicit null apart from a missing key. */
+/* WHAT THE RESOURCES FORM ASKED FOR: the sandbox contract's SandboxResourcesAsk, as the webview sends it. */
 #[derive(Deserialize, Default, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ReshapeAsk {
@@ -910,18 +802,7 @@ pub async fn sandbox_remove(app: AppHandle, slug: String) -> CommandResult<()> {
     Ok(())
 }
 
-/* THE DESKTOP SYNC ENROLLMENT, as an argument vector: sync.sh / sync.ps1 with the pairing the SPA minted.
- * Everything it does — downloading the agent, enrolling the SSH key, starting Mutagen and the port-mirror
- * watcher — is the script's, unchanged from the one-liner the Desktop sync card hands out; the app's part is
- * only that the folder arrived from a system dialog instead of being typed into a command.
- *
- * ENV THROUGHOUT, no positional args: both sync scripts read SANDBOX_URL / PAIR_TOKEN / SYNC_DIR / TAKEOVER
- * from the environment, exactly as the pasted `env … | sh` and `$env:… ; irm | iex` forms deliver them, so
- * there is no per-host argument convention here to get wrong.
- *
- * `dir` is the folder the user picked, and it is IGNORED on a mirror enrollment in this builder rather than
- * trusted to the webview: a mirror pairing has no folder, and a SYNC_DIR riding one would be a value the
- * agent ignores today and a latent surprise the day it stops ignoring it. */
+/* THE DESKTOP SYNC ENROLLMENT, as an argument vector: sync.sh / sync.ps1 with the pairing the SPA minted. */
 pub fn sync_script(args: &SyncArgs, dir: Option<&str>, host: Host, version: &str) -> ScriptRun {
     let mut env = app_env(version);
     env.push(("SANDBOX_URL".into(), args.url.clone()));
@@ -1021,10 +902,7 @@ pub fn setup_alert(app: AppHandle) {
     crate::windows::alert_setup(&app);
 }
 
-/* WHERE THE INSTALL HAS GOT TO, as the setup screen draws it (App.vue `progressShown`), for the workspace
- * page to draw the same thing once that screen has stepped aside. The screen's own figures rather than a
- * second reading of the run: one bar, two places. Every field is display-ready text or a percentage; nothing
- * about the machine rides along, and the name is the one the user typed for their sandbox. */
+/* WHERE THE INSTALL HAS GOT TO, as the setup screen draws it (App.vue `progressShown`). */
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetupReport {
@@ -1068,14 +946,7 @@ pub fn close_workspace(app: AppHandle, action: CloseAction, remember: bool) {
     });
 }
 
-/* WHAT THE APP IS DOING ABOUT ITS OWN VERSION — read on mount, then followed on `desktop://update`.
- *
- * Both halves are needed and neither is redundant. The event covers everything that happens while this window
- * is open; this covers the window that opens in the middle of it, which is the ordinary case here, because the
- * launcher face is built on demand and a download that started at launch is usually already finished by the
- * time anybody opens the manager. Without the read the screen would sit on "Checking for updates…" until the
- * next state change, which on a machine that is up to date never comes.
- */
+/* WHAT THE APP IS DOING ABOUT ITS OWN VERSION — read on mount, then followed on `desktop://update`. */
 #[tauri::command]
 pub fn update_state(app: AppHandle) -> crate::update::Stage {
     crate::update::stage(&app)
@@ -1107,13 +978,7 @@ pub fn settings_set(state: State<'_, AppState>, settings: Settings) {
 mod tests {
     use super::*;
 
-    /* The argument vectors, both hosts, on whichever host is running the suite.
-     *
-     * This is the crate's highest-risk logic and the least observable: the Windows installer is cross-built by
-     * cargo-xwin on a Linux runner, so before these tests every `.ps1` argument convention in this file first
-     * executed on a user's machine after a release. A `-SetupCode` that regressed to a bare positional would
-     * bind to connect.ps1's `-PlatformUrl` and point the whole setup at a platform named after a setup code —
-     * silently, with a plausible-looking failure much later. */
+/* Argument vectors are tested on both host types. */
 
     /// A version that looks like a release, so the pin below is exercised. `VERSION` itself is `0.0.0` in
     /// every build of this repo including the test one, which is deliberately the value that means "not a
@@ -1203,13 +1068,7 @@ mod tests {
         );
     }
 
-    /* THE APP AND THE CLI IT DRIVES MUST BE ONE RELEASE.
-     *
-     * Every shim downloads `ic` from `releases/latest` unless `IC_URL` says otherwise, and this app is the
-     * one caller that can be arbitrarily old when it runs one — it installs its own updates only when the
-     * user next quits. An app that predates a protocol the CLI now speaks receives lines it has no parser
-     * for and a first pass it does not know is meant to stop, which is a Windows install that reports
-     * nothing at all. */
+/* Shims download `ic` from `releases/latest` unless `IC_URL` overrides it. */
     /// A reshape with something in it, for the lists below: every flow that runs the recreate shim is held to
     /// the same pin and the same silence, this one included.
     fn reshape_ask() -> ReshapeAsk {
@@ -1254,12 +1113,7 @@ mod tests {
         );
     }
 
-    /* NO FLOW THIS WINDOW SPAWNS MAY ASK A QUESTION.
-     *
-     * The child has no window, no console and closed stdin. Every prompt in `ic` decides whether somebody is
-     * there by probing for a terminal, and the cost of one of those probes being wrong is not a bad guess —
-     * it is an install that never ends, in front of somebody watching a spinner. The `-y`/`-Yes` flags cover
-     * the questions we know about; this covers the ones we do not. */
+/* The child has no window, no console and closed stdin. */
     #[test]
     fn no_script_this_window_spawns_is_allowed_to_prompt() {
         for run in [
@@ -1353,12 +1207,7 @@ mod tests {
         assert!(!windows.elevate);
     }
 
-    /* THE TWO PASSES OF A WINDOWS SETUP, which is the whole shape of "ask once" on a screen with no terminal.
-     *
-     * First attempt: nothing agreed to, so no pre-consent rides along and `ic docker prepare` reports what it
-     * would change rather than changing it. The window turns that into a list and a button. Second attempt
-     * carries the answer. Getting this backwards would mean a window that silently installs Docker Desktop and
-     * turns on Windows features on the strength of a click that never mentioned either. */
+/* THE TWO PASSES OF A WINDOWS SETUP, which is the whole shape of "ask once" on a screen with no terminal. */
     #[test]
     fn windows_only_pre_consents_after_the_user_has_seen_the_list() {
         let first = setup_script(&setup_args("c"), &context(Host::Windows, false));
@@ -1422,8 +1271,7 @@ mod tests {
         );
     }
 
-    /* The rollback spelling, per host — the flag the sh shim reads and the switch the ps1 declares are two
-     * different strings for one button, and the Windows one is cross-built and first runs on a user's PC. */
+/* The rollback spelling, per host — the flag the sh shim reads and the switch the ps1 declares are two different strings for one button. */
     #[test]
     fn rollback_is_a_flag_on_sh_and_a_switch_on_powershell() {
         assert_eq!(
@@ -1462,10 +1310,7 @@ mod tests {
         );
     }
 
-    /* THE RESHAPE, PER HOST: the shim's own switch first, then `ic`'s flags verbatim behind it. The Windows
-     * spelling is the one worth pinning, being cross-built and first run on a user's PC: `-Reshape` is a
-     * [switch], so it takes no value, and every token after it binds to the shim's remaining-arguments list;
-     * a `-Reshape` written as `-Reshape:$true` or with a value between it and the flags would bind wrong. */
+/* THE RESHAPE, PER HOST: the shim's own switch first, then `ic`'s flags verbatim behind it. */
     #[test]
     fn reshape_forwards_ics_flags_behind_the_shims_own_switch_per_host() {
         let asked = ReshapeAsk {
@@ -1516,9 +1361,7 @@ mod tests {
         assert!(reshape_flags(&ReshapeAsk::default()).is_empty());
     }
 
-    /* THE THREE STATES OF A CAP'S ASK, off the wire. The form sends `null` for "back to the default" and no key
-     * at all for "leave it"; serde's ordinary Option folds the two together, and folding them would turn every
-     * untouched cap into a request to clear it. */
+/* THE THREE STATES OF A CAP'S ASK, off the wire. */
     #[test]
     fn a_reshape_ask_keeps_null_and_absent_apart() {
         let parsed: ReshapeAsk =
@@ -1538,10 +1381,7 @@ mod tests {
         );
     }
 
-    /* WHAT `docker inspect` SAYS ABOUT A CONTAINER'S SHARE, read the way the machine agent reads it for the web,
-     * so the two screens cannot disagree about one container: the cgroup caps (0 is docker's "unbounded", which
-     * is no cap anyone set), the privilege, the GPU in either spelling docker writes for `--gpus`, and the two
-     * env stamps the run contract leaves saying who asked for which directive. */
+/* WHAT `docker inspect` SAYS ABOUT A CONTAINER'S SHARE, read the way the machine agent reads it for the web. */
     #[test]
     fn a_containers_share_is_read_off_docker_inspect() {
         let inspected = serde_json::json!({
@@ -1628,10 +1468,7 @@ mod tests {
         assert!(!sync_script(&sync_args(), Some("/home/ada"), Host::Unix, RELEASE).elevate);
     }
 
-    /* The sync enrollment binds EVERYTHING through env and nothing positionally — the same delivery the
-     * pasted one-liners use, and the reason there is no per-host argument convention to cross-check here.
-     * The Windows half is still asserted by name: like every other .ps1 it is cross-built on a Linux runner
-     * and first executes on a user's machine. */
+/* The sync enrollment binds EVERYTHING through env and nothing positionally — the same delivery the pasted one-liners use. */
     #[test]
     fn sync_enrollment_rides_entirely_on_env_on_both_hosts() {
         let unix = sync_script(
@@ -1691,10 +1528,7 @@ mod tests {
         assert_eq!(env_of(&run, "SYNC_DIR"), None);
     }
 
-    /* The machine agent's own install location, per host. Cross-built like everything else here, so the Windows
-     * spelling first executes on a user's PC — and getting it wrong is invisible rather than loud: the PATH
-     * fallback would still find a global copy on a developer's machine and find nothing on a real user's, who
-     * would then see a window that simply never mentions their sync. */
+/* The machine agent's own install location, per host. */
     #[test]
     fn the_agents_own_install_is_preferred_over_whatever_is_on_path() {
         let unix = scripts::sync_agent_candidates(Host::Unix, Some("/home/ada"));

@@ -189,9 +189,7 @@ test("a repetition interval is reported in the units a person reads", () => {
     expect(humanDuration(``)).toBe(``);
 });
 
-/* Whether this desktop can be driven, the check whose absence cost two red releases: the doctor looked for the
- * foreground window in the WINDOW LIST, the lock screen is the one holder that has no row in it, and "none
- * holding the foreground" was printed about a machine on which nothing could be given the keyboard. */
+/* Whether this desktop can be driven, the check whose absence cost two red releases: the doctor looked for the foreground window in the WINDOW LIST. */
 
 const idle = { locked: false, foreground: undefined } as const;
 const lockScreen = { locked: false, foreground: { id: "66048", title: "Windows Default Lock Screen", app: "LockApp" } } as const;

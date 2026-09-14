@@ -131,15 +131,9 @@ const pushToCi = async (): Promise<void> => {
     <div class="flex flex-col gap-5">
         <NoticeStack :of="[pushError]" />
 
-        <!--
-            Two gates: content waits on `inventoryPending` (a half-read inventory never shows as empty), the outline waits
-            on the reveal (a warm daemon skips the skeleton). Collapsing them into one flag loses one half.
-        -->
+<!-- Content waits for inventory; the outline waits for the reveal. -->
         <template v-if="inventoryPending">
-            <!--
-                Shows the shape of the coming list (rows with a key and reveal control), not a spinner. Label sits inside the
-                reveal so an empty bordered surface with a heading doesn't flash first.
-            -->
+<!-- Shows the shape of the coming list (rows with a key and reveal control), not a spinner. -->
             <RowGroup v-if="outline" label="Your secrets">
                 <div role="status" aria-busy="true">
                     <span class="sr-only">Reading your sandbox's secrets…</span>

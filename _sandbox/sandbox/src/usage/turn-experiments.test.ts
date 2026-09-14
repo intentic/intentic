@@ -137,9 +137,7 @@ test("the map is judged on the listings its note tells the turn not to run", asy
     expect(map?.metrics[0].deltaPct).toBeCloseTo(-50, 0);
 });
 
-/* THE READING THE WHOLE DESIGN TURNS ON. The note rides the opening message and nothing after it, so a
- * conversation's later turns are evidence about a turn that was never treated on its own. Averaged in, they
- * pull both arms toward each other in proportion to how long the conversations happened to run. */
+/* Only the opening turn is sampled because later turns lack the opening note. */
 test("only the opening turn of a conversation is the map's sample", async () => {
     const arms = [
         ...Array.from({ length: 40 }, (_, index) => mapConversation(`on-${index}`, true, [0, 9, 9, 9])).flat(),
@@ -149,8 +147,7 @@ test("only the opening turn of a conversation is the map's sample", async () => 
     expect(map?.metrics[0]).toMatchObject({ on: { turns: 40, mean: 0 }, off: { turns: 40, mean: 2 } });
 });
 
-/* A conversation whose opening turn fell outside the window contributes nothing rather than offering its
- * earliest surviving turn as an opening one, which is what a reader without `turnIndex` would have to do. */
+/* A conversation whose opening turn fell outside the window contributes nothing rather than offering its. */
 test("a conversation whose opening turn is missing is not counted", async () => {
     const arms = [
         ...mapArms(30, 30, 1, 2),

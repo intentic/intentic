@@ -193,15 +193,9 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
 <template>
     <!-- `scroll="page"`: this body is a report read top-down once, not a document paired with an index worth preserving position in. -->
     <SplitView title="Pipelines" scroll="page" :scroll-key="scopeRepo">
-        <!--
-            In #info, not beside the picker in #actions: a fact, not a control, and the action cluster is `shrink-0`, so a tally there would push the
-            verbs off instead of wrapping.
-        -->
+        <!-- Pipeline totals belong in the information slot, not the action group. -->
         <template #info>
-            <!--
-                `min-w-0 flex-1`: the tally is what gives here. Sized from content it would squeeze the h1's own title; zero-basis instead, it wraps
-                a count onto a second line first.
-            -->
+            <!-- `min-w-0 flex-1`: the tally is what gives here. -->
             <PipelinesTally v-if="showTally && !narrowBoard" :items="counts" :rate="successRate" :skeleton="isPending" class="ml-1 min-w-0 flex-1" />
         </template>
 
@@ -232,18 +226,12 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
         </template>
 
         <template #detail>
-            <!--
-                No scroller or `min-h-0 flex-1`: nothing clamps this, so the column is as tall as its runs. The measured element: its width matches
-                the header's, and it's the one a `ref` can reach.
-            -->
+            <!-- No scroller or `min-h-0 flex-1`: nothing clamps this, so the column is as tall as its runs. -->
             <div ref="body" class="flex flex-col">
-                <!-- Too narrow for the header: the orientation line moves above the list, ahead of the skeleton, so the wait and the board match. -->
+                <!-- Narrow headers move orientation text above the list. -->
                 <PipelinesTally v-if="showTally && narrowBoard" :items="counts" :rate="successRate" :skeleton="isPending" class="mb-5" />
 
-                <!--
-                    Also covers the window before the sandbox handshake unblocks the fetch. Shows the board's shape, not a page indistinguishable
-                    from 'no repos connected'.
-                -->
+                <!-- Also covers the window before the sandbox handshake unblocks the fetch. -->
                 <PipelinesSkeleton v-if="isPending" />
 
                 <template v-else>
@@ -270,10 +258,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                     <div class="flex flex-col gap-6">
                         <RowGroup v-for="standing in sections" :key="standing.repo.repo" :label="standing.repo.repo">
                             <template #info>
-                                <!--
-                                    Links to the repo itself, not its pipelines (the header action's rung); text and destination agree, both name the
-                                    project.
-                                -->
+                                <!-- This link opens the repository, not its pipelines. -->
                                 <a
                                     :href="standing.repo.url"
                                     target="_blank"
@@ -286,10 +271,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                                 </a>
                             </template>
 
-                            <!--
-                                Warning text is for everyone; the recipe (URL + signing secret) is attached only for a maintainer or the owner, so it
-                                renders only when present.
-                            -->
+                            <!-- Everyone sees warnings; only maintainers see the signing recipe. -->
                             <Notice v-if="standing.repo.hookWarning" tone="warning" class="px-4 py-2.5 break-words">
                                 {{ standing.repo.hookWarning }}
                                 <template v-if="standing.repo.hookRecipe"> {{ standing.repo.hookRecipe }}</template>

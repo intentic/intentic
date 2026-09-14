@@ -173,10 +173,7 @@ const caption = computed(() =>
         <!-- The tunnels stay listed: this says the live half is missing, not the connections. -->
         <Notice v-if="listNotice" :of="listNotice" class="m-4" />
         <Row v-for="row in rows" :key="row.id" :icon="row.link?.state === 'connected' ? 'shield' : 'globe'" :selected="editingId === row.id">
-            <!--
-                Status rides the name, as elsewhere in the app, not beside the controls, which have the least space to
-                spare.
-            -->
+<!-- Status rides the name, as elsewhere in the app, not beside the controls, which have the least space to spare. -->
             <template #title>
                 <span class="flex flex-wrap items-center gap-2">
                     <span class="truncate">{{ row.id }}</span>
@@ -191,15 +188,9 @@ const caption = computed(() =>
                 </span>
             </template>
             <template #description>
-                <!--
-                    `block truncate`: an inline span can't ellipsise, so three routes would wrap under the row's button
-                    instead.
-                -->
+<!-- `block truncate`: an inline span can't ellipsise, so three routes would wrap under the row's button instead. -->
                 <span v-if="row.facts" class="block truncate font-mono" :title="row.facts">{{ row.facts }}</span>
-                <!--
-                    Wraps rather than truncates: the tail here is the way out of the state, not text an ellipsis should
-                    hide.
-                -->
+<!-- Wraps rather than truncates: the tail here is the way out of the state, not text an ellipsis should hide. -->
                 <span v-if="row.note === 'rebuild'" class="block text-warning">
                     Needs a sandbox rebuild to install its client:
                     <RouterLink to="/sandbox/environment" class="text-link hover:underline">finish setup →</RouterLink>
@@ -207,10 +198,7 @@ const caption = computed(() =>
                 <span v-else-if="row.note === 'auto'" class="block">Connects automatically after a sandbox restart.</span>
             </template>
             <template #control>
-                <!--
-                    No dial until the link arrives; guessing Connect vs Disconnect from stored config risks the wrong
-                    tunnel.
-                -->
+<!-- No dial until the link arrives; guessing Connect vs Disconnect from stored config risks the wrong tunnel. -->
                 <div class="flex shrink-0 items-center gap-1">
                     <Button
                         v-if="row.link?.state === 'connected' || row.link?.state === 'connecting'"
@@ -243,10 +231,7 @@ const caption = computed(() =>
                         class="scrollbar-thin max-h-32 overflow-auto whitespace-pre-wrap rounded-md border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-2xs text-danger"
                         >{{ failures[row.id] }}</pre>
                     <div v-if="otpFor === row.id" class="flex items-center gap-2">
-                        <!--
-                            Prevents on keydown, not keyup: this list sits inside the card's form, so a bare Enter
-                            would submit it.
-                        -->
+<!-- Prevents on keydown, not keyup: this list sits inside the card's form, so a bare Enter would submit it. -->
                         <input
                             v-model="otp"
                             :class="ui.input('w-32 font-mono')"

@@ -65,9 +65,7 @@ test("a config chain that does not load is a refusal, not a diagnostic", async (
     expect(report.unavailable[0]?.reason).toContain("nonexistent.json");
 });
 
-/* The native compiler does not auto-include @types from parent node_modules directories the way the JS one
- * does. A program tripping over missing node globals while an ancestor @types directory exists would send the
- * agent errors its own toolchain never shows it, so it is refused, with the reason. */
+/* The native compiler does not auto-include @types from parent node_modules directories the way the JS one does. */
 test("missing node globals with an ancestor @types directory is a refusal", async () => {
     const dir = fixture();
     const realTypes = join(import.meta.dirname, "..", "..", "..", "node_modules", "@types");
@@ -120,8 +118,7 @@ test("findTsconfig finds the nearest config walking up", async () => {
     expect(findTsconfig(file)).toBe(join(dir, "tsconfig.json"));
 });
 
-/* The build config excludes the tests, so a test file checked against it is in no program and comes back clean
- * whatever is in it. That is the exact shape of the type error that reached main past a green per-edit check. */
+/* The build config excludes the tests, so a test file checked against it is in no program and comes back clean whatever is in it. */
 test("a test file is checked against the tsconfig.test.json beside the build config, where one exists", async () => {
     const dir = fixture();
     writeFileSync(join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true, noEmit: true }, exclude: ["**/*.test.ts"] }));

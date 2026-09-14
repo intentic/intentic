@@ -67,9 +67,7 @@ export const enrollKey = async (
     { attempts = 10, delayMs = 3000, takeover = false }: { attempts?: number; delayMs?: number; takeover?: boolean } = {},
 ): Promise<{ syncToken: string; mode: SyncMode }> => {
     for (let attempt = 1; ; attempt++) {
-        // Enrolled wherever the daemon answers, resolved per attempt for the reason the device half's enroll states
-        // (device/commands.ts): a sandbox on this machine with its tunnel down must not fail the one call that pairs
-        // it.
+        // Resolve the daemon per attempt so a down tunnel does not fail key pairing.
         const { base } = await resolveDaemonBase(sandboxUrl);
         const url = `${base}/system/authorized-key`;
         let response: Response;
@@ -393,7 +391,7 @@ export const syncUninstall = async (out: Log, sandbox?: string): Promise<void> =
     // shouldn't block local teardown.
     for (const pairing of dropped) {
         if (pairing.syncToken !== undefined) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one HTTP call per sandbox being dropped, sequenced so a failure names its own
+            // oxlint-disable-next-line eslint/no-await-in-loop -- Drops are sequenced so failures identify one sandbox.
             await revokeEnrollment(pairing.sandboxUrl, pairing.syncToken).catch(() => {});
         }
         if (pairing.mode === "sync") {

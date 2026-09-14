@@ -333,11 +333,7 @@ const confirmDiscard = async (): Promise<void> => {
                     <Icon name="pencil" class="text-xs" />
                 </button>
             </template>
-            <!--
-                Which sandbox this agent is in, not decoration: every number below (diff, file count, what Land
-                applies) is
-                about a workspace on another machine.
-            -->
+<!-- Which sandbox this agent is in, not decoration: every number below (diff, file count, what Land applies) is about a workspace on another machine. -->
             <span
                 v-if="remoteName !== undefined"
                 class="ui-status-pill inline-flex shrink-0 items-center gap-1 bg-overlay text-2xs text-muted"
@@ -346,12 +342,7 @@ const confirmDiscard = async (): Promise<void> => {
                 <Icon name="server" class="text-2xs" />
                 <span class="max-w-[10rem] truncate">{{ remoteName }}</span>
             </span>
-            <!--
-                Session name, pasteable: replaces a truncated, unclickable chip that forced retyping the id by eye.
-                Survives
-                into a narrow header as the bare glyph rather than vanishing, since that's exactly where retyping is
-                worst.
-            -->
+<!-- Session name, pasteable: replaces a truncated, unclickable chip that forced retyping the id by eye. -->
             <span
                 v-if="fleetAgent?.branch !== undefined"
                 ref="identityAnchor"
@@ -360,11 +351,7 @@ const confirmDiscard = async (): Promise<void> => {
                 <SessionChip :branch="fleetAgent.branch" reveal @reveal="identityOpen = !identityOpen" />
             </span>
             <SessionChip v-if="fleetAgent?.branch !== undefined && mobile" :branch="fleetAgent.branch" reveal compact @reveal="identityOpen = true" />
-            <!--
-                Status compresses to its glyph in a narrow header; words return once the header itself has room. Kept
-                on
-                `mobile` alone, since a draft's header is exactly as tight as any other's.
-            -->
+<!-- Status compresses to its glyph in a narrow header; words return once the header itself has room. -->
             <span
                 v-if="status !== undefined"
                 class="inline-flex shrink-0 items-center gap-1 text-2xs"
@@ -378,11 +365,7 @@ const confirmDiscard = async (): Promise<void> => {
             <span v-else-if="headerOutline" class="skeleton block h-2.5 w-14 shrink-0" aria-hidden="true"></span>
             <template v-if="reviewable">
                 <Icon v-if="changes.actionBusy.value" name="spinner" class="shrink-0 text-xs text-muted" spin />
-                <!--
-                    The page's one primary action: appearing only when something is pending is itself the "not landed"
-                    signal,
-                    replacing the toolbar's old pill.
-                -->
+<!-- The page's one primary action: appearing only when something is pending is itself the "not landed" signal, replacing the toolbar's old pill. -->
                 <Button
                     v-if="!mobile && changes.pending.value.length > 0 && canShip"
                     size="small"
@@ -425,11 +408,7 @@ const confirmDiscard = async (): Promise<void> => {
                     <Icon name="bars" class="text-xs" />
                 </button>
             </template>
-            <!--
-                The one press that costs a window switch, and says so: everything else here reads or settles work in
-                place, but
-                talking to the agent needs the chat pointed at its own daemon.
-            -->
+<!-- The one press that costs a window switch, and says so: everything else here reads or settles work in place. -->
             <Button
                 v-if="remoteName !== undefined"
                 size="small"
@@ -442,36 +421,22 @@ const confirmDiscard = async (): Promise<void> => {
             </Button>
         </div>
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
-        <!--
-            Chat|Changes gets its own row on a phone: crowding the header left too little width for the title.
-            `stretch`
-            fits a narrow-screen mode choice, costing ~36px to give the header its width back.
-        -->
+<!-- Chat|Changes gets its own row on a phone: crowding the header left too little width for the title. -->
         <!-- Local-only like the chat below; a remote conversation lives elsewhere, so mobile gets the full review. -->
         <div v-if="mobile && reviewable && localOnly" class="shrink-0 border-b border-line px-2 py-1.5">
             <SegmentedControl v-model="view" :options="viewOptions" stretch />
         </div>
         <!-- `:tabs="false"`: this screen's header names the conversation, as does the panel's own mobile header. -->
         <ChatPanel v-if="mobile && localOnly && (view === 'chat' || !reviewable)" :tabs="false" class="min-h-0 flex-1" />
-        <!--
-            Still asking about this id: the review's own shape stands in, since an empty pane reads as an agent that
-            changed nothing and the sentence below would be answering a question that hasn't come back yet. Claims the
-            branch for the whole wait, drawing nothing under the reveal delay.
-        -->
+<!-- Still asking about this id: the review's own shape stands in. -->
         <template v-else-if="looking">
             <AgentReviewOutline v-if="outline" label="Opening this agent's review…" />
         </template>
-        <!--
-            A remote agent with no review has three distinct reasons, told apart rather than collapsed into one guess:
-            drawing an empty review would falsely read as "this agent changed nothing".
-        -->
+<!-- A remote agent with no review has three distinct reasons, told apart rather than collapsed into one guess. -->
         <p v-else-if="remote && !reviewable" class="px-3.5 py-3 text-xs text-muted">
             {{ remoteUnavailable }}
         </p>
-        <!--
-            `chat` is the review asking to swap for the conversation, raised when it hands a land conflict back to the
-            agent; desktop never sees it since the docked chat is already on screen.
-        -->
+<!-- `chat` is the review asking to swap for the conversation, raised when it hands a land conflict back to the agent. -->
         <AgentReviewPanel
             v-else-if="agentId !== '' && reviewable"
             :agent-id="agentId"
@@ -483,10 +448,7 @@ const confirmDiscard = async (): Promise<void> => {
             @chat="view = 'chat'"
         />
 
-        <!--
-            Session menu: one body, anchored on desktop or a thumb sheet on a phone. `land-in-menu` tracks form factor,
-            since desktop has its own header Land button and a phone has no room for one.
-        -->
+<!-- Session menu: one body, anchored on desktop or a thumb sheet on a phone. -->
         <ResponsiveOverlay v-model="menuOpen" :anchor="menuAnchor ?? undefined" header="Session" side="bottom" cross="end" panel-class="w-72">
             <AgentSessionMenu
                 :agent-id="agentId"
@@ -511,11 +473,7 @@ const confirmDiscard = async (): Promise<void> => {
             <SessionIdentity v-if="fleetAgent?.branch !== undefined" :agent-id="agentId" :branch="fleetAgent.branch" />
         </ResponsiveOverlay>
 
-        <!--
-            The mid-write land's warning states the one real risk and both reasons it's recoverable, since a bare "are
-            you
-            sure" just teaches people to click through.
-        -->
+<!-- Mid-write land warns about the recoverable overwrite risk. -->
         <Modal :open="pendingForceLand" size="sm" header="Land while the agent is working?" @update:open="pendingForceLand = false">
             <p class="text-xs text-content">
                 The agent is still writing. Landing now takes its work exactly as it stands, which can mean half-finished changes: one side of a

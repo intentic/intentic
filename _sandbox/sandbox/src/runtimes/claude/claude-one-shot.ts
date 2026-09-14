@@ -65,8 +65,7 @@ const oneShotOptions = (run: OneShotRun, abort: AbortController): Options => {
                 ...(endpoint !== undefined ? { baseUrl: endpoint.baseUrl, authToken: endpoint.authToken, model: endpoint.model } : {}),
                 ...(oauthToken !== undefined ? { oauthToken } : {}),
             }),
-            // Tags the process with an owner: one still running after this call gave up is a leftover, and a common
-            // one.
+            // Stamp one-shot processes so abandoned children remain identifiable.
             ...workloadStamp(ONE_SHOT_OWNER),
         },
     };

@@ -95,9 +95,7 @@ describe(`apps extension, merged tests view`, () => {
     });
 });
 
-// The claim rule's three positions: a claiming view suppresses a fallback for its repo; an auxiliary view
-// sets `activation.repo` but leaves the fallback standing, adding a surface beside the main one rather than subsuming
-// it.
+// Auxiliary views add a surface beside the claiming view without replacing its fallback.
 describe(`auxiliary views`, () => {
     const register = (id: string, extra: Partial<ViewRegistration>): Disposable =>
         registerView(`test`, {
@@ -215,9 +213,7 @@ describe(`rail order`, () => {
         expect(rank(`acceptance`)).toBeLessThan(rank(`documentation`));
     });
 
-    // The regression that motivated the rewrite: `workflows` and `deployments` were added after the first table
-    // shipped and never listed, so they fell through below every core view. Every compiled-in rail view must appear in
-    // it.
+    // Keep every compiled-in rail view listed in RAIL_GROUPS.
     it(`ranks every compiled-in rail view, so none falls through to the end unnoticed`, () => {
         const listed = new Set(RAIL_GROUPS.flatMap((group) => group.items.map((item) => item.id)));
         const capabilities: CapabilityFacts[] = [

@@ -1,8 +1,4 @@
-<!--
-    Platform navigation for the approvals queue, bounded by how many platforms a workspace posts to, not by queue length. Narrows the queue rather
-    than replacing it — 'All approvals' stays the default. Each row shows one count, its size; whether something is waiting is the row's colour, not
-    a second number.
--->
+<!-- Platform navigation for the approvals queue, bounded by how many platforms a workspace posts to, not by queue length. -->
 <script lang="ts">
 import type { IconName } from "@intentic/extension-ui";
 
@@ -95,10 +91,7 @@ const scopeOf = (value: string | undefined): ApprovalScope | undefined => scopes
             </Row>
         </template>
 
-        <!--
-            The platform's own brand mark, the same object its posts lead with, so a slice and its posts are recognised together. The actions row has
-            no brand, so it wears a glyph instead.
-        -->
+        <!-- The platform's own brand mark, the same object its posts lead with, so a slice and its posts are recognised together. -->
         <template #row="{ item: scope }">
             <Row
                 :key="scope.key"

@@ -26,10 +26,7 @@ export const checkFixPrompt = (run: CommandRun): string =>
         run.output,
     );
 
-/* WHAT A CONTINUED ATTEMPT IS TOLD, as against the opening prompt above: the check ran again and here is its current
- * tail. The conversation already holds the situation and the ask; sending them a second time (which is what a second
- * press used to do) reads to the model as a fresh assignment and to the reader as a transcript that repeats itself.
- * A nudge says only what changed and asks it to carry on. */
+/* WHAT A CONTINUED ATTEMPT IS TOLD, as against the opening prompt above: the check ran again and here is its current tail. */
 export const checkNudgePrompt = (run: CommandRun): string =>
     proposal(
         `\`${run.command}\` ran again and ${ending(run)} The push is still blocked on it.`,

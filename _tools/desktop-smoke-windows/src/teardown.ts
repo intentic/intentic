@@ -35,19 +35,7 @@ const removeSquatters = async (harness: Harness, keep: string): Promise<void> =>
 const FOREGROUND_SETTLE_MS = 3_000;
 const FOREGROUND_POLL_MS = 250;
 
-/*
- * THE ONE LEFTOVER THAT IS NOT A FILE OR A CONTAINER: a lock screen still holding the keyboard.
- *
- * It cost two red releases. The display timed out, Windows put the lock screen up, and LockApp kept the
- * foreground afterwards — an invisible window no enumeration returns, which `SetForegroundWindow` cannot
- * outvote. Every run after that installed the app, fired the deep link, watched the confirmation open and then
- * could not answer it, and the log read as a product that had stopped handling links.
- *
- * Ending LockApp is not a way past a locked machine: a session Windows has secured stays secured, and the lock
- * screen is simply drawn again. It clears the stuck case, on a machine that is signed in, with nobody there.
- * Attempted whenever the lock screen holds the keyboard rather than only when this reads the session as signed
- * in, because the cost of being wrong is a redrawn lock screen and the doctor refusing the machine either way.
- */
+/* THE ONE LEFTOVER THAT IS NOT A FILE OR A CONTAINER: a lock screen still holding the keyboard. */
 const clearLockScreen = async (harness: Harness): Promise<void> => {
     const held = await sessionState().catch(() => undefined);
     if (held === undefined || !lockScreenHolds(held)) {

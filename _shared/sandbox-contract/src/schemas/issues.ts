@@ -74,8 +74,7 @@ export type IssueIngest = z.infer<typeof IssueIngestSchema>;
 export const IssueStatusSchema = z.enum(["open", "investigating", "resolved", "ignored"]);
 export type IssueStatus = z.infer<typeof IssueStatusSchema>;
 
-// One agent turn for this issue; the conversation id is the link, so nothing about the run itself needs storing beyond
-// it.
+// Store only the conversation id for an issue run.
 export const IssueRunSchema = z.object({
     conversationId: z.string().describe("The conversation this run became."),
     at: z.number().describe("When it started, in milliseconds."),

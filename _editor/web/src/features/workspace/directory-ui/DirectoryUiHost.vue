@@ -2,11 +2,7 @@
 import { onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { createDirectoryUiBridge, loadDirectoryUi } from "./useDirectoryUi";
 
-/* Renders a directory's own UI (its `.intentic/ui/index.html`) inside a locked-down iframe. The document is read
- * through the authed daemon file route and injected as `srcdoc`, so the frame is an opaque origin with NO access
- * to the parent DOM, cookies, or the sandbox tokens: `sandbox="allow-scripts"` alone (no allow-same-origin).
- * It reaches its sandbox only through the postMessage bridge's allowlist (directoryUiVerbs.ts). No new-tab escape
- * hatch: the raw source is always visible in the file tree. */
+/* Renders a directory's own UI (its `.intentic/ui/index.html`) inside a locked-down iframe. */
 
 const props = defineProps<{ dir: string }>();
 

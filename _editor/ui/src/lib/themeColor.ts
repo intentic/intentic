@@ -64,10 +64,7 @@ export interface Accent {
     readonly saturation: number;
 }
 
-/**
- * Hex for a hue and saturation. Saturation is a fraction of what that hue can hold, not an absolute chroma, since
- * the ceiling varies nearly threefold across the wheel.
- */
+/** Hex for a hue and saturation. */
 export const accentHex = ({ hue, saturation }: Accent): string =>
     oklchToHex({ L: ACCENT_LIGHTNESS, C: maxChroma(ACCENT_LIGHTNESS, hue) * Math.min(1, Math.max(0, saturation)), h: hue });
 
@@ -81,11 +78,7 @@ const readAccent = (hex: string): Accent | undefined => {
     return { hue: colour.h, saturation: ceiling === 0 ? 0 : Math.min(1, colour.C / ceiling) };
 };
 
-/**
- * Snaps a hex onto the accent's lightness, or its canonical form if already there. Exits early for an on-ladder
- * colour: rebuilding it via hue/saturation drifts by rounding each time, and repeated saves would ratchet it away
- * from its own swatch.
- */
+/** Snaps a hex onto the accent's lightness, or its canonical form if already there. */
 export const normalizeAccent = (hex: string): string => {
     const colour = hexToOklch(hex);
     if (colour === undefined) {
@@ -100,10 +93,7 @@ export const normalizeAccent = (hex: string): string => {
 
 const round = (value: number, places: number): number => Number(value.toFixed(places));
 
-/**
- * Every custom property one accent implies (both ramps), keyed exactly as primitive-colors.css names them, so
- * writing them on <html> re-resolves every semantic scale, role token and Tailwind utility in one assignment.
- */
+/** Every custom property one accent implies (both ramps), keyed exactly as primitive-colors.css names them. */
 export const themeVars = (hex: string): Readonly<Record<string, string>> => {
     const colour = hexToOklch(hex) ?? hexToOklch(DEFAULT_ACCENT)!;
     const scale = clampBetween(colour.C / REFERENCE_CHROMA, MIN_SCALE, MAX_SCALE);

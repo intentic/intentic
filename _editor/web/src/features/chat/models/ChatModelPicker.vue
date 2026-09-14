@@ -30,14 +30,7 @@ const tierMode = computed(() => settings.value?.autoTier ?? `shadow`);
 // Whether the shared block has content for this provider; needed before the footer renders its own padding.
 const { hasContent } = usePickerAccounts(provider, harness, model);
 
-/* THE TWO CHIPS ARE THE SHARED CONTROL (PickerRunSettings): the same questions about the same model, asked
- * under this chevron and under every "Fix with agent" caret, so they are one component rather than three
- * drawings of one idea that agreed on the day they were written.
- *
- * THE TRAILING `false` IS `effortRow`, and it is a fact about this surface rather than a preference: the
- * composer keeps a meter beside its model pill (ComposerEffort), an inch from the chevron that opens this
- * panel, so the row would be that same control twice. `hasContent` has to know, or a provider whose only
- * control is the meter would earn this footer a border around nothing. */
+/* THE TWO CHIPS ARE THE SHARED CONTROL (PickerRunSettings): the same questions about the same model. */
 const { hasContent: runSettingsShown } = usePickerRunSettings(provider, model, harness, thinking, effort, false);
 
 // One patch per press, straight through to the conversation: settings of the next turn, so the panel stays
@@ -131,30 +124,15 @@ const footerVisible = computed(
 <template>
     <ModelPicker :provider="provider" :model="model" :unpickable="unpickable" @pick="pick" @close="emit(`selected`)">
         <template #footer>
-            <!--
-                Session controls with no place in the shared list: who serves the turn, extended thinking, fast speed,
-                and this runtime's limits. Controls and their state only, no standing prose.
-            -->
-            <!--
-                Matches the model list's own px-3 rhythm; row groups counter it with -mx-3 so their tint still spans
-                the panel.
-            -->
-            <!--
-                Shrinks and scrolls instead of holding natural height, paired with the list's own floor, so a tall
-                footer and a short window shorten each other without either disappearing.
-            -->
-            <!--
-                bg-canvas marks the footer as the surface the list stands on, not more list; a rule alone read
-                unclearly on a tall picker.
-            -->
+<!-- Session controls with no place in the shared list: who serves the turn, extended thinking, fast speed, and this runtime's limits. -->
+<!-- Matches the model list's own px-3 rhythm; row groups counter it with -mx-3 so their tint still spans the panel. -->
+<!-- Shrinks and scrolls instead of holding natural height, paired with the list's own floor. -->
+<!-- bg-canvas marks the footer as the surface the list stands on, not more list; a rule alone read unclearly on a tall picker. -->
             <div
                 v-if="footerVisible"
                 class="scrollbar-thin flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2"
             >
-                <!--
-                    Account list and harness axis, shared with the shell's own picker. Writes straight through the
-                    conversation and leaves the panel open: these are session settings, not an answer awaited.
-                -->
+<!-- Account list and harness axis, shared with the shell's own picker. -->
                 <PickerAccounts
                     v-if="accountsShown"
                     :provider="provider"
@@ -168,13 +146,7 @@ const footerVisible = computed(
                     @navigate="emit(`selected`)"
                 />
 
-                <!--
-                    Extended thinking and speed: the shell picker's and the settings page's own chips, shared
-                    verbatim (PickerRunSettings), because a reader setting this turn's thinking here and a run's
-                    over there is answering the same question about the same model. Speed appears only when
-                    fastAllowed holds (Claude Code loop, first-party route, catalog's fast badge), which the
-                    shared component decides.
-                -->
+<!-- Extended thinking and speed: the shell picker's and the settings page's own chips, shared verbatim (PickerRunSettings). -->
                 <div v-if="runSettingsShown" class="flex flex-col gap-1">
                     <PickerRunSettings
                         :provider="provider"
@@ -186,18 +158,11 @@ const footerVisible = computed(
                         :effort-row="false"
                         @update="applyRun($event)"
                     />
-                    <!--
-                        Shown only when the harness's answer differs from the ask; a notice under a working control
-                        trains people to ignore notices. gap-1 inside the group, so it hangs off the chips it is
-                        about rather than standing as a fourth setting at the footer's own rhythm.
-                    -->
+<!-- Shown only when the harness's answer differs from the ask; a notice under a working control trains people to ignore notices. -->
                     <span v-if="fastSpeedNotice !== undefined" class="text-2xs text-subtle">{{ fastSpeedNotice }}</span>
                 </div>
 
-                <!--
-                    The toggle is the standing veto (tierHold), shown only where it could stop something. The line
-                    below reports the judge's last verdict; a settings link exits the feature entirely.
-                -->
+<!-- The toggle is the standing veto (tierHold), shown only where it could stop something. -->
                 <div v-if="tierHoldOffered || tierNotice !== undefined" class="flex flex-col gap-1">
                     <div v-if="tierHoldOffered" class="flex items-center justify-between gap-2">
                         <span class="text-2xs font-medium uppercase tracking-wide text-muted">Simple turns may run cheaper</span>
@@ -224,17 +189,11 @@ const footerVisible = computed(
                     </RouterLink>
                 </div>
 
-                <!--
-                    One row (label-left/control-right), the list itself behind a hover card. The count shows how much
-                    there is to read without hovering, distinguishing nothing-to-disclose from plenty at a glance.
-                -->
+<!-- One row (label-left/control-right), the list itself behind a hover card. -->
                 <div v-if="limitations.length > 0" class="flex items-center justify-between gap-2">
                     <span class="text-2xs font-medium uppercase tracking-wide text-muted">Not available here</span>
                     <InfoHint label="What isn't available here" :text="`${limitations.length}`" class="shrink-0">
-                        <!--
-                            States its own heading, since the card teleports to the tooltip tier and may land clear of
-                            the row that raised it.
-                        -->
+<!-- States its own heading, since the card teleports to the tooltip tier and may land clear of the row that raised it. -->
                         <span class="block text-xs font-medium text-content">Not available here</span>
                         <ul class="mt-1 flex flex-col gap-1 text-xs">
                             <li v-for="limit in limitations" :key="limit" class="flex items-start gap-1.5">

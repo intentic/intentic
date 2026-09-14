@@ -1,7 +1,4 @@
-<!--
-    The orientation strip atop a document: a handful of unrelated counts, deliberately not a chart, since unrelated measures share no axis. Values
-    use proportional, not tabular, figures.
--->
+<!-- The orientation strip atop a document: a handful of unrelated counts, deliberately not a chart, since unrelated measures share no axis. -->
 <script setup lang="ts">
 import type { StatsFigureItem } from "../../markdown/figures.js";
 

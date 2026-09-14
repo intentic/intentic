@@ -51,9 +51,7 @@ test("the HTTP timeout is a minute past the gate's own hold", () => {
     expect(clientTimeoutMs(1800)).toBe(1860 * 1_000);
 });
 
-/* THE HAND VALIDATOR AGAINST THE CONTRACT: the one test that pays for this package having no dependencies.
- * Whatever GateVerdictSchema accepts, readVerdict must accept; if the wire shape ever moves, this is the
- * build that goes red instead of somebody's pipeline going blind. */
+/* THE HAND VALIDATOR AGAINST THE CONTRACT: the one test that pays for this package having no dependencies. */
 test("readVerdict agrees with the contract's own schema", () => {
     const verdicts = [
         { outcome: "pass", reason: 'verdict is "pass".', runId: "run-1", value: "pass" },

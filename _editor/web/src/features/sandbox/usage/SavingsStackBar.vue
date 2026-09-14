@@ -32,10 +32,7 @@ const tooltipFor = (label: string, tokens: number): string => `${label} · ~${fo
             />
         </div>
 
-        <!--
-            Only the ends are labelled, the two numbers the bar claims. The arrow rides the right label rather than
-            sitting mid-card as a third thing.
-        -->
+<!-- Only the ends are labelled, the two numbers the bar claims. -->
         <div class="flex items-baseline justify-between gap-2 text-2xs tabular-nums text-subtle">
             <span>~{{ formatCompact(composition.rawTokens) }} raw</span>
             <span><span aria-hidden="true">→ </span>~{{ formatCompact(reached?.tokens ?? 0) }} reached the assistant</span>
@@ -55,11 +52,7 @@ const tooltipFor = (label: string, tokens: number): string => `${label} · ~${fo
             </li>
         </ul>
 
-        <!--
-            Cost already inside the emitted total, said out loud (it's what makes trimming reversible via
-            `retrieve-output`); netting it off silently would overstate the saving. Why it's worth paying is in the hint; that it's paid stays on the
-            card.
-        -->
+        <!-- The displayed total already includes retrievable output cost. -->
         <p v-if="composition.footerTokens > 0" class="text-2xs text-subtle">
             Includes ~{{ formatCompact(composition.footerTokens) }} tokens of retrieval footers added back.
         </p>

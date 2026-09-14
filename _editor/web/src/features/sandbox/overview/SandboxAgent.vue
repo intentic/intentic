@@ -75,22 +75,13 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
 
 <template>
     <div class="flex flex-col gap-6">
-        <!--
-            No border under the strip: on mobile the hub draws its own bordered pill row above this one, and two bordered
-            strips would read as two controls.
-        -->
+<!-- No border under the strip: on mobile the hub draws its own bordered pill row above this one, and two bordered strips would read as two controls. -->
         <SegmentedControl v-model="section" :options="SECTIONS" aria-label="Agent settings category" />
 
-        <!--
-            Page-level so it sits above whichever category is showing; every control below is inert while the read is
-            pending or failed.
-        -->
+<!-- Page-level so it sits above whichever category is showing; every control below is inert while the read is pending or failed. -->
         <Notice v-if="settingsBlocked" :of="settingsBlocked" />
 
-        <!--
-            Daemon accepted the save but dropped a field; the control already reverted, so without this it looks like a
-            rejected input.
-        -->
+<!-- Daemon accepted the save but dropped a field; the control already reverted, so without this it looks like a rejected input. -->
         <Notice v-if="settingsDropped" tone="warning">{{ settingsDropped }}</Notice>
 
         <!-- Accounts first: every model choice below depends on a signed-in provider. -->
@@ -115,10 +106,7 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentSubagents />
         </template>
 
-        <!--
-            Whether anything judges, then what it judges against; the decision log sits last so it doesn't bury the controls
-            above it.
-        -->
+<!-- Whether anything judges, then what it judges against; the decision log sits last so it doesn't bury the controls above it. -->
         <template v-else-if="section === `safety`">
             <AgentSafetyJudge />
             <!-- Between the switch and the policy: what the judge is scoped to precedes the document it judges against. -->

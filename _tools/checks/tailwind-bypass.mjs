@@ -63,10 +63,7 @@ const closingBrace = (text, start) => {
     return text.length;
 };
 
-/**
- * Every class-attribute value in a file as `{ value, offset }`. Scans the whole text, not line by line, since a
- * `:class="[...]"` binding can span several lines.
- */
+/** Every class-attribute value in a file as `{ value, offset }`. */
 const classValues = (text) => {
     const found = [];
     CLASS_ATTR.lastIndex = 0;
@@ -87,10 +84,7 @@ const classValues = (text) => {
 
 const lineAt = (text, offset) => text.slice(0, offset).split(`\n`).length;
 
-/**
- * A comment line, so the pattern's own documentation (stack.ts's `bg-[#3b82f6]`, extensionSurface.test.ts's `w-[37px]`)
- * isn't reported as a violation of itself.
- */
+/** Matches comment lines so rule documentation is not reported as a violation. */
 const isComment = (line) => {
     const start = line.trim();
     return start.startsWith(`*`) || start.startsWith(`//`) || start.startsWith(`/*`);
@@ -107,10 +101,7 @@ const lineSpans = (text) => {
     return spans;
 };
 
-/**
- * In markup, a class lives only in an attribute, so that's the unit; in TypeScript there's no attribute to anchor on,
- * so the unit is the line, with comments dropped by hand.
- */
+/** In markup, a class lives only in an attribute, so that's the unit; in TypeScript there's no attribute to anchor on, so the unit is the line. */
 const scannable = (path, text) => (MARKUP.test(path) ? classValues(text) : lineSpans(text).filter((span) => !isComment(span.value)));
 
 const tracked = execFileSync(`git`, [`ls-files`, `-z`], { cwd: root, encoding: `utf8`, maxBuffer: 64 * 1024 * 1024 })

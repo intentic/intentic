@@ -1,7 +1,4 @@
-<!--
-    Design-system single-select replacing native <select>/PrimeVue Select: token-styled rows with icon/label/description/check, group headers, and a
-    filter box once the list is long. Opens in <ResponsiveOverlay> (anchored on desktop, a sheet on phone).
--->
+<!-- Design-system single-select replacing native <select>/PrimeVue Select: token-styled rows with icon/label/description/check, group headers. -->
 <script setup lang="ts" generic="T extends string">
 import { twMerge } from "tailwind-merge";
 import { computed, ref, useAttrs, useSlots } from "vue";
@@ -58,12 +55,7 @@ const passAttrs = computed(() => {
 const triggerClass = computed(() =>
     twMerge(
         `touch-target inline-flex cursor-pointer select-none items-center gap-2 transition-colors disabled:cursor-default`,
-        /* THE BORDERED TRIGGER IS THE FIELD, not a copy of it. This used to spell the recipe out
-         * (`rounded-md border border-line bg-canvas px-3 py-2 text-sm …`), which made <Picker> a second source
-         * of truth for what a field looks like — and it had already drifted: no disabled fade at the app's one
-         * opacity, no placeholder rule, and a focus state identical to its own hover. It wears `ui-field-box`
-         * now, so a picker sitting in a form row beside a text input is the same control by construction, down
-         * to the inset focus ring and the 16px mobile floor. */
+/* THE BORDERED TRIGGER IS THE FIELD, not a copy of it. */
         variant === `input`
             ? `ui-field-box`
             : `ui-off rounded-md px-1.5 py-0.5 text-xs font-medium text-content hover:bg-overlay focus:outline-none focus-visible:bg-overlay`,
@@ -124,18 +116,12 @@ const applyPick = (option: PickerOption<T>): void => {
     >
         <template v-if="selected !== undefined">
             <slot name="icon" :option="selected">
-                <!--
-                    A face, not a glyph, in the closed trigger too, since it's the only thing shown once the panel
-                    shuts. Sized to match the trigger's row height, smaller than a panel row's face.
-                -->
+<!-- A face, not a glyph, in the closed trigger too, since it's the only thing shown once the panel shuts. -->
                 <PersonaFace v-if="selected.face !== undefined" :persona="selected.face" :size="variant === `ghost` ? 16 : 20" />
                 <Icon v-else-if="selected.icon !== undefined" :name="selected.icon" class="shrink-0 text-sm text-muted" aria-hidden="true" />
             </slot>
         </template>
-        <!--
-            Tooltip fires only on overflow; a native `title` just repeated visible text and stayed silent when
-            truncated.
-        -->
+<!-- Tooltip fires only on overflow; a native `title` just repeated visible text and stayed silent when truncated. -->
         <span
             class="min-w-0 flex-1 truncate text-left"
             :class="[selected === undefined ? `text-subtle` : ``, selected?.mono === true ? `font-mono` : ``, labelClass]"

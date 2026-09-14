@@ -1,9 +1,6 @@
 import { mkdir, stat, writeFile } from "node:fs/promises";
 
-/* The up marker: touched when a tunnel comes up, removed when it goes down, its mtime the "up since" a card
- * shows. ADVISORY ONLY, and both kinds hold to it: liveness is always read off the machine by the driver's
- * probe, so a tunnel raised outside the daemon shows no uptime rather than a wrong state, and a missing marker
- * costs a label, never a fact. */
+/* The up marker: touched when a tunnel comes up, removed when it goes down, its mtime the "up since" a card shows. */
 
 export const upSince = async (marker: string): Promise<number | undefined> => (await stat(marker).catch(() => undefined))?.mtimeMs;
 

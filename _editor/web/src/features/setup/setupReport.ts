@@ -1,9 +1,6 @@
 import type { SetupReport } from "@intentic/api-contract";
 
-/* The machine's setup report, read for step 3's card. One decision, kept pure beside the page (the
- * setupCompose.ts pattern): a report is either a DIAGNOSIS, failures the card renders verbatim, problem and
- * fix per check, or NARRATION, the healthy run's current stage in the user's words. Never both: a spinner
- * narrating progress beside "here is what broke" is the page contradicting itself. */
+/* The machine's setup report, read for step 3's card. */
 
 // The connect flow's real phases (SetupReportSchema.stage), said the way the wait reads them. The pull
 // carries its own expectation-setting because it is the one honest multi-minute stage.
