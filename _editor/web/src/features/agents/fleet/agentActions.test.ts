@@ -37,10 +37,14 @@ vi.mock("../../chat/run/useChat", () => ({
 }));
 // The strip the fleet reads at module load; empty so no draft card competes with the registry rows under test.
 vi.mock("../../chat/panel/useChat-strip", () => ({ chatStrip: { value: { active: undefined, panes: [], tabs: [] } } }));
+// The draft startAgent pins and summons, one per test so its pins can be read back.
+const draft = vi.hoisted(() => ({
+    value: { conversationId: `c1`, actsAs: { value: undefined as string | undefined }, startIn: { value: undefined as string | undefined } },
+}));
 vi.mock("../../chat/panel/useChat-reveal", () => ({
     // `actsAs` is on the stub since startAgent pins the draft before summoning it, including to `undefined` when
     // pressing Anyone un-pins a persona.
-    draftConversation: () => ({ conversationId: `c1`, actsAs: { value: undefined }, startIn: { value: undefined }, enqueue: (prompt: string) => chat.enqueued.push(prompt) }),
+    draftConversation: () => ({ ...draft.value, enqueue: (prompt: string) => chat.enqueued.push(prompt) }),
     agentTabOf: () => ({}),
 }));
 // The summons channel is the seam startAgent shows the new tab through; this suite has no second window to receive it.
@@ -60,6 +64,7 @@ vi.mock("../../sandbox/client/sandboxSession", () => ({
 }));
 
 const { askAgentToResolve, landAgent, startAgent } = await import("./agentActions");
+const { setProjectScope } = await import("../../../app/projectScope");
 // The board's own roster, which the errand reads the agent's settings off; written per test, cleared with the tabs.
 const { registry } = await import("./useAgents-registry");
 
@@ -80,6 +85,8 @@ afterEach(() => {
     chat.conversations.value = [];
     chat.enqueued.length = 0;
     registry.value = [];
+    draft.value = { conversationId: `c1`, actsAs: { value: undefined }, startIn: { value: undefined } };
+    setProjectScope(undefined);
     vi.unstubAllGlobals();
 });
 
@@ -191,6 +198,29 @@ it("starts a fresh agent already running the task it was handed", () => {
 it("still starts an empty one when there is nothing to say", () => {
     startAgent();
     expect(chat.enqueued).toEqual([]);
+});
+
+// Under a project, a press naming no persona wears the project's own card (projectPersona.ts), made on the spot when
+// the list lacks it; the prompt goes only once the card exists, or the daemon would answer an unknown persona with an
+// ordinary chat.
+it("starts an agent under the open project wearing the project's own persona, made first if missing", async () => {
+    setProjectScope(`web`);
+    stubFetch({ personas: [], connected: [] });
+    startAgent(`Fix the footer.`);
+    expect(draft.value.actsAs.value).toBe(`project-web`);
+    expect(draft.value.startIn.value).toBe(`web`);
+    await vi.waitFor(() => expect(chat.enqueued).toEqual([`Fix the footer.`]));
+    const posted = sent.find((request) => request.method === `POST` && request.url === `https://daemon.test/personas`);
+    expect(await posted?.json()).toMatchObject({ id: `project-web`, workspace: { startIn: `web`, folders: [`web`] }, context: { repos: [`web`] } });
+});
+
+it("keeps the persona a press named over the project's own", () => {
+    setProjectScope(`web`);
+    stubFetch();
+    startAgent(undefined, `maya-support`);
+    expect(draft.value.actsAs.value).toBe(`maya-support`);
+    expect(draft.value.startIn.value).toBe(`web`);
+    expect(sent).toEqual([]);
 });
 
 // A card whose conversation is gone has nothing to send to; inventing one would start a turn on the wrong agent.

@@ -41,6 +41,11 @@ Capability-driven, not repo-driven: the tile surfaces when a github or gitlab co
 from the public capability facts. Which repos actually map to CI projects is the daemon's answer, rendered
 inside the view rather than gating the tile.
 
+**It narrows to the open project itself.** Runs and repositories come from the CI routes, not from
+`api.workspace.repos()`, so the shell's project scope cannot reach them on its own: the view filters both with
+`api.workspace.inProject` and wears the shared `ProjectChip`, which says how many repositories it hid and clears
+the scope.
+
 ## Conventions & gotchas
 
 - QUEUED IS ITS OWN STATE, not a flavour of running. The contract's `PipelineStatus` used to collapse every

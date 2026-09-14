@@ -19,6 +19,9 @@ export interface Activation {
     readonly title: string;
     // An icon name from the host's icon set; absent renders the title's initials.
     readonly icon?: string | undefined;
+    // One or two characters drawn in place of the icon, for a tile that stands for one named thing (the open
+    // project); wins over `icon` while set. Longer strings are cut to two.
+    readonly monogram?: string | undefined;
     // Absent for capability-driven elements, which have no repo to root at.
     readonly repo?: string | undefined;
     readonly props?: Record<string, unknown> | undefined;
@@ -207,6 +210,9 @@ export interface IntenticApi {
         project(): string | undefined;
         setProject(project: string | undefined): void;
         onDidChangeProject(listener: (project: string | undefined) => void): Disposable;
+        // Whether a workspace-relative path is in view: true while no project is open, else only for the project
+        // and what is inside it. What a view keyed by repository filters its own rows by; reactive inside a computed.
+        inProject(path: string): boolean;
         // Fires when a ref moves in a repo (commit, branch, checkout, rebase) — a change `.git` watching can't
         // see as a file path. `repos` are root-relative ids.
         onDidChangeRefs(listener: (repos: readonly string[]) => void): Disposable;

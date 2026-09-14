@@ -99,6 +99,7 @@ export {
     PersonaFace,
     type PersonaLike,
     Picker,
+    ProjectChip,
     type PickerGroup,
     type PickerOption,
     type PickerOptions,

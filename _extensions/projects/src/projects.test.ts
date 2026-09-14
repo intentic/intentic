@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { freeProjectName, previewPath, projectIds, slugOf, summaryOf } from "./projects.js";
+import { freeProjectName, monogramOf, previewPath, projectIds, slugOf, summaryOf } from "./projects.js";
 
 describe(`which repositories are projects`, () => {
     it(`lists every repository but the workspace's own, in name order`, () => {
@@ -31,6 +31,14 @@ describe(`naming a new project`, () => {
         expect(slugOf(`  My Bakery Site! `)).toBe(`my-bakery-site`);
         expect(slugOf(`--weird..name--`)).toBe(`weird..name`);
         expect(slugOf(`###`)).toBe(``);
+    });
+});
+
+describe(`the tile's monogram`, () => {
+    it(`is the first two letters of the project's own name, not its parent folder's`, () => {
+        expect(monogramOf(`web`)).toBe(`we`);
+        expect(monogramOf(`tools/cli`)).toBe(`cl`);
+        expect(monogramOf(`a`)).toBe(`a`);
     });
 });
 

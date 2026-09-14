@@ -87,26 +87,26 @@ const KNOW: RailGroup = { id: `know`, label: `Know`, items: [signal(`documentati
 
 // One table per audience; only the Work band differs. Preview is `always` for being visited constantly, not for its
 // badge, which counts an inventory, not a claim.
-// The Projects tile is seated for everyone: it is where the project scope (app/projectScope.ts) is read and changed,
-// and a scope with no seat would be a mode with no indicator. For a developer it sits beside the file tree; for a
-// maker it takes the tree's seat and the tree stands in for it.
+// The Projects tile is seated for everyone and heads the rail: it is where the project scope (app/projectScope.ts) is
+// read and changed, and every tile below it is narrowed by what it says, so it sits above them the way a switcher
+// sits above what it switches. For a maker the file tree stands in for it when the extension is off.
 const RAIL_GROUPS_BY_AUDIENCE: Record<Audience, readonly RailGroup[]> = {
     developer: [
         {
             id: `work`,
             label: `Work`,
-            items: [always(`chat`), always(`agents`), always(PROJECTS_VIEW_ID), always(WORKSPACE_VIEW_ID), always(`preview`)],
+            items: [always(PROJECTS_VIEW_ID), always(`chat`), always(`agents`), always(WORKSPACE_VIEW_ID), always(`preview`)],
         },
         JUDGE,
         SETUP,
         KNOW,
     ],
-    // The file tree keeps its rank beside the home it stands in for, so a maker who opens it finds it in the same seat.
+    // The file tree keeps a rank of its own below the work loop, so a maker who opens it finds it in the same seat.
     maker: [
         {
             id: `work`,
             label: `Work`,
-            items: [always(`chat`), always(`agents`), always(PROJECTS_VIEW_ID, WORKSPACE_VIEW_ID), signal(WORKSPACE_VIEW_ID), always(`preview`)],
+            items: [always(PROJECTS_VIEW_ID, WORKSPACE_VIEW_ID), always(`chat`), always(`agents`), signal(WORKSPACE_VIEW_ID), always(`preview`)],
         },
         JUDGE,
         SETUP,

@@ -13,6 +13,7 @@ import {
     SegmentedControl,
     SplitView,
     type AgentRunChoice,
+    ProjectChip,
 } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { acknowledge } from "./attention";
@@ -31,7 +32,11 @@ import { useRuns } from "./useRuns";
 const { repo: pinned } = defineProps<{ repo?: string }>();
 
 const api = host();
-const { byRepo, error, isPending, measuring, refresh, refreshProbe, snooze } = useChores();
+const { byRepo: allByRepo, error, isPending, measuring, refresh, refreshProbe, snooze } = useChores();
+// The open project's repositories only (api.workspace.inProject): the report comes from the chores routes, not from
+// repos(), so the view narrows it itself and says on its chip how many repositories it put out of sight.
+const byRepo = computed(() => allByRepo.value.filter((group) => api.workspace.inProject(group.repo)));
+const projectHidden = computed(() => allByRepo.value.length - byRepo.value.length);
 const { latestByChore, start, promote } = useRuns();
 
 type Filter = "attention" | "all";
@@ -195,6 +200,8 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
     <!-- `scroll="page"`: this body is a report read top-down, not a clamped panel with its own scroller. -->
     <SplitView title="Maintenance" scroll="page" :scroll-key="`${repo ?? ``}/${filter}`">
         <template #actions>
+            <!-- The open project, and the way out of it: the same scope every other area narrows by. -->
+            <ProjectChip :project="api.workspace.project()" :hidden="projectHidden" noun="repositories" @clear="api.workspace.setProject(undefined)" />
             <SegmentedControl
                 v-model="filter"
                 size="xs"

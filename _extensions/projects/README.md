@@ -22,11 +22,11 @@ The workspace's repositories as a dashboard of tiles: open one as its own tree, 
 
 ## How it fits
 
-**The place the project scope is read and changed.** The tile is seated for everyone; a maker has it where a
-developer has the file tree ([docs/design/maker-audience-design.md](../../docs/design/maker-audience-design.md),
-section 12). The scope itself is the shell's (`app/projectScope.ts`): this extension only sets it and says which
-project is open, on its tile's title and mark. Nothing here duplicates the Workspace, which roots itself at the
-open project and keeps the project's history in its own Restore points panel.
+**The place the project scope is read and changed.** The tile heads the rail for everyone, above what its scope
+narrows ([docs/design/maker-audience-design.md](../../docs/design/maker-audience-design.md), section 12). The
+scope itself is the shell's (`app/projectScope.ts`): this extension only sets it and says which project is open,
+on its tile's title and the monogram the tile wears in place of its glyph. Nothing here duplicates the Workspace,
+which roots itself at the open project and keeps the project's history in its own Restore points panel.
 
 **It reads and makes repositories, and does nothing else.** `GET /workspace/repos` lists them, `GET /workspace/file`
 reads a README, `POST /workspace/repos/new` makes one. The daemon does the making: a folder, `git init` with its git

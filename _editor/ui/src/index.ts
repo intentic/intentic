@@ -93,6 +93,8 @@ export { default as SandboxResourcesDialog } from "./components/sandbox/SandboxR
 export { type EngineFacts, type ResourcesAsk } from "./components/sandbox/sandboxResources.js";
 // Verb row (buttons, order, labels, which one is destructive) for one sandbox's line; shared by the desktop
 // manager and the web Devices tab.
+// The open project as a chip with its way out; one control for every surface the project scope narrows.
+export { default as ProjectChip } from "./components/sandbox/ProjectChip.vue";
 export { default as SandboxVerbs } from "./components/sandbox/SandboxVerbs.vue";
 export {
     DESTRUCTIVE_VERB,

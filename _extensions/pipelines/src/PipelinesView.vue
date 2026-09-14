@@ -15,6 +15,7 @@ import {
     useNarrow,
     type AgentRunChoice,
     type TallyItem,
+    ProjectChip,
 } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { branchFixes, branchKey, fixesByRun } from "./ciFixes";
@@ -33,7 +34,12 @@ import { usePipelines } from "./usePipelines";
 // stage circle pops job details; the chevron expands the full job flow.
 
 const api = host();
-const { repos, runs, error, isPending, rerun, cancel, fix } = usePipelines();
+const { repos: allRepos, runs: allRuns, error, isPending, rerun, cancel, fix } = usePipelines();
+// The open project's rows only (api.workspace.inProject): runs come from the CI routes, not from repos(), so the view
+// narrows them itself and says on its chip how many repositories it put out of sight.
+const repos = computed(() => allRepos.value.filter((repo) => api.workspace.inProject(repo.repo)));
+const runs = computed(() => allRuns.value.filter((run) => api.workspace.inProject(run.repo)));
+const projectHidden = computed(() => allRepos.value.length - repos.value.length);
 
 // Repository scope lives in the URL query, not a mirrored ref, so it's linkable and Back/Forward work. A repo the
 // workspace no longer maps resolves against current standings and falls back to the whole board.
@@ -200,6 +206,8 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
         </template>
 
         <template #actions>
+            <!-- The open project, and the way out of it: the same scope every other area narrows by. -->
+            <ProjectChip :project="api.workspace.project()" :hidden="projectHidden" noun="repositories" @clear="api.workspace.setProject(undefined)" />
             <!-- Only where there's a choice: over one repository this would point at the only thing on screen. -->
             <Picker
                 v-if="repos.length > 1"

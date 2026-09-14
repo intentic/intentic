@@ -23,6 +23,15 @@ export function useApprovalsTile(): ComputedRef<ApprovalsTile | undefined> {
     });
 }
 
+/** What the Projects tile wears while a project is open (Activation.monogram), so the phone's home tab matches the rail. */
+export function useProjectsMonogram(): ComputedRef<string | undefined> {
+    const { panels } = usePanels();
+    const { capabilities } = useCapabilities();
+    return computed(
+        () => detectActivations(panels.value, capabilities.value).find(({ extension }) => extension.id === PROJECTS_VIEW_ID)?.activation.monogram,
+    );
+}
+
 // The four tab destinations as paths, no query: this answers whether the reader is on a tab's own screen, and
 // both workspace tabs collapse to `/workspace`. The home tab is the Project page for a maker who has it.
 export function useTabRootPaths(): ComputedRef<readonly string[]> {

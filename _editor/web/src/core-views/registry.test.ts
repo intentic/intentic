@@ -246,10 +246,11 @@ describe(`rail order`, () => {
     // The top of the column is the scarce thing. Checked on railRank rather than a detected run, since two of
     // the four ids are core shell tiles that contribute no activation.
     it(`keeps the busy permanent run adjacent, with nothing seated between them`, () => {
-        // Start a turn, pick the project, read what it did: the loop the rail serves. Approvals/Workflows used to sit
-        // between them.
-        expect(railRank(`projects`)).toBe(railRank(`agents`) + 1);
-        expect(railRank(`workspace`)).toBe(railRank(`projects`) + 1);
+        // Pick the project, start a turn, read what it did: the loop the rail serves, with the scope that narrows the
+        // rest at its head. Approvals/Workflows used to sit between them.
+        expect(railRank(`chat`)).toBe(railRank(`projects`) + 1);
+        expect(railRank(`agents`)).toBe(railRank(`chat`) + 1);
+        expect(railRank(`workspace`)).toBe(railRank(`agents`) + 1);
     });
 
     it(`seats configuration below everything that lights up`, () => {
@@ -381,11 +382,11 @@ describe(`rail seats`, () => {
 
     it(`spends permanent seats on the work loop and nowhere else`, () => {
         // The count is the point: five fits above the fold, room for what lights up. A sixth means editing this. The
-        // fifth is the project scope's seat, the only place the shell says which project it is looking at.
+        // first is the project scope's seat, the only place the shell says which project it is looking at.
         const permanent = RAIL_GROUPS.flatMap((group) => group.items)
             .filter((item) => item.seat === `always`)
             .map((item) => item.id);
-        expect(permanent).toEqual([`chat`, `agents`, `projects`, `workspace`, `preview`]);
+        expect(permanent).toEqual([`projects`, `chat`, `agents`, `workspace`, `preview`]);
     });
 });
 
@@ -447,8 +448,9 @@ describe(`the maker's rail`, () => {
             expect(seatPolicy(`projects`)).toBe(`always`);
             expect(seatPolicy(`workspace`)).toBe(`signal`);
             expect(homeViewId()).toBe(`projects`);
-            expect(railRank(`projects`)).toBe(railRank(`agents`) + 1);
-            expect(railRank(`workspace`)).toBe(railRank(`projects`) + 1);
+            expect(railRank(`chat`)).toBe(railRank(`projects`) + 1);
+            expect(railRank(`agents`)).toBe(railRank(`chat`) + 1);
+            expect(railRank(`workspace`)).toBe(railRank(`agents`) + 1);
             expect(tabBarIds()).toContain(`projects`);
         } finally {
             registered.dispose();
@@ -473,6 +475,6 @@ describe(`the maker's rail`, () => {
             .flatMap((group) => group.items)
             .filter((item) => item.seat === `always`)
             .map((item) => item.id);
-        expect(permanent).toEqual([`chat`, `agents`, `projects`, `preview`]);
+        expect(permanent).toEqual([`projects`, `chat`, `agents`, `preview`]);
     });
 });

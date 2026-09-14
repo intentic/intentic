@@ -27,7 +27,10 @@ The chore definitions themselves are **not** here: they are in `@intentic/sandbo
 because both the daemon and the browser must agree on what a chore is. This package is the surface.
 
 **One rail tile, workspace-wide.** Workspace-wide because the question is "what is this workspace owed", answered
-across repos, rather than one tile per repository fragmenting one list into five.
+across repos, rather than one tile per repository fragmenting one list into five. Under the shell's project
+scope the list narrows to the open project's repositories (`api.workspace.inProject`, since the report comes
+from the chores routes rather than `repos()`), and the shared `ProjectChip` says how many it hid; the rail
+badge stays workspace-wide so a chore owed elsewhere is never missed.
 
 It activates on ANY repository and deliberately not on evidence of a problem: gating the AREA on something being
 due would mean the first time an owner sees this surface is the first time it has bad news.

@@ -177,7 +177,7 @@ watch(
 // The always-present tiles plus evidence-driven Preview; extension tiles are added separately below,
 // one per activation. Sandbox management lives behind the switcher chip, not a rail tile.
 const fixedTiles = computed<readonly AreaTile[]>(() => [
-    // First in the Work band; unbadged, since the Agents tile below carries the debt (see chatTileSeated).
+    // Below the Projects tile in the Work band; unbadged, since the Agents tile below carries the debt (see chatTileSeated).
     ...(chatTileSeated.value
         ? [
               {
@@ -254,6 +254,7 @@ const extensionTile = (active: ActiveExtension): AreaTile => {
         to: extensionPath(extension, activation),
         label: activation.title,
         ...(activation.icon === undefined ? {} : { icon: activation.icon as IconName }),
+        ...(activation.monogram === undefined ? {} : { monogram: activation.monogram }),
         ...(badge === undefined ? {} : { badge }),
     };
 };
@@ -483,7 +484,7 @@ useKeybindings();
                             class="icon-rail-tile flex items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40"
                             aria-hidden="true"
                         >
-                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-[1.375rem]" />
+                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="text-[1.375rem]" />
                         </span>
                         <RouterLink
                             v-else
@@ -494,7 +495,7 @@ useKeybindings();
                             v-tooltip.right="railTileLabel(tile)"
                             @contextmenu="onTileContextMenu(tile, $event)"
                         >
-                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-[1.375rem]" />
+                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="text-[1.375rem]" />
 <!-- One badge for every tile, core or extension: see AreaTile.badge. -->
                             <ViewBadgeChip :badge="tile.badge" class="absolute right-0.5 top-0.5 text-[0.6rem]" />
 <!-- Work in flight behind this tile (ViewBadge.running): its own corner, never the chip. -->
@@ -600,7 +601,7 @@ useKeybindings();
                 :aria-label="tileLabel(tile)"
                 v-tooltip.right="tileLabel(tile)"
             >
-                <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" class="text-[1.375rem]" />
+                <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="text-[1.375rem]" />
                 <!-- No tooltip on the badge, for the same reason as the navigation tiles above. -->
                 <ViewBadgeChip :badge="tile.badge" class="absolute right-0.5 top-0.5 text-[0.6rem]" />
                 <!-- Same running mark as a navigation tile, so live work reads identically in both clusters. -->

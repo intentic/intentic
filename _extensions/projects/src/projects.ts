@@ -48,6 +48,10 @@ export const slugOf = (typed: string): string =>
         .replace(/^[^a-z0-9]+/, ``)
         .replace(/-+$/, ``);
 
+// What the rail tile wears while a project is open: the first two letters of its name (the last path segment, so
+// `tools/cli` reads CL), upper-cased by the rail. Two letters, not initials: a name is read from its start.
+export const monogramOf = (project: string): string => (project.split(`/`).pop() ?? project).slice(0, 2);
+
 // Where a tile opens once the project is the shell's scope: the workspace, which roots itself at the open project.
 export const WORKSPACE_PATH = `/workspace`;
 

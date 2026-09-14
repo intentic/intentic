@@ -4,7 +4,7 @@ import { extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-manifest
 import { useDevice, useTheme } from "@intentic/ui";
 import { type AgentHarness, type AgentProvider, type ExtensionSummary, sandboxRequestFor, WorkspaceFileSchema } from "@intentic/sandbox-contract";
 import { watch } from "vue";
-import { projectScope, setProjectScope } from "../app/projectScope";
+import { projectScope, setProjectScope, withinScope } from "../app/projectScope";
 import { useAudience } from "../app/useAudience";
 import { effortLabelOf } from "../features/chat/models/effortScale";
 import { modelLabelFor } from "../features/chat/accounts/providerCatalog";
@@ -331,6 +331,7 @@ export const createExtensionApi = (
                 const stop = watch(projectScope, (value) => listener(value));
                 return track({ dispose: () => stop() });
             },
+            inProject: (path) => withinScope(path),
             onDidChangeRefs: (listener) => track(onRefsChanged(listener)),
             // Scoped to the approved manifest's paths, so an extension declaring nothing is never woken. An empty
             // declaration still returns a live Disposable, since sandboxPoll subscribes unconditionally.

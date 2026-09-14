@@ -37,11 +37,12 @@ describe(`the projects extension`, () => {
         expect(view?.badge?.({ key: `projects`, title: `Projects` })).toBeUndefined();
     });
 
-    it(`names the open project on its tile and marks it, so the scope has a visible cause`, () => {
+    it(`names the open project on its tile and wears its monogram, so the scope has a visible cause`, () => {
         const { views } = capture(`shop`);
         const view = views.find((candidate) => candidate.id === `projects`);
-        expect(view?.detect([], [])[0]?.title).toBe(`Projects · shop`);
-        expect(view?.badge?.({ key: `projects`, title: `Projects` })).toMatchObject({ mark: `folder-open`, tone: `neutral` });
+        expect(view?.detect([], [])[0]).toMatchObject({ title: `Projects · shop`, monogram: `sh` });
+        // A tooltip only: the monogram already says a scope is on, so the corner carries no second mark.
+        expect(view?.badge?.({ key: `projects`, title: `Projects` })).toEqual({ tooltip: `looking at shop only` });
     });
 
     it(`opens the dashboard from the palette`, () => {

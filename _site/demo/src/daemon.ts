@@ -8,6 +8,7 @@ import {
     ChoreLedgerWriteSchema,
     type CiJobsResponse,
     type Info,
+    type Persona,
     type Model,
     type OauthAccount,
     type OauthAccountList,
@@ -436,20 +437,10 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     // The demo knowledge base already started, so this only ever answers nothing to write.
     [`POST`, `${KNOWLEDGE_BASE}/seed`, () => json({ written: [] })],
     [`GET`, `/capabilities`, () => json({ capabilities: demoCapabilities() })],
-    // The persona picker's data; three personas make the point without turning the column into a directory.
-    [
-        `GET`,
-        `/personas`,
-        () =>
-            json({
-                personas: [
-                    { id: `maya-support`, label: `Maya · Customer Care`, capabilities: [`gmail-support`, `intercom`], workspace: { startIn: `web` } },
-                    { id: `owen-growth`, label: `Owen · Growth`, capabilities: [`x-brand`, `linkedin`] },
-                    { id: `priya-ops`, label: `Priya · Operations`, capabilities: [`github`, `stripe-ops`] },
-                ],
-                connected: [`gmail-support`, `intercom`, `x-brand`, `linkedin`, `github`, `stripe-ops`],
-            }),
-    ],
+    // The persona picker's data; three personas make the point without turning the column into a directory. A save
+    // is real (the fixture is the store), so the project persona New agent makes under a scope shows in the picker.
+    [`GET`, `/personas`, () => json({ personas: demoPersonas, connected: [`gmail-support`, `intercom`, `x-brand`, `linkedin`, `github`, `stripe-ops`] })],
+    [`POST`, `/personas`, savePersonaRoute],
     // Every registry URL answers the same joined data; the real route would clone a repo and read two JSON
     // files from it.
     [`POST`, `/capabilities/marketplace`, () => json(demoRegistry())],
@@ -710,6 +701,26 @@ function ciJobsRoute({ request }: RouteContext): Promise<Response> {
 
 function saveAutomationRoute({ request }: RouteContext): Promise<Response> {
     return request.json().then((body) => okAfter(() => saveAutomation(Date.now(), body as Automation)));
+}
+
+// Upsert by id, as the daemon's `/personas` does; the list is the store, so a saved card is in the next read.
+const demoPersonas: Persona[] = [
+    { id: `maya-support`, label: `Maya · Customer Care`, capabilities: [`gmail-support`, `intercom`], workspace: { startIn: `web` } },
+    { id: `owen-growth`, label: `Owen · Growth`, capabilities: [`x-brand`, `linkedin`] },
+    { id: `priya-ops`, label: `Priya · Operations`, capabilities: [`github`, `stripe-ops`] },
+];
+function savePersonaRoute({ request }: RouteContext): Promise<Response> {
+    return request.json().then((body) =>
+        okAfter(() => {
+            const card = body as Persona;
+            const index = demoPersonas.findIndex((persona) => persona.id === card.id);
+            if (index === -1) {
+                demoPersonas.push(card);
+            } else {
+                demoPersonas[index] = card;
+            }
+        }),
+    );
 }
 
 // A missing path answers "nothing there" in a 200 body, not a 404; several surfaces read a file just to

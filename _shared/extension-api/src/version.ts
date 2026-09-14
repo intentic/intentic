@@ -80,4 +80,9 @@
 // repository, chosen once for the whole shell, that `repos()` is already narrowed to; the dashboard that sets it
 // (`ext-projects`) is an extension, so the setter had to be on the API. Additive: a view that never asks sees the
 // narrowed `repos()` and nothing else changes for it.
-export const extensionApiVersion = "2.13.0";
+// 2.14.0 adds `api.workspace.inProject(path)` and `Activation.monogram`. The first is the scope as a predicate: the
+// views that list rows from their own daemon routes (pipelines, maintenance, deployments) never went through `repos()`
+// and so never narrowed, and each was about to reimplement "is this path under the project" by hand. The second lets
+// a tile stand for one named thing: the Projects tile wears the open project's initials in place of its glyph, which
+// no icon name could say. Additive: a view that never asks and a tile that names no monogram are unchanged.
+export const extensionApiVersion = "2.14.0";

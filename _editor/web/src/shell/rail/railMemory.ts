@@ -15,6 +15,8 @@ export interface RailSeat {
     readonly to: string;
     readonly label: string;
     readonly icon?: IconName;
+    // Letters drawn in place of the icon (Activation.monogram): the open project's, on the Projects tile.
+    readonly monogram?: string;
 }
 
 // A seat held open for a tile not back yet; same shape as RailSeat, flagged, so the rail renders one list, not a

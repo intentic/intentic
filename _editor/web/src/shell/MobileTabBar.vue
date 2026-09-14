@@ -5,7 +5,7 @@ import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
 import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTile";
-import { useApprovalsTile } from "./mobileTabs";
+import { useApprovalsTile, useProjectsMonogram } from "./mobileTabs";
 import { homeViewId, PROJECTS_VIEW_ID } from "../core-views/registry";
 import { useVocabulary } from "../core-views/vocabulary";
 import RailIcon from "./rail/RailIcon.vue";
@@ -31,6 +31,8 @@ interface Tab {
     readonly panel?: "files" | "changes";
     // A standing fact drawn as a corner glyph and spelled out in the label, like AreaTile.note.
     readonly note?: { readonly icon: IconName; readonly text: string };
+    // Letters in place of the glyph: the open project's, on the Projects tab, same as the desktop rail.
+    readonly monogram?: string;
 }
 
 const changes = useChanges();
@@ -39,9 +41,15 @@ const { badge: sandboxBadge } = useSandboxAttention();
 // The home tab is the maker's Project page when that extension is on, else the file tree; same rule as the rail's
 // seat (registry.ts), so the phone and the desktop agree on where home is.
 const words = useVocabulary();
+const projectsMonogram = useProjectsMonogram();
 const homeTab = computed<Tab>(() =>
     homeViewId() === PROJECTS_VIEW_ID
-        ? { id: PROJECTS_VIEW_ID, to: `/ext/${PROJECTS_VIEW_ID}`, label: words.value.home }
+        ? {
+              id: PROJECTS_VIEW_ID,
+              to: `/ext/${PROJECTS_VIEW_ID}`,
+              label: words.value.home,
+              ...(projectsMonogram.value === undefined ? {} : { monogram: projectsMonogram.value }),
+          }
         : { id: `workspace`, to: `/workspace`, label: `Files`, panel: `files` },
 );
 
@@ -116,7 +124,7 @@ const isNavActive = (tab: Tab): boolean => {
         >
             <!-- mark replaces the count when the amount isn't what you act on; aria-hidden, the label already says it. -->
             <span class="relative">
-                <RailIcon :area="tab.id" class="text-xl" />
+                <RailIcon :area="tab.id" :monogram="tab.monogram" class="text-xl" />
                 <ViewBadgeChip :badge="tab.badge" class="absolute -right-2.5 -top-1 text-[0.6rem]" aria-hidden="true" />
                 <!-- Work in flight, in the corner the badge and note both leave free; same mark as the desktop rail. -->
                 <RunningMark v-if="tab.badge?.running !== undefined" class="absolute -bottom-1 -right-2" />

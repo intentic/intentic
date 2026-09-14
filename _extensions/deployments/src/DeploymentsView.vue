@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { errorMessage } from "@intentic/base/errors";
 import type { DeployAction, DeployResource, DeployServer } from "./contract";
+import { host } from "./host.js";
 import {
     Button,
     ui,
@@ -14,6 +15,7 @@ import {
     RowGroup,
     type AgentRunChoice,
     type TallyItem,
+    ProjectChip,
 } from "@intentic/extension-ui";
 import { computed, onMounted, ref, toRef } from "vue";
 import { markDeploymentsSeen } from "./attention";
@@ -46,7 +48,12 @@ const open = computed(() => topTier(incidents(board.value?.alerts ?? [])));
 const worst = computed(() => open.value[0]?.tone);
 const resources = computed(() => board.value?.resources ?? []);
 const servers = computed(() => board.value?.servers ?? []);
-const repos = computed(() => board.value?.repos ?? []);
+// The open project's repositories only (api.workspace.inProject): the board comes from the Komodo routes, not from
+// repos(), so the view narrows its repo rows itself and says on its chip how many it put out of sight.
+const api = host();
+const allRepos = computed(() => board.value?.repos ?? []);
+const repos = computed(() => allRepos.value.filter((entry) => api.workspace.inProject(entry.repo)));
+const projectHidden = computed(() => allRepos.value.length - repos.value.length);
 const stackNames = computed(() => resources.value.filter((resource) => resource.kind === `stack`).map((resource) => resource.name));
 
 // Links to Komodo's stacks list: the level this view is really about, same route family as each row's link.
@@ -216,6 +223,8 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
                 />
             </template>
             <template #actions>
+                <!-- The open project, and the way out of it: the same scope every other area narrows by. -->
+                <ProjectChip :project="api.workspace.project()" :hidden="projectHidden" noun="repositories" @clear="api.workspace.setProject(undefined)" />
                 <PageAction v-if="stacksUrl !== undefined" icon="box" label="Open Komodo stacks" :href="stacksUrl" />
             </template>
         </PageHeader>

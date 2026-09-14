@@ -430,9 +430,25 @@ hide with it and count once. The archive stays the sandbox's, since its Delete a
 its count must say the whole pile. The Agents rail badge stays sandbox-wide too, so a hold on another project
 is never missed while looking at one.
 
-**Where it shows.** The Projects tile is seated for everyone, since a mode needs an indicator: its title reads
-"Projects · web" and it wears a folder mark while a project is open; the dashboard marks the open tile and offers
-All projects; the workspace and the agents board each carry a chip that names the project, counts what it hid,
-and clears it. The extension API grew `api.workspace.project()`, `setProject()` and `onDidChangeProject()`
-(2.13.0), since the dashboard that sets the scope is an extension.
+**Where it shows.** The Projects tile heads the rail for everyone, above Chat and Agents, since a mode needs an
+indicator and a switcher belongs above what it switches: while a project is open the tile wears the project's
+first two letters in place of its glyph (`Activation.monogram`) and its title reads "Projects · web"; the
+dashboard marks the open tile and offers All projects; the workspace, the agents board and every extension view
+that lists by repository carry the same chip (`ProjectChip`), which names the project, counts what that surface
+hid, and clears the scope. The extension API grew `api.workspace.project()`, `setProject()` and
+`onDidChangeProject()` (2.13.0), since the dashboard that sets the scope is an extension, then `inProject(path)`
+and `Activation.monogram` (2.14.0).
+
+**What the scope cannot reach by itself.** Pipelines, maintenance and deployments list rows from their own daemon
+routes (CI runs, chore reports, the Komodo board), never through `repos()`, so they did not narrow with the three
+sources above. Each now filters its own rows with `api.workspace.inProject` and says on its chip how many
+repositories it hid. Documentation, acceptance and the repo-keyed tiles read `repos()` and narrowed already.
+
+**New agent under a project.** A press naming no persona wears the project's own card
+(`features/sandbox/personas/projectPersona.ts`): id `project-<name>`, opened in the project, fenced to it
+(`workspace.folders`), carrying its repository (`context.repos`). Made the first time it is needed and never
+rewritten, so what the owner adds to the card (accounts, a brief, a model) stays; it is an ordinary card in the
+personas list and the composer's picker can swap it for another. Chosen over starting the conversation in the
+folder alone because a start folder does not stop file tools leaving it, and over reusing whichever existing
+persona reaches the project because that persona's accounts and brief would come along uninvited.
 

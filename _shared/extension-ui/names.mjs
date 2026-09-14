@@ -61,6 +61,7 @@ export const extensionUiNames = [
     "Picker",
     "Popover",
     "ProgressRing",
+    "ProjectChip",
     "ProseField",
     "RepoRail",
     "ResizeSeam",

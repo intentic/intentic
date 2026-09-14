@@ -7,6 +7,7 @@ import { useChat } from "../../chat/run/useChat";
 import { composingConversation, draftConversation } from "../../chat/panel/useChat-reveal";
 import { queryClient } from "../../../lib/queryPersistence";
 import { projectScope } from "../../../app/projectScope";
+import { ensureProjectPersona, projectPersonaId } from "../../sandbox/personas/projectPersona";
 import { router } from "../../../router";
 import { refreshAcross } from "../../sandbox/live/fleetAcross";
 import { refreshChangesAcross } from "../../workspace/changes/changesAcross";
@@ -35,15 +36,28 @@ export const startAgent = (prompt?: string, actsAs?: string): string => {
     // "New agent", as one action across every surface (board button, chat strip's +, mobile +): summon the tab in every
     // window, put the caret in its composer, and on mobile navigate to it. A press over an untouched draft reuses it
     // instead of minting a second one.
-    conversation.actsAs.value = actsAs;
-    // A conversation started while a project is open belongs to it: the daemon opens it there and the board files it
-    // under the project.
-    conversation.startIn.value = projectScope.value;
+    // A conversation started while a project is open belongs to it: opened there, and, when no persona was named,
+    // wearing the project's own (projectPersona.ts), which fences it to the project rather than only starting it
+    // there. A named persona is the caller's choice and stands.
+    const project = projectScope.value;
+    const fitted = actsAs === undefined && project !== undefined ? ensureProjectPersona(project) : undefined;
+    conversation.actsAs.value = actsAs ?? (project === undefined ? undefined : projectPersonaId(project));
+    conversation.startIn.value = project;
     summonChat({ kind: `reveal`, verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: true });
     revealConversation(conversation);
-    if (prompt !== undefined) {
-        void conversation.enqueue(prompt);
+    if (fitted === undefined) {
+        if (prompt !== undefined) {
+            void conversation.enqueue(prompt);
+        }
+        return conversation.conversationId;
     }
+    // The card exists before the first prompt goes, or the daemon would answer an unknown persona with an ordinary
+    // chat; a daemon that refuses the card leaves the conversation unpinned rather than pinned to nothing.
+    void fitted
+        .catch(() => {
+            conversation.actsAs.value = undefined;
+        })
+        .then(() => (prompt === undefined ? undefined : conversation.enqueue(prompt)));
     return conversation.conversationId;
 };
 

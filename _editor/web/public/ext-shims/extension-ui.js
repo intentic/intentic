@@ -41,6 +41,7 @@ export const PersonaFace = m["PersonaFace"];
 export const Picker = m["Picker"];
 export const Popover = m["Popover"];
 export const ProgressRing = m["ProgressRing"];
+export const ProjectChip = m["ProjectChip"];
 export const ProseField = m["ProseField"];
 export const RepoRail = m["RepoRail"];
 export const ResizeSeam = m["ResizeSeam"];

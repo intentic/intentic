@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Disposable } from "@intentic/extension-api";
 import { type AutomationApproval, isTrialProvider, type WorkflowRun } from "@intentic/sandbox-contract";
-import { Button, clipboardOf, ui, ContextMenu, Modal, SearchBar, SegmentedControl, useDevice, useNarrow } from "@intentic/ui";
+import { Button, clipboardOf, ui, ContextMenu, Modal, ProjectChip, SearchBar, SegmentedControl, useDevice, useNarrow } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -964,19 +964,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
 <!-- Drawn only when more than one sandbox exists (scopeOffered): a switch whose two settings look identical teaches the reader to ignore controls. -->
                 <SegmentedControl v-if="scopeOffered" v-model="fleetScope" :options="SCOPE_OPTIONS" class="shrink-0" />
 <!-- The open project, and the way out of it: the same scope the workspace chip clears, so both say the same thing. -->
-                <button
-                    v-if="projectScope !== undefined"
-                    type="button"
-                    class="ui-chip ui-chip-on h-6 shrink-0 px-1.5"
-                    :aria-label="`Showing agents on ${projectScope} only, ${projectHidden} elsewhere. Click to show every project's.`"
-                    v-tooltip.bottom="`Showing agents on ${projectScope} only, ${projectHidden} elsewhere. Click to show every project's.`"
-                    @click="setProjectScope(undefined)"
-                >
-                    <Icon name="folder-open" class="shrink-0 text-[0.7rem]" />
-                    <span class="max-w-32 truncate">{{ projectScope }}</span>
-                    <span v-if="projectHidden > 0" class="text-subtle">· {{ projectHidden }} hidden</span>
-                    <Icon name="times" class="shrink-0 text-[0.6rem] opacity-70" />
-                </button>
+                <ProjectChip :project="projectScope" :hidden="projectHidden" noun="agents" @clear="setProjectScope(undefined)" />
             </div>
             <SearchBar
                 ref="filterField"
