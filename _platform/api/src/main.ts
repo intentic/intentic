@@ -5,7 +5,7 @@ import { CONFIG_SECRETS, loadConfig } from "./config.js";
 import { mask } from "./log.js";
 import { createLogger } from "./logger.js";
 import { createPrisma } from "./prisma.js";
-import { startHostedAbuse } from "./sandbox/hosted/hosted-abuse.js";
+import { startHostedAbuse } from "./sandbox/hosted/abuse/hosted-abuse.js";
 import { startHostedBuilds } from "./sandbox/hosted/build/hosted-build.js";
 import { startHostedCanary } from "./sandbox/hosted/hosted-canary.js";
 import { startHostedCleanup } from "./sandbox/hosted/hosted-cleanup.js";

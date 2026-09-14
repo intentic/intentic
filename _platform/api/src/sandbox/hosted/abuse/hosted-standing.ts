@@ -1,8 +1,8 @@
 import { LEGAL_CONTACT_EMAIL } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
-import type { Config } from "../../config.js";
-import { stopOwnerMachines } from "./hosted-meter.js";
+import type { Config } from "../../../config.js";
+import { stopOwnerMachines } from "../hosted-meter.js";
 
 // An account's standing on the hosted lane. Suspended means no machine is provisioned, woken, restarted or rebuilt for
 // it and any awake one is stopped; the account itself, its own-machine sandboxes and its data are untouched. Written by

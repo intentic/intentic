@@ -7,7 +7,7 @@ import { stopMachine } from "../sandbox/hosted/fly/fly.js";
 import { destroyHosted, hostedEnabled } from "../sandbox/hosted/hosted.js";
 import { cancelHostedPlan } from "../sandbox/hosted/hosted-plan.js";
 import type { StripeGateway } from "../sandbox/hosted/hosted-plan-stripe.js";
-import { hostedSuspensionOf, liftHostedSuspension, suspendHosted } from "../sandbox/hosted/hosted-standing.js";
+import { hostedSuspensionOf, liftHostedSuspension, suspendHosted } from "../sandbox/hosted/abuse/hosted-standing.js";
 
 // Admin mutations, gated by routes (requireAdmin, the ADMIN_MUTATIONS switch, typed confirmation). Each action reuses
 // the owner's own teardown flows rather than inventing a new way to touch machines.

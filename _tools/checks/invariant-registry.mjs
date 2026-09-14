@@ -108,7 +108,8 @@ for (const directory of directories) {
     // Checks for `checks` structurally; executing the module would mean constructing daemon services.
     const empty = /export const checks[^=]*=\s*(\[\s*\]|\(\s*\)\s*(:[^=]*)?=>\s*\[\s*\])/.test(body);
     if (empty) {
-        if (!/^\s*(\/\/|\*)\s*No runtime invariant:/m.test(body)) {
+        // The marker opens a line in any of the three comment forms the tree uses: `//`, a block continuation `*`, or a one-line `/*`.
+        if (!/^\s*(\/\/|\/?\*)\s*No runtime invariant:/m.test(body)) {
             failures.push(
                 `'${directory}' registers no checks and does not say why, add a "No runtime invariant: <why>" comment naming what this subsystem owns that has no observable runtime relationship`,
             );

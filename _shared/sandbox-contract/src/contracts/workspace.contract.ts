@@ -14,9 +14,9 @@ import {
     TemplatesListSchema,
     WorkspaceGraphSchema,
     WorkspaceSyncSchema,
-} from "../schemas/workspace-repos.js";
-import { WorkspaceSearchQuerySchema, WorkspaceSearchResultSchema } from "../schemas/workspace-search.js";
-import { WorkspaceInstallResultSchema, WorkspaceInstallSchema, WorkspaceSetupSchema } from "../schemas/workspace-setup.js";
+} from "../schemas/workspace/workspace-repos.js";
+import { WorkspaceSearchQuerySchema, WorkspaceSearchResultSchema } from "../schemas/workspace/workspace-search.js";
+import { WorkspaceInstallResultSchema, WorkspaceInstallSchema, WorkspaceSetupSchema } from "../schemas/workspace/workspace-setup.js";
 import {
     WorkspaceChildrenQuerySchema,
     WorkspaceChildrenSchema,
@@ -34,7 +34,7 @@ import {
     WorkspaceResolveSchema,
     WorkspaceScopeSchema,
     WorkspaceTreeSchema,
-} from "../schemas/workspace-tree.js";
+} from "../schemas/workspace/workspace-tree.js";
 
 // The full /work view plus extra-repo cloning. /workspace/raw stays a plain Hono route (a streamed binary body doesn't
 // fit oRPC's request/response shape).

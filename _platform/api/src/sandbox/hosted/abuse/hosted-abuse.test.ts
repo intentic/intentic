@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@intentic/prisma";
-import type { Config } from "../../config.js";
+import type { Config } from "../../../config.js";
 import { ABUSE_SUSPENSION_REASON, sweepHostedAbuse } from "./hosted-abuse.js";
 
 // The watch reads the provider's per-machine meter and acts on the free lane: a saturated machine is stopped and

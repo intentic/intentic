@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PanelLaunchSchema } from "./panels.js";
+import { PanelLaunchSchema } from "../panels.js";
 // Every discovered repo's id (root-relative dir under /work), sorted, roles included.
 export const ReposListSchema = z.object({
     repos: z

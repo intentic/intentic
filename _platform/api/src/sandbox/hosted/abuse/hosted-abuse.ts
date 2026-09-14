@@ -1,16 +1,16 @@
 import { PLATFORM_SITE_ORIGIN } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
-import type { Config } from "../../config.js";
-import { DAY_MS } from "../../durations.js";
-import { JOB_HOSTED_ABUSE, runExclusive } from "../../jobs-lock.js";
-import { linkEmail, sendMail } from "../../mail.js";
-import { type MachineSample, queryMachineMetric } from "./fly/fly-metrics.js";
-import { stopMachine } from "./fly/fly.js";
-import { hostedEnabled } from "./hosted.js";
-import { onHostedPlan } from "./hosted-plan.js";
+import type { Config } from "../../../config.js";
+import { DAY_MS } from "../../../durations.js";
+import { JOB_HOSTED_ABUSE, runExclusive } from "../../../jobs-lock.js";
+import { linkEmail, sendMail } from "../../../mail.js";
+import { type MachineSample, queryMachineMetric } from "../fly/fly-metrics.js";
+import { stopMachine } from "../fly/fly.js";
+import { hostedEnabled } from "../hosted.js";
+import { onHostedPlan } from "../hosted-plan.js";
+import { closeHostedStretch } from "../hosted-usage.js";
 import { suspendHosted } from "./hosted-standing.js";
-import { closeHostedStretch } from "./hosted-usage.js";
 
 /* THE ABUSE WATCH. The platform cannot see inside a hosted machine and does not try; what it can read is the
  * provider's own meter for the machine, from outside: how busy its CPUs were and how much it sent, averaged over

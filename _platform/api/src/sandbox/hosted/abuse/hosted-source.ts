@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@intentic/prisma";
-import type { Config } from "../../config.js";
-import { DAY_MS } from "../../durations.js";
+import type { Config } from "../../../config.js";
+import { DAY_MS } from "../../../durations.js";
 
 // Same-source caps on NEW hosted machines: how many distinct accounts one client address, and one email domain, may be
 // handed a machine in a day. A machine costs money from the moment it exists and a farm of fresh Google accounts is the

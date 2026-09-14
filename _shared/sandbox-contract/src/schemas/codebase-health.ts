@@ -1,6 +1,6 @@
 // codebase health: one repository's structure and risk, in numbers
 import { z } from "zod";
-import { WorkspaceSearchFreshnessSchema } from "./workspace-search.js";
+import { WorkspaceSearchFreshnessSchema } from "./workspace/workspace-search.js";
 // Repo-level companion to the management panel and git-history graph: the resident engine's `hotspots` (churn ×
 // complexity) and `map` (PageRank over imports) verbs, as figures a panel can plot. Every field is a recountable count;
 // no composite maintainability grade, since those aren't comparable across projects or checkable. HEALTH_LIMIT is how

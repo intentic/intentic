@@ -1,6 +1,6 @@
 // workspace tree + files
 import { z } from "zod";
-import { ConversationIdSchema } from "./agent.js";
+import { ConversationIdSchema } from "../agent.js";
 // Which copy of the workspace a read means: the shared /work tree, or (if `agent` is set) that conversation's own
 // checkout, resolved in one place so the escape guard, denylist and ignore rules apply the same either way.
 export const WorkspaceScopeSchema = z.object({

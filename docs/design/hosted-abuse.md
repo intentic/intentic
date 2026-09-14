@@ -34,7 +34,7 @@ file, each with a plain sentence for the person it refuses.
 
 ### Standing
 
-`User.hostedSuspendedAt` + `hostedSuspendedReason` ([hosted-standing.ts](../../_platform/api/src/sandbox/hosted/hosted-standing.ts)).
+`User.hostedSuspendedAt` + `hostedSuspendedReason` ([hosted-standing.ts](../../_platform/api/src/sandbox/hosted/abuse/hosted-standing.ts)).
 Suspended, nothing hosted starts for the account: provision, wake, restart and rebuild answer FORBIDDEN with
 the reason and the legal contact, the offer reads `suspended` so the setup page never draws the button, and the
 hourly meter tick stops anything still awake. The account itself, its sandboxes on the owner's own computers
@@ -55,7 +55,7 @@ say when the full month applies, and the pricing page carries the figure in the 
 
 ### The same-source caps
 
-`provisionsPerIpPerDay` 3, `provisionsPerDomainPerDay` 10 ([hosted-source.ts](../../_platform/api/src/sandbox/hosted/hosted-source.ts)).
+`provisionsPerIpPerDay` 3, `provisionsPerDomainPerDay` 10 ([hosted-source.ts](../../_platform/api/src/sandbox/hosted/abuse/hosted-source.ts)).
 Every successful provision writes a `HostedProvision` row: the account, the client address, the email domain,
 the app. A new machine is refused (TOO_MANY_REQUESTS, pointing at the own-computer lane) when three *other*
 accounts were handed one from the same address in the last day, or ten from the same email domain. The domain
@@ -70,7 +70,7 @@ sessions trusted `x-forwarded-for` first, which a caller can write.
 ### The abuse watch
 
 `abuseMinutes` 15, `abuseWindowMinutes` 90, `abuseCpuShare` 0.85, `abuseEgressGbPerHour` 10,
-`abuseStrikesToSuspend` 2, `abuseStrikeDays` 30 ([hosted-abuse.ts](../../_platform/api/src/sandbox/hosted/hosted-abuse.ts),
+`abuseStrikesToSuspend` 2, `abuseStrikeDays` 30 ([hosted-abuse.ts](../../_platform/api/src/sandbox/hosted/abuse/hosted-abuse.ts),
 [fly-metrics.ts](../../_platform/api/src/sandbox/hosted/fly/fly-metrics.ts)).
 
 Fly's managed Prometheus exposes every machine's CPU time by mode and bytes sent, from the hypervisor, read

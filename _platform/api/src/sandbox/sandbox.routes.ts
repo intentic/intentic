@@ -39,8 +39,8 @@ import {
     releaseHosted,
 } from "./hosted/hosted-cleanup.js";
 import { hostedPlanEnabled, hostedSlotsOf, onHostedPlan } from "./hosted/hosted-plan.js";
-import { assertHostedSource, HostedSourceCapped, recordHostedProvision } from "./hosted/hosted-source.js";
-import { assertHostedStanding, HostedSuspended, hostedSuspensionOf } from "./hosted/hosted-standing.js";
+import { assertHostedSource, HostedSourceCapped, recordHostedProvision } from "./hosted/abuse/hosted-source.js";
+import { assertHostedStanding, HostedSuspended, hostedSuspensionOf } from "./hosted/abuse/hosted-standing.js";
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { mintSandbox } from "./mint-sandbox.js";

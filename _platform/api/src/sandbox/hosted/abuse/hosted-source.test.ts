@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@intentic/prisma";
-import type { Config } from "../../config.js";
+import type { Config } from "../../../config.js";
 import { assertHostedSource, emailDomain, HostedSourceCapped, recordHostedProvision } from "./hosted-source.js";
 
 // The caps count OTHER accounts handed a machine from the same address or domain in a day; the caller's own rows,
