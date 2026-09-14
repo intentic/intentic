@@ -22,6 +22,13 @@ export const TEXT_EDIT_MAX_BYTES = 2_000_000;
 
 const MARKDOWN_EXTS = new Set(["md", "markdown", "mdx"]);
 
+// A document rather than code: what a diff can show as tracked changes (viewers/ProseDiffView.vue). Plain text counts,
+// since a maker's notes are as often .txt as .md.
+export const isProsePath = (path: string): boolean => {
+    const { ext } = nameExt(path);
+    return MARKDOWN_EXTS.has(ext) || ext === "txt";
+};
+
 // Never read as text; also covers viewer-extension formats. SVG stays out: it's text (XML), not binary.
 const BINARY_EXTS = new Set([
     "woff",

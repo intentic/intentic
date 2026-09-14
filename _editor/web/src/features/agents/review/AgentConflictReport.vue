@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { LandConflict } from "@intentic/sandbox-contract";
 import { Button, useDevice } from "@intentic/ui";
+import { useVocabulary } from "../../../core-views/vocabulary";
 import { computed } from "vue";
 import { agentBlockers, type Blocker, blockerLabel, blockersOf, REASON_COPY, userBlockers } from "./conflictResolution";
 
@@ -25,6 +26,7 @@ const props = defineProps<{
 const emit = defineEmits<{ resolve: []; merge: []; commit: []; stop: []; chat: []; cross: []; select: [Blocker] }>();
 
 const { mobile } = useDevice();
+const words = useVocabulary();
 
 const blockers = computed(() => blockersOf(props.conflicts));
 const blockedCount = computed(() => blockers.value.length);
@@ -121,10 +123,10 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                     @click="emit('resolve')"
                     v-tooltip.bottom="streaming ? 'Wait for the agent turn to finish' : undefined"
                 >
-                    <Icon name="sparkles" />Have the agent resolve it
+                    <Icon name="sparkles" />{{ words.resolveConflict }}
                 </Button>
                 <span class="text-2xs text-subtle">
-                    It merges in its own worktree: nothing is written to your workspace until it succeeds.<template v-if="theirs.length > 0">
+                    {{ words.resolveConflictHint }}<template v-if="theirs.length > 0">
                         The {{ theirs.length === 1 ? "file" : `${theirs.length} files` }} with your own edits still
                         {{ theirs.length === 1 ? "needs" : "need" }} you.</template
                     >

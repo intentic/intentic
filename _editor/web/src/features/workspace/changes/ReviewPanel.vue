@@ -41,6 +41,7 @@ import { useModules } from "../health/useModules";
 import ChangeRowName from "../../../components/ChangeRowName.vue";
 import OtherSandboxChanges from "./OtherSandboxChanges.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
+import { useVocabulary } from "../../../core-views/vocabulary";
 
 // VSCode's SCM pattern over the real repos: uncommitted work grouped by repo, then by git's staged/unstaged
 // sides (a path can be on both with different content). Staging IS the selection — no checkboxes; git already
@@ -48,6 +49,7 @@ import ModuleLabel from "../../../components/ModuleLabel.vue";
 // row, icons+tooltips for the rest.
 
 const changes = useChanges();
+const words = useVocabulary();
 // The push, started here but owned above this panel, so leaving the view doesn't lose the run or its question.
 const pushFlow = usePushFlow();
 // Ticks while a push is in flight, and while a verdict stands unanswered below — that line counts up too, and a
@@ -743,16 +745,15 @@ const syncVerb = computed<"push" | "pull" | "sync" | "publish" | undefined>(() =
 // Icons match the row pills (↑ push, ↓ pull), so the bar and the rows read as one language.
 // No hover hint on this one, deliberately: the label is already Push/Pull/etc, and `syncSummary` beside it
 // already states what will move — a tooltip repeating the label would fire on every pointer pass in a narrow sidebar.
-const SYNC_VERB: Record<
-    "push" | "pull" | "sync" | "publish",
-    { readonly label: string; readonly icon: "arrow-up-right" | "arrow-down-left" | "sync" | "cloud-upload" }
-> = {
-    push: { label: `Push`, icon: `arrow-up-right` },
+const SYNC_VERB = computed<
+    Record<"push" | "pull" | "sync" | "publish", { readonly label: string; readonly icon: "arrow-up-right" | "arrow-down-left" | "sync" | "cloud-upload" }>
+>(() => ({
+    push: { label: words.value.push, icon: `arrow-up-right` },
     pull: { label: `Pull`, icon: `arrow-down-left` },
-    sync: { label: `Sync`, icon: `sync` },
-    publish: { label: `Publish`, icon: `cloud-upload` },
-};
-const syncMeta = computed(() => (syncVerb.value === undefined ? undefined : SYNC_VERB[syncVerb.value]));
+    sync: { label: words.value.sync, icon: `sync` },
+    publish: { label: words.value.publish, icon: `cloud-upload` },
+}));
+const syncMeta = computed(() => (syncVerb.value === undefined ? undefined : SYNC_VERB.value[syncVerb.value]));
 // Counts plus the repo spread when more than one is in play; a pure publish has nothing to count.
 const syncSummary = computed<string>(() => {
     const counts = [...(behindTotal.value > 0 ? [`↓${behindTotal.value}`] : []), ...(aheadTotal.value > 0 ? [`↑${aheadTotal.value}`] : [])];

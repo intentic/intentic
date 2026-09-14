@@ -27,7 +27,7 @@ import { archivable, archiveAgents, purgeArchived } from "./registry/archive.js"
 import { landAgent, outstandingConflicts } from "./land/land.js";
 import { syncBeforeLand } from "./land/sync.js";
 import { verifyLandedTree } from "./land/verify-landed.js";
-import { describeLandingInBackground } from "./land/landed-subject.js";
+import { settleLandingInBackground } from "./land/version-landed.js";
 
 // Fleet routes: list/get the registry, review a worktree's delta against its recorded bases, land it, archive it, or
 // discard it. Unknown id is NOT_FOUND; land/discard/archive on a running turn is CONFLICT.
@@ -115,7 +115,7 @@ export const createAgentsRoutes = (services: Services) => {
     // What a land that reached the tree sets in motion: the commit-box chip's draft (not awaited), the user-write
     // attribution (same convention as git.discard), and the workspace event.
     const announceLanded = (entry: IsolatedAgent, span: readonly { repo: string; from: string; dir: string }[]): void => {
-        describeLandingInBackground(services, entry.id);
+        settleLandingInBackground(services, entry.id);
         services.history.notifyUserWrite();
         emitWorkspaceEvent(
             services,

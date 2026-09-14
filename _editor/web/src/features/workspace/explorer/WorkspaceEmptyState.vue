@@ -2,6 +2,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
 import { Button, Notice, type NoticeModel, vAction } from "@intentic/ui";
+import { useAudience } from "../../../app/useAudience";
+import AudienceAsk from "../../../components/AudienceAsk.vue";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { useAddRepo } from "./useAddRepo";
 
@@ -11,6 +13,8 @@ const props = defineProps<{ empty: boolean }>();
 const emit = defineEmits<{ pick: [] }>();
 
 const { addRepo, cloning, error } = useAddRepo();
+// Asked here, where a new arrival first stands, until answered once in this browser.
+const { chosen: audienceChosen } = useAudience();
 // Clone form opens inline instead of on its own route.
 const cloneOpen = ref(false);
 const cloneUrl = ref(``);
@@ -45,6 +49,9 @@ const askAgent = (): void => {
 
 <template>
     <div class="flex h-full flex-col items-center justify-center gap-5 px-6 text-center">
+        <!-- The newcomer's screen only: a reader between files gets the drop target and nothing else; Settings holds the question for them. -->
+        <AudienceAsk v-if="props.empty && !audienceChosen" />
+
         <!-- Non-empty workspace: just the drop target. -->
         <template v-if="!props.empty">
             <button

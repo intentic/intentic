@@ -303,6 +303,13 @@ export interface IntenticApi {
         mode(): "light" | "dark";
         onDidChange(listener: (mode: "light" | "dark") => void): Disposable;
     };
+    // Who the screens are written for, the way `theme` says how they are lit: a developer reads git's own words
+    // (branch, land, commit, diff) and a maker reads plain ones (draft, accept, version, what changed) over the same
+    // mechanisms. Reactive when read inside a computed. A view that never asks renders as it always has.
+    readonly audience: {
+        current(): "developer" | "maker";
+        onDidChange(listener: (audience: "developer" | "maker") => void): Disposable;
+    };
 }
 
 export interface ExtensionContext {

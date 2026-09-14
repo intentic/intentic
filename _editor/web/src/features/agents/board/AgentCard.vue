@@ -6,6 +6,8 @@ import { RouterLink } from "vue-router";
 import { requestLandAgent } from "../fleet/agentActions";
 import { refreshAcross } from "../../sandbox/live/fleetAcross";
 import { useRole } from "../../sandbox/secrets/useRole";
+import { useAudience } from "../../../app/useAudience";
+import { useVocabulary } from "../../../core-views/vocabulary";
 import OriginMark from "../../../components/OriginMark.vue";
 import StartedByMark from "./StartedByMark.vue";
 import UnsentMark from "../../../components/UnsentMark.vue";
@@ -190,6 +192,10 @@ const landing = computed(() => props.pending === `land` || props.agent.status ==
 // viewers get neither.
 // The request is sent here rather than emitted, since the board is only one of this card's several hosts.
 const { canDrive, canShip } = useRole();
+// The audience's words for the verbs on this card; a maker also loses the branch and runner chips, which name nothing
+// they chose.
+const words = useVocabulary();
+const { maker } = useAudience();
 const { refresh: refreshAgents, notice: agentsNotice, rename } = useAgents();
 const requesting = ref(false);
 const requestLand = async (): Promise<void> => {
@@ -559,18 +565,18 @@ const grab = (event: PointerEvent): void => {
                 </span>
                 <span v-if="model !== undefined" class="truncate">{{ model }}</span>
 <!-- Where it's running, shown only when that's somewhere other than here: the fleet spreads work across machines without a per-agent choice. -->
-                <span v-if="agent.runner !== undefined" class="flex shrink-0 items-center gap-1 truncate" :title="`Runs on ${agent.runner}`">
+                <span v-if="agent.runner !== undefined && !maker" class="flex shrink-0 items-center gap-1 truncate" :title="`Runs on ${agent.runner}`">
                     <Icon name="desktop" class="text-2xs" />
                     {{ agent.runner }}
                 </span>
 <!-- Abbreviated on the card, full string on hover; a label, not a control (copy is on the right-click menu). -->
                 <!-- Clipped on the card, full identity on hover; nothing renders if the sandbox can't name the account. -->
-                <span v-if="agent.branch !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
+                <span v-if="agent.branch !== undefined && !maker" class="inline-flex min-w-0 items-center gap-1.5">
                     <span v-if="model !== undefined">·</span>
                     <SessionChip :branch="agent.branch" />
                 </span>
                 <span v-if="account !== undefined" class="inline-flex min-w-0 shrink items-center gap-1">
-                    <span v-if="model !== undefined || agent.branch !== undefined">·</span>
+                    <span v-if="model !== undefined || (agent.branch !== undefined && !maker)">·</span>
                     <span v-tooltip.top="account.hint" class="inline-flex min-w-0 shrink items-center gap-1">
                         <Icon name="user" class="shrink-0 text-2xs" />
                         <span class="truncate">{{ account.label }}</span>
@@ -587,13 +593,9 @@ const grab = (event: PointerEvent): void => {
 <!-- The one board state that's a decision, not a report: the agent redoes the merge in its own worktree, so a wrong answer costs nothing. -->
             <div v-if="resolvable" class="flex min-w-0 flex-col gap-1">
                 <Button size="small" class="self-start whitespace-nowrap" @click.stop="emit('resolve')">
-                    <Icon :name="handingOver ? 'spinner' : 'sparkles'" :spin="handingOver" />{{
-                        handingOver ? "Handing it over…" : "Have the agent resolve it"
-                    }}
+                    <Icon :name="handingOver ? 'spinner' : 'sparkles'" :spin="handingOver" />{{ handingOver ? "Handing it over…" : words.resolveConflict }}
                 </Button>
-                <span class="text-2xs leading-snug text-subtle"
-                    >It merges in its own worktree: nothing reaches your workspace unless it succeeds.</span
-                >
+                <span class="text-2xs leading-snug text-subtle">{{ words.resolveConflictHint }}</span>
             </div>
 
 <!-- One row (fact left, press right), not a stack: this is a fact the card owes the reader regardless of action, unlike the decision blocks above. -->
@@ -608,7 +610,7 @@ const grab = (event: PointerEvent): void => {
                 </span>
 <!-- No resting glyph: the line above it already leads with this exact icon, and a repeat would read as a stutter. -->
                 <Button size="small" severity="secondary" :text="true" class="shrink-0 whitespace-nowrap" @click.stop="emit('reland')">
-                    <Icon v-if="relanding" name="spinner" spin class="text-2xs" />{{ relanding ? "Landing…" : "Land again" }}
+                    <Icon v-if="relanding" name="spinner" spin class="text-2xs" />{{ relanding ? words.landing : words.landAgain }}
                 </Button>
             </div>
 
@@ -620,7 +622,7 @@ const grab = (event: PointerEvent): void => {
                 </p>
                 <!-- Disabled while the land runs: the daemon refuses a second one outright (agents.routes CONFLICT). -->
                 <Button size="small" severity="success" :disabled="landing" class="self-start whitespace-nowrap" @click.stop="emit('land')">
-                    <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? "Landing…" : "Land now" }}
+                    <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? words.landing : words.land }}
                 </Button>
             </div>
 
@@ -631,9 +633,9 @@ const grab = (event: PointerEvent): void => {
                 </p>
                 <template v-else>
                     <Button size="small" severity="secondary" class="self-start whitespace-nowrap" @click.stop="requestLand">
-                        <Icon :name="requesting ? 'spinner' : 'send'" :spin="requesting" />{{ requesting ? "Asking…" : "Request land" }}
+                        <Icon :name="requesting ? 'spinner' : 'send'" :spin="requesting" />{{ requesting ? "Asking…" : words.requestLand }}
                     </Button>
-                    <span class="text-2xs leading-snug text-subtle">Landing needs a maintainer: this puts the ask on their board.</span>
+                    <span class="text-2xs leading-snug text-subtle">{{ words.requestLandHint }}.</span>
                 </template>
             </div>
 

@@ -464,6 +464,7 @@ COPY _extensions/issues/intentic-extension.json /opt/extensions/issues/
 # invisible to a COPY that reads the repo tree — however plainly it sits beside the manifest in the checkout.
 COPY --from=trees extensions/deployments/dist /opt/extensions/deployments/dist
 COPY _extensions/git-history/intentic-extension.json /opt/extensions/git-history/
+COPY _extensions/project/intentic-extension.json /opt/extensions/project/
 COPY _extensions/knowledge/intentic-extension.json /opt/extensions/knowledge/
 # …knowledge is the documentation shape plus a backend: its views compile into the web bundle, its `knowledge`
 # skill (contributes.agent) is read from the image, and BOTH its compiled halves come from the trees context —

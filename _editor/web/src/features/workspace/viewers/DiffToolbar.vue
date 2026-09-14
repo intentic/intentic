@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ChangeStatusMark, SegmentedControl, useDevice } from "@intentic/ui";
+import { computed } from "vue";
 import type { DiffLayout } from "../../../shell/window/useLayout";
 import { useLayout } from "../../../shell/window/useLayout";
 import type { ChangeStatus } from "@intentic/extension-api";
 import { basename, parentDir } from "@intentic/ui/path";
 import ReviewStat from "../../../components/ReviewStat.vue";
 import type { LineStat } from "@intentic/code-read";
+import { isProsePath } from "../explorer/fileType";
 
 // Bar above a diff: which file, and how it's read. Shared by every diff surface (workspace tab, agent review,
 // environment card). Owns only the reading settings (comments, split/unified), global via useLayout since that's a
@@ -28,7 +30,16 @@ const { path, status, code, additions, deletions, from } = defineProps<{
 }>();
 
 const { mobile } = useDevice();
-const { showComments, toggleShowComments, diffLayout, setDiffLayout } = useLayout();
+const { showComments, toggleShowComments, diffLayout, setDiffLayout, diffProse, setDiffProse } = useLayout();
+
+// A document offers a second reading, tracked changes over the text; code has only the code. In the prose reading the
+// layout and comment controls have nothing to act on, so they step aside.
+const prose = computed(() => isProsePath(path));
+const proseOn = computed(() => prose.value && diffProse.value);
+const READING_OPTIONS = [
+    { label: `Prose`, value: `prose`, title: `The text with what was added underlined and what was removed struck through` },
+    { label: `Code`, value: `code`, title: `The file's lines, side by side or inline` },
+];
 
 // Desktop-only; DiffView forces unified on a phone without overwriting the stored preference.
 const LAYOUT_OPTIONS: { label: string; value: DiffLayout }[] = [
@@ -57,9 +68,17 @@ const LAYOUT_OPTIONS: { label: string; value: DiffLayout }[] = [
         </span>
         <slot name="badges" />
         <ReviewStat :code="code" :additions="additions" :deletions="deletions" />
-        <SegmentedControl v-if="!mobile" :model-value="diffLayout" :options="LAYOUT_OPTIONS" size="xs" @update:model-value="setDiffLayout" />
+        <SegmentedControl
+            v-if="prose"
+            :model-value="proseOn ? `prose` : `code`"
+            :options="READING_OPTIONS"
+            size="xs"
+            @update:model-value="(value: string) => setDiffProse(value === `prose`)"
+        />
+        <SegmentedControl v-if="!mobile && !proseOn" :model-value="diffLayout" :options="LAYOUT_OPTIONS" size="xs" @update:model-value="setDiffLayout" />
         <!-- Labelled, not just a glyph: a default that silently removes lines has to keep saying so at a glance. -->
         <button
+            v-if="!proseOn"
             type="button"
             class="ui-chip shrink-0 justify-center gap-1 rounded-md px-1.5 py-0.5 font-medium max-md:h-9 max-md:w-9"
             :class="showComments ? `ui-chip-on` : ``"

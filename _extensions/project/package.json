@@ -1,0 +1,39 @@
+{
+    "name": "@intentic/ext-project",
+    "version": "1.0.0",
+    "description": "Project, a maker's home over the workspace: what each project is, what changed, what is waiting, and the files that matter, as a first-party intentic extension",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "main": "src/index.ts",
+    "types": "src/index.ts",
+    "exports": {
+        ".": {
+            "types": "./src/index.ts",
+            "default": "./src/index.ts"
+        }
+    },
+    "scripts": {
+        "typecheck": "vue-tsc --noEmit",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@intentic/extension-api": "workspace:*",
+        "@intentic/extension-manifest": "workspace:*",
+        "@intentic/extension-ui": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@tanstack/vue-query": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "jsdom": "catalog:",
+        "typescript": "catalog:",
+        "vitest": "catalog:",
+        "vue": "catalog:",
+        "vue-tsc": "catalog:"
+    },
+    "peerDependencies": {
+        "vue": "3"
+    }
+}

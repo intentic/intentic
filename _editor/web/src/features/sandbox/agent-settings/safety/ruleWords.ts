@@ -5,8 +5,8 @@ import type { IconName } from "@intentic/ui";
 // wrote. Cost sits on each moment option; outcome is keyed by moment+action, since the same action means
 // something different at each moment.
 
-/** What a rule can be told to do, named for the effect; `hold`/`allow` are one action kind with two verdicts. */
-export type Choice = `instruct` | `command` | `hold` | `allow`;
+/** What a rule can be told to do, named for the effect; `hold`/`allow` are one action kind with two verdicts, `version` the one built-in a person writes. */
+export type Choice = `instruct` | `command` | `hold` | `allow` | `version`;
 
 /** Everything but identity: the form writes the words, the list owns the id and enabled state. */
 export type RuleDraft = Omit<Rule, `id` | `enabled`>;
@@ -25,6 +25,7 @@ export const MOMENTS: readonly [MomentWords, ...MomentWords[]] = [
     { value: `turn.ending`, label: `Before the assistant finishes`, icon: `clock`, cost: `Once per turn` },
     { value: `push.starting`, label: `Before you push`, icon: `cloud-upload`, cost: `Once per push` },
     { value: `agent.finished`, label: `When an agent finishes`, icon: `robot`, cost: `Once per finished agent` },
+    { value: `agent.landed`, label: `After its work is accepted`, icon: `check`, cost: `Once per accepted change` },
 ];
 
 interface ActionWords {
@@ -67,6 +68,13 @@ export const ACTIONS: Record<RuleMoment, readonly [ActionWords, ...ActionWords[]
         { value: `hold`, label: `Hold the work`, outcome: `Its work stays on its branch until you land it yourself.` },
         { value: `allow`, label: `Land the work`, outcome: `Its work lands in your workspace as soon as the agent finishes.` },
     ],
+    "agent.landed": [
+        {
+            value: `version`,
+            label: `Save a version`,
+            outcome: `What it changed is committed under a subject written for it, and your own edits are committed before the next agent starts, so every agent sees the latest tree.`,
+        },
+    ],
 };
 
 export const momentOf = (moment: RuleMoment): MomentWords => MOMENTS.find((entry) => entry.value === moment) ?? MOMENTS[0];
@@ -100,5 +108,8 @@ export const nameOf = (action: Choice, command: string, text: string, paths: rea
         return clip(text.replace(/[.!?]+$/, ``));
     }
     const touching = paths.length > 0 ? ` touching ${paths.join(`, `)}` : ``;
+    if (action === `version`) {
+        return clip(`Save a version of accepted work${touching}`);
+    }
     return clip(`${action === `allow` ? `Land` : `Hold`} finished work${touching}`);
 };

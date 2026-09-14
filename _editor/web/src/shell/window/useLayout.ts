@@ -1,5 +1,6 @@
-import { ref, type Ref } from "vue";
+import { computed, ref, type Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
+import { useAudience } from "../../app/useAudience";
 import { activeSandboxId } from "../../features/sandbox/overview/activeSandbox";
 import { iconRailScreenPx, useIconRailSize } from "../rail/useIconRailSize";
 import { toAppPx } from "./uiScale";
@@ -83,6 +84,10 @@ const SHOW_IGNORED_KEY = `ui-workspace-show-ignored`;
 // sources reads as more code than it is.
 const HIDE_TESTS_KEY = `ui-workspace-hide-tests`;
 
+// Three-valued: `auto` follows the audience (a maker's tree leaves tooling out, a developer's keeps it), and a press
+// either way records an override that outlives the answer changing.
+const HIDE_TECHNICAL_KEY = `ui-workspace-hide-technical`;
+
 // Global, not per file: on, every editable file opens directly in CodeMirror instead of the viewer.
 const EDIT_MODE_KEY = `ui-workspace-edit-mode`;
 
@@ -96,6 +101,10 @@ const HIDE_FILE_COMMENTS_KEY = `ui-file-hide-comments`;
 // Side-by-side or inline, for every diff surface at once; a reading habit, not a file property (DiffToolbar owns the
 // control). Ignored on mobile, where two panes don't fit.
 const DIFF_LAYOUT_KEY = `ui-diff-layout`;
+
+// Whether a document's diff reads as tracked changes rather than code, for every markdown diff at once. Three-valued:
+// `auto` follows the audience (a maker reads prose, a developer code), and a press either way records an override.
+const DIFF_PROSE_KEY = `ui-diff-prose`;
 
 // Where a diff opens the reader; Monaco's own landing (first change) is usually the import list rather than the change
 // under review.
@@ -176,10 +185,14 @@ const sidebarCollapsed = boolPref(SIDEBAR_COLLAPSED_KEY);
 const sidebarPanel = enumPref(SIDEBAR_PANEL_KEY, [`files`, `changes`, `history`] as const, `files`);
 const showIgnored = boolPref(SHOW_IGNORED_KEY);
 const hideTests = boolPref(HIDE_TESTS_KEY);
+const hideTechnicalChoice = enumPref(HIDE_TECHNICAL_KEY, [`auto`, `on`, `off`] as const, `auto`);
+const hideTechnical = computed<boolean>(() => (hideTechnicalChoice.value === `auto` ? useAudience().maker.value : hideTechnicalChoice.value === `on`));
 const editMode = boolPref(EDIT_MODE_KEY);
 const showComments = boolPref(SHOW_COMMENTS_KEY);
 const hideFileComments = boolPref(HIDE_FILE_COMMENTS_KEY);
 const diffLayout = enumPref(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`);
+const diffProseChoice = enumPref(DIFF_PROSE_KEY, [`auto`, `on`, `off`] as const, `auto`);
+const diffProse = computed<boolean>(() => (diffProseChoice.value === `auto` ? useAudience().maker.value : diffProseChoice.value === `on`));
 const diffOpen = enumPref(DIFF_OPEN_KEY, [`top`, `imports`, `biggest`] as const, `imports`);
 const markdownOutline = boolPref(MARKDOWN_OUTLINE_KEY, true);
 
@@ -265,6 +278,10 @@ const toggleHideTests = (): void => {
     hideTests.value = !hideTests.value;
 };
 
+const toggleHideTechnical = (): void => {
+    hideTechnicalChoice.value = hideTechnical.value ? `off` : `on`;
+};
+
 const setEditMode = (on: boolean): void => {
     editMode.value = on;
 };
@@ -279,6 +296,10 @@ const toggleHideFileComments = (): void => {
 
 const setDiffLayout = (value: DiffLayout): void => {
     diffLayout.value = value;
+};
+
+const setDiffProse = (on: boolean): void => {
+    diffProseChoice.value = on ? `on` : `off`;
 };
 
 const setDiffOpen = (value: DiffOpen): void => {
@@ -302,10 +323,12 @@ export function useLayout() {
         sidebarPanel,
         showIgnored,
         hideTests,
+        hideTechnical,
         editMode,
         showComments,
         hideFileComments,
         diffLayout,
+        diffProse,
         diffOpen,
         markdownOutline,
         set,
@@ -326,10 +349,12 @@ export function useLayout() {
         setSidebarPanel,
         toggleShowIgnored,
         toggleHideTests,
+        toggleHideTechnical,
         setEditMode,
         toggleShowComments,
         toggleHideFileComments,
         setDiffLayout,
+        setDiffProse,
         setDiffOpen,
         toggleMarkdownOutline,
     };

@@ -1,5 +1,6 @@
 import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewBadge, ViewRegistration } from "@intentic/extension-api";
 import { shallowRef } from "vue";
+import { type Audience, useAudience } from "../app/useAudience";
 import { coreViews } from "./coreViews";
 import { badgeSpeaks } from "./viewBadge";
 
@@ -53,6 +54,9 @@ export type SeatPolicy = "always" | "signal";
 export interface RailItem {
     readonly id: string;
     readonly seat: SeatPolicy;
+    // For an `always` seat an extension's view fills: the core id that takes the seat while that view is not
+    // registered, so switching the extension off leaves a home rather than a hole.
+    readonly standIn?: string;
 }
 
 export interface RailGroup {
@@ -62,33 +66,71 @@ export interface RailGroup {
     readonly items: readonly RailItem[];
 }
 
-const always = (id: string): RailItem => ({ id, seat: `always` });
+const always = (id: string, standIn?: string): RailItem => (standIn === undefined ? { id, seat: `always` } : { id, seat: `always`, standIn });
 const signal = (id: string): RailItem => ({ id, seat: `signal` });
 
-export const RAIL_GROUPS: readonly RailGroup[] = [
-    // Preview is `always` for being visited constantly, not for its badge, which counts an inventory, not a claim.
-    { id: `work`, label: `Work`, items: [always(`chat`), always(`agents`), always(`workspace`), always(`preview`)] },
-    // Every tile here badges when it needs the owner, and lights while a run of its own is in flight; being
-    // seated by lighting up costs them nothing.
-    {
-        id: `judge`,
-        label: `Judge`,
-        items: [signal(`approvals`), signal(`acceptance`), signal(`pipelines`), signal(`deployments`), signal(`maintenance`)],
-    },
-    // Authored once, then left alone. Automations never badges: a held wake is counted by Approvals instead.
-    { id: `setup`, label: `Set up`, items: [signal(`workflows`), signal(`automations`)] },
-    // Consulted deliberately, not summoned; Documentation badges rarely and meaningfully, the others don't at all.
-    { id: `know`, label: `Know`, items: [signal(`documentation`), signal(`infrastructure`), signal(`live-status`)] },
-];
+// The maker's home is the Project view (`@intentic/ext-project`), seated where a developer has the file tree.
+export const PROJECT_VIEW_ID = `project`;
+export const WORKSPACE_VIEW_ID = `workspace`;
 
-const RAIL_ORDER: readonly string[] = RAIL_GROUPS.flatMap((group) => group.items.map((item) => item.id));
+// Every tile here badges when it needs the owner, and lights while a run of its own is in flight; being
+// seated by lighting up costs them nothing.
+const JUDGE: RailGroup = {
+    id: `judge`,
+    label: `Judge`,
+    items: [signal(`approvals`), signal(`acceptance`), signal(`pipelines`), signal(`deployments`), signal(`maintenance`)],
+};
+// Authored once, then left alone. Automations never badges: a held wake is counted by Approvals instead.
+const SETUP: RailGroup = { id: `setup`, label: `Set up`, items: [signal(`workflows`), signal(`automations`)] };
+// Consulted deliberately, not summoned; Documentation badges rarely and meaningfully, the others don't at all.
+const KNOW: RailGroup = { id: `know`, label: `Know`, items: [signal(`documentation`), signal(`infrastructure`), signal(`live-status`)] };
 
-const SEAT_POLICY: ReadonlyMap<string, SeatPolicy> = new Map(
-    RAIL_GROUPS.flatMap((group) => group.items.map((item) => [item.id, item.seat] as const)),
-);
+// One table per audience; only the Work band differs. Preview is `always` for being visited constantly, not for its
+// badge, which counts an inventory, not a claim.
+const RAIL_GROUPS_BY_AUDIENCE: Record<Audience, readonly RailGroup[]> = {
+    developer: [
+        { id: `work`, label: `Work`, items: [always(`chat`), always(`agents`), always(WORKSPACE_VIEW_ID), always(`preview`)] },
+        JUDGE,
+        SETUP,
+        KNOW,
+    ],
+    // The file tree keeps its rank beside the home it stands in for, so a maker who opens it finds it in the same seat.
+    maker: [
+        {
+            id: `work`,
+            label: `Work`,
+            items: [always(`chat`), always(`agents`), always(PROJECT_VIEW_ID, WORKSPACE_VIEW_ID), signal(WORKSPACE_VIEW_ID), always(`preview`)],
+        },
+        JUDGE,
+        SETUP,
+        KNOW,
+    ],
+};
 
-// An unlisted id is `signal`, matching railRank's default: it appends and earns its place by badging.
-export const seatPolicy = (id: string): SeatPolicy => SEAT_POLICY.get(id) ?? `signal`;
+export const railGroupsFor = (audience: Audience): readonly RailGroup[] => RAIL_GROUPS_BY_AUDIENCE[audience];
+
+// The developer's table, which is also what every surface read before there were two.
+export const RAIL_GROUPS: readonly RailGroup[] = RAIL_GROUPS_BY_AUDIENCE.developer;
+
+// The table for whoever is looking; reactive when read inside a computed, like everything below that reads it.
+const activeGroups = (): readonly RailGroup[] => railGroupsFor(useAudience().audience.value);
+
+const isRegistered = (id: string): boolean => views.value.some((entry) => entry.registration.id === id);
+
+// An unlisted id is `signal`, matching railRank's default: it appends and earns its place by badging. A stand-in
+// inherits the `always` seat of the view it fills in for while that view is not registered.
+export const seatPolicy = (id: string): SeatPolicy => {
+    const items = activeGroups().flatMap((group) => group.items);
+    const own = items.find((item) => item.id === id)?.seat ?? `signal`;
+    if (own === `always`) {
+        return own;
+    }
+    const filling = items.find((item) => item.standIn === id && item.seat === `always`);
+    return filling !== undefined && !isRegistered(filling.id) ? `always` : own;
+};
+
+// The view a tile press on the home seat opens: the Project view when a maker has it, else the file tree.
+export const homeViewId = (): string => (useAudience().maker.value && isRegistered(PROJECT_VIEW_ID) ? PROJECT_VIEW_ID : WORKSPACE_VIEW_ID);
 
 // Whether a tile is on the rail now, in one predicate: the rail and the More menu ask its positive and
 // negative of the same list. `pinned` overrules the table; `active` keeps the current area seated while you're in it.
@@ -110,20 +152,28 @@ export const seatedOnlyByVisit = (
 // What the mobile tab bar already promotes, so the mobile menu doesn't list it again. View ids, the same
 // key RAIL_GROUPS and detectActivations use, not package ids.
 export const APPROVALS_VIEW_ID = `approvals`;
-export const TAB_BAR_IDS: readonly string[] = [APPROVALS_VIEW_ID, `workspace`, `chat`, `agents`];
+export const tabBarIds = (): readonly string[] => [APPROVALS_VIEW_ID, homeViewId(), `chat`, `agents`];
+
+const railOrder = (): readonly string[] => activeGroups().flatMap((group) => group.items.map((item) => item.id));
 
 export const railRank = (id: string): number => {
-    const at = RAIL_ORDER.indexOf(id);
-    return at === -1 ? RAIL_ORDER.length : at;
+    const order = railOrder();
+    const at = order.indexOf(id);
+    return at === -1 ? order.length : at;
 };
 
 // An unlisted id lands in the last group, matching railRank, so it can't sort under the wrong divider.
-const railGroupOf = (id: string): RailGroup => RAIL_GROUPS.find((group) => group.items.some((item) => item.id === id)) ?? RAIL_GROUPS.at(-1)!;
+const railGroupOf = (id: string): RailGroup => {
+    const groups = activeGroups();
+    return groups.find((group) => group.items.some((item) => item.id === id)) ?? groups.at(-1)!;
+};
 
 // Cuts a rail-ordered run into its bands, dropping empty ones so nothing draws a separator over an
 // unactivated band. Shared by the desktop rail and mobile menu so they can't disagree.
 export const railBands = <T>(items: readonly T[], idOf: (item: T) => string): { readonly group: RailGroup; readonly items: readonly T[] }[] =>
-    RAIL_GROUPS.map((group) => ({ group, items: items.filter((item) => railGroupOf(idOf(item)) === group) })).filter((band) => band.items.length > 0);
+    activeGroups()
+        .map((group) => ({ group, items: items.filter((item) => railGroupOf(idOf(item)) === group) }))
+        .filter((band) => band.items.length > 0);
 
 // detect() failures are contained: one broken extension contributes nothing this round, not a blanked sidebar.
 const safeDetect = (entry: RegisteredView, repos: readonly RepoFacts[], capabilities: readonly CapabilityFacts[]): Activation[] => {

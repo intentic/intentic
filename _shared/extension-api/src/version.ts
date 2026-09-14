@@ -72,4 +72,8 @@
 // than navigating away from the current view. Two extensions were navigating to `/agents/<id>` on a plain
 // click, which left the view they were on; this is the call they should have had. The `chatApi` sub-surface
 // is recorded from this release on, for the same reason `workspaceApi` was recorded from 2.10.0.
-export const extensionApiVersion = "2.11.0";
+// 2.12.0 adds `api.audience`: who the screens are written for, `developer` or `maker`, beside `theme` and read the
+// same way. The shell renames its own tiles and verbs by it (Land now is Accept, Workspace is Files beside a Project
+// home), and a view that says "branch" or "land" to a maker would be the one surface still speaking git. Additive:
+// a view that never asks renders as it always has.
+export const extensionApiVersion = "2.12.0";

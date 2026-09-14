@@ -16,13 +16,17 @@ const { rule, disabled = false } = defineProps<{
 
 const emit = defineEmits<{ save: [RuleDraft]; cancel: [] }>();
 
-// `builtin` never reaches this form; the three built-in rows are filtered out of the list it edits.
+// The verifier built-ins never reach this form; their rows are filtered out of the list it edits. The versioner is
+// the one built-in a person may write by hand.
 const choiceOf = (from: Rule | undefined): Choice => {
     if (from?.action.kind === `command`) {
         return `command`;
     }
     if (from?.action.kind === `verdict`) {
         return from.action.verdict;
+    }
+    if (from?.action.kind === `builtin` && from.action.name === `version-landed`) {
+        return `version`;
     }
     return `instruct`;
 };
@@ -135,6 +139,9 @@ const actionOf = (): Rule["action"] => {
     }
     if (action.value === `instruct`) {
         return { kind: `instruct`, text: text.value.trim() };
+    }
+    if (action.value === `version`) {
+        return { kind: `builtin`, name: `version-landed` };
     }
     return { kind: `verdict`, verdict: action.value === `allow` ? `allow` : `hold` };
 };

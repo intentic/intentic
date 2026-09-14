@@ -156,6 +156,8 @@ const BUILTINS: Record<RuleBuiltin, (deps: TurnEndingDeps, ledgers: Ledgers) => 
               }),
     "verify-ui-edits": async (_deps, ledgers) => verifyUiEditsMessage(ledgers.view),
     "verify-tests": async (deps) => (deps.tests === undefined ? undefined : deps.tests()),
+    // Stands at `agent.landed` only (the schema refuses it here); a Stop has nothing to say about it.
+    "version-landed": async () => undefined,
 };
 
 // Re-runs a failing check only when its output names a missing binary, the sign of a mid-install tree. Not a retry

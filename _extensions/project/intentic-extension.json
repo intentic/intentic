@@ -1,0 +1,47 @@
+{
+    "$schema": "https://intentic.dev/intentic-extension.schema.json",
+    "publisher": "intentic",
+    "name": "project",
+    "version": "1.0.0",
+    "category": "workspace",
+    "icon": "home",
+    "engines": {
+        "intentic": "^2.12.0"
+    },
+    "permissions": {
+        "sandbox": [
+            "GET /agents",
+            "POST /agent",
+            "GET /history/snapshots",
+            "GET /history/diff",
+            "GET /history/file-diff",
+            "POST /history/restore",
+            "GET /git/changes",
+            "GET /workspace/tree",
+            "GET /workspace/children",
+            "GET /workspace/file",
+            "GET /workspace/repos",
+            "POST /workspace/repos",
+            "GET /public",
+            "GET /share",
+            "GET /diff/raw"
+        ]
+    },
+    "contributes": {
+        "views": [
+            {
+                "id": "project",
+                "label": "Project",
+                "surface": "rail",
+                "badge": true
+            }
+        ],
+        "commands": [
+            {
+                "command": "project.open",
+                "title": "Go to Project",
+                "icon": "home"
+            }
+        ]
+    }
+}

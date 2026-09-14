@@ -35,7 +35,7 @@ import { anchorWorktree, forkWorktreeBase } from "../anchors/anchor-worktree.js"
 import { anchorSteeredMessage } from "../anchors/steer-anchors.js";
 import { landAgent } from "../../agents/land/land.js";
 import { verifyLandedTree } from "../../agents/land/verify-landed.js";
-import { describeLandingInBackground } from "../../agents/land/landed-subject.js";
+import { settleLandingInBackground, versionMainTree } from "../../agents/land/version-landed.js";
 import { landingPaths } from "../../agents/land/landing-paths.js";
 import { landingVerdict, standing } from "../../rules/rules.js";
 import { landingOutcome, takeCheckVerdict } from "../verification/turn-checks.js";
@@ -439,6 +439,12 @@ async function* runConversationTurn(
                     : {}),
             };
         };
+        // The owner's own edits reach the assistant only as commits, since the sync below reads HEAD: with the version
+        // rule standing, the main tree's remainder is committed first.
+        await versionMainTree(
+            services,
+            worktree.repos.map(({ repo }) => repo),
+        );
         const synced = await syncOnto();
         branch = worktree.branch;
         // Where each repo stood before this turn; a moved repo reads from `onto` instead of `landedTip`.
@@ -539,8 +545,9 @@ async function* runConversationTurn(
                 await services.agents.recordLanded(conversationId, landed);
                 outcome = landed.held === true ? "ready" : landed.landed ? "landed" : "conflict";
                 if (landed.landed) {
-                    // Drafts what this land did, for the Changes panel chip; not awaited yet.
-                    describeLandingInBackground(services, conversationId);
+                    // Drafts what this land did, for the Changes panel chip, and commits it when the version rule stands;
+                    // not awaited.
+                    settleLandingInBackground(services, conversationId);
                 }
                 // The moment a dependency change starts costing every later turn's node_modules.
                 const verifyContext: DependencyLandOrigin = {

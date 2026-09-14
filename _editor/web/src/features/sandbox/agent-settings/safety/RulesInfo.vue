@@ -8,6 +8,7 @@ const MOMENTS = [
     [`Before the assistant finishes`, `Send it back to work, or run something it has to pass`, `Once per turn`],
     [`Before you push`, `Run a command; the push waits on it`, `Once per push`],
     [`When an agent finishes`, `Land its work, or hold it on its branch`, `Once per finished agent`],
+    [`After its work is accepted`, `Save a version: commit what it changed, and your own edits before the next agent starts`, `Once per accepted change`],
 ];
 </script>
 

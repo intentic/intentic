@@ -3,6 +3,7 @@ import { useDevice } from "@intentic/ui";
 import { type FunctionalComponent, h } from "vue";
 import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteLocationRaw, type RouteRecordRaw } from "vue-router";
 import { asyncView } from "../components/asyncView";
+import { homeViewId, PROJECT_VIEW_ID } from "../core-views/registry";
 import SplitViewOutline from "../components/SplitViewOutline.vue";
 import { restorePersistedQueries } from "../lib/queryPersistence";
 import { useAuth } from "../features/auth/useAuth";
@@ -132,11 +133,11 @@ const routes: RouteRecordRaw[] = [
         beforeEnter: [requireAuth, requireSetup],
         component: () => import(`../shell/WorkspaceShell.vue`),
         children: [
-            // Where setup lets go of the user: mobile lands on the agent fleet, desktop on the workspace, where its
-            // chat is already docked.
+            // Where setup lets go of the user: mobile lands on the agent fleet, desktop on the home seat, where its
+            // chat is already docked: the file tree, or a maker's Project page once that extension has registered.
             {
                 path: ``,
-                redirect: () => (useDevice().mobile.value ? `/agents` : `/workspace`),
+                redirect: () => (useDevice().mobile.value ? `/agents` : homeViewId() === PROJECT_VIEW_ID ? `/ext/${PROJECT_VIEW_ID}` : `/workspace`),
             },
             // Full-screen chat: the rail-docked chat's own surface, expanded. A route rather than a layout switch, so
             // the rail, back button and reload already know how to enter and leave it.

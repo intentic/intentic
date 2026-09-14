@@ -5,6 +5,8 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { commandShortcut, type CommandRegistration, registerCommand } from "../../../shell/commands/useCommands";
+import { useAudience } from "../../../app/useAudience";
+import { useVocabulary } from "../../../core-views/vocabulary";
 import { openPreview } from "../../preview/previewSurface";
 import { repoTargetId } from "../../preview/previewModel";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
@@ -58,6 +60,8 @@ import { HOISTED_CONTEXT } from "../files/viewerChrome";
 // (sandbox-global); this view owns no control for it.
 
 const layout = useLayout();
+const { maker } = useAudience();
+const words = useVocabulary();
 const {
     tree,
     rootHidden,
@@ -99,8 +103,19 @@ const sidebarMode = computed<SidebarPanel>({ get: () => layout.sidebarPanel.valu
 const sidebarModeOptions = computed(() => [
     // No hint on Files/Changes, the label already says it; Changes gets one only while the mark shows.
     { label: `Files`, value: `files` as const },
-    { label: `Changes`, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
+    // A maker's changes are versions on the Project page, and the index is never theirs to stage.
+    ...(maker.value ? [] : [{ label: `Changes`, value: `changes` as const, badge: changes.count.value, ...changesMark.value }]),
 ]);
+// A stored panel the audience no longer offers falls back to Files rather than rendering a hidden one.
+watch(
+    [maker, () => layout.sidebarPanel.value],
+    ([plain, panel]) => {
+        if (plain && panel !== `files`) {
+            layout.setSidebarPanel(`files`);
+        }
+    },
+    { immediate: true },
+);
 
 // State for the search box; the funnel beside it holds what the list leaves out (tree's Name, search's text).
 const { filter, scope: searchScope, contentMode, textMode, options: search, results, clear: clearFilter } = useExplorerSearch();
@@ -252,6 +267,7 @@ const checksDir = ref<string | undefined>(undefined);
 // here, where the openers live; passed as a function so only on-screen rows are asked.
 const rowActions = (dir: string): readonly RowAction[] =>
     rowActionsFor(dir, {
+        plain: maker.value,
         repoDirs: repoDirs.value,
         manageableDirs: manageableDirs.value,
         previewableDirs: previewableDirs.value,
@@ -325,13 +341,17 @@ const filterMenuItems = computed<MenuItem[]>(() =>
         : [
               { label: `Show ignored files`, checked: layout.showIgnored.value, command: () => layout.toggleShowIgnored() },
               { label: `Hide tests`, checked: layout.hideTests.value, command: () => layout.toggleHideTests() },
+              { label: `Hide technical files`, checked: layout.hideTechnical.value, command: () => layout.toggleHideTechnical() },
               ...personaLensItems.value,
           ],
 );
 // Lit whenever the list isn't the default one, so a missing spec or a search into node_modules never reads as
-// the workspace itself changing.
+// the workspace itself changing. The technical switch is a maker's default, so it lights only when it disagrees with
+// the audience.
 const filtersActive = computed(() =>
-    contentMode.value ? search.includeIgnored.value : layout.showIgnored.value || layout.hideTests.value || lensPersonaId.value !== undefined,
+    contentMode.value
+        ? search.includeIgnored.value
+        : layout.showIgnored.value || layout.hideTests.value || layout.hideTechnical.value !== maker.value || lensPersonaId.value !== undefined,
 );
 
 // The lens's folder list rides a tooltip on the already-lit funnel, not a separate stripe (whose folder names
@@ -547,7 +567,7 @@ const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
     },
     { command: `workspace.showChanges`, title: `Show Changes`, icon: `check-square`, keybinding: `Ctrl+Shift+D`, handler: openReview },
     { command: `workspace.showFiles`, title: `Show Files`, icon: `folder`, handler: () => focusSearch() },
-    { command: `workspace.showHistory`, title: `Show Restore Points`, icon: `history`, handler: () => layout.setSidebarPanel(`history`) },
+    { command: `workspace.showHistory`, title: `Show ${words.value.restorePoints}`, icon: `history`, handler: () => layout.setSidebarPanel(`history`) },
     // The root repo's health report: the palette route to what a nested repo opens from its own tree row.
     { command: `workspace.codebaseHealth`, title: `Show Codebase Health`, icon: `wave-pulse`, handler: () => openHealth(`root`) },
     { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => toggleSidebar() },
@@ -744,12 +764,13 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                     <SegmentedControl v-model="sidebarMode" size="xs" :options="sidebarModeOptions" />
                     <span class="flex-1"></span>
                     <button
+                        v-if="!maker"
                         type="button"
                         :class="ui.iconButton(layout.sidebarPanel.value === 'history' ? 'bg-overlay text-content' : '')"
                         @click="layout.setSidebarPanel('history')"
-                        v-tooltip.bottom="'Restore points: automatic file history'"
+                        v-tooltip.bottom="words.restorePointsHint"
                         :aria-pressed="layout.sidebarPanel.value === 'history'"
-                        aria-label="Restore points"
+                        :aria-label="words.restorePoints"
                     >
                         <Icon name="history" class="text-xs" />
                     </button>

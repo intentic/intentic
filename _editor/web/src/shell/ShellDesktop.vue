@@ -26,6 +26,8 @@ import {
     seatedOnlyByVisit,
 } from "../core-views/registry";
 import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
+import { useVocabulary } from "../core-views/vocabulary";
+import { useAudience } from "../app/useAudience";
 import { chatOnRail, lastAreaPath, toggleChatFloating, toggleChatHome } from "../features/chat/panel/chatPanelLayout";
 import { useChatFloating } from "../features/chat/panel/chatFloating";
 import { useShellCommands } from "./commands/useShellCommands";
@@ -97,6 +99,9 @@ const { iconRailSize } = useIconRailSize();
 const { floats: chatFloats } = useChatFloating();
 const route = useRoute();
 const router = useRouter();
+// The audience's words for the two core tiles that have maker names (Files, See it); Chat and Agents keep theirs.
+const words = useVocabulary();
+const { maker } = useAudience();
 
 // Shown only while a tunnel is connected; an always-present badge would say nothing.
 const { connected: connectedVpns } = useVpn();
@@ -150,7 +155,7 @@ const previewTile = computed<AreaTile | undefined>(() => {
     return {
         id: `preview`,
         to: `/preview`,
-        label: `Preview`,
+        label: words.value.preview,
         icon: `eye`,
         ...(healthy > 0 ? { badge: { count: healthy, tone: `neutral` as const, tooltip: `${healthy} running` } } : {}),
     };
@@ -196,7 +201,7 @@ const fixedTiles = computed<readonly AreaTile[]>(() => [
     {
         id: `workspace`,
         to: `/workspace`,
-        label: `Workspace`,
+        label: words.value.workspace,
         icon: `file-tree`,
         ...(workspaceBadge.value === undefined ? {} : { badge: workspaceBadge.value }),
     },
@@ -602,9 +607,9 @@ useKeybindings();
                 <RunningMark v-if="tile.badge?.running !== undefined" class="absolute bottom-0.5 right-0.5" />
             </RouterLink>
 
-<!-- Toggles the one global terminal panel, badged with live sessions (background jobs excluded, they never idle). -->
+<!-- Toggles the one global terminal panel, badged with live sessions (background jobs excluded, they never idle). A maker never asked for a shell. -->
             <button
-                v-if="canShip"
+                v-if="canShip && !maker"
                 type="button"
                 class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
                 :class="{ 'pointer-events-none opacity-40': !reachable, 'bg-primary-600/15 text-link': terminal.open.value }"

@@ -20,6 +20,7 @@ import { useChangeWeight } from "../workspace/changes/changeWeight";
 import { useFileNesting } from "../workspace/explorer/useFileNesting";
 import { useIconRailSize } from "../../shell/rail/useIconRailSize";
 import { type Skin, useSkin } from "../../skins/useSkin";
+import { type Audience, useAudience } from "../../app/useAudience";
 
 // How the workspace looks: color scheme, accent color, file-tree treatment, and which tabs the terminal strip carries.
 // Each setting re-renders the whole UI live, so most of the app is its own preview; the Explorer gets an inline sample
@@ -35,8 +36,16 @@ const { groupByModule } = useChangeGrouping();
 const { largestFirst } = useChangeWeight();
 // How much of an agent's working shows in transcripts; also flipped from the chat's own readout row.
 const { showToolCalls } = useToolCalls();
-// showIgnored/hideTests mirror the toolbar's filter; diffOpen has no other home, deciding where a diff opens.
-const { showIgnored, toggleShowIgnored, hideTests, toggleHideTests, diffOpen, setDiffOpen } = useLayout();
+// showIgnored/hideTests/hideTechnical mirror the toolbar's filter; diffOpen has no other home, deciding where a diff
+// opens.
+const { showIgnored, toggleShowIgnored, hideTests, toggleHideTests, hideTechnical, toggleHideTechnical, diffOpen, setDiffOpen } = useLayout();
+
+// Who the screens are written for: the same workspace with git's words or plain ones, and a different home tile.
+const { audience, setAudience } = useAudience();
+const audienceOptions = [
+    { label: `I write code`, value: `developer` as const, title: `Git's own words, the file tree as the home, every panel.` },
+    { label: `I don't`, value: `maker` as const, title: `Plain words, a project page as the home, tooling files out of the way.` },
+] satisfies readonly { label: string; value: Audience; title: string }[];
 
 // Order a reader gives up ground: top, then past imports, then the biggest changed block.
 const DIFF_OPEN_OPTIONS = [
@@ -100,6 +109,15 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
 
 <template>
     <div class="flex flex-col gap-6">
+        <!-- Who the words are for; first, since it decides what the rest of the app is called. -->
+        <RowGroup label="How you work">
+            <Row icon="user" title="How you work" description="Changes the words the app uses and which page is home. Nothing about your files or your agents.">
+                <template #control
+                    ><SegmentedControl :model-value="audience" :options="audienceOptions" @update:model-value="setAudience"
+                /></template>
+            </Row>
+        </RowGroup>
+
         <!-- Look: whole-workspace appearance choices. -->
         <RowGroup label="Look">
             <Row :icon="THEME_ICON[themeChoice]" title="Theme">
@@ -162,6 +180,16 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             <Row as="label" icon="filter" title="Hide tests" description="Hide test files and folders in explorer.">
                 <template #control>
                     <ToggleSwitch :model-value="hideTests" @update:model-value="toggleHideTests()" />
+                </template>
+            </Row>
+            <Row
+                as="label"
+                icon="wrench"
+                title="Hide technical files"
+                description="Lockfiles, configuration, dot files and build output. On by default when you don't write code."
+            >
+                <template #control>
+                    <ToggleSwitch :model-value="hideTechnical" @update:model-value="toggleHideTechnical()" />
                 </template>
             </Row>
         </RowGroup>

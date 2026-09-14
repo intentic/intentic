@@ -13,6 +13,7 @@ import { useAgentChanges } from "./useAgentChanges";
 import { useAgents } from "../fleet/useAgents";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { useRole } from "../../sandbox/secrets/useRole";
+import { useVocabulary } from "../../../core-views/vocabulary";
 import { useChat } from "../../chat/run/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
@@ -215,6 +216,7 @@ const confirmForceLand = async (): Promise<void> => {
 
 // Role split on the primary action: maintainers land, collaborators ask (the daemon enforces the floor itself).
 const { canDrive, canShip } = useRole();
+const words = useVocabulary();
 const requestingLand = ref(false);
 const requestLand = async (): Promise<void> => {
     if (requestingLand.value) {
@@ -375,14 +377,14 @@ const confirmDiscard = async (): Promise<void> => {
                     @click="pressLand"
                     v-tooltip.bottom="landHint"
                 >
-                    <Icon name="check" />Land now
+                    <Icon name="check" />{{ words.land }}
                 </Button>
                 <!-- The collaborator's copy of the button above; once asked it becomes a fact instead of a press. -->
                 <span
                     v-else-if="!mobile && changes.pending.value.length > 0 && canDrive && fleetAgent?.landRequested !== undefined"
                     class="inline-flex shrink-0 items-center gap-1 text-2xs text-muted"
                 >
-                    <Icon name="clock" class="text-2xs" />Land requested
+                    <Icon name="clock" class="text-2xs" />{{ words.landRequested }}
                 </span>
                 <Button
                     v-else-if="!mobile && changes.pending.value.length > 0 && canDrive"
@@ -391,9 +393,9 @@ const confirmDiscard = async (): Promise<void> => {
                     class="shrink-0 whitespace-nowrap"
                     :disabled="requestingLand"
                     @click="requestLand"
-                    v-tooltip.bottom="'Landing needs a maintainer: this puts the ask on their board'"
+                    v-tooltip.bottom="words.requestLandHint"
                 >
-                    <Icon :name="requestingLand ? 'spinner' : 'send'" :spin="requestingLand" />Request land
+                    <Icon :name="requestingLand ? 'spinner' : 'send'" :spin="requestingLand" />{{ words.requestLand }}
                 </Button>
                 <button
                     v-if="localOnly"
@@ -474,32 +476,29 @@ const confirmDiscard = async (): Promise<void> => {
         </ResponsiveOverlay>
 
 <!-- Mid-write land warns about the recoverable overwrite risk. -->
-        <Modal :open="pendingForceLand" size="sm" header="Land while the agent is working?" @update:open="pendingForceLand = false">
-            <p class="text-xs text-content">
-                The agent is still writing. Landing now takes its work exactly as it stands, which can mean half-finished changes: one side of a
-                rename, or three files of a larger edit.
-            </p>
+        <Modal :open="pendingForceLand" size="sm" :header="words.landWhileWorking" @update:open="pendingForceLand = false">
+            <p class="text-xs text-content">{{ words.landWhileWorkingBody }}</p>
             <p class="mt-2 text-xs text-muted">
                 Nothing is final: this arrives as uncommitted changes for you to review, and the rest of the turn lands on top of it when the agent
                 finishes.
             </p>
             <template #footer>
                 <Button size="small" severity="secondary" :text="true" label="Cancel" @click="pendingForceLand = false" />
-                <Button size="small" severity="warn" label="Land anyway" :disabled="changes.actionBusy.value" @click="confirmForceLand" />
+                <Button size="small" severity="warn" :label="words.landAnyway" :disabled="changes.actionBusy.value" @click="confirmForceLand" />
             </template>
         </Modal>
 
-        <Modal :open="pendingDiscard" size="sm" header="Discard this agent's work" @update:open="pendingDiscard = false">
+        <Modal :open="pendingDiscard" size="sm" :header="words.discardHeader" @update:open="pendingDiscard = false">
             <p class="text-xs text-content">
-                Delete the agent's branch and worktree? Its {{ changes.count.value }} changed file{{ changes.count.value === 1 ? "" : "s" }} and the
-                conversation's isolated history go with them.
+                {{ words.discardBodyLead }} Its {{ changes.count.value }} changed file{{ changes.count.value === 1 ? "" : "s" }}
+                {{ words.discardBodyTail }}
             </p>
             <p v-if="changes.count.value > changes.pending.value.length" class="mt-2 text-xs text-muted">
                 Work that already landed stays in your workspace: only what is still on the branch is lost.
             </p>
             <template #footer>
                 <Button size="small" severity="secondary" :text="true" label="Cancel" @click="pendingDiscard = false" />
-                <Button size="small" severity="danger" label="Discard" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
+                <Button size="small" severity="danger" :label="words.discard" :disabled="changes.actionBusy.value" @click="confirmDiscard" />
             </template>
         </Modal>
     </div>

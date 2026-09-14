@@ -35,9 +35,10 @@ import FileDiffPane from "../viewers/FileDiffPane.vue";
 import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "../tabs/workspaceTabs";
 import { specialChip } from "../explorer/specialPaths";
+import { useVocabulary } from "../../../core-views/vocabulary";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
-import { explorerShows } from "../explorer/explorerFilter";
+import { type ExplorerFilters, explorerShows, technicalHidden } from "../explorer/explorerFilter";
 import FileViewer from "../viewers/FileViewer.vue";
 import HistoryPanel from "../changes/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
@@ -54,6 +55,7 @@ import { parentDir } from "@intentic/ui/path";
 const route = useRoute();
 const router = useRouter();
 const layout = useLayout();
+const words = useVocabulary();
 const changes = useChanges();
 const {
     tree,
@@ -189,14 +191,23 @@ watch(
     },
     { immediate: true },
 );
+// Filter switches are shared with desktop, so a drilled-into folder shows the same entries the tree would.
+const filters = computed<ExplorerFilters>(() => ({
+    showIgnored: layout.showIgnored.value,
+    hideTests: layout.hideTests.value,
+    hideTechnical: layout.hideTechnical.value,
+}));
+// A walked dir carries children inline; an unlisted one's arrive via loadChildren, keyed by path.
+const children = computed<readonly WorkspaceTreeEntry[]>(() =>
+    dir.value === `` ? tree.value : (entriesByPath.value.get(dir.value)?.children ?? lazyChildren.value.get(dir.value) ?? []),
+);
 const listing = computed<readonly WorkspaceTreeEntry[]>(() => {
-    // A walked dir carries children inline; an unlisted one's arrive via loadChildren, keyed by path.
-    const children = dir.value === `` ? tree.value : (entriesByPath.value.get(dir.value)?.children ?? lazyChildren.value.get(dir.value) ?? []);
-    // Filter switches are shared with desktop, so a drilled-into folder shows the same entries the tree would.
-    const shown = children.filter((node) => explorerShows(node, layout.showIgnored.value, layout.hideTests.value));
+    const shown = children.value.filter((node) => explorerShows(node, filters.value));
     const query = filter.value.trim().toLowerCase();
     return query === `` ? shown : shown.filter((node) => node.name.toLowerCase().includes(query));
 });
+// Tooling entries the technical switch took out of this level, said on a chip so the list never reads as the folder.
+const technicalCount = computed(() => technicalHidden(children.value, filters.value));
 const dirLoading = computed(() => dir.value !== `` && lazyLoading.value.has(dir.value));
 // Entries the daemon's cap cut from the open dir's listing; 0, the common case, shows nothing.
 const dirHidden = computed(() => (dir.value === `` ? rootHidden.value : (lazyHidden.value.get(dir.value) ?? 0)));
@@ -511,10 +522,10 @@ const onPick = (event: Event): void => {
                             />
                             <!-- What the sandbox does with this entry (specialPaths.ts). No hover on touch, so the chip alone names it. -->
                             <span
-                                v-if="specialChip(node.path)"
+                                v-if="specialChip(node.path, words)"
                                 class="ui-status-pill shrink-0 text-2xs font-medium"
-                                :class="specialChip(node.path)?.tone === 'warning' ? 'bg-warning/10 text-warning' : 'bg-subtle/10 text-subtle'"
-                                >{{ specialChip(node.path)?.label }}</span
+                                :class="specialChip(node.path, words)?.tone === 'warning' ? 'bg-warning/10 text-warning' : 'bg-subtle/10 text-subtle'"
+                                >{{ specialChip(node.path, words)?.label }}</span
                             >
                             <Icon
                                 v-if="node.type === 'dir' && !isLockedWorkspacePath(node.path) && !deadLink(node)"
@@ -529,6 +540,15 @@ const onPick = (event: Event): void => {
                         <p v-if="dirHidden > 0" class="px-4 py-2 text-center text-2xs text-subtle">
                             {{ dirHidden.toLocaleString() }} more {{ dirHidden === 1 ? "entry" : "entries" }} in this folder, search to reach them.
                         </p>
+                        <!-- The technical switch's own receipt; a tap is the way back. -->
+                        <button
+                            v-if="technicalCount > 0 && !filter.trim()"
+                            type="button"
+                            class="w-full px-4 py-2 text-center text-2xs text-subtle active:text-content"
+                            @click="layout.toggleHideTechnical()"
+                        >
+                            {{ technicalCount }} technical {{ technicalCount === 1 ? "file" : "files" }} hidden. Tap to show them.
+                        </button>
                     </div>
                 </PullToRefresh>
 
@@ -566,6 +586,17 @@ const onPick = (event: Event): void => {
                         <Icon v-show="layout.hideTests.value" name="check" class="text-base text-muted" />
                     </span>
                     Hide tests
+                </button>
+                <button
+                    type="button"
+                    class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
+                    :aria-pressed="layout.hideTechnical.value"
+                    @click="layout.toggleHideTechnical()"
+                >
+                    <span class="flex w-4 shrink-0 justify-center">
+                        <Icon v-show="layout.hideTechnical.value" name="check" class="text-base text-muted" />
+                    </span>
+                    Hide technical files
                 </button>
             </div>
         </BottomSheet>

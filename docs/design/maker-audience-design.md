@@ -1,0 +1,416 @@
+# The maker audience: the design
+
+How a person who does not write code uses Intentic without meeting git. The workspace keeps every mechanism it
+has (a branch and worktree per conversation, land as the review boundary, restore points, commits, push) and
+gains one preference, `audience`, that decides which of those mechanisms the screen names, which it hides
+behind a default, and what the home view is. This records the reasoning and the plan, and section 11 records what
+changed when it was built.
+
+## 1. The gap
+
+The product is sold to developers (`docs/marketing/positioning.md`, "Who it's for"), and every user story in
+`docs/user-stories/` is written from a developer's chair. The next person to arrive is someone who wants an
+assistant that writes their newsletter, keeps their notes, builds the one page site for their shop, and
+answers their mail. They have the same need for a persistent agent on a machine of their own. They have no
+idea what a repository is, and the app tells them about repositories on every screen.
+
+What that person meets today, by surface:
+
+| Surface | What it says | Where |
+| --- | --- | --- |
+| Rail | Chat, Agents, Workspace, Preview always seated | `_editor/web/src/core-views/registry.ts` `RAIL_GROUPS` |
+| Workspace | a file tree of every repo, dotfiles, lockfiles, `.intentic/`, config, tests | `features/workspace/explorer/WorkspaceTree.vue` |
+| Workspace sidebar | Files / Changes, the second being VSCode's SCM: repos, staged and unstaged sides, Stage, Unstage, Commit with a message box, Discard, Publish, Sync, Push, ahead and behind counts, Fetch every repo | `features/workspace/changes/ReviewPanel.vue`, `push/outgoingWork.ts` |
+| Row actions | codebase health, git history, personas, checks, apps, dependencies | `features/workspace/explorer/rowActions.ts` |
+| Empty workspace | "Clone a repository. Paste a Git address" | `features/workspace/explorer/WorkspaceEmptyState.vue` |
+| Agents board | a card names its branch `agent/…`, its runner and model, and offers Land now, Land again, Request land, Discard | `features/agents/board/AgentCard.vue` |
+| Agent review | a file list with diffs, mark as reviewed, a conflict report naming paths that refused | `features/agents/review/` |
+| Terminal | a shell | the shell's own panel |
+
+Two things make this a wall rather than a learning curve. The **centre of gravity is the file tree**: the
+always seated Workspace tile opens on files, and everything the maker wants (what did the assistant do, is it
+live, can I undo it) is a click away from a screen that shows `pnpm-lock.yaml`. And the **review boundary is
+git's index**: an assistant's work is held on a branch until someone reads a diff and presses Land, then stays
+uncommitted until someone writes a commit message. Both steps are the point for a developer. For a
+maker both are chores with unfamiliar names, and the second one is a trap (section 5).
+
+The good news is that most of what a maker needs already exists under a developer's name:
+
+- **Restore points** (`features/workspace/changes/HistoryPanel.vue`, daemon `history/history.ts`) are a
+  Drive style version history over `/work`, deliberately not git, labelled "Agent turn", "Your changes",
+  "Files restored", with a Restore that rewrites the tree after saving a safety checkpoint.
+- **Auto-land** is a rule at the `agent.finished` moment (`sandbox-contract/src/schemas/settings.ts`
+  `RuleMomentSchema`), per agent (`/agents/{id}/auto-land`) and as a sandbox posture.
+- **The daemon drafts a commit subject from the landed code** (`agents/land/landed-subject.ts`), and the
+  Changes panel fills its box from it (`changes/commitMessage.ts`).
+- **Roles** already split "may drive" from "may land": a collaborator sees Request land instead of Land now
+  (`auth/role-floor.ts`, `AgentCard.vue`).
+- **Preview** is an always seated tile, **`public/`** is a shareable outbox with a share view
+  (`_extensions/preview`), **viewers** render docx, xlsx, pdf and media (`_extensions/viewers`), and the
+  design kit has an editable `MarkdownDocument` with autosave.
+- **`AGENTS.md` already has a settings page** (`/sandbox/agent?section=instructions`), so "tell the assistant how
+  I like things" needs no file tree at all.
+- **The tree already filters**: ignored entries and tests are one predicate shared by both trees
+  (`explorer/explorerFilter.ts`), and special roles are one table (`explorer/specialPaths.ts`).
+
+So the job is less "build a simple mode" than "give the maker a different home and different defaults over the
+same machinery, and stop saying git words to them".
+
+## 2. What the maker already thinks in
+
+The maker's models come from Google Drive and Docs, Notion, Canva and a chat assistant. From those they bring
+six words, and each maps onto one mechanism that stays exactly as it is:
+
+| The maker says | The developer says | What runs underneath |
+| --- | --- | --- |
+| project | repository | a git repo under `/work`. The root counts as one (`repo === "root"` in changes) |
+| the assistant's draft | branch, worktree, `agent/<id>` | `agents/worktrees/worktrees.ts` |
+| accept / throw away | land / discard | `agents/land/land.ts` |
+| version, go back | commit, restore point | commit, `history/history.ts` snapshot |
+| what changed | diff | the same diff, rendered differently (section 6.3) |
+| back up to GitHub | push, publish a branch | push |
+| see it, share it | preview, `public/`, deploy | `_extensions/preview`, `_extensions/deployments` |
+| instructions for the assistant | `AGENTS.md`, memory | the same file |
+
+Two words never reach the maker at all: the index (stage, unstage) and the remote's bookkeeping (ahead, behind,
+upstream, fetch). A maker's version is everything in the tree at that moment. That is also Docs' model, and it
+is what makes the Changes panel unnecessary for them rather than merely renamed.
+
+One word clashes. Today **Publish** means "push a branch that has no upstream" (`push/outgoingWork.ts`,
+`unpublished`). To a maker, Publish means "put it where people can see it". The maker audience reserves Publish
+for `public/` and deploys, and calls the git act "Back up". The developer audience keeps its words. Section 7
+has the whole table.
+
+## 3. Replace the extensions, or extend them?
+
+Two clean answers were on the table, and neither survives contact with the code.
+
+**A parallel set of extensions for makers** (a Projects view instead of Workspace, a Versions view instead of
+Changes) would keep git underneath and keep the developer's screens untouched, which is the attraction. But the
+Workspace is not an extension: it is 5,800 lines of core (`features/workspace/`) that own the tab strip, the
+Monaco and markdown viewers, diff opening, uploads, presence, search and the `/workspace/<path>` route every
+file link in a transcript points at (`lib/markdown/markdownFileLinks.ts`). An extension cannot reach any of
+that (`_extensions/README.md`, the lint boundary), so a replacement would rebuild it, and a second copy of the
+viewer stack is the thing that drifts. The rail's four permanent seats are also a core table an extension
+cannot unseat (`registry.ts`, `always`).
+
+**A "simple mode" switch inside the existing screens** keeps one implementation, which is the attraction. But
+it leaves the file tree as the home, which is the actual complaint, and it would be built as conditionals
+through the workspace's components, against the way this codebase already handles variation (one table read
+by every surface: `RAIL_GROUPS`, `specialPaths`, `explorerShows`).
+
+The answer is the split the extension system already draws for features (`docs/architecture/extensions.md`,
+"does anything else plug into it?"). **What every surface reads is core. What one audience looks at is an
+extension.**
+
+Core owns the shared mechanism, each a small table or default:
+
+- the `audience` preference and its one reader, `useAudience` (section 4)
+- the vocabulary table (section 7)
+- the rail table per audience, with the rule that an `always` seat may name an extension's view id
+- the tree's "technical files" filter, one predicate beside `explorerShows`
+- the finishing defaults for makers (section 5), which are daemon rules rather than UI
+- a read of the audience on the extension API, `api.audience()`, the way `api.theme.mode()` is read now
+
+A first party UI extension, `_extensions/project` (`@intentic/ext-project`, id `intentic.project`), owns the
+maker's home: the Project view, its timeline, and the prose diff (section 6). It uses only what the public API
+already offers: `RepoFacts` for detection, `/history/*` and `GET /git/changes` and `GET /agents` through
+`permissions.sandbox`, `api.workspace.openDiff` and `api.navigate("/workspace/…")` to hand a file or a diff to
+the core viewers, `api.chat.openAgent` and `POST /agent` to start work, as `ext-deployments` does for its fix
+turns.
+
+What this buys: a developer sees nothing change, because every maker thing is a seat, a word or a default. A
+maker who turns the extension off falls back to the Workspace tile, because the rail resolves its `always`
+seat to whichever of `project` and `workspace` is registered. And the first extension to need the audience
+proves the API read is enough, which is the dogfooding rule the first party packs exist for.
+
+## 4. The audience preference
+
+`audience: "maker" | "developer"`, a preference of the person looking, not of the box. Two people share a
+sandbox today (owner and invitees), and a developer and their partner reading the same tree need different
+screens over the same files.
+
+**Storage.** With the appearance preferences (`features/settings/documentAppearance.ts`, beside `useSkin`):
+`useAudience.ts` reads and writes `ui-audience` in browser storage, reactive, applied at module load. Per
+browser is enough to start, exactly as theme and skin are, and it needs no daemon route. If a per account copy
+is wanted later it is one platform setting, and the reader does not change.
+
+**Setting it.** Two places.
+
+- The empty workspace pane, where a newcomer first stands once setup has handed them over (`Setup.vue` ends by
+  opening the chat, with no screen of its own to ask on), carries one card: "How will you work here?", "I write
+  code" or "I don't write code" (`components/AudienceAsk.vue`). The second answer sets `maker` and, for a
+  maintainer, writes the two rules of section 5 behind a checkbox that is on by default: "the assistant's
+  changes apply on their own and every change is saved as a version. You can always go back." A reader between
+  files (the pane over a workspace with code) is never asked here. Settings holds the question for them.
+- Settings ▸ Appearance gets the same row, so either answer is one click from the other. The maker audience
+  hides nothing permanently: every screen below has "All files", "Show details" or "Switch to the developer
+  view" on it.
+
+**What it changes**: the home seat, the words, the tree filter, which row actions and panels show, the
+default view for a markdown file (rendered, with Edit opening the prose editor), whether the terminal panel is
+offered, and the setup proposal. **What it does not change**: routes, the daemon's behaviour (those are the
+sandbox's rules, set once at setup and visible in Sandbox ▸ Agent), roles, and anything an agent does.
+
+**On the extension API**: `api.audience(): "maker" | "developer"` and `api.audience.onDidChange`, additive
+(`extension-api/src/version.ts`, minor bump, `surface.json` regenerated). A view that does not ask renders as
+it does today.
+
+## 5. Review before apply becomes apply then undo
+
+This is the one decision that changes what the product promises, so it gets its own section.
+
+The developer's contract is *nothing the agent writes reaches my tree until I have read it*
+(`docs/user-stories/04-work/01-delegate-a-task-to-an-agent.md`). The maker's contract is Docs': *the assistant
+edits my thing, and I can always go back*. Same worktree, same land, two defaults:
+
+1. **Auto-land on**, sandbox wide, for a maker's setup. A clean turn lands as it finishes. A `ready` card
+   appears only when the maker turns the switch off, and then it reads "3 files changed. Accept, Look, or
+   Throw away" (section 6.5).
+2. **Auto-version on.** The codebase forces this one. Worktrees are cut from HEAD (`worktrees.ts`,
+   `snapshot`: "the current full HEAD of every repository") and the pre turn sync rebases onto main's HEAD
+   (`agents/land/sync.ts`). Landed work is applied as *uncommitted* changes. So for a person who does not
+   commit, the second assistant starts from a tree without the first one's work, and so does every one after
+   it. Today the developer's commit closes that gap. The maker needs it closed for them, at two moments:
+   - after every land, commit the landed paths in the main tree with the subject the daemon already drafts
+     (`landed-subject.ts`), through a new `agent.landed` rule moment with a `builtin` action `version-landed`.
+   - before every isolated turn starts, commit whatever else is dirty in the main tree as "Your edits", so the
+     maker's own hand edits in the browser editor reach the assistant. `commitWorktreeRemainder`
+     (`git/remote/root-repo.ts`) is the helper that already does this for a worktree, and the main tree gets
+     the same call at the sync step.
+
+   Both are rows in the existing rule table (`RuleMomentSchema`, `RuleActionSchema`), which is where "a fourth
+   is now a row here, not a release" was written for. The developer's table stays as it is.
+
+**The safety net** is the one that exists: every turn and every user write already cuts a restore point,
+and Restore already saves a `pre-restore` checkpoint first. The maker's undo is "go back to before this",
+which is a press on the timeline (section 6.2). Commits give the same history a durable, pushable form for
+the day a developer joins or the maker wants a backup on GitHub.
+
+**The rejected alternative** was to run a maker's turns on the main tree (`isolated: false`, the mode
+`liveWrites.ts` tracks), which removes the branch and the land from the story entirely. It was rejected
+because it also removes the two things the maker benefits from without seeing: two assistants at once do not
+write over each other, and a turn that goes wrong can be thrown away before it touches anything. Keeping one
+mechanism for both audiences is also what keeps the product one product.
+
+**Where the mechanism leaks** is the conflict. A land that refuses raises a card naming paths
+(`agents/review/AgentConflictReport.vue`). In the maker audience that card says "The assistant's changes to
+*pricing.md* no longer fit, because you edited it since. Ask the assistant to redo them?" and the button
+starts a turn with the conflict report as its brief. The report is still there behind "Show details".
+
+**Teams.** The audience is per person. Auto-land and auto-version are per sandbox. A developer who owns a
+sandbox and invites a maker as a collaborator keeps their review boundary, and the maker's presses become
+Request land, which the role floor already produces. The setup proposal is only offered to the owner.
+
+## 6. The maker's surfaces
+
+### 6.1 Project: the home
+
+One rail tile, `project`, always seated in the maker audience in the seat Workspace holds now. Detection is
+`RepoFacts`: one activation per repo, and the root when it holds files outside any repo. A workspace with one
+project opens on it, and one with several opens on a list of them.
+
+A project page, top to bottom:
+
+- **Name and what it is**, read from the README's first paragraph or `docs/`, with **See it** (the Preview
+  tile's target when `hasPanel`, else the main document), **Share** (the `public/` outbox and the share link
+  `_extensions/preview` already draws), and **Instructions** (`/sandbox/agent?section=instructions`).
+- **Waiting for you**: agents in `ready` (only when auto-land is off), conflicts, held pushes, approvals.
+  Each row is a sentence and one or two verbs. Empty most of the time, and absent when empty.
+- **What's new**: the timeline (6.2).
+- **Files**: the project's *content*, as a Drive style list (documents, images, pages), each opening in the
+  core viewer through `api.navigate`. "All files" opens `/workspace/<project>` with the technical filter on.
+- **New project**, **Open from GitHub**, **Upload a folder**: the three ways in from
+  `WorkspaceEmptyState.vue`, reordered and renamed. New project starts a turn from a description ("a one page
+  site for my bakery") and the templates `GET /workspace/templates` already serves for `ext-repo-apps`.
+
+### 6.2 What's new: the timeline
+
+One list merged from three sources the daemon already keeps, newest first:
+
+- landed turns (`GET /agents`, the `landed` records and their drafted subjects)
+- restore points (`/history`, triggers `turn`, `user`, `restore`)
+- versions (commits on the main line, which after section 5 are the same events made durable)
+
+Each row is *"Added a pricing section to the homepage. 2:14 pm. 3 files."* with **What changed** (6.3) and
+**Go back to before this** (the existing `POST /history/restore` behind the existing confirmation). The
+developer keeps the Changes panel and the git-history document. The maker sees this instead, and does not meet
+the words "restore point".
+
+### 6.3 What changed, without code
+
+The diff is the most alienating artifact on the screen, and it is the one the maker most needs to read. Three
+tiers, best available first:
+
+1. **The sentence.** The daemon's drafted subject (`landed-subject.ts`) and the agent's own last message. This
+   is what the row shows and what most makers stop at.
+2. **A rendered prose diff** for markdown: the two texts rendered through the existing markdown pipeline and
+   diffed at word level, drawn as Docs' suggestions (insertions underlined, deletions struck). This is a new
+   viewer the extension registers (`contributes.viewers`) and opens through `api.workspace.openDiff` with a
+   `DiffPayload`. Images already have `BinaryDiffView.vue`.
+3. **See it.** For a site, the Preview after the change, with "Show details" opening the ordinary diff in the
+   core viewer.
+
+### 6.4 Files, filtered
+
+`explorerShows` gains a third switch, *technical files*, on by default for makers and off for developers:
+dotfiles and dot directories, lockfiles, `package.json` and its siblings, build and config files by extension,
+`.intentic/`, and the test predicate it already has. One predicate, both trees, and a chip on the tree that says
+"12 technical files hidden" so nothing is secret. The special path chips (`reference`, `public`, `memory`)
+keep their tooltips and get maker wording from the vocabulary table.
+
+### 6.5 The Agents board
+
+The board stays: three lanes sorted by who needs you is the right shape for anyone. In the maker audience a
+card drops its branch name, runner and model chips, and its verbs read from the table: Land now becomes
+**Accept**, Discard becomes **Throw away**, the review drill in becomes **Look**. A `ready` card's first line
+is the sentence from 6.3. The review panel (`AgentReviewPanel.vue`) opens the same file list with the prose diff
+where one applies. "Mark as reviewed" stays, since a tick is not a developer concept.
+
+### 6.6 See it and Share
+
+Preview keeps its always seat and is renamed **See it** in the maker audience. Share collects what is spread
+over `_extensions/preview` today (the share link, `public/`) under one verb on the project page, and Publish
+is reserved for it (section 2).
+
+### 6.7 Instructions
+
+The `AGENTS.md` editor exists at `/sandbox/agent?section=instructions`. The project page links it as
+**Instructions for your assistant**, and the `memory` chip on the file row says the same words.
+
+### 6.8 Mobile
+
+`shell/mobileTabs.ts` promotes four tabs. In the maker audience Workspace's tab becomes Project, and the
+Review tab keeps pointing at Approvals when that pack is on, else at the project's Waiting for you.
+
+### 6.9 What the maker audience hides
+
+The Changes panel, the Restore points panel (its content is the timeline), the terminal panel, codebase health,
+checks, personas and git history row actions, the search's ignored files toggle, and the diff layout controls.
+Every one is back behind "Switch to the developer view", and none of their state is lost by switching.
+
+## 7. Vocabulary
+
+One module, `_editor/web/src/core-views/vocabulary.ts`, a table keyed by audience and read by every surface that
+says one of these words. Each entry is the whole label, not a substitution, so "Land while the agent is
+working?" and "Accept while the assistant is still working?" are two strings side by side rather than a
+template.
+
+| key | developer | maker |
+| --- | --- | --- |
+| repo | repository | project |
+| agent | agent | assistant |
+| branch | branch | draft |
+| land | Land now | Accept |
+| landAgain | Land again | Accept again |
+| requestLand | Request land | Ask to accept |
+| discard | Discard | Throw away |
+| review | Review | Look |
+| commit | Commit | Save a version |
+| changes | Changes | (hidden) |
+| restorePoint | Restore point | Version |
+| restore | Restore | Go back to this |
+| push | Push | Back up |
+| publishBranch | Publish | Back up |
+| sync | Sync | Back up |
+| diff | Diff | What changed |
+| workspace | Workspace | Project |
+| preview | Preview | See it |
+| memory | memory | instructions |
+| reference | reference | reference material |
+| public | public | shared |
+
+The rule for adding a row: a word goes in the table when a maker would have to ask what it means. Words that
+are the same in both columns are not in the table.
+
+## 8. Phases
+
+Each phase can be built and merged on its own, and each leaves the developer's screens unchanged. The order puts the trap (section 5)
+before the home, because a maker who gets the home first and the trap later loses work in between.
+
+**Phase 0, the shared mechanism (core, small).**
+
+- `features/settings/useAudience.ts`, the Appearance row, and the setup question in `Setup.vue`.
+- `core-views/vocabulary.ts`, and the ~20 call sites in `AgentCard.vue`, `AgentDetail.vue`,
+  `ReviewPanel.vue`, `HistoryPanel.vue`, `WorkspaceDesktop.vue`, `WorkspaceMobile.vue`, `mobileTabs.ts`,
+  `specialPaths.ts` reading it.
+- `registry.ts`: `RAIL_GROUPS` per audience, and an `always` seat resolves to the first registered id of a
+  list (`[project, workspace]`).
+- `explorerFilter.ts`: the technical predicate and its chip.
+- `extension-api`: `api.audience()`, `onDidChange`, version bump.
+- Daemon: the `agent.landed` moment, the `version-landed` builtin, the pre turn commit of the main tree's
+  remainder, and the two rules the setup question writes into `.intentic/config/settings.json`.
+
+**Phase 1, the home (`_extensions/project`).** The Project view with its five blocks (6.1), the timeline
+(6.2), Files with the filter, the three ways in. Tier 1 and tier 3 of "what changed". A story in
+`docs/user-stories/07-make/` per block, so `ext-acceptance` walks them.
+
+**Phase 2, reading changes.** The prose diff viewer (6.3 tier 2), the maker agent card (6.5), the conflict
+card as an ask, the rendered markdown default with the prose editor.
+
+**Phase 3, arriving.** New project from a description and a template, the setup proposal, the
+Instructions link, See it and Share on the project page, mobile tabs.
+
+**Phase 4, the sweep.** Hide the panels and row actions of 6.9 behind the audience, the keybindings page,
+the empty states, the notification wording (`shell/notifications/`), and a pass over every string the
+scanner in `docs/user-stories/.acceptance.md` would have a maker read.
+
+## 9. What this leaves open
+
+- **The name.** `audience` with `maker` and `developer` is the proposal. The setting's question, "How will
+  you work here?", matters more than the identifier. `mode`, `profile`, `face`, `lens` and `skin` are all
+  taken by something else in the app.
+- **Per account storage.** Browser storage matches theme and skin and needs nothing from the platform. A
+  maker who opens the app on their phone would answer the question again once. If that grates, it is one
+  platform setting later.
+- **The project home as extension or core.** Extension, for the reasons in section 3, with the rail
+  fallback as the guard. If the timeline turns out to need something only core can see (live tool call
+  streams, say), the view moves into `core-views/` beside `infrastructure` with the same registration, and
+  the reason is written in `coreViews.ts` like the other three.
+- **Auto-version and a developer's own workflow.** The rules are written only when a maker's setup asks
+  for them. A developer who wants "commit after land" can add the same row by hand in Sandbox ▸ Agent, which
+  is the point of it being a row.
+
+## 10. Stories to add
+
+`docs/user-stories/07-make/`, written from the maker's chair, walked by `ext-acceptance`:
+
+1. Arrive without code: answer the one question, land on a project page, start a new project from a sentence.
+2. Ask for a change and see it happen: the assistant edits, the timeline gains a row, See it shows the result.
+3. Read what changed without reading code: the sentence, the prose diff, the details behind it.
+4. Go back: undo the last change from the timeline, and the tree is what it was.
+5. Share it: the public link, and what "shared" means on a file row.
+6. Switch views: a developer and a maker look at the same project and each sees their own words.
+
+## 11. What changed on the way
+
+Written after phases 0 to 4 were built, where the code disagreed with the plan above.
+
+- **The question moved off the setup wizard.** `Setup.vue` ends with `router.push("/")` and the chat composer,
+  so there is no screen to ask on. The card lives on the empty workspace pane instead (section 4), and only there:
+  `WorkspaceEmptyState.test.ts` pins that the non-empty pane is the drop target and nothing else.
+- **Auto-version is one rule, two moments.** Rather than a second rule for the pre-turn commit, the
+  `version-landed` built-in at `agent.landed` also commits the main tree's remainder before an isolated turn
+  starts (`agents/land/version-landed.ts`, `versionMainTree`, called from `agent.routes.ts` ahead of the sync).
+  One switch on the Agent tab ("Save a version of accepted work"), one row in the table. The landed paths are
+  committed with `git commit --only` after staging them (`changes-index.ts`, `commitOnly`), which leaves the
+  owner's other staging alone. The subject is awaited from `landed-subject.ts` first, so nothing is amended.
+- **The rail's stand-in is a field, not a list.** `RailItem.standIn` names the core id that takes an
+  extension's `always` seat while that extension is not registered; `seatPolicy` reads the registry to decide.
+  `homeViewId()` is the one answer the desktop rail, the phone's tab bar and the mobile menu share.
+- **The prose diff is the app's own.** No diff library is a dependency of the web app, so
+  `viewers/proseDiff.ts` is a table LCS over paragraphs and then over words, with a cell ceiling past which a
+  block reads as replaced whole. `ProseDiffView.vue` draws it, and the toolbar's Prose/Code control and the
+  `ui-diff-prose` preference (auto follows the audience) decide which reading a markdown or text file opens in.
+- **See it has an address.** `/preview?target=repo:<id>` selects the Preview area's target on arrival
+  (`PreviewArea.vue`), so the project page links to its own running site rather than to whatever was shown last.
+- **The extension declares fourteen routes** and reads files without writing any. Its one write is a turn
+  (`POST /agent`) for a new project, which runs on the shared tree because a repository made inside a worktree
+  is outside land. Every destination on the page is an anchor built with `appLink(api.href(...))`, which the
+  repo's link rule (`navigatingControl.test.ts`) enforces across extensions.
+- **The developer's surfaces step aside by audience, in place.** The Changes tab and the Restore points
+  button leave the workspace sidebar, the health, history, persona and check row actions leave the tree
+  (`rowActions.ts`, `plain`), and the terminal tile leaves the rail and the phone menu. Each is one `maker`
+  read at the call site, and each comes back with the other answer.
+- **A `home` glyph was added to the icon set** for the Project tile, since the set had none.
+

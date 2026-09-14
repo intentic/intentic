@@ -56,3 +56,18 @@ it(`shows a workspace that HAS code only the drop target: this pane is not a tut
     expect(buttonSaying(el, `Ask`)).toBeUndefined();
     expect(el.querySelector(`input`)).toBeNull();
 });
+
+// Last, since answering is remembered for the rest of this file's module: the card is the newcomer's one question,
+// and a reader between files (the non-empty pane) is never asked it here.
+it(`asks the newcomer how they work, once, and never the reader between files`, async () => {
+    expect(mount(false).textContent).not.toContain(`How will you work here?`);
+    const el = mount(true);
+    expect(el.textContent).toContain(`How will you work here?`);
+
+    buttonSaying(el, `I write code`)!.click();
+    await nextTick();
+
+    expect(el.textContent).not.toContain(`How will you work here?`);
+    expect(localStorage.getItem(`ui-audience`)).toBe(`developer`);
+    expect(mount(true).textContent).not.toContain(`How will you work here?`);
+});

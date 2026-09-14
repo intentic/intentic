@@ -19,7 +19,7 @@ export type DependencyFreshness = z.infer<typeof DependencyFreshnessSchema>;
 // three ways; a fourth is now a row here, not a release. Moments are named to match `WorkspaceEventKind`, so folding
 // chores in later won't rename what users wrote.
 
-// Four places the daemon already stops to decide something; this names those decisions rather than inventing new ones.
+// Five places the daemon already stops to decide something; this names those decisions rather than inventing new ones.
 export const RuleMomentSchema = z.enum([
     // A command here runs on the just-written file (`{file}` is its path); the cheapest moment to catch a defect.
     "file.edited",
@@ -29,6 +29,8 @@ export const RuleMomentSchema = z.enum([
     "push.starting",
     // An agent's turn is over and its delta is sitting on its branch. A rule here decides whether it lands.
     "agent.finished",
+    // An agent's delta has just reached the main tree. A rule here decides what becomes of it there.
+    "agent.landed",
 ]);
 export type RuleMoment = z.infer<typeof RuleMomentSchema>;
 // What a rule does; the split is functional since the three settings this table replaces each needed a different shape.
@@ -42,7 +44,10 @@ export type RuleMoment = z.infer<typeof RuleMomentSchema>;
 // verify-ui-edits: rendered surfaces a turn changed, against whether it ever looked at one.
 // verify-tests: whether a touched test's assertions got weaker than at HEAD, or would have passed before its own
 // change.
-export const RuleBuiltinSchema = z.enum(["verify-edits", "verify-removals", "verify-ui-edits", "verify-tests"]);
+// version-landed: commits what a land brought, in the main tree, under the subject drafted for it, and the tree's own
+// remainder before the next isolated turn starts; the only way a person who never commits keeps every agent seeing
+// the latest tree, since worktrees are cut from HEAD.
+export const RuleBuiltinSchema = z.enum(["verify-edits", "verify-removals", "verify-ui-edits", "verify-tests", "version-landed"]);
 export type RuleBuiltin = z.infer<typeof RuleBuiltinSchema>;
 export const RuleActionSchema = z.discriminatedUnion("kind", [
     z.object({
@@ -80,6 +85,13 @@ const MOMENT_ACTIONS: Record<RuleMoment, readonly RuleAction["kind"][]> = {
     "turn.ending": ["builtin", "instruct", "command"],
     "push.starting": ["command"],
     "agent.finished": ["verdict"],
+    "agent.landed": ["builtin"],
+};
+// A built-in reads a record only one moment keeps, so it stands at that moment alone: the verifiers read a turn's
+// ledgers, the versioner reads a landing's claim.
+const MOMENT_BUILTINS: Partial<Record<RuleMoment, readonly RuleBuiltin[]>> = {
+    "turn.ending": ["verify-edits", "verify-removals", "verify-ui-edits", "verify-tests"],
+    "agent.landed": ["version-landed"],
 };
 export const RuleSchema = z
     .object({
@@ -92,6 +104,10 @@ export const RuleSchema = z
     })
     .refine((rule) => MOMENT_ACTIONS[rule.moment].includes(rule.action.kind), {
         message: "that action cannot stand at that moment",
+        path: ["action"],
+    })
+    .refine((rule) => rule.action.kind !== "builtin" || (MOMENT_BUILTINS[rule.moment] ?? []).includes(rule.action.name), {
+        message: "that built-in cannot stand at that moment",
         path: ["action"],
     });
 export type Rule = z.infer<typeof RuleSchema>;

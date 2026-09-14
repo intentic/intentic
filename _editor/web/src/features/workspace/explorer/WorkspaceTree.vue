@@ -26,9 +26,10 @@ import { usePersonas } from "../../sandbox/personas/usePersonas";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import { specialChip } from "./specialPaths";
+import { useVocabulary } from "../../../core-views/vocabulary";
 import { dragOffer } from "./transfer/dragSource";
 import { filesToEntries } from "./transfer/dropEntries";
-import { explorerShows } from "./explorerFilter";
+import { type ExplorerFilters, explorerShows, technicalHidden } from "./explorerFilter";
 import { movableInto, pastePairs } from "./transfer/explorerPaste";
 import { nestSiblings, type NestedEntry } from "./fileNesting";
 import { ancestorDirs, revealTargets } from "./revealPath";
@@ -103,6 +104,15 @@ const {
     lazyLoading,
 } = useWorkspaceTree();
 const layout = useLayout();
+const words = useVocabulary();
+// The three switches as one value, read by every level's filter and by the chip that says what they removed.
+const filters = computed<ExplorerFilters>(() => ({
+    showIgnored: layout.showIgnored.value,
+    hideTests: layout.hideTests.value,
+    hideTechnical: layout.hideTechnical.value,
+}));
+// Tooling entries the technical switch took out of the root, said on a chip so a bare tree never reads as the workspace.
+const technicalCount = computed(() => technicalHidden(tree, filters.value));
 const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { say } = useNotifications();
 const { fileNesting } = useFileNesting();
@@ -195,7 +205,7 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
     // Filters apply once here, covering the root, lazy subtrees, and name matches that feed the selection/keyboard
     // axis. Nesting only applies unfiltered, since a filter flattens every level to match folded names.
     const level = (nodes: readonly WorkspaceTreeEntry[]): readonly NestedEntry[] => {
-        const shown = nodes.filter((entry) => explorerShows(entry, layout.showIgnored.value, layout.hideTests.value));
+        const shown = nodes.filter((entry) => explorerShows(entry, filters.value));
         return fileNesting.value && needle === `` ? nestSiblings(shown) : shown.map((entry) => ({ entry }));
     };
 
@@ -1148,11 +1158,11 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         />
                         <!-- What the sandbox does with this entry, which its name doesn't say (specialPaths.ts); hover gives the rule. -->
                         <span
-                            v-if="specialChip(row.entry.path)"
+                            v-if="specialChip(row.entry.path, words)"
                             class="ui-status-pill shrink-0 text-2xs font-medium"
-                            :class="specialChip(row.entry.path)?.tone === `warning` ? `bg-warning/10 text-warning` : `bg-subtle/10 text-subtle`"
-                            v-tooltip.right="specialChip(row.entry.path)?.tooltip"
-                            >{{ specialChip(row.entry.path)?.label }}</span
+                            :class="specialChip(row.entry.path, words)?.tone === `warning` ? `bg-warning/10 text-warning` : `bg-subtle/10 text-subtle`"
+                            v-tooltip.right="specialChip(row.entry.path, words)?.tooltip"
+                            >{{ specialChip(row.entry.path, words)?.label }}</span
                         >
                         <!-- A dir fetching its children lazily on expand (ignored, or below the walk's budget). -->
                         <Icon
@@ -1217,6 +1227,17 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
             <p v-if="visibleRows.length === 0 && creating === undefined" class="px-3 py-3 text-center text-2xs text-subtle">
                 {{ filter.trim() ? "No matching files." : "Empty workspace." }}
             </p>
+            <!-- The technical switch's own receipt: a press here is the way back, so the hidden files are never a mystery. -->
+            <button
+                v-if="technicalCount > 0 && filter.trim() === ''"
+                type="button"
+                class="flex w-full items-center gap-1.5 px-2 py-1 text-left text-2xs italic text-subtle transition-colors hover:text-content"
+                v-tooltip.top="'Lockfiles, configuration, dot files and build output. Press to show them.'"
+                @click="layout.toggleHideTechnical()"
+            >
+                <span class="w-[0.7rem] shrink-0"></span>
+                <span class="min-w-0 flex-1 truncate">{{ technicalCount }} technical {{ technicalCount === 1 ? "file" : "files" }} hidden</span>
+            </button>
         </div>
         <!-- Shown only while barren branches exist, pinned to the bottom; names what it counts, since Undo reverses the delete exactly. -->
         <div v-if="barrenBranches.length > 0 && filter.trim() === ''" class="sticky bottom-0 z-10 border-t border-line bg-card">

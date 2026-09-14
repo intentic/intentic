@@ -75,7 +75,13 @@ const menuModel = computed<MenuItem[]>(() => {
 const commandOf = (rule: Rule): string | undefined => (rule.action.kind === `command` ? rule.action.command : undefined);
 const textOf = (rule: Rule): string | undefined => (rule.action.kind === `instruct` ? rule.action.text : undefined);
 const verdictOf = (rule: Rule): string | undefined =>
-    rule.action.kind === `verdict` ? (rule.action.verdict === `allow` ? `land the work` : `hold the work on its branch`) : undefined;
+    rule.action.kind === `verdict`
+        ? rule.action.verdict === `allow`
+            ? `land the work`
+            : `hold the work on its branch`
+        : rule.action.kind === `builtin` && rule.action.name === `version-landed`
+          ? `save a version`
+          : undefined;
 
 // "Never fired" is worth reading: a rule that never fired is either wrong or aimed at something that hasn't happened
 // yet.

@@ -22,6 +22,7 @@ export const OBJECT_GLYPHS = {
     gift: { outline: `M3 8h18v5H3Z M5 13v8h14v-8 M12 8v13 M12 8H8a3 3 0 1 1 3-3l1 3 1-3a3 3 0 1 1 3 3Z` },
     globe: { outline: `M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z M3 12h18 M12 3c-5 5-5 13 0 18 5-5 5-13 0-18Z` },
     hammer: { outline: `m3 20 3 2 9-12-3-2Z M8 5l4-3 9 7-3 4Z` },
+    home: { outline: `M3 11 12 3l9 8 M5 9.5V21h5v-6h4v6h5V9.5` },
     image: { outline: `M3 3h18v18H3Z M3 17l6-6 4 4 3-3 5 5`, solid: `m16 5 2 2-2 2-2-2Z` },
     key: { outline: `M12 7a5 5 0 1 1-10 0 5 5 0 0 1 10 0Z M10 11l10 10 2-2 M15 16l3-3`, solid: `M6 6h2v2H6Z` },
     microphone: { outline: `M8 6a4 4 0 0 1 8 0v6a4 4 0 0 1-8 0Z M4 10v2a8 8 0 0 0 16 0v-2 M12 20v2` },

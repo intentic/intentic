@@ -19,7 +19,7 @@ import {
     revertCommit,
 } from "./changes-commits.js";
 import { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff, workingFileDiff } from "./changes-diff.js";
-import { commitIndex, discardPaths, stageAll, stagePaths, unstagePaths } from "./changes-index.js";
+import { commitIndex, commitOnly, discardPaths, stageAll, stagePaths, unstagePaths } from "./changes-index.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -898,4 +898,34 @@ test("dirtyPathsAcross names every changed path of the root and its nested repos
 
     const paths = await dirtyPathsAcross(root, ["intentic"]);
     expect(paths.sort()).toEqual(["a.txt", "intentic/new.ts", "intentic/x.ts"]);
+});
+
+test("commitOnly records exactly the named paths from the worktree, whatever else is staged, and leaves that staging alone", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "landed.txt"), "what the agent landed\n");
+    await writeFile(join(dir, "mine.txt"), "what the owner staged\n");
+    await sh(dir, "add", "mine.txt");
+
+    expect(await commitOnly(dir, ["landed.txt"], "feat: the landed work", author)).toBe(true);
+
+    expect(await sh(dir, "ls-tree", "--name-only", "HEAD")).toContain("landed.txt");
+    expect(await sh(dir, "ls-tree", "--name-only", "HEAD")).not.toContain("mine.txt");
+    expect(await sh(dir, "log", "-1", "--format=%s")).toBe("feat: the landed work");
+    const { staged, unstaged } = await changedFiles(dir);
+    // The owner's staging survives; the committed path reads clean on both sides.
+    expect(staged.map((change) => change.path)).toEqual(["mine.txt"]);
+    expect(unstaged).toEqual([]);
+});
+
+test("commitOnly carries a deletion, and is a no-op false when the paths already match HEAD", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "gone.txt"), "soon gone\n");
+    await sh(dir, "add", "gone.txt");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "seed");
+
+    expect(await commitOnly(dir, ["gone.txt"], "nothing changed", author)).toBe(false);
+    await rm(join(dir, "gone.txt"));
+    expect(await commitOnly(dir, ["gone.txt"], "chore: drop it", author)).toBe(true);
+    expect(await sh(dir, "ls-tree", "--name-only", "HEAD")).not.toContain("gone.txt");
+    expect(await sh(dir, "log", "-1", "--format=%s")).toBe("chore: drop it");
 });

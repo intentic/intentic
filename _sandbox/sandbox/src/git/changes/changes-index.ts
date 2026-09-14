@@ -83,6 +83,32 @@ export const commitIndex = async (
     return true;
 };
 
+// Commits the working-tree state of exactly `paths` (adds, edits, deletions), disregarding whatever else is staged and
+// leaving that staging as it was. The paths are staged first, since `commit` refuses a path git has never seen, then
+// `--only` records them alone; the index reads clean on them afterwards. False when they already match HEAD. One
+// spawn for the commit, since a commit cannot be chunked; the list is a landing's claim, not a whole tree.
+export const commitOnly = async (
+    dir: string,
+    paths: readonly string[],
+    message: string,
+    author: { readonly name: string; readonly email: string },
+    git: GitRunner = defaultGit,
+): Promise<boolean> => {
+    if (paths.length === 0) {
+        return false;
+    }
+    await stagePaths(dir, paths, git);
+    const head = await headSha(dir, git);
+    try {
+        await git(dir, ["diff", "--cached", "--quiet", head ?? EMPTY_TREE, "--", ...paths]);
+        return false;
+    } catch {
+        // The paths differ from HEAD, fall through to commit.
+    }
+    await git(dir, [...identity(author), "commit", "-q", "--only", "-m", message, "--", ...paths]);
+    return true;
+};
+
 // Discards uncommitted work: everything, or exactly `paths`; tracked content returns to HEAD, untracked is deleted.
 // Ignored files always survive (no -x); the doubled -f also removes an embedded repo a single -f would skip.
 export const discardPaths = async (dir: string, paths: readonly string[] | undefined, git: GitRunner = defaultGit): Promise<void> => {

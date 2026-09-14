@@ -3,10 +3,12 @@ import type { PartialFileDiff } from "@intentic/sandbox-contract";
 import { formatBytes } from "@intentic/ui";
 import { computed } from "vue";
 import type { LineStat } from "@intentic/code-read";
-import { rendersAsBytes } from "../explorer/fileType";
+import { isProsePath, rendersAsBytes } from "../explorer/fileType";
+import { useLayout } from "../../../shell/window/useLayout";
 import BinaryDiffView from "./BinaryDiffView.vue";
 import { patchedSides } from "./diffPatch";
 import DiffView from "./DiffView.vue";
+import ProseDiffView from "./ProseDiffView.vue";
 
 // One file's diff, whichever of four shapes it arrives in; every review surface (Changes tab, phone, agent
 // review) renders this same fork. Loading state stays with the host; content does not. The four shapes, decided
@@ -31,6 +33,11 @@ const { path, before, after, binary, partial, beforeRaw, afterRaw, at } = define
 }>();
 // Code-only change stat, forwarded from whichever viewer renders (DiffView decides the partial-diff case).
 const emit = defineEmits<{ stat: [LineStat | undefined] }>();
+
+// A document's whole two sides read as tracked changes when the toolbar's reading says so (DiffToolbar, the same
+// preference); a partial or binary diff has no text to word.
+const { diffProse } = useLayout();
+const prose = computed(() => diffProse.value && isProsePath(path));
 
 // Patch unpicked into two sides plus each line's file line; undefined when there's no patch, or no regions.
 const patched = computed(() => (partial?.patch === undefined ? undefined : patchedSides(partial.patch, partial.more === true)));
@@ -79,5 +86,6 @@ const note = computed(() => {
             />
         </div>
     </div>
+    <ProseDiffView v-else-if="prose" :before="before" :after="after" />
     <DiffView v-else :before="before" :after="after" :path="path" @stat="(stat) => emit(`stat`, stat)" />
 </template>

@@ -14,7 +14,25 @@ export const NAMED_RULES = {
     tests: `verify-tests`,
     prepush: `pre-push`,
     land: `auto-land`,
+    version: `auto-version`,
 } as const;
+
+// The two rows a maker's arrival writes together: finished work lands on its own, and what lands is committed. Also
+// what the Agent tab's own toggles write, so the two doors never disagree on the rule.
+export const AUTO_LAND_RULE: Rule = {
+    id: NAMED_RULES.land,
+    label: `Land finished work automatically`,
+    moment: `agent.finished`,
+    action: { kind: `verdict`, verdict: `allow` },
+    enabled: true,
+};
+export const AUTO_VERSION_RULE: Rule = {
+    id: NAMED_RULES.version,
+    label: `Save a version of accepted work`,
+    moment: `agent.landed`,
+    action: { kind: `builtin`, name: `version-landed` },
+    enabled: true,
+};
 
 // Resolves what the rules say before anything about the occasion is known: the first unconditional rule matching a
 // moment, since a conditional rule can't match the unknown.

@@ -6,6 +6,8 @@ import { RouterLink, useRoute } from "vue-router";
 import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
 import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTile";
 import { useApprovalsTile } from "./mobileTabs";
+import { homeViewId, PROJECT_VIEW_ID } from "../core-views/registry";
+import { useVocabulary } from "../core-views/vocabulary";
 import RailIcon from "./rail/RailIcon.vue";
 import RunningMark from "./rail/RunningMark.vue";
 import { outgoingMark, outgoingSummary } from "../features/workspace/push/outgoingWork";
@@ -34,8 +36,16 @@ interface Tab {
 const changes = useChanges();
 const pushFlow = usePushFlow();
 const { badge: sandboxBadge } = useSandboxAttention();
+// The home tab is the maker's Project page when that extension is on, else the file tree; same rule as the rail's
+// seat (registry.ts), so the phone and the desktop agree on where home is.
+const words = useVocabulary();
+const homeTab = computed<Tab>(() =>
+    homeViewId() === PROJECT_VIEW_ID
+        ? { id: PROJECT_VIEW_ID, to: `/ext/${PROJECT_VIEW_ID}`, label: words.value.home }
+        : { id: `workspace`, to: `/workspace`, label: `Files`, panel: `files` },
+);
 
-// Matched by view id (detectActivations); TAB_BAR_IDS is the shared promotion list ShellMobile also reads.
+// Matched by view id (detectActivations); tabBarIds() is the shared promotion list ShellMobile also reads.
 const approvalsTile = useApprovalsTile();
 
 // Falls back to the same push-owed glyph as the desktop rail when nothing else needs review.
@@ -63,7 +73,7 @@ const tabs = computed<readonly Tab[]>(() => [
         ...(agentsBadge.value === undefined ? {} : { badge: agentsBadge.value }),
         ...(agentsScopeNote.value === undefined ? {} : { note: { icon: `boxes` as IconName, text: agentsScopeNote.value } }),
     },
-    { id: `workspace`, to: `/workspace`, label: `Files`, panel: `files` },
+    homeTab.value,
     {
         /* The queue when the pack is on; the workspace's OWN review: its Changes panel, when it is off. */
         id: `approvals`,

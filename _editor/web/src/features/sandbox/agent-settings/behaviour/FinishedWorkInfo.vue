@@ -5,6 +5,7 @@ import { InfoDialog, InfoTable } from "@intentic/ui";
 
 const AT_A_GLANCE = [
     [`Land finished work automatically`, `Whether clean work reaches your workspace by itself`, `Off`],
+    [`Save a version of accepted work`, `Whether landed work is committed for you, and your own edits before the next agent starts`, `Off`],
     [`Archive finished agents`, `How long finished work stays on the board`, `3 days`],
 ];
 </script>

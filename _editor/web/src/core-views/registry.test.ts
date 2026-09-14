@@ -5,7 +5,20 @@ import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
 import type { PanelSummary } from "@intentic/api-contract";
 import { describe, expect, it } from "vitest";
-import { activationBadge, RAIL_GROUPS, detectActivations, railRank, railSeated, registerView, seatPolicy, seatedOnlyByVisit } from "./registry";
+import { useAudience } from "../app/useAudience";
+import {
+    activationBadge,
+    RAIL_GROUPS,
+    detectActivations,
+    homeViewId,
+    railGroupsFor,
+    railRank,
+    railSeated,
+    registerView,
+    seatPolicy,
+    seatedOnlyByVisit,
+    tabBarIds,
+} from "./registry";
 import { badgeChip } from "./viewBadge";
 
 // Registers packaged extensions' detects against the same registry the shell composes, so cross-extension
@@ -404,5 +417,59 @@ describe(`what a badge says`, () => {
         expect(badgeChip({ count: 2 })).toBe(true);
         expect(badgeChip({ mark: `arrow-up` })).toBe(true);
         expect(badgeChip({ count: 0, running: `2 running` })).toBe(false);
+    });
+});
+
+// The maker's table: the same rail with the Project view in the file tree's seat, and the file tree standing in for it
+// while that extension is off. Read through the audience preference, so the switch is the same one Settings flips.
+describe(`the maker's rail`, () => {
+    const projectView = (): ViewRegistration => ({
+        id: `project`,
+        label: `Project`,
+        surface: `rail`,
+        detect: () => [{ key: `project`, title: `Project` }],
+        view: async () => ({}),
+    });
+
+    it(`keeps the developer's permanent seats when nothing has been answered`, () => {
+        expect(seatPolicy(`workspace`)).toBe(`always`);
+        expect(seatPolicy(`project`)).toBe(`signal`);
+        expect(homeViewId()).toBe(`workspace`);
+    });
+
+    it(`seats the Project view where the file tree was, once a maker has it`, () => {
+        useAudience().setAudience(`maker`);
+        const registered = registerView(`test`, projectView());
+        try {
+            expect(seatPolicy(`project`)).toBe(`always`);
+            expect(seatPolicy(`workspace`)).toBe(`signal`);
+            expect(homeViewId()).toBe(`project`);
+            expect(railRank(`project`)).toBe(railRank(`agents`) + 1);
+            expect(railRank(`workspace`)).toBe(railRank(`project`) + 1);
+            expect(tabBarIds()).toContain(`project`);
+        } finally {
+            registered.dispose();
+            useAudience().setAudience(`developer`);
+        }
+    });
+
+    it(`hands the seat back to the file tree while the Project extension is off, so a maker never has no home`, () => {
+        useAudience().setAudience(`maker`);
+        try {
+            expect(seatPolicy(`project`)).toBe(`always`);
+            expect(seatPolicy(`workspace`)).toBe(`always`);
+            expect(homeViewId()).toBe(`workspace`);
+            expect(tabBarIds()).toContain(`workspace`);
+        } finally {
+            useAudience().setAudience(`developer`);
+        }
+    });
+
+    it(`spends the same four permanent seats in both tables`, () => {
+        const permanent = railGroupsFor(`maker`)
+            .flatMap((group) => group.items)
+            .filter((item) => item.seat === `always`)
+            .map((item) => item.id);
+        expect(permanent).toEqual([`chat`, `agents`, `project`, `preview`]);
     });
 });

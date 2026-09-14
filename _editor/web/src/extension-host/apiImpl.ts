@@ -4,6 +4,7 @@ import { extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-manifest
 import { useDevice, useTheme } from "@intentic/ui";
 import { type AgentHarness, type AgentProvider, type ExtensionSummary, sandboxRequestFor, WorkspaceFileSchema } from "@intentic/sandbox-contract";
 import { watch } from "vue";
+import { useAudience } from "../app/useAudience";
 import { effortLabelOf } from "../features/chat/models/effortScale";
 import { modelLabelFor } from "../features/chat/accounts/providerCatalog";
 import { agentRunChoice, shellModelPicking } from "../features/chat/models/shellModelPicking";
@@ -178,6 +179,7 @@ export const createExtensionApi = (
     });
 
     const { scheme } = useTheme();
+    const { audience } = useAudience();
 
     const api: IntenticApi = {
         apiVersion: extensionApiVersion,
@@ -505,6 +507,13 @@ export const createExtensionApi = (
             mode: () => scheme.value,
             onDidChange: (listener) => {
                 const stop = watch(scheme, (value) => listener(value));
+                return track({ dispose: () => stop() });
+            },
+        },
+        audience: {
+            current: () => audience.value,
+            onDidChange: (listener) => {
+                const stop = watch(audience, (value) => listener(value));
                 return track({ dispose: () => stop() });
             },
         },

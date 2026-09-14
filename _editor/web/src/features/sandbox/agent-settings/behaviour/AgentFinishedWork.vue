@@ -2,7 +2,7 @@
 import { Row, RowGroup, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
-import { NAMED_RULES } from "../../environment/rules";
+import { AUTO_LAND_RULE, AUTO_VERSION_RULE, NAMED_RULES } from "../../environment/rules";
 import { useRules } from "../../environment/useRules";
 import FinishedWorkInfo from "./FinishedWorkInfo.vue";
 
@@ -21,13 +21,18 @@ const setLand = (on: boolean): void => {
         remove(NAMED_RULES.land);
         return;
     }
-    upsert({
-        id: NAMED_RULES.land,
-        label: `Land finished work automatically`,
-        moment: `agent.finished`,
-        action: { kind: `verdict`, verdict: `allow` },
-        enabled: true,
-    });
+    upsert(AUTO_LAND_RULE);
+};
+
+// The versioner built-in, a rule like the land verdict above: absent means the owner commits, as a developer does.
+const version = () => byId(NAMED_RULES.version);
+
+const setVersion = (on: boolean): void => {
+    if (!on) {
+        remove(NAMED_RULES.version);
+        return;
+    }
+    upsert(AUTO_VERSION_RULE);
 };
 
 // Days; `0` disables the sweep. Values are string spellings since SegmentedControl works in strings.
@@ -51,6 +56,17 @@ const RETENTION_OPTIONS = [
         >
             <template #control>
                 <ToggleSwitch :model-value="land()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setLand" />
+            </template>
+        </Row>
+
+<!-- Worktrees are cut from HEAD, so an owner who never commits would start every agent on a tree without the last one's work. -->
+        <Row
+            icon="history"
+            title="Save a version of accepted work"
+            description="Commit what each landed agent changed, under a subject written for it, and your own edits before the next agent starts."
+        >
+            <template #control>
+                <ToggleSwitch :model-value="version()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setVersion" />
             </template>
         </Row>
 

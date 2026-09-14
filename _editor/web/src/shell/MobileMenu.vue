@@ -3,9 +3,10 @@ import type { ViewBadge } from "@intentic/extension-api";
 import { Avatar, type IconName, vAction } from "@intentic/ui";
 import { computed, onMounted } from "vue";
 import { RouterLink } from "vue-router";
+import { useAudience } from "../app/useAudience";
 import { useAuth } from "../features/auth/useAuth";
 import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
-import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, TAB_BAR_IDS } from "../core-views/registry";
+import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, tabBarIds } from "../core-views/registry";
 import { badgeChip, badgeClass, badgeToneClass, RUNNING_MARK_CLASS } from "../core-views/viewBadge";
 import { usePanels } from "../features/extensions/usePanels";
 import { useRole } from "../features/sandbox/secrets/useRole";
@@ -68,16 +69,17 @@ onMounted(() => {
 const areaBands = computed(() =>
     railBands(
         detectActivations(panels.value, capabilities.value)
-            .filter(({ extension }) => extension.surface === `rail` && !TAB_BAR_IDS.includes(extension.id))
+            .filter(({ extension }) => extension.surface === `rail` && !tabBarIds().includes(extension.id))
             .map(extensionRow),
         (area) => area.id,
     ),
 );
 // Matches the desktop rail's tail (terminal, +); terminal needs ship tier since a PTY is the whole sandbox.
 const { canShip } = useRole();
+const { maker } = useAudience();
 const sandboxRows = computed<readonly AreaRow[]>(() => [
     { id: `capabilities`, to: `/capabilities`, label: `Add a capability`, icon: `plus` },
-    ...(canShip.value ? [{ id: `terminal`, to: `/terminal`, label: `Terminal`, icon: `code` } as const] : []),
+    ...(canShip.value && !maker.value ? [{ id: `terminal`, to: `/terminal`, label: `Terminal`, icon: `code` } as const] : []),
     { id: `sandbox`, to: `/sandbox`, label: `Sandbox`, icon: `box` },
     { id: `settings`, to: `/settings`, label: `Settings`, icon: `cog` },
 ]);

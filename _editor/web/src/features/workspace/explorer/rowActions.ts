@@ -18,6 +18,9 @@ export interface RowAction {
 
 // The affordances the app itself puts on a row, plus whatever the open document providers offer for it.
 export interface RowActionSources {
+    // A maker's row: what the directory is (documents), what can be looked at (preview) and run (manage); the health,
+    // history, persona and check affordances are a developer's and stay off.
+    readonly plain?: boolean;
     // Directory paths that are git repos, each carries its own health report.
     readonly repoDirs: ReadonlySet<string>;
     // Directory paths a directory-surface extension serves (Apps, the repo's own UI).
@@ -51,6 +54,9 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
         standing: offer.evidence === true,
         run: (): void => sources.openDocument(provider.owner, provider.id, dir, offer.title, offer.icon),
     }));
+    if (sources.plain === true) {
+        return [...actions, ...doableActions(dir, sources)];
+    }
     if (sources.repoDirs.has(dir)) {
         actions.push({
             id: `health`,
@@ -90,8 +96,13 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
             run: (): void => sources.openChecks(dir),
         });
     }
-    // Door into the Preview area with this repo's target selected; hover-only, alongside the other things you can do to
-    // a repo.
+    return [...actions, ...doableActions(dir, sources)];
+};
+
+// What can be done to a directory, as opposed to read about it: the Preview area with this repo's target selected,
+// and its management panel. Hover-only, and the half of the row both audiences get.
+const doableActions = (dir: string, sources: RowActionSources): RowAction[] => {
+    const actions: RowAction[] = [];
     if (sources.previewableDirs.has(dir)) {
         actions.push({
             id: `preview`,
