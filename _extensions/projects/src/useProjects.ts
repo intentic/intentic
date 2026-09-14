@@ -1,7 +1,7 @@
 import { useQueries, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type ComputedRef } from "vue";
 import { host } from "./host.js";
-import { projectIds, type ProjectTile, summaryOf } from "./projects.js";
+import { accentOf, monogramOf, projectIds, type ProjectTile, summaryOf } from "./projects.js";
 
 // The tiles: the daemon's repository list, each with its README's first paragraph and whether it can be looked at
 // running. Re-read on a slow clock, and at once after a press makes a new one.
@@ -39,6 +39,8 @@ export function useProjects() {
         return ids.value.map((id, index) => ({
             id,
             name: id.split(`/`).at(-1) ?? id,
+            monogram: monogramOf(id),
+            accent: accentOf(id),
             summary: summaries.value[index]?.data ?? ``,
             hasPanel: facts.find((fact) => fact.repo === id)?.hasPanel ?? false,
         }));
