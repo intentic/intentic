@@ -53,6 +53,20 @@
     isolation: isolate;
 }
 
+/* THE DESKTOP APP'S TITLE STRIP, WHICH IS DRAWN ACROSS THIS SCREEN RATHER THAN ABOVE IT. An entry screen has no
+   bar of its own in the window's top row, so the app's three window controls arrive on a fixed strip of
+   `--bar-height` laid over whatever is under it (`_editor/web`'s WindowControls.vue, `bare`). Both entry screens
+   keep that height clear from INSIDE their own box: `box-sizing: border-box` makes this a padding within the
+   100dvh, not 52 rows of overflow.
+
+   It is here, and not in a component's scoped block, because BOTH screens need it and because the scoped version
+   silently did not work: `:global([data-frameless]) .door` compiles to `[data-frameless]` — Vue replaces the whole
+   selector with what `:global()` wraps — so the padding landed on <html>, outside a door still standing a full
+   100dvh tall. That is the scrollbar the sign-in window had, on every page of the app. */
+html[data-frameless] .entry {
+    padding-top: calc(var(--bar-height) + 1rem);
+}
+
 /* THE SKIN STOPS HERE. */
 .entry :is(h1, h2, h3, h4, h5, h6) {
     font-family: var(--face-mark);

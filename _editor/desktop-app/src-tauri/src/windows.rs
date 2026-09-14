@@ -331,6 +331,10 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
 /* NO PLATFORM TITLE BAR ON EITHER FACE — see [`WindowVerb`] for the bar the page draws in its place. */
         .decorations(false)
         .shadow(true)
+        // The frame between "window mapped" and the REMOTE page's first paint, which is white by default and is
+        // longest on the launch that has no HTTP cache to open from. The two local faces have always had this;
+        // the one window that waits on a network was the one without it.
+        .background_color(tauri::window::Color(15, 13, 10, 255))
 /* Windows uses either Tauri drag-drop or HTML5 drag-drop, never both. */
         .disable_drag_drop_handler()
         // The one window this is actually for — see BROWSER_ARGS, and `loopbackUngated` below, which tells the

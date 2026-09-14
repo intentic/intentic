@@ -23,13 +23,13 @@ const desktop = computed(() => desktopVersion() !== undefined);
 
 // Mirrors the site's 'Getting started' band, in order; the current step makes this a rail, not a list.
 // The third step must match `desktopInstaller()`, the same call the setup page uses, so the two screens agree.
+// Titles only: a station on a rail names where you are, and the sentences under them cost this screen the
+// height that put a scrollbar on the desktop window.
 const install = desktopInstaller();
-const steps: readonly { title: string; body: string }[] = [
-    { title: `Sign in with Google`, body: `No forms and no card.` },
-    { title: `Your sandbox is waiting`, body: `The private room your agents live and work in, with a web address of its own.` },
-    install === undefined
-        ? { title: `Paste one command`, body: `One line starts it on your own machine.` }
-        : { title: `Install the app`, body: `One click starts it on your own machine. No terminal.` },
+const steps: readonly string[] = [
+    `Sign in with Google`,
+    `Your sandbox is waiting`,
+    install === undefined ? `Paste one command` : `Install the app`,
 ];
 
 // Mints one Google credential and spends it on both the platform and the sandbox, removing the second ask; the
@@ -154,10 +154,9 @@ watch(
             <section class="rail">
                 <p class="entry-eyebrow eyebrow-bare">Three steps to your first agent</p>
                 <ol class="steps">
-                    <li v-for="(step, index) in steps" :key="step.title" class="step" :aria-current="index === 0 ? `step` : undefined">
+                    <li v-for="(step, index) in steps" :key="step" class="step" :aria-current="index === 0 ? `step` : undefined">
                         <span class="entry-lozenge"></span>
-                        <h2>{{ step.title }}</h2>
-                        <p>{{ step.body }}</p>
+                        <h2>{{ step }}</h2>
                     </li>
                 </ol>
             </section>
@@ -166,18 +165,13 @@ watch(
 </template>
 
 <style scoped>
-/* This file contains only login layout; shared materials live in entry.css. */
+/* This file contains only login layout; shared materials live in entry.css — the desktop window's title strip
+   included, which both entry screens clear there rather than each for itself. */
 .door {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: clamp(1.25rem, 3vw, 2.5rem) 1.5rem;
-}
-/* The desktop window has no platform chrome; min-height 100dvh plus the title strip is what overflowed. */
-:global([data-frameless]) .door {
-    min-height: auto;
-    padding-top: calc(var(--bar-height) + 1rem);
-    padding-bottom: 1.25rem;
+    padding: clamp(1rem, 2.5vw, 2rem) 1.5rem;
 }
 
 /* The empty axis in the art. */
@@ -193,14 +187,16 @@ watch(
 
 .mark {
     font-size: 1.375rem;
-    margin-bottom: clamp(1.5rem, 5vh, 3rem);
+    margin-bottom: clamp(1rem, 3vh, 1.75rem);
 }
 
-/* Two one-sentence beats; capped well below the site's own display size, since this screen has a door to fit under it, not a whole screen. */
+/* Two one-sentence beats; capped well below the site's own display size, since this screen has a door to fit under
+   it, not a whole screen. The `vh` arm only binds on a SHORT window — 6.4vh passes 3.4rem at 850px of height — so a
+   desktop window the user has dragged flat shrinks the display instead of growing a scrollbar. */
 .headline {
-    margin: 1.5rem 0 0;
+    margin: 1.25rem 0 0;
     font-family: var(--face-display);
-    font-size: clamp(1.75rem, 7.2vw, 3.4rem);
+    font-size: clamp(1.75rem, min(7.2vw, 6.4vh), 3.4rem);
     line-height: 1.24;
     font-weight: var(--font-weight-semibold);
 }
@@ -212,7 +208,7 @@ watch(
 
 /* Ported verbatim from `.home .hero-sub` in home.css. */
 .hero-sub {
-    margin: 1.4rem auto 0;
+    margin: 0.9rem auto 0;
     max-width: 36ch;
     font-size: 1.15rem;
     line-height: 1.6;
@@ -224,8 +220,8 @@ watch(
 .gate {
     width: 100%;
     max-width: 27rem;
-    margin-top: clamp(1.75rem, 5vh, 2.75rem);
-    padding: 2.25rem 2rem 1.35rem;
+    margin-top: clamp(1.25rem, 3.5vh, 2rem);
+    padding: 1.75rem 2rem 1.25rem;
 }
 
 .gate-error {
@@ -270,8 +266,8 @@ watch(
 }
 
 .fine {
-    margin-top: 1.5rem;
-    padding-top: 1.25rem;
+    margin-top: 1.1rem;
+    padding-top: 1rem;
     border-top: 1px solid var(--rule);
     font-size: 0.75rem;
     line-height: 1.7;
@@ -288,7 +284,7 @@ watch(
 /* Three stations on one hairline; ember marks the current step, quiet gold marks the ones ahead. */
 .rail {
     width: 100%;
-    margin-top: clamp(2rem, 6vh, 3.5rem);
+    margin-top: clamp(1.5rem, 4vh, 2.25rem);
 }
 .eyebrow-bare {
     color: var(--ink-subtle);
@@ -297,8 +293,8 @@ watch(
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1.75rem;
-    margin-top: 1.5rem;
-    padding-top: 1.5rem;
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
     border-top: 1px solid var(--rule-strong);
     text-align: left;
 }
@@ -308,7 +304,7 @@ watch(
 /* The mark sits on the rail, not under it, so the row reads as one line with three stops rather than separate cards. */
 .step .entry-lozenge {
     position: absolute;
-    top: calc(-1.5rem - 0.325rem);
+    top: calc(-1.25rem - 0.325rem);
     left: 0;
     width: 0.65rem;
     height: 0.65rem;
@@ -326,13 +322,6 @@ watch(
 }
 .step[aria-current="step"] h2 {
     color: var(--gold-bright);
-}
-.step p {
-    margin-top: 0.35rem;
-    font-size: 0.8125rem;
-    line-height: 1.6;
-    color: var(--ink-subtle);
-    text-wrap: pretty;
 }
 
 @media (max-width: 40rem) {

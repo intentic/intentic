@@ -215,6 +215,21 @@ ordinary drag region calling the window API, this face **has no command surface 
   problem is answered in the other direction: the app injects `frameless: true` into the page, and a build whose
   window still has a frame simply never says it, so a page newer than its app draws nothing.
 
+**The first launch after an install is the slowest this window will ever be, and it showed that as a black
+rectangle.** Nothing in this app draws the workspace: the window opens onto the SPA's origin, and until that
+page's bundle has arrived and run, what is on screen is the document's ground and nothing else. On a machine
+that has just installed the app, that wait is at its longest — no HTTP cache, a WebView2 profile being created
+underneath it, a virus scanner reading every file of both — and it outlasts the eight-second grace above, so
+the window hands the platform's frame back and what the user is looking at is an empty dark window wearing a
+title bar. Killing it and opening it again is quick, because by then all of that is warm, which is exactly why
+it reads as a broken first launch rather than a slow one. Two halves answer it. The window opens on the same
+canvas colour the app's own two faces use (`background_color` in `show_workspace_at`), so the frame between
+"window mapped" and the page's first paint is this product's ground rather than the white it was; the two
+local faces have always had that, and the one window that waits on a network was the one without it. And the
+page paints a **boot frame** of its own the moment its document lands — the lotus, a line saying what is
+happening, and a Reload offered after ten seconds ([`_editor/web`'s `index.html`](../web/index.html)) —
+because the only party that can fill that gap is the page, and this app has no way to reach into it and do so.
+
 Two things are genuinely lost, both on Windows: hovering the maximise button no longer opens the **Snap Layouts
 flyout** (it is drawn by the OS for a real caption button, and Tauri has no equivalent of Electron's native
 overlay), and `Alt+Space` no longer opens the system menu. Dragging to snap, `Win`+arrow, double-click to

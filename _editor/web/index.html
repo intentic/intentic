@@ -86,10 +86,112 @@
 <!-- Every face is served from this origin (src/styles/faces.css, files in public/fonts). Preloaded here because
              the stylesheet that declares it is bundled, so the browser would otherwise learn of it a round trip late. -->
         <link rel="preload" as="font" type="font/woff2" href="/fonts/public-sans-100-900-latin.woff2" crossorigin />
+<!-- The boot frame's own styles, here rather than in the bundle, because the bundle is what it stands in for. -->
+        <style>
+            .boot {
+                position: fixed;
+                inset: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 0.9rem;
+                /* A start that finishes inside this delay is never seen: no flash on a warm cache, where the whole
+                   boot is shorter than the fade. */
+                animation: boot-in 320ms ease 600ms both;
+                color: #7a6a52;
+                font-family: "Public Sans", ui-sans-serif, system-ui, sans-serif;
+                font-size: 0.875rem;
+                text-align: center;
+            }
+            [data-mode="dark"] .boot {
+                color: #9c8b73;
+            }
+            .boot-mark {
+                width: 3.25rem;
+                height: 3.25rem;
+                color: #e07b27;
+                animation: boot-breathe 2.4s ease-in-out infinite;
+            }
+            .boot-note,
+            .boot-slow {
+                margin: 0;
+            }
+            #boot-reload {
+                border: 0;
+                background: none;
+                font: inherit;
+                color: #e07b27;
+                text-decoration: underline;
+                cursor: pointer;
+            }
+            @keyframes boot-in {
+                from {
+                    opacity: 0;
+                }
+                to {
+                    opacity: 1;
+                }
+            }
+            @keyframes boot-breathe {
+                0%,
+                100% {
+                    opacity: 0.5;
+                    transform: scale(0.97);
+                }
+                50% {
+                    opacity: 1;
+                    transform: scale(1);
+                }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                .boot-mark {
+                    animation: none;
+                }
+            }
+        </style>
     </head>
     <body class="bg-canvas text-content">
-        <div id="app"></div>
+<!-- THE FIRST FRAME, and the only one this file can draw by itself: `app.mount("#app")` empties this container
+             (main.ts), so nothing here has to be taken down. Without it the window is EMPTY until the bundle has
+             arrived and run — 1.6 MB over ~150 requests — and a cold start on a new machine, with no HTTP cache and a
+             webview profile being created underneath it, spends that whole time looking like an app that failed to
+             open. That is what the desktop app's first launch after an install was. -->
+        <div id="app">
+            <div class="boot" role="status" aria-live="polite">
+                <svg class="boot-mark" viewBox="0 -1.3 32 32" fill="currentColor" aria-hidden="true">
+                    <path d="M8.4 25.6c-3.2 0-5.6-1-7.2-3 3.6-1.2 6.6-.7 9 1.4z" opacity=".42" />
+                    <path d="M23.6 25.6c3.2 0 5.6-1 7.2-3-3.6-1.2-6.6-.7-9 1.4z" opacity=".42" />
+                    <path d="M16 9.5c2.1 3 3.2 5.7 3.2 8.1 0 2.2-1.1 4.1-3.2 5.6-2.1-1.5-3.2-3.4-3.2-5.6 0-2.4 1.1-5.1 3.2-8.1z" transform="rotate(-74 16 22.6)" opacity=".55" />
+                    <path d="M16 9.5c2.1 3 3.2 5.7 3.2 8.1 0 2.2-1.1 4.1-3.2 5.6-2.1-1.5-3.2-3.4-3.2-5.6 0-2.4 1.1-5.1 3.2-8.1z" transform="rotate(74 16 22.6)" opacity=".55" />
+                    <path d="M16 6.4c2.4 3.4 3.6 6.4 3.6 9.1 0 2.5-1.2 4.6-3.6 6.3-2.4-1.7-3.6-3.8-3.6-6.3 0-2.7 1.2-5.7 3.6-9.1z" transform="rotate(-39 16 21.7)" opacity=".78" />
+                    <path d="M16 6.4c2.4 3.4 3.6 6.4 3.6 9.1 0 2.5-1.2 4.6-3.6 6.3-2.4-1.7-3.6-3.8-3.6-6.3 0-2.7 1.2-5.7 3.6-9.1z" transform="rotate(39 16 21.7)" opacity=".78" />
+                    <path d="M16 3.4c2.8 4 4.2 7.5 4.2 10.6 0 2.9-1.4 5.4-4.2 7.3-2.8-1.9-4.2-4.4-4.2-7.3 0-3.1 1.4-6.6 4.2-10.6z" />
+                </svg>
+                <p class="boot-note">Opening your workspace…</p>
+                <p class="boot-slow" hidden>
+                    This is taking longer than usual.
+                    <button type="button" id="boot-reload">Reload</button>
+                </p>
+            </div>
+        </div>
         <script type="module" src="/src/main.ts"></script>
+<!-- A start that is merely slow is still a start, so the first word about it comes late; a start that is STUCK
+             would otherwise be a mark on a ground with nothing to press. `isConnected` is how the mount cancels this:
+             the element this timer speaks about is gone by then. -->
+        <script>
+            (function () {
+                var slow = document.querySelector(".boot-slow");
+                var reload = document.getElementById("boot-reload");
+                if (slow === null || reload === null) return;
+                reload.addEventListener("click", function () {
+                    location.reload();
+                });
+                setTimeout(function () {
+                    if (slow.isConnected) slow.hidden = false;
+                }, 10000);
+            })();
+        </script>
         <noscript>Please enable JavaScript to continue using this application.</noscript>
     </body>
 </html>
