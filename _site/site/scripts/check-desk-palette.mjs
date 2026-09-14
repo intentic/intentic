@@ -91,9 +91,9 @@ const ROLES = [
     ["--role-danger", "--color-danger"],
     ["--role-success", "--color-success"],
     ["--role-warning", "--color-warning"],
-    // The site's primary button is cast bronze on the dark skin; on desk it is the app's filled control, exactly.
-    ["--role-primary-fill", "--house-bronze-fill"],
-    ["--role-fill-content", "--house-bronze-ink"],
+    // The primary button is NOT pinned to the app's filled control. It is the house's cast-gold plaque in both
+    // skins — the one place the site deliberately keeps its own material rather than borrowing the app's — so
+    // there is nothing here for the app to drift away from.
     // A terminal is paper on both, and the same paper.
     ["--role-terminal", "--role-code-fill"],
     ["--role-terminal", "--role-figure-terminal"],

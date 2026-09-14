@@ -250,6 +250,10 @@
     --role-nav-wash: linear-gradient(90deg, rgba(224, 123, 39, 0.13) 0%, rgba(224, 123, 39, 0.05) 34%, transparent 72%);
     --role-nav-sheet: #1f1710;
     --role-nav-sheet-wash: radial-gradient(130% 120% at 50% 8%, rgba(52, 38, 24, 0.28) 0%, rgba(22, 16, 10, 0.12) 62%, rgba(9, 6, 4, 0.34) 100%);
+    /* The menu sheet's weave. The filter region is pinned to the tile so `stitchTiles` stitches at the tile's own
+       edge; without that it stitches 20% wider and the repeat shows a seam every 200px — the "grid" this used to
+       draw across every open menu. */
+    --role-nav-sheet-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='m' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='4' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.04 0 0 0 0 0.025 0 0 0 0 0.012 0.5 0 0 0 -0.13'/%3E%3C/filter%3E%3Cfilter id='h' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.03 0.72' numOctaves='1' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.78 0 0 0 0 0.63 0 0 0 0 0.45 0.2 0 0 0 -0.1'/%3E%3C/filter%3E%3Cfilter id='v' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72 0.03' numOctaves='1' seed='23' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.78 0 0 0 0 0.63 0 0 0 0 0.45 0.17 0 0 0 -0.09'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23m)'/%3E%3Crect width='200' height='200' filter='url(%23h)'/%3E%3Crect width='200' height='200' filter='url(%23v)'/%3E%3C/svg%3E");
     --role-nav-sheet-frame: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M8.4 0.6H39.6M47.4 8.4V39.6M39.6 47.4H8.4M0.6 39.6V8.4' fill='none' stroke='rgba(201,160,92,0.66)' stroke-width='1.2'/%3E%3Cpath d='M39.6 0.6L47.4 8.4M47.4 39.6L39.6 47.4M8.4 47.4L0.6 39.6M0.6 8.4L8.4 0.6' fill='none' stroke='rgba(201,160,92,0.66)' stroke-width='2.34'/%3E%3Cpath d='M10.22 5H37.78M43 10.22V37.78M37.78 43H10.22M5 37.78V10.22' fill='none' stroke='rgba(201,160,92,0.4)' stroke-width='1'/%3E%3Cpath d='M37.78 5L43 10.22M43 37.78L37.78 43M10.22 43L5 37.78M5 10.22L10.22 5' fill='none' stroke='rgba(201,160,92,0.4)' stroke-width='1.95'/%3E%3C/svg%3E");
     --role-nav-sheet-shadow: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55)) drop-shadow(0 24px 34px rgba(0, 0, 0, 0.5));
     --role-bar-fill: rgba(10, 7, 5, 0.86);
@@ -260,9 +264,15 @@
     --role-scrim: 12 9 7;
     --role-scrim-well: 9 6 4;
     --role-scrim-crop: 10 7 5;
+    /* The art on the plate, at the rung this width wants. */
+    --role-plate-art: url("/assets/angkor/temple-1600.avif");
     /* How much of the photograph survives, and the flat tint laid over whatever does. */
     --role-plate-dim: 1;
     --role-plate-tint: 0.12;
+    /* ONE KNOB OVER EVERY SCRIM STOP BELOW. The dark skin needs the full weight: it is darkening a photograph far
+       enough that cream type can sit on it. A skin whose art is already pale needs a fraction of it, and without a
+       multiplier each of those fourteen alphas would have to be tokenised on its own. */
+    --role-plate-veil: 1;
 
     /* The home page's own furniture: the stage's frame shadow, the veil over the demo figure that lifts its play
        button, the hero's subtitle, the ember rule under a live tab, and the plate's foot. */
@@ -1125,6 +1135,17 @@
         text-decoration: none;
     }
 
+    /* THE TWO COPIES OF EVERY PRODUCT SHOT (ProductShot.astro). Each skin hides the copy that is not its own and
+       never touches the other, so the visible image keeps whatever display its own classes gave it — several of
+       these are absolutely positioned frames in the hero's stack. A hidden, lazy <img> is not fetched, so a reader
+       pays for one of the pair, not both. */
+    html:not([data-variant="desk"]) .shot-light {
+        display: none;
+    }
+    html[data-variant="desk"] .shot-dark {
+        display: none;
+    }
+
     /* The way back out of the desk skin. It sits in the footer of every page, in the markup either way so that one
        cached document can serve both skins, and is only shown where it means something. */
     .variant-exit {
@@ -1165,7 +1186,7 @@
     left: 0;
 /* THE BOX IS THE ART'S OWN SHAPE. */
     aspect-ratio: 16 / 9;
-    background-image: url("/assets/angkor/temple-1600.avif");
+    background-image: var(--role-plate-art);
     background-position: 50% 0%;
     background-size: cover;
     background-repeat: no-repeat;
@@ -1179,7 +1200,7 @@
     bottom: 0;
     left: 0;
     height: 38%;
-    background: linear-gradient(180deg, transparent 0%, rgb(var(--role-scrim) / 0.55) 52%, var(--color-canvas) 100%);
+    background: linear-gradient(180deg, transparent 0%, rgb(var(--role-scrim) / calc(0.55 * var(--role-plate-veil))) 52%, var(--color-canvas) 100%);
 }
 /* THE SCRIM IS A WELL, not a ramp, and the symmetry of the art is why. */
 .plate::after {
@@ -1189,19 +1210,19 @@
     background:
         radial-gradient(
             58% 46% at 50% 30%,
-            rgb(var(--role-scrim-well) / 0.74) 0%,
-            rgb(var(--role-scrim-well) / 0.6) 42%,
-            rgb(var(--role-scrim-well) / 0.28) 72%,
+            rgb(var(--role-scrim-well) / calc(0.74 * var(--role-plate-veil))) 0%,
+            rgb(var(--role-scrim-well) / calc(0.6 * var(--role-plate-veil))) 42%,
+            rgb(var(--role-scrim-well) / calc(0.28 * var(--role-plate-veil))) 72%,
             transparent 100%
         ),
         linear-gradient(
             0deg,
-            rgb(var(--role-scrim-well) / 0.72) 0%,
-            rgb(var(--role-scrim-well) / 0.42) 18%,
-            rgb(var(--role-scrim-well) / 0.12) 38%,
+            rgb(var(--role-scrim-well) / calc(0.72 * var(--role-plate-veil))) 0%,
+            rgb(var(--role-scrim-well) / calc(0.42 * var(--role-plate-veil))) 18%,
+            rgb(var(--role-scrim-well) / calc(0.12 * var(--role-plate-veil))) 38%,
             transparent 58%
         ),
-        radial-gradient(128% 108% at 50% 40%, transparent 46%, rgb(var(--role-scrim-well) / 0.52) 100%),
+        radial-gradient(128% 108% at 50% 40%, transparent 46%, rgb(var(--role-scrim-well) / calc(0.52 * var(--role-plate-veil))) 100%),
         rgb(var(--role-scrim) / var(--plate-scrim));
 }
 /* THE BAND EVERY PAGE OPENS ON. */
@@ -1225,9 +1246,9 @@
         180deg,
         transparent 0,
         transparent var(--bar-height),
-        rgb(var(--role-scrim) / 0.62) calc(var(--bar-height) + 5rem),
-        rgb(var(--role-scrim) / 0.82) calc(var(--bar-height) + 14rem),
-        rgb(var(--role-scrim) / 0.82) 100%
+        rgb(var(--role-scrim) / calc(0.62 * var(--role-plate-veil))) calc(var(--bar-height) + 5rem),
+        rgb(var(--role-scrim) / calc(0.82 * var(--role-plate-veil))) calc(var(--bar-height) + 14rem),
+        rgb(var(--role-scrim) / calc(0.82 * var(--role-plate-veil))) 100%
     );
 }
 
@@ -1238,15 +1259,17 @@
     bottom: 0;
     left: 0;
     height: 7rem;
-    background: linear-gradient(180deg, transparent, rgb(var(--role-scrim) / 0.6) 55%, var(--color-canvas) 96%);
+    background: linear-gradient(180deg, transparent, rgb(var(--role-scrim) / calc(0.6 * var(--role-plate-veil))) 55%, var(--color-canvas) 96%);
     pointer-events: none;
 }
 /* ON A PHONE THE ART IS CROPPED TO ONE FIGURE, and which one is not a free choice. */
 @media (max-width: 48rem) {
+    :root {
+        --role-plate-art: url("/assets/angkor/temple-900.avif");
+    }
     .plate-img {
         aspect-ratio: auto;
         bottom: 0;
-        background-image: url("/assets/angkor/temple-900.avif");
         background-position: 21% 0%;
     }
     .plate-img::after {
@@ -1257,17 +1280,19 @@
         background:
             linear-gradient(
                 180deg,
-                rgb(var(--role-scrim-crop) / 0.62) 0%,
-                rgb(var(--role-scrim-crop) / 0.5) 40%,
-                rgb(var(--role-scrim-crop) / 0.52) 66%,
-                rgb(var(--role-scrim-crop) / 0.86) 100%
+                rgb(var(--role-scrim-crop) / calc(0.62 * var(--role-plate-veil))) 0%,
+                rgb(var(--role-scrim-crop) / calc(0.5 * var(--role-plate-veil))) 40%,
+                rgb(var(--role-scrim-crop) / calc(0.52 * var(--role-plate-veil))) 66%,
+                rgb(var(--role-scrim-crop) / calc(0.86 * var(--role-plate-veil))) 100%
             ),
             rgb(var(--role-scrim) / var(--plate-scrim));
     }
 }
 @media (min-width: 100rem) {
+    :root {
+        --role-plate-art: url("/assets/angkor/temple-2400.avif");
+    }
     .plate-img {
-        background-image: url("/assets/angkor/temple-2400.avif");
     }
 }
 

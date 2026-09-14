@@ -8,9 +8,8 @@ import { APP_URL, DEMO_PATH, githubUrl, ORG_NAME } from "@intentic/site-content/
 import { buildSoftwareAppSchema } from "@intentic/site-content/structured-data";
 // Provider marks match the session icons used by the app.
 import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
-import { Image } from "astro:assets";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { shotAsset, SHOT_WIDTHS } from "../lib/shots";
+import ProductShot from "./ProductShot.astro";
 import AutomateFigure from "./figures/AutomateFigure.astro";
 import Bullet from "./Bullet.astro";
 import Corners from "./Corners.astro";
@@ -41,9 +40,8 @@ const beats = content.hero.headlineLines
     .map((beat) => beat.replace(/\.\s*$/u, ""))
     .filter((beat) => beat.length > 0);
 
-const appScreens = content.hero.screens.app.map((screen) => ({ ...screen, image: shotAsset(screen.name) }));
 /* Side frames hold still images. */
-const chatStill = shotAsset(content.hero.screens.chat[0]!.name);
+const chatStillName = content.hero.screens.chat[0]!.name;
 /* Hero frames share a viewport axis, so their sizes use `vw`. */
 const appSizes = "(min-width: 64rem) 70vw, (min-width: 48rem) 78vw, 205vw";
 const chatSizes = "(min-width: 64rem) 47vw, (min-width: 48rem) 56vw, 60vw";
@@ -115,7 +113,7 @@ const machineStep = content.connect.steps.at(-1)!;
                         <div class="hero-stack">
                             <Window class="window-plan" aria-hidden="true">
                                 <div class="window-crop window-crop-plan">
-                                    <Image src={shotAsset("chat-plan")} alt="" widths={SHOT_WIDTHS} sizes={planSizes} loading="lazy" decoding="async" class="screen screen-plan" />
+                                    <ProductShot name="chat-plan" alt="" sizes={planSizes} class="screen screen-plan" />
                                 </div>
                             </Window>
 
@@ -123,16 +121,13 @@ const machineStep = content.connect.steps.at(-1)!;
                             <Window class="window-app" finial>
                                 <div class="window-crop window-crop-app">
                                     {
-                                        appScreens.map((screen, index) => (
-                                            <Image
-                                                src={screen.image}
+                                        content.hero.screens.app.map((screen, index) => (
+                                            <ProductShot
+                                                name={screen.name}
                                                 alt={screen.alt}
-                                                widths={SHOT_WIDTHS}
                                                 sizes={appSizes}
-                                                loading={index === 0 ? "eager" : "lazy"}
-                                                fetchpriority={index === 0 ? "high" : undefined}
-                                                decoding="async"
-                                                class:list={["screen screen-app", index === 0 && "is-on"]}
+                                                priority={index === 0}
+                                                class={`screen screen-app${index === 0 ? " is-on" : ""}`}
                                                 data-screen="app"
                                                 aria-hidden={index > 0 ? "true" : undefined}
                                             />
@@ -151,7 +146,7 @@ const machineStep = content.connect.steps.at(-1)!;
 
                             <Window class="window-chat" aria-hidden="true">
                                 <div class="window-crop window-crop-chat">
-                                    <Image src={chatStill} alt="" widths={SHOT_WIDTHS} sizes={chatSizes} loading="lazy" decoding="async" class="screen screen-chat" />
+                                    <ProductShot name={chatStillName} alt="" sizes={chatSizes} class="screen screen-chat" />
                                 </div>
                             </Window>
                         </div>
@@ -188,7 +183,6 @@ const machineStep = content.connect.steps.at(-1)!;
 
                 {
                     content.verbs.items.map((item) => {
-                        const image = item.shot === undefined ? undefined : shotAsset(item.shot.name);
                         return (
                             <div class="stage fade-in">
                                 <div class="stage-head">
@@ -200,19 +194,11 @@ const machineStep = content.connect.steps.at(-1)!;
                                     <a href={item.href} class="link see">See it →</a>
                                 </div>
 
-                                {item.shot !== undefined && image !== undefined && (
+                                {item.shot !== undefined && (
 /* Each showcase frame gets its own finial. */
                                     <Window class="stage-frame" finial label={item.shot.label}>
                                         <div class="stage-crop">
-                                            <Image
-                                                src={image}
-                                                alt={item.shot.alt}
-                                                widths={SHOT_WIDTHS}
-                                                sizes={STAGE_SIZES}
-                                                loading="lazy"
-                                                decoding="async"
-                                                class="stage-shot"
-                                            />
+                                            <ProductShot name={item.shot.name} alt={item.shot.alt} sizes={STAGE_SIZES} class="stage-shot" />
                                         </div>
                                     </Window>
                                 )}
@@ -498,7 +484,10 @@ const machineStep = content.connect.steps.at(-1)!;
         }
 
 /* One app frame is visible at a time. */
-        const screens = document.querySelectorAll<HTMLElement>('[data-screen="app"]');
+        // Every shot is in the page twice, once per skin (ProductShot.astro); only the visible set rotates.
+        const screens = [...document.querySelectorAll<HTMLElement>('[data-screen="app"]')].filter(
+            (screen) => getComputedStyle(screen).display !== "none",
+        );
         if (screens.length > 1) {
             let shown = 0;
             setInterval(() => {

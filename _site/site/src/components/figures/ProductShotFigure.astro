@@ -1,8 +1,7 @@
 ---
 import type { ProductShot } from "@intentic/site-content/product";
-import { Image } from "astro:assets";
-import { shotAsset, SHOT_WIDTHS } from "../../lib/shots";
 import Window from "../Window.astro";
+import ProductShot from "../ProductShot.astro";
 
 /* One screenshot, framed — and the frame is the site's own, the same carved window the home page stands its three hero surfaces in. */
 
@@ -16,15 +15,12 @@ interface Props {
 }
 
 const { shot, priority = false, sizes, class: className = "" } = Astro.props;
-const image = shotAsset(shot.name);
-const loading = priority ? "eager" : "lazy";
-const fetchpriority = priority ? "high" : undefined;
 ---
 
 {
     shot.frame === "browser" && (
         <Window class={className} label={shot.label}>
-            <Image src={image} alt={shot.alt} widths={SHOT_WIDTHS} sizes={sizes} loading={loading} fetchpriority={fetchpriority} decoding="async" class="window-full" />
+            <ProductShot name={shot.name} alt={shot.alt} sizes={sizes} priority={priority} class="window-full" />
         </Window>
     )
 }
@@ -32,14 +28,11 @@ const fetchpriority = priority ? "high" : undefined;
 {
     shot.frame === "phone" && (
         <div class:list={["mx-auto w-full max-w-[27rem] overflow-hidden rounded-[2rem] border border-line-strong bg-card p-2 shadow-2xl shadow-black/50", className]}>
-            <Image
-                src={image}
+            <ProductShot
+                name={shot.name}
                 alt={shot.alt}
-                widths={SHOT_WIDTHS}
                 sizes="(min-width: 29rem) 416px, calc(100vw - 4rem)"
-                loading={loading}
-                fetchpriority={fetchpriority}
-                decoding="async"
+                priority={priority}
                 class="w-full rounded-[1.5rem]"
             />
         </div>
@@ -48,15 +41,12 @@ const fetchpriority = priority ? "high" : undefined;
 
 {
     shot.frame === "bare" && (
-        <Image
-            src={image}
+        <ProductShot
+            name={shot.name}
             alt={shot.alt}
-            widths={SHOT_WIDTHS}
             sizes={sizes}
-            loading={loading}
-            fetchpriority={fetchpriority}
-            decoding="async"
-            class:list={["w-full border border-line-strong shadow-2xl shadow-black/50", className]}
+            priority={priority}
+            class={`w-full border border-line-strong shadow-2xl shadow-black/50 ${className}`}
         />
     )
 }

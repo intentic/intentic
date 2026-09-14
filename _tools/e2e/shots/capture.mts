@@ -1,12 +1,16 @@
 /* Marketing screenshot harness. */
-import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
+import { closeSync, createReadStream, existsSync, mkdirSync, openSync, readSync, statSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { chromium, type Browser, type Page } from "@playwright/test";
 
 const DEMO_DIR = join(repoRoot(import.meta.url), "_site/site/public/demo");
-const OUT_DIR = join(repoRoot(import.meta.url), "_site/site/src/assets/product");
+
+// The site ships two skins, so it needs two sets of these. `--light` drives the app in its light scheme and writes
+// the twin set; the site pairs them by filename (see _site/site/src/lib/shots.ts).
+const LIGHT = process.argv.includes("--light");
+const OUT_DIR = join(repoRoot(import.meta.url), `_site/site/src/assets/${LIGHT ? "product-light" : "product"}`);
 const PORT = 47_147;
 const ORIGIN = `http://localhost:${PORT}`;
 /* Serve the demo under its configured /demo base. */
@@ -23,8 +27,12 @@ const DEFAULT_DPR = 2;
 /* Hide demo-only chrome and tooltips from screenshots. */
 const HIDE_DEMO_CHROME = `#demo-switcher, .ui-tooltip { display: none !important; }`;
 
-// The composer's textarea is the docked chat's left edge — every desktop surface shares the shell, so one
-// landmark decides where the workspace ends and the chat begins.
+// WHERE THE WORKSPACE ENDS AND THE CHAT BEGINS. Every desktop surface shares the shell, so one landmark decides it
+// for all of them. It used to be the composer's textarea, and that selector has since stopped matching anything the
+// demo renders — the pane and its controls mount, the textarea does not. A stale landmark here is expensive and
+// quiet: `composerLeft` fell back to the whole viewport and every clipped shot came out ~400px too wide, with
+// nothing in the log to say so. Hence two of them, the panel first, and a loud failure when neither is found.
+const CHAT_PANEL = ".chat-panel";
 const COMPOSER = 'textarea[name="draft"]';
 
 /* Match the platform-independent start of the chat popout label. */
@@ -173,7 +181,7 @@ const SHOTS: Shot[] = [
         name: "hero-chat-agents",
         path: "/agents/cnv_checkout_stripe",
         openFirst: "/agents/cnv_checkout_stripe",
-        waitFor: COMPOSER,
+        waitFor: POPOUT_BUTTON,
         settleMs: 2600,
         popout: POPOUT_WINDOW,
         dpr: DENSE_DPR,
@@ -182,7 +190,7 @@ const SHOTS: Shot[] = [
         name: "hero-chat-personas",
         path: "/agents/cnv_checkout_stripe",
         openFirst: "/agents/cnv_checkout_stripe",
-        waitFor: COMPOSER,
+        waitFor: POPOUT_BUTTON,
         settleMs: 2600,
         popout: {
             ...POPOUT_WINDOW,
@@ -347,17 +355,17 @@ const FRONT_DESK_REPLY =
 
 const FRONT_DESK_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Northwind Robotics</title>
 <style>
-  :root{color-scheme:dark}
-  body{margin:0;background:#0b0d10;color:#e6e8eb;font:16px/1.65 ui-serif,Georgia,serif}
+  :root{color-scheme:${LIGHT ? `light` : `dark`}}
+  body{margin:0;background:${LIGHT ? `#fbfaf9` : `#0b0d10`};color:${LIGHT ? `#1b1d20` : `#e6e8eb`};font:16px/1.65 ui-serif,Georgia,serif}
   header,main{max-width:54rem;margin:0 auto;padding:0 2.5rem}
   header{padding-top:5.5rem}
-  .eyebrow{font:600 12px/1 ui-sans-serif,system-ui;letter-spacing:.14em;text-transform:uppercase;color:#8ab4f8}
+  .eyebrow{font:600 12px/1 ui-sans-serif,system-ui;letter-spacing:.14em;text-transform:uppercase;color:${LIGHT ? `#1a56c4` : `#8ab4f8`}}
   h1{font-size:3.1rem;line-height:1.08;letter-spacing:-.025em;margin:1rem 0 1rem}
-  p{color:#9aa0a6;max-width:36rem}
+  p{color:${LIGHT ? `#5f6368` : `#9aa0a6`};max-width:36rem}
   .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem;margin-top:3.5rem}
-  .card{border:1px solid #1e2227;border-radius:.75rem;padding:1.25rem;background:#101318}
+  .card{border:1px solid ${LIGHT ? `#e3e5e8` : `#1e2227`};border-radius:.75rem;padding:1.25rem;background:${LIGHT ? `#fff` : `#101318`}}
   .card h3{font:600 14px/1.3 ui-sans-serif,system-ui;margin:0 0 .4rem}
-  .card p{font:13px/1.55 ui-sans-serif,system-ui;margin:0;color:#6b7280}
+  .card p{font:13px/1.55 ui-sans-serif,system-ui;margin:0;color:${LIGHT ? `#70757a` : `#6b7280`}}
 </style></head><body>
 <header>
   <span class="eyebrow">Industrial robotics</span>
@@ -435,11 +443,19 @@ const serveDemo = (): Server => {
 
 /** Where the docked chat starts — the split every desktop clip is taken on. */
 const composerLeft = async (page: Page, fallback: number): Promise<number> => {
-    const box = await page
-        .locator(COMPOSER)
-        .boundingBox()
-        .catch(() => null);
-    return box === null ? fallback : Math.round(box.x);
+    for (const selector of [COMPOSER, CHAT_PANEL]) {
+        const box = await page
+            .locator(selector)
+            .first()
+            .boundingBox()
+            .catch(() => null);
+        if (box !== null) {
+            return Math.round(box.x);
+        }
+    }
+    // Loud on purpose: the quiet version of this line framed a whole run wrong.
+    console.warn(`  [split not found] neither ${COMPOSER} nor ${CHAT_PANEL} — clipping to the full window instead`);
+    return fallback;
 };
 
 /* Trim screenshots to the last visible content pixel plus padding. */
@@ -478,7 +494,46 @@ const contentBottom = async (page: Page, from: number, to: number): Promise<numb
 /** The gutter left under the content, so a trimmed shot ends on breathing room rather than on a card's edge. */
 const TRIM_PAD = 24;
 
+/**
+ * The dark twin's box, in CSS pixels, read from its PNG header.
+ *
+ * The two sets are pairs: the site lays out from the dark shot's dimensions and swaps the light one in underneath,
+ * so a reader changing skin must not see the page reflow. Measuring the light run independently does not give that
+ * — `composerLeft` locates the workspace/chat split by finding the composer, and when it cannot it silently falls
+ * back to the whole viewport, which framed the first light run 800px wider than its pair. Framing from the twin is
+ * right whether or not that measurement works, so it is what decides the box.
+ */
+const twinBox = (shot: Shot): { width: number; height: number } | undefined => {
+    if (!LIGHT) {
+        return undefined;
+    }
+    const twin = join(repoRoot(import.meta.url), "_site/site/src/assets/product", `${shot.name}.png`);
+    if (!existsSync(twin)) {
+        return undefined;
+    }
+    // IHDR carries width and height in the first 24 bytes; the rest of the file is of no interest here.
+    const header = Buffer.alloc(24);
+    const file = openSync(twin, "r");
+    try {
+        readSync(file, header, 0, 24, 0);
+    } finally {
+        closeSync(file);
+    }
+    const dpr = shot.dpr ?? DEFAULT_DPR;
+    return { width: header.readUInt32BE(16) / dpr, height: header.readUInt32BE(20) / dpr };
+};
+
 const clipFor = async (page: Page, shot: Shot): Promise<{ x: number; y: number; width: number; height: number } | undefined> => {
+    const twin = twinBox(shot);
+    if (twin !== undefined) {
+        const paired = shot.viewport ?? (shot.mobile === true ? MOBILE : DESKTOP);
+        // A twin that fills the window was shot unclipped; keep it that way rather than inventing a box.
+        if (twin.width >= paired.width - 1 && twin.height >= paired.height - 1) {
+            return undefined;
+        }
+        // The chat is flush right, the workspace flush left: that is the whole of where a clip can start.
+        return { x: shot.clip === "chat" ? paired.width - twin.width : 0, y: 0, width: twin.width, height: twin.height };
+    }
     if (shot.clip === undefined) {
         return undefined;
     }
@@ -500,7 +555,8 @@ const shootPopout = async (page: Page, shot: Shot, popout: NonNullable<Shot["pop
     try {
         window.on("pageerror", (error) => console.warn(`  [pageerror ${shot.name}/popout] ${error.message.split("\n")[0]}`));
         await window.setViewportSize({ width: popout.width, height: popout.height });
-        await window.waitForSelector(COMPOSER, { timeout: 20_000 });
+        // The popped-out window is the chat and nothing else, so the panel itself is what "it has rendered" means.
+        await window.waitForSelector(CHAT_PANEL, { timeout: 20_000 });
         for (const target of popout.press ?? []) {
             await window.click(target, { timeout: 20_000 });
             await window.waitForTimeout(600);
@@ -545,8 +601,27 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
         deviceScaleFactor: shot.dpr ?? DEFAULT_DPR,
         isMobile: shot.mobile ?? false,
         hasTouch: shot.mobile ?? false,
-        colorScheme: "dark",
+        colorScheme: LIGHT ? "light" : "dark",
     });
+    // TWO preferences decide how the app looks, and the light set needs both.
+    //
+    // `ui-skin` is the bigger of the two. Sanctum is the site's own carved design worn by the app, and it is DARK BY
+    // CONSTRUCTION — its README says turning it on forces the dark scheme — so the light set is the app with no skin,
+    // which is exactly the light theme the desk pages are built from. The dark set keeps Sanctum, which is why those
+    // shots sit so well on the carved pages.
+    //
+    // Both are written before the app boots, and the app applies them itself: `definePreference` reads storage at
+    // load and writes `data-mode`/`data-skin` onto <html> from it. An earlier version of this also forced the
+    // attributes from a MutationObserver over the whole document; that fired on every node the app rendered and
+    // stalled the boot far enough that the docked chat never mounted, which silently cost the two popped-out shots
+    // and mis-framed every clipped one.
+    await context.addInitScript(
+        ({ scheme, skin }: { scheme: string; skin: string }) => {
+            window.localStorage.setItem(`ui-color-scheme`, scheme);
+            window.localStorage.setItem(`ui-skin`, skin);
+        },
+        LIGHT ? { scheme: `light`, skin: `none` } : { scheme: `dark`, skin: `sanctum` },
+    );
     /* Set fixture mode before app boot so every navigation keeps it. */
     if (shot.mode !== undefined) {
         await context.addInitScript((mode) => window.sessionStorage.setItem(`intentic.demo.mode`, mode), shot.mode);
@@ -598,7 +673,7 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
 };
 
 const run = async (): Promise<void> => {
-    const only = process.argv.slice(2);
+    const only = process.argv.slice(2).filter((argument) => !argument.startsWith(`--`));
     const wanted = only.length === 0 ? SHOTS : SHOTS.filter((shot) => only.includes(shot.name));
     if (wanted.length === 0) {
         throw new Error(`No shot matches ${only.join(", ")} — known: ${SHOTS.map((shot) => shot.name).join(", ")}`);
@@ -624,7 +699,7 @@ const run = async (): Promise<void> => {
         await browser.close();
         server.close();
     }
-    console.log(`${wanted.length - failed}/${wanted.length} shots written to ${OUT_DIR}`);
+    console.log(`${wanted.length - failed}/${wanted.length} ${LIGHT ? `light` : `dark`} shots written to ${OUT_DIR}`);
 };
 
 await run();

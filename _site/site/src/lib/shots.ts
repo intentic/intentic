@@ -1,7 +1,11 @@
 import type { ImageMetadata } from "astro";
 
 // Shots from capture.mts, in src/assets/ not public/, so astro:assets emits a hashed, right-sized WebP ladder.
+// There are two sets, one per skin, paired by filename: the dark set is the app wearing the Sanctum skin (the
+// site's own carved design), the light set is the app unskinned in its light scheme — which is the theme the desk
+// pages are built from. Sanctum cannot be light; its own README says turning it on forces the dark scheme.
 const files = import.meta.glob<{ default: ImageMetadata }>("../assets/product/*.png", { eager: true });
+const lightFiles = import.meta.glob<{ default: ImageMetadata }>("../assets/product-light/*.png", { eager: true });
 
 export function shotAsset(name: string): ImageMetadata {
     const file = files[`../assets/product/${name}.png`];
@@ -9,6 +13,18 @@ export function shotAsset(name: string): ImageMetadata {
         throw new Error(`No screenshot named "${name}": capture.mts writes them to src/assets/product/.`);
     }
     return file.default;
+}
+
+/** Both skins' copies of one shot. Every shot needs both; a missing twin is a capture run that did not finish. */
+export function shotPair(name: string): { dark: ImageMetadata; light: ImageMetadata } {
+    const light = lightFiles[`../assets/product-light/${name}.png`];
+    if (light === undefined) {
+        throw new Error(
+            `No light screenshot named "${name}". Write it with:\n` +
+                `  node --experimental-strip-types _tools/e2e/shots/capture.mts --light ${name}`,
+        );
+    }
+    return { dark: shotAsset(name), light: light.default };
 }
 
 // Srcset rungs, spaced to avoid wasted variants; top rung matches capture.mts's own max width, never upscaled.

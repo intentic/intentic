@@ -465,10 +465,10 @@ const currentPath = Astro.url.pathname;
     .flyout-surface {
         --cut: 9px;
 
-        /* The flyout panel uses a dark warm linen surface. */
+        /* Each skin brings its own sheet: a ground, a woven tile and a wash. */
         background-color: var(--role-nav-sheet);
         background-image:
-            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='m' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='4' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.04 0 0 0 0 0.025 0 0 0 0 0.012 0.5 0 0 0 -0.13'/%3E%3C/filter%3E%3Cfilter id='h' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.03 0.72' numOctaves='1' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.78 0 0 0 0 0.63 0 0 0 0 0.45 0.2 0 0 0 -0.1'/%3E%3C/filter%3E%3Cfilter id='v' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72 0.03' numOctaves='1' seed='23' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.78 0 0 0 0 0.63 0 0 0 0 0.45 0.17 0 0 0 -0.09'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23m)'/%3E%3Crect width='200' height='200' filter='url(%23h)'/%3E%3Crect width='200' height='200' filter='url(%23v)'/%3E%3C/svg%3E"),
+            var(--role-nav-sheet-texture),
             var(--role-nav-sheet-wash);
         background-repeat: repeat, no-repeat;
         background-size: 200px 200px, cover;

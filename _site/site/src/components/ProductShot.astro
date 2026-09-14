@@ -1,0 +1,41 @@
+---
+/* ONE SCREENSHOT, IN BOTH SKINS. The site ships two looks and the app has two of its own, so every product shot
+   exists twice and the page carries both — the skin is decided in the browser, after this HTML is cached, so it
+   cannot be decided here. CSS shows one and hides the other (`.shot-dark` / `.shot-light` in global.css).
+
+   Only the dark copy may be eager. It is the copy the public, indexed site paints, so its LCP is the one that
+   counts; the light twin is always lazy, which also means a `display: none` twin is never fetched at all. The one
+   cost is that a desk reader with a priority shot above the fold fetches the dark copy they will not see. */
+import { Image } from "astro:assets";
+import { shotPair, SHOT_WIDTHS } from "../lib/shots";
+
+interface Props {
+    /** The filename both sets share. */
+    name: string;
+    alt: string;
+    /** How wide the page paints this shot, so the browser can pick a rung of its srcset. */
+    sizes: string;
+    class?: string;
+    /** The hero is the page's LCP; everything below it waits until it is scrolled near. */
+    priority?: boolean;
+    widths?: number[];
+    /** Anything else — `data-screen`, `style`, `aria-hidden` — lands on both copies, since either may be the live one. */
+    [attribute: string]: unknown;
+}
+
+const { name, alt, sizes, class: className = "", priority = false, widths = SHOT_WIDTHS, ...rest } = Astro.props;
+const shot = shotPair(name);
+---
+
+<Image
+    src={shot.dark}
+    alt={alt}
+    widths={widths}
+    sizes={sizes}
+    loading={priority ? "eager" : "lazy"}
+    fetchpriority={priority ? "high" : undefined}
+    decoding="async"
+    class:list={["shot-dark", className]}
+    {...rest}
+/>
+<Image src={shot.light} alt={alt} widths={widths} sizes={sizes} loading="lazy" decoding="async" class:list={["shot-light", className]} {...rest} />

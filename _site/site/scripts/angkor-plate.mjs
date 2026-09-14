@@ -7,8 +7,16 @@ import { join } from "node:path";
 import sharp from "sharp";
 
 const here = import.meta.dirname;
-const MASTER = join(here, "../src/assets/angkor/temple-master.png");
 const OUT_DIR = join(here, "../public/assets/angkor");
+
+// One plate per skin, and they are different pictures rather than one picture lit twice. The dark skin's is a
+// photograph of a temple wall, dark enough that cream type sits on it. The desk skin's is drawn: cream parchment,
+// the same apsaras and spires, a gold cartouche border, and an empty middle for the headline. Washing the
+// photograph out to paper was tried first and is not the same thing — it reads as a faded photo, not as a page.
+const PLATES = [
+    { master: "temple-master.png", prefix: "temple" },
+    { master: "temple-desk-master.png", prefix: "temple-desk" },
+];
 
 // Pinned to 16:9, matching global.css's frame math; quality drops as width grows (artefacts shrink angularly).
 const RUNGS = [
@@ -19,13 +27,15 @@ const RUNGS = [
 
 await mkdir(OUT_DIR, { recursive: true });
 
-for (const { width, quality } of RUNGS) {
-    const height = Math.round((width * 9) / 16);
-    const buffer = await sharp(MASTER)
-        .resize(width, height, { fit: "fill", kernel: "lanczos3" })
-        .avif({ quality, effort: 9, chromaSubsampling: "4:4:4", bitdepth: 10 })
-        .toBuffer();
-    const file = join(OUT_DIR, `temple-${width}.avif`);
-    await writeFile(file, buffer);
-    console.log(`${file}  ${width}×${height}  ${(buffer.length / 1024).toFixed(1)} KB`);
+for (const { master, prefix } of PLATES) {
+    for (const { width, quality } of RUNGS) {
+        const height = Math.round((width * 9) / 16);
+        const buffer = await sharp(join(here, "../src/assets/angkor", master))
+            .resize(width, height, { fit: "fill", kernel: "lanczos3" })
+            .avif({ quality, effort: 9, chromaSubsampling: "4:4:4", bitdepth: 10 })
+            .toBuffer();
+        const file = join(OUT_DIR, `${prefix}-${width}.avif`);
+        await writeFile(file, buffer);
+        console.log(`${file}  ${width}×${height}  ${(buffer.length / 1024).toFixed(1)} KB`);
+    }
 }

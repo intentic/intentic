@@ -1,12 +1,12 @@
 ---
 import { productHref, productPages } from "@intentic/site-content/product";
 import { APP_URL, DEMO_PATH } from "@intentic/site-content/site";
-import { Image } from "astro:assets";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
 import Window from "../../components/Window.astro";
-import { shotAsset, SHOT_WIDTHS } from "../../lib/shots";
+import { shotAsset } from "../../lib/shots";
+import ProductShot from "../../components/ProductShot.astro";
 
 /* The features index: every verb as a card, in the order the menu lists them. */
 ---
@@ -46,14 +46,11 @@ import { shotAsset, SHOT_WIDTHS } from "../../lib/shots";
                             <Window href={productHref(page.slug)} class="group flex flex-col overflow-hidden">
                                 {image && page.hero ? (
                                     <div class="flex aspect-16/10 justify-center overflow-hidden border-b border-line bg-canvas">
-                                        <Image
-                                            src={image}
+                                        <ProductShot
+                                            name={page.hero.name}
                                             alt={page.hero.alt}
-                                            widths={SHOT_WIDTHS}
                                             sizes={`(min-width: 80rem) min(604px, ${cap}), (min-width: 40rem) min((100vw - 4.5rem) / 2, ${cap}), min(100vw - 3rem, ${cap})`}
                                             style={`max-width:${cap}`}
-                                            loading="lazy"
-                                            decoding="async"
                                             class="h-full w-full object-cover object-left-top"
                                         />
                                     </div>
