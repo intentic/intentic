@@ -173,12 +173,12 @@
     padding-block: 0.125rem;
 }
 @container (min-width: 61rem) {
-/* THE ROW HAS TO REACH THE MARGIN BEFORE THE MARK CAN STAND IN IT. */
+/* A paint-contained row cannot clip the out-of-flow mark or its scaled ring. */
     .chat-pane .chat-message:has(.chat-run-bar) {
         margin-right: -5.75rem;
         padding-right: 5.75rem;
-        margin-block: -0.5rem;
-        padding-block: 0.5rem;
+        margin-block: -0.625rem;
+        padding-block: 0.625rem;
     }
     .chat-pane .chat-run-bar {
         padding-block: 0.25rem;
