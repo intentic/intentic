@@ -17,29 +17,47 @@ export const AT_CAPACITY_MESSAGE = `we're out of machines right now — every on
 
 // How long a provider refusal is believed, per region (an org allowance is global; a region's hardware is not).
 const PROVIDER_FULL_MS = 5 * 60 * 1000;
-const providerFullAt = new Map<string, number>();
+
+/* WHAT THE PROVIDER SAID, kept beside WHEN, because the count never answered the only question an operator has.
+ * Fly publishes no status code for an out-of-capacity refusal, so the wording is the entire diagnosis: an
+ * allowance for this org is raised with Fly, while a region out of hardware is placed somewhere else instead,
+ * and nothing about the size of the fleet tells the two apart. A fleet that held ten machines when Fly refused
+ * and twelve an hour later was never at an org ceiling at all — but the alert had already said it might be,
+ * named no region, and the log that knew both died with the container it was written in. */
+interface ProviderRefusal {
+    readonly at: number;
+    readonly detail: string;
+}
+
+const providerFullAt = new Map<string, ProviderRefusal>();
+
+// One refusal, as the alert and the fleet report read it.
+export interface HostedRefusal {
+    readonly region: string;
+    // Fly's own words, verbatim.
+    readonly detail: string;
+}
 
 // Fly refused a create for capacity in this region; remembered for a few minutes (hosted.ts, hosted-pool.ts,
 // hosted-build.ts).
-export const noteProviderAtCapacity = (region: string, at: number = Date.now()): void => {
-    providerFullAt.set(region, at);
+export const noteProviderAtCapacity = (region: string, detail: string, at: number = Date.now()): void => {
+    providerFullAt.set(region, { at, detail });
 };
+
+// What to latch as the provider's words; a throw that carries none must not leave the alert quoting nothing.
+export const providerWords = (error: unknown): string => (error instanceof Error ? error.message : `Fly refused to create a machine`);
 
 // Tests reset this latch; nothing else should touch it.
 export const forgetProviderCapacity = (): void => {
     providerFullAt.clear();
 };
 
-// Is the provider refusing right now: one region if the caller names one, any region otherwise (health watch, canary,
+// Refusals still believed: one region if the caller names one, every region otherwise (health watch, canary,
 // fleet report), since those ask whether placing machines is broken at all.
-const providerRefusing = (region: string | undefined, now: number): boolean => {
-    const live = (at: number): boolean => now - at < PROVIDER_FULL_MS;
-    if (region === undefined) {
-        return [...providerFullAt.values()].some(live);
-    }
-    const at = providerFullAt.get(region);
-    return at !== undefined && live(at);
-};
+const liveRefusals = (region: string | undefined, now: number): HostedRefusal[] =>
+    [...providerFullAt.entries()]
+        .filter(([where, refusal]) => now - refusal.at < PROVIDER_FULL_MS && (region === undefined || where === region))
+        .map(([where, refusal]) => ({ region: where, detail: refusal.detail }));
 
 export interface HostedCapacity {
     // The configured ceiling; 0 when the platform imposes none of its own.
@@ -54,6 +72,8 @@ export interface HostedCapacity {
     readonly full: boolean;
     // Why: the platform's own ceiling, or the provider's refusal.
     readonly reason: "cap" | "provider" | undefined;
+    // The refusals behind a `provider` reason, in the scope asked about; empty for every other reason.
+    readonly refusals: readonly HostedRefusal[];
 }
 
 // Room left under the platform's own ceiling, ignoring warm stock: the pool asks 'may I build one more', not 'can
@@ -69,11 +89,12 @@ export const hostedCapacity = async (
     region?: string,
     now: number = Date.now(),
 ): Promise<HostedCapacity> => {
-    const providerFull = providerRefusing(region, now);
+    const refusals = liveRefusals(region, now);
+    const providerFull = refusals.length > 0;
     const capped = config.hosted.maxMachines > 0;
     // No ceiling and no refusal: skip the four queries this runs on every provision, refill, and build.
     if (!capped && !providerFull) {
-        return { cap: 0, used: undefined, headroom: Number.POSITIVE_INFINITY, warm: 0, full: false, reason: undefined };
+        return { cap: 0, used: undefined, headroom: Number.POSITIVE_INFINITY, warm: 0, full: false, reason: undefined, refusals: [] };
     }
     const [machines, pooled, building, warm] = await Promise.all([
         prisma.hostedMachine.count(),
@@ -101,5 +122,8 @@ export const hostedCapacity = async (
         // provider.
         full: reason !== undefined && warm === 0,
         reason,
+        // Only when the provider is the reason: at our own ceiling it has said nothing, and quoting a lapsed
+        // refusal would date the alert rather than explain it.
+        refusals: reason === `provider` ? refusals : [],
     };
 };

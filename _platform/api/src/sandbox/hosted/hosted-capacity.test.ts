@@ -36,7 +36,15 @@ describe(`hostedCapacity`, () => {
     it(`asks the database nothing when there is no ceiling and nothing has been refused`, async () => {
         const { prisma, counts } = fakePrisma({ machines: 40 });
         const capacity = await hostedCapacity(prisma, config(0));
-        expect(capacity).toEqual({ cap: 0, used: undefined, headroom: Number.POSITIVE_INFINITY, warm: 0, full: false, reason: undefined });
+        expect(capacity).toEqual({
+            cap: 0,
+            used: undefined,
+            headroom: Number.POSITIVE_INFINITY,
+            warm: 0,
+            full: false,
+            reason: undefined,
+            refusals: [],
+        });
         expect(counts.machines).not.toHaveBeenCalled();
         expect(counts.pool).not.toHaveBeenCalled();
         expect(counts.builds).not.toHaveBeenCalled();
@@ -68,7 +76,7 @@ describe(`hostedCapacity`, () => {
     it(`believes a refusal only in the region it came from, and only for a few minutes`, async () => {
         const { prisma } = fakePrisma({ machines: 12 });
         const at = Date.UTC(2026, 0, 1, 12, 0, 0);
-        noteProviderAtCapacity(`arn`, at);
+        noteProviderAtCapacity(`arn`, `insufficient capacity to create volume`, at);
         expect((await hostedCapacity(prisma, config(0), `arn`, at + 60_000)).full).toBe(true);
         expect((await hostedCapacity(prisma, config(0), `arn`, at + 60_000)).reason).toBe(`provider`);
         expect((await hostedCapacity(prisma, config(0), `iad`, at + 60_000)).full).toBe(false);
@@ -76,10 +84,22 @@ describe(`hostedCapacity`, () => {
         expect((await hostedCapacity(prisma, config(0), `arn`, at + 6 * 60_000)).full).toBe(false);
     });
 
+    // Fly publishes no status code for an out-of-capacity refusal, so its wording is the only thing that says whether
+    // an org allowance or a region's hardware was hit — opposite fixes, and the machine count distinguishes neither.
+    it(`carries the provider's own words, for the region they were said about`, async () => {
+        const { prisma } = fakePrisma({ machines: 12 });
+        const at = Date.UTC(2026, 0, 1, 12, 0, 0);
+        noteProviderAtCapacity(`arn`, `insufficient capacity to create volume`, at);
+        expect((await hostedCapacity(prisma, config(0), `arn`, at + 60_000)).refusals).toEqual([
+            { region: `arn`, detail: `insufficient capacity to create volume` },
+        ]);
+        expect((await hostedCapacity(prisma, config(0), `iad`, at + 60_000)).refusals).toEqual([]);
+    });
+
     it(`answers a region-less question with any region's refusal`, async () => {
         const { prisma } = fakePrisma({ machines: 12 });
         const at = Date.UTC(2026, 0, 1, 12, 0, 0);
-        noteProviderAtCapacity(`arn`, at);
+        noteProviderAtCapacity(`arn`, `insufficient capacity to create volume`, at);
         expect((await hostedCapacity(prisma, config(0), undefined, at + 60_000)).full).toBe(true);
     });
 });

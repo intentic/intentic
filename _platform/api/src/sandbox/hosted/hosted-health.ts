@@ -3,7 +3,7 @@ import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { JOB_HOSTED_HEALTH, runExclusive } from "../../jobs-lock.js";
 import { linkEmail, sendMail } from "../../mail.js";
-import { hostedCapacity } from "./hosted-capacity.js";
+import { hostedCapacity, type HostedRefusal } from "./hosted-capacity.js";
 import { hostedFleet } from "./hosted-fleet.js";
 import { hostedEnabled, type OrphanSkip, sortUnknownApps } from "./hosted.js";
 import { HOUR_MS } from "../../durations.js";
@@ -151,6 +151,8 @@ export interface HostedHealth {
         readonly cap: number;
         readonly full: boolean;
         readonly reason: "cap" | "provider" | undefined;
+        // Which regions the provider is refusing, in its own words; empty when the ceiling is this platform's own.
+        readonly refusals: readonly HostedRefusal[];
     };
     // Rows whose Fly app is gone; the shape that leaves people pressing start it over.
     readonly missing: string[];
@@ -162,6 +164,9 @@ export interface HostedHealth {
     readonly stock: { region: string; warm: number; target: number }[];
     readonly healthy: boolean;
 }
+
+// The regions this platform places machines in; one knob names both, and a single-region setup dedupes to one.
+const configuredRegions = (config: Config): string[] => [...new Set([config.hosted.region, config.hosted.regionEu].filter((region) => region !== ``))];
 
 export const hostedHealth = async (prisma: PrismaClient, config: Config, now: () => number = Date.now): Promise<HostedHealth> => {
     const [fleet, capacity, edge, lane] = await Promise.all([
@@ -177,8 +182,7 @@ export const hostedHealth = async (prisma: PrismaClient, config: Config, now: ()
         orphans.length === 0 ? { doomed: [], skipped: [] } : await sortUnknownApps(config, orphans);
     const strangers = sorted.skipped.filter((entry) => entry.why === `theirs`).map((entry) => entry.app);
     const litter = [...sorted.doomed, ...sorted.skipped.filter((entry) => entry.why !== `theirs`).map((entry) => entry.app)];
-    const regions = [...new Set([config.hosted.region, config.hosted.regionEu].filter((region) => region !== ``))];
-    const stock = regions.map((region) => ({
+    const stock = configuredRegions(config).map((region) => ({
         region,
         warm: fleet.filter((entry) => entry.role === `warm` && !entry.missing && entry.region === region).length,
         target: config.hosted.poolSize,
@@ -186,7 +190,7 @@ export const hostedHealth = async (prisma: PrismaClient, config: Config, now: ()
     return {
         edge,
         lane,
-        capacity: { used: capacity.used, cap: capacity.cap, full: capacity.full, reason: capacity.reason },
+        capacity: { used: capacity.used, cap: capacity.cap, full: capacity.full, reason: capacity.reason, refusals: capacity.refusals },
         missing,
         strangers,
         litter,
@@ -203,15 +207,34 @@ export const hostedHealth = async (prisma: PrismaClient, config: Config, now: ()
     };
 };
 
-// Own ceiling vs. provider refusal have different remedies (a config number vs. a quota only Fly can move), but both
-// end the same way: nobody new gets a sandbox.
-const capacityLine = (capacity: HostedHealth[`capacity`]): string => {
+const andList = (parts: readonly string[]): string =>
+    parts.length <= 1 ? (parts[0] ?? ``) : `${parts.slice(0, -1).join(`, `)} and ${parts.at(-1) ?? ``}`;
+
+/* THE TWO THINGS THIS ALERT USED TO WITHHOLD, both of which decide what the reader does next.
+ *
+ * WHICH REGION. The refusal is latched per region and both user-facing paths scope it to the caller's own
+ * (hosted.ts's provision, the hosted offer), so a region out of hardware refuses EEA sign-ups while everyone
+ * else is served normally. Saying "nobody can be given a new sandbox" of that sends the reader to look for an
+ * outage that is not happening.
+ *
+ * AND WHAT FLY SAID. The alert offered "its allowance for this org, or a region's hardware" and left the
+ * reader to guess, which are opposite fixes: one is a quota raised with Fly, the other is placing machines
+ * somewhere else. The count cannot tell them apart — a fleet that held ten machines at the refusal held twelve
+ * an hour later, so it was never an org ceiling — and the log line that carried the wording lives in a
+ * container that restarts. Quoted here, the mail is the diagnosis rather than the start of one. */
+const capacityLine = (capacity: HostedHealth[`capacity`], regions: readonly string[]): string => {
     const held = `${capacity.used ?? `all`}${capacity.cap === 0 ? `` : ` of ${capacity.cap}`} machines`;
-    const cause =
-        capacity.reason === `cap`
-            ? `This platform is at the ceiling it was configured with (${held}): raise HOSTED_MAX_MACHINES, and the provider's own allowance with it.`
-            : `Fly refused to create a machine for capacity in the last few minutes, with ${held} in the fleet: its allowance for this org, or a region's hardware, is the limit rather than anything here.`;
-    return `${cause} There is no warm stock left either, so nobody can be given a new sandbox: new sign-ups are being told plainly that we are out of machines and pointed at running one on their own computer. Free machines or raise the limit and the lane opens again by itself.`;
+    const nobody = `no sign-up anywhere can be given a machine; they are being told plainly that we are out of machines and pointed at running one on their own computer`;
+    if (capacity.reason === `cap`) {
+        return `This platform is at the ceiling it was configured with (${held}), and there is no warm stock left either, so ${nobody}. Raise HOSTED_MAX_MACHINES, and the provider's own allowance with it, and the lane opens again by itself.`;
+    }
+    const refusing = capacity.refusals.map((refusal) => refusal.region);
+    const quoted = capacity.refusals.map((refusal) => `${refusal.region} — "${refusal.detail}"`).join(`; `);
+    const who =
+        refusing.length > 0 && refusing.length < regions.length
+            ? `Only sign-ups placed in ${andList(refusing)} are refused; the other regions are serving normally`
+            : `There is no warm stock left either, so ${nobody}`;
+    return `Fly refused to create a machine for capacity in the last few minutes, with ${held} in the fleet. What it actually said: ${quoted}. That wording is the diagnosis — an allowance for this org is raised with Fly, while a region out of hardware is placed somewhere else instead, and the size of the fleet says nothing about which of the two this is. ${who}.`;
 };
 
 // Subject line: a broken edge leads, then a full fleet — both are happening to people right now rather than
@@ -234,7 +257,12 @@ const alertHeading = (health: HostedHealth): string => {
     if (health.edge?.fault !== undefined || health.lane.fault !== undefined) {
         return `Hosted sandboxes cannot be reached at their addresses`;
     }
-    return health.capacity.full ? `The hosted lane has run out of machines` : `The hosted fleet and the database disagree`;
+    if (!health.capacity.full) {
+        return `The hosted fleet and the database disagree`;
+    }
+    // Naming the region in the heading, since a reader who is not in it should not be reading an outage.
+    const refusing = health.capacity.refusals.map((refusal) => refusal.region);
+    return refusing.length === 0 ? `The hosted lane has run out of machines` : `The hosted lane has run out of machines in ${andList(refusing)}`;
 };
 
 const alertMail = (config: Config, health: HostedHealth) => ({
@@ -246,7 +274,7 @@ const alertMail = (config: Config, health: HostedHealth) => ({
             health.edge?.fault ?? ``,
             // Second: the sandboxes' own verdict, which stands whether or not the edge could explain it.
             health.lane.fault ?? ``,
-            health.capacity.full ? capacityLine(health.capacity) : ``,
+            health.capacity.full ? capacityLine(health.capacity, configuredRegions(config)) : ``,
             health.missing.length > 0
                 ? `${health.missing.length} sandbox row(s) point at Fly apps that no longer exist: ${health.missing.join(`, `)}.`
                 : ``,
@@ -282,9 +310,14 @@ const faultLine = (health: HostedHealth): string => {
     if (health.lane.fault !== undefined) {
         return `hosted health: ${health.lane.fault}`;
     }
-    return health.capacity.full
-        ? `hosted health: the lane is full; nobody can be given a new machine until the provider's allowance is raised`
-        : `hosted health: the fleet and the database disagree`;
+    if (!health.capacity.full) {
+        return `hosted health: the fleet and the database disagree`;
+    }
+    // The structured `capacity` field beside this carries the refusals verbatim; the message names where, not why.
+    const refusing = health.capacity.refusals.map((refusal) => refusal.region);
+    return refusing.length === 0
+        ? `hosted health: the lane is full; nobody can be given a new machine`
+        : `hosted health: the provider is refusing machines in ${andList(refusing)}; nobody placed there can be given one`;
 };
 
 // What the healthy line says about the edge; an unstamped one never reaches it, since that is now a fault.

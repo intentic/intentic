@@ -20,7 +20,7 @@ import {
     updateMachine,
 } from "../fly/fly.js";
 import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "../fly/fly-tokens.js";
-import { hostedCapacity, noteProviderAtCapacity } from "../hosted-capacity.js";
+import { hostedCapacity, noteProviderAtCapacity, providerWords } from "../hosted-capacity.js";
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson, LOG_TAIL_BYTES } from "./hosted-build-script.js";
 import { hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs, startAfterUpdate } from "../hosted.js";
 import { chargeMinutes, hostedBudgetOf, usageMonth } from "../hosted-usage.js";
@@ -329,7 +329,7 @@ const startBuilder = async (
         await prisma.hostedMachine.updateMany({ where: { id: machine.id, buildingId: id }, data: { buildingId: null } });
         // Same brake arriving one call later (the org filled up meanwhile): surfaced as capacity, not a gateway error.
         if (isFlyCapacity(error)) {
-            noteProviderAtCapacity(machine.region);
+            noteProviderAtCapacity(machine.region, providerWords(error));
             logger.error({ err: error, app: machine.appName }, `hosted build: the provider has no machine left for a builder`);
             throw new HostedBuildRefused(
                 `capacity`,

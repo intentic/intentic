@@ -27,7 +27,7 @@ import {
     updateMachine,
     LIVE_STATES,
 } from "./fly/fly.js";
-import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
+import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCapacity, providerWords } from "./hosted-capacity.js";
 import { resolveHostedImage } from "./build/hosted-image.js";
 import { hostedSlotsOf } from "./hosted-plan.js";
 import { assertHostedIdentity, HostedAlreadyProvisioned, HostedProvisionCancelled, lockHostedSandbox, withHostedApp } from "./hosted-cleanup.js";
@@ -396,9 +396,9 @@ export const provisionHosted = async (
                 throw new HostedAlreadyProvisioned(`this sandbox already has a machine`);
             }
             // Read as the same refusal whatever the cause, and latched briefly so the next arrivals skip the round trip;
-            // logged at error because only an operator raising a quota fixes it.
+            // logged at error because only an operator moving a limit or a region fixes it.
             if (isFlyCapacity(error)) {
-                noteProviderAtCapacity(region);
+                noteProviderAtCapacity(region, providerWords(error));
                 logger.error({ err: error, region, appName }, `hosted: the provider has no machine left to give; the lane is full`);
                 throw new HostedAtCapacity(AT_CAPACITY_MESSAGE);
             }

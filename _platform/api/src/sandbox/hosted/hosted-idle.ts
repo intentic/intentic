@@ -45,14 +45,34 @@ interface IdleCandidate {
     readonly sandbox: { id: string; name: string; lastSeenAt: Date | null; ownerId: string; owner: { email: string } };
 }
 
-// Decides one candidate: on the plan, gone, alive, past the axe, or owed its one warning. Split from the sweep loop so
-// each stays one job.
+/* THE WARNING IS A PROMISE, NOT A FORMALITY, and the clock alone used to be enough to break it. Collection was
+ * reached on `idleDaysSoFar >= idleDays` and nothing else, so any machine already past the deadline the first
+ * time the sweep considered it was destroyed with no mail ever sent. That is not a corner case: it is exactly
+ * what LOWERING idleDays does to every machine sitting between the old threshold and the new one, and a fleet
+ * is tightened precisely when it is full of forgotten disks. The same hole opens whenever the sweep has been
+ * off, failing, or pointed at a fleet older than itself.
+ *
+ * So the deadline is necessary and no longer sufficient: a machine is collected once a notice has STOOD for
+ * the notice period, however far past the deadline it already is. The worst a tightened threshold can now do
+ * is warn everybody today and collect them a notice period from today. */
+// What the mail may truthfully promise: the later of the deadline and the notice period this mail itself starts,
+// since a machine already past the deadline is held for the whole notice regardless.
+const daysOfGrace = (config: Config, idleDaysSoFar: number): number =>
+    Math.max(1, Math.ceil(Math.max(config.hosted.idleDays - idleDaysSoFar, config.hosted.idleDays - config.hosted.idleWarnDays)));
+
+const noticeServed = (config: Config, machine: IdleCandidate, now: number): boolean =>
+    machine.idleWarnedAt !== null &&
+    now - machine.idleWarnedAt.getTime() >= Math.max(0, config.hosted.idleDays - config.hosted.idleWarnDays) * DAY_MS;
+
+// Decides one candidate: on the plan, gone, alive, past the axe with notice served, or owed its one warning. Split
+// from the sweep loop so each stays one job.
 const decideIdleMachine = async (
     prisma: PrismaClient,
     config: Config,
     logger: Logger,
     machine: IdleCandidate,
     idleDaysSoFar: number,
+    now: number,
 ): Promise<IdleVerdict> => {
     if (await onHostedPlan(prisma, config, machine.sandbox.ownerId)) {
         return `kept`;
@@ -79,7 +99,7 @@ const decideIdleMachine = async (
         }
         return `kept`;
     }
-    if (idleDaysSoFar >= config.hosted.idleDays) {
+    if (idleDaysSoFar >= config.hosted.idleDays && noticeServed(config, machine, now)) {
         // Any stretch still open is closed at the stop Fly just reported, BEFORE the app goes: afterwards there
         // is no machine to ask and, a line later, no row to hold the minutes.
         await closeHostedStretch(prisma, machine, machine.sandbox.ownerId, state.updatedAt);
@@ -98,7 +118,7 @@ const decideIdleMachine = async (
     // Mail first, stamp second: a stamp before a failed send would silently burn the one warning.
     await sendMail(config, logger, {
         to: machine.sandbox.owner.email,
-        ...warnMail(config, machine.sandbox.name, Math.max(1, Math.ceil(config.hosted.idleDays - idleDaysSoFar))),
+        ...warnMail(config, machine.sandbox.name, daysOfGrace(config, idleDaysSoFar)),
     });
     await prisma.hostedMachine.update({ where: { id: machine.id }, data: { idleWarnedAt: new Date() } });
     return `warned`;
@@ -136,7 +156,7 @@ export const reapIdleHosted = async (
             continue;
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on the API
-        const verdict = await decideIdleMachine(prisma, config, logger, machine, idleDaysSoFar).catch((error: unknown) => {
+        const verdict = await decideIdleMachine(prisma, config, logger, machine, idleDaysSoFar, now).catch((error: unknown) => {
             logger.error({ err: error, app: machine.appName }, `hosted idle sweep: failed for this machine; retried tomorrow`);
             return `kept` as const;
         });

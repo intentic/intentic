@@ -200,7 +200,7 @@ describe(`the provisioning canary`, () => {
     it(`stands down entirely while the lane is full`, async () => {
         const fetchSpy = vi.fn();
         vi.stubGlobal(`fetch`, fetchSpy);
-        noteProviderAtCapacity(`iad`);
+        noteProviderAtCapacity(`iad`, `insufficient capacity`);
         const result = await runHostedCanary(prismaWith(new Date()), config(), logger, nap);
         expect(result).toMatchObject({ ok: true, detail: `skipped: the lane is at capacity` });
         expect(fetchSpy).not.toHaveBeenCalled();

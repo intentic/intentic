@@ -59,7 +59,7 @@ afterEach(() => {
 describe(`collecting the machines nobody came back to`, () => {
     it(`destroys a non-member's machine once it is past the deadline, and drops only its row`, async () => {
         const calls = stubFly(`stopped`);
-        const prisma = prismaWith([machine()]);
+        const prisma = prismaWith([machine({ idleWarnedAt: daysAgo(8) })]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
         expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(1);
         expect(prisma.hostedMachine.delete).toHaveBeenCalledWith({ where: { id: `h1` } });
@@ -74,7 +74,7 @@ describe(`collecting the machines nobody came back to`, () => {
         stubFly(`stopped`);
         const upsert = vi.fn().mockResolvedValue({});
         const wokeAt = daysAgo(30);
-        const prisma = prismaWith([machine({ wokeAt })], { hostedUsage: { upsert } });
+        const prisma = prismaWith([machine({ wokeAt, idleWarnedAt: daysAgo(8) })], { hostedUsage: { upsert } });
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
         expect(upsert).toHaveBeenCalledWith(
             expect.objectContaining({ where: { userId_month: { userId: `u1`, month: wokeAt.toISOString().slice(0, 7) } } }),
@@ -111,6 +111,26 @@ describe(`collecting the machines nobody came back to`, () => {
         expect(prisma.hostedMachine.update).not.toHaveBeenCalled();
     });
 
+    /* LOWERING idleDays MUST NOT COLLECT WHAT IT HAS NEVER WARNED. A machine sitting between the old threshold
+     * and a tighter new one is past the deadline the first time the sweep sees it, and the destroy branch used
+     * to be reached on the clock alone — so the mail promising notice was never sent and the owner's first news
+     * was an empty sandbox. It is warned instead, and collected a notice period later. */
+    it(`warns a machine already past the deadline rather than collecting one nobody was told about`, async () => {
+        const calls = stubFly(`stopped`);
+        const prisma = prismaWith([machine({ sandbox: { ...machine().sandbox, lastSeenAt: daysAgo(40) } })]);
+        expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 1, destroyed: 0, dropped: 0 });
+        expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(0);
+        expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { idleWarnedAt: expect.any(Date) } });
+    });
+
+    // The notice has to have STOOD for the notice period (21 - 14 here), not merely to have been sent at some point.
+    it(`holds a machine past the deadline while its notice is younger than the notice period`, async () => {
+        const calls = stubFly(`stopped`);
+        const prisma = prismaWith([machine({ idleWarnedAt: daysAgo(2) })]);
+        expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 0, dropped: 0 });
+        expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(0);
+    });
+
     it(`never touches a member's machine`, async () => {
         const calls = stubFly(`stopped`);
         const prisma = prismaWith([machine()], { hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) } });
@@ -130,7 +150,7 @@ describe(`collecting the machines nobody came back to`, () => {
 
     it(`measures a machine that never announced from when it was created`, async () => {
         stubFly(`stopped`);
-        const prisma = prismaWith([machine({ createdAt: daysAgo(40), sandbox: { ...machine().sandbox, lastSeenAt: null } })]);
+        const prisma = prismaWith([machine({ createdAt: daysAgo(40), idleWarnedAt: daysAgo(8), sandbox: { ...machine().sandbox, lastSeenAt: null } })]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
     });
 
@@ -159,7 +179,7 @@ describe(`collecting the machines nobody came back to`, () => {
                 ? Promise.resolve(new Response(``, { status: 202 }))
                 : Promise.resolve(new Response(JSON.stringify({ id: `m2`, state: `stopped` })));
         });
-        const prisma = prismaWith([machine(), machine({ id: `h2`, appName: `intentic-sbx-b` })]);
+        const prisma = prismaWith([machine({ idleWarnedAt: daysAgo(8) }), machine({ id: `h2`, appName: `intentic-sbx-b`, idleWarnedAt: daysAgo(8) })]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
         expect(prisma.hostedMachine.delete).toHaveBeenCalledWith({ where: { id: `h2` } });
     });

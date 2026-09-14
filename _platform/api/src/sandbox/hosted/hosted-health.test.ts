@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
 import { forgetHostedHealthAlert, sweepHostedHealth } from "./hosted-health.js";
+import { forgetProviderCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
 
 // Every other sweep here acts on the gap between the platform's rows and Fly, but never reported the gap itself. These
 // tests pin what this watch has to say out loud.
@@ -153,8 +154,35 @@ describe(`hosted health`, () => {
         stubApps(`intentic-sbx-a`);
         const prisma = prismaWith([taken(`intentic-sbx-a`)], []);
         const health = await sweepHostedHealth(prisma, config({ poolSize: 0, regionEu: ``, maxMachines: 1 }), logger);
-        expect(health?.capacity).toEqual({ used: 1, cap: 1, full: true, reason: `cap` });
+        expect(health?.capacity).toEqual({ used: 1, cap: 1, full: true, reason: `cap`, refusals: [] });
         expect(health?.healthy).toBe(false);
+    });
+
+    /* THE TWO FACTS THE ALERT USED TO WITHHOLD, which are the two that decide what the reader does next. It
+     * said "its allowance for this org, or a region's hardware" and left them to guess between a quota raised
+     * with Fly and a region placed somewhere else, then called the whole lane down — while the refusal is
+     * latched per region and the sign-up path scopes it to the caller's own, so everyone outside that region
+     * was being served the entire time. The provider's wording is the diagnosis, so the mail carries it. */
+    it(`names the refusing region, quotes the provider, and does not call the lane down for one region's refusal`, async () => {
+        const sent: string[] = [];
+        vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
+            const target = String(url);
+            if (target.startsWith(`https://api.resend.com`)) {
+                sent.push(String(init?.body ?? ``));
+                return Promise.resolve(new Response(JSON.stringify({ id: `sent` })));
+            }
+            return Promise.resolve(edgeAnswer(target, EDGE_OK) ?? new Response(JSON.stringify({ apps: [{ name: `intentic-sbx-a` }] })));
+        });
+        forgetProviderCapacity();
+        noteProviderAtCapacity(`arn`, `Fly refused POST /apps/intentic-sbx-b/volumes: insufficient capacity to create volume`);
+        const mailed = { ...config({ poolSize: 0 }), admin: { emails: `ops@test` }, email: { apiKey: `k`, from: `i@test` } } as unknown as Config;
+        const health = await sweepHostedHealth(prismaWith([taken(`intentic-sbx-a`)], []), mailed, logger);
+        expect(health?.capacity).toMatchObject({ full: true, reason: `provider`, refusals: [{ region: `arn` }] });
+        expect(sent).toHaveLength(1);
+        expect(sent[0]).toContain(`insufficient capacity to create volume`);
+        // The scope, in the words a reader acts on: arn is refused, iad is not, and neither is asserted of the other.
+        expect(sent[0]).toContain(`Only sign-ups placed in arn are refused`);
+        expect(sent[0]).not.toContain(`no sign-up anywhere`);
     });
 
     /* THE OUTAGE THIS WATCH WAS MISSING, and the shape of it is the whole point: every row has its machine,

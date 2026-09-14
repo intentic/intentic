@@ -7,7 +7,7 @@ import { encryptSecret } from "../../crypto.js";
 import { JOB_HOSTED_POOL, runExclusive } from "../../jobs-lock.js";
 import { mintConnectToken } from "../mint-sandbox.js";
 import { createApp, createMachine, createVolume, deleteApp, flyWarmRole, FlyError, getMachine, isFlyCapacity } from "./fly/fly.js";
-import { hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
+import { hostedCapacity, noteProviderAtCapacity, providerWords } from "./hosted-capacity.js";
 import { resolveHostedImage } from "./build/hosted-image.js";
 import { hostedEnabled, hostedInstanceId } from "./hosted.js";
 
@@ -115,15 +115,15 @@ const refillStock = async (
             headroom -= 1;
             // A capacity refusal ends the whole tick: the allowance is the org's, so every region meets the same wall.
             // oxlint-disable-next-line eslint/no-await-in-loop
-            const atCapacity = await buildPoolMachine(prisma, config, logger, region, image).then(
-                () => false,
+            const refusal = await buildPoolMachine(prisma, config, logger, region, image).then(
+                () => undefined,
                 (error: unknown) => {
                     logger.error({ err: error, region }, `hosted pool: build failed; retried next tick`);
-                    return isFlyCapacity(error);
+                    return isFlyCapacity(error) ? providerWords(error) : undefined;
                 },
             );
-            if (atCapacity) {
-                noteProviderAtCapacity(region);
+            if (refusal !== undefined) {
+                noteProviderAtCapacity(region, refusal);
                 headroom = 0;
             }
         }
