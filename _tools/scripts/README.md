@@ -126,6 +126,31 @@ Ordered the way a release runs them:
 | [setup-windows-runner.ps1](ci/setup-windows-runner.ps1) | provision the Windows runner — the one thing the pipeline cannot do for itself |
 | [setup-wsl-fleet.ps1](ci/setup-wsl-fleet.ps1) | make the Linux fleet come back on its own after a reboot |
 
+### [engines/](engines) — which agent program a sandbox runs
+
+Every sandbox on the `blessed` channel reads [engines.json](../../engines.json) hourly, so the version named
+there is the version the whole fleet runs — and the `engines` check ties each of those to a pin in this
+repository, which is what makes "blessed" mean "this repo's suite ran against it". That tie is also what let
+the fleet fall months behind upstream, because moving a pin was a chore with no owner.
+[engines.yml](../../.github/workflows/engines.yml) is the owner now: it runs the bumper daily, and CI's verdict
+on the pull request it opens is what turns a version into a blessed one. The invariant did not move; the
+remembering did.
+
+| | |
+|---|---|
+| [engine-pins.mjs](engines/engine-pins.mjs) | every file that carries an engine's version, and where upstream publishes it — read by the check, written by the bumper |
+| [upstream.mjs](engines/upstream.mjs) | what npm and GitHub have published, **and when**, which is what a soak window needs |
+| [bump-engines.mjs](engines/bump-engines.mjs) | take upstream's newest once it has aged: rewrite the pins, move `engines.json`, say why each engine did or did not move |
+
+The pin graph is one description read from both ends on purpose. `_tools/checks/engines-blessed.mjs` used to
+keep its own copy of where each version lived, which meant a pin site could be taught to the check and not to
+anything that writes one. Reading both out of `engine-pins.mjs` also made the check stronger for free: it now
+catches a catalog and a pack that disagree, a skew that previously surfaced only after an install, in
+`packs.integration.test.ts`.
+
+It pairs with the nightly `provider-canary`, which drives the same CLIs at `--latest` — the canary finds out
+that a vendor changed something, and this is what then takes the version.
+
 ## How it fits
 
 Four things run these, and each reaches a different subset:

@@ -1,0 +1,175 @@
+# THE AGENT ENGINES, KEPT CURRENT BY THE CLOCK RATHER THAN BY MEMORY.
+#
+# engines.json is read by every sandbox on the `blessed` channel, hourly, so the version named there is the one the
+# whole fleet runs. The check in _tools/checks/engines-blessed.mjs ties each blessed version to a pin in this
+# repository, which is what makes "blessed" mean "this repo's suite ran against it" — and is also what left the fleet
+# months behind upstream, because moving a pin was a chore nobody was assigned. This workflow is the assignee.
+#
+# It does not verify anything itself, and that is the design. It rewrites the pins, moves the lockfile, and opens ONE
+# pull request; ci.yml runs on that pull request exactly as it does on anyone else's, and auto-merge lands it when the
+# suite is green. The invariant is untouched — CI is still what blesses a version — while the remembering is gone.
+#
+# ONE LONG-LIVED BRANCH, force-pushed. A bump that CI refuses stays open and red, and tomorrow's run rewrites it to
+# whatever upstream published since, so a broken release upstream fixes itself rather than accumulating a PR a day. To
+# stop one engine without stopping the rest, put a `hold` on it in engines.json.
+name: Engines
+
+on:
+  schedule:
+    # 05:00 UTC daily — after the nightly (03:00) has finished with the fleet, so a bump's pull request meets a CI
+    # queue that is empty rather than one competing with the deep tiers for six runner processes.
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      engine:
+        description: Bump one engine instead of every one.
+        type: choice
+        default: all
+        options:
+          - all
+          - claude
+          - codex
+          - cursor
+          - opencode
+          - translator
+      version:
+        description: Take exactly this version, skipping the soak window. Needs a single engine above.
+        type: string
+      dry-run:
+        description: Report what would move and change nothing.
+        type: boolean
+        default: false
+
+# Never two of these at once: both would write the same branch.
+concurrency:
+  group: engines
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  BRANCH: engines/bump
+
+jobs:
+  bump:
+    # GitHub-hosted on purpose. This job asks two registries what they publish and writes a lockfile; it wants nothing
+    # from the self-hosted fleet's caches or its docker socket, and the fleet is six processes on one box.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: package.json
+      - name: Enable pnpm
+        run: corepack enable
+
+      # THROUGH THE ENVIRONMENT, never interpolated into the script: `${{ }}` inside a `run:` is textual substitution
+      # before the shell sees the line, and `version` here is a free-text dispatch input.
+      - name: Decide what moves
+        id: plan
+        env:
+          ENGINE: ${{ inputs.engine || 'all' }}
+          VERSION: ${{ inputs.version }}
+          DRY_RUN: ${{ inputs.dry-run }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # `if` rather than `[ … ] && …`: an and-list that ends the script is the one place `set -e` still exits on a
+          # false test, so an empty `version` input would have failed this step instead of skipping the flag.
+          args=()
+          if [ "$DRY_RUN" != "true" ]; then args+=(--apply); fi
+          if [ "$ENGINE" != "all" ]; then args+=("--engine=$ENGINE"); fi
+          if [ -n "${VERSION:-}" ]; then args+=("--to=$VERSION"); fi
+          node _tools/scripts/engines/bump-engines.mjs "${args[@]}"
+
+      # Only the lockfile: the pull request's own CI does the real install, and resolving without linking keeps this
+      # job to seconds and runs no package's build script on a token that can write to the repository.
+      - name: Move the lockfile
+        if: steps.plan.outputs.changed == 'true'
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+
+      - name: Commit
+        if: steps.plan.outputs.changed == 'true'
+        id: commit
+        env:
+          TITLE: ${{ steps.plan.outputs.title }}
+          BODY: ${{ steps.plan.outputs.body }}
+          BUMP_TOKEN: ${{ secrets.ENGINE_BUMP_TOKEN }}
+          FALLBACK_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git config user.name "intentic"
+          git config user.email "agent@intentic.dev"
+          git checkout -b "$BRANCH"
+          git commit --all --message "$TITLE" --message "$BODY"
+          # An identical tree already on the branch means yesterday's pull request is still open and still current:
+          # pushing would only restamp it, and restamping re-runs CI for nothing. Authenticated, because the checkout
+          # kept no credentials and an anonymous fetch would read every private repository as "no such branch" and
+          # force-push over a good pull request daily.
+          remote="https://x-access-token:${BUMP_TOKEN:-$FALLBACK_TOKEN}@github.com/${REPO}.git"
+          existing="$(git fetch --quiet "$remote" "$BRANCH" 2>/dev/null && git rev-parse FETCH_HEAD^{tree} || echo none)"
+          if [ "$(git rev-parse HEAD^{tree})" = "$existing" ]; then
+            echo "The open pull request already carries exactly this bump; nothing pushed." >> "$GITHUB_STEP_SUMMARY"
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A pull request opened with GITHUB_TOKEN starts no other workflow — GitHub's own loop prevention — so without a
+      # separate token CI never runs and auto-merge has nothing to wait for. Rather than open a pull request that can
+      # only ever sit there, this says which secret is missing and what it needs.
+      - name: Open the pull request
+        if: steps.commit.outputs.push == 'true'
+        env:
+          BUMP_TOKEN: ${{ secrets.ENGINE_BUMP_TOKEN }}
+          FALLBACK_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TITLE: ${{ steps.plan.outputs.title }}
+          BODY: ${{ steps.plan.outputs.body }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          GH_TOKEN="${BUMP_TOKEN:-$FALLBACK_TOKEN}"
+          export GH_TOKEN
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/${BRANCH}"
+
+          body="$BODY
+
+          Opened by .github/workflows/engines.yml. Every version here is upstream's newest that has aged past the soak
+          window in engines.json; the pins and engines.json were written by _tools/scripts/engines/bump-engines.mjs.
+          Merging is what blesses them, so let CI decide. To stop an engine from being proposed again, give it a
+          \`hold\` in engines.json."
+
+          # BY NUMBER, and only among OPEN ones. `gh pr view <branch>` falls back to the most recent closed pull
+          # request for that branch when none is open, so once the first bump merged, every later run would have tried
+          # to edit a merged pull request and failed instead of opening the next one.
+          # A number from the list, a URL from create: gh takes either wherever a pull request is named.
+          pr="$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --repo "$REPO" --title "$TITLE" --body "$body"
+          else
+            pr="$(gh pr create --repo "$REPO" --head "$BRANCH" --base main --title "$TITLE" --body "$body")"
+          fi
+
+          if [ -z "${BUMP_TOKEN:-}" ]; then
+            {
+              echo "### Auto-merge is off"
+              echo
+              echo "No \`ENGINE_BUMP_TOKEN\` secret, so the pull request was opened with \`GITHUB_TOKEN\` — GitHub starts"
+              echo "no workflow from that token's events, so CI will not run on it and there is nothing for auto-merge to"
+              echo "wait for. Add a fine-grained PAT or App installation token with \`contents: write\` and"
+              echo "\`pull requests: write\` as \`ENGINE_BUMP_TOKEN\` to close the loop."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # Needs "Allow auto-merge" on the repository and a required check to wait for; without either, gh refuses and
+          # the pull request simply stays open for a person, which is a worse day, not a broken one.
+          gh pr merge "$pr" --repo "$REPO" --auto --squash \
+            || echo "auto-merge could not be enabled; the pull request is open and waiting for a person" >> "$GITHUB_STEP_SUMMARY"

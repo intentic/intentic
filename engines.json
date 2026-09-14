@@ -8,12 +8,27 @@
         "to `latest` on the Environment card; one debugging a regression pins a version there instead.",
         "`blessed` must be a version this repository's own suite has run against, which is what the CI check in",
         "_tools/checks/engines-blessed.mjs enforces against the pins in pnpm-workspace.yaml and the packs.",
-        "`minimum` is advisory and records a floor the provider itself enforces, so a card can explain a refusal."
+        "`minimum` is advisory and records a floor the provider itself enforces, so a card can explain a refusal.",
+        "NOBODY EDITS `blessed` BY HAND. .github/workflows/engines.yml runs _tools/scripts/engines/bump-engines.mjs",
+        "daily: it takes upstream's newest stable version once it has aged past the soak window below, rewrites",
+        "every pin, and opens one auto-merging pull request. CI's green is what turns that into a blessing, so the",
+        "invariant holds while the number stops being something a person has to remember. `policy` is what steers",
+        "it, and `hold` is how to stop it for one engine without stopping it for the rest."
     ],
+    "policy": {
+        "soakHours": 6,
+        "$comment": [
+            "soakHours: how long a version must have been published before this repo will pin it. It buys nothing",
+            "against a bad release that stays up; it buys everything against the one upstream unpublishes an hour",
+            "later, which is the failure a fleet-wide default cannot absorb. Raise it per engine below.",
+            "hold: set it on an engine to a sentence saying why, and the bumper leaves that engine alone and reports",
+            "the hold. Delete the key to resume. Both are read only by the bumper — the fleet's schema ignores them."
+        ]
+    },
     "engines": {
         "claude": {
             "blessed": "0.3.257",
-            "notes": "npm @anthropic-ai/claude-agent-sdk; ships Claude Code 2.1.257, which is the version the API states its floors in."
+            "notes": "npm @anthropic-ai/claude-agent-sdk; ships as Claude Code 2.1.x sharing this version's last component, which is the number the API states its floors in."
         },
         "codex": {
             "blessed": "0.147.0",

@@ -38,7 +38,10 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   doubt (`engine-resolve.ts`). Each engine's channel (`engine-policy.ts`, `.intentic/config/engines.json`) is
   `blessed` by default — the version this repository's suite ran against, published as `engines.json` at the
   repo root and read hourly, so blessing one is a commit rather than a release — with `latest`, a pin and the
-  image itself as the alternatives. [src/runtimes/claude/claude-sdk.ts](../src/runtimes/claude/claude-sdk.ts) is the loader that
+  image itself as the alternatives. Nobody writes that commit by hand: `.github/workflows/engines.yml` takes
+  upstream's newest version once it has aged past the soak window, rewrites every pin
+  (`_tools/scripts/engines/`), and opens one auto-merging pull request, so the fleet's default tracks upstream
+  at CI's pace instead of a maintainer's memory. [src/runtimes/claude/claude-sdk.ts](../src/runtimes/claude/claude-sdk.ts) is the loader that
   makes it real for the engine loaded IN this process: both halves of the Claude SDK come from one installed
   prefix, resolved at turn start so a version can never change under a turn already running. Its `/engines` routes are `engines.routes.ts`.
 - [src/dependencies](../src/dependencies): whether the version an agent is about to pin is the one its registry
