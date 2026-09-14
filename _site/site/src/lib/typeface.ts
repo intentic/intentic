@@ -1,115 +1,204 @@
-// A TEMPORARY TYPE LAB. The reading face is being chosen, so the site can wear nine of them and the choice is a
-// click. Everything here — the catalogue, the switcher component, the cookie — is meant to be deleted once a face
-// wins; what survives is one `--font-sans` line in global.css.
+// A TEMPORARY TYPE LAB, now on two axes: the reading face and the display face. Everything here — the catalogues,
+// the switcher component, the cookies, public/fonts/lab/ — is meant to be deleted once both are settled; what
+// survives is two lines in global.css.
 //
-// The brief: Mukta sets too light at body sizes, so every candidate is picked for weight on the page rather than
-// personality — humanist or neutral, high x-height, and a 400 that still looks like ink at 15px. Each one really
-// has 400/500/600, because the site sets all three (body, control labels, small-caps labels) and a missing weight
-// gets synthesised into a smear.
+// The reading face is already settled: PUBLIC SANS, chosen off this lab and now self-hosted in public/fonts/ with
+// the full subsets the site's own faces carry. Mukta is gone — it set too light at body sizes, which is what
+// started this. The seven alternatives below stay only so the choice can be re-tested against a new display face,
+// because a pairing is what is being judged now, not a face on its own.
 //
-// The eight alternatives load from Google's CDN on demand: a face nobody picked costs nothing, and a face being
-// tried costs one request. The winner should then be self-hosted in public/fonts/ like Mukta, which is why Mukta
-// is the only one here with no `google` entry.
+// The display face is what the headline beats are set in — "You delegate." / "Agents work." / "You approve." — and
+// it is the one still open. Playfair is the incumbent.
+//
+// Every candidate is SELF-HOSTED, in public/fonts/lab/. The lab used to pull a face from Google's CDN the moment
+// you picked it, which works on a machine that can reach fonts.gstatic.com and silently does nothing on one that
+// cannot. The `google` entries are read by scripts/type-lab-fonts.mts alone, at build time; nothing asks for them
+// at runtime. A face the site already hosts has none.
 
-export interface Typeface {
-    /** The `data-font` value, the cookie value, and the `?font=` value. */
+export interface Face {
+    /** The `data-*` value, the cookie value, and the `?…=` value. */
     id: string;
     label: string;
-    /** What `--font-sans` becomes. */
+    /** What the axis's custom property becomes. */
     stack: string;
-    /** The Google Fonts stylesheet, or undefined for the face the site already self-hosts. */
+    /** Where the generator fetches this face from. Build-time only — no page ever requests this. */
     google?: string;
     /** One line on what it is and why it is a candidate. */
     note: string;
+    /**
+     * The weight the display rule should use. Several display serifs ship ONE weight, and asking a 400-only face
+     * for 600 gets it smeared into a synthetic bold — which is exactly the mush this lab is trying to judge away.
+     */
+    weight?: number;
+}
+
+/** One thing the lab can change, with its own cookie, attribute and custom property. */
+export interface Axis {
+    key: string;
+    label: string;
+    lede: string;
+    /** The attribute written on <html>. */
+    attribute: string;
+    /** The custom property the attribute rewrites. */
+    property: string;
+    /** Set alongside `property` when a face declares a weight. */
+    weightProperty?: string;
+    faces: Face[];
 }
 
 const TAIL = `ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"`;
-const sheet = (family: string, weights = "400;500;600"): string =>
-    `https://fonts.googleapis.com/css2?family=${family}:wght@${weights}&display=swap`;
+const SERIF_TAIL = `Georgia, "Times New Roman", serif`;
+const sheet = (family: string, weights: string): string => `https://fonts.googleapis.com/css2?family=${family}:wght@${weights}&display=swap`;
 
-export const TYPEFACES: Typeface[] = [
-    { id: "mukta", label: "Mukta", stack: `"Mukta", ${TAIL}`, note: "what the site ships today — the one being replaced" },
-    { id: "inter", label: "Inter", stack: `"Inter", ${TAIL}`, google: sheet("Inter"), note: "the neutral workhorse: tall x-height, nothing to argue with" },
-    {
-        id: "source-sans",
-        label: "Source Sans 3",
-        stack: `"Source Sans 3", ${TAIL}`,
-        google: sheet("Source+Sans+3"),
-        note: "humanist and warm; reads long without going bland",
-    },
-    {
-        id: "plex-sans",
-        label: "IBM Plex Sans",
-        stack: `"IBM Plex Sans", ${TAIL}`,
-        google: sheet("IBM+Plex+Sans"),
-        note: "humanist with real character — the most opinionated of the eight",
-    },
-    { id: "work-sans", label: "Work Sans", stack: `"Work Sans", ${TAIL}`, google: sheet("Work+Sans"), note: "geometric-humanist, noticeably sturdier at 400" },
-    {
-        id: "nunito-sans",
-        label: "Nunito Sans",
-        stack: `"Nunito Sans", ${TAIL}`,
-        google: sheet("Nunito+Sans"),
-        note: "soft terminals; the closest match to Baloo 2's roundness",
-    },
-    { id: "figtree", label: "Figtree", stack: `"Figtree", ${TAIL}`, google: sheet("Figtree"), note: "friendly and modern, with a heavier default colour on the page" },
-    { id: "rubik", label: "Rubik", stack: `"Rubik", ${TAIL}`, google: sheet("Rubik"), note: "slightly rounded corners, wide apertures, very solid at small sizes" },
-    {
-        id: "public-sans",
-        label: "Public Sans",
-        stack: `"Public Sans", ${TAIL}`,
-        google: sheet("Public+Sans"),
-        note: "drawn for government forms: legibility first, ornament never",
-    },
-];
+const READING: Axis = {
+    key: "font",
+    label: "Reading face",
+    lede: "Body copy, labels and controls — everything that is not a headline.",
+    attribute: "data-font",
+    property: "--font-sans",
+    faces: [
+        { id: "public-sans", label: "Public Sans", stack: `"Public Sans", ${TAIL}`, note: "the chosen face: legibility first, ornament never" },
+        { id: "inter", label: "Inter", stack: `"Inter", ${TAIL}`, google: sheet("Inter", "400;500;600"), note: "the neutral workhorse: tall x-height" },
+        { id: "source-sans", label: "Source Sans 3", stack: `"Source Sans 3", ${TAIL}`, google: sheet("Source+Sans+3", "400;500;600"), note: "humanist and warm" },
+        { id: "plex-sans", label: "IBM Plex Sans", stack: `"IBM Plex Sans", ${TAIL}`, google: sheet("IBM+Plex+Sans", "400;500;600"), note: "humanist with real character" },
+        { id: "work-sans", label: "Work Sans", stack: `"Work Sans", ${TAIL}`, google: sheet("Work+Sans", "400;500;600"), note: "geometric-humanist, sturdy at 400" },
+        { id: "nunito-sans", label: "Nunito Sans", stack: `"Nunito Sans", ${TAIL}`, google: sheet("Nunito+Sans", "400;500;600"), note: "soft terminals, closest to Baloo 2" },
+        { id: "figtree", label: "Figtree", stack: `"Figtree", ${TAIL}`, google: sheet("Figtree", "400;500;600"), note: "friendly and modern, heavier colour" },
+        { id: "rubik", label: "Rubik", stack: `"Rubik", ${TAIL}`, google: sheet("Rubik", "400;500;600"), note: "rounded corners, wide apertures" },
+    ],
+};
 
-/** The face the site wears when nothing is chosen, and the one that needs no download. */
-export const DEFAULT_TYPEFACE = TYPEFACES[0]!;
+// The headline beats are set at 1.9–2.75rem and up, where a face is judged on its shapes rather than its
+// legibility, so the spread is deliberate: three high-contrast serifs, three warm quiet ones, a slab, and the
+// body face itself for the no-serif direction.
+const DISPLAY: Axis = {
+    key: "display",
+    label: "Display face",
+    lede: "The headline beats — “You delegate.” “Agents work.” — and every band title.",
+    attribute: "data-display",
+    property: "--font-display",
+    weightProperty: "--display-weight",
+    faces: [
+        { id: "playfair", label: "Playfair Display", stack: `"Playfair Display", ${SERIF_TAIL}`, weight: 600, note: "the incumbent: high contrast, formal, tight" },
+        {
+            id: "fraunces",
+            label: "Fraunces",
+            stack: `"Fraunces", ${SERIF_TAIL}`,
+            google: sheet("Fraunces", "600"),
+            weight: 600,
+            note: "soft old-style with a deliberate wonk — the most characterful",
+        },
+        {
+            id: "instrument",
+            label: "Instrument Serif",
+            stack: `"Instrument Serif", ${SERIF_TAIL}`,
+            google: sheet("Instrument+Serif", "400"),
+            weight: 400,
+            note: "very high contrast, editorial, of the moment",
+        },
+        {
+            id: "dm-serif",
+            label: "DM Serif Display",
+            stack: `"DM Serif Display", ${SERIF_TAIL}`,
+            google: sheet("DM+Serif+Display", "400"),
+            weight: 400,
+            note: "Playfair's shapes with more meat on them",
+        },
+        {
+            id: "newsreader",
+            label: "Newsreader",
+            stack: `"Newsreader", ${SERIF_TAIL}`,
+            google: sheet("Newsreader", "600"),
+            weight: 600,
+            note: "warm editorial serif drawn for screens",
+        },
+        { id: "lora", label: "Lora", stack: `"Lora", ${SERIF_TAIL}`, google: sheet("Lora", "600"), weight: 600, note: "brushed curves; calm rather than grand" },
+        {
+            id: "spectral",
+            label: "Spectral",
+            stack: `"Spectral", ${SERIF_TAIL}`,
+            google: sheet("Spectral", "600"),
+            weight: 600,
+            note: "low contrast, screen-first, the quietest serif here",
+        },
+        { id: "bitter", label: "Bitter", stack: `"Bitter", ${SERIF_TAIL}`, google: sheet("Bitter", "600"), weight: 600, note: "slab serif: plain-spoken, no flourish" },
+        {
+            id: "display-sans",
+            label: "Public Sans",
+            stack: `"Public Sans", ${TAIL}`,
+            weight: 600,
+            note: "no serif at all — the headline in the body face, big",
+        },
+    ],
+};
 
-export const FONT_COOKIE = "font";
-export const FONT_PARAM = "font";
-export const FONT_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
+export const AXES: Axis[] = [READING, DISPLAY];
 
-/** The `data-font` rules, built from the catalogue so the list above is the only place a face is named. */
+/** The face an axis wears when nothing is chosen. It is the one the site already hosts, so it needs no lab file. */
+export const defaultFace = (axis: Axis): Face => axis.faces[0]!;
+
+export const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
+
+/** Every face the generator has to fetch, across both axes. */
+export const fetchable = (): Face[] => AXES.flatMap((axis) => axis.faces).filter((face) => face.google !== undefined);
+
+/** The `data-*` rules, built from the catalogues so the lists above are the only place a face is named. */
 export const typefaceCss = (): string =>
-    TYPEFACES.filter((face) => face.id !== DEFAULT_TYPEFACE.id)
-        .map((face) => `html[data-font="${face.id}"]{--font-sans:${face.stack};}`)
-        .join("");
-
-const q = (value: string): string => JSON.stringify(value);
+    AXES.flatMap((axis) =>
+        axis.faces
+            .filter((face) => face.id !== defaultFace(axis).id)
+            .map((face) => {
+                const weight = axis.weightProperty !== undefined && face.weight !== undefined ? `${axis.weightProperty}:${face.weight};` : "";
+                return `html[${axis.attribute}="${face.id}"]{${axis.property}:${face.stack};${weight}}`;
+            }),
+    ).join("");
 
 /**
- * Applies the chosen face before first paint, and pulls its stylesheet only if it is actually being worn.
- * Same shape as the variant script in variant.ts, and for the same reason: a second round trip would show the
- * page in the old face first.
+ * Applies both chosen faces before first paint. Same shape as the variant script in variant.ts, and for the same
+ * reason: a second round trip would show the page in the old face first. It only sets attributes — every face is
+ * declared in the stylesheet already, and a face nobody is wearing is never downloaded, so there is nothing to fetch.
  */
 export const typefaceScript = (): string => {
-    const sheets = Object.fromEntries(TYPEFACES.filter((face) => face.google !== undefined).map((face) => [face.id, face.google]));
+    const axes = AXES.map((axis) => ({ param: axis.key, cookie: axis.key, attribute: axis.attribute, fallback: defaultFace(axis).id }));
     return `(function () {
-    var sheets = ${JSON.stringify(sheets)};
+    var axes = ${JSON.stringify(axes)};
     var url = new URL(window.location.href);
-    var asked = url.searchParams.get(${q(FONT_PARAM)});
-    var chosen;
-    if (asked !== null) {
-        chosen = asked;
-        document.cookie = ${q(`${FONT_COOKIE}=`)} + encodeURIComponent(chosen) +
-            ";path=/;max-age=${FONT_COOKIE_MAX_AGE};samesite=lax";
-        url.searchParams.delete(${q(FONT_PARAM)});
+    var touched = false;
+    for (var i = 0; i < axes.length; i += 1) {
+        var axis = axes[i];
+        var asked = url.searchParams.get(axis.param);
+        var chosen;
+        if (asked !== null) {
+            chosen = asked;
+            document.cookie = axis.cookie + "=" + encodeURIComponent(chosen) +
+                ";path=/;max-age=${COOKIE_MAX_AGE};samesite=lax";
+            url.searchParams.delete(axis.param);
+            touched = true;
+        } else {
+            var jar = new RegExp("(?:^|; )" + axis.cookie + "=([^;]*)").exec(document.cookie);
+            chosen = jar === null ? "" : decodeURIComponent(jar[1]);
+        }
+        if (chosen !== "" && chosen !== axis.fallback) {
+            document.documentElement.setAttribute(axis.attribute, chosen);
+        }
+    }
+    if (touched) {
         window.history.replaceState(null, "", url.pathname + url.search + url.hash);
-    } else {
-        var jar = new RegExp("(?:^|; )" + ${q(FONT_COOKIE)} + "=([^;]*)").exec(document.cookie);
-        chosen = jar === null ? "" : decodeURIComponent(jar[1]);
     }
-    if (chosen === "" || chosen === ${q(DEFAULT_TYPEFACE.id)}) {
-        return;
-    }
-    document.documentElement.dataset.font = chosen;
-    var href = sheets[chosen];
-    if (href !== undefined) {
-        var link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = href;
-        document.head.appendChild(link);
+})();`;
+};
+
+/** What the switcher marks as worn, which only the browser knows — the HTML is one cached document for every choice. */
+export const typefaceMarkScript = (): string => {
+    const axes = AXES.map((axis) => ({ attribute: axis.attribute, fallback: defaultFace(axis).id }));
+    return `(function () {
+    var axes = ${JSON.stringify(axes)};
+    for (var i = 0; i < axes.length; i += 1) {
+        var worn = document.documentElement.getAttribute(axes[i].attribute) ?? axes[i].fallback;
+        var choice = document.querySelector('[data-face="' + axes[i].attribute + ':' + worn + '"]');
+        if (choice !== null) {
+            choice.setAttribute("aria-current", "true");
+        }
     }
 })();`;
 };

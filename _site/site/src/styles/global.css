@@ -3,6 +3,8 @@
 @import "../../../../_shared/house-css/house.css";
 /* The light skin. Ordered first because it cannot lose: its selector outscores the `:root` Tailwind emits. */
 @import "./desk.css";
+/* Temporary: the type lab's candidate faces (scripts/type-lab-fonts.mts). Goes with the lab. */
+@import "./type-lab-faces.css";
 
 /* Site tokens and components use the shared carved-stone vocabulary. */
 
@@ -65,58 +67,23 @@
         U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
-/* Three static weights of the reading face, and no more: 400 sets the body, 500 the control labels, 600 the small caps labels. */
+/* THE READING FACE. One variable file per subset covers 400 (body), 500 (control labels) and 600 (small-caps
+   labels) — the three weights the site sets. It replaced Mukta, which set too light to read as ink at body sizes. */
 @font-face {
-    font-family: "Mukta";
+    font-family: "Public Sans";
     font-style: normal;
-    font-weight: 400;
+    font-weight: 400 600;
     font-display: swap;
-    src: url("/fonts/mukta-400-latin.woff2") format("woff2");
+    src: url("/fonts/public-sans-400-600-latin.woff2") format("woff2");
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
         U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
-    font-family: "Mukta";
+    font-family: "Public Sans";
     font-style: normal;
-    font-weight: 400;
+    font-weight: 400 600;
     font-display: swap;
-    src: url("/fonts/mukta-400-latin-ext.woff2") format("woff2");
-    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
-        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-    font-family: "Mukta";
-    font-style: normal;
-    font-weight: 500;
-    font-display: swap;
-    src: url("/fonts/mukta-500-latin.woff2") format("woff2");
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
-        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-    font-family: "Mukta";
-    font-style: normal;
-    font-weight: 500;
-    font-display: swap;
-    src: url("/fonts/mukta-500-latin-ext.woff2") format("woff2");
-    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
-        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-    font-family: "Mukta";
-    font-style: normal;
-    font-weight: 600;
-    font-display: swap;
-    src: url("/fonts/mukta-600-latin.woff2") format("woff2");
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
-        U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-    font-family: "Mukta";
-    font-style: normal;
-    font-weight: 600;
-    font-display: swap;
-    src: url("/fonts/mukta-600-latin-ext.woff2") format("woff2");
+    src: url("/fonts/public-sans-400-600-latin-ext.woff2") format("woff2");
     unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
         U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
@@ -167,7 +134,7 @@
     --color-white: #fff;
     --color-black: #000;
 
-    --font-sans: "Mukta", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    --font-sans: "Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
     --font-mark: "Baloo 2", "Trebuchet MS", ui-rounded, sans-serif;
     --font-display: "Playfair Display", Georgia, "Times New Roman", serif;
     --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
@@ -342,7 +309,9 @@
     /* DISPLAY TYPE CARVED STONE, NOT POLISHED METAL — and the difference is texture, not colour. */
     .display {
         font-family: var(--font-display);
-        font-weight: 600;
+/* Settable because a display face may ship only one weight; a 400-only serif asked for 600 gets smeared into a
+           synthetic bold. The lab's faces each declare the weight they actually have. */
+        font-weight: var(--display-weight, 600);
 /* Positive tracking, because Playfair at these sizes sets tight enough that adjacent letters kiss. */
         letter-spacing: max(0.02em, 0.09rem);
         line-height: 1.24;

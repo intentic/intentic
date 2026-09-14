@@ -1,11 +1,12 @@
 ---
-/* THE TYPE LAB, and it is temporary. A docked panel for picking the site's reading face by eye, on the real pages,
-   rather than by looking at nine specimens side by side in a tool. Each choice is a plain link to `?font=<id>`:
+/* THE TYPE LAB, and it is temporary. Two axes — the reading face and the display face — picked by eye on the real
+   pages rather than from specimens side by side in a tool. Each choice is a plain link to `?font=…` or `?display=…`:
    the pre-paint script in lib/typeface.ts reads the parameter, writes the cookie, strips the parameter and applies
-   the face, so there is no client JavaScript here and no flash of the previous face on the way.
+   the face, so there is no client JavaScript here beyond marking what is worn, and no flash of the previous face.
 
-   Delete this component, lib/typeface.ts and the two lines that call them once a face has won. */
-import { TYPEFACES, DEFAULT_TYPEFACE, FONT_PARAM } from "../lib/typeface";
+   Delete this component, lib/typeface.ts, public/fonts/lab/, styles/type-lab-faces.css and the lines that call
+   them once both faces have won. */
+import { AXES, defaultFace, typefaceMarkScript } from "../lib/typeface";
 ---
 
 <details class="type-lab">
@@ -14,37 +15,31 @@ import { TYPEFACES, DEFAULT_TYPEFACE, FONT_PARAM } from "../lib/typeface";
         <span>Type</span>
     </summary>
     <div class="type-lab-body">
-        <p class="type-lab-lede">
-            Pick the reading face. It follows you across the site and survives a reload; everything else on the page stays put.
-        </p>
-        <ul class="type-lab-list">
-            {
-                TYPEFACES.map((face) => (
-                    <li>
-                        <a href={`?${FONT_PARAM}=${face.id}`} class="type-lab-choice" data-font-choice={face.id}>
-                            <span class="type-lab-name">
-                                {face.label}
-                                {face.id === DEFAULT_TYPEFACE.id && <span class="type-lab-now">current</span>}
-                            </span>
-                            <span class="type-lab-note">{face.note}</span>
-                        </a>
-                    </li>
-                ))
-            }
-        </ul>
+        {
+            AXES.map((axis) => (
+                <section class="type-lab-axis">
+                    <h2 class="type-lab-axis-name">{axis.label}</h2>
+                    <p class="type-lab-lede" set:html={axis.lede} />
+                    <ul class="type-lab-list">
+                        {axis.faces.map((face) => (
+                            <li>
+                                <a href={`?${axis.key}=${face.id}`} class="type-lab-choice" data-face={`${axis.attribute}:${face.id}`}>
+                                    <span class="type-lab-name">
+                                        {face.label}
+                                        {face.id === defaultFace(axis).id && <span class="type-lab-now">default</span>}
+                                    </span>
+                                    <span class="type-lab-note">{face.note}</span>
+                                </a>
+                            </li>
+                        ))}
+                    </ul>
+                </section>
+            ))
+        }
     </div>
 </details>
 
-<script is:inline>
-    /* Marks the face being worn, which only the browser knows — the HTML is one cached document for every choice. */
-    (function () {
-        const worn = document.documentElement.dataset.font ?? "mukta";
-        const choice = document.querySelector(`[data-font-choice="${worn}"]`);
-        if (choice !== null) {
-            choice.setAttribute("aria-current", "true");
-        }
-    })();
-</script>
+<script is:inline set:html={typefaceMarkScript()} />
 
 <style>
     /* Docked bottom-left, clear of the demo bar that sits bottom-centre. */
@@ -87,14 +82,28 @@ import { TYPEFACES, DEFAULT_TYPEFACE, FONT_PARAM } from "../lib/typeface";
     .type-lab-body {
         border-top: 1px solid var(--color-line);
         padding: 0.7rem 0.8rem 0.85rem;
-        /* Nine faces with a line of reasoning each is taller than most windows; the list scrolls inside the panel
+        /* Seventeen faces with a line of reasoning each is taller than any window; the list scrolls inside the panel
            rather than the panel covering the page it is there to let you read. */
-        max-height: min(58vh, 32rem);
+        max-height: min(64vh, 34rem);
         overflow-y: auto;
         overscroll-behavior: contain;
     }
+    .type-lab-axis + .type-lab-axis {
+        margin-top: 0.9rem;
+        border-top: 1px solid var(--color-line);
+        padding-top: 0.7rem;
+    }
+    .type-lab-axis-name {
+        margin: 0;
+        font-family: var(--font-sans);
+        font-size: var(--text-2xs);
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--color-gold);
+    }
     .type-lab-lede {
-        margin: 0 0 0.6rem;
+        margin: 0.25rem 0 0.5rem;
         font-size: 0.75rem;
         line-height: 1.5;
         color: var(--color-subtle);
@@ -108,7 +117,7 @@ import { TYPEFACES, DEFAULT_TYPEFACE, FONT_PARAM } from "../lib/typeface";
     }
     .type-lab-choice {
         display: block;
-        padding: 0.4rem 0.55rem;
+        padding: 0.35rem 0.55rem;
         border: 1px solid transparent;
         text-decoration: none;
     }

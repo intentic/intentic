@@ -125,8 +125,8 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         {/* Temporary: the type lab (lib/typeface.ts). Both lines go when a reading face has been chosen. */}
         <style is:inline set:html={typefaceCss()} />
         <script is:inline set:html={typefaceScript()} />
-        {/* Preload the reading face used by every page. */}
-        <link rel="preload" as="font" type="font/woff2" href="/fonts/mukta-400-latin.woff2" crossorigin />
+        {/* Preload the reading face used by every page. One variable file covers 400, 500 and 600. */}
+        <link rel="preload" as="font" type="font/woff2" href="/fonts/public-sans-400-600-latin.woff2" crossorigin />
         <noscript>
             <style>
                 .fade-in {
