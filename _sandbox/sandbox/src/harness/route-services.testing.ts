@@ -32,6 +32,7 @@ import {
 } from "./route-stores.testing.js";
 import { createCredentialGrants } from "../secrets/credential-grants.js";
 import type { SecretUse } from "../secrets/secret-uses.js";
+import { deriveText, readDerivedText } from "../derived/derived-text.js";
 import { IN_MEMORY, openSearchIndex } from "../sessions/search-index.js";
 import { windowOf } from "../sessions/transcript-record.js";
 import { spokenLinesOf } from "../sessions/transcript-search.js";
@@ -430,6 +431,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // No agent has landed anything, so every changed file is the user's and `identify` has nobody to resolve.
         agentOrigins: { forRepo: async () => ({}), identify: () => ({}), metrics: () => ({}) },
         files: fakeFiles(),
+        // The real readers: a shadow is read off disk, so a fake here would only test the fake.
+        derived: { read: readDerivedText, derive: deriveText },
         workspaceTree: async () => ({ root: WORKSPACE_ROOT, tree: [], hidden: 0, barren: [] }),
         // Inert resident search, no index, no rg; the search route test overrides `run` with a canned outcome.
         iq: unstubbed<Services["iq"]>("iq", {

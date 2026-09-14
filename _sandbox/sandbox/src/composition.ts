@@ -21,6 +21,7 @@ import type {
     TranscriptRow,
     StashEntry,
     WorkspaceChildren,
+    WorkspaceDerived,
     WorkspaceTree,
 } from "@intentic/sandbox-contract";
 import { portSlotsFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -82,6 +83,7 @@ import { withTrialEndpoint } from "./trial/trial-endpoint.js";
 import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismissals-store.js";
 import { filePersonasStore, type PersonasStore } from "./personas/personas-store.js";
 import { fileHeavyCommandsStore, type HeavyCommandsStore } from "./platform/resources/heavy-commands.js";
+import { deriveText, readDerivedText } from "./derived/derived-text.js";
 import { type CiStore, fileCiStore } from "./ci/ci-store.js";
 import { fileVerifyStore, type VerifyStore } from "./workspace/deps/verify-store.js";
 import { type CiHookReconciler, createCiHookReconciler } from "./ci/hooks.js";
@@ -566,6 +568,12 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         readonly remove: (absPath: string) => Promise<void>;
         readonly move: (fromAbs: string, toAbs: string) => Promise<void>;
         readonly copy: (fromAbs: string, toAbs: string) => Promise<void>;
+    };
+    // A binary file's markdown shadow, read and derived on demand; wired here so no route reaches into fileq's own
+    // subsystem, which reads workspace files itself.
+    readonly derived: {
+        readonly read: (root: string, relPath: string) => Promise<WorkspaceDerived>;
+        readonly derive: (root: string, relPath: string) => Promise<WorkspaceDerived>;
     };
     readonly workspaceTree: (root: string) => Promise<WorkspaceTree>;
     readonly workspaceChildren: (root: string, relPath: string, options?: { depth?: number }) => Promise<WorkspaceChildren>;
@@ -1190,6 +1198,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
             remove: removeWorkspacePath,
             move: moveWorkspacePath,
             copy: copyWorkspacePath,
+        },
+        derived: {
+            read: readDerivedText,
+            derive: deriveText,
         },
         workspaceTree: walkWorkspaceTree,
         workspaceChildren: listWorkspaceChildren,

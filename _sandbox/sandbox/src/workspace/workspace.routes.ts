@@ -5,7 +5,6 @@ import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { deriveText, readDerivedText } from "../derived/derived-text.js";
 import { repoGitDir } from "../history/history.js";
 import { cachedScheme } from "../ports/port-probe.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
@@ -75,9 +74,9 @@ export const createWorkspaceRoutes = (services: Services) => {
         }),
         // A file's markdown shadow as it stands. Shared tree only, since fileq refuses to shadow a checkout, and a
         // shared-tree shadow served under a conversation's scope would describe a different file than the one open.
-        derived: i.derived.handler(async ({ input }) => readDerivedText(services.workspace.root, await derivedRel(input.path))),
+        derived: i.derived.handler(async ({ input }) => services.derived.read(services.workspace.root, await derivedRel(input.path))),
         // The same convergence the background pass runs, for the one file someone is looking at.
-        derive: i.derive.handler(async ({ input }) => deriveText(services.workspace.root, await derivedRel(input.path))),
+        derive: i.derive.handler(async ({ input }) => services.derived.derive(services.workspace.root, await derivedRel(input.path))),
         // Mints the ticket presented to GET /workspace/media, guarded like a read so it can only name a file already
         // readable. Binds the resolved file, not its shared-tree namesake.
         mediaTicket: i.mediaTicket.handler(async ({ input }) => {
