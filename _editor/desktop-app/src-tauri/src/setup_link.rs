@@ -77,7 +77,7 @@ pub struct AuthArgs {
 /* Window links carry their action in the `do` query parameter. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowVerb {
-/* THE PAGE ANNOUNCING ITS OWN BAR IS UP, which is what keeps a frameless window from ever being a trap. */
+    /* THE PAGE ANNOUNCING ITS OWN BAR IS UP, which is what keeps a frameless window from ever being a trap. */
     Ready,
     Minimize,
     /// Maximise or restore, one verb: it is one button, and which of the two it does is a fact about the
@@ -98,9 +98,9 @@ pub enum Link {
     /// user's real browser. It carries nothing, because everything it starts is minted afterwards.
     SignIn,
     Auth(AuthArgs),
-/* `intentic://update` — the workspace banner's button, and the reason the SPA can offer a swap it has no way to perform. */
+    /* `intentic://update` — the workspace banner's button, and the reason the SPA can offer a swap it has no way to perform. */
     Update,
-/* `intentic://launcher` — the setup page's way back to the app's own face after "Back to your workspace" stepped it aside. */
+    /* `intentic://launcher` — the setup page's way back to the app's own face after "Back to your workspace" stepped it aside. */
     Launcher,
     /// See [`WindowVerb`]: the workspace SPA's own title bar, which is a link channel rather than IPC for the
     /// same reason everything else here is.
@@ -281,7 +281,7 @@ mod tests {
         );
     }
 
-/* THE ONE LINK THAT ENDS THE PROCESS, so it is the one link only this app's own window may send. */
+    /* THE ONE LINK THAT ENDS THE PROCESS, so it is the one link only this app's own window may send. */
     #[test]
     fn only_this_apps_own_window_can_ask_it_to_replace_itself() {
         assert_eq!(
@@ -325,7 +325,7 @@ mod tests {
         assert_eq!(mirror.name, None);
     }
 
-/* THE FOLDER-EXFILTRATION LINK THIS REFUSAL EXISTS TO STOP. */
+    /* THE FOLDER-EXFILTRATION LINK THIS REFUSAL EXISTS TO STOP. */
     #[test]
     fn a_sync_link_from_outside_the_app_is_refused_entirely() {
         assert_eq!(
@@ -368,7 +368,7 @@ mod tests {
         }
     }
 
-/* THE BAR BELONGS TO THIS WINDOW, so only this window may work it. */
+    /* THE BAR BELONGS TO THIS WINDOW, so only this window may work it. */
     #[test]
     fn a_title_bar_press_is_refused_from_outside_the_app_and_when_it_names_nothing() {
         assert_eq!(
@@ -408,7 +408,7 @@ mod tests {
         assert_eq!(parse_link("intentic://auth?handoff=tok", Source::App), None);
     }
 
-/* External setup links may not supply platform or Cloudflare credentials. */
+    /* External setup links may not supply platform or Cloudflare credentials. */
     #[test]
     fn an_external_link_cannot_choose_the_platform_or_supply_a_cloudflare_token() {
         let url = "intentic://setup?code=abc123&syncDir=%2Fhome%2Fme&cfToken=cf&platform=https%3A%2F%2Fevil.example";

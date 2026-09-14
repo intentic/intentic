@@ -574,7 +574,7 @@ mod tests {
         );
     }
 
-/* A setup run installs resident background agents, and on Windows a detached process inherits the pipes of whoever spawned it. */
+    /* A setup run installs resident background agents, and on Windows a detached process inherits the pipes of whoever spawned it. */
     #[test]
     fn a_drain_that_completes_costs_nothing() {
         let (drained, drains) = channel::<()>();
@@ -619,7 +619,7 @@ mod tests {
         );
     }
 
-/* THE ONE THING A .ps1 IN THIS REPO MAY NOT CONTAIN — a byte above 0x7F. */
+    /* THE ONE THING A .ps1 IN THIS REPO MAY NOT CONTAIN — a byte above 0x7F. */
     #[test]
     fn every_bundled_powershell_script_is_ascii() {
         for (path, text) in powershell_scripts() {
@@ -639,7 +639,7 @@ mod tests {
         }
     }
 
-/* THE SECOND 5.1 LANDMINE IN THE SAME FILES, and the one that outlived the first fix. */
+    /* THE SECOND 5.1 LANDMINE IN THE SAME FILES, and the one that outlived the first fix. */
     #[test]
     fn no_powershell_script_silences_a_probe_while_stop_is_in_force() {
         const REDIRECTIONS: [&str; 4] = ["*>", "2>&1", "2>$null", "2> $null"];
@@ -664,7 +664,7 @@ mod tests {
         }
     }
 
-/* SPLATTING TAKES A VARIABLE, AND `@(...)` IS NOT ONE. */
+    /* SPLATTING TAKES A VARIABLE, AND `@(...)` IS NOT ONE. */
     #[test]
     fn no_powershell_script_fakes_a_splat_with_an_array_subexpression() {
         // The native commands these scripts hand argv to. A cmdlet taking `@(...)` as one array argument is
@@ -696,7 +696,7 @@ mod tests {
         }
     }
 
-/* `connect.ps1`, `connect-host.ps1` and `recreate.ps1` are each handed to `irm | iex` as a standalone string: there is no import. */
+    /* `connect.ps1`, `connect-host.ps1` and `recreate.ps1` are each handed to `irm | iex` as a standalone string: there is no import. */
     #[test]
     fn every_copy_of_the_ic_download_is_the_same_download() {
         let scripts = powershell_scripts();
@@ -725,7 +725,7 @@ mod tests {
         }
     }
 
-/* Download scripts place binaries under %USERPROFILE%\.intentic and report their command name. */
+    /* Download scripts place binaries under %USERPROFILE%\.intentic and report their command name. */
     #[test]
     fn every_downloading_installer_puts_its_binary_on_path() {
         let mut blocks: Vec<(std::path::PathBuf, String)> = Vec::new();
@@ -769,7 +769,7 @@ mod tests {
         }
     }
 
-/* Windows restarts the resident agent from its HKCU startup registration. */
+    /* Windows restarts the resident agent from its HKCU startup registration. */
     #[test]
     fn no_script_fetches_the_windowless_launcher() {
         for (path, text) in powershell_scripts() {

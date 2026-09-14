@@ -116,7 +116,7 @@ fn write_file(path: &std::path::Path, record: &ChannelRecord) -> Result<()> {
 mod tests {
     use super::*;
 
-/* No env mutation here on purpose: `set_var` is process-global and Rust runs tests in parallel threads. */
+    /* No env mutation here on purpose: `set_var` is process-global and Rust runs tests in parallel threads. */
 
     fn swap(current: &str, previous: Option<&str>) -> ChannelRecord {
         ChannelRecord {

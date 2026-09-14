@@ -190,14 +190,14 @@ pub fn run(args: Args) -> Result<()> {
     if unmet.iter().all(|r| r.action == Action::Restart) {
         return restart(&unmet, args.yes);
     }
-/* A stale login token cannot reach Docker until the user signs in again. */
+    /* A stale login token cannot reach Docker until the user signs in again. */
     if let Some(stale) = unmet.iter().find(|r| r.action == Action::SignOut) {
         return sign_out(std::slice::from_ref(stale), &facts.user);
     }
 
     consent(&unmet, args.yes)?;
 
-/* Fixes change the machine under their own diagnosis: installing Docker Desktop makes `docker-desktop` go away and `docker-path` appear. */
+    /* Fixes change the machine under their own diagnosis: installing Docker Desktop makes `docker-desktop` go away and `docker-path` appear. */
     let mut previous: Vec<&'static str> = unmet.iter().map(|r| r.id).collect();
     for pass in 0..3 {
         if pass > 0 {
@@ -252,7 +252,7 @@ pub fn run(args: Args) -> Result<()> {
                     announce_state(requirement.id, "done", Some("waiting for the restart"));
                     return restart(&pending, args.yes);
                 }
-/* The fix worked and changed nothing yet, which is the whole point of `Done::AfterSignOut`. */
+                /* The fix worked and changed nothing yet, which is the whole point of `Done::AfterSignOut`. */
                 Outcome::SignOut => {
                     let mut pending = requirement.clone();
                     pending.action = Action::SignOut;
@@ -378,7 +378,7 @@ fn restart(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     println!();
     println!("  {again}");
     println!();
-/* Pre-consent covers installing things, never a restart: the desktop app passes it. */
+    /* Pre-consent covers installing things, never a restart: the desktop app passes it. */
     if !pre_consented && tty::have_tty() && tty::confirm("Restart this PC now?", false) {
         fix::restart_windows().map_err(crate::util::Fail)?;
         stop(
@@ -459,7 +459,7 @@ fn consent(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     println!("  https://www.docker.com/legal/docker-subscription-service-agreement");
     println!();
     if !tty::have_tty() {
-/* The desktop app's first setup pass enters here. */
+        /* The desktop app's first setup pass enters here. */
         stop(
             EXIT_NEEDS_CONSENT,
             "nothing has been changed yet - re-run with -y (or INSTALL_DOCKER=1) to go ahead with the list above.",
@@ -484,7 +484,7 @@ pub fn run(_args: Args) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-/* The flow above is Windows-only; its DECISIONS are plan.rs's and are tested there against fact literals, on every runner. */
+    /* The flow above is Windows-only; its DECISIONS are plan.rs's and are tested there against fact literals, on every runner. */
 
     #[test]
     fn the_requirement_marker_cannot_be_mistaken_for_a_step() {

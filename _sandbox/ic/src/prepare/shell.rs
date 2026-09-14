@@ -175,7 +175,7 @@ mod tests {
         assert_eq!(base64(&[0x00, 0x00, 0x00]), "AAAA");
     }
 
-/* THE EXACT BYTES A REAL INSTALL PUT ON SOMEBODY'S SCREEN, where the reason should have been. */
+    /* THE EXACT BYTES A REAL INSTALL PUT ON SOMEBODY'S SCREEN, where the reason should have been. */
     const REPORTED: &str = "\
 System error 1379 has occurred.\n\
 The specified local group already exists.\n\
@@ -219,7 +219,7 @@ The specified local group already exists.\n\
         assert_eq!(strip_clixml("before\n#< CLIXML\n<Objs>\n"), "before");
     }
 
-/* The two things that make the noise above impossible in the first place. */
+    /* The two things that make the noise above impossible in the first place. */
     #[test]
     fn every_script_runs_with_the_progress_stream_switched_off() {
         assert!(PREAMBLE.contains("$ProgressPreference = 'SilentlyContinue'"));

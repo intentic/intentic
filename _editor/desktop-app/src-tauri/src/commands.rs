@@ -110,7 +110,7 @@ pub struct SetupContext {
     pub host: Host,
     /// This build's version — the release its `ic` download is pinned to. See [`ic_url`].
     pub version: String,
-/* The install flow asks its one question exactly once, and on this path there is no terminal to ask it on — so the run happens TWICE. */
+    /* The install flow asks its one question exactly once, and on this path there is no terminal to ask it on — so the run happens TWICE. */
     pub consented: bool,
 }
 
@@ -168,7 +168,7 @@ pub fn setup_script(args: &SetupArgs, ctx: &SetupContext) -> ScriptRun {
         env.push(("SANDBOX_IMAGE".into(), image));
     }
 
-/* Elevate only to install Docker, and only when there is none — the same trade the setup screen's "I already have Docker" checkbox makes. */
+    /* Elevate only to install Docker, and only when there is none — the same trade the setup screen's "I already have Docker" checkbox makes. */
     let elevate = ctx.host == Host::Unix && !ctx.docker_ready;
     if elevate || (ctx.host == Host::Windows && ctx.consented) {
         env.push(("INSTALL_DOCKER".into(), "1".into()));
@@ -978,7 +978,7 @@ pub fn settings_set(state: State<'_, AppState>, settings: Settings) {
 mod tests {
     use super::*;
 
-/* Argument vectors are tested on both host types. */
+    /* Argument vectors are tested on both host types. */
 
     /// A version that looks like a release, so the pin below is exercised. `VERSION` itself is `0.0.0` in
     /// every build of this repo including the test one, which is deliberately the value that means "not a
@@ -1068,7 +1068,7 @@ mod tests {
         );
     }
 
-/* Shims download `ic` from `releases/latest` unless `IC_URL` overrides it. */
+    /* Shims download `ic` from `releases/latest` unless `IC_URL` overrides it. */
     /// A reshape with something in it, for the lists below: every flow that runs the recreate shim is held to
     /// the same pin and the same silence, this one included.
     fn reshape_ask() -> ReshapeAsk {
@@ -1113,7 +1113,7 @@ mod tests {
         );
     }
 
-/* The child has no window, no console and closed stdin. */
+    /* The child has no window, no console and closed stdin. */
     #[test]
     fn no_script_this_window_spawns_is_allowed_to_prompt() {
         for run in [
@@ -1207,7 +1207,7 @@ mod tests {
         assert!(!windows.elevate);
     }
 
-/* THE TWO PASSES OF A WINDOWS SETUP, which is the whole shape of "ask once" on a screen with no terminal. */
+    /* THE TWO PASSES OF A WINDOWS SETUP, which is the whole shape of "ask once" on a screen with no terminal. */
     #[test]
     fn windows_only_pre_consents_after_the_user_has_seen_the_list() {
         let first = setup_script(&setup_args("c"), &context(Host::Windows, false));
@@ -1271,7 +1271,7 @@ mod tests {
         );
     }
 
-/* The rollback spelling, per host — the flag the sh shim reads and the switch the ps1 declares are two different strings for one button. */
+    /* The rollback spelling, per host — the flag the sh shim reads and the switch the ps1 declares are two different strings for one button. */
     #[test]
     fn rollback_is_a_flag_on_sh_and_a_switch_on_powershell() {
         assert_eq!(
@@ -1310,7 +1310,7 @@ mod tests {
         );
     }
 
-/* THE RESHAPE, PER HOST: the shim's own switch first, then `ic`'s flags verbatim behind it. */
+    /* THE RESHAPE, PER HOST: the shim's own switch first, then `ic`'s flags verbatim behind it. */
     #[test]
     fn reshape_forwards_ics_flags_behind_the_shims_own_switch_per_host() {
         let asked = ReshapeAsk {
@@ -1361,7 +1361,7 @@ mod tests {
         assert!(reshape_flags(&ReshapeAsk::default()).is_empty());
     }
 
-/* THE THREE STATES OF A CAP'S ASK, off the wire. */
+    /* THE THREE STATES OF A CAP'S ASK, off the wire. */
     #[test]
     fn a_reshape_ask_keeps_null_and_absent_apart() {
         let parsed: ReshapeAsk =
@@ -1381,7 +1381,7 @@ mod tests {
         );
     }
 
-/* WHAT `docker inspect` SAYS ABOUT A CONTAINER'S SHARE, read the way the machine agent reads it for the web. */
+    /* WHAT `docker inspect` SAYS ABOUT A CONTAINER'S SHARE, read the way the machine agent reads it for the web. */
     #[test]
     fn a_containers_share_is_read_off_docker_inspect() {
         let inspected = serde_json::json!({
@@ -1468,7 +1468,7 @@ mod tests {
         assert!(!sync_script(&sync_args(), Some("/home/ada"), Host::Unix, RELEASE).elevate);
     }
 
-/* The sync enrollment binds EVERYTHING through env and nothing positionally — the same delivery the pasted one-liners use. */
+    /* The sync enrollment binds EVERYTHING through env and nothing positionally — the same delivery the pasted one-liners use. */
     #[test]
     fn sync_enrollment_rides_entirely_on_env_on_both_hosts() {
         let unix = sync_script(
@@ -1528,7 +1528,7 @@ mod tests {
         assert_eq!(env_of(&run, "SYNC_DIR"), None);
     }
 
-/* The machine agent's own install location, per host. */
+    /* The machine agent's own install location, per host. */
     #[test]
     fn the_agents_own_install_is_preferred_over_whatever_is_on_path() {
         let unix = scripts::sync_agent_candidates(Host::Unix, Some("/home/ada"));

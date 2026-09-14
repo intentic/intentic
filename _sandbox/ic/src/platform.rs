@@ -9,7 +9,7 @@ use crate::util::{bail, kv_lines, step, Result};
 #[derive(Default)]
 pub struct Claim {
     pub connect_token: Option<String>,
-/* WHAT MAKES THE SANDBOX REACHABLE, and the two values are useless apart: a platform-signed grant naming this sandbox's id. */
+    /* WHAT MAKES THE SANDBOX REACHABLE, and the two values are useless apart: a platform-signed grant naming this sandbox's id. */
     pub sandbox_grant: Option<String>,
     pub ingress_url: Option<String>,
     /// The public name the platform published for this sandbox — the address the browser opens, and the
@@ -219,7 +219,7 @@ mod tests {
         assert!(!is_local("https://api.intentic.dev"));
     }
 
-/* Every one of these contains "//localhost" or "//127.0.0.1" somewhere, and not one of them is served by this machine. */
+    /* Every one of these contains "//localhost" or "//127.0.0.1" somewhere, and not one of them is served by this machine. */
     #[test]
     fn a_remote_host_cannot_dress_itself_up_as_local() {
         assert!(!is_local("https://evil.example//localhost"));

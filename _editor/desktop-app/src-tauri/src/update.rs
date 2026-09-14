@@ -259,7 +259,7 @@ async fn check_now(app: &AppHandle) {
     if *app.state::<UpdateState>().failures.lock().unwrap() >= GIVE_UP_AFTER {
         return;
     }
-/* What was true before this pass, so a failure can put it back. */
+    /* What was true before this pass, so a failure can put it back. */
     let settled = stage(app);
     set(app, Stage::Checking);
     *app.state::<UpdateState>().last_check.lock().unwrap() = Some(Instant::now());
@@ -285,7 +285,7 @@ async fn check_now(app: &AppHandle) {
 
     let version = found.version.clone();
 
-/* `latest.json` names an AppImage for `linux-x86_64`, so this copy has no artifact of its own to be moved onto. */
+    /* `latest.json` names an AppImage for `linux-x86_64`, so this copy has no artifact of its own to be moved onto. */
     if updatable() == Updatable::OtherPackaging {
         return set(
             app,
@@ -320,7 +320,7 @@ async fn check_now(app: &AppHandle) {
                     return;
                 };
                 let percent = ((so_far.min(total) * 100) / total) as u8;
-/* Whole percents only, and only forwards. */
+                /* Whole percents only, and only forwards. */
                 if percent > announced.load(Ordering::Relaxed) {
                     announced.store(percent, Ordering::Relaxed);
                     set(
@@ -464,7 +464,7 @@ pub fn install_on_exit(app: &AppHandle) {
 mod tests {
     use super::*;
 
-/* WHAT EACH STATE OFFERS. */
+    /* WHAT EACH STATE OFFERS. */
     #[test]
     fn only_a_finished_download_is_offered_as_an_action() {
         for stage in [
@@ -543,7 +543,7 @@ mod tests {
         assert_eq!(Stage::Current.ready_version(), None);
     }
 
-/* It arrives on a minisign-verified manifest this repo publishes, so nothing hostile is expected in it. */
+    /* It arrives on a minisign-verified manifest this repo publishes, so nothing hostile is expected in it. */
     #[test]
     fn nothing_can_end_the_string_it_is_injected_into() {
         assert_eq!(escape_js("1.2.3"), "1.2.3");

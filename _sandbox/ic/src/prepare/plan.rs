@@ -405,7 +405,7 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
         ));
     }
 
-/* Non-administrators need this group to reach the engine, and Docker's installer only adds the user who ran it. */
+    /* Non-administrators need this group to reach the engine, and Docker's installer only adds the user who ran it. */
     if !facts.in_docker_users && !facts.elevated {
         let who = if facts.user.is_empty() {
             "this account"
@@ -615,7 +615,7 @@ pub fn summary(facts: &Facts) -> String {
 mod tests {
     use super::*;
 
-/* Every branch above as a fact literal. */
+    /* Every branch above as a fact literal. */
 
     /// A PC where everything is already right — the baseline every case below mutates.
     fn healthy() -> Facts {
@@ -651,7 +651,7 @@ mod tests {
         }
     }
 
-/* A PC WITH NOTHING RUNNING YET — no hypervisor, no WSL, no Docker. */
+    /* A PC WITH NOTHING RUNNING YET — no hypervisor, no WSL, no Docker. */
     fn bare() -> Facts {
         Facts {
             hypervisor_present: Some(false),
@@ -734,7 +734,7 @@ mod tests {
         assert!(!desktop.remedy.contains("docker.com"));
     }
 
-/* VIRTUALIZATION OFF IN FIRMWARE — the one outcome the user has to leave Windows for, and the one the old script could not see at all. */
+    /* VIRTUALIZATION OFF IN FIRMWARE — the one outcome the user has to leave Windows for, and the one the old script could not see at all. */
     #[test]
     fn firmware_virtualization_is_named_as_firmware_and_explained_in_full() {
         let facts = Facts {
@@ -778,7 +778,7 @@ mod tests {
         }
     }
 
-/* A RUNNING HYPERVISOR IS PROOF. */
+    /* A RUNNING HYPERVISOR IS PROOF. */
     #[test]
     fn a_running_hypervisor_outweighs_the_firmware_flag() {
         let facts = Facts {
@@ -844,7 +844,7 @@ mod tests {
         assert!(!found[0].action.ours());
     }
 
-/* THE VERDICT WITH NO WAY BACK, AND THE MACHINE THAT PROVOKED IT. */
+    /* THE VERDICT WITH NO WAY BACK, AND THE MACHINE THAT PROVOKED IT. */
     #[test]
     fn no_running_machine_is_ever_declared_unsupported_hardware() {
         for proof in [
@@ -914,7 +914,7 @@ mod tests {
         assert!(found[0].remedy.contains("ARM"));
     }
 
-/* ZERO IS A PROCESSOR, NOT A SILENCE. */
+    /* ZERO IS A PROCESSOR, NOT A SILENCE. */
     #[test]
     fn an_unreadable_processor_is_not_a_32_bit_one() {
         assert!(requirements(&Facts {
@@ -936,7 +936,7 @@ mod tests {
         );
     }
 
-/* A PENDING RESTART COMES FIRST. */
+    /* A PENDING RESTART COMES FIRST. */
     #[test]
     fn a_pending_restart_is_dealt_with_before_features_are_touched() {
         let facts = Facts {
@@ -1052,7 +1052,7 @@ mod tests {
         );
     }
 
-/* THE REPORTED FAILURE, AS A DIAGNOSIS. */
+    /* THE REPORTED FAILURE, AS A DIAGNOSIS. */
     #[test]
     fn an_account_already_in_the_group_is_asked_to_sign_out_rather_than_for_administrator() {
         let facts = Facts {
@@ -1164,7 +1164,7 @@ mod tests {
         .is_empty());
     }
 
-/* A FRESH PC, WHICH IS THE CASE THIS WHOLE MODULE EXISTS FOR: nothing installed, features off. */
+    /* A FRESH PC, WHICH IS THE CASE THIS WHOLE MODULE EXISTS FOR: nothing installed, features off. */
     #[test]
     fn a_bare_machine_gets_one_ordered_list_of_everything_it_needs() {
         let facts = Facts {
@@ -1198,7 +1198,7 @@ mod tests {
         );
     }
 
-/* THE CHECKLIST'S THIRD STATE, which is the whole reason it is not just "the failures, inverted". */
+    /* THE CHECKLIST'S THIRD STATE, which is the whole reason it is not just "the failures, inverted". */
     #[test]
     fn rows_below_a_blocker_are_unjudged_rather_than_passed() {
         let facts = Facts {
@@ -1333,7 +1333,7 @@ mod tests {
         );
     }
 
-/* The registry must identify the target Windows installation. */
+    /* The registry must identify the target Windows installation. */
     #[test]
     fn a_windows_11_machine_is_not_introduced_as_windows_10() {
         // The exact pair the reported machine printed: 25H2, build 26200, calling itself Windows 10 Pro.

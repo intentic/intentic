@@ -133,7 +133,7 @@ pub fn up(args: Up) -> Result<()> {
         })
         .transpose()?;
 
-/* The parent's overlay, built BEFORE anything boots (the recreate flow's ordering: a failed build leaves this machine with nothing to clean up). */
+    /* The parent's overlay, built BEFORE anything boots (the recreate flow's ordering: a failed build leaves this machine with nothing to clean up). */
     let (run_image, base_image, env_hash, runtime_lines) = match (&overlay, &environment_hash) {
         (Some(content), Some(hash)) => {
             let verified = verified_overlay(content, hash, &image, &slug)?;

@@ -43,7 +43,7 @@ fn run_command_argv(
         .iter()
         .map(|s| s.to_string())
         .collect();
-/* One-time seeds pass owner limits and directives to the probe. */
+    /* One-time seeds pass owner limits and directives to the probe. */
     for (name, value) in seeds {
         args.push("-e".to_string());
         args.push(format!("{name}={value}"));
@@ -300,7 +300,7 @@ mod tests {
         assert_eq!(value_of(&argv, "--format"), Some("json"));
     }
 
-/* A seed rides as a docker `-e` on the PROBE, which is a different thing from the `--flag` every other input here uses, and the difference is load-bearing. */
+    /* A seed rides as a docker `-e` on the PROBE, which is a different thing from the `--flag` every other input here uses, and the difference is load-bearing. */
     #[test]
     fn seeds_ride_as_probe_env_before_the_image_and_are_absent_when_none_were_given() {
         let seeds = vec![
@@ -325,7 +325,7 @@ mod tests {
         assert!(!bare.contains(&"-e".to_string()));
     }
 
-/* The headless spelling, `SANDBOX_MEMORY=10g ic sandbox connect`, still works — and loses to a value the verb was handed explicitly. */
+    /* The headless spelling, `SANDBOX_MEMORY=10g ic sandbox connect`, still works — and loses to a value the verb was handed explicitly. */
     #[test]
     fn the_shell_memory_seed_is_appended_only_when_no_explicit_seed_names_it_and_never_when_blank()
     {

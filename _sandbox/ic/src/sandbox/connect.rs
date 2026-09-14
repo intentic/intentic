@@ -32,7 +32,7 @@ pub fn run(args: Args) -> Result<()> {
     let platform_url = env_or("PLATFORM_URL", "https://api.intentic.dev");
     let setup_code = args.setup_code.clone().or_else(|| env("SETUP_CODE"));
 
-/* The one seam every setup failure passes through. */
+    /* The one seam every setup failure passes through. */
     let reporter = platform::Reporter::new(&platform_url, setup_code.clone());
     let result = connect(args, &platform_url, setup_code, &reporter);
     if let Err(fail) = &result {
@@ -60,7 +60,7 @@ fn connect(
     let self_host = env("SELF_HOST").is_some();
 
     let mut connect_token = env("CONNECT_TOKEN").unwrap_or_default();
-/* The reachability grant names this sandbox and the edge that presents it to the daemon. */
+    /* The reachability grant names this sandbox and the edge that presents it to the daemon. */
     let mut sandbox_grant = env("SANDBOX_GRANT").unwrap_or_default();
     let mut ingress_url = env("INGRESS_URL").unwrap_or_default();
     let mut sandbox_hostname = env("SANDBOX_HOSTNAME").unwrap_or_default();
@@ -72,7 +72,7 @@ fn connect(
     let mut owner_email = env("OWNER_EMAIL").unwrap_or_default();
     let cf_token = env("CF_TOKEN").unwrap_or_default();
 
-/* Same idea and the same phase vocabulary as the desktop app's own plan (desktop-app/src/setupPlan.ts). */
+    /* Same idea and the same phase vocabulary as the desktop app's own plan (desktop-app/src/setupPlan.ts). */
     let mut plan = vec![ui::PlanStep {
         phase: "preflight",
         label: "Check this device",
@@ -128,7 +128,7 @@ fn connect(
     });
     ui::begin("intentic · setting up your sandbox", plan);
 
-/* PREFLIGHT — every prerequisite verified read-only, every failure reported at once. */
+    /* PREFLIGHT — every prerequisite verified read-only, every failure reported at once. */
     let mut list = vec![
         checks::Check::new("Docker", checks::check_docker),
         checks::Check::new("Disk space", checks::check_disk),
@@ -173,7 +173,7 @@ fn connect(
         host_pair_token = claim.host_pair_token.unwrap_or(host_pair_token);
         owner_email = claim.owner_email.unwrap_or(owner_email);
     }
-/* Reachability is the platform's own edge now, and provisioning it is a pure function there. */
+    /* Reachability is the platform's own edge now, and provisioning it is a pure function there. */
     let has_public_name = !sandbox_hostname.is_empty();
 
     // Per-sandbox identity, so several sandboxes coexist: the slug is the same key the public hostname uses.
@@ -239,7 +239,7 @@ fn connect(
     if connect_token.is_empty() {
         bail!("CONNECT_TOKEN is required (via the setup code or env) — copy the one-liner from the platform's setup screen.");
     }
-/* A grant is what makes a sandbox reachable from anywhere; it is NOT what makes it run. */
+    /* A grant is what makes a sandbox reachable from anywhere; it is NOT what makes it run. */
     if let Some(warning) = reachability_warning(&sandbox_hostname, &sandbox_grant, &ingress_url) {
         ui::warn(&warning);
     }
@@ -283,7 +283,7 @@ fn connect(
     reporter.stage("pulling-image");
     ensure_image(&sandbox_image, &log)?;
 
-/* The address is the platform's answer, not something this flow provisions: the box enables against the hub itself and serves its own share. */
+    /* The address is the platform's answer, not something this flow provisions: the box enables against the hub itself and serves its own share. */
     let sandbox_public_url = if sandbox_hostname.is_empty() {
         String::new()
     } else {
@@ -435,7 +435,7 @@ fn connect(
     reporter.stage("waiting-health");
     health::wait_answering(&container, &log, "")?;
 
-/* POSTFLIGHT — a daemon answering INSIDE the container proves only half the chain. */
+    /* POSTFLIGHT — a daemon answering INSIDE the container proves only half the chain. */
     step(
         "verifying",
         "verifying the sandbox is reachable end to end…",
@@ -451,7 +451,7 @@ fn connect(
         std::time::Duration::from_secs(120),
     );
     if let Some(summary) = checks::failure_summary(&findings) {
-/* WHOSE VERDICT THIS IS. */
+        /* WHOSE VERDICT THIS IS. */
         if setup_code.is_some() {
             reporter.findings_failed("verifying", checks::wire_failures(&findings));
             bail!("{summary}\nThe sandbox itself is running on this machine — fix the above, then re-check with: ic sandbox doctor {slug}");
@@ -461,7 +461,7 @@ fn connect(
 
     reporter.stage("done");
 
-/* Desktop sync chosen at setup: the same paste covers it, gated on the SYNC_DIR opt-in the command carried. */
+    /* Desktop sync chosen at setup: the same paste covers it, gated on the SYNC_DIR opt-in the command carried. */
     if let (Some(dir), false, false) = (
         sync_dir,
         sync_pair_token.is_empty(),
@@ -472,7 +472,7 @@ fn connect(
         }
     }
 
-/* Connect this machine as a device — not gated on an opt-in, unlike sync above, because it needs no decision from the user. */
+    /* Connect this machine as a device — not gated on an opt-in, unlike sync above, because it needs no decision from the user. */
     if !host_pair_token.is_empty()
         && !sandbox_public_url.is_empty()
         && !run_host_agent(&container, &sandbox_public_url, &host_pair_token)
@@ -697,7 +697,7 @@ fn run_agent_bootstrap(agent: AgentBootstrap, vars: &[(&str, &str)]) -> bool {
             agent.unix_url
         },
     );
-/* These installers inherit stdout, so two things have to be arranged before they get it. */
+    /* These installers inherit stdout, so two things have to be arranged before they get it. */
     let child_vars = agent_env(vars, ui::is_rich());
     ui::suspend();
     let finished = run_agent_script(&url, agent.what, &child_vars);
@@ -914,7 +914,7 @@ mod tests {
         assert_eq!(&nested[..2], &vars[..]);
     }
 
-/* THE STATE THAT SHIPPED: a claim that named an address and carried no grant. */
+    /* THE STATE THAT SHIPPED: a claim that named an address and carried no grant. */
     #[test]
     fn an_address_without_a_grant_is_named_rather_than_read_as_reachable() {
         let named = |grant, ingress| {

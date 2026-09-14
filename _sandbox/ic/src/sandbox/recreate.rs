@@ -137,7 +137,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         docker::quiet(&["start", &container]);
     }
 
-/* Preparing holds a SECOND full copy of the image until a swap consumes it, and a machine that also carries a rollback pin can be holding three. */
+    /* Preparing holds a SECOND full copy of the image until a swap consumes it, and a machine that also carries a rollback pin can be holding three. */
     if reach == Reach::Staged {
         match checks::check_disk() {
             checks::Outcome::Fail { problem, remedy } => bail!(
@@ -181,11 +181,11 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         }
     }
 
-/* The EXACT image the running sandbox was built from, captured before anything pulls. */
+    /* The EXACT image the running sandbox was built from, captured before anything pulls. */
     let current_base = docker::container_env_value(&container, "SANDBOX_BASE_IMAGE");
     let sandbox_image = docker::container_env_value(&container, "SANDBOX_IMAGE");
 
-/* AN UNATTENDED PREPARE ONLY TRACKS THE OFFICIAL REGISTRY. */
+    /* AN UNATTENDED PREPARE ONLY TRACKS THE OFFICIAL REGISTRY. */
     if auto
         && image_override.is_none()
         && !follows_registry(current_base.as_deref(), sandbox_image.as_deref())
@@ -194,7 +194,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         return Ok(());
     }
 
-/* AN UPDATE DOES NOT REFRESH AN IMAGE BUILT FROM A CHECKOUT, IT REPLACES IT. */
+    /* AN UPDATE DOES NOT REFRESH AN IMAGE BUILT FROM A CHECKOUT, IT REPLACES IT. */
     if matches!(mode, Mode::Update { force: false, .. })
         && image_override.is_none()
         && built_from_checkout(current_base.as_deref(), sandbox_image.as_deref())
@@ -234,19 +234,19 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
             env_hash = Some(hash.clone());
         }
         Mode::Update { .. } => {
-/* The approved overlay comes out FIRST here, ahead of the decision below. */
+            /* The approved overlay comes out FIRST here, ahead of the decision below. */
             stage_overlay(&container, &overlay_path)?;
             let approved = std::fs::read(&overlay_path).unwrap_or_default();
             let approved_hash = (!approved.is_empty()).then(|| sha256_hex(&approved));
 
-/* WHAT `prepare` LEFT READY, when it is still the right thing to swap onto — the whole point of preparing. */
+            /* WHAT `prepare` LEFT READY, when it is still the right thing to swap onto — the whole point of preparing. */
             prepared = reach == Reach::Applied
                 // SANDBOX_IMAGE names an exact image to run — a pinned build, a locally-built one. Someone
                 // who passed it asked for THAT image, not for whatever was staged for the channel.
                 && image_override.is_none()
                 && staged_still_fits(&saved, &channel, approved_hash.as_deref(), old_base_id.as_deref())
                 && docker::image_exists(saved.staged.as_deref().unwrap_or_default());
-/* A staged entry that no longer fits is DROPPED here — from the record AND from the sandbox, in one call. */
+            /* A staged entry that no longer fits is DROPPED here — from the record AND from the sandbox, in one call. */
             if !prepared && reach == Reach::Applied {
                 if saved.staged.is_some() {
                     println!("intentic: the prepared update no longer fits this sandbox — updating the ordinary way.");
@@ -266,13 +266,13 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
                 if pulled.is_none() {
                     bail!("{registry_image} is not available (pull failed) — the sandbox is untouched. Log: {}", log.path.display());
                 }
-/* "Already current" means THIS CONTAINER runs the image the tag now names — not that the pull moved nothing. */
+                /* "Already current" means THIS CONTAINER runs the image the tag now names — not that the pull moved nothing. */
                 let already_current = match (&old_base_id, &pulled) {
                     (Some(old), Some(new)) => old == new,
                     _ => cached.is_some() && cached == pulled,
                 };
                 if already_current {
-/* Nothing is waiting for this sandbox, whatever the record last said. */
+                    /* Nothing is waiting for this sandbox, whatever the record last said. */
                     clear_staged(&slug, &container, &saved);
                     println!("intentic: no newer sandbox image is available yet — your sandbox is already on the latest :{channel} it can pull.");
                     println!("          If the app still shows an update, the new release's image may still be publishing — try again in a few minutes.");
@@ -297,7 +297,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
             }
             println!("intentic: rolling back to {registry_image}…");
             stage_overlay(&container, &overlay_path)?;
-/* The overlay must ride the TARGET, not its own FROM: the FROM names the channel tag, which now points at the very build being rolled back from. */
+            /* The overlay must ride the TARGET, not its own FROM: the FROM names the channel tag, which now points at the very build being rolled back from. */
             let overlay = std::fs::read_to_string(&overlay_path)?;
             if !overlay.is_empty() {
                 env_hash = Some(sha256_hex(overlay.as_bytes()));
@@ -305,7 +305,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
             }
         }
         Mode::Reshape(_) => {
-/* Nothing to fetch and nothing to build: the target is the image this container already runs. */
+            /* Nothing to fetch and nothing to build: the target is the image this container already runs. */
             stage_overlay(&container, &overlay_path)?;
             env_hash = docker::container_env_value(&container, "SANDBOX_ENVIRONMENT_HASH");
         }
@@ -366,7 +366,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
             println!("intentic: building {target_image} from the approved overlay…");
             build_overlay(&target_image, &overlay_path, false, &log);
         }
-/* One arm, because a rollback IS an update pointed at the pinned image — same overlay rebuild, same base pinning, same health gate — with one inversion. */
+        /* One arm, because a rollback IS an update pointed at the pinned image — same overlay rebuild, same base pinning, same health gate — with one inversion. */
         Mode::Update { .. } | Mode::Rollback => {
             let fresh = matches!(mode, Mode::Update { .. });
             target_image = registry_image.clone();
@@ -382,7 +382,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
                     env_hash = Some(hash);
                 }
             }
-/* A prepared update is the same derivation already performed, so this arm's own answer and the record's staged image are the same string by construction. */
+            /* A prepared update is the same derivation already performed, so this arm's own answer and the record's staged image are the same string by construction. */
             if prepared {
                 target_image = saved.staged.clone().unwrap_or(target_image);
             } else if !overlay.is_empty() {
@@ -423,7 +423,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         bail!("{target_image} is not available (pull or overlay build failed) — the sandbox is untouched. Log: {}", log.path.display());
     }
 
-/* `prepare` stops here, which is the whole of what makes it safe to run at any moment: the container has not been read from since the overlay copy. */
+    /* `prepare` stops here, which is the whole of what makes it safe to run at any moment: the container has not been read from since the overlay copy. */
     if reach == Reach::Staged {
         return record_staged(
             Prepared {
@@ -487,7 +487,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         .filter(|line| line.starts_with("# intentic:runtime "))
         .collect::<Vec<_>>()
         .join("\n");
-/* THE OWNER'S OWN DIRECTIVES, the second source beside the overlay's: what the container carries now (SANDBOX_RUNTIME, replayed by every other mode). */
+    /* THE OWNER'S OWN DIRECTIVES, the second source beside the overlay's: what the container carries now (SANDBOX_RUNTIME, replayed by every other mode). */
     let carried_runtime =
         docker::container_env_value(&container, HOST_RUNTIME_ENV).unwrap_or_default();
     let (host_runtime, seeds) = match &mode {
@@ -509,7 +509,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     let dns = docker::inspect(&container, "{{join .HostConfig.Dns \" \"}}")
         .filter(|servers| !servers.is_empty());
 
-/* What the record's `previous` becomes — the rollback target — decided by identity above and pinned under a protected local tag. */
+    /* What the record's `previous` becomes — the rollback target — decided by identity above and pinned under a protected local tag. */
     let new_base_id = docker::image_id(&base_image);
     let next = next_previous(
         &saved,
@@ -546,8 +546,8 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     log.section(&format!("previous container logs ({container})"));
     docker::logs_into(&container, "5000", &log);
 
-/* The channel record — written BEFORE the swap and before the LAUNCH: a swap that starts and then crash-loops is exactly the case rollback is for. */
-/* Reshape reuses the staged image because it does not build one. */
+    /* The channel record — written BEFORE the swap and before the LAUNCH: a swap that starts and then crash-loops is exactly the case rollback is for. */
+    /* Reshape reuses the staged image because it does not build one. */
     let reshaping = matches!(mode, Mode::Reshape(_));
     record::write(
         &slug,
@@ -563,13 +563,13 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         },
     )?;
 
-/* The cutover PARKS the old container instead of destroying it: stop, rename aside, and only a replacement that answers health earns the rm. */
+    /* The cutover PARKS the old container instead of destroying it: stop, rename aside, and only a replacement that answers health earns the rm. */
     docker::quiet(&["rm", "-f", &parked]);
     docker::quiet(&["stop", &container]);
     docker::quiet(&["rename", &container, &parked]);
     log.section("run command");
 
-/* THE PORT THIS CUTOVER JUST FREED IS NOT FREE YET, and that is a race rather than a refusal. */
+    /* THE PORT THIS CUTOVER JUST FREED IS NOT FREE YET, and that is a race rather than a refusal. */
     let mut launched = docker::run_argv(&argv, &log);
     for _ in 0..PORT_RELEASE_TRIES {
         // The window is the last attempt's output alone — its command line, the created container's id, and
@@ -624,12 +624,12 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     health::wait_ready(&container);
     docker::quiet(&["rm", "-f", &parked]);
 
-/* Take the "an update is ready for you" offer back, now that the swap is real. */
+    /* Take the "an update is ready for you" offer back, now that the swap is real. */
     if !reshaping {
         staged::withdraw(&container);
     }
 
-/* The record keeps ONE way back, so a superseded pin is dropped — kept, every update would retain a whole extra image, forever. */
+    /* The record keeps ONE way back, so a superseded pin is dropped — kept, every update would retain a whole extra image, forever. */
     if let Some(old_pin) = saved.previous.as_deref() {
         if old_pin.starts_with(&format!("intentic-sandbox-rollback-{slug}:"))
             && Some(old_pin) != next.as_deref()
@@ -1028,7 +1028,7 @@ mod tests {
         }
     }
 
-/* THE RESHAPE'S ARITHMETIC. */
+    /* THE RESHAPE'S ARITHMETIC. */
     #[test]
     fn switches_edit_only_their_own_token_and_leave_the_rest_of_the_owners_list_alone() {
         assert_eq!(apply_switches("", Some(true), None), "--privileged");
@@ -1060,7 +1060,7 @@ mod tests {
         );
     }
 
-/* WHICH LAUNCH FAILURES ARE WORTH WAITING OUT. */
+    /* WHICH LAUNCH FAILURES ARE WORTH WAITING OUT. */
     #[test]
     fn only_a_held_port_is_worth_waiting_out_and_the_address_is_never_matched_on() {
         // Verbatim dockerd, the refusal this whole retry exists for.
@@ -1159,7 +1159,7 @@ mod tests {
 
     #[test]
     fn a_recipe_the_owner_has_re_approved_since_invalidates_what_was_staged() {
-/* The staged image bakes the overlay it was built with. */
+        /* The staged image bakes the overlay it was built with. */
         assert!(!staged_still_fits(
             &prepared("stable", "sha256:new", Some("deadbeef")),
             "stable",
@@ -1292,7 +1292,7 @@ mod tests {
 
     #[test]
     fn a_sandbox_that_has_a_recipe_the_copy_cannot_read_stops_the_flow_instead_of_stripping_it() {
-/* The dev loop's silent downgrade. */
+        /* The dev loop's silent downgrade. */
         assert!(matches!(overlay_outcome(false, true), Overlay::Lost));
     }
 

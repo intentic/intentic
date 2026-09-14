@@ -44,7 +44,7 @@ pub struct ParkedSetup {
 pub struct AppState {
     config_dir: PathBuf,
     pub settings: Mutex<Settings>,
-/* A request waiting for the launcher UI to pick up. */
+    /* A request waiting for the launcher UI to pick up. */
     pub pending: Mutex<Option<SetupArgs>>,
     pub pending_recreate: Mutex<Option<RecreateArgs>>,
     /// A desktop-sync enrollment the SPA handed over (`intentic://sync`), waiting for the launcher face to
@@ -113,7 +113,7 @@ impl AppState {
         self.config_dir.join("close-action.json")
     }
 
-/* A SETUP THAT A RESTART INTERRUPTED — the one piece of this app's state that has to outlive the process by design rather than by accident. */
+    /* A SETUP THAT A RESTART INTERRUPTED — the one piece of this app's state that has to outlive the process by design rather than by accident. */
     pub fn park_setup(&self, args: &SetupArgs) {
         let parked = ParkedSetup {
             args: args.clone(),
@@ -139,7 +139,7 @@ impl AppState {
         self.config_dir.join("resume-setup.json")
     }
 
-/* The launcher and the workspace are separate webviews with separate storage. */
+    /* The launcher and the workspace are separate webviews with separate storage. */
     pub fn install_id(&self) -> String {
         let mut cached = self.install_id.lock().unwrap();
         if let Some(id) = cached.as_ref() {
@@ -201,7 +201,7 @@ mod tests {
         }
     }
 
-/* This id ties an install run to the workspace it opens. */
+    /* This id ties an install run to the workspace it opens. */
     #[test]
     fn the_install_id_survives_a_restart() {
         let dir =
@@ -218,7 +218,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-/* This app spawns the shipped connect scripts precisely so the desktop and terminal paths cannot disagree (scripts.rs states the case). */
+    /* This app spawns the shipped connect scripts precisely so the desktop and terminal paths cannot disagree (scripts.rs states the case). */
     #[test]
     fn the_platform_default_is_the_one_the_connect_flow_picks_for_itself() {
         let connect = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

@@ -439,7 +439,7 @@ fn pull_once(image: &str, log: &Log) -> Result<bool> {
 mod tests {
     use super::wrong_container_platform;
 
-/* The one decision in this file that is pure, and the one whose absence let a whole class of Windows install failure through: the daemon answers. */
+    /* The one decision in this file that is pure, and the one whose absence let a whole class of Windows install failure through: the daemon answers. */
 
     #[test]
     fn a_linux_daemon_is_what_we_want() {

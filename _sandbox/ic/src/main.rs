@@ -355,7 +355,7 @@ mod tests {
     use super::*;
     use clap::CommandFactory;
 
-/* THE ARGUMENT SURFACE, asserted — the shims and the platform's cards build command lines against it. */
+    /* THE ARGUMENT SURFACE, asserted — the shims and the platform's cards build command lines against it. */
 
     #[test]
     fn the_command_tree_is_internally_consistent() {
@@ -560,7 +560,7 @@ mod tests {
         assert!(parse(&["machine", "remove", "-y", "--keep-user"]).is_ok());
     }
 
-/* `docker prepare` is on the shims' critical path — connect.ps1 and connect-host.ps1 both stop dead if it will not parse. */
+    /* `docker prepare` is on the shims' critical path — connect.ps1 and connect-host.ps1 both stop dead if it will not parse. */
     #[test]
     fn docker_prepare_defaults_to_asking_and_to_acting() {
         let Ok(Cli {
@@ -583,7 +583,7 @@ mod tests {
         assert!(parse(&["docker", "prepare", "extra"]).is_err());
     }
 
-/* `reshape` changes a container's PRIVILEGES, so its surface is held tighter than the swaps': the slug is never inferred. */
+    /* `reshape` changes a container's PRIVILEGES, so its surface is held tighter than the swaps': the slug is never inferred. */
     #[test]
     fn reshape_names_its_sandbox_and_requires_at_least_one_ask() {
         assert!(parse(&["sandbox", "reshape"]).is_err());

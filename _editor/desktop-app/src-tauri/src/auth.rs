@@ -116,7 +116,7 @@ mod tests {
         assert_eq!(PendingAuth::default().live_url(), None);
     }
 
-/* THE REGRESSION. */
+    /* THE REGRESSION. */
     #[test]
     fn a_second_click_reopens_the_same_page() {
         let pending = attempt(

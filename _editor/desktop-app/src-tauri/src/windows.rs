@@ -384,7 +384,7 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
                     api.prevent_close();
                     request_close(&handle);
                 }
-/* WHAT THE PAGE'S MAXIMISE BUTTON DRAWS FOLLOWS THE WINDOW, NOT THE PRESS. */
+                /* WHAT THE PAGE'S MAXIMISE BUTTON DRAWS FOLLOWS THE WINDOW, NOT THE PRESS. */
                 WindowEvent::Resized(_) => {
                     if let Some(window) = handle.get_webview_window(WORKSPACE) {
                         announce_frame(&window, false);
@@ -864,7 +864,7 @@ mod loopback_tests {
         assert!(script.contains("loopbackUngated: true"), "{script}");
     }
 
-/* THE OTHER PAIR THAT HAS TO STAY A PAIR: this window opens with no platform frame, and the page is told so. */
+    /* THE OTHER PAIR THAT HAS TO STAY A PAIR: this window opens with no platform frame, and the page is told so. */
     #[test]
     fn the_page_is_told_the_window_has_no_frame_of_its_own() {
         let script = workspace_init_script("install-1", None);
@@ -1077,7 +1077,7 @@ mod frame_tests {
         );
     }
 
-/* THE BUG AS REPORTED, which the fit alone did not cover: the window opened with its bottom edge — and the chat composer in it — under the taskbar. */
+    /* THE BUG AS REPORTED, which the fit alone did not cover: the window opened with its bottom edge — and the chat composer in it — under the taskbar. */
     #[test]
     fn a_cold_start_window_opens_fully_inside_the_work_area() {
         let work = screen((1531.0, 883.0));

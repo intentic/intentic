@@ -35,7 +35,7 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
     let container = format!("{CONTAINER_PREFIX}{slug}");
     let deadline = Instant::now() + patience;
     let mut settled: [Option<Outcome>; 5] = [const { None }; 5];
-/* WHAT THIS CONTAINER WAS GIVEN TO DIAL THE EDGE WITH, read once, before any patience is spent. */
+    /* WHAT THIS CONTAINER WAS GIVEN TO DIAL THE EDGE WITH, read once, before any patience is spent. */
     let missing_reach = match public_url {
         Some(_) => missing_reach_env(&container),
         None => Vec::new(),
@@ -140,7 +140,7 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
             // Anything still unsettled had its Pending outcome forced by settle(); one more pass writes them.
             continue;
         }
-/* WHAT IT IS STILL WAITING FOR. */
+        /* WHAT IT IS STILL WAITING FOR. */
         let waiting: Vec<&str> = LINKS
             .iter()
             .zip(settled.iter())
@@ -535,7 +535,7 @@ mod tests {
         ));
     }
 
-/* THE 502 THAT WILL NEVER CLEAR. */
+    /* THE 502 THAT WILL NEVER CLEAR. */
     #[test]
     fn a_502_from_a_container_that_was_given_no_grant_is_settled_and_names_the_missing_value() {
         match classify_public(

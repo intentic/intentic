@@ -339,7 +339,7 @@ pub fn wait_for_daemon() -> Fixed {
         }
         if !hinted && started.elapsed() >= HINT_AFTER {
             hinted = true;
-/* Docker Desktop's first run puts up a licence screen and, depending on the build, an offer to sign in — and it does it in its OWN window. */
+            /* Docker Desktop's first run puts up a licence screen and, depending on the build, an offer to sign in — and it does it in its OWN window. */
             super::progress(
                 "Docker Desktop may be asking you something - check its window for a licence or sign-in screen; a first start also just takes a couple of minutes",
             );
@@ -418,7 +418,7 @@ mod tests {
     // pure, so the test that guards it runs on every runner.
     use crate::prepare::plan::Facts;
 
-/* The bodies above are Windows-only and are covered by the Windows smoke tiers. */
+    /* The bodies above are Windows-only and are covered by the Windows smoke tiers. */
 
     #[test]
     fn the_installer_url_is_dockers_own_permanent_one() {
@@ -433,7 +433,7 @@ mod tests {
         );
     }
 
-/* THE REPORTED FAILURE, PINNED AT ITS CAUSE. */
+    /* THE REPORTED FAILURE, PINNED AT ITS CAUSE. */
     #[test]
     fn the_group_fix_reads_the_roster_rather_than_believing_net_exes_exit_code() {
         assert!(

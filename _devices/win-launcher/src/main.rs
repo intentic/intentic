@@ -132,7 +132,7 @@ fn main() -> ExitCode {
     if !launch.wait {
         return ExitCode::SUCCESS;
     }
-/* THE CHILD'S OWN VERDICT, PASSED THROUGH, because with `--wait` this process is standing in for it: Task Scheduler reads the action's exit code. */
+    /* THE CHILD'S OWN VERDICT, PASSED THROUGH, because with `--wait` this process is standing in for it: Task Scheduler reads the action's exit code. */
     match child.wait() {
         Ok(status) => match status.code() {
             Some(0) => ExitCode::SUCCESS,
@@ -195,7 +195,7 @@ mod tests {
         );
     }
 
-/* Fire-and-forget is the DEFAULT, and that is the whole difference between the two callers: an agent's Run entry wants this process gone at once. */
+    /* Fire-and-forget is the DEFAULT, and that is the whole difference between the two callers: an agent's Run entry wants this process gone at once. */
     #[test]
     fn waits_only_when_asked() {
         assert!(
@@ -232,7 +232,7 @@ mod tests {
         assert!(launch.args.is_empty());
     }
 
-/* Everything after the separator belongs to the child, including the tokens this program has flags for. */
+    /* Everything after the separator belongs to the child, including the tokens this program has flags for. */
     #[test]
     fn hands_the_child_its_own_flags_verbatim() {
         let launch = parse(argv(&[

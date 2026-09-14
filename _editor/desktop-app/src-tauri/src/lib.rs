@@ -126,7 +126,7 @@ pub fn run() {
                 update::start(app.handle());
             }
 
-/* BEFORE the link, nothing opens. */
+            /* BEFORE the link, nothing opens. */
             if app.webview_windows().is_empty() {
                 windows::show_workspace(app.handle());
             }
@@ -135,7 +135,7 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("intentic desktop failed to start");
 
-/* Quitting is the one moment with nothing to interrupt: the window is going anyway, no script run is being watched. */
+    /* Quitting is the one moment with nothing to interrupt: the window is going anyway, no script run is being watched. */
     app.run(|app, event| {
         if matches!(event, RunEvent::Exit) {
             update::install_on_exit(app);
@@ -152,11 +152,11 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     // "This device", matching the window it opens — the screen covers the machine's sandboxes AND its desktop
     // sync, and a tray entry naming only half of that is the reason nobody looked there for the other half.
     let manager = MenuItemBuilder::with_id("manager", "This device").build(app)?;
-/* This app spends most of its life as a tray icon with nothing on screen. */
+    /* This app spends most of its life as a tray icon with nothing on screen. */
     let update = MenuItemBuilder::with_id("update", "Checking for updates…")
         .enabled(false)
         .build(app)?;
-/* The machine agent has no window because it runs headlessly at logon. */
+    /* The machine agent has no window because it runs headlessly at logon. */
     let agent = MenuItemBuilder::with_id("agent", "Machine agent: checking…").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
     let menu = MenuBuilder::new(app)

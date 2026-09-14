@@ -174,7 +174,7 @@ mod tests {
     use super::*;
     use crate::prepare::plan::{requirements, ARCH_X64};
 
-/* THE PROBE'S OUTPUT, AS THE PROBE ACTUALLY PRINTS IT. */
+    /* THE PROBE'S OUTPUT, AS THE PROBE ACTUALLY PRINTS IT. */
     const REAL: &str = r#"{"build":22631,"displayVersion":"23H2","productName":"Windows 11 Pro","editionId":"Professional","arch":9,"hypervisorPresent":true,"virtualizationFirmware":false,"slat":true,"vmHint":"asus system product name","serviceVmcompute":true,"serviceWsl":true,"wslStatusOk":true,"wslStatus":"Default Version: 2","wslVersion":"WSL version: 2.2.4.0","rebootPending":false,"elevated":false,"winget":true,"dockerDesktopPath":"C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe","dockerDesktopVersion":"4.34.0","inDockerUsers":true,"inDockerUsersGroup":true,"freeGib":412,"user":"radarsu","userQualified":"omen\\radarsu"}"#;
 
     #[test]
@@ -210,7 +210,7 @@ mod tests {
         );
     }
 
-/* A SECOND REAL MACHINE, AND THE ONE THAT PAID FOR THIS TEST. */
+    /* A SECOND REAL MACHINE, AND THE ONE THAT PAID FOR THIS TEST. */
     const OMEN: &str = r#"{"winget":true,"productName":"Windows 10 Pro","freeGib":402,"inDockerUsers":true,"inDockerUsersGroup":true,"wslVersion":"WSL version: 2.7.11.0\r\nKernel version: 6.18.33.2-2\r\n","arch":9,"dockerDesktopVersion":"4.82.0","build":26200,"user":"radar","displayVersion":"25H2","rebootPending":false,"dockerDesktopPath":"C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe","virtualizationFirmware":false,"userQualified":"radarsu-omen17\\radar","editionId":"Professional","wslStatus":"Default Distribution: archlinux\r\nDefault Version: 2\r\n","wslStatusOk":true,"hypervisorPresent":true,"slat":false,"serviceVmcompute":true,"vmHint":"hp omen by hp laptop 17-ck0xxx","serviceWsl":true,"elevated":false}"#;
 
     /// The regression that matters most: a working PC must never be told its hardware is unsupported.
@@ -277,7 +277,7 @@ mod tests {
         assert_eq!(facts.wsl_status, "x");
     }
 
-/* THE MACHINE THAT REPORTED THIS. */
+    /* THE MACHINE THAT REPORTED THIS. */
     #[test]
     fn the_group_roster_and_the_login_token_are_reported_separately() {
         let json = r#"{"inDockerUsers":false,"inDockerUsersGroup":true,"user":"radar"}"#;
@@ -306,7 +306,7 @@ mod tests {
         assert!(parse("").is_err());
     }
 
-/* The probe is also a PowerShell script this repo ships inside a binary. */
+    /* The probe is also a PowerShell script this repo ships inside a binary. */
     #[test]
     fn the_probe_is_ascii_and_asks_for_nothing_it_should_not() {
         assert!(
