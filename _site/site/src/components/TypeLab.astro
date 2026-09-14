@@ -38,8 +38,8 @@ import { TYPEFACES, DEFAULT_TYPEFACE, FONT_PARAM } from "../lib/typeface";
 <script is:inline>
     /* Marks the face being worn, which only the browser knows — the HTML is one cached document for every choice. */
     (function () {
-        var worn = document.documentElement.dataset.font ?? "mukta";
-        var choice = document.querySelector('[data-font-choice="' + worn + '"]');
+        const worn = document.documentElement.dataset.font ?? "mukta";
+        const choice = document.querySelector(`[data-font-choice="${worn}"]`);
         if (choice !== null) {
             choice.setAttribute("aria-current", "true");
         }

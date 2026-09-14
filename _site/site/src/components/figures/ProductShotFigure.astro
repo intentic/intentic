@@ -1,12 +1,12 @@
 ---
-import type { ProductShot } from "@intentic/site-content/product";
+import type { ProductShot as Shot } from "@intentic/site-content/product";
 import Window from "../Window.astro";
 import ProductShot from "../ProductShot.astro";
 
 /* One screenshot, framed — and the frame is the site's own, the same carved window the home page stands its three hero surfaces in. */
 
 interface Props {
-    shot: ProductShot;
+    shot: Shot;
     /** The hero is the page's LCP; everything below it waits until it is scrolled near. */
     priority?: boolean;
 /** How wide the page paints this shot, so the browser can pick a rung of its srcset. */
