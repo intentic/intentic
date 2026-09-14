@@ -15,6 +15,11 @@ export const CloneResultSchema = z.object({
     name: z.string().describe("What it ended up called."),
     path: z.string().describe("Where it landed."),
 });
+// A repository made from nothing: a folder, `git init`, a README that names it, and one commit so it has a main line
+// for agents to branch from.
+export const CreateRepoSchema = z.object({
+    name: z.string().min(1).describe("What to call it, which is also its folder under the workspace root."),
+});
 // status mirrors GitSyncResult plus turn outcomes skipped/error; behind/ahead/head/message are present per status.
 export const RepoSyncSchema = z.object({
     repo: z.string().describe("Which repository."),

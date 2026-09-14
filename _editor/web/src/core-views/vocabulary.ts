@@ -129,7 +129,7 @@ const MAKER: Vocabulary = {
     sync: `Back up`,
     diff: `What changed`,
     workspace: `Files`,
-    home: `Project`,
+    home: `Projects`,
     preview: `See it`,
     memoryChip: `instructions`,
     memoryTooltip: `Standing instructions for your assistant, read into every conversation that starts in this folder or deeper.`,

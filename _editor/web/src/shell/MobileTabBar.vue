@@ -6,7 +6,7 @@ import { RouterLink, useRoute } from "vue-router";
 import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
 import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTile";
 import { useApprovalsTile } from "./mobileTabs";
-import { homeViewId, PROJECT_VIEW_ID } from "../core-views/registry";
+import { homeViewId, PROJECTS_VIEW_ID } from "../core-views/registry";
 import { useVocabulary } from "../core-views/vocabulary";
 import RailIcon from "./rail/RailIcon.vue";
 import RunningMark from "./rail/RunningMark.vue";
@@ -40,8 +40,8 @@ const { badge: sandboxBadge } = useSandboxAttention();
 // seat (registry.ts), so the phone and the desktop agree on where home is.
 const words = useVocabulary();
 const homeTab = computed<Tab>(() =>
-    homeViewId() === PROJECT_VIEW_ID
-        ? { id: PROJECT_VIEW_ID, to: `/ext/${PROJECT_VIEW_ID}`, label: words.value.home }
+    homeViewId() === PROJECTS_VIEW_ID
+        ? { id: PROJECTS_VIEW_ID, to: `/ext/${PROJECTS_VIEW_ID}`, label: words.value.home }
         : { id: `workspace`, to: `/workspace`, label: `Files`, panel: `files` },
 );
 

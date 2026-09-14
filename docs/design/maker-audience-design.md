@@ -112,16 +112,14 @@ Core owns the shared mechanism, each a small table or default:
 - the finishing defaults for makers (section 5), which are daemon rules rather than UI
 - a read of the audience on the extension API, `api.audience()`, the way `api.theme.mode()` is read now
 
-A first party UI extension, `_extensions/project` (`@intentic/ext-project`, id `intentic.project`), owns the
-maker's home: the Project view, its timeline, and the prose diff (section 6). It uses only what the public API
-already offers: `RepoFacts` for detection, `/history/*` and `GET /git/changes` and `GET /agents` through
-`permissions.sandbox`, `api.workspace.openDiff` and `api.navigate("/workspace/…")` to hand a file or a diff to
-the core viewers, `api.chat.openAgent` and `POST /agent` to start work, as `ext-deployments` does for its fix
-turns.
+A first party UI extension, `_extensions/projects` (`@intentic/ext-projects`, id `intentic.projects`), owns the
+maker's home: the Projects dashboard (section 6). It uses only what the public API already offers: `RepoFacts`
+for detection, `GET /workspace/repos`, `GET /workspace/file` and `POST /workspace/repos/new` through
+`permissions.sandbox`, and `api.href`/`api.navigate` to hand a project to the core workspace.
 
 What this buys: a developer sees nothing change, because every maker thing is a seat, a word or a default. A
 maker who turns the extension off falls back to the Workspace tile, because the rail resolves its `always`
-seat to whichever of `project` and `workspace` is registered. And the first extension to need the audience
+seat to whichever of `projects` and `workspace` is registered. And the first extension to need the audience
 proves the API read is enough, which is the dogfooding rule the first party packs exist for.
 
 ## 4. The audience preference
@@ -204,38 +202,28 @@ Request land, which the role floor already produces. The setup proposal is only 
 
 ## 6. The maker's surfaces
 
-### 6.1 Project: the home
+### 6.1 Projects: the home
 
-One rail tile, `project`, always seated in the maker audience in the seat Workspace holds now. Detection is
-`RepoFacts`: one activation per repo, and the root when it holds files outside any repo. A workspace with one
-project opens on it, and one with several opens on a list of them.
+One rail tile, `projects`, always seated in the maker audience in the seat Workspace holds now. It draws the
+workspace's repositories as tiles: the name, the README's first paragraph, and whether the Preview area can show
+it running. A press on a tile opens the Workspace rooted at that repository (6.2). The last tile is **New
+project**: one press offers a free name (`new-project`, `new-project-2`), Enter makes the repository (a folder,
+`git init` with its git dir on `/history` like a clone's, a README that names it, one commit so agents have a
+main line to branch from) and opens it. A workspace with no repository shows only that tile.
 
-A project page, top to bottom:
+The dashboard reads and makes repositories and does nothing else: no timeline of its own, since the Workspace
+already keeps one (6.2), and no file list, since the rooted Workspace is the file list.
 
-- **Name and what it is**, read from the README's first paragraph or `docs/`, with **See it** (the Preview
-  tile's target when `hasPanel`, else the main document), **Share** (the `public/` outbox and the share link
-  `_extensions/preview` already draws), and **Instructions** (`/sandbox/agent?section=instructions`).
-- **Waiting for you**: agents in `ready` (only when auto-land is off), conflicts, held pushes, approvals.
-  Each row is a sentence and one or two verbs. Empty most of the time, and absent when empty.
-- **What's new**: the timeline (6.2).
-- **Files**: the project's *content*, as a Drive style list (documents, images, pages), each opening in the
-  core viewer through `api.navigate`. "All files" opens `/workspace/<project>` with the technical filter on.
-- **New project**, **Open from GitHub**, **Upload a folder**: the three ways in from
-  `WorkspaceEmptyState.vue`, reordered and renamed. New project starts a turn from a description ("a one page
-  site for my bakery") and the templates `GET /workspace/templates` already serves for `ext-repo-apps`.
+### 6.2 A project as its own tree, and the way back
 
-### 6.2 What's new: the timeline
+`/workspace?dir=<repo>` roots the explorer at that repository: its files, its "N technical files hidden" line,
+its creates and drops all inside it, with a chip in the toolbar that says which folder is open and is the way
+back to the whole workspace (`explorer/WorkspaceDirChip.vue`, `health/workspaceScope.ts` `workspaceDir`). The
+same query is what the phone's drill-down already reads, so one address opens the same folder on either shell.
 
-One list merged from three sources the daemon already keeps, newest first:
-
-- landed turns (`GET /agents`, the `landed` records and their drafted subjects)
-- restore points (`/history`, triggers `turn`, `user`, `restore`)
-- versions (commits on the main line, which after section 5 are the same events made durable)
-
-Each row is *"Added a pricing section to the homepage. 2:14 pm. 3 files."* with **What changed** (6.3) and
-**Go back to before this** (the existing `POST /history/restore` behind the existing confirmation). The
-developer keeps the Changes panel and the git-history document. The maker sees this instead, and does not meet
-the words "restore point".
+What's new is the Workspace's own **Restore points** panel, which stays for a maker under the maker's words
+(Versions, Go back to this): every turn and every user write already cuts one, and Restore already saves a
+point of the present first. Nothing of it is duplicated on the dashboard.
 
 ### 6.3 What changed, without code
 
@@ -248,8 +236,8 @@ tiers, best available first:
    diffed at word level, drawn as Docs' suggestions (insertions underlined, deletions struck). This is a new
    viewer the extension registers (`contributes.viewers`) and opens through `api.workspace.openDiff` with a
    `DiffPayload`. Images already have `BinaryDiffView.vue`.
-3. **See it.** For a site, the Preview after the change, with "Show details" opening the ordinary diff in the
-   core viewer.
+3. **See it.** For a site, the Preview after the change (`/preview?target=repo:<id>`, which the dashboard
+   links for every project that runs), with the toolbar's Code reading one press away.
 
 ### 6.4 Files, filtered
 
@@ -269,25 +257,25 @@ where one applies. "Mark as reviewed" stays, since a tick is not a developer con
 
 ### 6.6 See it and Share
 
-Preview keeps its always seat and is renamed **See it** in the maker audience. Share collects what is spread
-over `_extensions/preview` today (the share link, `public/`) under one verb on the project page, and Publish
-is reserved for it (section 2).
+Preview keeps its always seat and is renamed **See it** in the maker audience, and the dashboard links each
+running project's own target. `public/` keeps its Public tab. In the tree its chip reads "shared" for a maker,
+and Publish is reserved for it (section 2).
 
 ### 6.7 Instructions
 
-The `AGENTS.md` editor exists at `/sandbox/agent?section=instructions`. The project page links it as
-**Instructions for your assistant**, and the `memory` chip on the file row says the same words.
+The `AGENTS.md` editor exists at `/sandbox/agent?section=instructions`; the `memory` chip on the file row reads
+"instructions" for a maker and says the same words in its tooltip.
 
 ### 6.8 Mobile
 
-`shell/mobileTabs.ts` promotes four tabs. In the maker audience Workspace's tab becomes Project, and the
-Review tab keeps pointing at Approvals when that pack is on, else at the project's Waiting for you.
+`shell/mobileTabs.ts` promotes four tabs. In the maker audience Workspace's tab becomes Projects, and the
+Review tab keeps pointing at Approvals when that pack is on, else at the workspace's own review.
 
 ### 6.9 What the maker audience hides
 
-The Changes panel, the Restore points panel (its content is the timeline), the terminal panel, codebase health,
-checks, personas and git history row actions, the search's ignored files toggle, and the diff layout controls.
-Every one is back behind "Switch to the developer view", and none of their state is lost by switching.
+The Changes panel, the terminal panel, and the codebase health, checks, personas and git history row actions.
+Restore points stay: they are the maker's way back. Every hidden thing is back behind "Switch to the developer
+view", and none of their state is lost by switching.
 
 ## 7. Vocabulary
 
@@ -341,15 +329,15 @@ before the home, because a maker who gets the home first and the trap later lose
 - Daemon: the `agent.landed` moment, the `version-landed` builtin, the pre turn commit of the main tree's
   remainder, and the two rules the setup question writes into `.intentic/config/settings.json`.
 
-**Phase 1, the home (`_extensions/project`).** The Project view with its five blocks (6.1), the timeline
-(6.2), Files with the filter, the three ways in. Tier 1 and tier 3 of "what changed". A story in
-`docs/user-stories/07-make/` per block, so `ext-acceptance` walks them.
+**Phase 1, the home (`_extensions/projects`).** The dashboard (6.1), the rooted Workspace and its chip (6.2),
+and the daemon's create route. A story in `docs/user-stories/07-make/` per block, so `ext-acceptance` walks
+them.
 
 **Phase 2, reading changes.** The prose diff viewer (6.3 tier 2), the maker agent card (6.5), the conflict
 card as an ask, the rendered markdown default with the prose editor.
 
-**Phase 3, arriving.** New project from a description and a template, the setup proposal, the
-Instructions link, See it and Share on the project page, mobile tabs.
+**Phase 3, arriving.** New project in a press, the arrival card's proposal, See it on the dashboard, mobile
+tabs.
 
 **Phase 4, the sweep.** Hide the panels and row actions of 6.9 behind the audience, the keybindings page,
 the empty states, the notification wording (`shell/notifications/`), and a pass over every string the
@@ -363,10 +351,8 @@ scanner in `docs/user-stories/.acceptance.md` would have a maker read.
 - **Per account storage.** Browser storage matches theme and skin and needs nothing from the platform. A
   maker who opens the app on their phone would answer the question again once. If that grates, it is one
   platform setting later.
-- **The project home as extension or core.** Extension, for the reasons in section 3, with the rail
-  fallback as the guard. If the timeline turns out to need something only core can see (live tool call
-  streams, say), the view moves into `core-views/` beside `infrastructure` with the same registration, and
-  the reason is written in `coreViews.ts` like the other three.
+- **The dashboard as extension or core.** Extension, for the reasons in section 3, with the rail fallback as
+  the guard. The rooted Workspace is core, since it is the Workspace.
 - **Auto-version and a developer's own workflow.** The rules are written only when a maker's setup asks
   for them. A developer who wants "commit after land" can add the same row by hand in Sandbox ▸ Agent, which
   is the point of it being a row.
@@ -375,10 +361,10 @@ scanner in `docs/user-stories/.acceptance.md` would have a maker read.
 
 `docs/user-stories/07-make/`, written from the maker's chair, walked by `ext-acceptance`:
 
-1. Arrive without code: answer the one question, land on a project page, start a new project from a sentence.
-2. Ask for a change and see it happen: the assistant edits, the timeline gains a row, See it shows the result.
-3. Read what changed without reading code: the sentence, the prose diff, the details behind it.
-4. Go back: undo the last change from the timeline, and the tree is what it was.
+1. Arrive without code: answer the one question, land on the dashboard, start a new project in a press.
+2. Ask for a change and see it happen: the assistant edits, a restore point appears, See it shows the result.
+3. Read what changed without reading code: the prose diff, the code reading behind it.
+4. Go back: undo the last change from the Restore points panel, and the tree is what it was.
 5. Share it: the public link, and what "shared" means on a file row.
 6. Switch views: a developer and a maker look at the same project and each sees their own words.
 
@@ -403,14 +389,17 @@ Written after phases 0 to 4 were built, where the code disagreed with the plan a
   block reads as replaced whole. `ProseDiffView.vue` draws it, and the toolbar's Prose/Code control and the
   `ui-diff-prose` preference (auto follows the audience) decide which reading a markdown or text file opens in.
 - **See it has an address.** `/preview?target=repo:<id>` selects the Preview area's target on arrival
-  (`PreviewArea.vue`), so the project page links to its own running site rather than to whatever was shown last.
-- **The extension declares fourteen routes** and reads files without writing any. Its one write is a turn
-  (`POST /agent`) for a new project, which runs on the shared tree because a repository made inside a worktree
-  is outside land. Every destination on the page is an anchor built with `appLink(api.href(...))`, which the
-  repo's link rule (`navigatingControl.test.ts`) enforces across extensions.
+  (`PreviewArea.vue`), so the dashboard links each running project to its own site rather than to whatever was shown last.
+- **The first home was a page, and it was replaced by a dashboard.** The first build put a timeline, a file
+  list and the ways in on one Project page (`_extensions/project`). The owner's read: the Workspace's restore
+  points already are the timeline, and what a maker needs first is to see their projects and open one. So
+  `_extensions/projects` draws tiles, makes a repository in a press (`POST /workspace/repos/new`, the daemon's
+  own `git init` with a first commit), and opens the Workspace rooted at the repository (`?dir=`, section 6.2).
+  Every destination is an anchor built with `appLink(api.href(...))`, which the repo's link rule
+  (`navigatingControl.test.ts`) enforces across extensions.
 - **The developer's surfaces step aside by audience, in place.** The Changes tab and the Restore points
   button leave the workspace sidebar, the health, history, persona and check row actions leave the tree
   (`rowActions.ts`, `plain`), and the terminal tile leaves the rail and the phone menu. Each is one `maker`
   read at the call site, and each comes back with the other answer.
-- **A `home` glyph was added to the icon set** for the Project tile, since the set had none.
+- **A `home` glyph was added to the icon set** while the first home existed; the dashboard wears `th-large`.
 

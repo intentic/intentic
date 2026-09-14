@@ -40,6 +40,6 @@ describe(`the vocabulary table`, () => {
 
         expect(words.value.home).toBe(`Workspace`);
         useAudience().setAudience(`maker`);
-        expect(words.value.home).toBe(`Project`);
+        expect(words.value.home).toBe(`Projects`);
     });
 });

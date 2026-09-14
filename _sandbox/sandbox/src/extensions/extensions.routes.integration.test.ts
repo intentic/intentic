@@ -117,7 +117,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.pi-agent",
         "intentic.pipelines",
         "intentic.preview",
-        "intentic.project",
+        "intentic.projects",
         "intentic.repo-apps",
         "intentic.slack",
         "intentic.social",

@@ -7,6 +7,7 @@ import {
     AppParamSchema,
     AppsListSchema,
     CloneRepoSchema,
+    CreateRepoSchema,
     CloneResultSchema,
     RepoAppsParamSchema,
     ReposListSchema,
@@ -223,6 +224,16 @@ export const workspaceContract = {
             description: "Clones a repository into the workspace beside the others, using whatever forge credentials the sandbox already holds.",
         })
         .input(CloneRepoSchema)
+        .output(CloneResultSchema),
+    createRepo: oc
+        .route({
+            method: "POST",
+            path: "/workspace/repos/new",
+            summary: "Start a new repo",
+            description:
+                "Makes an empty repository in the workspace: a folder named after it, initialised, with a README that names it and one commit, so an agent can start on it at once. Nothing is cloned and nothing leaves the machine.",
+        })
+        .input(CreateRepoSchema)
         .output(CloneResultSchema),
     // Mutates the tree (fetch + fast-forward), which is why this is POST rather than GET.
     sync: oc

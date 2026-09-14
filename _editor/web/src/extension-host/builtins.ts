@@ -14,7 +14,7 @@ import * as knowledge from "@intentic/ext-knowledge";
 import * as maintenance from "@intentic/ext-maintenance";
 import * as pipelines from "@intentic/ext-pipelines";
 import * as preview from "@intentic/ext-preview";
-import * as project from "@intentic/ext-project";
+import * as projects from "@intentic/ext-projects";
 import * as viewers from "@intentic/ext-viewers";
 import * as workflows from "@intentic/ext-workflows";
 
@@ -42,7 +42,7 @@ const modules: readonly BuiltinModule[] = [
     issues,
     maintenance,
     preview,
-    project,
+    projects,
     viewers,
     workflows,
 ];

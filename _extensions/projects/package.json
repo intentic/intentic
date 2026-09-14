@@ -1,7 +1,7 @@
 {
-    "name": "@intentic/ext-project",
+    "name": "@intentic/ext-projects",
     "version": "1.0.0",
-    "description": "Project, a maker's home over the workspace: what each project is, what changed, what is waiting, and the files that matter, as a first-party intentic extension",
+    "description": "Projects, the workspace's repositories as a dashboard of tiles: open one as its own tree, or start a new one in a press, as a first-party intentic extension",
     "license": "MIT",
     "private": true,
     "type": "module",

@@ -420,43 +420,43 @@ describe(`what a badge says`, () => {
     });
 });
 
-// The maker's table: the same rail with the Project view in the file tree's seat, and the file tree standing in for it
+// The maker's table: the same rail with the Projects dashboard in the file tree's seat, and the file tree standing in for it
 // while that extension is off. Read through the audience preference, so the switch is the same one Settings flips.
 describe(`the maker's rail`, () => {
     const projectView = (): ViewRegistration => ({
-        id: `project`,
-        label: `Project`,
+        id: `projects`,
+        label: `Projects`,
         surface: `rail`,
-        detect: () => [{ key: `project`, title: `Project` }],
+        detect: () => [{ key: `projects`, title: `Projects` }],
         view: async () => ({}),
     });
 
     it(`keeps the developer's permanent seats when nothing has been answered`, () => {
         expect(seatPolicy(`workspace`)).toBe(`always`);
-        expect(seatPolicy(`project`)).toBe(`signal`);
+        expect(seatPolicy(`projects`)).toBe(`signal`);
         expect(homeViewId()).toBe(`workspace`);
     });
 
-    it(`seats the Project view where the file tree was, once a maker has it`, () => {
+    it(`seats the Projects dashboard where the file tree was, once a maker has it`, () => {
         useAudience().setAudience(`maker`);
         const registered = registerView(`test`, projectView());
         try {
-            expect(seatPolicy(`project`)).toBe(`always`);
+            expect(seatPolicy(`projects`)).toBe(`always`);
             expect(seatPolicy(`workspace`)).toBe(`signal`);
-            expect(homeViewId()).toBe(`project`);
-            expect(railRank(`project`)).toBe(railRank(`agents`) + 1);
-            expect(railRank(`workspace`)).toBe(railRank(`project`) + 1);
-            expect(tabBarIds()).toContain(`project`);
+            expect(homeViewId()).toBe(`projects`);
+            expect(railRank(`projects`)).toBe(railRank(`agents`) + 1);
+            expect(railRank(`workspace`)).toBe(railRank(`projects`) + 1);
+            expect(tabBarIds()).toContain(`projects`);
         } finally {
             registered.dispose();
             useAudience().setAudience(`developer`);
         }
     });
 
-    it(`hands the seat back to the file tree while the Project extension is off, so a maker never has no home`, () => {
+    it(`hands the seat back to the file tree while the Projects extension is off, so a maker never has no home`, () => {
         useAudience().setAudience(`maker`);
         try {
-            expect(seatPolicy(`project`)).toBe(`always`);
+            expect(seatPolicy(`projects`)).toBe(`always`);
             expect(seatPolicy(`workspace`)).toBe(`always`);
             expect(homeViewId()).toBe(`workspace`);
             expect(tabBarIds()).toContain(`workspace`);
@@ -470,6 +470,6 @@ describe(`the maker's rail`, () => {
             .flatMap((group) => group.items)
             .filter((item) => item.seat === `always`)
             .map((item) => item.id);
-        expect(permanent).toEqual([`chat`, `agents`, `project`, `preview`]);
+        expect(permanent).toEqual([`chat`, `agents`, `projects`, `preview`]);
     });
 });

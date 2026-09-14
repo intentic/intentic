@@ -1,11 +1,13 @@
 import { existsSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { HEALTH_LIMIT, includeGlobs, MAX_REF_CANDIDATES, previewUrl, workspaceContract, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { repoGitDir } from "../history/history.js";
+import { AGENT_GIT_AUTHOR } from "../git/git.js";
+import { repoGitDir, syncRootExcludes } from "../history/history.js";
 import { cachedScheme } from "../ports/port-probe.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { appPanelKey, buildAppSpec, discoverApps } from "./layout/app-previews.js";
@@ -237,6 +239,25 @@ export const createWorkspaceRoutes = (services: Services) => {
                 ...(input.branch !== undefined ? { branch: input.branch } : {}),
                 separateGitDir: repoGitDir(services.config.historyRoot, input.name),
             });
+            services.history.notifyUserWrite();
+            return { name: input.name, path: input.name };
+        }),
+        // A repository from nothing: the folder, `git init` with its git dir on /history like a clone's, a README that
+        // names it, and one commit so agents have a main line to branch from (a worktree is cut from HEAD). Root's
+        // excludes converge at once, so the new folder is never swept into the workspace's own scope.
+        createRepo: i.createRepo.handler(async ({ input }) => {
+            if (!isValidRepoName(input.name)) {
+                throw new ORPCError("BAD_REQUEST", { message: "invalid or reserved repo name" });
+            }
+            const dir = join(services.workspace.root, input.name);
+            if (existsSync(dir)) {
+                throw new ORPCError("CONFLICT", { message: `"${input.name}" already exists in the workspace` });
+            }
+            await mkdir(dir, { recursive: true });
+            await services.git.init(dir, repoGitDir(services.config.historyRoot, input.name));
+            await writeFile(join(dir, "README.md"), `# ${input.name}\n`);
+            await services.git.commitAll(dir, `Start ${input.name}`, AGENT_GIT_AUTHOR);
+            await syncRootExcludes(services.config.historyRoot, await discoverRepos(services.workspace.root));
             services.history.notifyUserWrite();
             return { name: input.name, path: input.name };
         }),

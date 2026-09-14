@@ -2,7 +2,7 @@ import type { IntenticApi, ViewRegistration } from "@intentic/extension-api";
 import { describe, expect, it, vi } from "vitest";
 import { activate } from "./extension.js";
 
-// Pins that the home exists for an empty workspace too, and that the palette command lands on it.
+// Pins that the dashboard exists for an empty workspace too, and that the palette command lands on it.
 
 const capture = () => {
     const views: ViewRegistration[] = [];
@@ -23,21 +23,21 @@ const capture = () => {
         },
         navigate,
     } as unknown as IntenticApi;
-    activate(api, { extensionId: `intentic.project`, subscriptions: [] });
+    activate(api, { extensionId: `intentic.projects`, subscriptions: [] });
     return { views, commands, navigate };
 };
 
-describe(`the project extension`, () => {
+describe(`the projects extension`, () => {
     it(`registers one rail view that activates with no repositories at all`, () => {
         const { views } = capture();
-        const view = views.find((candidate) => candidate.id === `project`);
+        const view = views.find((candidate) => candidate.id === `projects`);
         expect(view?.surface).toBe(`rail`);
-        expect(view?.detect([], [])).toEqual([{ key: `project`, title: `Project`, icon: `home` }]);
+        expect(view?.detect([], [])).toEqual([{ key: `projects`, title: `Projects`, icon: `th-large` }]);
     });
 
-    it(`opens the home from the palette`, () => {
+    it(`opens the dashboard from the palette`, () => {
         const { commands, navigate } = capture();
-        commands.get(`project.open`)?.();
-        expect(navigate).toHaveBeenCalledWith(`/ext/project`);
+        commands.get(`projects.open`)?.();
+        expect(navigate).toHaveBeenCalledWith(`/ext/projects`);
     });
 });

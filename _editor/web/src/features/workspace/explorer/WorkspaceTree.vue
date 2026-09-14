@@ -63,6 +63,7 @@ interface MoreRow {
 
 const {
     tree,
+    rootDir = ``,
     rootHidden = 0,
     barren = [],
     filter = ``,
@@ -71,6 +72,8 @@ const {
     rowActions,
 } = defineProps<{
     tree: readonly WorkspaceTreeEntry[];
+    // The folder `tree` is the contents of, "" for the workspace root: where a create or a drop with no target lands.
+    rootDir?: string;
     // How many of the root's own entries the daemon's entry budget cut (0 = the root listing is complete).
     rootHidden?: number;
     // Complete for the whole workspace, unlike `tree`, which stops at the daemon's listing budget.
@@ -189,10 +192,10 @@ const byPath = computed(() => {
     return map;
 });
 const leadEntry = computed(() => (lead.value === null ? undefined : byPath.value.get(lead.value)));
-// The directory an op targets: a dir itself, else the file's parent, else the /work root.
+// The directory an op targets: a dir itself, else the file's parent, else the tree's own root.
 const targetDir = (path: string | null): string => {
     if (path === null) {
-        return ``;
+        return rootDir;
     }
     return byPath.value.get(path)?.type === `dir` ? path : parentDir(path);
 };

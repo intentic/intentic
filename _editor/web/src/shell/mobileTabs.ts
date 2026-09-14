@@ -2,7 +2,7 @@ import type { ViewBadge } from "@intentic/extension-api";
 import { computed, type ComputedRef } from "vue";
 import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
 import { usePanels } from "../features/extensions/usePanels";
-import { activationBadge, APPROVALS_VIEW_ID, detectActivations, extensionPath, homeViewId, PROJECT_VIEW_ID } from "../core-views/registry";
+import { activationBadge, APPROVALS_VIEW_ID, detectActivations, extensionPath, homeViewId, PROJECTS_VIEW_ID } from "../core-views/registry";
 
 // The four tab destinations MobileTabBar and ShellMobile both need. Three are constants; Review is the approvals
 // extension's tile when that pack is on, else the workspace's own Changes panel, so it can't be a literal list.
@@ -29,7 +29,7 @@ export function useTabRootPaths(): ComputedRef<readonly string[]> {
     const approvalsTile = useApprovalsTile();
     return computed(() => {
         const review = approvalsTile.value?.to ?? `/workspace`;
-        const home = homeViewId() === PROJECT_VIEW_ID ? `/ext/${PROJECT_VIEW_ID}` : `/workspace`;
+        const home = homeViewId() === PROJECTS_VIEW_ID ? `/ext/${PROJECTS_VIEW_ID}` : `/workspace`;
         return [`/agents`, home, `/menu`, review.split(`?`)[0] ?? review];
     });
 }

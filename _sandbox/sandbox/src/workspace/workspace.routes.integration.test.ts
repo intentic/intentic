@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -827,4 +827,40 @@ test("workspace.derived serves a file's shadow with its provenance, and distingu
     } finally {
         await rm(root, { recursive: true, force: true });
     }
+});
+
+test("workspace.createRepo makes a repository from nothing: a folder, git init on /history, a README, one commit; and refuses a taken or reserved name", async () => {
+    const workspace = tempWorkspace([{ name: "shop" }]);
+    const inits: { dir: string; gitDir?: string }[] = [];
+    const commits: { dir: string; message: string }[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                git: {
+                    status: async () => ({ branch: "main", dirty: false, files: [] }),
+                    listFiles: async () => [],
+                    init: async (dir, separateGitDir) => {
+                        inits.push({ dir, ...(separateGitDir === undefined ? {} : { gitDir: separateGitDir }) });
+                    },
+                    commitAll: async (dir, message) => {
+                        commits.push({ dir, message });
+                        return true;
+                    },
+                    clone: async () => {},
+                },
+            }),
+        ),
+    );
+
+    expect(await client.workspace.createRepo({ name: "notes" })).toEqual({ name: "notes", path: "notes" });
+    expect(inits).toEqual([{ dir: join(workspace.root, "notes"), gitDir: join(testConfig.historyRoot, "gits", "notes") }]);
+    expect(commits).toEqual([{ dir: join(workspace.root, "notes"), message: "Start notes" }]);
+    expect(await readFile(join(workspace.root, "notes", "README.md"), "utf8")).toBe("# notes\n");
+
+    // A folder that exists is not clobbered, and a reserved name or a path-escape is refused before anything is made.
+    expect(await errorCode(client.workspace.createRepo({ name: "shop" }))).toBe("CONFLICT");
+    expect(await errorCode(client.workspace.createRepo({ name: "root" }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.workspace.createRepo({ name: "../evil" }))).toBe("BAD_REQUEST");
+    expect(inits).toHaveLength(1);
 });

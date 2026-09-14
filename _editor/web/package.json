@@ -38,7 +38,7 @@
         "@intentic/ext-maintenance": "workspace:*",
         "@intentic/ext-pipelines": "workspace:*",
         "@intentic/ext-preview": "workspace:*",
-        "@intentic/ext-project": "workspace:*",
+        "@intentic/ext-projects": "workspace:*",
         "@intentic/ext-repo-apps": "workspace:*",
         "@intentic/ext-viewers": "workspace:*",
         "@intentic/ext-workflows": "workspace:*",

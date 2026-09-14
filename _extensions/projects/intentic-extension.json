@@ -1,0 +1,16 @@
+{
+    "$schema": "https://intentic.dev/intentic-extension.schema.json",
+    "publisher": "intentic",
+    "name": "projects",
+    "version": "1.0.0",
+    "category": "workspace",
+    "icon": "th-large",
+    "engines": { "intentic": "^2.12.0" },
+    "permissions": {
+        "sandbox": ["GET /workspace/repos", "POST /workspace/repos/new", "GET /workspace/file"]
+    },
+    "contributes": {
+        "views": [{ "id": "projects", "label": "Projects", "surface": "rail" }],
+        "commands": [{ "command": "projects.open", "title": "Go to Projects", "icon": "th-large" }]
+    }
+}

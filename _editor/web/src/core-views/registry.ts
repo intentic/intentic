@@ -69,8 +69,8 @@ export interface RailGroup {
 const always = (id: string, standIn?: string): RailItem => (standIn === undefined ? { id, seat: `always` } : { id, seat: `always`, standIn });
 const signal = (id: string): RailItem => ({ id, seat: `signal` });
 
-// The maker's home is the Project view (`@intentic/ext-project`), seated where a developer has the file tree.
-export const PROJECT_VIEW_ID = `project`;
+// The maker's home is the Projects dashboard (`@intentic/ext-projects`), seated where a developer has the file tree.
+export const PROJECTS_VIEW_ID = `projects`;
 export const WORKSPACE_VIEW_ID = `workspace`;
 
 // Every tile here badges when it needs the owner, and lights while a run of its own is in flight; being
@@ -99,7 +99,7 @@ const RAIL_GROUPS_BY_AUDIENCE: Record<Audience, readonly RailGroup[]> = {
         {
             id: `work`,
             label: `Work`,
-            items: [always(`chat`), always(`agents`), always(PROJECT_VIEW_ID, WORKSPACE_VIEW_ID), signal(WORKSPACE_VIEW_ID), always(`preview`)],
+            items: [always(`chat`), always(`agents`), always(PROJECTS_VIEW_ID, WORKSPACE_VIEW_ID), signal(WORKSPACE_VIEW_ID), always(`preview`)],
         },
         JUDGE,
         SETUP,
@@ -130,7 +130,7 @@ export const seatPolicy = (id: string): SeatPolicy => {
 };
 
 // The view a tile press on the home seat opens: the Project view when a maker has it, else the file tree.
-export const homeViewId = (): string => (useAudience().maker.value && isRegistered(PROJECT_VIEW_ID) ? PROJECT_VIEW_ID : WORKSPACE_VIEW_ID);
+export const homeViewId = (): string => (useAudience().maker.value && isRegistered(PROJECTS_VIEW_ID) ? PROJECTS_VIEW_ID : WORKSPACE_VIEW_ID);
 
 // Whether a tile is on the rail now, in one predicate: the rail and the More menu ask its positive and
 // negative of the same list. `pinned` overrules the table; `active` keeps the current area seated while you're in it.

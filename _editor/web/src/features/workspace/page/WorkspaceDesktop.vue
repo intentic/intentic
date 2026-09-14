@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, ResizeSeam, SegmentedControl, useNarrow } from "@intentic/ui";
+import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
@@ -15,7 +16,7 @@ import { personaStartDirs } from "../../sandbox/personas/personaCard";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { useRepoChecks } from "../../sandbox/environment/useRepoChecks";
 import { lensPersonaId, reachOf, reachSentence } from "../directory-ui/personaReach";
-import { workspaceAgent } from "../health/workspaceScope";
+import { workspaceAgent, workspaceDir } from "../health/workspaceScope";
 import { detectActivations } from "../../../core-views/registry";
 import { useEditBuffers } from "../files/useEditBuffers";
 import { useMonaco } from "../files/useMonaco";
@@ -48,6 +49,7 @@ import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
 import EditorPane from "../files/EditorPane.vue";
 import HistoryPanel from "../changes/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
+import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
 import WorkspaceTree from "../explorer/WorkspaceTree.vue";
@@ -66,6 +68,10 @@ const {
     tree,
     rootHidden,
     barren,
+    entriesByPath,
+    lazyChildren,
+    lazyHidden,
+    loadChildren,
     error,
     isLoading,
     refetch,
@@ -78,6 +84,27 @@ const {
     canEditFiles,
     refuseWrite,
 } = useWorkspaceTree();
+
+// The tree the explorer draws: the whole workspace, or one folder's contents when rooted there (workspaceDir). A
+// folder the walk carried opens at once; one it skipped is asked for, the way expanding it would.
+const scopedTree = computed<readonly WorkspaceTreeEntry[]>(() => {
+    const dir = workspaceDir.value;
+    if (dir === ``) {
+        return tree.value;
+    }
+    return entriesByPath.value.get(dir)?.children ?? lazyChildren.value.get(dir) ?? [];
+});
+watch(
+    () => [workspaceDir.value, entriesByPath.value.get(workspaceDir.value)?.children] as const,
+    ([dir, children]) => {
+        if (dir !== `` && children === undefined) {
+            void loadChildren(dir);
+        }
+    },
+    { immediate: true },
+);
+const scopedRootHidden = computed(() => (workspaceDir.value === `` ? rootHidden.value : (lazyHidden.value.get(workspaceDir.value) ?? 0)));
+const scopedBarren = computed(() => (workspaceDir.value === `` ? barren.value : barren.value.filter((path) => path.startsWith(`${workspaceDir.value}/`))));
 const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { forget, dirtyPaths } = useEditBuffers();
 const changes = useChanges();
@@ -106,11 +133,12 @@ const sidebarModeOptions = computed(() => [
     // A maker's changes are versions on the Project page, and the index is never theirs to stage.
     ...(maker.value ? [] : [{ label: `Changes`, value: `changes` as const, badge: changes.count.value, ...changesMark.value }]),
 ]);
-// A stored panel the audience no longer offers falls back to Files rather than rendering a hidden one.
+// A stored Changes panel the audience no longer offers falls back to Files rather than rendering a hidden one; the
+// history panel stays, since the workspace's own restore points are a maker's way back.
 watch(
     [maker, () => layout.sidebarPanel.value],
     ([plain, panel]) => {
-        if (plain && panel !== `files`) {
+        if (plain && panel === `changes`) {
             layout.setSidebarPanel(`files`);
         }
     },
@@ -671,7 +699,7 @@ const onRootDrop = (event: DragEvent): void => {
     // An internal tree-row drag moves rows to root; OS files upload to root; a drag from this document is neither.
     const internal = dataTransfer.getData(`application/x-intentic-path`);
     if (internal !== ``) {
-        void run(() => moveIntoMany(internal.split(`\n`), ``), `Couldn't move those files.`);
+        void run(() => moveIntoMany(internal.split(`\n`), workspaceDir.value), `Couldn't move those files.`);
         return;
     }
     if (!offer.files) {
@@ -713,7 +741,7 @@ onBeforeUnmount(() => {
 const onPick = (event: Event): void => {
     const input = event.target as HTMLInputElement;
     if (input.files !== null && input.files.length > 0 && !refuseWrite()) {
-        void enqueue(``, filesToEntries(input.files));
+        void enqueue(workspaceDir.value, filesToEntries(input.files));
     }
     input.value = ``;
 };
@@ -764,7 +792,6 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                     <SegmentedControl v-model="sidebarMode" size="xs" :options="sidebarModeOptions" />
                     <span class="flex-1"></span>
                     <button
-                        v-if="!maker"
                         type="button"
                         :class="ui.iconButton(layout.sidebarPanel.value === 'history' ? 'bg-overlay text-content' : '')"
                         @click="layout.setSidebarPanel('history')"
@@ -929,9 +956,10 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                 <!-- Bottom padding belongs to the tree, not this scrollport, or scrolled rows peek under the pinned empty line. -->
                 <div v-else-if="layout.sidebarPanel.value === 'files'" class="scrollbar-thin min-h-0 flex-1 overflow-auto pt-1">
                     <WorkspaceTree
-                        :tree="tree"
-                        :root-hidden="rootHidden"
-                        :barren="barren"
+                        :tree="scopedTree"
+                        :root-dir="workspaceDir"
+                        :root-hidden="scopedRootHidden"
+                        :barren="scopedBarren"
                         :filter="filter"
                         :selected-path="openPath"
                         :manageable-dirs="manageableDirs"
@@ -1007,6 +1035,8 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                             }}</span>
                             <!-- Which workspace copy this is about; absent on the shared tree, which needs no marker. -->
                             <WorkspaceScopeChip />
+                            <!-- Which folder the tree is rooted at; absent on the whole tree. -->
+                            <WorkspaceDirChip />
                             <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
                         </div>
                     </template>

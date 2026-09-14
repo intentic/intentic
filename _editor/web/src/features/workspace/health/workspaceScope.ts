@@ -14,3 +14,9 @@ export const scopeQuery = (query: URLSearchParams): URLSearchParams => {
     }
     return query;
 };
+
+// The directory the desktop view is rooted at, "" for the whole tree: a project opened from the Projects dashboard
+// shows as its own tree, with a chip back to everything. Mirrored to `?dir=` by useWorkspaceRoute, the same query
+// the phone's drill-down reads, so one address opens the same folder on either shell.
+export const workspaceDir = ref<string>(``);
+

@@ -97,7 +97,7 @@ which shape a directory is saves opening it:
 
 | layout | what is in `src/` | who wears it |
 | --- | --- | --- |
-| **UI extension** | `manifest.ts`, `host.ts` (the singleton the views and the API impl share), `extension.ts` and the `.vue` views | `acceptance`, `activity`, `approvals`, `automations`, `deployments`, `documentation`, `git-history`, `issues`, `knowledge`, `maintenance`, `pipelines`, `preview`, `project`, `repo-apps`, `workflows` |
+| **UI extension** | `manifest.ts`, `host.ts` (the singleton the views and the API impl share), `extension.ts` and the `.vue` views | `acceptance`, `activity`, `approvals`, `automations`, `deployments`, `documentation`, `git-history`, `issues`, `knowledge`, `maintenance`, `pipelines`, `preview`, `projects`, `repo-apps`, `workflows` |
 | **gateway pack** | `gateway.ts`, `client.ts`, `listener.ts` — a connector to somebody else's service, no `host.ts` because there is no view | `discord`, `google-workspace`, `imap`, `slack`, `telegram`, `whatsapp` |
 | **manifest-only pack** | nothing but the manifest: capabilities, skills, agent definitions or bin entries the daemon reads directly | `acp-agents`, `browsers`, `connectors`, `devices`, `pi-agent`, `social` |
 
@@ -137,7 +137,7 @@ confusion that this paragraph fixes.
 | `maintenance` | UI view | The chore book against this workspace: what routine upkeep each repository is owed (outdated deps, advisories, dead code, duplication, undocumented packages, tangled files, periodic surveys), the daemon-measured evidence behind each verdict, and an isolated fleet turn per chore. |
 | `pipelines` | UI view | CI runs: status, rerun/cancel, agent-driven fixes. |
 | `preview` | UI view | Per-repo dev-server preview panels. |
-| `project` | UI view | The maker's home: what each project is, what is waiting on the owner, what changed (the tree's own restore points with each landing's drafted sentence folded in, and a way back), and the files that matter with tooling left out. Seated where a developer has the file tree only for a maker (`core-views/registry.ts`); everyone else finds it in the More menu. |
+| `projects` | UI view | The workspace's repositories as a dashboard of tiles: each opens the Workspace rooted at that repository (`/workspace?dir=`), and New project makes a fresh one in a press (`POST /workspace/repos/new`). A maker's home seat (`core-views/registry.ts`); everyone else finds it in the More menu. |
 | `viewers` | UI viewers | **Every file format the app can show that isn't source code**: images, SVG (picture + source), PDF, audio/video (a streaming player over `/workspace/media`), docx, xlsx, via `contributes.viewers`. The core resolves a path to text or to opaque bytes and stops there; switch this off and those files fall back to a download. |
 | `connectors` | data-only | CLI-tool connectors as manifest data: no code. |
 | `social` | data-only | The platforms the agent acts on **as the owner** through the shared logged-in Chromium (Reddit, X, YouTube): a card, a login URL and a cheatsheet each. The browser itself is core, this pack buys identity, not tooling. |
