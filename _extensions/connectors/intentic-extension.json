@@ -647,6 +647,55 @@
                 }
             },
             {
+                "id": "fly",
+                "kind": "cli",
+                "catalog": {
+                    "name": "Fly.io",
+                    "logo": "flydotio",
+                    "description": "Machines, volumes and secrets on Fly.io apps.",
+                    "category": "deploy",
+                    "hint": "The agent drives Fly's Machines API over HTTPS (api.machines.dev), so nothing is installed and no flyctl login happens: list, create, start, stop, suspend, restart and destroy machines, run one-off commands inside them, resize a guest, and manage volumes, app secrets and IP addresses. An org token reaches every app in one organization, a deploy token reaches one app, and a read-only token can look without touching.",
+                    "guide": {
+                        "url": "https://fly.io/dashboard",
+                        "linkLabel": "Open the Fly.io dashboard",
+                        "scopes": "an org-scoped token (`fly tokens create org`); `fly tokens create readonly` for look-but-don't-touch",
+                        "steps": [
+                            "With flyctl: `fly tokens create org --name intentic --expiry 720h`.",
+                            "In the dashboard: pick the organization from the dropdown, then `Tokens` → `Create token`.",
+                            "Paste the whole token, `fm2_` prefix included.",
+                            "Not `fly auth token`: that one is short-lived and carries your entire account.",
+                            "`Organization` is the slug in the dashboard URL, `personal` unless you made another."
+                        ]
+                    }
+                },
+                "fields": [
+                    {
+                        "key": "token",
+                        "label": "Access token",
+                        "secret": true
+                    },
+                    {
+                        "key": "org",
+                        "label": "Organization",
+                        "placeholder": "personal",
+                        "default": "personal",
+                        "hint": "The slug the agent lists apps and machines under; an app-scoped token ignores it."
+                    }
+                ],
+                "env": {
+                    "FLY_API_TOKEN": "${token}",
+                    "FLY_ORG": "${org}"
+                },
+                "skill": "skills/fly/SKILL.md",
+                "probe": {
+                    "url": "https://api.machines.dev/v1/tokens/current",
+                    "headers": {
+                        "authorization": "Bearer ${token}"
+                    },
+                    "identity": "tokens.0.org_slug"
+                }
+            },
+            {
                 "id": "postgres",
                 "kind": "cli",
                 "catalog": {

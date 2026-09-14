@@ -1,7 +1,7 @@
 # @intentic/ext-connectors
 
 The systems an agent can be wired to: GitHub, GitLab, npm, Sentry, Redmine, Outline, Notion, SharePoint, SigNoz,
-Komodo, Cloudflare, Firecrawl, Postgres, MySQL.
+Komodo, Cloudflare, Fly.io, Firecrawl, Postgres, MySQL.
 
 Connecting one does two things at once: it turns on the capability other surfaces gate on (Pipelines appears when
 github or gitlab is on; Deployments when Komodo is), and it teaches the agent how to use that system by shipping
@@ -15,7 +15,7 @@ a skill alongside the credential.
 
 ## Key files
 
-- [intentic-extension.json](intentic-extension.json): the fifteen connectors, and what each one grants. This
+- [intentic-extension.json](intentic-extension.json): every connector card, and what each one grants. This
   file IS the package; there is no `src/`.
 - [skills/github](skills/github): a worked example of the shipped-skill half.
 - [env/postgres.Dockerfile](env/postgres.Dockerfile): a connector that needs a client installed in the sandbox,
@@ -38,6 +38,9 @@ here to every view that gates on them.
   only connector of `browser` kind here. The browser half exists for what no token can do anymore: WebAuthn
   2FA and publish approvals: which the sandbox answers with its own enrolled passkey (the daemon's browser
   passkey store).
+- Fly.io ships no client fragment on purpose: its skill drives the Machines API with curl, so the card works the
+  moment it is connected rather than after a rebuild. What it does carry is a bill that runs by the second,
+  which is why its skill puts the state-changing calls behind a say-first rule.
 - The webhook automations for these services are declared here too (`contributes.automationTemplates`): a
   GitHub or GitLab push, a Sentry alert, a Komodo deployment alert. A template that fires on the generic
   webhook has no trigger source to sit beside, so it goes with the pack carrying the card it needs connected,
