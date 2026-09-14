@@ -195,10 +195,15 @@ A reader's tour of `src/`: which directory answers which question, and the file 
     slowest of those actions pulls an image for minutes; the scope behind it is checked on the machine and
     never here. `device-commands.ts` is the other door: one of the machine's OWN CLI actions run from a button
     rather than through an agent, a closed enum whose argv is built here from the name, never sent by the
-    caller, because the socket underneath also carries `run_command`. Two of those names need more than a name,
-    and take it from what only the daemon knows rather than from the caller: the dev checkout recorded on this
-    container (`dev-reload`, which restarts the very daemon answering the request) and a pairing minted for that
-    one call (`sync-install`, enrolling desktop sync on a machine already connected). `self-host.ts` is what
+    caller, because the socket underneath also carries `run_command`. Three of those names need more than a
+    name, and take it from what only the daemon knows rather than from the caller: the dev checkout recorded on
+    this container (`dev-reload`, which restarts the very daemon answering the request, and `dev-rebuild`, which
+    builds a fresh image out there and swaps this container onto it) and a pairing minted for that one call
+    (`sync-install`, enrolling desktop sync on a machine already connected). `dev-rebuild` is also the one
+    action nothing can stream — it is detached on the machine, and the swap at the end kills the daemon that
+    would have carried the stream — so its own shell appends an exit mark to a log, and `dev-rebuild-log` reads
+    that log back. Progress for it is polled, not received, which is the only way a build nobody is connected to
+    can still be watched. `self-host.ts` is what
     makes any of that addressable — which connected device runs THIS sandbox, answered from readings already
     held, so a turn's prompt can be composed without waiting on a laptop. Readings are served from memory and
     refreshed behind the answer, each carrying its own `capturedAt` for the view to age it by.

@@ -1,5 +1,11 @@
 import type { DeviceCommandInput } from "@intentic/sandbox-contract";
-import { DeviceCommandInputSchema, DeviceLocalDirSchema } from "@intentic/sandbox-contract";
+import {
+    DEV_REBUILD_EXIT_MARK,
+    DEV_REBUILD_QUIET_MARK,
+    DeviceCommandInputSchema,
+    DeviceLocalDirSchema,
+    devRebuildLogPath,
+} from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { type DeviceCommandFacts, DEVICE_COMMANDS, outcomeOf, streamOf, succeeded } from "./device-commands.js";
 
@@ -117,6 +123,7 @@ test("implements every action the contract names", () => {
         "sync-install",
         "dev-reload",
         "dev-rebuild",
+        "dev-rebuild-log",
     ];
     expect(Object.keys(DEVICE_COMMANDS).toSorted()).toEqual(commands.toSorted());
 });
@@ -146,8 +153,46 @@ test("refuses to reload a sandbox that has no checkout behind it", () => {
 test("starts the checkout's rebuild in the background, logging where ic's own logs are", () => {
     const line = DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "/home/ada/intentic", sandboxId: "someone-else" }));
     expect(line).toBe(
-        'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"; mkdir -p "$HOME/.intentic/logs" && cd "/home/ada/intentic" && nohup pnpm rebuild:sandbox work-abc > "$HOME/.intentic/logs/dev-rebuild-work-abc.log" 2>&1 &',
+        'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"; ' +
+            'mkdir -p "$HOME/.intentic/logs" && cd "/home/ada/intentic" && ' +
+            `nohup sh -c 'pnpm rebuild:sandbox work-abc; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"' ` +
+            '> "$HOME/.intentic/logs/dev-rebuild-work-abc.log" 2>&1 &',
     );
+});
+
+// The status is appended by the BUILD's own shell, not by the daemon: by the time a rebuild ends, the daemon that
+// launched it, the container it ran in and the page that asked for it have all been replaced.
+test("has the rebuild write its own exit status where the log outlives everything that started it", () => {
+    const line = DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "/home/ada/intentic" })) ?? "";
+    expect(line).toContain(`printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"`);
+    // Single-quoted, so `$?` is the inner shell's status when it ends rather than the outer shell's when it starts.
+    expect(line).toContain(`nohup sh -c 'pnpm rebuild:sandbox work-abc;`);
+});
+
+// The read side, polled while a rebuild runs. Needs only the slug: reading a log takes the log's name, not the checkout.
+test("reads the rebuild log back with its mtime, bounded in bytes and lines", () => {
+    const line = DEVICE_COMMANDS["dev-rebuild-log"].line(facts({ sandboxId: "someone-else" })) ?? "";
+    expect(line).toContain('log="$HOME/.intentic/logs/dev-rebuild-work-abc.log"');
+    // Both dialects of mtime, because the machine holding a checkout is as often macOS as it is Linux.
+    expect(line).toContain('stat -c %Y "$log" 2>/dev/null || stat -f %m "$log" 2>/dev/null');
+    expect(line).toContain(`echo "${DEV_REBUILD_QUIET_MARK} $(( $(date +%s) - at ))"`);
+    // Polled every few seconds, and a docker build's log is not small.
+    expect(line).toContain('tail -c 12000 "$log" | tail -n 80');
+    // No log at all is an answer, not an error: nothing has rebuilt this sandbox from a checkout here.
+    expect(line).toContain(`echo "${DEV_REBUILD_QUIET_MARK} -"`);
+});
+
+test("cannot name a log for a sandbox that does not know its own name", () => {
+    expect(DEVICE_COMMANDS["dev-rebuild-log"].line(facts({ ownSlug: undefined }))).toBeUndefined();
+    // Unlike the rebuild beside it, a missing checkout is no obstacle to reading how the last one ended.
+    expect(DEVICE_COMMANDS["dev-rebuild-log"].line(facts({ devRoot: undefined }))).toContain("dev-rebuild-work-abc.log");
+});
+
+// One reader, one writer, one path: a card that named the log itself could point at a file nothing writes.
+test("writes and reads the same log path", () => {
+    const written = DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "/home/ada/intentic" })) ?? "";
+    expect(written).toContain(devRebuildLogPath("work-abc").replace("~", "$HOME"));
+    expect(DEVICE_COMMANDS["dev-rebuild-log"].line(facts()) ?? "").toContain(devRebuildLogPath("work-abc").replace("~", "$HOME"));
 });
 
 // Same rule as the reload beside it: no checkout recorded, no line — a path on somebody's laptop is never guessed.

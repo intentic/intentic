@@ -1,5 +1,6 @@
 import { installScriptUrl } from "@intentic/constants";
 import type { DeviceCommand, DeviceCommandInput, DeviceCommandResult } from "@intentic/sandbox-contract";
+import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import { callTool, forgetPull } from "./device-reports.js";
@@ -118,15 +119,31 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
      * (`pnpm rebuild:sandbox`, which builds intentic-sandbox:dev and swaps this container onto it). Detached, with its
      * output to a log beside ic's own, for two reasons: a cold build can run past any timeout a device command may
      * have, and the swap at the end kills the daemon awaiting the answer anyway. So the call returns as soon as the
-     * build is under way, the sandbox coming back is the outcome, and the log is where a build that never finishes
-     * says why. */
+     * build is under way, and `dev-rebuild-log` below is how anyone watches the rest of it.
+     *
+     * The build runs under its own `sh -c` SOLELY so the exit mark is appended by the same shell: the status has to be
+     * written by something that outlives the daemon, the container and the page, because all three are gone by the time
+     * a rebuild ends. Without it a finished build and a stalled one read identically from outside. */
     "dev-rebuild": {
         done: "The rebuild is running on that device. Your sandbox restarts on the new image when it is built, and this page reconnects on its own.",
         line: (facts) =>
             facts.devRoot === undefined || facts.ownSlug === undefined
                 ? undefined
-                : `${WITH_PNPM} mkdir -p "$HOME/.intentic/logs" && cd ${shellDir(facts.devRoot)} && nohup pnpm rebuild:sandbox ${facts.ownSlug} > "$HOME/.intentic/logs/dev-rebuild-${facts.ownSlug}.log" 2>&1 &`,
+                : `${WITH_PNPM} mkdir -p "$HOME/.intentic/logs" && cd ${shellDir(facts.devRoot)} && nohup sh -c 'pnpm rebuild:sandbox ${facts.ownSlug}; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"' > ${shellDir(devRebuildLogPath(facts.ownSlug))} 2>&1 &`,
         needs: "only a dev sandbox launched by dev-sandbox.sh knows which checkout to rebuild from",
+    },
+    /* The read side of the command above, polled by whoever is watching. Bounded twice (bytes, then lines) because it
+     * is polled every few seconds and a docker build's log is not small; the header is the log's own mtime, which is
+     * what separates a build sitting inside a slow layer from one whose machine went to sleep. Needs only the slug —
+     * reading a log takes the log's name, not the checkout it came from — so a sandbox can still be told how its last
+     * rebuild ended after the checkout it was built from has moved. */
+    "dev-rebuild-log": {
+        done: "That device has no rebuild log for this sandbox.",
+        line: (facts) =>
+            facts.ownSlug === undefined
+                ? undefined
+                : `log=${shellDir(devRebuildLogPath(facts.ownSlug))}; if [ -f "$log" ]; then at=$(stat -c %Y "$log" 2>/dev/null || stat -f %m "$log" 2>/dev/null || echo); if [ -n "$at" ]; then echo "${DEV_REBUILD_QUIET_MARK} $(( $(date +%s) - at ))"; else echo "${DEV_REBUILD_QUIET_MARK} ?"; fi; tail -c 12000 "$log" | tail -n 80; else echo "${DEV_REBUILD_QUIET_MARK} -"; fi`,
+        needs: "this sandbox does not know its own name, so it cannot name the log to read",
     },
     // The dev inner loop, run where the checkout is: compile the daemon and restart this very container. The slug is
     // this sandbox's own, never the caller's, and the answer usually never arrives — the daemon carrying it is the one

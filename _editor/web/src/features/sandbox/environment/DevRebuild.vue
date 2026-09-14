@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, Notice, type NoticeModel } from "@intentic/ui";
-import { noticeFrom } from "@intentic/ui/async";
-import { computed, onBeforeUnmount, ref } from "vue";
+import { devRebuildLogPath } from "@intentic/sandbox-contract";
+import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, DeviceRunLog, Notice, type NoticeModel, ui } from "@intentic/ui";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import ConnectDeviceHint from "../devices/ConnectDeviceHint.vue";
-import { runDeviceCommand, useHostRunning } from "../devices/useDevices";
+import { useHostRunning } from "../devices/useDevices";
+import { type DevRebuildPhase, rebuildRunning, useDevRebuild } from "./useDevRebuild";
 
 // Rebuilding a sandbox whose base was compiled from a checkout, from that checkout. Not HostRecreate's flow: that one
 // swaps between images that already exist, and the image this asks for — the working tree as it is now — is not one of
@@ -14,7 +15,11 @@ import { runDeviceCommand, useHostRunning } from "../devices/useDevices";
 // is the load-bearing choice: the closed set of commands lives in the DAEMON and what crosses to the machine is a line
 // for `run_command`, a tool every released agent already has. A new op would instead have to reach a machine whose
 // agent is usually older than the sandbox asking — which is every dogfooding machine, and is what made the first
-// attempt answer "Input validation failed". Nothing streams back for the same reason: the build is detached out there.
+// attempt answer "Input validation failed".
+//
+// Nothing streams back from the build itself, for the same reason: it is detached out there, and the swap at the end
+// replaces the daemon that would have carried a stream. So progress is READ rather than received — useDevRebuild polls
+// the machine's own log — and the run it draws lives outside this component, because the build outlives it.
 
 const props = defineProps<{
     slug: string;
@@ -25,14 +30,25 @@ const props = defineProps<{
 }>();
 
 const hostId = useHostRunning(() => props.slug);
+const { run, elapsed, start, adopt, dismiss } = useDevRebuild(props.slug);
 
-const starting = ref(false);
-const failure = ref<NoticeModel | undefined>(undefined);
-const done = ref<string | undefined>(undefined);
+// The card is drawn from the machine's log, not from having clicked the button: a rebuild started in a terminal, in
+// another tab, or by this tab before the restart wiped it all land here the same way.
+watch(
+    hostId,
+    (id) => {
+        if (id !== undefined) {
+            adopt(id);
+        }
+    },
+    { immediate: true },
+);
+
 const confirming = ref(false);
-
 const overlayOpen = ref(false);
 const anchorRef = ref<HTMLElement>();
+
+const live = computed(() => rebuildRunning(run.phase));
 
 // The two costs, side by side: the build interrupts nothing, the swap at the end of it is the restart.
 const cost = `Builds the image while you keep working (may take minutes), then restarts (~30s). /work is kept.`;
@@ -73,31 +89,68 @@ const onButtonClick = (): void => {
 
 onBeforeUnmount(() => clearTimeout(timer));
 
-// Where the detached build writes, so a rebuild that never comes back can still say why. Same folder ic logs its own
-// recreates into, and the daemon builds the same path when it forms the command (hosts/device-commands.ts).
-const logPath = computed(() => `~/.intentic/logs/dev-rebuild-${props.slug}.log`);
+// Where the detached build writes, named by the contract that also builds both command lines from it, so the path a
+// reader is sent to is the path something actually writes.
+const logPath = computed(() => devRebuildLogPath(props.slug));
 
 const execute = async (): Promise<void> => {
     confirming.value = false;
     const id = hostId.value;
-    if (id === undefined || starting.value) {
-        return;
-    }
-    starting.value = true;
-    failure.value = undefined;
-    done.value = undefined;
-    try {
-        // The machine's own sentence either way: a refusal (commands switched off, no checkout) is a value here, not a
-        // throw, and only an unreachable device throws.
-        const result = await runDeviceCommand(id, `dev-rebuild`);
-        done.value = result.ok ? result.message : undefined;
-        failure.value = result.ok ? undefined : { tone: `warning`, title: `That device didn't start the rebuild.`, detail: result.message };
-    } catch (error) {
-        failure.value = noticeFrom(error, `Couldn't reach that device to rebuild this sandbox.`);
-    } finally {
-        starting.value = false;
+    if (id !== undefined && !live.value) {
+        await start(id);
     }
 };
+
+// Minutes first, because every rebuild worth watching is minutes; seconds padded so the number stops jittering.
+const elapsedLabel = computed(() => {
+    const seconds = elapsed.value;
+    if (seconds === undefined) {
+        return undefined;
+    }
+    const minutes = Math.floor(seconds / 60);
+    return minutes === 0 ? `${seconds}s` : `${minutes}m ${String(seconds % 60).padStart(2, `0`)}s`;
+});
+
+// Each phase says what is happening to the SANDBOX, since that is what the reader is waiting on — not what the device
+// is doing, and not what this page is doing about it.
+const PROGRESS: Partial<Record<DevRebuildPhase, string>> = {
+    starting: `Starting the build on that device…`,
+    building: `Building the image from your checkout. Your sandbox keeps working, and restarts on its own once it's built.`,
+    restarting: `Restarting your sandbox on the new image. This page reconnects on its own.`,
+};
+const progress = computed(() => PROGRESS[run.phase]);
+
+const done = computed(() =>
+    run.phase === `done` ? `Rebuilt from your checkout in ${elapsedLabel.value ?? `a few minutes`}. You're running the new image.` : undefined,
+);
+
+const failure = computed<NoticeModel | undefined>(() => {
+    if (run.phase === `failed`) {
+        const title = run.exitCode === undefined ? `That device didn't run the rebuild.` : `The rebuild failed on that device (exit ${run.exitCode}).`;
+        return { tone: `warning`, title, ...(run.trouble === undefined ? {} : { detail: run.trouble }) };
+    }
+    if (run.phase === `lost`) {
+        return {
+            tone: `warning`,
+            title: `That rebuild stopped reporting, and never said how it ended.`,
+            detail: run.trouble ?? `Nothing has been written to its log for a while: the machine may have slept, or the build was stopped.`,
+        };
+    }
+    return undefined;
+});
+
+// A docker layer builds for minutes without printing anything, so a still pane is not evidence of a stuck build — but
+// after a while it is worth saying which of the two this is, rather than leaving the reader to guess.
+const QUIET_AFTER_S = 90;
+const quiet = computed(() => {
+    const seconds = run.quietFor ?? 0;
+    return run.phase === `building` && seconds > QUIET_AFTER_S
+        ? `Nothing new in the log for ${Math.round(seconds / 60)}m — a single docker layer can take that long.`
+        : undefined;
+});
+
+// A read that failed while the build carries on regardless: the machine's own words, not a verdict on the rebuild.
+const hiccup = computed(() => (live.value ? run.trouble : undefined));
 </script>
 
 <template>
@@ -113,9 +166,10 @@ const execute = async (): Promise<void> => {
                 @focusout="onBlur"
             >
                 <Button
-                    :label="starting ? `Starting…` : `Rebuild from checkout`"
+                    :label="live ? `Rebuilding…` : `Rebuild from checkout`"
                     size="small"
-                    :loading="starting"
+                    :loading="live"
+                    :disabled="live"
                     @click="onButtonClick"
                 >
                     <template #icon><Icon name="bolt" /></template>
@@ -144,17 +198,47 @@ const execute = async (): Promise<void> => {
                 </div>
             </AnchoredOverlay>
 
-            <Notice v-if="failure" :of="failure" />
             <!--
-                The build outlives this page: the sandbox coming back is its outcome, and the log is the only place a
-                build that never finishes can say why — so it is named here rather than only in the failure case.
+                The whole point of this block: a build detached on another machine, drawn as something in progress. The
+                clock is this page's own, the lines are the machine's log, and both survive leaving the tab, reloading,
+                and the sandbox restarting underneath it.
             -->
-            <template v-else-if="done">
-                <p class="text-2xs text-muted">{{ done }}</p>
+            <div v-if="progress" class="flex items-center gap-2 text-2xs text-muted">
+                <Icon name="refresh" spin />
+                <span>{{ progress }}</span>
+                <span v-if="elapsedLabel" class="ml-auto shrink-0 font-mono tabular-nums text-subtle">{{ elapsedLabel }}</span>
+            </div>
+
+            <!--
+                Shown from the first phase, before a single line exists, because an empty pane that says what it is
+                waiting for is the signal: this is the difference between "running" and "nothing happened".
+            -->
+            <DeviceRunLog
+                v-if="live || run.lines.length > 0"
+                :lines="run.lines"
+                :running="live"
+                empty="Waiting for the first line from that device…"
+                note="Running on that device: it keeps going even if you leave this page."
+            />
+
+            <p v-if="quiet" class="text-2xs text-subtle">{{ quiet }}</p>
+            <p v-if="hiccup" class="text-2xs text-subtle">Can't read the log at the moment ({{ hiccup }}) — the build itself is unaffected.</p>
+
+            <Notice v-if="failure" :of="failure" />
+            <p v-else-if="done" class="flex items-center gap-2 text-2xs text-muted">
+                <Icon name="check" class="text-success" />
+                <span>{{ done }}</span>
+            </p>
+
+            <!-- The log is named under every ending, since it is the only full account of a build nobody watched. -->
+            <div v-if="failure || done" class="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <p class="text-2xs text-subtle">
-                    If it hasn't come back in a few minutes, <span class="font-mono">{{ logPath }}</span> on that device says how far it got.
+                    The full output is in <span class="font-mono">{{ logPath }}</span> on that device.
                 </p>
-            </template>
+                <button type="button" :class="ui.linkButton(`gap-1 text-2xs text-subtle hover:text-content`)" @click="dismiss">
+                    <Icon name="times" />Dismiss
+                </button>
+            </div>
 
             <ConfirmDialog
                 :open="confirming"
