@@ -113,11 +113,28 @@ deployment engine, but it is just one of the many tools an agent can run (like `
 browser, or `docker`). It is never a band, a card, a "superpower", a "sidecar", or an FAQ headline on
 this page.
 
+**One picture of the deal, added above the tour 2026-09-14 (recorded decision).** The page went from the
+hero's promise straight into five verbs, and everything between those two is a thing the reader has to
+hold as words: agents, a workspace, a plan they approve. `#build` (the band list below) puts a picture
+under all of it first — your AI plans are the stone, agents do the building, the temple that goes up is
+your software, and you direct, watch and approve. It costs about 930px at 1440 wide, which makes it the
+first band added back since the 2026-08-02 cut, and the reason it is allowed is that **it adds no
+argument**: it adds the model every argument below it was already assuming the reader had.
+
+**And it is a temple, not an engine, for a reason worth keeping.** The drawing was a car first — the
+plans as fuel, intentic as the engine, a throttle, a brake and a row of instruments — and it was thrown
+out whole. It read well and it was wrong twice: a page whose entire design system is a carved temple
+cannot run a second metaphor without the reader paying for the switch, and an engine diagram needed the
+mechanisms (branches, checks, terminals) named to make sense, which is exactly the vocabulary a
+first-time reader does not have. The building site says the same thing with three nouns a stranger
+already owns. If this band is ever redrawn, redraw the temple.
+
 ## Where the page lives
 
 - Copy: `_site/site-content/src/landing.ts`, a single `LandingContent` object. Change copy there,
   not in the `.astro` files. There is **no `SITE_VARIANT`, no `/preview` route, and no a/b/c
-  variants**: that system is retired.
+  variants**: that system is retired. Two bands keep their words elsewhere because they are shared or
+  drawn: `#trust` in `about.ts`, `#build` in `temple.ts`.
 - Structure: `_site/site/src/components/Landing.astro` renders the `LandingContent`;
   `_site/site/src/pages/index.astro` is the single entry.
 - **The look is the whole site's, not this page's.** The carved-stone treatment: a photographed temple
@@ -158,9 +175,10 @@ this page.
 
 ## Page architecture
 
-One page, one continuous scroll: **the claim, a five-verb tour, two objection bands and a trust band**,
-down from fourteen. Section ids in parens; copy per section in `landing.ts`, except `#trust`, whose copy
-is in `about.ts` because `/about/` shares it.
+One page, one continuous scroll: **the claim, one picture of the deal, a five-verb tour, two objection
+bands and a trust band**, down from fourteen. Section ids in parens; copy per section in `landing.ts`,
+except `#trust`, whose copy is in `about.ts` because `/about/` shares it, and `#build`, whose handful of
+words are in `temple.ts`.
 
 1. **Hero (`#hero`)**: the greeting eyebrow, the brand line kept verbatim ("You delegate. Agents work.
    You approve."), the one-sentence subhead `A workspace for coding agents.`, two CTAs, and **three frames
@@ -216,7 +234,27 @@ is in `about.ts` because `/about/` shares it.
    not something a script measures. Pinning the plate to its own 16:9 ratio made the art's scale a
    single term (`width / 1600`) and the carved band is 90 of those units, which is 5.625vw. That is
    the whole reason every page can have this bar: there is nothing left for only this page to compute.
-2. **What you do (the five verbs (`#verbs`)**) the one telling of what the product does, in the
+2. **The build (`#build`)**: one drawing of the whole deal, and the first thing under the hero. The
+   hero ends on a promise the reader has nothing to picture yet (agents work, you approve); this is the
+   shape of it, as a building site: the AI plans you already pay for are the **stone**, the **site** is
+   agents doing the work with you watching from the terrace, and the **temple** going up is your
+   software. Under the middle stage, the three things that never leave your hands: *you direct · you
+   watch · you approve*. Six short lines of copy in total (`site-content/src/temple.ts`), because the
+   picture is the argument.
+
+   **It is the only band on the page that is a DRAWING, and that is a rule rather than a look.**
+   Everywhere else a frame means "this is a photograph of the product", and the three things this band
+   relates — a subscription, a fleet of agents, a shipped release — are not one surface and never could
+   be photographed together. The scene (`TempleFigure.astro`) is three `<svg>` panels in a grid whose
+   columns are proportional to their viewBoxes, so on a wide window they scale identically and abut into
+   one continuous ground line, and on a narrow one they stack into three legible pictures, each with its
+   own caption. It builds itself: a wave of light runs up the temple stone by stone and the lotus lights
+   on the summit when the wave arrives. Under `prefers-reduced-motion` the temple simply stands finished.
+
+   **No mechanism may be named in this band.** Branches, worktrees, terminals, sandboxes and diffs are
+   all true, all named further down the page, and all a word a first-time reader has not been given yet:
+   the band exists precisely to give them a picture to hang those words on. (P1, P2, P6)
+3. **What you do (the five verbs (`#verbs`)**) the one telling of what the product does, in the
    same five verbs as the Features menu, so the home page and the feature pages read as one product.
    **Orchestrate** leads at full column width with the whole fleet board; **Empower**, **Automate**,
    **Supervise** and **Delegate** follow as a 2×2 grid of compact cards: each a cropped real screen
@@ -225,26 +263,26 @@ is in `about.ts` because `/about/` shares it.
    capture exists (same rule as its feature page). This one band replaced the old four-beat `#loop` and
    six-row `#extend` (see the 2026-08-09 decision above): the product's powers were told three times:
    the loop beats, the extend bento, and the menu: and once is enough. (P2, P4, P5, P6)
-3. **Why a workspace (`#workspace`)**: the answer to the question the hero raises. The hero promises
+4. **Why a workspace (`#workspace`)**: the answer to the question the hero raises. The hero promises
    the reader approves everything, so this is where the page shows what they approve *with*: the diff,
    the editor and file tree, the agent's own terminal, the run as it happens. Made as a comparison
    against a chat box, two columns of nouns, because the asymmetry is the argument. Replaced the
    ownership ledger on 2026-08-15 (recorded decision above). (P1, P6)
-4. **Economics (`#economics`)**: the deal, and the answer to the reflex that "ten agents" triggers:
+5. **Economics (`#economics`)**: the deal, and the answer to the reflex that "ten agents" triggers:
    bring your own model subscription, self-hosted, pay us nothing: never a meter on model
    usage. Carries the free story. (P7)
-5. **About the creator (`#trust`)**: the last objection before the command. The page has just asked a
+6. **About the creator (`#trust`)**: the last objection before the command. The page has just asked a
    visitor to run a container on their own machine and hand it a GitHub token and a database password;
    its own first card answers the architectural half of *"can I trust this"* and is now the only place
    on the page that does, and the rest of the band answers the human half.
    Creator-forward: the name, the role, three profile chips, then four cards, *why trust intentic ·
    open source first · it builds itself · honest about its age*. Copy in `about.ts`, shared with
    `/about/` so the two cannot drift. (P1, P4)
-6. **Get connected (`#connect`)**, the speed proof: ① Sign in with Google ② Your sandbox is waiting
+7. **Get connected (`#connect`)**, the speed proof: ① Sign in with Google ② Your sandbox is waiting
    (made for you, and the step that defines the word) ③ Paste one command, with the real command block. Two of the three are things
    the visitor does not have to do, which is the point the band is making. (P3)
-7. **FAQ (`#faq`)**: see below.
-8. **Final CTA**: restate the claim + `Get started free` · `See the source`. (close)
+8. **FAQ (`#faq`)**: see below.
+9. **Final CTA**: restate the claim + `Get started free` · `See the source`. (close)
 
 ### The trust band's rules (they are what keep it from backfiring)
 

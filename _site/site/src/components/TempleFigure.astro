@@ -1,0 +1,744 @@
+---
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════════
+ * THE BUILD. A temple going up, drawn rather than diagrammed: a quarry of cut stone on the left, a
+ * causeway of workers carrying it, you on a terrace watching, and the temple rising on the right.
+ *
+ * WHY A SCENE AND NOT A DIAGRAM. What this band has to land is a relation between three things a reader
+ * has no picture of — a subscription, a fleet of agents, a shipped product — and boxes joined by arrows
+ * only ever say "these are related". A building site says which is the material, who does the lifting and
+ * who the building is for, before a word under it is read. The words under it are three labels and three
+ * lines; everything else here is drawing.
+ *
+ * THE PROVIDER MARKS ARE CUT INTO THE STONES, which is the one joke the picture tells and the one thing it
+ * has to be literal about: the AI plans you already pay for ARE the material. They are read from the cost
+ * band's own account list, so the quarry and `#economics` can never name different providers.
+ *
+ * THREE PANELS, ONE PICTURE. The scene is three `<svg>`s in a grid whose columns are proportional to their
+ * viewBoxes (260 : 420 : 520) and whose viewBox heights are equal, so on a wide window they scale
+ * identically and abut into one continuous ground line. On a narrow one they stack, and each becomes a
+ * legible picture of its own stage with its caption under it — which is the only honest way to put a
+ * 1200-unit-wide scene on a phone. `preserveAspectRatio="xMidYMax slice"` is what makes the stack work:
+ * every panel is anchored to its ground line, so a short box crops sky rather than stone.
+ *
+ * IT BUILDS ITSELF, and that is the whole reason this is animated at all: a wave of light runs up the
+ * temple stone by stone, workers walk the causeway, and the lotus on the summit lights when the wave
+ * reaches it. Nothing here animates a layout — opacity and transform only — and under
+ * `prefers-reduced-motion` the temple simply stands finished with the crew mid-causeway.
+ *
+ * EVERY CLASS IS PREFIXED `tp-`. Astro's scoping stops this file leaking out, but not the home page
+ * leaking in: rendered inside `.home`, an unprefixed `.stage` or `.card` would collect that page's rules.
+ *
+ * The words are `site-content/src/temple.ts`. Nothing here authors a sentence.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
+import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
+import { landingContent } from "@intentic/site-content/landing";
+import { templeScene, type TempleControl } from "@intentic/site-content/temple";
+import { LOTUS_PETALS } from "./ornaments";
+
+const scene = templeScene;
+
+/* ── The grid the whole scene is cut on ──────────────────────────────────────────────────────────────
+ * One stone, one ground line, one course height, shared by the quarry and the temple so a stone carried
+ * out of one fits the other. Everything else in this drawing is measured from these five numbers. */
+const STONE = { w: 38, h: 20 };
+const PITCH = { x: 40, y: 22 };
+const GROUND = 300;
+const PANEL = { quarry: 260, site: 420, temple: 520 };
+const VIEW_H = 340;
+
+interface Stone {
+    x: number;
+    y: number;
+}
+
+/** A course of `n` stones, centred on `cx`, `row` courses above the ground line (row 0 sits on it). */
+const course = (cx: number, n: number, row: number): Stone[] => {
+    const y = GROUND - STONE.h - row * PITCH.y;
+    const x0 = cx - (n * PITCH.x) / 2 + (PITCH.x - STONE.w) / 2;
+    return Array.from({ length: n }, (_, i) => ({ x: x0 + i * PITCH.x, y }));
+};
+
+/* ── The quarry: eight stones, one per plan ──────────────────────────────────────────────────────── */
+const quarryCx = PANEL.quarry / 2;
+const quarryStones = [...course(quarryCx, 4, 0), ...course(quarryCx, 3, 1), ...course(quarryCx, 1, 2)];
+/* The marks go on the stones in the order the cost band lists them, from the bottom of the pile up. A
+ * ninth account would want a ninth stone in `quarryStones` rather than a ninth mark on eight. */
+const quarried = landingContent.economics.accounts.map((account, index) => ({ ...quarryStones[index]!, logo: account.logo, name: account.name }));
+
+/* ── The temple: a three-tier platform under three towers ────────────────────────────────────────── */
+const templeCx = PANEL.temple / 2;
+const towerLeft = templeCx - 119;
+const towerRight = templeCx + 119;
+const templeStones: Stone[] = [
+    // The platform: three courses, each a stone narrower on every side.
+    ...course(templeCx, 12, 0),
+    ...course(templeCx, 10, 1),
+    ...course(templeCx, 8, 2),
+    // The central tower. It keeps a one-stone shaft for its last two courses rather than tapering to a point,
+    // which is the difference between a temple and a pyramid of boxes.
+    ...course(templeCx, 4, 3),
+    ...course(templeCx, 3, 4),
+    ...course(templeCx, 3, 5),
+    ...course(templeCx, 2, 6),
+    ...course(templeCx, 2, 7),
+    ...course(templeCx, 1, 8),
+    ...course(templeCx, 1, 9),
+    // Two shorter towers, one either side, standing on the same platform and reaching its edges exactly.
+    ...course(towerLeft, 2, 3),
+    ...course(towerLeft, 2, 4),
+    ...course(towerLeft, 1, 5),
+    ...course(towerLeft, 1, 6),
+    ...course(towerRight, 2, 3),
+    ...course(towerRight, 2, 4),
+    ...course(towerRight, 1, 5),
+    ...course(towerRight, 1, 6),
+];
+/* BUILT BOTTOM UP, left to right, because that is the order a wall goes up in and the order the eye reads
+ * a wave travelling. The index is the stone's beat in the cycle; the summit is the last of them, which is
+ * what lets the finial light on the same beat the wave arrives. */
+const laid = [...templeStones]
+    .sort((a, b) => b.y - a.y || a.x - b.x)
+    .map((stone, order) => ({ ...stone, order }));
+
+/* The finial stands ON the summit, so it is measured from the highest stone rather than from a course
+ * number: add a course to the central tower and the lotus rises with it. `FOOT` is where the flower's base
+ * falls inside its own 52-unit box — the petals run to y=26 on a 32-grid offset by -1.3. */
+const FINIAL = { size: 52, foot: 44 };
+const summitY = Math.min(...laid.map((stone) => stone.y));
+
+/* ── The crew ────────────────────────────────────────────────────────────────────────────────────────
+ * `rest` is where a worker stands when the animation is off, so a reader with reduced motion gets a crew
+ * spread along the causeway rather than six figures stacked on the left edge. */
+const crew = [
+    { from: -30, to: 450, rest: 45, delay: 0, load: true },
+    { from: -30, to: 450, rest: 140, delay: 2.4, load: true },
+    { from: -30, to: 450, rest: 300, delay: 4.8, load: true },
+    { from: -30, to: 450, rest: 400, delay: 7.2, load: true },
+    { from: 450, to: -30, rest: 100, delay: 1.2, load: false },
+    { from: 450, to: -30, rest: 350, delay: 6, load: false },
+];
+
+const CONTROL_ICONS: Record<TempleControl["icon"], string> = {
+    // The drawing you hand the site: what gets built, and in what order.
+    direct: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7.5 9.5h9M7.5 13.5h5"/>',
+    watch: '<path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3.1"/>',
+    approve: '<path d="m4.5 12.6 4.8 4.8L19.5 7.2"/>',
+};
+
+const glyph = (paths: string) =>
+    `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+---
+
+{/* ONE PICTURE TO A SCREEN READER, spoken as the paragraph in `temple.ts`. A listener handed eight brand
+    names, a crew and a temple's worth of stones has the parts and none of the sense. */}
+<figure class="tp" role="img" aria-label={scene.label}>
+    {/* The paint servers, once, for all three panels: `url(#id)` resolves against the document, so this
+        hidden svg is what keeps the stone in the quarry the same stone as the stone in the temple. */}
+    <svg class="tp-defs" width="0" height="0" aria-hidden="true" focusable="false">
+        <defs>
+            <linearGradient id="tp-face" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#c9a05c" stop-opacity="0.3" />
+                <stop offset="1" stop-color="#c9a05c" stop-opacity="0.09" />
+            </linearGradient>
+            <linearGradient id="tp-rock" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#c9a05c" stop-opacity="0.14" />
+                <stop offset="1" stop-color="#c9a05c" stop-opacity="0.03" />
+            </linearGradient>
+            <radialGradient id="tp-halo">
+                <stop offset="0" stop-color="#e07b27" stop-opacity="0.4" />
+                <stop offset="0.55" stop-color="#e07b27" stop-opacity="0.12" />
+                <stop offset="1" stop-color="#e07b27" stop-opacity="0" />
+            </radialGradient>
+        </defs>
+    </svg>
+
+    <div class="tp-scene">
+        <!-- ═══ The quarry ═══════════════════════════════════════════════════════════════════════ -->
+        <div class="tp-stage tp-stage-stone">
+            <svg class="tp-panel" viewBox={`0 0 ${PANEL.quarry} ${VIEW_H}`} preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">
+                {/* THE FACE THE STONE IS CUT FROM, and it is cut in BENCHES — right angles only, stepping down
+                    to the right. A jagged outline here draws a mountain, and a mountain is scenery; a worked
+                    face says the stones in front of it came out of it, in courses, like the ones going up on
+                    the far panel. */}
+                <path class="tp-rock" d="M4 300V140h44v34h48v34h52v40h56v52z" />
+                <path class="tp-seam" d="M48 174v126M96 208v92M148 248v52" />
+
+                {/* The cutter, and the only figure on the plate whose stone has not been cut yet. Facing the
+                    face, mallet up: the pile below is what they have already taken out of it. */}
+                <g class="tp-fig" transform={`translate(226 ${GROUND})`}>
+                    <circle cx="0" cy="-38" r="4" />
+                    <path d="M0-34v14" />
+                    <path d="M0-31-9-37M0-31 6-24" />
+                    <g class="tp-mallet">
+                        <rect class="tp-load" x="-18" y="-43" width="11" height="8" rx="1" />
+                    </g>
+                    <path d="M0-20-6 0M0-20 6 0" />
+                </g>
+
+                <g class="tp-pile">
+                    {
+                        quarried.map((stone) => (
+                            <g>
+                                <rect class="tp-stone" x={stone.x} y={stone.y} width={STONE.w} height={STONE.h} rx="1.5" />
+                                <g class="tp-mark" transform={`translate(${stone.x + 12} ${stone.y + 3}) scale(0.583)`}>
+                                    <path d={PROVIDER_BRAND_PATHS[stone.logo]} fill-rule={providerFillRule(stone.logo)} />
+                                </g>
+                            </g>
+                        ))
+                    }
+                </g>
+
+                <path class="tp-ground" d={`M0 ${GROUND}h${PANEL.quarry}`} />
+            </svg>
+        </div>
+
+        <!-- ═══ The site ═════════════════════════════════════════════════════════════════════════
+             The causeway, the crew on it, and you on a terrace in front of it. You are drawn LOWER than
+             the ground line rather than bigger only: standing forward of the work is what makes a figure
+             read as the one watching it rather than as a seventh worker. -->
+        <div class="tp-stage tp-stage-site">
+            <svg class="tp-panel" viewBox={`0 0 ${PANEL.site} ${VIEW_H}`} preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">
+                <path class="tp-ground" d={`M0 ${GROUND}h${PANEL.site}`} />
+                {/* The way itself: a second rail under the ground line with a tie every forty units, which
+                    is one stone's pitch — the causeway is paved with the same stone everything else is. */}
+                <path class="tp-way" d={`M0 ${GROUND + 12}h${PANEL.site}`} />
+                <g class="tp-ties">
+                    {
+                        Array.from({ length: Math.floor(PANEL.site / PITCH.x) + 1 }, (_, i) => (
+                            <path d={`M${i * PITCH.x} ${GROUND}v12`} />
+                        ))
+                    }
+                </g>
+
+                {/* SCAFFOLD. Two poles, four rungs, a brace and a stone waiting on the top lift. It is the one
+                    vertical thing between the quarry face and the temple, which is what it is here for: a
+                    scene that is all ground line reads as a frieze, and a building site is not flat. */}
+                <g class="tp-scaffold">
+                    <path d="M336 300V186M384 300V186" />
+                    <path d="M336 186h48M336 214h48M336 244h48M336 272h48" />
+                    <path d="M336 272 384 244M336 214 384 186" />
+                    <rect class="tp-load" x="348" y="176" width="24" height="9" rx="1.5" />
+                </g>
+
+                <g class="tp-crew">
+                    {
+                        crew.map((worker) => (
+                            <g
+                                class:list={["tp-walker", worker.load ? "tp-walker-load" : "tp-walker-back"]}
+                                style={`--from:${worker.from}; --to:${worker.to}; --rest:${worker.rest}; --d:${worker.delay}s`}
+                            >
+                                {/* A CARRIER, IN SIX STROKES, and the stone rides at the CHEST. Overhead is the
+                                    pose everyone pictures and it does not survive being drawn 40px tall: the
+                                    block lands on top of the head, the arms splay to its corners, and the
+                                    whole figure reads as a table. Carried in front, the head is the topmost
+                                    thing in the silhouette, which is the one stroke that makes it a person. */}
+                                <g class="tp-fig" transform={`translate(0 ${GROUND})`}>
+                                    <circle cx="0" cy="-38" r="4" />
+                                    <path d="M0-34v14" />
+                                    {worker.load ? <path d="M0-31-8-25M0-31 8-25" /> : <path d="M0-31-5-22M0-31 5-22" />}
+                                    {worker.load && <rect class="tp-load" x="-10" y="-28" width="20" height="9" rx="1.5" />}
+                                    <g class="tp-legs tp-legs-a"><path d="M0-20-6 0M0-20 6 0" /></g>
+                                    <g class="tp-legs tp-legs-b"><path d="M0-20-2 0M0-20 5 0" /></g>
+                                </g>
+                            </g>
+                        ))
+                    }
+                </g>
+
+                {/* YOU. The warm ring is a lantern, not an aura: it is the only light on this panel, and it
+                    is what says the watching is happening here rather than being a claim in the caption. */}
+                <g class="tp-you" transform={`translate(${PANEL.site / 2} ${GROUND + 16})`}>
+                    <ellipse class="tp-lantern" cx="0" cy="-30" rx="86" ry="62" fill="url(#tp-halo)" />
+                    <path class="tp-dais" d="M-30 0h60v7h-60zM-38 7h76v8h-76z" />
+                    <g class="tp-fig tp-fig-you">
+                        <circle cx="0" cy="-48" r="5.6" />
+                        <path d="M0-42v18" />
+                        <path d="M0-38 15-45" />
+                        <path d="M0-35-12-30" />
+                        <rect class="tp-plan" x="-22" y="-36" width="12" height="15" rx="1.5" />
+                        <path d="M0-24-7 0M0-24 7 0" />
+                    </g>
+                </g>
+            </svg>
+        </div>
+
+        <!-- ═══ The temple ═══════════════════════════════════════════════════════════════════════ -->
+        <div class="tp-stage tp-stage-temple">
+            <svg class="tp-panel" viewBox={`0 0 ${PANEL.temple} ${VIEW_H}`} preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">
+                <ellipse class="tp-halo" cx={templeCx} cy="200" rx="250" ry="170" fill="url(#tp-halo)" />
+                <path class="tp-ground" d={`M0 ${GROUND}h${PANEL.temple}`} />
+
+                <g class="tp-temple">
+                    {
+                        laid.map((stone) => (
+                            <rect class="tp-stone tp-set" x={stone.x} y={stone.y} width={STONE.w} height={STONE.h} rx="1.5" style={`--o:${stone.order}`} />
+                        ))
+                    }
+                </g>
+
+                {/* THE DOOR, and it is the cheapest stroke in the whole drawing: an arch in the face of the
+                    platform is what stops a stepped stack of stones reading as a pyramid and starts it reading
+                    as somewhere you could walk in. */}
+                <path class="tp-door" d={`M${templeCx - 15} ${GROUND}v-26a15 15 0 0 1 30 0v26z`} />
+
+                {/* The lotus on the summit, the same flower the site sets on every frame's top rail, lighting
+                    on the beat the wave reaches it. It is the payoff of the whole picture: the thing is
+                    finished, and it is yours. */}
+                <svg
+                    class="tp-finial"
+                    x={templeCx - FINIAL.size / 2}
+                    y={summitY - FINIAL.foot}
+                    width={FINIAL.size}
+                    height={FINIAL.size}
+                    viewBox="0 -1.3 32 32"
+                    set:html={LOTUS_PETALS}
+                />
+
+                {/* The last pair of hands, setting the stone that has just arrived. The lift is on an inner
+                    group so the figure's own place on the ground stays an attribute rather than a keyframe. */}
+                <g transform={`translate(44 ${GROUND})`}>
+                    <g class="tp-setter">
+                        <g class="tp-fig">
+                            <circle cx="0" cy="-38" r="4" />
+                            <path d="M0-34v14" />
+                            <path d="M0-31-8-25M0-31 8-25" />
+                            <rect class="tp-load" x="-10" y="-28" width="20" height="9" rx="1.5" />
+                            <path d="M0-20-6 0M0-20 6 0" />
+                        </g>
+                    </g>
+                </g>
+            </svg>
+        </div>
+
+        <!-- ═══ The captions ═════════════════════════════════════════════════════════════════════
+             One label and one line under each stage, and the three verbs under the middle one, because
+             directing, watching and approving are things you do on the site rather than to the stone or to
+             the finished thing. -->
+        <div class="tp-cap tp-cap-stone">
+            <span class="tp-label">{scene.stone.label}</span>
+            <p class="tp-copy">{scene.stone.line}</p>
+        </div>
+
+        <div class="tp-cap tp-cap-site">
+            <span class="tp-label">{scene.site.label}</span>
+            <p class="tp-copy">{scene.site.line}</p>
+            <ul class="tp-keeps">
+                {
+                    scene.site.controls.map((control) => (
+                        <li class="tp-keep">
+                            <span class="tp-keep-icon" set:html={glyph(CONTROL_ICONS[control.icon])} />
+                            <span>{control.label}</span>
+                        </li>
+                    ))
+                }
+            </ul>
+        </div>
+
+        <div class="tp-cap tp-cap-temple">
+            <span class="tp-label tp-label-lit">{scene.temple.label}</span>
+            <p class="tp-copy">{scene.temple.line}</p>
+        </div>
+    </div>
+</figure>
+
+<style>
+    /* ── The canvas ──────────────────────────────────────
+       `container-type` is what lets one markup be a 1200-unit scene in a 1340px plate and three stacked
+       pictures in a phone column. `--tp-cycle` is one pass of the wave up the temple; the walk is
+       deliberately not a whole fraction of it, so the crew and the courses never fall into step. */
+    .tp {
+        container-type: inline-size;
+        --tp-cycle: 11s;
+        --tp-walk: 9.6s;
+        margin: 0;
+    }
+    .tp-defs {
+        position: absolute;
+        width: 0;
+        height: 0;
+    }
+
+    /* THE THREE PANELS ARE ONE PICTURE, and these column ratios are the whole of what makes them one: they
+       are the panels' own viewBox widths, so all three scale by the same factor and their ground lines
+       meet at the seams. `minmax(0, …fr)` rather than bare `fr` because the CAPTIONS share these columns,
+       and a long line in one of them would otherwise widen its column and shear the scene. */
+    .tp-scene {
+        display: grid;
+        grid-template-columns: minmax(0, 260fr) minmax(0, 420fr) minmax(0, 520fr);
+        grid-template-areas:
+            "stone     site     temple"
+            "cap-stone cap-site cap-temple";
+        align-items: start;
+    }
+    .tp-stage {
+        min-width: 0;
+    }
+    /* NAMED AREAS RATHER THAN SOURCE ORDER, because the two arrangements interleave differently: side by side
+       the three pictures share one row and the three captions the next, and stacked each caption has to
+       follow its OWN picture. Left to flow, the phone gets three pictures and then three captions. */
+    .tp-stage-stone {
+        grid-area: stone;
+    }
+    .tp-stage-site {
+        grid-area: site;
+    }
+    .tp-stage-temple {
+        grid-area: temple;
+    }
+    .tp-cap-stone {
+        grid-area: cap-stone;
+    }
+    .tp-cap-site {
+        grid-area: cap-site;
+    }
+    .tp-cap-temple {
+        grid-area: cap-temple;
+    }
+    .tp-panel {
+        display: block;
+        width: 100%;
+        height: auto;
+    }
+
+    /* ── The drawing ─────────────────────────────────────
+       Two weights and nothing else: a gold hairline for anything cut or carried, and the ember for the one
+       thing that is finished. The site's own rule, in a picture. */
+    .tp-ground {
+        stroke: var(--color-line-bright);
+        stroke-width: 1.2;
+    }
+    .tp-way {
+        stroke: var(--color-line);
+        stroke-width: 1;
+    }
+    .tp-ties path {
+        stroke: var(--color-line);
+        stroke-width: 1;
+    }
+    .tp-rock {
+        fill: url(#tp-rock);
+        stroke: var(--color-line);
+        stroke-width: 1;
+        stroke-linejoin: round;
+    }
+    .tp-seam {
+        stroke: var(--color-line);
+        stroke-width: 1;
+        opacity: 0.55;
+    }
+    .tp-scaffold {
+        fill: none;
+        stroke: var(--color-line-strong);
+        stroke-width: 1.4;
+        stroke-linecap: round;
+    }
+    .tp-stone {
+        fill: url(#tp-face);
+        stroke: var(--color-line-strong);
+        stroke-width: 1;
+    }
+    .tp-mark {
+        fill: var(--color-gold);
+        opacity: 0.85;
+    }
+
+    /* The figures: one stroke weight, round joints, no fills. A crowd of filled silhouettes at this size is
+       a row of smudges; drawn in line they read as people at any scale the panels take. */
+    .tp-fig {
+        fill: none;
+        stroke: var(--color-gold);
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+    .tp-load {
+        fill: url(#tp-face);
+        stroke: var(--color-gold);
+        stroke-width: 1.4;
+    }
+    .tp-walker-back .tp-fig {
+        opacity: 0.45;
+    }
+    /* YOU ARE THE WARM ONE. Everything else on this plate is gold; the reader and the finished temple are
+       the only things in ember, which is the picture saying who the building is for. */
+    .tp-fig-you {
+        stroke: var(--color-primary-400);
+        stroke-width: 2.3;
+    }
+    .tp-plan {
+        fill: rgba(224, 123, 39, 0.18);
+        stroke: var(--color-primary-400);
+        stroke-width: 1.6;
+    }
+    .tp-dais {
+        fill: url(#tp-face);
+        stroke: var(--color-line-bright);
+        stroke-width: 1;
+    }
+    .tp-lantern {
+        opacity: 0.5;
+    }
+
+    .tp-halo {
+        opacity: 0;
+    }
+    .tp-finial {
+        fill: var(--color-primary-400);
+        opacity: 0.25;
+    }
+    /* The doorway is a hole, so it is painted in the plate's own dark rather than in any of the drawing's
+       colours: anything lighter reads as a panel set into the wall instead of a way in. */
+    .tp-door {
+        fill: rgba(9, 7, 5, 0.82);
+        stroke: var(--color-line-bright);
+        stroke-width: 1.2;
+    }
+
+    /* ── The captions ────────────────────────────────────
+       Three labels and three lines. This band's entire text budget, and it is deliberately smaller than any
+       other band's on the page: the picture above is doing the arguing. */
+    .tp-cap {
+        padding: 1.25rem 0 0;
+    }
+    .tp-cap-site,
+    .tp-cap-temple {
+        padding-left: 1.5rem;
+    }
+    .tp-label {
+        display: block;
+        font-size: 0.625rem;
+        font-weight: 600;
+        letter-spacing: 0.24em;
+        line-height: 1;
+        text-transform: uppercase;
+        color: var(--color-gold);
+    }
+    .tp-label-lit {
+        color: var(--color-primary-400);
+    }
+    .tp-copy {
+        margin: 0.6rem 0 0;
+        max-width: 44ch;
+        font-size: 0.9375rem;
+        line-height: 1.55;
+        color: var(--color-muted);
+    }
+
+    /* The three you keep. A row of verbs rather than a list of features, and the only place in this band
+       where the reader is the subject of the sentence. */
+    .tp-keeps {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.4rem;
+        margin: 0.9rem 0 0;
+        padding: 0;
+        list-style: none;
+    }
+    .tp-keep {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        font-size: 0.875rem;
+        line-height: 1.2;
+        color: var(--color-content);
+    }
+    .tp-keep-icon {
+        display: flex;
+        color: var(--color-primary-400);
+    }
+
+    /* ── Stacked: a picture and its caption, three times ──
+       Below 46rem the scene stops being one wide view and becomes three, each full width. `slice` on every
+       panel is what makes this safe: the box gets shorter than the viewBox, so what is lost is sky. */
+    @container (max-width: 46rem) {
+        .tp-scene {
+            grid-template-columns: minmax(0, 1fr);
+            grid-template-areas:
+                "stone"
+                "cap-stone"
+                "site"
+                "cap-site"
+                "temple"
+                "cap-temple";
+        }
+        /* A BOX PER PANEL, CUT TO WHAT IS IN IT. The three viewBoxes are different widths, so one shared
+           ratio would leave the site panel showing 125px of empty sky over its crew while the quarry's face
+           was being cropped. Each number here is that panel's own content height in viewBox units divided by
+           its viewBox width — change a drawing's height and this is the second place to look. */
+        .tp-panel {
+            max-width: 28rem;
+            height: auto;
+            margin-inline: auto;
+        }
+        .tp-stage-stone .tp-panel {
+            aspect-ratio: 7 / 5;
+        }
+        .tp-stage-site .tp-panel {
+            aspect-ratio: 12 / 5;
+        }
+        .tp-stage-temple .tp-panel {
+            aspect-ratio: 37 / 20;
+        }
+        .tp-stage-site,
+        .tp-stage-temple {
+            margin-top: 1.75rem;
+        }
+        .tp-cap-site,
+        .tp-cap-temple {
+            padding-left: 0;
+        }
+        .tp-copy {
+            max-width: 46ch;
+        }
+    }
+
+    /* ── The build ───────────────────────────────────────
+       A wave of light up the temple: each stone lights on its own beat and holds, so what a reader sees is
+       a course going up rather than a plate full of things blinking. Opacity only, so the geometry never
+       moves and the whole build costs one repaint per stone per cycle. */
+    .tp-set {
+        opacity: 1;
+        animation: tp-lay var(--tp-cycle) linear infinite both;
+        animation-delay: calc(var(--o) * 78ms);
+    }
+    .tp-halo {
+        animation: tp-halo var(--tp-cycle) ease-in-out infinite both;
+        animation-delay: 4.1s;
+    }
+    .tp-finial {
+        animation: tp-crown var(--tp-cycle) ease-in-out infinite both;
+        animation-delay: 4.3s;
+    }
+
+    /* A STONE IS NEVER UNLAID. The dim is at the START of each stone's own timeline and nowhere else, so the
+       backwards fill holds it dim until its beat comes: on first paint the temple rises course by course out
+       of nothing, and on every cycle after that a wave of settling light runs back up a temple that stays
+       standing. An earlier cut of this dimmed each stone again at the end of its cycle, which — with the
+       delays — swept the base of the building away while its towers were still lit. */
+    @keyframes tp-lay {
+        0% {
+            opacity: 0.12;
+        }
+        6% {
+            opacity: 1;
+        }
+        18%,
+        100% {
+            opacity: 0.9;
+        }
+    }
+    /* The light behind the towers breathes rather than switching: what it must never do is go out, because
+       an unlit temple at the end of every cycle reads as the thing having been taken down again. */
+    @keyframes tp-halo {
+        0%,
+        100% {
+            opacity: 0.4;
+        }
+        24%,
+        64% {
+            opacity: 1;
+        }
+    }
+    @keyframes tp-crown {
+        0%,
+        100% {
+            opacity: 0.55;
+        }
+        18%,
+        60% {
+            opacity: 1;
+        }
+    }
+
+    /* ── The crew ────────────────────────────────────────
+       Each worker is two groups: the outer one walks, the inner one is the drawing. The walk is a translate
+       between two viewBox units, and `--rest` is where the figure stands when nothing is animating. */
+    .tp-walker {
+        transform: translateX(calc(var(--rest) * 1px));
+        animation: tp-walk var(--tp-walk) linear infinite both;
+        animation-delay: var(--d);
+    }
+    /* The stride: two pairs of legs, one shown at a time. A sprite swap rather than a rotation, because at
+       two pixels of stroke a rotating limb is a smear and a swap is a step. */
+    .tp-legs-b {
+        opacity: 0;
+    }
+    .tp-legs {
+        animation: tp-step 0.42s steps(1) infinite alternate;
+    }
+    .tp-legs-b {
+        animation-name: tp-step-off;
+    }
+    /* The stone lands, and the setter straightens up for the next one. */
+    .tp-setter {
+        animation: tp-place 2.6s ease-in-out infinite;
+    }
+    /* One tap of the mallet, then a rest: a mallet swinging on every beat of a 1.8s loop is a metronome. */
+    .tp-mallet {
+        animation: tp-tap 1.8s ease-in-out infinite;
+    }
+
+    @keyframes tp-walk {
+        0% {
+            transform: translateX(calc(var(--from) * 1px));
+        }
+        100% {
+            transform: translateX(calc(var(--to) * 1px));
+        }
+    }
+    @keyframes tp-step {
+        from {
+            opacity: 1;
+        }
+        to {
+            opacity: 0;
+        }
+    }
+    @keyframes tp-step-off {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+    @keyframes tp-place {
+        0%,
+        100% {
+            transform: translateY(0);
+        }
+        50% {
+            transform: translateY(-6px);
+        }
+    }
+    @keyframes tp-tap {
+        0%,
+        66%,
+        100% {
+            transform: translate(0, 0);
+        }
+        78% {
+            transform: translate(2px, 6px);
+        }
+    }
+
+    /* The picture is complete without any of it: the temple stands finished, the lotus is lit, the crew is
+       spread along the causeway where `--rest` puts them, and the light behind the towers is up. */
+    @media (prefers-reduced-motion: reduce) {
+        .tp-set,
+        .tp-halo,
+        .tp-finial,
+        .tp-walker,
+        .tp-legs,
+        .tp-setter,
+        .tp-mallet {
+            animation: none;
+        }
+        .tp-halo {
+            opacity: 0.9;
+        }
+        .tp-finial {
+            opacity: 1;
+        }
+    }
+</style>

@@ -278,7 +278,26 @@
     color: #fff6e6;
 }
 
-/* ── 2 · The verbs, a screenful each ─────────────────────
+/* ── 2 · The build ─────────────────────────────────────
+   ONE DRAWING, AT THE SAME WIDTH AS THE PHOTOGRAPHS BELOW IT, which is the only thing this band needs from
+   the stylesheet: `TempleFigure.astro` owns every rule inside the plate and arranges itself from the
+   plate's own width rather than the window's. So this band borrows `.stage` from the verbs section further
+   down — the measure, the gutters and `--stage-bleed` are defined there — and spends its own rules on the
+   vertical rhythm, which is not a verb stage's. A stage is a screenful with a screenful's air around it;
+   this is a heading and the picture that finishes its sentence, so the two sit close.
+
+   THE PLATE IS A `.card`, NOT A `.window`, and that difference is load-bearing on this site: a window means
+   "this is a photograph of the product", and a subscription, a fleet of agents and a shipped release could
+   never be photographed together. */
+.home .shell.build-open {
+    padding-bottom: 0;
+}
+.home .build-stage {
+    padding-top: clamp(1.75rem, 3.5vh, 2.5rem);
+    padding-bottom: clamp(2.5rem, 5vh, 4rem);
+}
+
+/* ── 3 · The verbs, a screenful each ─────────────────────
    THE SHOWCASE. Five stages down the page, and each one is a title, a line and then the screen itself,
    a little wider than the column the title sits in. Two rules decide the whole shape of it.
 
@@ -349,11 +368,13 @@
        and above the shell it is bounded by the real space beside it. */
     --stage-bleed: min(4.5rem, var(--stage-room) / 2);
 }
-/* THE STEP OUT OF THE COLUMN, and both of the things a stage can carry take it: the four screenshots and
-   the plate Automate draws its machine on. If only the frames leaned out, the fifth stage would read as
-   the one that missed — the rhythm of this band is five visuals on one measure, whatever is inside them. */
+/* THE STEP OUT OF THE COLUMN, and everything a stage can carry takes it: the four screenshots, the plate
+   Automate draws its machine on, and the build scene in the band above. If only the frames leaned out, the
+   fifth stage would read as the one that missed — the rhythm of this band is five visuals on one measure,
+   whatever is inside them, and the page has ONE picture width from the first band to the last. */
 .home .stage-frame,
-.home .stage-machine {
+.home .stage-machine,
+.home .build-plate {
     margin-inline: calc(-1 * var(--stage-bleed));
 }
 /* STACKED, and the link is the third line of it rather than the far end of a row. It was a row once, the
@@ -434,11 +455,12 @@
    OWN width rather than the window's — it is the same drawing at half the size on /features/automate/.
    All that is left here is the plate: the quiet `.card` treatment rather than a `.window`, because on this site
    a window means "this is a photograph of the product" and it would be lying here. */
-.home .stage-machine {
+.home .stage-machine,
+.home .build-plate {
     padding: clamp(1.5rem, 3vw, 2.5rem);
 }
 
-/* ── 3 · The comparison ────────────────────────────────
+/* ── 4 · The comparison ────────────────────────────────
    Two columns of nouns, and the asymmetry between them is the whole argument — so the heavy side is a lit
    cartouche and the light one a dashed outline. */
 .home .compare {
@@ -521,7 +543,7 @@
     font-size: 0.9375rem;
 }
 
-/* ── 4 · What it costs ───────────────────────────────── */
+/* ── 5 · What it costs ───────────────────────────────── */
 .home .econ {
     display: grid;
     align-items: start;
@@ -602,7 +624,7 @@
     color: var(--color-muted);
 }
 
-/* ── 5 · Who builds it ───────────────────────────────── */
+/* ── 6 · Who builds it ───────────────────────────────── */
 .home .trust {
     display: grid;
     gap: 3rem;
@@ -621,7 +643,7 @@
     color: var(--color-subtle);
 }
 
-/* ── 6 · Getting started ─────────────────────────────────
+/* ── 7 · Getting started ─────────────────────────────────
    TWO PLACES AND THE SEAM BETWEEN THEM. The band is a plan rather than a list: the left zone is what
    happens in a browser on our side, the right is what happens on the reader's own machine, and the rule
    down the middle is the boundary the whole product argument rests on.
@@ -772,7 +794,7 @@
     color: var(--color-muted);
 }
 
-/* ── 7 · FAQ ─────────────────────────────────────────────
+/* ── 8 · FAQ ─────────────────────────────────────────────
    THREE REGISTERS SIDE BY SIDE, rather than three stacked down one column.
 
    The questions were always an accordion — fifteen native <details>, every one shut. What made the section
@@ -872,7 +894,7 @@
     font-size: 0.875rem;
 }
 
-/* ── 8 · The closing cartouche ─────────────────────────
+/* ── 9 · The closing cartouche ─────────────────────────
    The plate returns, cropped to its foot — the temple and the lotus at the bottom of the art, which is the
    half the first screen never shows because the windows cover it. */
 .home .final {

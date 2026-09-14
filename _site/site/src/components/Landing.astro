@@ -14,6 +14,7 @@
 import { CREATOR_NAME, creatorBio, creatorRole } from "@intentic/site-content/about";
 import { faqGroups } from "@intentic/site-content/faq";
 import { landingContent } from "@intentic/site-content/landing";
+import { templeScene } from "@intentic/site-content/temple";
 import { APP_URL, DEMO_PATH, githubUrl, ORG_NAME } from "@intentic/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic/site-content/structured-data";
 // The providers' own marks, the same five the app draws beside every session.
@@ -30,6 +31,7 @@ import Footer from "./Footer.astro";
 import Lotus from "./Lotus.astro";
 import Nav from "./Nav.astro";
 import Point from "./Point.astro";
+import TempleFigure from "./TempleFigure.astro";
 import TrustCards from "./TrustCards.astro";
 import Window from "./Window.astro";
 import "../styles/home.css";
@@ -218,7 +220,35 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- ═══ 2 · What you do: the five verbs, a screenful each ═══════════════════════════
+            <!-- ═══ 2 · The build ═══════════════════════════════════════════════════════════════
+                 ONE PICTURE OF THE WHOLE DEAL, and it is the first thing under the hero because the hero
+                 ends on a promise the reader has nothing to picture yet: agents work, you approve. This is
+                 the shape of that — the AI plans you already pay for are the stone, agents do the lifting,
+                 and what goes up is yours — told as a building site rather than as a machine, because the
+                 page is already built on a temple and a reader should meet one product, not two.
+                 IT IS A DRAWING, AND THE ONLY ONE ON THE PAGE. Everything below this band is a photograph of
+                 the product; a subscription, a fleet of agents and a shipped release are not one surface and
+                 never could be photographed together, so this band draws them instead. `TempleFigure` owns
+                 the scene and `site-content/temple.ts` owns its handful of words. -->
+            <section class="band" id="build">
+                <div class="wall" aria-hidden="true"></div>
+                <div class="shell build-open fade-in">
+                    <div class="eyebrow">{templeScene.eyebrow}</div>
+                    <h2 class="h2 display">{templeScene.heading}</h2>
+                    <p class="lede">{templeScene.sub}</p>
+                </div>
+
+                {/* The stage's own measure, so the scene is exactly as wide as the screenshots in the band
+                    below it and the page has one picture width rather than two. */}
+                <div class="stage build-stage fade-in">
+                    <div class="card build-plate">
+                        <Corners />
+                        <TempleFigure />
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══ 3 · What you do: the five verbs, a screenful each ═══════════════════════════
                  A SHOWCASE, NOT A GRID, and the difference is the whole redesign. This band used to be one
                  wide frame followed by four cards, and each card cropped its screenshot into a 13rem strip
                  at 150% width — a sliver of a surface, four times over, on the one screen of the page whose
@@ -297,7 +327,7 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- ═══ 3 · Why a workspace: the comparison ═════════════════════════════════════════
+            <!-- ═══ 4 · Why a workspace: the comparison ═════════════════════════════════════════
                  Two columns of nouns, and the asymmetry between them is the whole argument — so the heavy
                  side is a lit cartouche and the light one a dashed outline that ends early. -->
             <section class="band" id="workspace">
@@ -346,7 +376,7 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- ═══ 4 · What it costs ═══════════════════════════════════════════════════════════ -->
+            <!-- ═══ 5 · What it costs ═══════════════════════════════════════════════════════════ -->
             <section class="band" id="economics">
                 <div class="wall" aria-hidden="true"></div>
                 <div class="shell fade-in">
@@ -389,7 +419,7 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- ═══ 5 · Who builds it ═══════════════════════════════════════════════════════════ -->
+            <!-- ═══ 6 · Who builds it ═══════════════════════════════════════════════════════════ -->
             <section class="band" id="trust">
                 <div class="wall" aria-hidden="true"></div>
                 <div class="shell fade-in">
@@ -409,7 +439,7 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- ═══ 6 · Getting started ═════════════════════════════════════════════════════════ -->
+            <!-- ═══ 7 · Getting started ═════════════════════════════════════════════════════════ -->
             <section class="band" id="connect">
                 <div class="wall" aria-hidden="true"></div>
                 <div class="shell fade-in">
@@ -481,7 +511,7 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- ═══ 7 · FAQ ═════════════════════════════════════════════════════════════════════
+            <!-- ═══ 8 · FAQ ═════════════════════════════════════════════════════════════════════
                  Native <details>, so the whole widget costs no JavaScript and keeps keyboard and
                  screen-reader behaviour for free. `name` makes each band an exclusive accordion. -->
             <section class="band" id="faq">
@@ -526,7 +556,7 @@ const machineStep = content.connect.steps.at(-1)!;
                 </div>
             </section>
 
-            <!-- ═══ 8 · The closing cartouche ═══════════════════════════════════════════════════
+            <!-- ═══ 9 · The closing cartouche ═══════════════════════════════════════════════════
                  The plate returns, cropped to its foot — the temple and the lotus at the bottom of the art,
                  which is the half the first screen never shows because the windows cover it. -->
             <section class="band final">

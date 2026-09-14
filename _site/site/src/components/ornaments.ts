@@ -1,16 +1,17 @@
 // The four ornament shapes (lotus, corner, lozenge, divider), strings in `currentColor` so one drawing serves both
 // markup and CSS `background-image`.
 
-/** Filled paths only (a stroke aliases at 15px); viewBox is offset -1.3 to center it against text. */
-export const LOTUS = `<svg viewBox="0 -1.3 32 32" fill="currentColor" aria-hidden="true">
-  <path d="M8.4 25.6c-3.2 0-5.6-1-7.2-3 3.6-1.2 6.6-.7 9 1.4z" opacity=".42"/>
+/** The flower's petals alone, on the 32×32 grid below: for a caller that needs them INSIDE an SVG of its own. */
+export const LOTUS_PETALS = `<path d="M8.4 25.6c-3.2 0-5.6-1-7.2-3 3.6-1.2 6.6-.7 9 1.4z" opacity=".42"/>
   <path d="M23.6 25.6c3.2 0 5.6-1 7.2-3-3.6-1.2-6.6-.7-9 1.4z" opacity=".42"/>
   <path d="M16 9.5c2.1 3 3.2 5.7 3.2 8.1 0 2.2-1.1 4.1-3.2 5.6-2.1-1.5-3.2-3.4-3.2-5.6 0-2.4 1.1-5.1 3.2-8.1z" transform="rotate(-74 16 22.6)" opacity=".55"/>
   <path d="M16 9.5c2.1 3 3.2 5.7 3.2 8.1 0 2.2-1.1 4.1-3.2 5.6-2.1-1.5-3.2-3.4-3.2-5.6 0-2.4 1.1-5.1 3.2-8.1z" transform="rotate(74 16 22.6)" opacity=".55"/>
   <path d="M16 6.4c2.4 3.4 3.6 6.4 3.6 9.1 0 2.5-1.2 4.6-3.6 6.3-2.4-1.7-3.6-3.8-3.6-6.3 0-2.7 1.2-5.7 3.6-9.1z" transform="rotate(-39 16 21.7)" opacity=".78"/>
   <path d="M16 6.4c2.4 3.4 3.6 6.4 3.6 9.1 0 2.5-1.2 4.6-3.6 6.3-2.4-1.7-3.6-3.8-3.6-6.3 0-2.7 1.2-5.7 3.6-9.1z" transform="rotate(39 16 21.7)" opacity=".78"/>
-  <path d="M16 3.4c2.8 4 4.2 7.5 4.2 10.6 0 2.9-1.4 5.4-4.2 7.3-2.8-1.9-4.2-4.4-4.2-7.3 0-3.1 1.4-6.6 4.2-10.6z"/>
-</svg>`;
+  <path d="M16 3.4c2.8 4 4.2 7.5 4.2 10.6 0 2.9-1.4 5.4-4.2 7.3-2.8-1.9-4.2-4.4-4.2-7.3 0-3.1 1.4-6.6 4.2-10.6z"/>`;
+
+/** Filled paths only (a stroke aliases at 15px); viewBox is offset -1.3 to center it against text. */
+export const LOTUS = `<svg viewBox="0 -1.3 32 32" fill="currentColor" aria-hidden="true">${LOTUS_PETALS}</svg>`;
 
 /** The lozenge: the site's full stop. A bullet in a list, the knot in a divider, the stud at a frame's elbow. */
 export const LOZENGE = `<svg viewBox="0 0 12 12" fill="none" aria-hidden="true">
