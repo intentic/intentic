@@ -50,7 +50,6 @@ import { autoSandboxName } from "./setupName";
 import { setupReportView } from "./setupReport";
 import { hostedWaitView, machineIsDown } from "./hostedWait";
 import AppBrand from "../../components/AppBrand.vue";
-import { useSiteFaces } from "../../shell/useSiteFaces";
 
 // No identity or machine decision here: the surface (setupArrival.ts) decides those; this page is what's left
 // otherwise.
@@ -66,7 +65,6 @@ const { mobile } = useDevice();
 const { user } = useAuth();
 
 // Shares `/login`'s visual material (`styles/entry.css`) rather than duplicating it.
-useSiteFaces();
 const { getIdToken, warmIdToken } = useGoogleIdentity();
 
 // Sandbox this page is setting up; null while auto-create is in flight or after it failed.

@@ -48,13 +48,9 @@
 <!-- The .ico is first and unqualified because that is the one every crawler, feed reader and pinned-tab list asks for by convention. -->
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<!-- The app's two faces: Inter for --font-sans, JetBrains Mono for --font-mono. -->
-        <link
-            href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500&family=Inter:wght@100..900&family=JetBrains+Mono:wght@400;500;600&display=swap"
-            rel="stylesheet"
-        />
+<!-- Every face is served from this origin (src/styles/faces.css, files in public/fonts). Preloaded here because
+             the stylesheet that declares it is bundled, so the browser would otherwise learn of it a round trip late. -->
+        <link rel="preload" as="font" type="font/woff2" href="/fonts/public-sans-100-900-latin.woff2" crossorigin />
     </head>
     <body class="bg-canvas text-content">
         <div id="app"></div>

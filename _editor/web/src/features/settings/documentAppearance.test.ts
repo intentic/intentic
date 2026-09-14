@@ -14,20 +14,19 @@ beforeEach(() => {
     root().removeAttribute(`data-skin`);
     root().removeAttribute(`data-mode`);
     root().removeAttribute(`data-text-size`);
-    document.getElementById(`ui-skin-font`)?.remove();
     vi.resetModules();
 });
 
 describe(`installDocumentAppearance`, () => {
-    it(`applies a stored skin, and the face that skin asks for`, async () => {
+    it(`applies a stored skin`, async () => {
         localStorage.setItem(`ui-skin`, `sanctum`);
         const { installDocumentAppearance } = await boot();
 
         installDocumentAppearance();
 
+        // beforeEach strips the attribute, so it can only be back because useSkin read storage and wrote it —
+        // this is not the anti-flash markup surviving.
         expect(root().getAttribute(`data-skin`)).toBe(`sanctum`);
-        // Only useSkin fetches the webfont; its presence proves useSkin ran, not just the anti-flash markup.
-        expect(document.getElementById(`ui-skin-font`)).not.toBeNull();
     });
 
     it(`makes a skin picked in another window land here`, async () => {
@@ -61,7 +60,6 @@ describe(`installDocumentAppearance`, () => {
         receivePreferenceChange({ key: `ui-skin`, raw: `none` });
 
         expect(root().hasAttribute(`data-skin`)).toBe(false);
-        expect(document.getElementById(`ui-skin-font`)).toBeNull();
     });
 
     it(`falls back to the default skin when storage is cleared`, async () => {
@@ -73,6 +71,5 @@ describe(`installDocumentAppearance`, () => {
         receivePreferenceChange({ key: `ui-skin`, raw: null });
 
         expect(root().getAttribute(`data-skin`)).toBe(`sanctum`);
-        expect(document.getElementById(`ui-skin-font`)).not.toBeNull();
     });
 });

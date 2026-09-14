@@ -6,7 +6,6 @@ import { useRoute, useRouter } from "vue-router";
 import AppBrand from "../../components/AppBrand.vue";
 import { useAuth } from "./useAuth";
 import { useGoogleIdentity } from "./useGoogleIdentity";
-import { useSiteFaces } from "../../shell/useSiteFaces";
 import { desktopInstaller, desktopVersion, signInThroughBrowser } from "../../app/environments/desktop";
 import { returnPath } from "../../router/signIn";
 
@@ -18,8 +17,6 @@ const route = useRoute();
 // Where the guard sent this visitor; sanitized as both a router push and an OAuth callback (router/signIn.ts).
 const destination = computed(() => returnPath(route.query[`returnTo`]));
 
-// The site's faces, only on this route and /setup; see composables/useSiteFaces.ts.
-useSiteFaces();
 
 // True in the desktop webview, where Google can't run; sign-in there hands off to the real browser instead.
 const desktop = computed(() => desktopVersion() !== undefined);

@@ -13,9 +13,9 @@
     --ink: #efe3cd;
     --ink-muted: #b7a68d;
     --ink-subtle: #9c8b73;
-    --face-display: "Playfair Display", Georgia, "Times New Roman", serif;
+    --face-display: "Spectral", Georgia, "Times New Roman", serif;
     --face-mark: "Baloo 2", "Trebuchet MS", ui-rounded, sans-serif;
-    --face-read: "Mukta", ui-sans-serif, system-ui, sans-serif;
+    --face-read: "Public Sans", ui-sans-serif, system-ui, sans-serif;
     --corner-size: 1.7rem;
 
     /* The design system's roles, in the site's own values — see the header for why these are the `--color-*`. */

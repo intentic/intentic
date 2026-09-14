@@ -206,8 +206,8 @@ that is what selecting the skin set: the leftover `ui-skin` key in their browser
 
 Add `<name>.css` beside the one here, scoped to `[data-skin="<name>"]`; add the value to `Skin` in `useSkin.ts`; add an
 option to `themeOptions` and an icon to `THEME_ICON` in the appearance page; add the `@import` to `styles.css` and
-the name to the anti-flash list in `index.html`. If it wants a face of its own, `FONT_HREF` in `useSkin.ts` is
-where that lives.
+the name to the anti-flash list in `index.html`. Faces are not a skin's to fetch: every one the app uses is served
+from this origin and declared in `src/styles/faces.css`, so a skin names a family and the file is already there.
 
 Three selectors are worth copying rather than re-deriving, because each was a bug first:
 

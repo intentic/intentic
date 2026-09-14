@@ -2,6 +2,8 @@
 @layer theme, base, primeng, components, utilities;
 
 @import "tailwindcss";
+/* Every face the app serves, self-hosted. Regenerate with `node _tools/scripts/fonts.mjs`. */
+@import "./styles/faces.css";
 
 /* The design-system stylesheet loads after the cascade-layer order is declared. */
 @import "../../../_editor/ui/src/styles/index.css";

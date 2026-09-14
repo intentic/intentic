@@ -48,7 +48,7 @@
 
     /* THE FACES The site's, and its size rule with them: a titling face from 13 to 24px, a display serif only above ~28. */
     --sanctum-titling: "Baloo 2", "Trebuchet MS", ui-rounded, var(--font-sans);
-    --sanctum-display: "Playfair Display", "Iowan Old Style", Georgia, serif;
+    --sanctum-display: "Spectral", "Iowan Old Style", Georgia, serif;
 
     /* TIER 1 · THE ROLES Stated unconditionally rather than under a scheme scope: the skin IS its own scheme. */
     --role-canvas: color-mix(in oklab, var(--color-surface-950) 84%, black);
