@@ -10,6 +10,7 @@ import { usePanels } from "../../extensions/usePanels";
 import { useChanges } from "../../workspace/changes/useChanges";
 import { synthesizeSessions, synthesizing } from "../fleet/synthesizeSessions";
 import { dropActionLabel, dropRejection, type PendingAction } from "./laneDrop";
+import { bareBranch } from "./sessionChip";
 import { useAgentDrag } from "./useAgentDrag";
 import { useAgentFilter } from "./useAgentFilter";
 import { projectScope, setProjectScope } from "../../../app/projectScope";
@@ -788,9 +789,12 @@ const menuAgent = ref<FleetAgent>();
 // Copies through the pressed card's own document (clipboardOf), not this module's `navigator`, so the app's clipboard
 // accessor asks the element the gesture happened in.
 const menuAnchor = ref<Element>();
+// Hands over the bare name (`sleek-arrow-uzgj`), not the branch: that is the handle `agents show`, Quick Open and the
+// worktree path all take, while `agent/` is only how git spells it. The branch itself is a labelled row on the agent's
+// own page.
 const copySessionName = async (branch: string): Promise<void> => {
     try {
-        await clipboardOf(menuAnchor.value).writeText(branch);
+        await clipboardOf(menuAnchor.value).writeText(bareBranch(branch));
     } catch {
         // Clipboard may be unavailable (insecure context); the name is still on the card either way.
     }
@@ -849,7 +853,7 @@ const cardMenuItems = computed<MenuItem[]>(() => {
             // own tab; a plain click still goes through `reviewAgent`, which also points the chat dock.
             ...(review === undefined ? [] : [{ label: review, icon: `copy`, url: agentHref(agent), command: () => reviewAgent(agent) }]),
         ],
-        // Hands over the branch, which is what the card prints; the name's other forms are already labelled on the
+        // Hands over the name the card prints; the name's other forms (branch, link) are already labelled on the
         // agent's own page.
         branch === undefined ? [] : [{ label: `Copy session name`, icon: `code`, command: () => void copySessionName(branch) }],
         // The crossing to another box, named after the destination rather than called "Switch": it's the one press here

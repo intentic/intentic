@@ -8,8 +8,12 @@ const BUDGET = 20;
 const HEAD = 10;
 const TAIL = 9;
 
+// The session's own name: for an isolated agent this is its conversation id, which every handle-taker (the CLI, Quick
+// Open, the worktree path) resolves; `agent/` is git's word for it, not the session's.
+export const bareBranch = (branch: string): string => (branch.startsWith(PREFIX) ? branch.slice(PREFIX.length) : branch);
+
 /** The branch as a board card spells it: no `agent/` prefix, and no longer than `BUDGET` with the middle elided. */
 export const shortBranch = (branch: string): string => {
-    const bare = branch.startsWith(PREFIX) ? branch.slice(PREFIX.length) : branch;
+    const bare = bareBranch(branch);
     return bare.length <= BUDGET ? bare : `${bare.slice(0, HEAD)}…${bare.slice(-TAIL)}`;
 };

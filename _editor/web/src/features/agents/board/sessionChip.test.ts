@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { shortBranch } from "./sessionChip";
+import { bareBranch, shortBranch } from "./sessionChip";
+
+describe(`bareBranch`, () => {
+    it(`hands back the conversation id, which is the handle every tool takes`, () => {
+        expect(bareBranch(`agent/sleek-arrow-uzgj`)).toBe(`sleek-arrow-uzgj`);
+    });
+
+    it(`never elides — this is the string that gets pasted, not the one that gets glanced at`, () => {
+        const long = `ci-fix-32458072655-mt2mi4z21`;
+        expect(bareBranch(`agent/${long}`)).toBe(long);
+    });
+
+    it(`leaves a branch that does not carry the prefix untouched`, () => {
+        expect(bareBranch(`main`)).toBe(`main`);
+    });
+});
 
 describe(`shortBranch`, () => {
     it(`drops the prefix every session branch shares`, () => {
