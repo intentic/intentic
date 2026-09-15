@@ -73,8 +73,6 @@ const svg = computed<string>(() => {
         // others.
         seed: seed.value,
         headVariant: `default`,
-        // Scaled up so the head fills the circle like other avatars, cropping empty margin without losing hair or chin.
-        scale: 1.3,
         skinColor: pick(SKIN_COLORS, bytes[0]!),
         detailsVariant: pick(DETAILS, bytes[1]!),
         detailsProbability: 100,
@@ -97,7 +95,7 @@ const svg = computed<string>(() => {
 <template>
 <!-- The name is only a lookup index, never markup, so nothing user-supplied is interpolated into what's rendered. -->
     <span
-        class="flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-content/10"
+        class="flex shrink-0 items-center justify-center"
         :style="{ width: `${size}px`, height: `${size}px` }"
         role="img"
         :aria-label="seed"
