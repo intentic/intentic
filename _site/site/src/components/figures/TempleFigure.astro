@@ -95,7 +95,7 @@ const summitY = Math.min(...laid.map((stone) => stone.y));
    the causeway without anyone posing it. First of the list cuts, last sets, the rest carry. */
 const roster = landingContent.economics.accounts;
 const cutter = roster[0]!;
-const setter = roster[roster.length - 1]!;
+const setter = roster.at(-1)!;
 const carriers = roster.slice(1, -1);
 
 /* One walk crosses the panel; the CSS reads the duration off the figure so these delays cannot drift from it. */
