@@ -65,7 +65,6 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
                 <Button label="Remove" size="small" severity="danger" :text="true" @click="remove(passkey.id)" />
             </template>
         </Row>
-        <RowNote v-if="list.passkeys.length === 0">No passkey opens this sandbox yet. One signs you in without Google, with your device's own lock.</RowNote>
 
         <RowNote variant="block">
             <div class="flex flex-col gap-3">
