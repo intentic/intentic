@@ -1,4 +1,4 @@
-/* Entry-screen styles for login and setup, using the site's design vocabulary. */
+/* Entry-screen styles for login, setup and the desktop app's two handoff screens, in the site's design vocabulary. */
 
 /* THE METALS, THE GROUND AND THE INK */
 .entry {
@@ -55,10 +55,10 @@
 
 /* THE DESKTOP APP'S WINDOW BUTTONS FLOAT OVER THIS SCREEN'S TOP-RIGHT CORNER, `--bar-height` tall, with nothing
    drawn under them (`_editor/web`'s WindowControls.vue); the same band along the top edge is what drags the
-   window. Both entry screens keep that height clear from INSIDE their own box: `box-sizing: border-box` makes
+   window. Every entry screen keeps that height clear from INSIDE its own box: `box-sizing: border-box` makes
    this a padding within the 100dvh, not 52 rows of overflow.
 
-   It is here, and not in a component's scoped block, because BOTH screens need it and because the scoped version
+   It is here, and not in a component's scoped block, because EVERY entry screen needs it and because the scoped version
    silently did not work: `:global([data-frameless]) .door` compiles to `[data-frameless]` — Vue replaces the whole
    selector with what `:global()` wraps — so the padding landed on <html>, outside a door still standing a full
    100dvh tall. That is the scrollbar the sign-in window had, on every page of the app. */
@@ -253,6 +253,88 @@ html[data-frameless] .entry {
     transform: scale(-1);
 }
 
+/* THE SOCKET — where Google's own button is seated: a slot cut into the plate, the hairline its lit edge and the
+   inset shadow its depth. `color-scheme: light` is load-bearing, not decoration: Google draws its button to the
+   scheme it finds, and both entry screens want the light one, whatever the page around it wears. */
+.entry-socket {
+    padding: 0.85rem;
+    border: 1px solid var(--rule);
+    background: #0b0805;
+    box-shadow:
+        inset 0 2px 7px rgba(0, 0, 0, 0.66),
+        0 1px 0 rgba(201, 160, 92, 0.1);
+    color-scheme: light;
+}
+/* A block, not a flex item: a shrink-to-fit item is 0px wide until Google renders something inside it. */
+.entry-socket-slot {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+/* THE SEAL — the mark inside a double ring, for a screen whose whole content is one wait. `-turning` runs an arc
+   round it, `-lit` locks it; one object in two states, so arrival is a change rather than a different screen. */
+.entry-seal {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 4.75rem;
+    height: 4.75rem;
+    margin: 0 auto 1rem;
+}
+.entry-seal-ring {
+    position: absolute;
+    inset: 0;
+    border: 1px solid var(--rule-strong);
+    border-radius: 50%;
+}
+.entry-seal-ring::after {
+    content: "";
+    position: absolute;
+    inset: 5px;
+    border: 1px solid var(--rule);
+    border-radius: 50%;
+}
+.entry-seal-mark {
+    font-size: 1.5rem;
+}
+/* Masked to the ring's own width, so it reads as light travelling metal rather than as a spinner laid on top. */
+.entry-seal-sweep {
+    position: absolute;
+    inset: -1px;
+    border-radius: 50%;
+    background: conic-gradient(from 0turn, transparent 0turn, var(--gold-bright) 0.2turn, transparent 0.33turn);
+    mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+    animation: entry-seal-turn 2.4s linear infinite;
+}
+.entry-seal-turning .entry-seal-mark {
+    opacity: 0.55;
+    transition: opacity 0.4s ease;
+}
+/* Arrival: the ring takes the metal and throws a halo mixed from the ember, so it follows whichever dress is on. */
+.entry-seal-lit .entry-seal-ring {
+    border-color: var(--gold);
+    box-shadow: 0 0 32px -6px color-mix(in oklab, var(--ember) 45%, transparent);
+}
+.entry-seal-lit .entry-seal-ring::after {
+    border-color: var(--rule-bright);
+}
+.entry-seal-lit .entry-seal-mark {
+    filter: var(--house-ember-mark-glow);
+}
+@keyframes entry-seal-turn {
+    to {
+        transform: rotate(1turn);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    /* Still a ring with a bright side, so the state is legible without anything moving. */
+    .entry-seal-sweep {
+        animation: none;
+        background: conic-gradient(from 0turn, var(--rule-strong) 0turn, var(--gold-bright) 0.5turn, var(--rule-strong) 1turn);
+    }
+}
+
 /* The finial carries no plate of its own: a filled box behind it reads as a sticker punched through the wall the frame stands on. */
 .entry-finial {
     position: absolute;
@@ -424,9 +506,9 @@ html[data-frameless] .entry {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   THE SAME TWO SCREENS IN DAYLIGHT.
+   THE SAME SCREENS IN DAYLIGHT.
 
-   A reader who came from intentic.dev/desk has been reading a light page, and /login and /setup are the first thing
+   A reader who came from intentic.dev/desk has been reading a light page, and an entry screen is the first thing
    they meet on this side — so they wear the site's light skin exactly as they already wear its dark one.
 
    KEYED ON THE SCHEME, NOT ON THE PROFILE, and that distinction is the whole of it. A profile decides the scheme once,
@@ -444,7 +526,7 @@ html[data-frameless] .entry {
 html:not([data-mode="dark"]) .entry {
     /* GOLD DOES NOT SURVIVE DAYLIGHT — #c9a05c on paper is 2.2:1, unreadable as the label type it carries. Both metals
        become burnt orange and keep their order, and the ember lands a step off them. Fixed brand rather than the picked
-       accent, for the reason the dark skin is fixed gold: nobody has picked anything yet on these two screens. */
+       accent, for the reason the dark skin is fixed gold: nobody has picked anything yet on an entry screen. */
     --gold: var(--color-brand-900);
     --gold-bright: var(--color-brand-800);
     --ember: var(--color-brand-700);
@@ -505,6 +587,7 @@ html:not([data-mode="dark"]) .entry {
     /* Ember glows read as smudges on white; the marks they sat behind are dark enough to carry themselves. */
     --house-ember-stop-glow: none;
     --house-finial-glow: none;
+    --house-ember-mark-glow: none;
 
     color-scheme: light;
 }
@@ -527,6 +610,16 @@ html:not([data-mode="dark"]) .entry-plate::after {
         radial-gradient(58% 46% at 50% 34%, rgb(var(--scrim) / 0.62) 0%, rgb(var(--scrim) / 0.46) 42%, rgb(var(--scrim) / 0.2) 72%, transparent 100%),
         linear-gradient(0deg, rgb(var(--scrim) / 0.88) 0%, rgb(var(--scrim) / 0.56) 20%, rgb(var(--scrim) / 0.18) 40%, transparent 60%),
         radial-gradient(128% 108% at 50% 40%, transparent 44%, rgb(var(--scrim) / 0.42) 100%);
+}
+
+/* THE SLOT IS CUT INTO THE PAGE, NOT PUNCHED THROUGH IT. The dark skin's near-black fill is a hole, which on cream
+   is the one object in the light dress that still belongs to the night one — and it is the size of Google's button.
+   Same recess, in the plate's own stone: a shaded well and a lit lip below it. `color-scheme` is untouched. */
+html:not([data-mode="dark"]) .entry-socket {
+    background: color-mix(in oklab, var(--rule-strong) 45%, var(--plate));
+    box-shadow:
+        inset 0 2px 6px rgb(61 40 22 / 0.14),
+        0 1px 0 rgb(255 255 255 / 0.55);
 }
 
 /* No stone to echo on paper: the headline is simply the page's ink. */

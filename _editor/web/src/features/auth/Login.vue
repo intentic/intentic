@@ -124,8 +124,8 @@ watch(
                 <p v-if="error" class="gate-error">{{ error }}</p>
 
 <!-- Google's button also supplies the sandbox credential, one sign-in for both. -->
-                <div v-show="googleReady" class="socket">
-                    <div ref="googleButton" class="socket-slot"></div>
+                <div v-show="googleReady" class="entry-socket">
+                    <div ref="googleButton" class="entry-socket-slot"></div>
                 </div>
 
 <!-- The site's primary button style (styles/entry.css), shown only when Google's embedded button could not render. -->
@@ -236,23 +236,6 @@ watch(
     color: var(--ink);
 }
 
-/* A cut slot, not a box: the hairline is its lit edge, the inset shadow its depth. */
-.socket {
-    padding: 0.85rem;
-    border: 1px solid var(--rule);
-    background: #0b0805;
-    box-shadow:
-        inset 0 2px 7px rgba(0, 0, 0, 0.66),
-        0 1px 0 rgba(201, 160, 92, 0.1);
-    color-scheme: light;
-}
-/* A block, not a flex item: a shrink-to-fit item is 0px wide until Google renders something inside it. */
-.socket-slot {
-    display: flex;
-    justify-content: center;
-    width: 100%;
-}
-
 .escape {
     display: block;
     width: 100%;
@@ -349,7 +332,7 @@ watch(
         padding-left: 1.25rem;
         padding-right: 1.25rem;
     }
-    .socket {
+    .entry-socket {
         padding-left: 0.5rem;
         padding-right: 0.5rem;
     }

@@ -148,7 +148,8 @@ One attribute on `<html>`: `data-skin="sanctum"`. Every rule in the skin's style
 to it, so an app with no skin selected is not a skin turned down: it is the skin's rules never matching. `none`
 writes no attribute at all.
 
-**Two routes are outside all of this, on purpose.** `/login` and `/setup` are built out of the marketing site's
+**Four routes are outside all of this, on purpose.** `/login`, `/setup` and the desktop app's two handoff screens
+(`/desktop-auth`, `/desktop-auth/complete`) are built out of the marketing site's
 own material — see [`../styles/entry.css`](../styles/entry.css) — because a visitor meets them within a minute
 of leaving intentic.dev and has picked no skin yet. That sheet is imported **after** the skin in
 `styles.css`: a skin's rules are `[data-skin=…] .p-button…` (an attribute plus a class), which weighs exactly
@@ -224,7 +225,7 @@ Three selectors are worth copying rather than re-deriving, because each was a bu
   strip is also a card-painted direct child of a `<section>`, and it wore a full panel frame across a bar of tabs;
 - the route element is `#app > :first-child:not(.entry)`, **not** `#app > *`: `#app` also holds a screen-reader
   live region and a fixed toast layer, and a backdrop painted on the toast layer floats above the whole app.
-  The `:not(.entry)` is the two entry screens opting out — `/login` and `/setup` are dressed as the marketing
+  The `:not(.entry)` is the entry screens opting out — the four named above are dressed as the marketing
   site the visitor just came from (`styles/entry.css`), and they carry the site's own carved plate, so a skin's
   horizon under it is a second temple standing behind the first. It has to be written **here**, because the
   backdrop is drawn with an id and no amount of class specificity in that sheet could reach it;

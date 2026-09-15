@@ -1,5 +1,6 @@
+<!-- Where the browser's handoff lands, inside the app: the same entry material, at the size of a two-second wait. -->
 <script setup lang="ts">
-import { Button, ui, Notice, type NoticeModel } from "@intentic/ui";
+import { Button, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -7,6 +8,7 @@ import { apiClient } from "../../lib/useApi";
 import { useAuth } from "./useAuth";
 import { useGoogleIdentity } from "./useGoogleIdentity";
 import { environment } from "../../app/environments/environment";
+import AppBrand from "../../components/AppBrand.vue";
 
 // This page runs inside the desktop app's webview, which starts with no session.
 // 1. Redeem the row the browser parked (single use).
@@ -57,16 +59,64 @@ onMounted(() => void complete());
 </script>
 
 <template>
-    <div class="flex min-h-dvh w-full items-center justify-center bg-canvas px-4 text-content">
-        <div class="flex w-full max-w-sm flex-col gap-4 text-center">
-            <template v-if="error">
-                <Notice v-if="error" :of="error" />
-                <Button label="Back to sign in" severity="secondary" class="self-center" @click="void router.replace(`/login`)" />
+    <div class="entry arrival">
+        <div class="entry-plate" aria-hidden="true"><div class="entry-plate-img"></div></div>
+
+        <main class="shell">
+            <header class="mark"><AppBrand /></header>
+
+            <!-- No frame and no rail while it works: nothing is being asked, so there is nothing to put a frame round. -->
+            <template v-if="error === undefined">
+                <div class="entry-seal entry-seal-turning" aria-hidden="true">
+                    <span class="entry-seal-ring"></span>
+                    <span class="entry-seal-sweep"></span>
+                    <AppBrand shape="mark" class="entry-seal-mark" />
+                </div>
+                <p class="say" role="status">Signing you in…</p>
             </template>
-            <p v-else class="flex items-center justify-center gap-2 text-sm text-muted">
-                <Icon name="spinner" spin />
-                <span>Signing you in…</span>
-            </p>
-        </div>
+
+            <!-- A failure is terminal for this link, so the frame comes up around the one thing left to do. -->
+            <section v-else class="entry-frame gate">
+                <span class="entry-corner entry-corner-tl"></span>
+                <span class="entry-corner entry-corner-tr"></span>
+                <span class="entry-corner entry-corner-bl"></span>
+                <span class="entry-corner entry-corner-br"></span>
+                <Notice :of="error" class="rounded-none text-left" />
+                <Button label="Back to sign in" severity="secondary" class="mt-4 self-center" @click="void router.replace(`/login`)" />
+            </section>
+        </main>
     </div>
 </template>
+
+<style scoped>
+/* Layout only; the plate, metals and seal are shared material in styles/entry.css. */
+.arrival {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: clamp(1rem, 2.5vw, 2rem) 1.5rem;
+}
+.shell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 30rem;
+    margin: auto;
+    text-align: center;
+}
+.mark {
+    font-size: 1.375rem;
+    margin-bottom: clamp(1.5rem, 5vh, 2.75rem);
+}
+.say {
+    font-size: 0.9375rem;
+    color: var(--ink-muted);
+}
+.gate {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 1.75rem 1.75rem 1.5rem;
+}
+</style>
