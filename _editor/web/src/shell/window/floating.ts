@@ -170,6 +170,13 @@ export const floatingWindowPanel: ComputedRef<FloatingPanel | undefined> = compu
  */
 export const floatsElsewhere: ComputedRef<boolean> = computed(() => elsewhere.value.size > 0);
 
+/** Brings the window already floating a panel forward, for work handed to it; never opens one (see FloatingSurface.open). */
+export const raiseFloating = (panel: FloatingPanel): void => {
+    if (elsewhere.value.has(panel)) {
+        post({ kind: `raise`, panel });
+    }
+};
+
 // Last remembered position and size for a panel's floating window, kept in localStorage (not session) so it survives
 // restarts; written only by that window itself.
 interface Frame {

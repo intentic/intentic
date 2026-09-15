@@ -45,6 +45,9 @@ export interface Reveal {
     readonly peek?: boolean;
     // Drafts these chats were closed holding, claimed once so every window restores the same composer.
     readonly unsent?: readonly StoredTab[];
+    // The focused chat's first turn, for the window drawing the chat to send (summon.ts); only that window acts on
+    // it, so a summons every window applies still starts exactly one turn.
+    readonly deliver?: string;
 }
 
 // The transcript round-trip behind a session entry, off the reveal's synchronous path.

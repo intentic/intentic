@@ -47,8 +47,12 @@ vi.mock("../../chat/panel/useChat-reveal", () => ({
     draftConversation: () => ({ ...draft.value, enqueue: (prompt: string) => chat.enqueued.push(prompt) }),
     agentTabOf: () => ({}),
 }));
-// The summons channel is the seam startAgent shows the new tab through; this suite has no second window to receive it.
-vi.mock("../../chat/run/summon", () => ({ summonChat: () => {} }));
+// The summons channel is the seam startAgent shows the new tab through; this suite has no second window to receive it,
+// so a summoned turn runs here, as summonTurn does in any window drawing the chat.
+vi.mock("../../chat/run/summon", () => ({
+    summonChat: () => {},
+    summonTurn: (conversation: { enqueue: (prompt: string) => void }, prompt: string) => conversation.enqueue(prompt),
+}));
 vi.mock("../../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries: async () => undefined } }));
 vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
 vi.mock("../../sandbox/client/useSandbox", () => ({

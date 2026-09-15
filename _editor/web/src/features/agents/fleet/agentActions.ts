@@ -2,7 +2,7 @@ import type { AgentChangesResponse } from "@intentic/api-contract";
 import type { AgentSpan, AgentSummary, LandMode, LandResult } from "@intentic/sandbox-contract";
 import { useDevice } from "@intentic/ui";
 import type { Conversation } from "../../chat/session/conversation";
-import { summonChat } from "../../chat/run/summon";
+import { summonChat, summonTurn } from "../../chat/run/summon";
 import { useChat } from "../../chat/run/useChat";
 import { composingConversation, draftConversation } from "../../chat/panel/useChat-reveal";
 import { queryClient } from "../../../lib/queryPersistence";
@@ -43,12 +43,16 @@ export const startAgent = (prompt?: string, actsAs?: string): string => {
     const fitted = actsAs === undefined && project !== undefined ? ensureProjectPersona(project) : undefined;
     conversation.actsAs.value = actsAs ?? (project === undefined ? undefined : projectPersonaId(project));
     conversation.startIn.value = project;
+    // The prompt rides the summons, so the turn runs in the window drawing the chat rather than whichever one was
+    // clicked (summonTurn).
+    if (fitted === undefined && prompt !== undefined) {
+        summonTurn(conversation, prompt);
+        revealConversation(conversation);
+        return conversation.conversationId;
+    }
     summonChat({ kind: `reveal`, verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: true });
     revealConversation(conversation);
     if (fitted === undefined) {
-        if (prompt !== undefined) {
-            void conversation.enqueue(prompt);
-        }
         return conversation.conversationId;
     }
     // The card exists before the first prompt goes, or the daemon would answer an unknown persona with an ordinary
@@ -57,7 +61,7 @@ export const startAgent = (prompt?: string, actsAs?: string): string => {
         .catch(() => {
             conversation.actsAs.value = undefined;
         })
-        .then(() => (prompt === undefined ? undefined : conversation.enqueue(prompt)));
+        .then(() => (prompt === undefined ? undefined : summonTurn(conversation, prompt)));
     return conversation.conversationId;
 };
 

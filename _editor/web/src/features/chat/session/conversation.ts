@@ -375,6 +375,10 @@ export class Conversation {
     // True while drainQueue owns the idle flush, so a second drain can't send the same messages twice.
     private flushing = false;
 
+    // Queued messages handed to a send the daemon has not acknowledged; they are still in `queued`, so nothing about
+    // them is lost if this window dies, and a refusal has nothing to hand back (requeueUndelivered).
+    private undelivered: readonly QueuedMessage[] = [];
+
     // The conversation's whole identity: key for the fleet entry, worktree, tab, and mirror; a word pair, not a UUID.
     constructor(readonly conversationId: string = newConversationId()) {
         this.seedPicks();
@@ -993,6 +997,8 @@ export class Conversation {
             }
             // The ack means the turn is running daemon-side regardless of this tab; a fork's rows are already copied.
             this.pendingForkOf.value = undefined;
+            // The daemon has the words now, so the queue's copy of them stops being the only one that exists.
+            this.settleDelivered();
             const { run } = (await response.json()) as { run: string };
             this.turnAccepted = true;
             this.latchRemoteRegistration();
@@ -1185,12 +1191,27 @@ export class Conversation {
         this.queued.value = this.queued.value.filter((message) => message.id !== id);
     }
 
+    // Drops the messages a turn was started from, now that the daemon holds them; called at the ack alone, so anything
+    // refused before it stays queued.
+    private settleDelivered(): void {
+        if (this.undelivered.length === 0) {
+            return;
+        }
+        const delivered = this.undelivered;
+        this.undelivered = [];
+        this.queued.value = this.queued.value.filter((message) => !delivered.includes(message));
+    }
+
     // Take a bubble the daemon turned away out of the transcript and queue it at the front, for the user to resend.
     // A turn refused before it ran produced nothing, so an auto-flushed queue would just re-fail it.
     private requeueUndelivered(userMessageId: number): void {
         this.interrupted = true;
         const bubble = this.transcript.takeBackUserBubble(userMessageId);
         if (bubble === undefined) {
+            return;
+        }
+        // Refused before the ack: the words never left the queue, so they are already where a resend reads them.
+        if (this.undelivered.length > 0) {
             return;
         }
         const held = { text: bubble.text, attachments: (bubble.attachments ?? []).map((path) => ({ name: basename(path), path })) };
@@ -1294,9 +1315,12 @@ export class Conversation {
                 return;
             }
             this.flushing = true;
+            const pending = this.queued.value;
+            // The words stay in the queue until the daemon has the turn (settleDelivered, at the ack): the queue rides
+            // the tab snapshot, so a window that dies mid-send — a dev-server reload, a closed tab — leaves them on
+            // the tab to send again rather than nowhere, with no turn anywhere either.
+            this.undelivered = pending;
             try {
-                const pending = this.queued.value;
-                this.queued.value = [];
                 await this.send(
                     pending
                         .map((message) => message.text)
@@ -1307,6 +1331,7 @@ export class Conversation {
                     pending.find((message) => message.editorContext !== undefined)?.editorContext,
                 );
             } finally {
+                this.undelivered = [];
                 this.flushing = false;
             }
         }

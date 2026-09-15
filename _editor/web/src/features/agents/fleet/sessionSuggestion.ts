@@ -1,6 +1,6 @@
 import { parsePinned } from "@intentic/sandbox-contract";
 import { Conversation } from "../../chat/session/conversation";
-import { summonChat } from "../../chat/run/summon";
+import { summonTurn } from "../../chat/run/summon";
 import { openConversation, revealConversation } from "./agentActions";
 
 // Suggests a specific piece of work with the turn already composed, so the app decides WHAT and the user decides IF:
@@ -51,7 +51,8 @@ export const startSession = (conversation: Conversation): void => {
         return;
     }
     conversation.draft.value = ``;
-    summonChat({ kind: `reveal`, verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: true });
+    // summonTurn, not a summons plus a local send: a card pressed from a window with the chat floating elsewhere would
+    // otherwise run the turn in the window nobody is watching.
+    summonTurn(conversation, prompt);
     revealConversation(conversation);
-    void conversation.enqueue(prompt);
 };

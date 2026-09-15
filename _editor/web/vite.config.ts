@@ -22,7 +22,7 @@ const buildStamp = (): Plugin => ({
     },
 });
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
     ...shared,
     plugins: [...shared.plugins, buildStamp()],
     server: {
@@ -33,10 +33,9 @@ export default defineConfig({
         // Shares the API's local dev cert, so the two origins keep one trust chain and the session cookie carries with
         // no mixed-content warnings. Minted by `pnpm install`, trusted by `pnpm cert:trust`; path is per-user
         // (_tools/localhost-https).
-        https: {
-            cert: readFileSync(LEAF_CRT),
-            key: readFileSync(LEAF_KEY),
-        },
+        // Read only while serving: `vite build` loads this same config, and a machine that never runs the dev server
+        // (CI, a sandbox) has no leaf to read — a build that needs one fails where nothing was ever going to serve.
+        ...(command === `serve` ? { https: { cert: readFileSync(LEAF_CRT), key: readFileSync(LEAF_KEY) } } : {}),
     },
     build: {
         outDir: "dist",
@@ -49,4 +48,4 @@ export default defineConfig({
             input: { index: here("./index.html") },
         },
     },
-});
+}));

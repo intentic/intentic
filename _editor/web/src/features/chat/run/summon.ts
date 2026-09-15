@@ -1,6 +1,8 @@
 import { onChatNote, postChatNote } from "./chatChannel";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { claimClosedDrafts } from "../drafts/closedDrafts";
+import { drawsChat } from "./chatEcho";
+import { floatingWindowPanel, raiseFloating } from "../../../shell/window/floating";
 import { Conversation } from "../session/conversation";
 import { traceFocus } from "./focusTrace";
 import { showRun } from "./chatRun";
@@ -48,13 +50,19 @@ const apply = (summons: Summons): void => {
         }
         return;
     }
-    reveal(summons);
+    const focused = reveal(summons);
+    // Only the window holding the chat's own window sends a carried turn: every window applies this summons, and the
+    // one that composed it kept the turn for itself unless it draws no chat (summonTurn).
+    if (summons.deliver !== undefined && focused !== undefined && floatingWindowPanel.value === `chat`) {
+        void focused.enqueue(summons.deliver);
+    }
 };
 
 // What a summons logs to the focus trace: the one tab-list change no local gesture explains.
 const traced = (summons: Summons): Record<string, unknown> => {
     if (summons.kind === `reveal`) {
-        return { kind: summons.kind, verb: summons.verb, focus: summons.focus };
+        // `carries` says a first turn rode along, the one summons whose effect is a turn rather than a tab.
+        return { kind: summons.kind, verb: summons.verb, focus: summons.focus, ...(summons.deliver === undefined ? {} : { carries: true }) };
     }
     return summons.kind === `run` ? { kind: summons.kind, run: summons.runId } : { kind: summons.kind, ids: summons.conversationIds.join(`,`) };
 };
@@ -85,6 +93,33 @@ export const summonChat = (summons: Summons): void => {
     const carrying = claimedSummons(summons);
     apply(carrying);
     relaySummons(carrying);
+};
+
+/**
+ * Shows a chat everywhere and starts its first turn, the one act behind every "start an agent for me" button.
+ *
+ * The turn runs in the window drawing the chat, never necessarily the one that was clicked: a turn started from a
+ * window with no chat on screen would run where nobody can watch it, keep its error where nobody can read it, and die
+ * with that window (a reload takes the composed prompt with it, and the daemon never hears of the press). Pressed
+ * from such a window, the prompt rides the summons and the chat's own window sends it, raised so the answer is where
+ * the eye already goes.
+ */
+export const summonTurn = (conversation: Conversation, prompt: string): void => {
+    const here = drawsChat.value;
+    summonChat({
+        kind: `reveal`,
+        verb: `show`,
+        entries: [conversation],
+        focus: conversation.conversationId,
+        caret: true,
+        ...(here ? {} : { deliver: prompt }),
+    });
+    if (here) {
+        void conversation.enqueue(prompt);
+        return;
+    }
+    // Raises the window already holding the chat, so the answer arrives where the eye goes; never opens one.
+    raiseFloating(`chat`);
 };
 
 // One summons reader per window; a hot-reloaded rerun would apply board clicks to a stale copy of the tab store.

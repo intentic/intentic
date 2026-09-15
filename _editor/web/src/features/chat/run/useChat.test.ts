@@ -1802,6 +1802,30 @@ describe(`hydrating a conversation whose turn is still running`, () => {
         vi.unstubAllGlobals();
     });
 
+    // What a window that died between a press and the daemon's ack leaves behind: the words still in the tab's queue,
+    // and a daemon that knows nothing of the conversation. Coming back, the press finishes rather than leaving the
+    // blank chat that made "Fix with agent" look like it did nothing.
+    it(`sends a first turn the daemon never heard of when its tab comes back`, async () => {
+        sandboxRequestMock.mockImplementation((path: string) =>
+            Promise.resolve(
+                path === `/agent`
+                    ? ({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response)
+                    : ({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response),
+            ),
+        );
+        const conversation = useChat().active.value;
+        conversation.queued.value = [{ id: `q1`, text: `the check failed, fix it`, attachments: [] }];
+
+        hydrateOnce(conversation);
+
+        await vi.waitFor(() =>
+            expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent`).map(([, init]) => JSON.parse(init!.body as string))).toMatchObject(
+                [{ prompt: `the check failed, fix it` }],
+            ),
+        );
+        expect(conversation.queued.value).toHaveLength(0);
+    });
+
     it(`runs one pass at a time, so a second trigger cannot answer about a tab the first has moved on`, async () => {
         let reads = 0;
         sandboxRequestMock.mockImplementation((path: string) => {

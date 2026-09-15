@@ -1,6 +1,6 @@
 // Pins the summons channel's contract: a chat summoned anywhere is on screen everywhere. Queued messages never ride the
 // wire, and a summons for another sandbox's chats is ignored whole.
-import { nextTick } from "vue";
+import { effectScope, nextTick } from "vue";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Summons } from "./summon";
 import type { StoredTab } from "../tabs/tabSnapshot";
@@ -47,10 +47,10 @@ const sandboxRequestMock = vi.mocked(sandboxRequest);
 const { resetChat, useChat } = await import("./useChat");
 const { Conversation } = await import("../session/conversation");
 const { chatRun } = await import("./chatRun");
-const { claimedSummons, relaySummons, summonChat, wireSummons } = await import("./summon");
+const { claimedSummons, relaySummons, summonChat, summonTurn, wireSummons } = await import("./summon");
 const { receiveChatNote } = await import("./chatChannel");
 const { closedDrafts, forgetClosedDraft, keepClosedDraft } = await import("../drafts/closedDrafts");
-const { receiveFloatingNote } = await import("../../../shell/window/floating");
+const { claimFloating, receiveFloatingNote } = await import("../../../shell/window/floating");
 
 // A summons as another window's channel would deliver it: an envelope naming its sandbox.
 const deliver = (summons: Summons, sandbox: string | undefined = `sb1`): void => receiveChatNote({ sandbox, note: { kind: `summons`, summons } });
@@ -263,6 +263,69 @@ it(`sets no words aside for a chat this window is only shadowing`, async () => {
 
     expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(clicked.conversationId);
     expect(closedDrafts.value).toEqual([]);
+});
+
+// Which window ran a turn, by the one call only a send makes; `/agent/attach` is hydration, not a send.
+const turnsSentHere = (): number => sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent`).length;
+
+// A card's "start an agent for me" press: the turn belongs to the window drawing the chat, not to whichever window was
+// clicked. A turn run in a window with no chat on screen is invisible while it works, keeps its refusal where nobody
+// reads it, and dies with that window — a reload between the press and the daemon's ack leaves nothing anywhere.
+it(`sends a summoned turn itself while it draws the chat`, () => {
+    const conversation = new Conversation();
+
+    summonTurn(conversation, `the check failed, fix it`);
+
+    expect(turnsSentHere()).toBe(1);
+    expect(useChat().activeId.value).toBe(conversation.conversationId);
+});
+
+it(`hands a summoned turn over rather than running it where no chat is drawn`, () => {
+    popOut();
+    const conversation = new Conversation();
+
+    summonTurn(conversation, `the check failed, fix it`);
+
+    expect(turnsSentHere()).toBe(0);
+});
+
+// The chat's own window claims the panel for as long as it is that window; node has none of the browser it polls for,
+// so the claim gets the frame and listeners it reads and nothing else.
+const asChatWindow = (act: () => void): void => {
+    Object.defineProperty(globalThis, `window`, {
+        configurable: true,
+        value: { screenX: 0, screenY: 0, outerWidth: 1024, outerHeight: 768, addEventListener: () => {}, removeEventListener: () => {} },
+    });
+    const scope = effectScope();
+    try {
+        scope.run(() => claimFloating(`chat`, () => undefined));
+        act();
+    } finally {
+        scope.stop();
+        Reflect.deleteProperty(globalThis, `window`);
+    }
+};
+
+it(`runs a carried turn in the window holding the chat's own window`, () => {
+    const clicked = new Conversation();
+
+    asChatWindow(() => {
+        deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: true, deliver: `fix it` }));
+    });
+
+    expect(turnsSentHere()).toBe(1);
+});
+
+// Every window applies the summons; a second sender would start the same fix twice.
+it(`leaves a carried turn alone in a window only shadowing the chat`, () => {
+    popOut();
+    const clicked = new Conversation();
+
+    deliver(
+        wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: true, deliver: `fix it` }),
+    );
+
+    expect(turnsSentHere()).toBe(0);
 });
 
 it(`strips queued turns from the words a summons carries`, () => {

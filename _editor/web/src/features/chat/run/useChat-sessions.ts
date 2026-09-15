@@ -2,6 +2,7 @@ import type { MatchSnippet, TranscriptRow } from "@intentic/sandbox-contract";
 import { ref, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { agentTranscript, type AgentTranscript } from "../transcript/agentTranscript";
+import { drawsChat } from "./chatEcho";
 import type { Conversation } from "../session/conversation";
 import type { PickUp } from "./pickUp";
 import { activeId, conversations, setConversations } from "../tabs/useChat-tabs";
@@ -146,6 +147,20 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
 // In-flight guard only; unlike `hydrating` (done for good), this clears once the pass ends either way.
 const hydrateInFlight = new WeakSet<Conversation>();
 
+// A first turn the daemon never heard of: the words sit in the tab's queue, where a send holds them until the ack
+// (Conversation.drainQueue), and the window that was delivering them is gone — a reload, a closed window. The daemon
+// has just said it knows nothing of this conversation, so there is no turn for a resend to collide with, and the press
+// finishes itself instead of coming back as a blank chat nobody asked for.
+const resumeUndelivered = (conversation: Conversation): void => {
+    if (!drawsChat.value || conversation.streaming.value || conversation.registered.value || conversation.queued.value.length === 0) {
+        return;
+    }
+    if (conversation.session.value !== undefined || conversation.messages.value.length > 0) {
+        return;
+    }
+    void conversation.drainQueue();
+};
+
 // Hydrates a tab once, holding the in-flight mark while the daemon answers. Exported for the pane's fleet
 // watcher, which calls it whenever the fleet reports a change to a conversation this tab didn't stream itself.
 export const hydrateOnce = (conversation: Conversation): void => {
@@ -158,7 +173,9 @@ export const hydrateOnce = (conversation: Conversation): void => {
         .then((current) => {
             if (!current) {
                 hydrating.delete(conversation);
+                return;
             }
+            resumeUndelivered(conversation);
         })
         // Unreachable daemon leaves the tab as-is; caught so it doesn't surface as an unhandled rejection.
         .catch(() => hydrating.delete(conversation))

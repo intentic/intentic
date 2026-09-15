@@ -1161,6 +1161,30 @@ describe(`Conversation`, () => {
         await turn;
     });
 
+    // The queue rides the tab snapshot, so what is still in it is what a reload brings back. A window can die between
+    // the press and the daemon's ack (a dev-server reload, a closed tab); dropping the message at the POST would leave
+    // the words nowhere and no turn anywhere.
+    it(`holds a message in the queue until the daemon has the turn`, async () => {
+        const conversation = new Conversation(`c1`);
+        let ack!: (response: Response) => void;
+        sandboxRequestMock.mockImplementation((path: string) =>
+            path === `/agent`
+                ? new Promise<Response>((resolve) => {
+                      ack = resolve;
+                  })
+                : Promise.resolve({ ok: true } as Response),
+        );
+
+        const sending = conversation.enqueue(`fix the failing check`);
+        await vi.waitFor(() => expect(turnBodies()).toHaveLength(1));
+        expect(conversation.queued.value.map((message) => message.text)).toEqual([`fix the failing check`]);
+
+        ack({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+        await sending;
+
+        expect(conversation.queued.value).toHaveLength(0);
+    });
+
     it(`keeps a message the running turn can't take, then sends it as the next turn once that one settles`, async () => {
         const conversation = new Conversation(`c1`);
         let controller!: ReadableStreamDefaultController<Uint8Array>;
