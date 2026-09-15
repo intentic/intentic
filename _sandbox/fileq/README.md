@@ -82,6 +82,15 @@ the pass's own `queue`, also served bare at `GET /workspace/derived-status` for 
 unrendered file and a file thirty deep in the queue stop looking identical. The empty state points at
 Settings → Agent only where `state` is `off`; pointing at a switch that is already on is what it used to do.
 
+`state` is also what decides who reads a file nobody has read yet. Opening one asks for it (`POST
+/workspace/derive`) without waiting to be told to, because opening the text IS the request and one ordinary
+document is a few hundred milliseconds — except where the answer says someone else has it: `deriving`, or
+`queued` behind a named batch, which is seconds away. A `queued` behind a whole-tree **sweep** is not left
+alone, since that converges hundreds of files and the reader would wait behind all of them. One version of a
+file is asked for once per tab, so a file that renders to nothing is not re-read on every frame that lands.
+The daemon shares one run between callers asking for the same path and holds itself to two at a time, so a
+reader walking a folder of documents cannot put a child process per file on the box.
+
 Later tiers extend the same shape, not the same commit: transcripts (whisper-cli, already in the image's
 feature pack for voice) and captions (a vision model, costing real money) would each be a deriver whose
 absence today is already named in the sidecars it will one day fill, the way OCR was until an image layer
@@ -103,3 +112,9 @@ is the one place a deriver asks whether a binary is on PATH.
   and build every binary fixture in code (`src/testing.ts`) so what a fixture contains is reviewable.
 - No per-file timeout inside the CLI: a pathological parse is bounded by the daemon's timeout on the spawn,
   and by nothing when run by hand. Sweeps on document-heavy trees take minutes and say so as they go.
+- A deriver's parser is loaded inside its `derive()`, never at the top of its module: `derive.ts` imports all
+  eleven so `read` and `derive` cannot disagree about a file, which means one top-level `import` is paid by
+  every run — an agent reading a png, a sweep with nothing stale in it, `fileq --version`. exceljs, mammoth
+  and music-metadata together were ~1.3s of a ~1.4s no-op run; moving them took `fileq --version` from ~560ms
+  to ~120ms, and reading one ordinary document from ~400ms to ~150ms. `src/lib/derivers/load-cost.test.ts`
+  holds the line.

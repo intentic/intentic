@@ -1,7 +1,11 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
 /* Spreadsheets: one markdown table per sheet, capped, with the cap announced. */
+
+// exceljs is 0.8s to load, and it is loaded inside derive() rather than here because every fileq run — every agent
+// read of a png, every sweep, `fileq --version` — pays for a module this file imports at its top. The type import
+// above is erased at compile time and costs nothing.
 
 const MAX_ROWS_PER_SHEET = 200;
 const MAX_COLUMNS = 30;
@@ -39,7 +43,8 @@ export const xlsxDeriver: Deriver = {
     name: "xlsx",
     version: 1,
     derive: async (absPath): Promise<DerivedDoc> => {
-        const workbook = new ExcelJS.Workbook();
+        const { default: excel } = await import("exceljs");
+        const workbook = new excel.Workbook();
         await workbook.xlsx.readFile(absPath);
         const notes: string[] = [];
         const sections: string[] = [];

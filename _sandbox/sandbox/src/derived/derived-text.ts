@@ -90,8 +90,37 @@ const skipReason = (stdout: string): string | undefined => {
     }
 };
 
-/** Derives one file now and answers with the result: the lazy path the CLI already runs. */
-export const deriveText = async (root: string, relPath: string, exec: ExecFn = defaultExec): Promise<WorkspaceDerived> => {
+// Derivations asked for right now, by path. Opening a file asks for one without anyone pressing a button, so a reader
+// walking a folder of documents would otherwise have a child process per file, all at once, on the box their agent is
+// working on. Two callers wanting the same file wait on the same child rather than spawning a second.
+const inFlight = new Map<string, Promise<WorkspaceDerived>>();
+// One at a time past this, which is what the background pass already holds itself to for the same reason.
+const MAX_CONCURRENT = 2;
+const waiting: (() => void)[] = [];
+let running = 0;
+
+const acquire = async (): Promise<void> => {
+    if (running < MAX_CONCURRENT) {
+        running += 1;
+        return;
+    }
+    // Woken already counted (see release): a waiter that incremented for itself would leave a gap between the
+    // decrement and the wake-up, and a third caller arriving in that gap would find the count one too low.
+    await new Promise<void>((resolve) => waiting.push(resolve));
+};
+
+const release = (): void => {
+    const next = waiting.shift();
+    if (next === undefined) {
+        running -= 1;
+        return;
+    }
+    // The slot is handed over rather than given back, so `running` never dips between the two.
+    next();
+};
+
+const deriveOnce = async (root: string, relPath: string, exec: ExecFn): Promise<WorkspaceDerived> => {
+    await acquire();
     try {
         await exec("fileq", ["derive", "--json", relPath], { timeout: DERIVE_TIMEOUT_MS, maxBuffer: FILEQ_MAX_BUFFER });
         return await readDerivedText(root, relPath);
@@ -109,5 +138,21 @@ export const deriveText = async (root: string, relPath: string, exec: ExecFn = d
         }
         // Exit 1 is fileq's "nothing derivable here", and the line it printed says which of its reasons applied.
         return await readDerivedText(root, relPath, skipReason(stdoutOf(error)));
+    } finally {
+        release();
     }
+};
+
+/**
+ * Derives one file now and answers with the result: the lazy path the CLI already runs. Concurrent asks for the same
+ * file share one run, and the box never carries more than a couple at once.
+ */
+export const deriveText = (root: string, relPath: string, exec: ExecFn = defaultExec): Promise<WorkspaceDerived> => {
+    const already = inFlight.get(relPath);
+    if (already !== undefined) {
+        return already;
+    }
+    const started = deriveOnce(root, relPath, exec).finally(() => inFlight.delete(relPath));
+    inFlight.set(relPath, started);
+    return started;
 };

@@ -29,5 +29,23 @@ export const rememberDerived = (path: string, derived: WorkspaceDerived): Worksp
 /** What this path answered last, if it has been read in this tab: what a reopened file paints before the daemon answers. */
 export const rememberedDerivedText = (path: string): WorkspaceDerived | undefined => remembered.get(path);
 
-/** Drops every remembered shadow. Paths collide across sandboxes, so switching one makes all of them another file's. */
-export const forgetDerivedText = (): void => remembered.clear();
+// One version of one file that has already had a derivation asked for it. Opening a file derives it rather than
+// offering a button, and this pane re-reads often (its text landing, a sweep finishing, the tab reopening): without
+// this, a file that legitimately renders to nothing would have the same work spawned for it over and over.
+const attempted = new Set<string>();
+
+/** Records an attempt at this version of this file, answering whether it is the first one. */
+export const firstDeriveAttempt = (path: string, version: number): boolean => {
+    const key = `${version}:${path}`;
+    if (attempted.has(key)) {
+        return false;
+    }
+    attempted.add(key);
+    return true;
+};
+
+/** Drops everything remembered here. Paths collide across sandboxes, so switching one makes all of it another file's. */
+export const forgetDerivedText = (): void => {
+    remembered.clear();
+    attempted.clear();
+};

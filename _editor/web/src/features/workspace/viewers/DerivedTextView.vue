@@ -4,7 +4,7 @@ import { errorMessage } from "@intentic/ui/async";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { formatElapsed } from "../../agents/fleet/agentStatus";
 import { changeEpochOf, derivedEpochOf, sidecarQueue } from "../changes/useWorkspaceLive";
-import { rememberedDerivedText } from "../files/derivedCache";
+import { firstDeriveAttempt, rememberedDerivedText } from "../files/derivedCache";
 import { deriveText, readDerivedText, type WorkspaceDerived } from "../files/derivedText";
 
 /* Derived text is the agent-readable rendering of a file. */
@@ -64,6 +64,45 @@ const settle = (id: number, result: WorkspaceDerived): void => {
     error.value = null;
 };
 
+const derive = (target: string): void => {
+    const id = ++seq;
+    deriving.value = true;
+    startClock();
+    deriveText(target).then(
+        (result) => {
+            settle(id, result);
+            deriving.value = false;
+            stopClock();
+        },
+        (err: unknown) => {
+            if (id !== seq) {
+                return;
+            }
+            deriving.value = false;
+            stopClock();
+            error.value = errorMessage(err, `Could not render this file as text.`);
+        },
+    );
+};
+
+// Whether this file is about to be read by someone else, closely enough that asking for it again would only put two
+// child processes on the same work. A named batch is seconds away, so it is; a whole-tree sweep converges hundreds of
+// files and can run for minutes, and the file in front of a reader should not wait behind all of them.
+const handledSoon = (result: Extract<WorkspaceDerived, { present: false }>): boolean =>
+    result.state === `deriving` || (result.state === `queued` && !result.queue.sweeping);
+
+// A reader looking at this pane has already asked for this file's text; a button asking them to confirm it is a step,
+// not a choice, and one ordinary document costs a few hundred milliseconds to read — a load, not a job.
+const deriveIfNothingElseWill = (target: string, result: WorkspaceDerived): void => {
+    if (result.present || !result.derivable || result.state === `broken` || result.state === `undeliverable` || handledSoon(result)) {
+        return;
+    }
+    // Once per version of the file: one that renders to nothing has answered, and this pane re-reads often.
+    if (firstDeriveAttempt(target, changeEpochOf(target))) {
+        derive(target);
+    }
+};
+
 const load = (target: string): void => {
     const id = ++seq;
     // What this path answered last, painted before the read that confirms it. A file whose text exists is not being
@@ -76,6 +115,7 @@ const load = (target: string): void => {
             settle(id, result);
             loading.value = false;
             stopClock();
+            deriveIfNothingElseWill(target, result);
         },
         (err: unknown) => {
             if (id !== seq) {
@@ -123,6 +163,10 @@ const emptyIcon = computed(() => {
     return shadow.value?.state === `undeliverable` || shadow.value?.state === `broken` ? `box` : `align-left`;
 });
 
+// The answer's absent half, where `derivable` and `reason` live. Everything below the text is about this one; the
+// template narrows it for itself, a computed has to be told.
+const absent = computed(() => (shadow.value?.present === false ? shadow.value : undefined));
+
 const emptyMessage = computed(() => {
     switch (shadow.value?.state) {
         case `deriving`:
@@ -133,32 +177,15 @@ const emptyMessage = computed(() => {
         case `undeliverable`:
             return `Nothing here can turn this file into text.`;
         default:
-            // `off` and `idle` both leave the reader holding the same question; what differs is whether a switch would
-            // answer it, and that is what the Settings line below says or withholds.
-            return `Nothing has read this file yet. Rendering it gives you its text — and gives an agent the same.`;
+            // `reason` is set exactly when a derivation was just attempted and produced nothing, which is now the
+            // common way to arrive here: opening the file already tried. Saying "nothing has read this" over a file
+            // this pane just had read would be the same lie the queued state used to tell.
+            return absent.value?.reason === undefined
+                ? `Nothing has read this file yet. Rendering it gives you its text — and gives an agent the same.`
+                : `This file was read, but no text came out of it.`;
     }
 });
 
-const derive = (): void => {
-    const id = ++seq;
-    deriving.value = true;
-    startClock();
-    deriveText(path).then(
-        (result) => {
-            settle(id, result);
-            deriving.value = false;
-            stopClock();
-        },
-        (err: unknown) => {
-            if (id !== seq) {
-                return;
-            }
-            deriving.value = false;
-            stopClock();
-            error.value = errorMessage(err, `Could not render this file as text.`);
-        },
-    );
-};
 </script>
 
 <template>
@@ -183,7 +210,7 @@ const derive = (): void => {
                     :text="true"
                     class="shrink-0"
                     :disabled="deriving"
-                    @click="derive"
+                    @click="derive(path)"
                     v-tooltip.bottom="'Read the file again and rewrite this text'"
                 >
                     <Icon :name="deriving ? `spinner` : `refresh`" :spin="deriving" class="text-[0.7rem]" /> Derive again
@@ -225,9 +252,11 @@ const derive = (): void => {
             <Icon name="spinner" class="text-xl" spin />
             <template v-if="deriving">
                 <p class="text-sm">Reading this file and writing its text…</p>
+                <!-- What actually takes time, which is not what a reader assumes: a document is a few hundred
+                     milliseconds, and OCR is the one case that runs long. Recordings are read for duration and tags,
+                     not transcribed, so this must not imply otherwise. -->
                 <p class="max-w-sm text-2xs text-subtle">
-                    A document or a spreadsheet takes a moment. A scanned PDF is recognised a page at a time and a recording is transcribed, which can run to a
-                    minute or two.
+                    Most documents take a moment. A scanned PDF has to be recognised a page at a time, which is the one that can run to a minute or more.
                 </p>
                 <p class="text-2xs tabular-nums text-subtle">{{ waited }}</p>
                 <p v-if="longDerive" class="max-w-sm text-2xs text-subtle">
@@ -252,7 +281,7 @@ const derive = (): void => {
             <p v-if="shadow?.reason !== undefined" class="max-w-sm text-2xs text-subtle">{{ shadow.reason }}</p>
             <div class="mt-1 flex items-center gap-2">
                 <!-- Offered even while queued: this is the way to jump the queue for the file in front of you. -->
-                <Button v-if="canDerive" severity="secondary" :disabled="deriving" @click="derive">
+                <Button v-if="canDerive" severity="secondary" :disabled="deriving" @click="derive(path)">
                     <Icon name="align-left" class="text-xs" />
                     {{ waiting ? `Read it now` : `Render as text` }}
                 </Button>

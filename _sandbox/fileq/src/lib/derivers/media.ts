@@ -1,7 +1,8 @@
-import { parseFile } from "music-metadata";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
 /* Media derivation reads container duration, codecs, and tags without decoding frames. */
+
+// music-metadata is 0.2s to load, and only a recording needs it; see xlsx.ts for why that is loaded inside derive().
 
 const formatDuration = (seconds: number): string => {
     const whole = Math.round(seconds);
@@ -13,6 +14,7 @@ export const mediaDeriver: Deriver = {
     name: "media",
     version: 1,
     derive: async (absPath): Promise<DerivedDoc> => {
+        const { parseFile } = await import("music-metadata");
         const meta = await parseFile(absPath, { duration: true });
         const lines: string[] = [];
         const { format, common } = meta;
