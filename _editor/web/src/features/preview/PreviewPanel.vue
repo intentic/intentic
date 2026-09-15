@@ -21,6 +21,8 @@ import { frameSandbox, pickTarget, type PreviewTarget } from "./previewModel";
 import { usePreviewTargets } from "./usePreviewTargets";
 import { previewAddress, previewOpened, previewSelectedId, selectPreviewTarget, setPreviewAddress } from "./previewSurface";
 import { togglePreviewFloating, usePreviewFloating } from "./previewFloating";
+import { phoneById, phonePickerGroups, storePhoneId, storedPhoneId } from "./phoneModels";
+import PreviewStage from "./PreviewStage.vue";
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 
 // Real iframe onto the dev server's own public hostname, not a streamed screenshot. Teleported between the /preview
@@ -216,8 +218,21 @@ const reload = (): void => {
     previewEpoch.value += 1;
 };
 
-// Full is the panel's whole width; phone centers a 390px column (current iPhone CSS width) in place of devtools.
+// Full is the panel's whole width; phone reproduces one model's CSS viewport inside a drawn handset, in place of devtools.
 const fit = ref<`full` | `phone`>(`full`);
+const phoneOptions = phonePickerGroups();
+const phoneId = ref(storedPhoneId());
+const phone = computed(() => phoneById(phoneId.value));
+// Clearing isn't a choice the list offers: there is always a handset on the stage.
+const phoneChoice = computed<string | undefined>({
+    get: () => phoneId.value,
+    set: (id) => {
+        if (id !== undefined) {
+            phoneId.value = id;
+            storePhoneId(id);
+        }
+    },
+});
 
 // Names what Start will run and where its output lands (`panel-<repo>` / `panel-<repo>--<app>`), since a bare "Start"
 // names neither the target nor the command it's about to run.
@@ -399,6 +414,16 @@ onUnmounted(stopStartingPoll);
                         { label: `Phone`, value: `phone` },
                     ]"
                 />
+                <!-- Only meaningful once there's a handset on the stage, and the row is tight enough to mind the width. -->
+                <Picker
+                    v-if="fit === `phone`"
+                    v-model="phoneChoice"
+                    :options="phoneOptions"
+                    variant="ghost"
+                    :search-threshold="12"
+                    aria-label="Which phone to frame the preview in"
+                    header="Phone"
+                />
 
                 <button
                     v-if="previewSrc"
@@ -469,16 +494,18 @@ onUnmounted(stopStartingPoll);
             </div>
 
             <!-- Sandbox preview responses admit this editor as a frame ancestor; mounting still waits for the hostname probe. -->
-            <div v-else-if="previewSrc" class="flex min-h-0 flex-1 justify-center overflow-hidden">
-                <iframe
-                    :key="`${previewEpoch}-${previewSrc}`"
-                    :src="previewSrc"
-                    :title="`${target.label} preview`"
-                    :sandbox="frameSandbox(target.kind)"
-                    class="h-full min-h-0 flex-1 bg-white"
-                    :class="fit === `phone` ? `max-w-phone border-x border-line` : ``"
-                ></iframe>
-            </div>
+            <PreviewStage v-else-if="previewSrc" :phone="fit === `phone` ? phone : undefined">
+                <template #default="{ frame }">
+                    <iframe
+                        :key="`${previewEpoch}-${previewSrc}`"
+                        :src="previewSrc"
+                        :title="`${target.label} preview`"
+                        :sandbox="frameSandbox(target.kind)"
+                        :style="frame"
+                        class="block border-0 bg-white"
+                    ></iframe>
+                </template>
+            </PreviewStage>
 
             <!-- A missing route means this sandbox has no preview proxy. -->
             <div v-else-if="reach?.outcome === `unreachable`" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">

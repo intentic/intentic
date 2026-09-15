@@ -39,9 +39,6 @@
 /* `full` has no rem ceiling on purpose — it is for the modal whose content is a CANVAS (a job graph, an embedded browser). */
     --container-modal-full: calc(100vw - 3rem);
 
-/* THE PHONE VIEWPORT, as the preview reproduces it. */
-    --container-phone: 390px;
-
 /* THE PANEL CEILING, named — for the same reason and out of the same spread (`max-h-[45dvh]`, `[55dvh]`, `[60dvh]`, `[60vh]`, `[72dvh]`). */
     --height-panel: 60dvh;
     --height-panel-lg: 72dvh;
