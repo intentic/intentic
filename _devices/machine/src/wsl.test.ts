@@ -12,7 +12,24 @@ describe("wslFrom", () => {
         expect(wslFrom(WSL2, "Arch", ARCH)).toEqual({ distro: "Arch" });
     });
 
-    // The daemon case: started by systemd, so the interactive shell's env never reached it.
+    // THE REGISTRATION NAME, and the reason this source exists: a resident agent started from a login entry has no
+    // WSL_DISTRO_NAME, and os-release says "Arch Linux" where `wsl -l -q` says "archlinux" — the mismatch that had a
+    // connected distro listed as not connected, and `in: "wsl:Arch Linux"` refused by wsl.exe.
+    it("takes the name WSL registered over anything the distro calls itself", () => {
+        expect(wslFrom(WSL2, undefined, ARCH, "\\\\wsl.localhost\\archlinux\\\n")).toEqual({ distro: "archlinux" });
+        // Older builds answer with the `wsl$` share instead.
+        expect(wslFrom(WSL2, undefined, ARCH, "\\\\wsl$\\Ubuntu-22.04\\")).toEqual({ distro: "Ubuntu-22.04" });
+        // It outranks the environment too: same string when both are there, and the one that is right when they differ.
+        expect(wslFrom(WSL2, "Arch Linux", ARCH, "\\\\wsl.localhost\\archlinux\\")).toEqual({ distro: "archlinux" });
+    });
+
+    // Interop off, no wslpath, or a path that is not a distro share: names nothing, and the fallbacks answer.
+    it("ignores an answer that is not a distro share", () => {
+        expect(wslFrom(WSL2, "archlinux", ARCH, "C:\\Users\\radar")).toEqual({ distro: "archlinux" });
+        expect(wslFrom(WSL2, undefined, ARCH, "")).toEqual({ distro: "Arch Linux" });
+    });
+
+    // The daemon case with no registration name to be had: what the distro calls itself, which is better than nothing.
     it("recognises the kernel with no distro name in the environment", () => {
         expect(wslFrom(WSL2, undefined, ARCH)).toEqual({ distro: "Arch Linux" });
     });

@@ -7,18 +7,28 @@ environment is one OS install on it with its own agent and its own door, both ag
 hostname plus the fact that one side is WSL.** Companion to the last two sections of
 [capabilities.md](../architecture/capabilities.md).
 
-## 1. Why the rows stay and the machine is a fold over them
+## 1. One card is one computer; an environment is a connection of it
 
-The first instinct is one agent per PC. It does not survive file sync: Mutagen watching a folder in a distro's
-filesystem has to run inside that distro (over `\\wsl.localhost` it is slow and blind to changes), and the Windows
-side alone can neither hold that folder nor own the distro's login shell and PATH. So a distro keeps its own agent,
-its own enrollment and its own host capability, with the owner's own switches on each: the grant for "run commands
-in Arch" and the grant for "see my Windows screen" are two decisions.
+Two things are true at once, and the first draft of this design mistook one for the other.
 
-What was wrong was never the rows; it was that nothing said they were one box. The fold is therefore a pure function
-over the rows (`machinesOf`), computed wherever the rows are read, not a new record the daemon keeps. Nothing is
-migrated, nothing is renamed, and a lone device is a machine of one environment keyed as itself, so its address does
-not change.
+**An agent per OS install is unavoidable.** Mutagen watching a folder in a distro's filesystem has to run inside that
+distro (over `\\wsl.localhost` it is slow and blind to changes), and the Windows side can neither hold that folder nor
+own the distro's login shell and PATH. So a distro keeps its own agent and its own durable enrollment.
+
+**A capability per OS install was a mistake.** The owner connected a computer, not a shell. Two cards meant two acts
+of connecting with different outcomes — a PC connected on its Windows side alone would print a command it could
+perfectly well have run — and it made one side of a machine a second-class row that the other side's distro listing
+then called "not connected".
+
+So: the `host` capability is the machine, and each environment connects under a key of that card. The native
+environment's key IS the card id (`rog`), by definition rather than as a fallback, and a sibling hangs off it
+(`rog::wsl:archlinux`); `hostCardOf` takes a connection back to the card whose switches admit it
+([schemas/hosts.ts](../../_shared/sandbox-contract/src/schemas/hosts.ts), `PeerDoor.cardOf`). A machine with one OS
+install is therefore addressed exactly as it always was, and `HostSummary.environments` — native first, each with its
+own liveness, version and facts — is what a page draws a row per and what a command picks from.
+
+The old fold (`machinesOf` over device rows, joined on hostname plus WSL) remains only for a machine that reaches this
+sandbox WITHOUT a card, which after stage 3 of this work is nothing at all.
 
 ## 2. Why hostname plus WSL is the join, and not hostname alone
 

@@ -51,7 +51,7 @@ const scopesOf = async <Scopes>(services: Services, kind: "host" | "webext", id:
 // moment costs a reconnect instead of a re-pairing.
 export const admitPeer = async <Scopes>(
     services: Services,
-    door: Pick<PeerDoor<{ token: string }, unknown, Record<never, never>>, "noun" | "scopesKind">,
+    door: Pick<PeerDoor<{ token: string }, unknown, Record<never, never>>, "noun" | "scopesKind" | "cardOf">,
     store: Pick<PeerStore<unknown>, "verify">,
     token: string,
 ): Promise<{ readonly id: string; readonly scopes: Scopes | undefined } | { readonly refusal: string }> => {
@@ -62,7 +62,9 @@ export const admitPeer = async <Scopes>(
     if (door.scopesKind === undefined) {
         return { id, scopes: undefined };
     }
-    const scopes = await scopesOf<Scopes>(services, door.scopesKind, id);
+    // The grant is the CARD's, which a connection may be finer than: every environment of one machine is admitted on
+    // the one set of switches its owner ticked for that machine.
+    const scopes = await scopesOf<Scopes>(services, door.scopesKind, door.cardOf?.(id) ?? id);
     return scopes === undefined
         ? { refusal: `this ${door.noun} is not connected to this sandbox: add it again from its capability card` }
         : { id, scopes };

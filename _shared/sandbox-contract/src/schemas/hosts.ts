@@ -41,10 +41,52 @@ export const wslPathOf = (windowsPath: string): string | undefined => {
     return drive === null ? undefined : `/mnt/${drive[1]?.toLowerCase()}/${(drive[2] ?? "").replaceAll("\\", "/")}`.replace(/\/$/, "");
 };
 export const windowsPathOf = (distro: string, linuxPath: string): string => `\\\\wsl.localhost\\${distro}${linuxPath.replaceAll("/", "\\")}`;
+
+// ONE CARD IS ONE COMPUTER, AND EACH OS INSTALL ON IT IS A CONNECTION OF THAT CARD. A PC's Windows side and every WSL
+// distro on it hold their own agent — mutagen has to watch the filesystem it syncs, and a distro's login shell is its
+// own — but the owner connected a computer, not a shell, so the grant, the row and the tools are the machine's.
+// The native environment's connection key IS the card id, by definition rather than as a fallback: a machine with one
+// OS install has one connection named after itself, and a sibling hangs off it as `<card>::wsl:<distro>`. `::` cannot
+// collide with the single colon in an environment key.
+export const HOST_NATIVE_ENVIRONMENT = "native";
+const ENVIRONMENT_SEPARATOR = "::";
+
+// Which environment a machine is describing when it connects: the distro by the name WSL registered (what `wsl -l -q`
+// prints and `in: "wsl:<name>"` takes), or the metal. Facts arrive at connect and no scope withholds them, so this is
+// always answerable — unlike `environmentOf` (devices.ts), which weighs a report too and may hold no evidence at all.
+export const environmentKeyOf = (facts: Pick<HostFacts, "wsl">): string =>
+    facts.wsl === undefined ? HOST_NATIVE_ENVIRONMENT : `wsl:${facts.wsl.distro}`;
+
+export const hostConnectionKey = (card: string, environment: string): string =>
+    environment === HOST_NATIVE_ENVIRONMENT ? card : `${card}${ENVIRONMENT_SEPARATOR}${environment}`;
+
+export const hostCardOf = (connection: string): string => connection.split(ENVIRONMENT_SEPARATOR)[0] ?? connection;
+
+export const hostEnvironmentOf = (connection: string): string => {
+    const at = connection.indexOf(ENVIRONMENT_SEPARATOR);
+    return at === -1 ? HOST_NATIVE_ENVIRONMENT : connection.slice(at + ENVIRONMENT_SEPARATOR.length);
+};
+
+// One OS install of a machine, as its card knows it. `key` is the environment (`native`, `wsl:archlinux`); everything
+// else is what its own agent reported through its own socket, so two environments of one PC never share liveness or a
+// version — one side can be asleep, or running a build behind.
+export const HostEnvironmentSchema = z.object({
+    key: z.string().min(1),
+    online: z.boolean(),
+    version: z.string().optional(),
+    lastSeen: z.number().optional(),
+    facts: HostFactsSchema.optional(),
+});
+export type HostEnvironment = z.infer<typeof HostEnvironmentSchema>;
+
 export const HostSummarySchema = z.object({
     // The capability id, the machine's name, and the prefix of its tools (mcp__<id>__run_command).
     id: z.string(),
     platform: z.string().min(1),
+    // Every environment of this machine, native first: what the page draws a row per, and what a command picks from.
+    // Never empty — a card that has never connected still has its native environment, offline.
+    environments: z.array(HostEnvironmentSchema).min(1),
+    // The native environment's own state, restated because every existing reader asks the machine, not a side of it.
     online: z.boolean(),
     // Agent binary version; absent until the machine has connected once.
     version: z.string().optional(),

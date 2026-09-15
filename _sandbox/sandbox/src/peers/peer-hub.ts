@@ -55,6 +55,9 @@ export interface PeerHub<Client extends PeerClient<Facts, Scopes>, Announced, Fa
     readonly online: (id: string) => boolean;
     // Every peer holding a socket now; checked against the enrollment store by the peers invariant.
     readonly connected: () => readonly string[];
+    // Those plus the ones remembered since they dropped: what a machine's environment list is built from, since a
+    // distro that went to sleep is still an environment of that machine.
+    readonly known: () => readonly string[];
     readonly state: (id: string) => PeerState<Announced, Facts>;
 }
 
@@ -175,6 +178,9 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
         },
         online: (id) => live.has(id),
         connected: () => [...live.keys()],
+        // Every peer this hub can say anything about: holding a socket now, or remembered since it dropped. What a
+        // machine's environment list is built from, where `connected` alone would lose a distro that went to sleep.
+        known: () => [...new Set([...live.keys(), ...seen.keys()])],
         state: (id) => {
             const peer = live.get(id);
             const remembered = peer ?? seen.get(id);

@@ -1,4 +1,20 @@
-import { type Device, environmentOf, machinesOf, windowsPathOf, wslPathOf } from "@intentic/sandbox-contract";
+import type { Services } from "../composition.js";
+import { createPeerHub } from "../peers/peer-hub.js";
+import { HOST_PEER, type HostClient, hostSummaries } from "./host-peer.js";
+import {
+    type Device,
+    environmentKeyOf,
+    environmentOf,
+    HOST_NATIVE_ENVIRONMENT,
+    hostCardOf,
+    hostConnectionKey,
+    hostEnvironmentOf,
+    type HostFacts,
+    type HostScopes,
+    machinesOf,
+    windowsPathOf,
+    wslPathOf,
+} from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 
 // The join behind "one PC, two doors": Windows and the WSL distros on it answer `hostname` alike, so a distro joins
@@ -55,4 +71,73 @@ test("names the same folder from either side", () => {
     expect(wslPathOf("D:/data/")).toBe("/mnt/d/data");
     expect(wslPathOf("/home/radarsu")).toBeUndefined();
     expect(windowsPathOf("Arch", "/home/radarsu/proj")).toBe("\\\\wsl.localhost\\Arch\\home\\radarsu\\proj");
+});
+
+// ONE CARD, ONE COMPUTER, A CONNECTION PER OS INSTALL ON IT. The native environment's key is the card id itself, so a
+// machine with one OS install is addressed exactly as before and a sibling is a longer name rather than a second card.
+test("names a machine's environments without giving any of them a card of its own", () => {
+    expect(hostConnectionKey("rog", HOST_NATIVE_ENVIRONMENT)).toBe("rog");
+    expect(hostConnectionKey("rog", "wsl:archlinux")).toBe("rog::wsl:archlinux");
+    // Both directions, since the store and the hub only ever hold the key and the grant only ever hangs off the card.
+    expect(hostCardOf("rog")).toBe("rog");
+    expect(hostCardOf("rog::wsl:archlinux")).toBe("rog");
+    expect(hostEnvironmentOf("rog")).toBe(HOST_NATIVE_ENVIRONMENT);
+    expect(hostEnvironmentOf("rog::wsl:archlinux")).toBe("wsl:archlinux");
+    // The single colon inside an environment key is why the separator is doubled: a distro named with one cannot
+    // split a card in two.
+    expect(hostCardOf(hostConnectionKey("rog", "wsl:my:distro"))).toBe("rog");
+    expect(hostEnvironmentOf(hostConnectionKey("rog", "wsl:my:distro"))).toBe("wsl:my:distro");
+});
+
+// The key is read off what the agent reported at connect, so the distro carries the name WSL registered — the one
+// `wsl -l -q` prints and `in: "wsl:<name>"` accepts.
+test("reads a connecting machine's environment off its own facts", () => {
+    expect(environmentKeyOf({ wsl: { distro: "archlinux" } })).toBe("wsl:archlinux");
+    expect(environmentKeyOf({})).toBe(HOST_NATIVE_ENVIRONMENT);
+});
+
+// The daemon's own reader of all of it: one card, a row per environment, native first, each with its own liveness —
+// one side asleep must not read as the machine being away.
+test("gives one card a row per environment, native first, each with its own liveness", async () => {
+    const hub = createPeerHub<HostClient, { version: string }, HostFacts, HostScopes>(HOST_PEER.hub, { warn: () => {} });
+    const peer = () => ({ client: { ping: async () => ({ ok: true }) } as unknown as HostClient, close: () => {}, announced: { version: "1.274.0" } });
+    const distroKey = hostConnectionKey("rog", "wsl:archlinux");
+    const detachNative = hub.attach("rog", peer());
+    hub.observe("rog", { ...WINDOWS, hostname: "rog" });
+    const detachDistro = hub.attach(distroKey, peer());
+    hub.observe(distroKey, { ...ARCH, hostname: "rog", wsl: { distro: "archlinux" } });
+    // The distro goes to sleep: still an environment of this computer, no longer online.
+    detachDistro();
+
+    const services = {
+        capabilities: { list: async () => [{ kind: "host", id: "rog", config: { platform: "windows" } }] },
+        hostHub: hub,
+    } as unknown as Services;
+    const [machine, ...rest] = await hostSummaries(services);
+    detachNative();
+
+    expect(rest).toEqual([]);
+    expect(machine?.environments.map((environment) => [environment.key, environment.online])).toEqual([
+        [HOST_NATIVE_ENVIRONMENT, true],
+        ["wsl:archlinux", false],
+    ]);
+    // What the sleeping side last said is kept, so its row can name a version and a shell rather than nothing.
+    expect(machine?.environments[1]?.facts?.shell).toBe(ARCH.shell);
+    expect(machine?.environments[1]?.version).toBe("1.274.0");
+    // The machine's own state is the native side's: every reader that asks whether "this device" is online means that.
+    expect(machine).toMatchObject({ id: "rog", platform: "windows", online: true });
+    expect(machine?.facts?.shell).toBe(WINDOWS.shell);
+});
+
+// A card is a computer, so one nobody has reached yet is a computer with one environment, offline — never an empty
+// list the page would have to invent a row for.
+test("gives a card that has never connected its native environment anyway", async () => {
+    const hub = createPeerHub<HostClient, { version: string }, HostFacts, HostScopes>(HOST_PEER.hub, { warn: () => {} });
+    const services = {
+        capabilities: { list: async () => [{ kind: "host", id: "omen", config: { platform: "windows" } }] },
+        hostHub: hub,
+    } as unknown as Services;
+    const [machine] = await hostSummaries(services);
+    expect(machine?.environments).toEqual([{ key: HOST_NATIVE_ENVIRONMENT, online: false }]);
+    expect(machine?.online).toBe(false);
 });

@@ -1,4 +1,11 @@
-import { type HostSummary, type DeviceFlowLine, type DeviceReport, type DeviceSandboxFlow, hostRunningSandbox } from "@intentic/sandbox-contract";
+import {
+    type HostSummary,
+    type DeviceFlowLine,
+    type DeviceReport,
+    type DeviceSandboxFlow,
+    HOST_NATIVE_ENVIRONMENT,
+    hostRunningSandbox,
+} from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { ORPCError } from "@orpc/server";
 import { afterEach, expect, test, vi } from "vitest";
@@ -21,13 +28,21 @@ const report = (hostname: string, overrides: Partial<DeviceReport> = {}): Device
     ...overrides,
 });
 
-// platform is always set on a host capability; connected-machine facts appear only once it has answered.
-const host = (id: string, overrides: Partial<HostSummary> = {}): HostSummary => ({
-    id,
-    platform: "linux",
-    online: true,
-    ...overrides,
-});
+// platform is always set on a host capability; connected-machine facts appear only once it has answered. Every card
+// has at least its native environment, whose state IS the machine's — the same shape `hostSummaries` builds.
+const host = (id: string, overrides: Partial<HostSummary> = {}): HostSummary => {
+    const summary = { id, platform: "linux", online: true, ...overrides };
+    return {
+        ...summary,
+        environments: overrides.environments ?? [
+            {
+                key: HOST_NATIVE_ENVIRONMENT,
+                online: summary.online,
+                ...(summary.facts === undefined ? {} : { facts: summary.facts }),
+            },
+        ],
+    };
+};
 
 // One desktop-sync enrollment fixture: a machine name and which sync mode it holds.
 const enrolled = (machine: string, mode: "sync" | "mirror" = "sync"): SyncEnrollmentRow => ({ machine, mode });
@@ -287,6 +302,8 @@ const fakeServices = (id: string, mcp: (call: FakeCall) => Promise<unknown>): { 
         capabilities: { list: async () => [{ kind: "host", id, config: { platform: "linux" } }] },
         hostHub: {
             state: () => ({ online: true, version: "0.1.0" }),
+            // One connection per card here, named after it: these machines have a single OS install.
+            known: () => ["ada-laptop", "desk"],
             mcp: async (asked: string, payload: unknown, options?: { signal?: AbortSignal }) => {
                 const tool = (payload as { params?: { name?: string } }).params?.name ?? "";
                 const call = { id: asked, tool, signal: options?.signal };

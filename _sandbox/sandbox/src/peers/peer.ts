@@ -54,6 +54,10 @@ export interface PeerDoor<Hello extends { readonly token: string }, Announced, S
         readonly announced: (hello: Hello) => Announced;
     };
     readonly scopesKind?: "host" | "webext";
+    // Which capability a connection's grant comes from, where a peer's id is finer than its card: a machine card is
+    // one computer and each OS install on it connects under its own key, all on the one grant. Absent ⇒ the id IS the
+    // card, which is every other door.
+    readonly cardOf?: (id: string) => string;
     readonly mcp?: PeerMcpSpec;
     // The sentence a spent or unknown pairing is refused with, naming where a fresh one comes from.
     readonly expired: string;

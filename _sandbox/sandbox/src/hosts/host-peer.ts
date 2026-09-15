@@ -1,5 +1,17 @@
 import { join } from "node:path";
-import { HOST_HEARTBEAT_MS,type hostContract,type HostFacts,type HostHello,HostHelloSchema,type HostScopes,type HostSummary } from "@intentic/sandbox-contract";
+import {
+    HOST_HEARTBEAT_MS,
+    HOST_NATIVE_ENVIRONMENT,
+    hostCardOf,
+    type hostContract,
+    hostEnvironmentOf,
+    type HostEnvironment,
+    type HostFacts,
+    type HostHello,
+    HostHelloSchema,
+    type HostScopes,
+    type HostSummary,
+} from "@intentic/sandbox-contract";
 import type { ContractRouterClient } from "@orpc/contract";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { hostHandler } from "../capabilities/handlers/host.handler.js";
@@ -41,8 +53,35 @@ export const HOST_PEER: PeerDoor<HostHello, HostAnnounced, Record<never, never>>
     },
     hello: { schema: HostHelloSchema, announced: (hello) => ({ version: hello.version }) },
     scopesKind: "host",
+    // A machine card is one computer; each OS install on it connects under its own key and is admitted on the card's
+    // own switches (peer-routes.ts). The native environment's key is the card id, so a one-OS machine is unchanged.
+    cardOf: hostCardOf,
     mcp: { serverName: (id) => `intentic-machine:${id}` },
     expired: "pairing expired, click Connect again in your browser for a fresh command.",
+};
+
+// Native first, then distros by name: the side that owns the screen leads, and the order is stable so a row never
+// jumps between reads.
+const byEnvironment = (a: HostEnvironment, b: HostEnvironment): number =>
+    Number(a.key !== HOST_NATIVE_ENVIRONMENT) - Number(b.key !== HOST_NATIVE_ENVIRONMENT) || a.key.localeCompare(b.key);
+
+// Every environment of one machine, from what the hub knows: its native connection (always listed, offline until it
+// connects once) plus every sibling that has held a socket. A card is a computer, so a card with nothing connected is
+// still a computer with one environment nobody has reached.
+const environmentsOf = (services: Services, card: string): HostEnvironment[] => {
+    const keys = new Set([card, ...services.hostHub.known().filter((key) => hostCardOf(key) === card)]);
+    return [...keys]
+        .map((key) => {
+            const state = services.hostHub.state(key);
+            return {
+                key: hostEnvironmentOf(key),
+                online: state.online,
+                ...(state.announced === undefined ? {} : { version: state.announced.version }),
+                ...(state.facts === undefined ? {} : { facts: state.facts }),
+                ...(state.lastSeen === undefined ? {} : { lastSeen: state.lastSeen }),
+            };
+        })
+        .toSorted(byEnvironment);
 };
 
 // The owner's view of their machines: each host capability plus whatever the hub currently knows. Enrollment state must
@@ -52,15 +91,19 @@ export const hostSummaries = async (services: Services): Promise<HostSummary[]> 
         if (capability.kind !== "host") {
             return [];
         }
-        const state = services.hostHub.state(capability.id);
+        const environments = environmentsOf(services, capability.id);
+        // The native environment leads the list, and its state is the machine's own: every reader that asks whether
+        // "this device" is online means the side named after the card.
+        const native = environments[0];
         return [
             {
                 id: capability.id,
                 platform: capability.config.platform,
-                online: state.online,
-                ...(state.announced === undefined ? {} : { version: state.announced.version }),
-                ...(state.facts === undefined ? {} : { facts: state.facts }),
-                ...(state.lastSeen === undefined ? {} : { lastSeen: state.lastSeen }),
+                environments,
+                online: native?.online ?? false,
+                ...(native?.version === undefined ? {} : { version: native.version }),
+                ...(native?.facts === undefined ? {} : { facts: native.facts }),
+                ...(native?.lastSeen === undefined ? {} : { lastSeen: native.lastSeen }),
             },
         ];
     });

@@ -1,28 +1,43 @@
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { promisify } from "node:util";
 
 // Whether this agent is running inside a WSL distro rather than on the machine itself, and which distro. WSL hands a
 // distro the Windows computer's name, so `hostname` alone makes Windows and every distro on it look like one machine
 // with one agent. Everything that joins two readings into a row needs this to tell them apart.
+//
+// THE NAME HAS TO BE WSL'S REGISTRATION NAME, not a pretty one. It is what `wsl -l -q` prints, what
+// `run_command`'s `in: "wsl:<name>"` accepts, and what the sandbox matches a listed distro against — so a distro
+// answering "Arch Linux" where the listing says "archlinux" reads as a distro that is not connected while it is
+// sitting right there, connected.
 
 // The line WSL writes into its kernel version string, on both WSL1 ("Microsoft") and WSL2
 // ("microsoft-standard-WSL2"). Matched case-insensitively so one test covers both.
 const WSL_KERNEL = /microsoft/i;
 
-// Pure over what was read, so the rules are testable without a filesystem. `WSL_DISTRO_NAME` alone is enough: WSL sets
-// it and nothing else does, which also covers a distro whose /proc was not readable.
+const exec = promisify(execFile);
+
+// Pure over what was read, so the rules are testable without a filesystem. Three sources, best first: the
+// registration name WSL itself reports through `wslpath`, then `WSL_DISTRO_NAME`, which is the same string but only
+// where the launcher's environment survived, then what the distro calls itself — a last resort that is NOT the
+// registration name and is kept only because presence is the fact that matters.
 export const wslFrom = (
     procVersion: string | undefined,
     distroEnv: string | undefined,
     osRelease: string | undefined,
+    wslRoot?: string | undefined,
 ): { readonly distro: string } | undefined => {
-    const named = (distroEnv ?? "").trim();
+    const named = [registeredFrom(wslRoot), (distroEnv ?? "").trim()].find((name) => name !== "") ?? "";
     if (named === "" && !WSL_KERNEL.test(procVersion ?? "")) {
         return undefined;
     }
-    // WSL's own name for the distro is the one the owner sees in `wsl -l`, so it wins over what the distro calls
-    // itself. An unreadable name is carried as empty rather than guessed: presence is the fact that matters.
     return { distro: named === "" ? nameFrom(osRelease) : named };
 };
+
+// `wslpath -w /` answers `\\wsl.localhost\archlinux\` (`\\wsl$\archlinux\` on older builds): the second component is
+// the registration name. Anything else — interop off, no wslpath, a drive path — names nothing.
+const registeredFrom = (wslRoot: string | undefined): string =>
+    /^\\\\wsl(?:\.localhost|\$)\\([^\\]+)/.exec((wslRoot ?? "").trim())?.[1] ?? "";
 
 // `NAME="Arch Linux"` out of /etc/os-release, quotes stripped. Empty for anything that doesn't have the line.
 const nameFrom = (osRelease: string | undefined): string => {
@@ -32,8 +47,16 @@ const nameFrom = (osRelease: string | undefined): string => {
 
 const readable = (path: string): Promise<string | undefined> => readFile(path, "utf8").catch(() => undefined);
 
-// One reading per report. Costs two small reads on Linux and nothing anywhere else, since neither path exists there.
+// Asking WSL what it calls this distro. Short deadline and every failure swallowed: interop can be off, wslpath can
+// be absent, and neither is a reason for a report to fail — the fallbacks below answer instead.
+const WSLPATH_TIMEOUT_MS = 2_000;
+const wslRoot = async (): Promise<string | undefined> =>
+    (await exec("wslpath", ["-w", "/"], { timeout: WSLPATH_TIMEOUT_MS }).catch(() => undefined))?.stdout;
+
+// One reading per report. Two small reads on Linux, nothing anywhere else since neither path exists there, and the
+// one spawn only where the kernel has already said WSL — a native Linux box never pays for it.
 export const wslEnvironment = async (): Promise<{ readonly distro: string } | undefined> => {
     const [procVersion, osRelease] = await Promise.all([readable("/proc/version"), readable("/etc/os-release")]);
-    return wslFrom(procVersion, process.env["WSL_DISTRO_NAME"], osRelease);
+    const root = WSL_KERNEL.test(procVersion ?? "") ? await wslRoot() : undefined;
+    return wslFrom(procVersion, process.env["WSL_DISTRO_NAME"], osRelease, root);
 };
