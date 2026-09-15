@@ -21,7 +21,7 @@ const app = resolve(root, "../../_editor/ui/src/styles");
 const primitives = readFileSync(resolve(app, "primitive-colors.css"), "utf8");
 const semantics = readFileSync(resolve(app, "semantic-colors.css"), "utf8");
 const desk = readFileSync(resolve(root, "src/styles/desk.css"), "utf8");
-const entry = readFileSync(resolve(root, "../../_editor/web/src/styles/entry.css"), "utf8");
+const entry = readFileSync(resolve(root, "../../_shared/entry-css/entry.css"), "utf8");
 
 const failures = [];
 const fail = (what, expected, actual) => failures.push(`${what}\n    app  : ${expected}\n    desk : ${actual}`);
@@ -195,7 +195,7 @@ if (failures.length > 0) {
         `desk palette has drifted from the app's light theme (${failures.length} ${failures.length === 1 ? "difference" : "differences"}).\n` +
             `  app   : _editor/ui/src/styles/{primitive,semantic}-colors.css\n` +
             `  desk  : _site/site/src/styles/desk.css\n` +
-            `  entry : _editor/web/src/styles/entry.css (its light-scheme blocks)\n\n` +
+            `  entry : _shared/entry-css/entry.css (its light-scheme blocks)\n\n` +
             `${failures.join("\n\n")}\n\n` +
             `Copy the app's values across, or if the app moved on purpose, move the other two with it.`,
     );

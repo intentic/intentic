@@ -23,8 +23,8 @@
 /* SKINS — whole-interface looks, each scoped to a `data-skin` attribute on <html> and therefore inert until one is selected in Appearance. */
 @import "./skins/sanctum.css";
 
-/* THE ENTRY SCREENS' OWN MATERIAL — the site's metals, ground, frame kit and two button plaques. */
-@import "./styles/entry.css";
+/* THE ENTRY SKIN — the site's metals, ground, frame kit and two button plaques, worn by /login, /setup and the launcher window. */
+@import "../../../_shared/entry-css/entry.css";
 
 /* Tailwind scans the UI kit explicitly because it lives outside this app's tree. */
 @source "../../../_editor/ui/src/**/*.{ts,html,vue}";

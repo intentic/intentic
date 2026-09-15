@@ -51,6 +51,14 @@ const TARGETS = [
         // The site sets no code in a webfont — its code blocks take the system mono stack.
         families: ["public-sans", "spectral", "baloo-2"],
     },
+    {
+        label: "app",
+        fonts: "_editor/desktop-app/public/fonts",
+        css: "_editor/desktop-app/src/styles/faces.css",
+        url: "/fonts",
+        // The launcher wears the entry skin but draws no carved headline, so it needs no display serif.
+        families: ["public-sans", "baloo-2", "jetbrains-mono"],
+    },
 ];
 
 const field = (body, name) => new RegExp(`${name}:\\s*([^;]+);`, "u").exec(body)?.[1]?.trim();

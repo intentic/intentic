@@ -21,6 +21,8 @@
         "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --all --check && pnpm lint:rust && pnpm test:rust"
     },
     "dependencies": {
+        "@intentic/entry-css": "workspace:*",
+        "@intentic/house-css": "workspace:*",
         "@intentic/ui": "workspace:*",
         "@tauri-apps/api": "catalog:",
         "@tauri-apps/plugin-dialog": "catalog:",

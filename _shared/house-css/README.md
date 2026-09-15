@@ -9,7 +9,7 @@ kit and the three ember glows. One stylesheet, no selectors, nothing but `--hous
 | consumer                                | what it is                                                    |
 | --------------------------------------- | ------------------------------------------------------------- |
 | `_site/site/src/styles/global.css`      | the marketing site, where this vocabulary was designed         |
-| `_editor/web/src/styles/entry.css`      | the app's `/login` and `/setup`, dressed as the site           |
+| `_shared/entry-css/entry.css`           | the entry skin: `/login`, `/setup` and the launcher window      |
 | `_editor/web/src/skins/sanctum.css`     | the Sanctum skin — the whole app wearing the same design system |
 
 All three carried their own copy until this package existed. The bronze plaque was written out three times,

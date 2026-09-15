@@ -18,6 +18,8 @@ export { default as AgentRunButton } from "./components/sandbox/AgentRunButton.v
 export { type AgentRunAttempt, type AgentRunChoice, type AgentRunPicker, type ModelPicking, useAgentRunPick } from "./composables/useAgentRunPick.js";
 export { type FixStanceLook, fixStanceLook } from "./composables/fixStanceLook.js";
 export { default as AnchoredOverlay } from "./components/overlays/AnchoredOverlay.vue";
+// The product's own mark: the lotus alone, or the lotus with the wordmark.
+export { default as AppBrand } from "./components/brand/AppBrand.vue";
 export { default as Avatar } from "./components/brand/Avatar.vue";
 export { type Cross, placeAnchored, type Placement, type Side } from "./lib/anchorPlacement.js";
 export { default as BarChart } from "./components/charts/BarChart.vue";

@@ -1,9 +1,8 @@
-<!-- Sign-in screen; shares its visual material with /setup via styles/entry.css so the two stay in one style. -->
+<!-- Sign-in screen; shares its visual material with /setup via @intentic/entry-css so the two stay in one style. -->
 <script setup lang="ts">
-import { Button, vAction } from "@intentic/ui";
+import { AppBrand, Button, vAction } from "@intentic/ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import AppBrand from "../../components/AppBrand.vue";
 import { useAuth } from "./useAuth";
 import { useGoogleIdentity } from "./useGoogleIdentity";
 import { desktopVersion, signInThroughBrowser } from "../../app/environments/desktop";
@@ -128,7 +127,7 @@ watch(
                     <div ref="googleButton" class="entry-socket-slot"></div>
                 </div>
 
-<!-- The site's primary button style (styles/entry.css), shown only when Google's embedded button could not render. -->
+<!-- The site's primary button style (@intentic/entry-css), shown only when Google's embedded button could not render. -->
                 <Button
                     v-if="!googleReady"
                     :label="desktop ? `Continue with Google in your browser` : `Continue with Google`"
@@ -166,7 +165,7 @@ watch(
 </template>
 
 <style scoped>
-/* This file contains only login layout; shared materials live in entry.css — the desktop window's title strip
+/* This file contains only login layout; shared materials live in @intentic/entry-css — the desktop window's title strip
    included, which both entry screens clear there rather than each for itself. */
 .door {
     display: flex;

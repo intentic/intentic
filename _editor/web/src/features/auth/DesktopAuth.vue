@@ -1,6 +1,6 @@
-<!-- The desktop app's sign-in seen from the browser; wears /login's material (styles/entry.css), being the same door. -->
+<!-- The desktop app's sign-in seen from the browser; wears /login's material (@intentic/entry-css), being the same door. -->
 <script setup lang="ts">
-import { Button, Notice, type NoticeModel, vAction } from "@intentic/ui";
+import { AppBrand, Button, Notice, type NoticeModel, vAction } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
@@ -10,7 +10,6 @@ import { useAuth } from "./useAuth";
 import { useGoogleIdentity } from "./useGoogleIdentity";
 import { desktopAuthLink, signInThroughBrowser } from "../../app/environments/desktop";
 import { arrivingProfile } from "../../app/useProfile";
-import AppBrand from "../../components/AppBrand.vue";
 
 // Runs in the user's real browser, not the app's webview (Google refuses OAuth there; see environments/desktop.ts).
 // Session handling is this page's own job, not a route guard's: bouncing a signed-out window to /login would sign

@@ -26,6 +26,7 @@
         "@intentic/base": "workspace:*",
         "@intentic/code-read": "workspace:*",
         "@intentic/constants": "workspace:*",
+        "@intentic/entry-css": "workspace:*",
         "@intentic/ext-acceptance": "workspace:*",
         "@intentic/ext-activity": "workspace:*",
         "@intentic/ext-automations": "workspace:*",

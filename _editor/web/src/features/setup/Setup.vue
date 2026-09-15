@@ -3,8 +3,8 @@ import type { AddressOffer, HostedOffer, SandboxSummary, SetupCode, SetupReport,
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
 import {
+    AppBrand,
     Button,
-    ui,
     Code,
     commandLang,
     CopyButton,
@@ -13,6 +13,7 @@ import {
     type NoticeModel,
     SegmentedControl,
     StepSection,
+    ui,
     useDevice,
     useOsPreference,
     vAction,
@@ -51,7 +52,6 @@ import { type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, probeDaemon }
 import { autoSandboxName } from "./setupName";
 import { setupReportView } from "./setupReport";
 import { hostedWaitView, machineIsDown } from "./hostedWait";
-import AppBrand from "../../components/AppBrand.vue";
 
 // No identity or machine decision here: the surface (setupArrival.ts) decides those; this page is what's left
 // otherwise.
@@ -66,7 +66,7 @@ const route = useRoute();
 const { mobile } = useDevice();
 const { user } = useAuth();
 
-// Shares `/login`'s visual material (`styles/entry.css`) rather than duplicating it.
+// Shares `/login`'s visual material (`@intentic/entry-css`) rather than duplicating it.
 const { getIdToken, warmIdToken } = useGoogleIdentity();
 
 // Sandbox this page is setting up; null while auto-create is in flight or after it failed.
@@ -2137,7 +2137,7 @@ const warmSandboxCredential = async (): Promise<void> => {
 </template>
 
 <style scoped>
-/* Shared material lives in styles/entry.css (metals, ink, faces, plate, type). */
+/* Shared material lives in @intentic/entry-css (metals, ink, faces, plate, type). */
 
 /* The ground: how far the picture reaches, and where the veil closes over it. */
 .vestibule .entry-plate {

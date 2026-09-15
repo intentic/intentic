@@ -150,7 +150,7 @@ writes no attribute at all.
 
 **Four routes are outside all of this, on purpose.** `/login`, `/setup` and the desktop app's two handoff screens
 (`/desktop-auth`, `/desktop-auth/complete`) are built out of the marketing site's
-own material — see [`../styles/entry.css`](../styles/entry.css) — because a visitor meets them within a minute
+own material — see [`@intentic/entry-css`](../../../../_shared/entry-css/README.md) — because a visitor meets them within a minute
 of leaving intentic.dev and has picked no skin yet. That sheet is imported **after** the skin in
 `styles.css`: a skin's rules are `[data-skin=…] .p-button…` (an attribute plus a class), which weighs exactly
 what `.entry .p-button…` weighs, so source order is what settles the tie — the same argument that puts the
@@ -226,7 +226,7 @@ Three selectors are worth copying rather than re-deriving, because each was a bu
 - the route element is `#app > :first-child:not(.entry)`, **not** `#app > *`: `#app` also holds a screen-reader
   live region and a fixed toast layer, and a backdrop painted on the toast layer floats above the whole app.
   The `:not(.entry)` is the entry screens opting out — the four named above are dressed as the marketing
-  site the visitor just came from (`styles/entry.css`), and they carry the site's own carved plate, so a skin's
+  site the visitor just came from (`@intentic/entry-css`), and they carry the site's own carved plate, so a skin's
   horizon under it is a second temple standing behind the first. It has to be written **here**, because the
   backdrop is drawn with an id and no amount of class specificity in that sheet could reach it;
 - a button-tier rule must exclude `.p-button-danger`, `.p-button-warn` and `.p-button-success` explicitly, or a

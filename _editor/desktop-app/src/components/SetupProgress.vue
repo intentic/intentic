@@ -1,22 +1,20 @@
 <script setup lang="ts">
-import { Notice } from "@intentic/ui";
+import { Notice, ui } from "@intentic/ui";
 import { computed, nextTick, ref, watch } from "vue";
 import type { RunEvent } from "../desktop";
-import type { ProgressView, StepView } from "../setupPlan";
+import type { ProgressView } from "../setupPlan";
 
-// Shows the full plan up front (setupPlan.ts), the current step's own detail, and a bar weighted by each step's
-// typical duration rather than step count. The log stays collapsed but opens itself on failure.
+// ONE THING IS HAPPENING, AND THIS SAYS WHICH. The step under way is the only sentence at reading size; the plan
+// behind it is the bar's own divisions (setupPlan.ts weights it in seconds, so the long steps are visibly long),
+// and the ten named rows are one click away for whoever wants them.
 //
-// ONE PRIMARY OBJECT PER SCREEN: with a requirements card or a failure above it, the plan folds to its own first
-// line; `stepsOpen` is the reader overriding that in either direction for the rest of the run.
-
 // `awaiting` is a deliberate stop for the requirements card above; this component just must not call it a crash.
 // `blocked`: that card is on screen, so this one is not the thing to read.
-const props = defineProps<{ events: RunEvent[]; view: ProgressView; running: boolean; awaiting?: boolean; blocked?: boolean }>();
+const props = defineProps<{ events: RunEvent[]; view: ProgressView; running: boolean; reason?: string; awaiting?: boolean; blocked?: boolean }>();
 
 // Owned by the card's own action bar (App.vue), which holds every other verb about this transcript.
 const open = defineModel<boolean>(`open`, { default: false });
-const stepsOpen = ref<boolean | undefined>(undefined);
+const listOpen = ref(false);
 const logEnd = ref<HTMLElement | undefined>(undefined);
 
 const lines = computed(() => props.events.flatMap((event) => (event.kind === `line` ? [event] : [])));
@@ -30,38 +28,45 @@ const failed = computed(() => !props.awaiting && props.blocked !== true && stopp
 // The run is parked on something the reader has to answer, whether the script asked (`awaiting`) or stopped on a
 // requirement the card above holds.
 const parked = computed(() => props.awaiting === true || (props.blocked === true && stoppedShort.value));
-// The percentage and the estimate are shown only while the run is the thing that is moving.
+// The estimate is shown only while the run is the thing that is moving.
 const live = computed(() => props.running && !props.awaiting);
-
-const compact = computed(() => props.blocked === true || props.awaiting === true || failed.value);
-const listShown = computed(() => stepsOpen.value ?? !compact.value);
+const done = computed(() => props.view.steps.every((step) => step.state === `done`));
 
 // The step the run is in: the running one, or — once it has stopped — the first one it never finished.
 const at = computed(() => props.view.steps.find((step) => step.state === `running`) ?? props.view.steps.find((step) => step.state !== `done`));
 // Nothing has reported yet: the first step is next, not under way.
 const started = computed(() => props.view.steps.some((step) => step.state !== `waiting`));
 // Survives a stop, unlike `view.position`, which is the wire report's and goes quiet the moment a run ends.
-const positionOf = (step: StepView): string => `Step ${props.view.steps.indexOf(step) + 1} of ${props.view.steps.length}`;
-const position = computed(() => (at.value === undefined ? undefined : positionOf(at.value)));
+const position = computed(() => (at.value === undefined ? undefined : `Step ${props.view.steps.indexOf(at.value) + 1} of ${props.view.steps.length}`));
 const heading = computed(() => {
     const step = at.value;
     if (parked.value) {
         return `Waiting for you`;
     }
     if (failed.value) {
-        return step === undefined ? `Stopped` : `Stopped at ${step.label}`;
+        // The step is named on the line under this one, so this says where in the plan rather than repeating it.
+        return step === undefined ? `Stopped` : `Stopped at ${position.value?.toLowerCase() ?? `this step`}`;
     }
-    if (step === undefined) {
-        return `Done`;
+    if (step === undefined || done.value) {
+        return `All done`;
     }
     if (!started.value) {
-        return `Starting…`;
+        return `Getting started`;
     }
-    // With the plan on screen its own running row says which step this is; without it, this line has to.
-    return listShown.value ? positionOf(step) : step.label;
+    return step.label;
 });
-// Never the same fact twice in one row.
-const beside = computed(() => (!started.value || position.value === heading.value ? undefined : position.value));
+
+// Where one step ends and the next begins, as a fraction of the bar; the last boundary is the bar's own end and
+// would draw a notch on the rounded cap, so it is left off.
+const marks = computed(() => {
+    let sum = 0;
+    return props.view.steps.slice(0, -1).map((step) => {
+        sum += step.share;
+        return sum;
+    });
+});
+// The bar's one colour: the ember while it moves, and the status the run ended on.
+const fillClass = computed(() => (failed.value ? `bg-danger` : parked.value ? `bg-warning` : `bg-primary-fill`));
 
 // Filters PowerShell's error-record furniture (source excerpt, CategoryInfo, FullyQualifiedErrorId) so a "last N
 // lines of stderr" rule shows the actual message, not boilerplate.
@@ -77,6 +82,8 @@ const failure = computed(() =>
         .map((line) => line.text.replace(/^\s*error:\s+/i, ``))
         .join(`\n`),
 );
+// The stderr tail carries the reason where there is one; `reason` covers a command that failed without printing.
+const told = computed(() => (failure.value === `` ? (props.reason ?? ``) : failure.value));
 
 // immediate: a card mounting on an already-failed run opens the log too, not just future failures.
 watch(
@@ -101,56 +108,63 @@ watch(
 </script>
 
 <template>
-    <div class="flex flex-col gap-2">
-        <!-- One line for all three questions: what is happening, how far in, how long left. -->
-        <div class="flex items-baseline gap-2 text-2xs">
-            <span class="min-w-0 flex-1 truncate font-medium text-content">{{ heading }}</span>
-            <span v-if="beside" class="shrink-0 text-subtle">{{ beside }}</span>
-            <span v-if="live && view.remaining" class="shrink-0 text-subtle">{{ view.remaining }}</span>
-            <span v-if="live" class="shrink-0 font-mono tabular-nums text-muted">{{ view.percent }}%</span>
+    <!-- ONE PRIMARY OBJECT PER SCREEN: with the requirements card up, this is not the thing to read, so it gives up
+         its plate, its bar and its sentence and keeps only where the run is parked. -->
+    <section :class="blocked ? `flex flex-col gap-3` : `entry-card flex flex-col gap-3 p-4`">
+        <!-- The one sentence at reading size: what this computer is doing right now. -->
+        <div v-if="!blocked" class="flex items-start gap-3">
+            <span class="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+                <Icon v-if="failed" name="exclamation-circle" class="text-danger" />
+                <Icon v-else-if="parked" name="exclamation-circle" class="text-warning" />
+                <Icon v-else-if="done" name="check-circle" class="text-success" />
+                <Icon v-else name="spinner" spin class="text-link" />
+            </span>
+            <div class="min-w-0 flex-1">
+                <p class="text-sm leading-snug font-medium text-content">{{ heading }}</p>
+                <!-- The script's own line for this step, which is often an instruction rather than decoration. -->
+                <p v-if="failed && at" class="mt-0.5 truncate text-xs text-muted">{{ at.label }}</p>
+                <p v-else-if="at?.detail" class="mt-0.5 truncate text-xs text-muted">{{ at.detail }}</p>
+            </div>
         </div>
-        <div class="h-1.5 overflow-hidden rounded-full bg-canvas">
-            <div
-                :class="[
-                    'h-full rounded-full transition-[width] duration-500 ease-out',
-                    failed ? 'bg-danger' : parked ? 'bg-warning' : 'bg-primary-400',
-                ]"
-                :style="{ width: `${Math.max(view.percent, 2)}%` }"
-            />
+
+        <!-- THE PLAN IS THE BAR: one whisper of a division per step, spaced by how long that step takes, so the
+             shape of the wait is visible without ten rows of it being counted. -->
+        <div
+            v-if="!blocked"
+            class="relative h-1.5 overflow-hidden rounded-full bg-content/15"
+            role="progressbar"
+            :aria-valuenow="view.percent"
+            aria-valuemin="0"
+            aria-valuemax="100"
+        >
+            <span class="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500 ease-out" :class="fillClass" :style="{ width: `${view.percent}%` }" />
+            <span v-for="mark in marks" :key="mark" class="absolute inset-y-0 w-px bg-canvas/35" :style="{ left: `${mark * 100}%` }" />
         </div>
-        <!-- The folded plan keeps the running step's own sentence, which may be an instruction, not decoration. -->
-        <p v-if="!listShown && at?.detail" class="truncate text-2xs text-subtle">{{ at.detail }}</p>
+
+        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-subtle">
+            <span v-if="position && !done && !failed">{{ blocked ? `Paused at ${position.toLowerCase()}` : position }}</span>
+            <span v-if="live && view.remaining">{{ view.remaining }}</span>
+            <span class="flex-1" />
+            <button type="button" :class="ui.textAction(`shrink-0`)" @click="listOpen = !listOpen">
+                {{ listOpen ? `Hide the steps` : `See all ${view.steps.length} steps` }}
+            </button>
+        </div>
 
         <!-- Steps that won't run on this machine were never in the plan; nothing here is crossed out or skipped. -->
-        <ol v-if="listShown" class="flex flex-col gap-1">
-            <li v-for="step in view.steps" :key="step.phase" class="flex items-start gap-2 text-2xs">
+        <ol v-if="listOpen" class="flex flex-col gap-1.5 border-t border-line pt-3">
+            <li v-for="step in view.steps" :key="step.phase" class="flex items-start gap-2.5 text-xs">
                 <span class="mt-0.5 flex size-3.5 shrink-0 items-center justify-center">
-                    <Icon v-if="step.state === `done`" name="check-circle" class="text-success" />
-                    <Icon v-else-if="step.state === `running`" name="spinner" spin class="text-primary-400" />
+                    <Icon v-if="step.state === `done`" name="check" class="text-success" />
+                    <Icon v-else-if="step.state === `running`" name="spinner" spin class="text-link" />
                     <!-- Neither done nor coming: a run that stopped is not still working through its list. -->
-                    <span v-else class="size-1.5 rounded-full" :class="step.state === `stopped` ? 'bg-line' : 'bg-muted/40'" />
+                    <span v-else class="size-1 rounded-full bg-current opacity-40" />
                 </span>
-                <span class="min-w-0 flex-1">
-                    <span :class="step.state === `running` ? 'text-content' : step.state === `done` ? 'text-muted' : 'text-subtle'">
-                        {{ step.label }}
-                    </span>
-                    <!-- The script's own detail line for this step, which may be an instruction, not just decoration. -->
-                    <span v-if="step.detail" class="block truncate text-subtle">{{ step.detail }}</span>
-                </span>
+                <span :class="step.state === `running` ? `min-w-0 flex-1 text-content` : `min-w-0 flex-1 text-subtle`">{{ step.label }}</span>
             </li>
         </ol>
 
         <!-- Prose, not a terminal: the log below is where the machine's own words are, one click away. -->
-        <Notice v-if="failed && failure !== ``" tone="danger" class="text-2xs whitespace-pre-wrap">{{ failure }}</Notice>
-
-        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-2xs">
-            <!-- True, and the reason the × on this card is not a trap: the script is a process on this machine, not something this window is holding up. -->
-            <span v-if="running" class="min-w-0 flex-1 text-subtle">Closing this doesn't stop the install: your workspace shows its progress.</span>
-            <span v-else class="flex-1" />
-            <button type="button" class="shrink-0 text-link hover:underline" @click="stepsOpen = !listShown">
-                {{ listShown ? `Hide steps` : `All ${view.steps.length} steps` }}
-            </button>
-        </div>
+        <Notice v-if="failed && told !== ``" tone="danger" class="text-xs whitespace-pre-wrap">{{ told }}</Notice>
 
         <!-- Monospace and wrapped: it matches what the same command prints in a terminal, minus the sideways drag. -->
         <pre
@@ -158,5 +172,5 @@ watch(
             class="max-h-64 overflow-auto rounded-md border border-line bg-canvas p-2 font-mono text-2xs leading-relaxed break-words text-muted whitespace-pre-wrap"
         ><span v-for="(line, index) in lines" :key="index" :class="line.stream === `stderr` ? `text-warning` : ``">{{ line.text }}
 </span><span ref="logEnd" /></pre>
-    </div>
+    </section>
 </template>

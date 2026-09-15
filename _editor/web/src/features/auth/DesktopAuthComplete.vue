@@ -1,6 +1,6 @@
 <!-- Where the browser's handoff lands, inside the app: the same entry material, at the size of a two-second wait. -->
 <script setup lang="ts">
-import { Button, Notice, type NoticeModel } from "@intentic/ui";
+import { AppBrand, Button, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -8,7 +8,6 @@ import { apiClient } from "../../lib/useApi";
 import { useAuth } from "./useAuth";
 import { useGoogleIdentity } from "./useGoogleIdentity";
 import { environment } from "../../app/environments/environment";
-import AppBrand from "../../components/AppBrand.vue";
 
 // This page runs inside the desktop app's webview, which starts with no session.
 // 1. Redeem the row the browser parked (single use).

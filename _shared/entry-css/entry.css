@@ -1,4 +1,5 @@
-/* Entry-screen styles for login, setup and the desktop app's two handoff screens, in the site's design vocabulary. */
+/* The entry skin — the site's design vocabulary, scoped to `.entry`: /login, /setup, the desktop app's two handoff
+   screens, and the launcher window the setup page hands the install to. */
 
 /* THE METALS, THE GROUND AND THE INK */
 .entry {

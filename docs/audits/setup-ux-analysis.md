@@ -332,7 +332,7 @@ entire job is to get somebody to press something, nothing looked pressable.
 
 What shipped:
 
-- **The material moved out of `Login.vue` into [`styles/entry.css`](../../_editor/web/src/styles/entry.css)**,
+- **The material moved out of `Login.vue` into [`entry.css`](../../_shared/entry-css/entry.css)**,
   scoped to `.entry`, and both screens wear it. The door keeps its own composition (centred on
   the art's empty middle, one control); the setup page is laid out like one of the site's
   article pages, left down the column the work is in. Nothing is duplicated, which is what

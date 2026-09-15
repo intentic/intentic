@@ -168,6 +168,8 @@ export interface StepView {
     readonly state: `done` | `running` | `waiting` | `stopped`;
     /** Only on the running row: what the script is saying about it right now. */
     readonly detail: string | undefined;
+    /** This step's share of the whole plan (0..1), so the bar can be drawn in the plan's own proportions. */
+    readonly share: number;
 }
 
 export interface ProgressView {
@@ -198,9 +200,10 @@ const remainingOf = (state: Progress, now: number): string | undefined => {
     }
     const left = total(state.plan) * (1 - state.percent / 100) * paceOf(state, now);
     if (left < 60_000) {
-        return `less than a minute left`;
+        return `less than a minute`;
     }
-    return `about ${Math.round(left / 60_000)} min left`;
+    const minutes = Math.round(left / 60_000);
+    return `about ${minutes} minute${minutes === 1 ? `` : `s`}`;
 };
 
 export const progressView = (state: Progress, now: number): ProgressView => ({
@@ -220,6 +223,7 @@ export const progressView = (state: Progress, now: number): ProgressView => ({
                     ? `stopped`
                     : `running`,
         detail: at === state.index && state.ended === undefined ? state.detail : undefined,
+        share: step.weight / Math.max(total(state.plan), 1),
     })),
     percent: Math.round(state.percent),
     position: state.index < 0 || state.ended !== undefined ? undefined : `Step ${state.index + 1} of ${state.plan.length}`,

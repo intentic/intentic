@@ -3,9 +3,22 @@
 
 @import "tailwindcss";
 
+/* The faces the app sets type in, self-hosted: this window opens before a browser ever has, and often on a machine
+   that has just been told it has no Docker. Regenerate with `node _tools/scripts/fonts.mjs`. */
+@import "./styles/faces.css";
+
 @import "../../../_editor/ui/src/styles/index.css";
 
+/* THE HOUSE METALS — carved stone, cast bronze, the cartouche frame kit and the ember glows. */
+@import "../../../_shared/house-css/house.css";
+
+/* THE ENTRY SKIN — what /setup was wearing when it handed this window the install. */
+@import "../../../_shared/entry-css/entry.css";
+
+/* Both trees named explicitly: the kit lives outside this app, and this app's own sources are scanned from more
+   than one vite root (the launcher's, and preview/'s). */
 @source "../../../_editor/ui/src/**/*.{ts,html,vue}";
+@source "./**/*.{ts,html,vue}";
 
 @layer base {
     * {
@@ -21,4 +34,10 @@
     input {
         user-select: text;
     }
+}
+
+/* The launcher is a card, not a page: `.entry` stands 100dvh tall for a screen with a plate behind it, and this
+   window is only ever as tall as what it draws (windows.rs `fit_to_content`). */
+.entry.launcher {
+    min-height: 0;
 }

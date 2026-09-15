@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, Notice, type NoticeModel } from "@intentic/ui";
+import { AppBrand, Button, Notice, type NoticeModel, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import type { InvitePreview } from "@intentic/api-contract";
 import { computed, onMounted, ref } from "vue";
@@ -7,7 +7,6 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import { apiClient } from "../../lib/useApi";
 import { useAuth } from "../auth/useAuth";
 import { useSandbox } from "../sandbox/client/useSandbox";
-import AppBrand from "../../components/AppBrand.vue";
 
 // Public accept-invite landing for /invite/:token: previews the token without a session, resolves the current session,
 // then routes the invitee (sign in as the invited address, accept, into the workspace). Accept is email-locked

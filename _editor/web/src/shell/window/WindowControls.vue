@@ -120,7 +120,7 @@ onMounted(() => {
     if (!frameless) {
         return;
     }
-    // What turns the reserve on for every bar in this window, and clears the corner on the entry screens (styles.css, entry.css).
+    // What turns the reserve on for every bar in this window, and clears the corner on the entry screens (styles.css, @intentic/entry-css).
     document.documentElement.setAttribute(`data-frameless`, ``);
     observer = typeof ResizeObserver === `undefined` ? undefined : new ResizeObserver(schedule);
     arrivals = typeof MutationObserver === `undefined` ? undefined : new MutationObserver(onArrivals);

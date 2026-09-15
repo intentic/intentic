@@ -109,16 +109,16 @@ const sessionNote = computed(() => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-3">
-        <p v-if="stuck || many" class="text-2xs text-content">
+    <div class="flex flex-col gap-4">
+        <p v-if="stuck || many" class="text-sm text-content">
             {{ stuck ? `This device can't run a sandbox yet:` : `Before your sandbox can run here:` }}
         </p>
 
-        <ul class="flex flex-col gap-2">
-            <li v-for="requirement in requirements" :key="requirement.id" class="rounded-md border border-line bg-canvas p-2.5">
-                <div class="flex items-start gap-2">
+        <ul class="flex flex-col gap-2.5">
+            <li v-for="requirement in requirements" :key="requirement.id" class="entry-card p-3.5">
+                <div class="flex items-start gap-3">
                     <!-- Live state overrides the static action icon once something is actually happening. -->
-                    <Icon v-if="stateOf(requirement.id)?.state === `running`" name="spinner" spin class="mt-0.5 shrink-0 text-primary-400" />
+                    <Icon v-if="stateOf(requirement.id)?.state === `running`" name="spinner" spin class="mt-0.5 shrink-0 text-link" />
                     <Icon v-else-if="stateOf(requirement.id)?.state === `done`" name="check-circle" class="mt-0.5 shrink-0 text-success" />
                     <Icon
                         v-else
@@ -128,27 +128,27 @@ const sessionNote = computed(() => {
                             stateOf(requirement.id)?.state === `failed`
                                 ? 'text-danger'
                                 : requirement.action === `fix` || requirement.action === `fixElevated`
-                                  ? 'text-primary-400'
+                                  ? 'text-link'
                                   : 'text-warning'
                         "
                     />
-                    <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <div class="flex min-w-0 flex-1 flex-col gap-1">
                         <div class="flex flex-wrap items-baseline gap-x-2">
                             <!-- The heading of whatever is in the way, and the loudest text on the card while it is up. -->
-                            <span class="text-xs font-medium text-content">{{ requirement.title }}</span>
+                            <span class="text-sm font-medium text-content">{{ requirement.title }}</span>
                             <span v-if="badgeOf(requirement)" class="text-2xs text-subtle">{{ badgeOf(requirement) }}</span>
                         </div>
-                        <p class="text-2xs text-muted">{{ requirement.problem }}</p>
+                        <p class="text-xs leading-relaxed text-muted">{{ requirement.problem }}</p>
                         <!-- Live detail replaces the static remedy once the row is running; after a failure it is the reason, and what to do. -->
                         <p
                             v-if="stateOf(requirement.id)?.detail"
-                            class="text-2xs"
+                            class="text-xs leading-relaxed"
                             :class="stateOf(requirement.id)?.state === `failed` ? 'text-content' : 'text-subtle'"
                         >
                             {{ stateOf(requirement.id)?.detail }}
                         </p>
-                        <p v-else-if="remedyOf(requirement)" class="text-2xs text-subtle">{{ remedyOf(requirement) }}</p>
-                        <button v-if="requirement.detail" type="button" :class="ui.linkButton(`mt-1 text-2xs`)" @click="toggle(requirement.id)">
+                        <p v-else-if="remedyOf(requirement)" class="text-xs leading-relaxed text-subtle">{{ remedyOf(requirement) }}</p>
+                        <button v-if="requirement.detail" type="button" :class="ui.linkButton()" @click="toggle(requirement.id)">
                             {{ opened[requirement.id] ? `Hide the steps` : `Show me how` }}
                         </button>
                     </div>
@@ -156,18 +156,18 @@ const sessionNote = computed(() => {
                 <!-- Verbatim and monospace: reflowing would break the alignment of these steps. -->
                 <pre
                     v-if="requirement.detail && opened[requirement.id]"
-                    class="mt-2 max-h-72 overflow-auto rounded-md border border-line bg-surface p-2 font-mono text-2xs leading-relaxed text-muted whitespace-pre-wrap"
+                    class="mt-2 max-h-72 overflow-auto rounded-md border border-line bg-canvas p-2.5 font-mono text-2xs leading-relaxed text-muted whitespace-pre-wrap"
                     >{{ requirement.detail }}</pre>
             </li>
         </ul>
 
         <!-- Shown before the click, so an expected elevation prompt doesn't read as something going wrong. -->
         <!-- Hidden once busy: the prompt has already happened or is happening by then. -->
-        <p v-if="needsAdmin && ours && !busy" class="text-2xs text-subtle">Windows will ask for permission once.</p>
+        <p v-if="needsAdmin && ours && !busy" class="text-xs text-subtle">Windows will ask for permission once.</p>
 
         <!-- Buttons hide once busy: progress lives in the rows above, not in a disabled button beside them. -->
         <!-- The hosted alternative rides the same row, right-aligned: it is the other answer to this question, not a footnote under it. -->
-        <div v-if="!busy" class="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div v-if="!busy" class="flex flex-wrap items-center gap-x-4 gap-y-2">
             <Button v-if="ours" :label="doLabel" @click="emit(`install`)">
                 <template #icon><Icon name="bolt" /></template>
             </Button>
@@ -182,11 +182,11 @@ const sessionNote = computed(() => {
                 <template #icon><Icon name="refresh" /></template>
             </Button>
             <!-- The one escape hatch: run in a hosted browser instead, when this device can't meet the requirements. -->
-            <button type="button" :class="ui.textAction(`ml-auto text-2xs`)" @click="emit(`elsewhere`)">
+            <button type="button" :class="ui.textAction()" @click="emit(`elsewhere`)">
                 <Icon name="server" class="shrink-0" />
                 <span>Run it on a machine we host</span>
             </button>
         </div>
-        <p v-if="sessionNote && !busy" class="text-2xs text-subtle">{{ sessionNote }}</p>
+        <p v-if="sessionNote && !busy" class="text-xs leading-relaxed text-subtle">{{ sessionNote }}</p>
     </div>
 </template>

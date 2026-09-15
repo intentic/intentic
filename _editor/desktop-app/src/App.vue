@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+    AppBrand,
     Button,
     DeviceAgentGroup,
     DeviceDetail,
@@ -927,16 +928,20 @@ onUnmounted(() => {
 
 <template>
 <!-- ONE ROOT, TWO FACES, AND THE WINDOW IS THE CARD. -->
-    <div class="h-dvh overflow-auto bg-canvas text-content">
-        <div ref="content" class="flex w-full flex-col gap-3 p-4">
+<!-- The setup face wears the entry skin (@intentic/entry-css) — the same metals, ground and type /setup was wearing
+     when it handed this window the install. The manager face is the workspace's own look, and keeps it. -->
+    <div class="h-dvh overflow-auto bg-canvas text-content" :class="setupMode ? `entry launcher` : ``">
+        <div ref="content" class="flex w-full flex-col gap-3 p-4" :class="setupMode ? `gap-5 p-6` : ``">
 <!-- SETUP: a SCREEN of this window, in the middle of the frame the workspace was filling (windows.rs), not a second window standing in front of it. -->
             <template v-if="setupMode">
-<!-- THE HEADER IS THE TITLE BAR: every press on it that isn't the × moves the window (dragWindow.ts). -->
-                <header class="flex items-start gap-2.5 select-none" @mousedown="dragWindow">
-                    <Icon name="bolt" class="mt-0.5 text-primary-400" />
+<!-- THE HEADER IS THE TITLE BAR: every press on it that isn't the way back moves the window (dragWindow.ts). -->
+                <header class="flex items-start gap-3 select-none" @mousedown="dragWindow">
+                    <AppBrand shape="mark" class="mt-0.5 shrink-0 text-xl" />
                     <div class="min-w-0 flex-1">
-                        <h1 class="font-semibold leading-tight">Setting up {{ pending?.name ?? `your sandbox` }} on this device</h1>
-                        <p class="text-2xs text-subtle">Your sandbox runs in Docker on this computer: this gets Docker ready, then opens your workspace.</p>
+                        <p class="entry-eyebrow"><span class="entry-lozenge"></span><span>On this computer</span></p>
+                        <h1 class="mt-1.5 text-2xl leading-tight font-semibold">
+                            Setting up {{ pending?.name ?? `your sandbox` }}<span class="text-primary-fill">.</span>
+                        </h1>
                     </div>
 <!-- SAYS WHERE IT GOES, in its label, because a bare × on a screen that fills its window reads as "close Intentic", which is the one thing it does not do. -->
                     <button
@@ -949,25 +954,30 @@ onUnmounted(() => {
                         <Icon name="times" />
                     </button>
                 </header>
+
+<!-- What the next few minutes are, in one sentence; gone once the run has stopped, when the card below is the true one. -->
+                <p v-if="!expired && !setupError && !wasStopped" class="-mt-2 max-w-read-sm text-sm leading-relaxed text-muted">
+                    <template v-if="resuming">Picking up where the restart left off. Nothing needs doing: this window carries on by itself.</template>
+                    <template v-else-if="requirementsShown">Nothing on this computer changes until you say so.</template>
+                    <template v-else>We're getting this computer ready and starting your sandbox. It usually takes a few minutes, and your workspace opens by itself when it's done.</template>
+                </p>
+
 <!-- The code this window came back to is older than the platform will accept: not a dead end, one click. -->
-                <Notice v-if="expired" tone="warning" class="items-center text-2xs">
+                <Notice v-if="expired" tone="warning" class="items-center text-xs">
                     <span class="flex-1">
                         Your setup code ran out while this device was away. Everything the restart was for is already done; it just needs a fresh
                         code to carry on.
                     </span>
                     <Button class="ml-2 shrink-0" size="small" severity="secondary" label="Get a fresh code" @click="freshCode" />
                 </Notice>
-                <p v-else-if="resuming" class="flex items-start gap-2 text-2xs text-subtle">
-                    <Icon name="refresh" class="mt-0.5 shrink-0" />
-                    <span>Picking up where the restart left off.</span>
-                </p>
                 <!-- `=== false`, not `!`: unknown is a real third state here, not yet a warning. -->
-                <p v-if="dockerReady === false && !expired && requirements.length === 0" class="flex items-start gap-2 text-2xs text-warning">
-                    <Icon name="box" class="mt-0.5 shrink-0" />
+                <p v-if="dockerReady === false && !expired && requirements.length === 0" class="flex items-start gap-2.5 text-xs text-subtle">
+                    <Icon name="box" class="mt-0.5 shrink-0 text-warning" />
                     <span v-if="info?.os === `windows`"
-                        >Docker isn't running yet: this checks what your PC needs first, and asks before changing anything.</span
+                        >Your sandbox runs in Docker, which isn't running yet. This checks what your PC needs first, and asks before changing
+                        anything.</span
                     >
-                    <span v-else>Docker isn't running yet: setup installs it first, so your system will ask for your password once.</span>
+                    <span v-else>Your sandbox runs in Docker, which isn't running yet. Setup installs it first, so your system asks for your password once.</span>
                 </p>
 
 <!-- Leads above the progress bar, since it's the only thing here to act on and the machines that produce it have the most rows to scroll past. -->
@@ -984,10 +994,11 @@ onUnmounted(() => {
                     @elsewhere="setUpElsewhere"
                 />
 
-                <Notice v-else-if="setupError && !expired" tone="danger" class="text-2xs">{{ setupError }}</Notice>
+                <!-- Only where the progress card cannot say it: with a plan on screen, the failure is told once, there. -->
+                <Notice v-else-if="setupError && !expired && !progressShown" tone="danger" class="text-xs">{{ setupError }}</Notice>
 
                 <!-- A user-ended run isn't a failure, but still gets said out loud rather than just stopping silently. -->
-                <p v-if="wasStopped" class="flex items-start gap-2 text-2xs text-subtle">
+                <p v-if="wasStopped" class="flex items-start gap-2.5 text-xs text-subtle">
                     <Icon name="times" class="mt-0.5 shrink-0" />
                     <span>You stopped this install. Nothing else is running on this device.</span>
                 </p>
@@ -997,6 +1008,7 @@ onUnmounted(() => {
                     :events="eventsOf(`setup`)"
                     :view="progressShown"
                     :running="activeRun === `setup`"
+                    :reason="setupError"
                     :awaiting="awaitingConsent"
                     :blocked="requirementsShown"
                     v-model:open="setupLogOpen"
@@ -1009,22 +1021,31 @@ onUnmounted(() => {
                     </Button>
                 </div>
 
-<!-- Stop and Copy log: a run that goes wrong can now be ended, not just abandoned. -->
-<!-- Every verb about the transcript in one row, and its path in the tooltip of the button that opens it: printed, it is the longest thing on this screen and the least read. -->
-                <div v-if="!expired" class="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-2 text-2xs">
-                    <button v-if="running" type="button" class="text-link hover:underline" :disabled="stopping" v-action="stopSetup">
+<!-- THE FOOT OF THE CARD: the true sentence about leaving, then the quiet verbs. None of them is the accent —
+     nothing here is what the reader came to press, and `Stop` least of all. -->
+                <footer v-if="!expired" class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-3 text-xs text-subtle">
+                    <span v-if="running" class="min-w-0 flex-1">Closing this window doesn't stop it — your workspace shows the same progress.</span>
+                    <span v-else class="flex-1" />
+                    <button v-if="running" type="button" :class="ui.textAction(`shrink-0`)" :disabled="stopping" v-action="stopSetup">
                         {{ stopping ? `Stopping…` : `Stop` }}
                     </button>
-                    <button v-if="progressShown" type="button" class="text-link hover:underline" @click="setupLogOpen = !setupLogOpen">
-                        {{ setupLogOpen ? `Hide log` : `Show log` }}
+                    <button v-if="progressShown" type="button" :class="ui.textAction(`shrink-0`)" @click="setupLogOpen = !setupLogOpen">
+                        {{ setupLogOpen ? `Hide the log` : `Show the log` }}
                     </button>
-                    <button type="button" class="text-link hover:underline" v-action="copyLog">
-                        {{ logCopied ? `Copied` : `Copy log` }}
-                    </button>
-                    <button v-if="setupLog" type="button" class="text-link hover:underline" v-tooltip.top="setupLog" v-action="openLogFolder">
-                        Open log folder
-                    </button>
-                </div>
+<!-- Only beside an open log: away from it, "copy" and "folder" name a thing the reader has not been shown. -->
+                    <template v-if="setupLogOpen">
+                        <button type="button" :class="ui.textAction(`shrink-0`)" v-action="copyLog">{{ logCopied ? `Copied` : `Copy it` }}</button>
+                        <button
+                            v-if="setupLog"
+                            type="button"
+                            :class="ui.textAction(`shrink-0`)"
+                            v-tooltip.top="setupLog"
+                            v-action="openLogFolder"
+                        >
+                            Open its folder
+                        </button>
+                    </template>
+                </footer>
             </template>
 
 <!-- THE MANAGER: what this machine is running, once nothing is being handed over. -->

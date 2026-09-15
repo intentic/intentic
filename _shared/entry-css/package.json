@@ -1,0 +1,12 @@
+{
+    "name": "@intentic/entry-css",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        "./entry.css": "./entry.css"
+    },
+    "files": [
+        "entry.css"
+    ]
+}
