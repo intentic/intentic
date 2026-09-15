@@ -107,7 +107,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
     // Real registry, memory-backed; worktree git stays stubbed, hoisted so workspaceScope shares this instance.
     const agents = createAgentsRegistry(
         { load: async () => [], save: async () => {} },
-        { of: () => "idle", refresh: async () => false, forget: () => {} },
+        { of: () => "idle", causesOf: () => [], refresh: async () => false, forget: () => {} },
         { of: () => undefined, refresh: async () => false, forget: () => {}, metrics: () => ({}) },
     );
     const workspace = workspacePaths(WORKSPACE_ROOT);

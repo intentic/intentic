@@ -109,8 +109,9 @@ export const requestLandAgent = (id: string, at: AgentReach = undefined): Promis
 // works on it like any other.
 
 // Whether the turn actually went, and, if not, the one sentence explaining why, so callers can't invent their own
-// wording.
-export type ResolveAsk = { readonly sent: true } | { readonly sent: false; readonly why: string };
+// wording. `settled` marks the sentence as good news — the press found nothing left to do and put the card right —
+// which reads as a floating receipt, never as the failure strip an ordinary refusal earns.
+export type ResolveAsk = { readonly sent: true } | { readonly sent: false; readonly why: string; readonly settled?: true };
 
 export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
     const { agentById, open } = useAgents();
@@ -124,9 +125,13 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
         return { sent: false, why: `That agent has no conversation left to send to.` };
     }
     const { conflicts } = await sandboxJson<AgentChangesResponse>(`/agents/${encodeURIComponent(id)}/diff`);
-    // Refusing is not a send: the report is re-derived fresh at read time so a stale refusal can't reappear. The user's
-    // own uncommitted edits are the one thing a rebase can't reach, so they're named explicitly rather than sent to the
-    // agent as a task.
+    // Nothing at all in a report re-derived at read time means the stored refusal has since lost its premise, and the
+    // card is sitting in Attention over a clash that no longer exists. That is a repair, not a refusal: see `rejudged`.
+    if (conflicts === undefined || conflicts.length === 0) {
+        return rejudged(id);
+    }
+    // Refusing is not a send: the user's own uncommitted edits are the one thing a rebase can't reach, so they're named
+    // explicitly rather than sent to the agent as a task.
     const blockers = blockersOf(conflicts);
     if (agentBlockers(blockers).length === 0) {
         const yours = userBlockers(blockers).length;
@@ -135,7 +140,9 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
             why:
                 yours > 0
                     ? `A rebase can't reach this: ${yours === 1 ? `the blocked file is` : `all ${yours} blocked files are`} held by your own uncommitted edits. Commit or stash them, then land again.`
-                    : `Nothing left for the agent to rebase, open it to see what the land reported.`,
+                    : // A refusal naming no path at all is a repo the land couldn't reach (land.ts). Naming it beats
+                      // sending the reader to a report whose entire content is this one sentence.
+                      `The land couldn't reach your workspace's copy of ${conflicts.map((conflict) => conflict.repo).join(`, `)}, so there's nothing here for the agent to rebase.`,
         };
     }
     // The app composed this turn, so it runs as the agent, not on whatever the composer in THIS window happens to hold:
@@ -146,6 +153,21 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
     // caller's busy flag across a multi-minute rebase.
     void conversation.enqueue(resolvePrompt(conflicts));
     return { sent: true };
+};
+
+// The report has evaporated: every blocker the stored refusal named applies cleanly today. That refusal is what holds
+// the card in Attention, and only a land may retire it (agents-registry.recordLanded), so this runs the one land mode
+// that judges without writing: `measure` touches no main tree, and re-judges precisely because a refusal is stored.
+// Repairing beats reporting — the alternative was a sentence sending the reader to a report with nothing in it.
+const rejudged = async (id: string): Promise<ResolveAsk> => {
+    try {
+        await landAgent(id, `measure`);
+        await invalidateAgentAction(id);
+        return { sent: false, settled: true, why: `Nothing is blocking this any more: it's ready to land.` };
+    } catch {
+        // The re-check itself failed (a land holding the repo, a daemon that went away); the card stays as it was.
+        return { sent: false, why: `Nothing is blocking this any more, but the re-check didn't go through. Try landing it.` };
+    }
 };
 
 // What the agent's own turns ran on, as the registry recorded them. Absent for an agent that has never run one, which

@@ -155,6 +155,86 @@ test("a refused land arms the conflict against the same shas", async () => {
     expect(standings.of("c1")).toBe("conflict");
 });
 
+// The one refusal whose premise this file's header could not cover: `workspace` is caused by the user's own uncommitted
+// edits, which move no sha and touch no stored report, so nothing else here notices when they go. Doing exactly what the
+// report asked has to clear the card by itself — no second land, no press.
+test("clearing the uncommitted edit a refusal named puts the card back to ready, with nothing re-landed", async () => {
+    const { work, worktrees, conversation } = await setup();
+    const standings = createLandStandings(worktrees);
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "agent work");
+
+    await writeFile(join(work, "app.ts"), "line one MINE\nline two\nline three\n");
+    const refused = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    expect(refused.conflicts?.[0]?.paths).toEqual([{ path: "app.ts", reason: "workspace" }]);
+    const entry = isolatedAgent(refused.repos, { conflicts: refused.conflicts });
+    await standings.refresh([entry]);
+    expect(standings.of("c1")).toBe("conflict");
+    // Named, not just counted: the board offers a press per cause, and this is the one only the user can make.
+    expect(standings.causesOf("c1")).toEqual(["workspace"]);
+
+    // The user does what the report asked and nothing else: no commit, no land, not a sha moves.
+    await sh(work, "checkout", "--", "app.ts");
+
+    expect(await standings.refresh([entry])).toBe(true);
+    expect(standings.of("c1")).toBe("ready");
+    expect(standings.causesOf("c1")).toEqual([]);
+});
+
+// The conservative half of the same reading: a tidy tree is evidence about `workspace` blockers and nothing else, so a
+// committed divergence keeps refusing until a land re-judges it.
+test("a refusal the workspace never caused survives a tidy tree", async () => {
+    const { work, worktrees, conversation } = await setup();
+    const standings = createLandStandings(worktrees);
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "agent work");
+    const entry = isolatedAgent(conversation.repos, { conflicts: report });
+    await standings.refresh([entry]);
+    expect(standings.of("c1")).toBe("conflict");
+    expect(standings.causesOf("c1")).toEqual(["diverged"]);
+
+    // Unrelated edits of the user's, made and unmade: the tree is as clean as it was, and so is the verdict.
+    await writeFile(join(work, "notes.md"), "mine\n");
+    await standings.refresh([entry]);
+    await rm(join(work, "notes.md"));
+
+    await standings.refresh([entry]);
+    expect(standings.of("c1")).toBe("conflict");
+    expect(standings.causesOf("c1")).toEqual(["diverged"]);
+});
+
+// Per-cause, not all-or-nothing: clearing your own half of a mixed refusal narrows what is left rather than clearing it,
+// which is what lets the card swap "commit yours" for "have the agent resolve it" at exactly the right moment.
+test("clearing the user's half of a mixed refusal leaves the agent's half standing", async () => {
+    const { work, worktrees, conversation } = await setup();
+    const standings = createLandStandings(worktrees);
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "agent work");
+    await writeFile(join(work, "mine.ts"), "mine\n");
+    const mixed = [
+        {
+            repo: "root",
+            paths: [
+                { path: "mine.ts", reason: "workspace" as const },
+                { path: "app.ts", reason: "diverged" as const },
+            ],
+            clean: 0,
+        },
+    ];
+    const entry = isolatedAgent(conversation.repos, { conflicts: mixed });
+    await standings.refresh([entry]);
+    expect(standings.causesOf("c1")).toEqual(["workspace", "diverged"]);
+
+    await rm(join(work, "mine.ts"));
+
+    expect(await standings.refresh([entry])).toBe(true);
+    expect(standings.of("c1")).toBe("conflict");
+    expect(standings.causesOf("c1")).toEqual(["diverged"]);
+});
+
 // Commits are dropped one by one, only when each is empty on its own, so a pair that cancels out survives a rebase and
 // leaves the branch ahead with nothing real in it.
 test("a branch ahead by commits that cancel out is landed, not ready", async () => {

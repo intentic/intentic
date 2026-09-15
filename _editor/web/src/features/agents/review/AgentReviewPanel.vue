@@ -28,6 +28,8 @@ import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { defaultReviewListWidth, MAX_REVIEW_LIST_WIDTH, MIN_REVIEW_LIST_WIDTH, useLayout } from "../../../shell/window/useLayout";
 import { toAppPx, toScreenPx, uiLength } from "../../../shell/window/uiScale";
 import { diffRawUrls } from "../../workspace/changes/diffRaw";
+// Where the user's own conflict half is resolved: the Changes panel, the same deep-link the card and the badges use.
+import { openChanges } from "../../workspace/changes/openChanges";
 import { useWorkspaceTabs } from "../../workspace/tabs/useWorkspaceTabs";
 import DiffToolbar from "../../workspace/viewers/DiffToolbar.vue";
 import FileDiffPane from "../../workspace/viewers/FileDiffPane.vue";
@@ -545,12 +547,6 @@ const NOTICE = `flex items-start gap-1.5 rounded-md border border-danger/40 bg-d
 
 // What a refused land left behind; causes and the action ladder are AgentConflictReport's to own.
 const resolvingPaths = computed(() => (changes.resolving.value ?? []).flatMap((entry) => entry.paths));
-
-// Where the user's own conflict half is resolved: the Changes panel, the same deep-link the badges use.
-const openChanges = (): void => {
-    shell.setSidebarPanel(`changes`);
-    void router.push({ name: `workspace` });
-};
 
 // The file list's width is the reviewer's own call (a flat repo vs. a deep monorepo), sized and persisted exactly
 // like the workspace explorer's edge (drag, double-click reset, ResizeSeam). The seam speaks in pointer

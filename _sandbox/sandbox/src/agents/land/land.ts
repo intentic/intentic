@@ -140,8 +140,10 @@ const changesByPath = (changes: readonly DeltaChange[]): Map<string, DeltaChange
 
 // Every path main's own tree has something uncommitted on, a rename's source leg included: a staged copy is as much at
 // risk as an unstaged one. One status read; no line counts, which changedFiles would spend a read per untracked file on.
-const dirtyPaths = async (main: string, git: GitRunner): Promise<ReadonlySet<string>> => {
-    const status = parseStatusV2((await git(main, ["status", "--porcelain=v2", "-z", "--branch", "-uall", "--find-renames"])).stdout);
+// `--no-optional-locks`: the standings probe calls this outside the repo lock, where writing index.lock would race a land.
+export const dirtyPaths = async (main: string, git: GitRunner): Promise<ReadonlySet<string>> => {
+    const { stdout } = await git(main, ["--no-optional-locks", "status", "--porcelain=v2", "-z", "--branch", "-uall", "--find-renames"]);
+    const status = parseStatusV2(stdout);
     const dirty = new Set<string>(status.untracked);
     for (const change of [...status.conflicted, ...status.staged, ...status.unstaged]) {
         dirty.add(change.path);

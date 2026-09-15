@@ -18,6 +18,7 @@ import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent } fro
 import { landedAway } from "../fleet/agentStatus";
 import { blockersOf } from "./conflictResolution";
 import { useAgents } from "../fleet/useAgents";
+import { useNotifications } from "../../../shell/notifications/notifications";
 
 // Per-agent review of what a worktree has that main does not (GET /agents/{id}/diff): one flat set per repo, no
 // staged/unstaged split. `landed` is read off the tree; committed files drop into `absorbed`. Land/discard replace
@@ -215,10 +216,17 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
     const askResolve = (): Promise<void> =>
         run(async () => {
             const ask = await askAgentToResolve(agentId.value);
-            if (!ask.sent) {
-                throw new Error(ask.why);
+            if (ask.sent) {
+                askedByAgent.value = new Set(askedByAgent.value).add(agentId.value);
+                return;
             }
-            askedByAgent.value = new Set(askedByAgent.value).add(agentId.value);
+            // A press that found nothing left and put the card right is not a declined mutation: it takes the same
+            // floating receipt the board gives it, rather than this panel's red error line.
+            if (ask.settled === true) {
+                useNotifications().say(ask.why);
+                return;
+            }
+            throw new Error(ask.why);
         }, `Couldn't ask the agent to resolve it.`);
 
     const discard = (): Promise<void> =>

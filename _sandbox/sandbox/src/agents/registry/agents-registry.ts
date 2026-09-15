@@ -5,6 +5,7 @@ import {
     type AgentSummary,
     type AgentTurn,
     deriveTitle,
+    type LandConflictReason,
     type LandedMessageDraft,
     planParts,
     type TodoItem,
@@ -499,6 +500,13 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         return fresh;
     };
 
+    // Who can clear what is still refusing, from the same live probe the verdict came from. Only while the card is
+    // actually refusing: a list left on a landed card would offer a press about nothing.
+    const conflictCausesOf = (status: AgentStatus, id: string): LandConflictReason[] | undefined => {
+        const causes = status === "conflict" ? standings.causesOf(id) : [];
+        return causes.length === 0 ? undefined : [...causes];
+    };
+
     const summaryOf = (entry: PersistedAgent): AgentSummary => {
         const state = runtime.get(entry.id);
         // A turn holding any unanswered card reads as `awaiting`, whatever else is in flight beside it.
@@ -542,6 +550,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 // Reads the derived verdict, not a stored status; a cached status here was the original bug's shape.
                 conflict: status === "conflict",
             },
+            // Rides beside the flag, from the same live probe: the flag says a press is owed, this says whose it is.
+            ...opt("conflictCauses", conflictCausesOf(status, entry.id)),
             ...reportedUnfinished(entry, state),
             ...(entry.sessionId !== undefined ? { sessionId: entry.sessionId } : {}),
             ...reportedFailure(entry, status),

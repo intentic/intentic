@@ -7,8 +7,10 @@ const stub = vi.hoisted(() => ({
     fleet: { value: [] as unknown[] },
     notice: { value: undefined as string | undefined },
     // The deferred halves of the two calls under test, so a test can leave one out and settle the other.
-    asks: [] as ((answer: { sent: boolean; why?: string }) => void)[],
+    asks: [] as ((answer: { sent: boolean; why?: string; settled?: true }) => void)[],
     lands: [] as ((answer: { landed: boolean }) => void)[],
+    // The app's one self-retiring receipt lane, so a test can tell an outcome from a failure by which channel it took.
+    said: [] as string[],
 }));
 
 vi.mock("../fleet/useAgents", () => ({
@@ -20,6 +22,11 @@ vi.mock("../fleet/useAgents", () => ({
     }),
 }));
 vi.mock("../fleet/fleetScope", () => ({ otherFleet: { value: [] } }));
+vi.mock("../../../shell/notifications/notifications", () => ({
+    useNotifications: () => ({
+        say: (message: string) => stub.said.push(message),
+    }),
+}));
 vi.mock("../../sandbox/live/fleetAcross", () => ({ refreshAcross: () => undefined }));
 vi.mock("../fleet/agentActions", () => ({
     askAgentToResolve: vi.fn(() => new Promise((settle) => stub.asks.push(settle))),
@@ -35,8 +42,28 @@ const { useAgentDrag } = await import("./useAgentDrag");
 afterEach(() => {
     stub.asks.length = 0;
     stub.lands.length = 0;
+    stub.said.length = 0;
     stub.notice.value = undefined;
     vi.mocked(askAgentToResolve).mockClear();
+});
+
+// TWO KINDS OF "the turn didn't go", ONE OF WHICH IS GOOD NEWS. The board's notice strip is a red bar that shifts the
+// layout and waits to be dismissed, which is right for a refusal and wrong for a press that found nothing left to do and
+// put the card right. That one takes the floating receipt instead, so the reader isn't warned about a repair.
+it("reports a press that repaired the card as an outcome, and a refusal as a failure", async () => {
+    const { resolveNow } = useAgentDrag();
+
+    const repaired = resolveNow(`a`);
+    stub.asks[0]?.({ sent: false, settled: true, why: `Nothing is blocking this any more: it's ready to land.` });
+    await repaired;
+    expect(stub.said).toEqual([`Nothing is blocking this any more: it's ready to land.`]);
+    expect(stub.notice.value).toBeUndefined();
+
+    const refused = resolveNow(`b`);
+    stub.asks[1]?.({ sent: false, why: `A rebase can't reach this.` });
+    await refused;
+    expect(stub.notice.value).toBe(`A rebase can't reach this.`);
+    expect(stub.said).toHaveLength(1);
 });
 
 // The board must not share one `{id, action}` slot across cards: a second press must not clear or override the first

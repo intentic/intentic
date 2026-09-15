@@ -36,7 +36,7 @@ const card = (overrides: Partial<AgentSummary> = {}): AgentSummary => ({
 });
 
 // Archive paths only ever read the roster and write markers back through this stub.
-const noStandings = { of: () => "idle" as const, refresh: async () => false, forget: () => {} };
+const noStandings = { of: () => "idle" as const, causesOf: () => [], refresh: async () => false, forget: () => {} };
 const noPresences = { of: () => undefined, refresh: async () => false, forget: () => {}, metrics: () => ({}) };
 
 // Only `retire` and `remove` are exercised; the rest of the interface is unreachable from these paths.

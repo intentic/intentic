@@ -30,6 +30,9 @@ export interface Vocabulary {
     // The conflict card's one costless press, and the sentence under it.
     readonly resolveConflict: string;
     readonly resolveConflictHint: string;
+    // The other half of a refused land: the press for a clash only the user can clear, and the sentence under it.
+    readonly clearYours: string;
+    readonly clearYoursHint: string;
     readonly restorePoints: string;
     readonly restorePointsHint: string;
     readonly restoreEmpty: string;
@@ -74,6 +77,8 @@ const DEVELOPER: Vocabulary = {
     review: `Review`,
     resolveConflict: `Have the agent resolve it`,
     resolveConflictHint: `It merges in its own worktree: nothing reaches your workspace unless it succeeds.`,
+    clearYours: `Commit or stash yours`,
+    clearYoursHint: `Your own uncommitted edits are on the files it needs: only you can clear those, and it is ready to land as soon as they are gone.`,
     restorePoints: `Restore points`,
     restorePointsHint: `Restore points: automatic file history`,
     restoreEmpty: `No restore points yet: file history is saved automatically as you and your agents work.`,
@@ -117,6 +122,8 @@ const MAKER: Vocabulary = {
     review: `Look`,
     resolveConflict: `Ask the assistant to redo it`,
     resolveConflictHint: `It tries again on its own copy: nothing in your project changes unless it succeeds.`,
+    clearYours: `Set your own changes aside`,
+    clearYoursHint: `You have changes of your own on the files it needs: only you can move those, and it can go ahead as soon as they are gone.`,
     restorePoints: `Versions`,
     restorePointsHint: `Versions: every change, and a way back`,
     restoreEmpty: `No versions yet: one is saved automatically every time you or your assistant change something.`,

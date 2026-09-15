@@ -394,3 +394,34 @@ it(`names the login a session's turns run on, and stays silent about one it cann
     expect(mount({ ...ready(), account: `acct-1` }).textContent ?? ``).toContain(`acme-work`);
     expect(mount({ ...ready(), account: `disconnected-since` }).textContent ?? ``).not.toContain(`acme-work`);
 });
+
+// THE PRESS ON A REFUSED LAND HAS TO BE ONE THAT WORKS. A rebase runs in the agent's own checkout, which cannot see the
+// user's uncommitted work and cannot merge through it — so on a refusal held entirely by the user's own edits, "have the
+// agent resolve it" was a button whose send the daemon refused the moment it was made. The card offers the Changes panel
+// instead, in the same seat, and keeps the agent's press for everything a rebase can still reach.
+const conflicted = (causes?: FleetAgent[`conflictCauses`]): FleetAgent => ({
+    ...ready(`conflict`),
+    attention: { ...NO_ATTENTION, conflict: true },
+    ...(causes !== undefined ? { conflictCauses: causes } : {}),
+});
+
+const pressFor = (el: HTMLElement, text: string): HTMLButtonElement | undefined =>
+    [...el.querySelectorAll(`button`)].find((button) => (button.textContent ?? ``).includes(text));
+
+it(`offers the user's own press, not the agent's, for a refusal only the user can clear`, () => {
+    const el = mount(conflicted([`workspace`]));
+    expect(pressFor(el, `Have the agent resolve it`)).toBeUndefined();
+    expect(pressFor(el, `Commit or stash yours`)).toEqual(expect.any(Object));
+    // The chip says whose refusal it is, so the card's corner and its button agree.
+    expect(el.textContent ?? ``).toContain(`Your edits`);
+});
+
+it(`keeps the agent's press while any cause is still one a rebase reaches`, () => {
+    for (const agent of [conflicted([`workspace`, `diverged`]), conflicted()]) {
+        const el = mount(agent);
+        expect(pressFor(el, `Have the agent resolve it`)).toEqual(expect.any(Object));
+        expect(pressFor(el, `Commit or stash yours`)).toBeUndefined();
+        app?.unmount();
+        app = undefined;
+    }
+});

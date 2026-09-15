@@ -131,12 +131,32 @@ it("refuses the ask when every blocked path is the user's own uncommitted work, 
 });
 
 // The repo-unavailable refusal reads as a conflict on the card and names nothing a rebase could act on, so it's the
-// same refusal wearing different copy.
-it("refuses the ask when the report names no blocked path at all", async () => {
+// same refusal wearing different copy. Distinct from a report that came back EMPTY, below: that one has no premise left
+// at all, this one has a premise the agent simply cannot act on.
+it("refuses the ask when the report names no blocked path at all, and names the repo it couldn't reach", async () => {
     chat.conversations.value = [tab(`a1`)];
-    stubConflicts([{ repo: `root`, clean: 0, paths: [] }]);
-    expect(await askAgentToResolve(`a1`)).toEqual({ sent: false, why: expect.stringContaining(`Nothing left for the agent to rebase`) });
+    stubConflicts([{ repo: `docs`, clean: 0, paths: [] }]);
+    expect(await askAgentToResolve(`a1`)).toEqual({ sent: false, why: expect.stringContaining(`couldn't reach your workspace's copy of docs`) });
     expect(chat.enqueued).toEqual([]);
+    // Nothing is re-judged: the refusal still stands, so retiring it would clear a card that is genuinely stuck.
+    expect(sent.filter((request) => request.method === `POST`)).toEqual([]);
+});
+
+// THE DEAD END THIS PRESS USED TO BE. The stored refusal is what holds the card in Attention and only a land retires it
+// (agents-registry.recordLanded), so a refusal whose cause the user has since cleared left the board stuck on a clash
+// that no longer existed — and the card's only press answered "nothing left to rebase, go read the report", pointing at
+// a report with nothing in it. It re-judges instead, through the one land mode that writes to no tree.
+it("re-judges instead of scolding when the refusal it was pressed about has evaporated", async () => {
+    chat.conversations.value = [tab(`a1`)];
+    stubFetch({ repos: [] });
+    const ask = await askAgentToResolve(`a1`);
+    // Reported as an outcome, not a refusal: the board floats this rather than raising its failure strip.
+    expect(ask).toEqual({ sent: false, settled: true, why: expect.stringContaining(`ready to land`) });
+    // No turn spent on a rebase with nothing to rebase...
+    expect(chat.enqueued).toEqual([]);
+    // ...and the re-judge is a `measure`, the mode that judges a stored refusal without touching the main tree.
+    const land = sent.find((request) => request.url === `https://daemon.test/agents/a1/land`);
+    expect(await land?.json()).toEqual({ mode: `measure`, span: `outstanding`, force: false });
 });
 
 it("sends the composed prompt when the agent's own rebase could reach it, and fences off the user's half", async () => {

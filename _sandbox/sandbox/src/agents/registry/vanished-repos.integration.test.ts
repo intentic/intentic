@@ -41,7 +41,7 @@ const memoryStore = (initial: PersistedAgent[] = []): AgentsStore & { saved: () 
     };
 };
 
-const noStandings = { of: () => "idle" as const, refresh: async () => false, forget: () => {} };
+const noStandings = { of: () => "idle" as const, causesOf: () => [], refresh: async () => false, forget: () => {} };
 const noPresences = { of: () => undefined, refresh: async () => false, forget: () => {}, metrics: () => ({}) };
 
 // A production-shaped workspace: a root repo over /work, a nested repo, and two conversations spanning both, with real

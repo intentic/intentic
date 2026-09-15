@@ -7,6 +7,7 @@ import {
     awaitingUser,
     blocked,
     type ClientAgentStatus,
+    conflictIsYours,
     laneOf,
     limitCountdown,
     type RimAgent,
@@ -307,6 +308,28 @@ describe("attentionReason · every park names itself", () => {
             return { flag, chip: attentionReason(agent), verb: reviewAction(agent) };
         });
         expect(said).toEqual(FLAGS.map((flag) => ({ flag, chip: expect.stringMatching(/\S/u), verb: expect.stringMatching(/\S/u) })));
+    });
+
+    // "Land conflict" beside a press only the reader can make reads as the agent's problem, so the chip names whose
+    // problem it is. Same width budget as every other chip, and only when every cause left is the reader's own.
+    it("names a refusal the reader has to clear as theirs, not as the agent's", () => {
+        const mine: AgentStanding = { status: `conflict`, attention: none, conflictCauses: [`workspace`] };
+        expect(attentionReason(mine)).toBe(`Your edits`);
+        // No wider than the word it replaces: the chip is shrink-0 beside a title that isn't.
+        const generic = attentionReason({ status: `conflict`, attention: none }) ?? ``;
+        expect(attentionReason(mine)?.length).toBeLessThanOrEqual(generic.length);
+        expect(conflictIsYours(mine)).toBe(true);
+    });
+
+    // Anything the agent can still rebase keeps the generic word: its press is the one on offer, and a chip promising
+    // the reader work they needn't do is as wrong as one hiding work they must.
+    it("keeps the agent's word while any cause is the agent's, and for a refusal with no causes named", () => {
+        const mixed: AgentStanding = { status: `conflict`, attention: none, conflictCauses: [`workspace`, `diverged`] };
+        expect(attentionReason(mixed)).toBe(`Land conflict`);
+        expect(conflictIsYours(mixed)).toBe(false);
+        // No causes at all is a daemon that could not attribute the refusal; the board falls back as it always did.
+        expect(attentionReason({ status: `conflict`, attention: none })).toBe(`Land conflict`);
+        expect(conflictIsYours({ status: `conflict`, attention: none, conflictCauses: [] })).toBe(false);
     });
 
     // The chip and the press must rank the same flags the same way: two hand-kept lists once disagreed on setup vs. a

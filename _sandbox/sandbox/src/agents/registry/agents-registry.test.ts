@@ -1,5 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { AgentEvent, AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentSummary, LandConflictReason } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { noteSubagentTask, resetSubagents, type SubagentTaskMessage, type SubagentTurn } from "../../agent/subagents/subagents.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
@@ -10,17 +10,18 @@ import type { LandStanding, LandStandings } from "../land/standing.js";
 
 // Hand-dialed stand-in for land standing; real derivation needs a git repo per case (standing.integration.test.ts).
 // This suite only pins the projection: which half wins, and what each surface reads off it.
-const standings = (): LandStandings & { set: (id: string, standing: LandStanding) => void } => {
-    const verdicts = new Map<string, LandStanding>();
+const standings = (): LandStandings & { set: (id: string, standing: LandStanding, causes?: readonly LandConflictReason[]) => void } => {
+    const verdicts = new Map<string, { standing: LandStanding; causes: readonly LandConflictReason[] }>();
     return {
-        of: (id) => verdicts.get(id) ?? "idle",
+        of: (id) => verdicts.get(id)?.standing ?? "idle",
+        causesOf: (id) => verdicts.get(id)?.causes ?? [],
         refresh: async () => false,
         forget: (ids) => {
             for (const id of ids) {
                 verdicts.delete(id);
             }
         },
-        set: (id, standing) => verdicts.set(id, standing),
+        set: (id, standing, causes = []) => verdicts.set(id, { standing, causes }),
     };
 };
 
@@ -709,6 +710,7 @@ describe("agents registry", () => {
     it("a probe that throws cannot fail a turn, and does not silence the other one", async () => {
         const failing: LandStandings = {
             of: () => "idle",
+            causesOf: () => [],
             refresh: async () => {
                 throw new Error(`fatal: cannot change to '${WORKSPACE_ROOT}/deleted': No such file or directory`);
             },
@@ -884,16 +886,20 @@ describe("agents registry", () => {
         await registry.finish("c1", 2_000);
         expect(registry.get("c1")?.status).toBe("idle");
 
-        land.set("c1", "conflict");
+        land.set("c1", "conflict", ["workspace"]);
         expect(registry.get("c1")?.status).toBe("conflict");
         // `attention.conflict` reads the same derived verdict, not a stored status.
         expect(registry.get("c1")?.attention.conflict).toBe(true);
+        // ...and the causes ride the same verdict, so a card can tell whose press clears it.
+        expect(registry.get("c1")?.conflictCauses).toEqual(["workspace"]);
         // The land verdict is never persisted; the stored status stays `idle`.
         expect(store.saved().find((entry) => entry.id === "c1")?.status).toBe("idle");
 
         land.set("c1", "ready");
         expect(registry.get("c1")?.status).toBe("ready");
         expect(registry.get("c1")?.attention.conflict).toBe(false);
+        // Nothing is refusing, so nothing names a cause: a list left here would offer a press about nothing.
+        expect(registry.get("c1")?.conflictCauses).toBeUndefined();
 
         // An error outranks the branch's land standing.
         await registry.begin(turn(), 3_000);

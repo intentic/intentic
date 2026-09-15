@@ -1,6 +1,6 @@
 import type { IconName } from "@intentic/ui";
 import { formatWeekdayTime } from "@intentic/ui/format";
-import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, AgentWatch, LoopState } from "@intentic/sandbox-contract";
+import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, AgentWatch, LandConflictReason, LoopState } from "@intentic/sandbox-contract";
 
 // Every projection of a fleet agent's state (lane, attention label, drill-in verb, glyphs). Nothing else may
 // derive these from `status` alone: a parked turn is `idle` with an attention flag raised. Pure functions over
@@ -21,6 +21,9 @@ export interface AgentStanding {
     // Outside conditions this conversation is parked on (AgentSummary.watches); `laneOf` reads it alongside `status`
     // and `attention`. Absent for nearly every conversation.
     readonly watches?: readonly AgentWatch[];
+    // Why a refused land is still refusing (AgentSummary.conflictCauses), which decides whose press can clear it.
+    // Absent for every card but one refusing to merge.
+    readonly conflictCauses?: readonly LandConflictReason[];
     // Which kind of failure ended the last turn. `status: "error"` alone conflates a broken harness with a spent
     // allowance; both belong in Attention, but this says which so the card can tell them apart. `laneOf` reads it too,
     // so the lane, badge and chip stay in agreement.
@@ -49,6 +52,15 @@ export const limitClosed = (agent: AgentStanding, now: number = Date.now()): boo
 // A booked fire needs no person: the held turn goes again at the reset either way. Off by default
 // (`resumeAfterLimit` defaults false), so on an ordinary board every spent allowance lands in Attention.
 export const limitScheduled = (agent: AgentStanding): boolean => limited(agent) && agent.limitScheduled === true;
+
+// A refused land nothing the agent does can clear: every blocker left is a file the user has uncommitted edits on,
+// which only a commit or stash releases (git cannot merge through unstaged work, and the agent's checkout cannot
+// even see it). The distinction the board used to lack: it offered "have the agent resolve it" for every conflict,
+// including the ones where that press was refused the moment it was made.
+// False when the daemon named no causes, which is a build that predates them or a refusal it could not attribute;
+// the board then falls back to offering the agent, as it always did.
+export const conflictIsYours = (agent: AgentStanding): boolean =>
+    agent.conflictCauses !== undefined && agent.conflictCauses.length > 0 && agent.conflictCauses.every((cause) => cause === `workspace`);
 
 // This conversation runs again by itself, with nobody pressing anything: a watched agent's last turn ended (status
 // is `idle`/`landed`/`ready`, correctly), but the conversation is not over.
@@ -209,7 +221,9 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
     }
     const park = leadingPark(agent);
     if (park !== undefined) {
-        return ATTENTION_WORDS[park].chip;
+        // Same length as the generic word it replaces, and it names the half of the report the reader can act on:
+        // "Land conflict" beside a button only they can press read as the agent's problem.
+        return park === `conflict` && conflictIsYours(agent) ? `Your edits` : ATTENTION_WORDS[park].chip;
     }
     // A park the attention block can't name: `awaiting` covers a browser or terminal hand-off, neither of which raises
     // a wire flag, so it arrives as a bare status. Checked last, only once nothing more specific applies.
@@ -241,6 +255,7 @@ export const standingFrom = (agent: AgentStanding): AgentStanding => ({
     // Copied, not referenced: this outlives the roster entry it was read from, in a tab and in storage.
     attention: { ...agent.attention },
     ...(agent.watches !== undefined ? { watches: agent.watches } : {}),
+    ...(agent.conflictCauses !== undefined ? { conflictCauses: agent.conflictCauses } : {}),
     ...(agent.failureCode !== undefined ? { failureCode: agent.failureCode } : {}),
     ...(agent.limitResetsAt !== undefined ? { limitResetsAt: agent.limitResetsAt } : {}),
     ...(agent.limitHeld !== undefined ? { limitHeld: agent.limitHeld } : {}),

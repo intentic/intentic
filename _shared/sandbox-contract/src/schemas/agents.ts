@@ -145,6 +145,14 @@ export const LandedMessageDraftSchema = z.object({
     finishedAt: z.number().optional().describe("When it ended, in milliseconds."),
 });
 export type LandedMessageDraft = z.infer<typeof LandedMessageDraftSchema>;
+// Why a path would not land:
+// workspace: your own uncommitted edits are on that path
+// diverged: the main tree's committed content moved under the agent since it branched; nothing of yours is at risk
+// binary: git cannot three-way merge the file at all
+// Declared here rather than beside the conflict report below, since the roster carries the causes too: a card cannot
+// offer the press that clears a refusal without knowing whose refusal it is.
+export const LandConflictReasonSchema = z.enum(["workspace", "diverged", "binary"]);
+export type LandConflictReason = z.infer<typeof LandConflictReasonSchema>;
 export const AgentSummarySchema = z.object({
     id: z.string().describe("The conversation id, which is how every other call addresses it."),
     sessionId: z.string().optional().describe("The provider session behind the last turn. It is retired whenever the model or account changes."),
@@ -299,6 +307,14 @@ export const AgentSummarySchema = z.object({
             "When somebody last opened it, in milliseconds. Newer activity than this is what makes it unread. Kept by the sandbox rather than by a browser, so clearing site data or picking up a phone does not resurrect every badge.",
         ),
     attention: AgentAttentionSchema.describe("Which kinds of waiting-for-you it is doing."),
+    // Only the causes that still hold, re-read live (agents/land/standing.ts), never the stored report's own list: a
+    // blocker the user has since cleared is not something to offer them an action about.
+    conflictCauses: z
+        .array(LandConflictReasonSchema)
+        .optional()
+        .describe(
+            "Why its work will not merge, and so who can clear it: your own uncommitted edits, which only you can commit or stash, against a moved main line or an unmergeable binary, which the conversation can redo on its own copy. Absent unless it is refusing to merge.",
+        ),
     // Beside `attention` since a reader asks both at a glance, but opposite in shape: a turn gone, not one still parked
     // and waiting.
     unfinished: UnfinishedWorkSchema.optional().describe(
@@ -563,12 +579,6 @@ export const AgentFileDiffQuerySchema = z.object({
     repo: z.string().min(1).describe("Which repository."),
     path: z.string().min(1).describe("Which file, relative to that repository."),
 });
-// Why a path would not land:
-// workspace: your own uncommitted edits are on that path
-// diverged: the main tree's committed content moved under the agent since it branched; nothing of yours is at risk
-// binary: git cannot three-way merge the file at all
-export const LandConflictReasonSchema = z.enum(["workspace", "diverged", "binary"]);
-export type LandConflictReason = z.infer<typeof LandConflictReasonSchema>;
 export const LandConflictPathSchema = z.object({
     path: z.string().describe("Which file."),
     reason: LandConflictReasonSchema.describe(

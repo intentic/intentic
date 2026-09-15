@@ -1,4 +1,4 @@
-import { awaitingUser, endingByHand, laneOf, type FleetLane, turnInFlight, unregistered, watching } from "../fleet/agentStatus";
+import { awaitingUser, conflictIsYours, endingByHand, laneOf, type FleetLane, turnInFlight, unregistered, watching } from "../fleet/agentStatus";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 
 // What dragging a card actually does: the lanes are pure projections of the daemon's status machine, so a drop can only
@@ -26,6 +26,11 @@ const refusedForItsBox = (agent: FleetAgent, target: DropTarget): string | undef
     }
     return action === `resolve` ? `Asking the agent to resolve needs its own sandbox` : `Ending a watch needs the agent's own sandbox`;
 };
+
+// What a refused land offers: the agent redoes its own merge, unless nothing is left for it to redo. A blocker held by
+// the user's uncommitted work is invisible to the agent's checkout and unreachable by a rebase, so a card holding only
+// those offers no drop at all rather than a send the daemon refuses on arrival (agentActions.askAgentToResolve).
+const conflictAction = (agent: FleetAgent): DropAction | undefined => (conflictIsYours(agent) ? undefined : `resolve`);
 
 export const dropActionFor = (agent: FleetAgent, target: DropTarget): DropAction | undefined =>
     refusedForItsBox(agent, target) === undefined ? dropActionHere(agent, target) : undefined;
@@ -67,9 +72,10 @@ const dropActionHere = (agent: FleetAgent, target: DropTarget): DropAction | und
     }
     // A conflicted card's drop asks the agent to resolve rather than re-running the land, which would fail identically
     // since check mode is atomic. The board confirms first (useAgentDrag), since a drag spends a turn on an easy
-    // accident.
+    // accident. Withheld when every blocker left is the user's own uncommitted work: a rebase cannot reach a file the
+    // agent's checkout can't even see, so the send would be refused the moment it was made.
     if (agent.attention.conflict || agent.status === `conflict`) {
-        return `resolve`;
+        return conflictAction(agent);
     }
     // An errored, interrupted, or stopped turn never reached its auto-land, so there is a first land to try, not a
     // repeat.
@@ -124,8 +130,9 @@ const rejectionForTarget = (agent: FleetAgent, target: DropTarget): string => {
     if (laneOf(agent) === `finished`) {
         return `Already finished`;
     }
-    // Everything reaching here is the blocked-on-the-user guard; every other path returns above.
-    return `Answer the agent first`;
+    // Two ways to reach here: the blocked-on-the-user guard, and a refusal only the user can clear. The second names
+    // the press that works, since it's the one refusal where "ask the agent" is the wrong answer rather than a busy one.
+    return conflictIsYours(agent) ? `Commit or stash your own edits first` : `Answer the agent first`;
 };
 
 // The verb shown on the drag hint while a legal target is hovered.

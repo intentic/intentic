@@ -6,6 +6,7 @@ import { otherFleet } from "../fleet/fleetScope";
 import { unregistered } from "../fleet/agentStatus";
 import { dropActionFor, type DropAction, type DropTarget, type PendingAction } from "./laneDrop";
 import { useAgents } from "../fleet/useAgents";
+import { useNotifications } from "../../../shell/notifications/notifications";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 
 // Pointer-driven card drag: Pointer Events (not HTML5 drag-and-drop) give a real AgentCard ghost, Escape-to-cancel, and
@@ -17,6 +18,7 @@ import type { FleetAgent } from "../fleet/useAgents-fleet";
 const DRAG_THRESHOLD_PX = 5;
 
 const { fleet, refresh, notice, stopWatching } = useAgents();
+const { say } = useNotifications();
 
 // An id and its box: agent ids are minted per daemon, so the same id can be on two cards from two sandboxes, and
 // resolving by id alone could act on the wrong one's card.
@@ -118,9 +120,16 @@ const runAction = async (id: string, chosen: PendingAction, at?: string): Promis
         // that went says nothing here; one that didn't must, since the board can't tell from `status: "conflict"` alone
         // whether this refusal is the user's to clear.
         const ask = await askAgentToResolve(id);
-        if (!ask.sent) {
-            notice.value = ask.why;
+        if (ask.sent) {
+            return;
         }
+        // A press that put the card right is an outcome, not a failure: it takes the floating receipt, leaving the
+        // board's danger strip for the refusals it was written for.
+        if (ask.settled === true) {
+            say(ask.why);
+            return;
+        }
+        notice.value = ask.why;
         return;
     }
     await discardAgent(id, at);

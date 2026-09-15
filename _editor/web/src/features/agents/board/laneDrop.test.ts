@@ -69,6 +69,16 @@ describe("dropActionFor", () => {
     it("hands a conflict back to the agent instead of re-running the land that just refused", () => {
         expect(dropActionFor(agent({ status: `conflict` }), `finished`)).toBe(`resolve`);
         expect(dropActionFor(agent({ status: `idle`, attention: { ...none, conflict: true } }), `finished`)).toBe(`resolve`);
+        // Still the agent's while any cause is: its half is what a rebase would fix, whatever else sits beside it.
+        expect(dropActionFor(agent({ status: `conflict`, conflictCauses: [`workspace`, `diverged`] }), `finished`)).toBe(`resolve`);
+    });
+
+    // A rebase runs in the agent's own checkout, which cannot see the user's uncommitted work and cannot merge through
+    // it; the send was refused on arrival, so the board withholds the drop and names the press that does work.
+    it("withholds the resolve for a refusal only the user can clear, and names the press that clears it", () => {
+        const mine = agent({ status: `conflict`, conflictCauses: [`workspace`] });
+        expect(dropActionFor(mine, `finished`)).toBeUndefined();
+        expect(dropRejection(mine, `finished`)).toBe(`Commit or stash your own edits first`);
     });
 
     it("refuses to land an agent that is blocked on the user: it is mid-task, not done", () => {
