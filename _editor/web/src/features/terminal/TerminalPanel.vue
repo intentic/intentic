@@ -1151,7 +1151,8 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 </div>
             </div>
             <!-- xterm sizes to this container; each split's fit observer fills its own cell. -->
-            <div ref="container" class="term-body flex min-h-0 min-w-0 flex-1 bg-terminal p-2" @contextmenu="onGridContextMenu"></div>
+<!-- Every press here is the terminal's: xterm selects under its own cursor rules (shell/window/windowGesture.ts). -->
+            <div ref="container" class="term-body flex min-h-0 min-w-0 flex-1 bg-terminal p-2" data-window-no-drag @contextmenu="onGridContextMenu"></div>
             <!-- Find sits over the pane's top-right corner (VSCode's placement) so highlighted rows stay visible under it. -->
             <div
                 v-if="finding"

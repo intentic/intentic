@@ -9,7 +9,8 @@ const back = usePageBack();
 </script>
 
 <template>
-    <header :class="description ? 'mb-6' : 'mb-4'">
+<!-- `ui-page-header` is how the desktop app's window buttons find the row that meets their corner (web's shell/window/controlsReserve.ts). -->
+    <header class="ui-page-header" :class="description ? 'mb-6' : 'mb-4'">
         <div class="flex items-center justify-between gap-3">
 <!-- THE TITLE CLUSTER TAKES THE ROW'S LEFTOVER WIDTH, not its own content's. -->
             <div class="flex min-w-0 flex-1 items-center gap-2">

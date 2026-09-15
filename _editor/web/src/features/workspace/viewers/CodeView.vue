@@ -294,5 +294,6 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div ref="host" class="h-full w-full bg-canvas"></div>
+<!-- Every press here is the editor's: its gutter selects lines under an arrow cursor (shell/window/windowGesture.ts). -->
+    <div ref="host" class="h-full w-full bg-canvas" data-window-no-drag></div>
 </template>

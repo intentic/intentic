@@ -1,13 +1,12 @@
 // @vitest-environment jsdom
-// The flicker this pins: a bar arrives wearing its own background — the file-tab row's `bg-card` — and the title
-// fill only reaches it on the NEXT frame, so the top of a frameless window paints grey and then turns black. Every
-// view mounts through a dynamic import, so no click, keypress or route change is still pending when its bars land;
-// the measurement has to follow the document instead. Frames are pumped by hand here, and the assertions that
-// matter are the ones made without pumping one.
+// The corner this pins: a bar arrives at the window's right edge with its own controls at its right end, and the
+// reserve for the window's buttons only reached it on the NEXT frame, so one frame painted that bar's last control
+// under the buttons. Every view mounts through a dynamic import, so no click, keypress or route change is still
+// pending when its bars land; the measurement has to follow the document instead. Frames are pumped by hand here,
+// and the assertions that matter are the ones made without pumping one.
 import { IconStub } from "@intentic/ui/testing";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp } from "vue";
-import { TITLE_BAR } from "./titleBar";
 import WindowControls from "./WindowControls.vue";
 
 // Partial, over the real module: the component reaches for whatever the desktop lane grows next, and a mock listing
@@ -22,6 +21,8 @@ vi.mock(import("../../app/environments/desktop"), async (importOriginal) => ({
 
 vi.mock("vue-router", () => ({ useRoute: () => ({ fullPath: `/workspace` }) }));
 
+const RESERVE = `padding-inline-end`;
+
 let app: App | undefined;
 let pending: FrameRequestCallback | undefined;
 
@@ -31,13 +32,21 @@ const frame = (): void => {
     run?.(0);
 };
 
-// jsdom lays nothing out, so every bar reads top 0 — which is the top row, and exactly the case under test.
 const mountControls = (): void => {
     const host = document.createElement(`div`);
     document.body.append(host);
     app = createApp(WindowControls);
     app.component(`Icon`, IconStub);
     app.mount(host);
+};
+
+// jsdom lays nothing out, so the geometry is supplied the way the browser would have measured it: the buttons in the
+// top-right corner of a 1280-wide window, and every bar running the window's full width along the top edge — into
+// the corner, which is exactly the case under test.
+const layOut = (): void => {
+    vi.spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockImplementation(function (this: HTMLElement) {
+        return this.classList.contains(`window-controls`) ? new DOMRect(1160, 0, 120, 36) : new DOMRect(0, 0, 1280, 36);
+    });
 };
 
 // The document as a view leaves it: one bar inside a subtree, the way a route's component mounts it.
@@ -48,7 +57,9 @@ const mountView = (): HTMLElement => {
     return view;
 };
 
-// One turn of Vue's queue, which is where the strip follows the measurement; never a frame.
+const barOf = (view: HTMLElement): HTMLElement => view.querySelector(`.view-header`) as HTMLElement;
+
+// One turn of the microtask queue, which is where the arrival observer runs; never a frame.
 const settle = async (): Promise<void> => {
     await Promise.resolve();
     await Promise.resolve();
@@ -57,6 +68,7 @@ const settle = async (): Promise<void> => {
 beforeEach(() => {
     document.body.replaceChildren();
     pending = undefined;
+    layOut();
     vi.stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback) => {
         pending = callback;
         return 1;
@@ -70,34 +82,48 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
 });
 
-it(`fills a bar that arrived after mount, before the frame it would have painted grey in`, async () => {
+it(`reserves the corner on a bar that arrived after mount, before the frame it would have painted under the buttons in`, async () => {
     mountControls();
     frame();
 
     const view = mountView();
     await settle();
 
-    expect(view.querySelector(`.view-header`)?.hasAttribute(TITLE_BAR)).toBe(true);
-    expect(pending, `a frame is still pending, so the fill was not what this one landed`).toBeUndefined();
+    expect(barOf(view).style.getPropertyValue(RESERVE)).toBe(`var(--window-controls-width)`);
+    expect(pending, `a frame is still pending, so the reserve was not what this one landed`).toBeUndefined();
 });
 
-/* THE STRIP STANDS IN FOR A MISSING BAR (titleBar.ts `STRIP`), so it has to hand the row over the moment one arrives. */
-it(`hands the top row between the stand-in strip and a real bar as views come and go`, async () => {
+/* ONE BAR HOLDS THE CORNER AT A TIME, and it hands the corner over the moment the layout changes under it. */
+it(`hands the corner from one bar to the next as views come and go`, async () => {
     mountControls();
     frame();
+
+    const first = mountView();
+    await settle();
+    first.remove();
     await settle();
 
-    expect(document.querySelector(`.window-titlebar`), `no bar is up, so the strip should be`).not.toBeNull();
+    expect(barOf(first).style.getPropertyValue(RESERVE), `a bar that left keeps no reserve`).toBe(``);
 
-    const view = mountView();
+    const second = mountView();
     await settle();
 
-    expect(document.querySelector(`.window-titlebar`), `a real bar is up, so the strip should not be`).toBeNull();
+    expect(barOf(second).style.getPropertyValue(RESERVE)).toBe(`var(--window-controls-width)`);
+});
 
-    view.remove();
-    await settle();
+/* Nothing but the three buttons is drawn: no bar, no strip, no fill — the page under them is the handle. */
+it(`draws the window's three buttons and marks the document frameless for as long as it is up`, () => {
+    mountControls();
 
-    expect(document.querySelector(`.window-titlebar`)).not.toBeNull();
+    expect(document.querySelectorAll(`.window-control`)).toHaveLength(3);
+    expect(document.documentElement.hasAttribute(`data-frameless`)).toBe(true);
+    expect(document.querySelector(`.window-controls`)?.parentElement?.children).toHaveLength(1);
+
+    app?.unmount();
+    app = undefined;
+
+    expect(document.documentElement.hasAttribute(`data-frameless`)).toBe(false);
 });

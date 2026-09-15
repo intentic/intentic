@@ -221,10 +221,6 @@
         border-bottom-color: var(--sanctum-rule-strong);
         box-shadow: 0 2px 0 -1px var(--sanctum-whisper);
     }
-/* THE SAME FILLET UNDER THE TITLE BAR. */
-    html[data-skin="sanctum"] {
-        --title-bar-shadow: 0 2px 0 -1px var(--sanctum-whisper), 0 4px 14px -4px rgb(0 0 0 / 0.7);
-    }
 
     /* OVERLAYS Opaque, deliberately and without exception. */
     [data-skin="sanctum"] .p-dialog,

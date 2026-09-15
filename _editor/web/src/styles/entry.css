@@ -53,11 +53,10 @@
     isolation: isolate;
 }
 
-/* THE DESKTOP APP'S TITLE STRIP, WHICH IS DRAWN ACROSS THIS SCREEN RATHER THAN ABOVE IT. An entry screen has no
-   bar of its own in the window's top row, so the app's three window controls arrive on a fixed strip of
-   `--bar-height` laid over whatever is under it (`_editor/web`'s WindowControls.vue, `bare`). Both entry screens
-   keep that height clear from INSIDE their own box: `box-sizing: border-box` makes this a padding within the
-   100dvh, not 52 rows of overflow.
+/* THE DESKTOP APP'S WINDOW BUTTONS FLOAT OVER THIS SCREEN'S TOP-RIGHT CORNER, `--bar-height` tall, with nothing
+   drawn under them (`_editor/web`'s WindowControls.vue); the same band along the top edge is what drags the
+   window. Both entry screens keep that height clear from INSIDE their own box: `box-sizing: border-box` makes
+   this a padding within the 100dvh, not 52 rows of overflow.
 
    It is here, and not in a component's scoped block, because BOTH screens need it and because the scoped version
    silently did not work: `:global([data-frameless]) .door` compiles to `[data-frameless]` — Vue replaces the whole

@@ -340,8 +340,8 @@ onUnmounted(stopStartingPoll);
 
 <template>
     <div class="flex h-full min-h-0 w-full flex-col bg-canvas">
-        <!-- One h-10 row: switcher and status on the left, verbs on the right; typing an address swaps the left half for the field. -->
-        <div class="flex h-10 shrink-0 items-center gap-1 border-b border-line bg-card px-1.5">
+        <!-- One bar (`.view-header`, so the desktop app's window buttons reserve its right end): switcher and status on the left, verbs on the right; typing an address swaps the left half for the field. -->
+        <div class="view-header flex items-center gap-1 border-b border-line bg-card px-1.5">
             <template v-if="addressOpen">
                 <input
                     ref="addressField"

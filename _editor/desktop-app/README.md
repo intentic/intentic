@@ -30,8 +30,8 @@ from any device. The app adds no third plane. It is three thin native things aro
 
 1. **A shell for the hosted SPA.** The workspace screen loads `https://app.intentic.dev`
    (override: `INTENTIC_APP_URL`, or settings). It gets **no IPC at all**, its capability list is empty, and
-   its only channel into the app is an `intentic://` navigation the window intercepts in Rust — the title bar
-   it draws for its own frameless window included.
+   its only channel into the app is an `intentic://` navigation the window intercepts in Rust — the window
+   buttons it draws for its own frameless window included.
 2. **A script runner.** Every machine operation is one of the scripts the copy-paste one-liners already run,
    spawned as a child process with its output streamed into the app's own screen.
 3. **A lifecycle manager.** Setup progress, then one row per sandbox carrying its folder, its localhost ports,
@@ -174,7 +174,7 @@ Three more consequences worth knowing:
   ([`installer-hooks.nsh`](src-tauri/installer-hooks.nsh), which `installer.nsi` inserts ahead of its own
   running-app check).
 
-### …and neither has the workspace: the SPA's own top row is its title bar
+### …and neither has the workspace: the page itself is the window's handle
 
 The card above took the frame off the app's own screens. The same argument answers the face the user actually
 spends the day in, and it is worth more there: the workspace's platform strip carried a logo, the word
@@ -187,19 +187,25 @@ With no face wearing a platform frame, `FRAME_ALLOWANCE` went with it: every siz
 area, the frame used to be added back outside it, and 48 logical rows were reserved on every screen for a title
 bar that is no longer there.
 
-The row does both jobs now: the columns keep their controls, the window's three go at the right end of whichever
-bar reaches the window's edge, and every empty stretch of the row drags the window
-([`_editor/web`'s WindowControls.vue](../web/src/shell/window/WindowControls.vue)). It also **looks like the top of
-a window**: the bars standing in the top row wear a fill mixed down from the canvas toward black and a soft
-shadow onto the content under them (`data-title-bar`, `styles.css`), and a screen with no bar in its top row —
-the login page, a gate, an error — gets a strip of the same material drawn across it, which drags and
-double-clicks like any bar. Which bars are in the top row is measured, not declared: the terminal panel's bar
-and an agent's detail row wear the same class and must never wear the fill. That measurement follows the
-document, not the frame clock. A view's bars arrive from a dynamic import, well after the click and the route
-change that asked for them, so a bar entering or leaving the document is measured in the microtask after the
-patch that moved it — before it can paint once in its own colours (the file-tab row is `bg-card` grey) and turn
-black a frame later. Where the launcher's header is an ordinary drag region calling the window API, this face
-**has no command surface and does not get one for this**:
+Nothing stands in for the frame. The page draws the window's three buttons floating in its top-right corner and
+nothing else — no bar, no strip, no fill ([`_editor/web`'s
+WindowControls.vue](../web/src/shell/window/WindowControls.vue)) — and the page under them is the handle
+([windowGesture.ts](../web/src/shell/window/windowGesture.ts)). A press moves the window from the band along
+the top edge, exactly as tall as the buttons, whatever stands there short of a control; and from every empty
+stretch of background below it — the rail between its tiles, a board's canvas, a chat's margin, a page's
+padding. Whatever the press was for first keeps it: a control, a link, a field, a line of text (a press there
+starts a selection, and the line's margin and leading count as the line), a scrollbar, a resize seam, a
+picture, a frame, anything under a cursor that names another gesture, anything fixed to the viewport (a menu,
+a dialog, the buttons themselves), and the editor's and the terminal's own surfaces (`data-window-no-drag`). A
+double-click in the band maximises, as on any title bar. The one thing measured rather than declared is which
+row of the layout runs into the buttons' corner — the file-tab row, the chat's tab row, the preview's toolbar,
+a page's title row, or none — because that row gives up that much of its right end so none of its own controls
+ends up under the window's ([controlsReserve.ts](../web/src/shell/window/controlsReserve.ts)). That
+measurement follows the document, not the frame clock: a view's rows arrive from a dynamic import, well after
+the click and the route change that asked for them, so a row entering or leaving the document is measured in
+the microtask after the patch that moved it, before it can paint once with a control under the buttons. Where
+the launcher's header is an ordinary drag region calling the window API, this face **has no command surface
+and does not get one for this**:
 
 - Every press is an `intentic://window?do=…` navigation, **including the drag**: Rust answers it with
   `start_dragging()`, which hands the window to the platform's own move loop — the same call a Tauri drag region
@@ -207,14 +213,14 @@ black a frame later. Where the launcher's header is an ordinary drag region call
 - **No such navigation starts before the page's `load` event** (`environments/desktop.ts` `openDesktopLink`).
   Starting one — even one this app cancels a millisecond later — aborts whatever the document is still fetching:
   `load` never fires and the renderer keeps the page in its loading regime for good, at three to four times the
-  cost per frame. That was the first frameless build's "everything is slow": the page announced its bar from
+  cost per frame. That was the first frameless build's "everything is slow": the page announced itself from
   `onMounted`, while its fonts and the sign-in script were still arriving. A link asked for early now waits for
   `load`; a drag asked for early is dropped, because a move loop started after the release is a window glued
   to the pointer.
 - What comes back is a DOM event dispatched by `eval` (the update banner's channel, and the setup bar's), because
   whether the window is maximised is a fact about the window: `Win+↑`, a drag to the top edge and a snap layout
   all change it without touching that button.
-- **A frameless window whose page draws no bar is a trap**, so the app refuses to be in one. It opens
+- **A frameless window whose page draws no window buttons is a trap**, so the app refuses to be in one. It opens
   undecorated and waits to hear `intentic://window?do=ready`; if nothing says it within eight seconds — an app
   newer than the page it loaded, a page that failed to load at all, an offline cold start — it hands the
   platform's frame back (`arm_frame_fallback`). Eight rather than six because the announcement now waits for
@@ -597,7 +603,7 @@ The whole channel between the SPA and the app
 | `intentic://auth?handoff=…&state=…` | the browser, after sign-in | the credential coming back |
 | `intentic://update` | the SPA's own update banner | install the app update already downloaded here |
 | `intentic://launcher` | the setup page's *Show the setup* | raise the app's own card again, holding the same run |
-| `intentic://window?do=…` | the title bar the SPA draws | minimise, maximise, close, drag, or announce that bar |
+| `intentic://window?do=…` | the window buttons the SPA draws, and the page under them | minimise, maximise, close, drag, or announce that the page is up |
 
 `setup`, `signin` and `auth` work from an external browser too, where the OS routes them to the installed app:
 with the one difference the next section is about. **The other four are refused from anywhere but this app's
