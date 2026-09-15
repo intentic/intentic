@@ -113,9 +113,44 @@ const keepTab = (id: string): void => {
     }
 };
 
+// Where a path lands after `from` moved to `to`: the path itself, or one under it when a whole folder moved. Undefined
+// means this path was not in what moved.
+const movedPath = (path: string, from: string, to: string): string | undefined =>
+    path === from ? to : path.startsWith(`${from}/`) ? `${to}${path.slice(from.length)}` : undefined;
+
+// Follows files that moved on disk: each open tab keeps its place, its pane and its slot under the new name, and its
+// edit buffer travels with it. A tab left pointing at the old path reads a file that is no longer there, closes itself,
+// and takes any unsaved work with it — which is what a rename used to do to the file being renamed.
+export const renameOpenPaths = (from: string, to: string): void => {
+    for (const which of [`main`, `side`] as const) {
+        const current = pane(which);
+        const moves = new Map<string, string>();
+        const followed = current.tabs.map((tab) => {
+            if (tab.kind !== `file`) {
+                return tab;
+            }
+            const moved = movedPath(tab.path, from, to);
+            if (moved === undefined) {
+                return tab;
+            }
+            moves.set(tab.id, moved);
+            renamePath(tab.path, moved);
+            return { kind: `file` as const, id: moved, path: moved };
+        });
+        if (moves.size === 0) {
+            continue;
+        }
+        setPane(which, {
+            tabs: followed,
+            active: current.active === null ? null : (moves.get(current.active) ?? current.active),
+            preview: current.preview === null ? null : (moves.get(current.preview) ?? current.preview),
+        });
+    }
+};
+
 // Editing a previewed file promotes it, the third promotion gesture beside the double-click. Without it, the
 // next peek would replace the tab and discard-prompt an edit the user never asked to open.
-const { dirtyPaths, forget } = useEditBuffers();
+const { dirtyPaths, forget, renamePath } = useEditBuffers();
 watch(dirtyPaths, (dirty) => {
     for (const which of [`main`, `side`] as const) {
         const previewed = pane(which).tabs.find((tab) => tab.id === pane(which).preview);

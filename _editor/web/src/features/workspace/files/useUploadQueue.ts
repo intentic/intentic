@@ -9,7 +9,7 @@ import { sandboxJson, sandboxUpload } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { WORKSPACE_TREE } from "../../../lib/queryKeys";
 import { chunkItems, dedupeByPath } from "./uploadChunking";
-import { clearUnlandedUploads, markUploadFailed, markUploadLanded, notePendingUpload } from "./pendingUploads";
+import { clearUnsettledUploads, markFailed, markSettled, noteArriving } from "./provisionalEntries";
 
 // Workspace upload queue: drops and picks append to a shared queue rather than clobbering an in-flight upload.
 // Per-file transport is a bounded XHR pool (HTTP/1.1 and HTTP/2); large trees stream as one tar instead, falling
@@ -62,11 +62,11 @@ const joinPath = (dir: string, rel: string): string => (dir === `` ? rel : `${di
 const setStatus = (item: QueueFile, status: FileStatus): void => {
     item.status = status;
     if (status === `done`) {
-        markUploadLanded(item.path);
+        markSettled(item.path);
     } else if (status === `failed`) {
-        markUploadFailed(item.path);
+        markFailed(item.path);
     } else if (status === `queued`) {
-        notePendingUpload(item.path, item.size);
+        noteArriving(item.path, { kind: `upload`, size: item.size });
     }
 };
 
@@ -155,7 +155,7 @@ export const resetUploadQueue = (): void => {
     controller = new AbortController();
     // Placeholder rows for bytes that never landed go with the queue; ones already on disk stay until the tree lists
     // them, since the row is the only sign of them until it does.
-    clearUnlandedUploads();
+    clearUnsettledUploads();
     files.value = [];
     bytesTotal.value = 0;
     bytesDone.value = 0;
@@ -362,7 +362,7 @@ const uploadChunk = async (chunk: readonly QueueFile[], signal: AbortSignal): Pr
 // explorer shows where the drop landed while the daemon's own listing (a walk of the whole workspace) is seconds away.
 const queueBatch = (items: QueueFile[]): void => {
     for (const item of items) {
-        notePendingUpload(item.path, item.size);
+        noteArriving(item.path, { kind: `upload`, size: item.size });
     }
     files.value.push(...items);
     bytesTotal.value += items.reduce((sum, item) => sum + item.size, 0);

@@ -19,7 +19,7 @@ import { viewersOfPath } from "../../../shell/presence/usePresence";
 import { noteUserCreatedDir, useEmptyDirs } from "./useEmptyDirs";
 import { useFileNesting } from "./useFileNesting";
 import { useUploadQueue } from "../files/useUploadQueue";
-import { type PendingState, pendingStateOf, withPendingEntries } from "../files/pendingUploads";
+import { isLeaving, type Provisional, provisionalAt, withProvisionalEntries } from "../files/provisionalEntries";
 import { isRecentlyChanged } from "../changes/useWorkspaceLive";
 import { lensPersonaId, reachOf } from "../directory-ui/personaReach";
 import { useWorkspaceTree } from "./useWorkspaceTree";
@@ -90,7 +90,7 @@ const {
 const emit = defineEmits<{ openFile: [path: string, mode: OpenMode]; openDirectory: [path: string] }>();
 
 const {
-    saveText,
+    createFile,
     createDir,
     moveEntry,
     removeEntries,
@@ -171,7 +171,7 @@ const lensReach = computed(() => {
 const refused = (path: string): boolean => lensReach.value?.refuses(path) === true;
 // Selection filtered to paths the ops may actually touch, so bulk delete doesn't hit paths the daemon will refuse, nor
 // placeholder rows for files that aren't on disk under that name yet.
-const unlockedOnly = (paths: readonly string[]): string[] => paths.filter((path) => !locked(path) && !pending(path));
+const unlockedOnly = (paths: readonly string[]): string[] => paths.filter((path) => !locked(path) && !pending(path) && !isLeaving(path));
 
 // Children come from the eager walk's inline `children`, else the lazily-fetched map keyed by path. No `children` means
 // never listed (ignored, or beyond budget) and fetches on expand; `children: []` is a genuinely empty dir.
@@ -194,21 +194,22 @@ const byPath = computed(() => {
     return map;
 });
 
-// A placeholder row: bytes this browser sent (or is sending) that the daemon's listing hasn't caught up with yet. It
-// draws and expands like any row, but nothing may act on it — there is no file at that path to rename, move or open.
+// A provisional row: something this browser has just done that the daemon's listing hasn't caught up with yet. It draws
+// and expands like any row, but nothing may act on it — there is no file at that path to rename, move or open.
 // Only for a path the listing DOESN'T have: the folders on the way to an upload usually already exist, and drawing one
 // as provisional would say the folder itself was arriving.
-const pendingRow = (path: string): PendingState | undefined => (byPath.value.has(path) ? undefined : pendingStateOf(path));
+const pendingRow = (path: string): Provisional | undefined => (byPath.value.has(path) ? undefined : provisionalAt(path));
 const pending = (path: string): boolean => pendingRow(path) !== undefined;
 const pendingTooltip = (path: string): string | undefined => {
-    const state = pendingRow(path);
-    return state === `uploading`
-        ? `Uploading…`
-        : state === `landing`
-          ? `Uploaded — waiting for the workspace listing`
-          : state === `failed`
-            ? `Upload failed; the file isn't in the workspace`
-            : undefined;
+    const row = pendingRow(path);
+    if (row === undefined) {
+        return undefined;
+    }
+    if (row.state === `failed`) {
+        return `Upload failed; the file isn't in the workspace`;
+    }
+    const verb = row.kind === `upload` ? `Uploaded` : `Written`;
+    return row.state === `landing` ? `${verb} — waiting for the workspace listing` : row.kind === `upload` ? `Uploading…` : `Writing…`;
 };
 
 const leadEntry = computed(() => (lead.value === null ? undefined : byPath.value.get(lead.value)));
@@ -227,10 +228,10 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
     const open = expanded.value;
     // Filters apply once here, covering the root, lazy subtrees, and name matches that feed the selection/keyboard
     // axis. Nesting only applies unfiltered, since a filter flattens every level to match folded names.
-    // Files still on their way into `dir` join its listing here, in the order their real rows will take, so an upload
-    // has a row from the moment it starts rather than when the daemon's next walk proves it landed.
+    // Entries still on their way into `dir` join its listing here, in the order their real rows will take, and ones on
+    // their way out leave it, so every file gesture shows in the tree at the gesture rather than a round trip later.
     const level = (nodes: readonly WorkspaceTreeEntry[], dir: string): readonly NestedEntry[] => {
-        const shown = withPendingEntries(dir, nodes).filter((entry) => explorerShows(entry, filters.value));
+        const shown = withProvisionalEntries(dir, nodes).filter((entry) => explorerShows(entry, filters.value));
         return fileNesting.value && needle === `` ? nestSiblings(shown) : shown.map((entry) => ({ entry }));
     };
 
@@ -508,7 +509,11 @@ const commitRename = (): void => {
     if (name === `` || name === basename(path)) {
         return;
     }
-    void run(() => moveEntry(path, joinPath(parentDir(path), name)), `Couldn't rename that.`);
+    const to = joinPath(parentDir(path), name);
+    // `moveEntry` swaps the rows before its first await, so the new name is on screen in this same frame; the selection
+    // follows it, or the highlight would sit on a row that has just gone. A refusal puts both back.
+    void run(() => moveEntry(path, to), `Couldn't rename that.`);
+    selectSingle(to);
 };
 const cancelRename = (): void => {
     renamingPath.value = undefined;
@@ -564,20 +569,30 @@ const commitCreate = async (): Promise<void> => {
     }
     creating.value = undefined;
     const path = joinPath(spec.dir, name);
+    // The write puts the row up before its first await, so the phantom input is replaced by a real-looking row in the
+    // same frame rather than leaving a hole where the file was just named. Selection and focus land on that row: they
+    // used to be aimed at a path with nothing to focus, which dropped the keyboard out of the tree entirely.
     if (spec.type === `dir`) {
         // A freshly created folder is exempt from barren marking until it gains content.
         noteUserCreatedDir(path);
-        await run(() => createDir(path), `Couldn't create that folder.`);
+        const write = run(() => createDir(path), `Couldn't create that folder.`);
         selectSingle(path);
         await focusLead();
+        await write;
         return;
     }
-    // A new file opens straight into edit mode; kept, not previewed, so a later peek can't close it mid-type.
-    await run(() => saveText(path, ``), `Couldn't create that file.`);
+    // A new file opens straight into edit mode; kept, not previewed, so a later peek can't close it mid-type. The row
+    // is up immediately but the tab waits for the bytes: the viewer reads the path it is given, and a read of a file
+    // the daemon hasn't written yet closes the tab that just opened it.
+    const write = run(() => createFile(path), `Couldn't create that file.`);
     selectSingle(path);
+    await focusLead();
+    await write;
+    if (!pending(path) && !byPath.value.has(path)) {
+        return; // refused, and taken back off the tree: there is nothing to open
+    }
     emit(`openFile`, path, `keep`);
     layout.setEditMode(true);
-    await focusLead();
 };
 const cancelCreate = (): void => {
     creating.value = undefined;
@@ -686,10 +701,14 @@ const confirmDelete = (): void => {
     if (paths === undefined) {
         return;
     }
-    // Said only after the delete lands, since a receipt for a failed delete would misreport what can't be undone.
+    // Named while the tree still knows what they were, said only after the delete lands: a receipt for a failed delete
+    // would misreport what can't be undone. No Undo on this one, unlike the sweep's — there is no trash to restore
+    // from, and a button that only sometimes brings a file back is worse than none.
+    const only = paths.length === 1 ? paths[0] : undefined;
+    const named = only === undefined ? `${paths.length} items deleted` : `${basename(only)} deleted`;
     void run(async () => {
         await removeEntries(paths);
-        say(paths.length === 1 ? `1 item deleted` : `${paths.length} items deleted`);
+        say(named);
     }, `Couldn't delete that.`);
     selection.value = new Set();
     anchor.value = null;
@@ -701,7 +720,7 @@ const keepFolder = async (path: string): Promise<void> => {
     }
     const tail = chainOf(path).tail;
     await run(async () => {
-        await saveText(joinPath(tail, `.gitkeep`), ``);
+        await createFile(joinPath(tail, `.gitkeep`));
         say(`Folder kept`);
     }, `Couldn't keep that folder.`);
 };
@@ -750,16 +769,19 @@ const doPaste = async (dir: string): Promise<void> => {
     if (clip === undefined || refuseWrite()) {
         return;
     }
+    // Revealed before the write is awaited: the destination rows are already on screen, so selecting them after the
+    // round trip would only mean the paste looked like nothing happened until it was over.
     if (clip.mode === `copy`) {
         const pairs = pastePairs(clip.paths, dir, await namesIn(dir));
         if (pairs.length === 0) {
             return;
         }
-        await run(() => copyEntries(pairs), `Couldn't paste those items.`);
+        const write = run(() => copyEntries(pairs), `Couldn't paste those items.`);
         revealPasted(
             dir,
             pairs.map((pair) => pair.to),
         );
+        await write;
         return;
     }
     const sources = movableInto(clip.paths, dir);
@@ -767,11 +789,12 @@ const doPaste = async (dir: string): Promise<void> => {
     if (sources.length === 0) {
         return;
     }
-    await run(() => moveIntoMany(sources, dir), `Couldn't move those items.`);
+    const write = run(() => moveIntoMany(sources, dir), `Couldn't move those items.`);
     revealPasted(
         dir,
         sources.map((source) => joinPath(dir, basename(source))),
     );
+    await write;
 };
 
 // ---- clipboard events (the tree owns them only while it holds focus; an inline input owns its own) ----
@@ -1216,7 +1239,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
                         />
                         <!-- Still on its way in: sending, or on disk with the workspace listing yet to catch up. -->
                         <Icon
-                            v-if="pendingRow(row.entry.path) === 'failed'"
+                            v-if="pendingRow(row.entry.path)?.state === 'failed'"
                             name="exclamation-triangle"
                             aria-hidden="true"
                             class="shrink-0 text-2xs text-danger"

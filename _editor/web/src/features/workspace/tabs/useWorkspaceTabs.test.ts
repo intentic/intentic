@@ -19,7 +19,7 @@ sessionStorage.setItem(
     }),
 );
 
-const { useWorkspaceTabs } = await import("./useWorkspaceTabs");
+const { renameOpenPaths, useWorkspaceTabs } = await import("./useWorkspaceTabs");
 const { useEditBuffers } = await import("../files/useEditBuffers");
 const { documentTabId } = await import("../../../core-views/documentRegistry");
 
@@ -335,4 +335,54 @@ it(`stores the companion pane, and stores nothing when it holds only a diff`, as
 
     expect(splitOpen.value).toBe(true);
     expect(stored().side).toBeUndefined();
+});
+
+/* A rename used to reach the open file as a 404: the tab read a path that was no longer there, closed itself, and took
+   whatever was unsaved in it along. The tab follows the file instead, keeping its place, its slot and its buffer. */
+
+it(`carries an open tab to the file's new name, keeping its place and its slot`, () => {
+    startFresh();
+    openFile(`src/first.ts`);
+    openFile(`src/main.ts`, `preview`);
+
+    renameOpenPaths(`src/main.ts`, `src/entry.ts`);
+
+    expect(strip.value.main.tabs.map((tab) => tab.id)).toEqual([`src/first.ts`, `src/entry.ts`]);
+    expect(activeId.value).toBe(`src/entry.ts`);
+    expect(previewId.value).toBe(`src/entry.ts`);
+});
+
+it(`takes the unsaved buffer with it, so a rename cannot strand an edit at a dead path`, () => {
+    startFresh();
+    const edit = useEditBuffers();
+    openFile(`src/main.ts`);
+    edit.setBaseline(`src/main.ts`, `on disk`);
+    edit.setBuffer(`src/main.ts`, `being typed`);
+
+    renameOpenPaths(`src/main.ts`, `src/entry.ts`);
+
+    expect(edit.bufferOf(`src/entry.ts`)).toBe(`being typed`);
+    expect(edit.baselineOf(`src/entry.ts`)).toBe(`on disk`);
+    expect(edit.isDirty(`src/entry.ts`)).toBe(true);
+    expect(edit.bufferOf(`src/main.ts`)).toBeUndefined();
+});
+
+it(`follows every file under a folder that moved, and leaves other tabs alone`, () => {
+    startFresh();
+    openFile(`src/api/routes.ts`);
+    openFile(`docs/readme.md`);
+
+    renameOpenPaths(`src/api`, `src/http`);
+
+    expect(strip.value.main.tabs.map((tab) => tab.id)).toEqual([`src/http/routes.ts`, `docs/readme.md`]);
+});
+
+it(`leaves the strip untouched when nothing open was in what moved`, () => {
+    startFresh();
+    openFile(`src/main.ts`);
+    const before = strip.value.main;
+
+    renameOpenPaths(`docs/elsewhere.md`, `docs/moved.md`);
+
+    expect(strip.value.main).toBe(before);
 });

@@ -38,7 +38,7 @@ import { specialChip } from "../explorer/specialPaths";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
-import { type PendingState, pendingStateOf, withPendingEntries } from "../files/pendingUploads";
+import { type Provisional, provisionalAt, withProvisionalEntries } from "../files/provisionalEntries";
 import { type ExplorerFilters, explorerShows, technicalHidden } from "../explorer/explorerFilter";
 import FileViewer from "../viewers/FileViewer.vue";
 import HistoryPanel from "../changes/HistoryPanel.vue";
@@ -203,8 +203,9 @@ const children = computed<readonly WorkspaceTreeEntry[]>(() =>
     dir.value === `` ? tree.value : (entriesByPath.value.get(dir.value)?.children ?? lazyChildren.value.get(dir.value) ?? []),
 );
 const listing = computed<readonly WorkspaceTreeEntry[]>(() => {
-    // Files still on their way into this folder are listed too, so a pick has a row before the daemon's walk agrees.
-    const shown = withPendingEntries(dir.value, children.value).filter((node) => explorerShows(node, filters.value));
+    // Entries on their way into this folder are listed and ones on their way out are not, so every file gesture shows
+    // in the list at the gesture rather than a round trip later.
+    const shown = withProvisionalEntries(dir.value, children.value).filter((node) => explorerShows(node, filters.value));
     const query = filter.value.trim().toLowerCase();
     return query === `` ? shown : shown.filter((node) => node.name.toLowerCase().includes(query));
 });
@@ -224,7 +225,7 @@ const deadLink = (node: WorkspaceTreeEntry): boolean => node.link?.state !== und
 // A row for a file still arriving: drawn so an upload is visible where it lands, but there is nothing at that path to
 // open or act on until the workspace listing has it. A folder still arriving drills in — its own rows are placeholders.
 // Only for a path the listing doesn't have: a folder an upload is landing in usually exists already.
-const pendingRow = (path: string): PendingState | undefined => (entriesByPath.value.has(path) ? undefined : pendingStateOf(path));
+const pendingRow = (path: string): Provisional | undefined => (entriesByPath.value.has(path) ? undefined : provisionalAt(path));
 const pending = (path: string): boolean => pendingRow(path) !== undefined;
 const openEntry = (node: WorkspaceTreeEntry): void => {
     if (node.type === `dir` && !isLockedWorkspacePath(node.path) && !deadLink(node)) {
@@ -257,13 +258,21 @@ const confirmRename = (): void => {
         return;
     }
     const parent = parentDir(target.path);
-    void run(() => moveEntry(target.path, parent === `` ? name : `${parent}/${name}`), `Couldn't rename that.`);
+    // Said only once the move lands, and named: on a phone the list is the only feedback there is, and a row changing
+    // its own name is easy to miss with a thumb over it.
+    void run(async () => {
+        await moveEntry(target.path, parent === `` ? name : `${parent}/${name}`);
+        say(`Renamed to ${name}`);
+    }, `Couldn't rename that.`);
 };
 const confirmDelete = (): void => {
     const target = deleteTarget.value;
     deleteTarget.value = undefined;
     if (target !== undefined) {
-        void run(() => removeEntries([target.path]), `Couldn't delete that.`);
+        void run(async () => {
+            await removeEntries([target.path]);
+            say(`${target.name} deleted`);
+        }, `Couldn't delete that.`);
     }
 };
 const copyPath = (target: WorkspaceTreeEntry): void => {
@@ -532,7 +541,7 @@ const onPick = (event: Event): void => {
                             >
                             <!-- Still on its way in: sending, or on disk with the workspace listing yet to catch up. -->
                             <Icon
-                                v-if="pendingRow(node.path) === 'failed'"
+                                v-if="pendingRow(node.path)?.state === 'failed'"
                                 name="exclamation-triangle"
                                 aria-hidden="true"
                                 class="shrink-0 text-xs text-danger"

@@ -237,7 +237,7 @@ export { useNow } from "./composables/useNow.js";
 // Gates when a loading placeholder may appear; a fast response resolves within the reveal delay so nothing
 // flashes for a normal round trip.
 export { useLoadingReveal } from "./composables/loadingReveal.js";
-export { errorMessage, noticeFrom, noticeOf, useAsyncAction } from "./composables/useAsyncAction.js";
+export { errorMessage, noticeFrom, noticeOf, useAsyncAction, useConcurrentActions } from "./composables/useAsyncAction.js";
 // Declares an account preference: read, write, apply and cross-window change notification in one definition, so
 // a setting can't be live in one window and stale in another.
 export { definePreference, type PreferenceOptions, receivePreferenceChange, storedPreference } from "./composables/preference.js";

@@ -1,5 +1,5 @@
 import type { NoticeModel, NoticeTone } from "../components/feedback/notice.js";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 // The one shape every user-facing mutation reports through: a busy flag plus a surfaced notice. Errors
 // are surfaced, not thrown; re-entry while busy is a no-op.
@@ -38,6 +38,29 @@ export const noticeOf = (wrote: string, options: NoticeOptions = {}): NoticeMode
     action: options.action,
     key: options.key,
 });
+
+// Same reporting, no mutex: for a surface whose actions are independent of one another, where the re-entry guard below
+// would silently drop the second one. `busy` counts rather than latches, so one spinner still covers a whole wave, and
+// the notice is cleared only when a wave starts — a failure mid-wave survives the actions still finishing around it.
+export function useConcurrentActions() {
+    const running = ref(0);
+    const notice = ref<NoticeModel | undefined>(undefined);
+    const busy = computed(() => running.value > 0);
+    const run = async (task: () => Promise<void>, wrote: string): Promise<void> => {
+        if (running.value === 0) {
+            notice.value = undefined;
+        }
+        running.value += 1;
+        try {
+            await task();
+        } catch (caught) {
+            notice.value = noticeFrom(caught, wrote);
+        } finally {
+            running.value -= 1;
+        }
+    };
+    return { busy, notice, run };
+}
 
 export function useAsyncAction() {
     const busy = ref(false);

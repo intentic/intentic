@@ -40,8 +40,24 @@ export function useEditBuffers() {
         baseline.delete(path);
         buffers.delete(path);
     };
+    // Follows a file that moved on disk. Without it a rename strands unsaved work at a path nothing reads any more,
+    // and the tab that reopens at the new name comes back with the on-disk text instead.
+    const renamePath = (from: string, to: string): void => {
+        const text = buffers.get(from);
+        const disk = baseline.get(from);
+        if (text === undefined && disk === undefined) {
+            return;
+        }
+        if (disk !== undefined) {
+            baseline.set(to, disk);
+        }
+        if (text !== undefined) {
+            buffers.set(to, text);
+        }
+        forget(from);
+    };
 
     const dirtyPaths = computed(() => new Set([...buffers.keys()].filter(isDirty)));
 
-    return { isDirty, setBaseline, setBuffer, bufferOf, baselineOf, markSaved, forget, dirtyPaths };
+    return { isDirty, setBaseline, setBuffer, bufferOf, baselineOf, markSaved, forget, renamePath, dirtyPaths };
 }

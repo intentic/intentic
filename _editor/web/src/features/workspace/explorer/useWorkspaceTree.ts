@@ -1,5 +1,6 @@
 import type { WorkspaceChildrenResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic/api-contract";
-import { type NoticeModel, noticeFrom, noticeOf, useAsyncAction } from "@intentic/ui/async";
+import { type NoticeModel, noticeFrom, noticeOf, useConcurrentActions } from "@intentic/ui/async";
+import { mapPool } from "@intentic/base/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { SandboxHttpError, sandboxBlob, sandboxJson } from "../../sandbox/client/sandboxClient";
@@ -10,7 +11,8 @@ import { useSandbox } from "../../sandbox/client/useSandbox";
 import { useRole } from "../../sandbox/secrets/useRole";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { resetUploadQueue } from "../files/useUploadQueue";
-import { resetPendingUploads, retireListedUploads } from "../files/pendingUploads";
+import { dropProvisional, markSettled, noteArriving, noteLeaving, reconcileProvisional, resetProvisional } from "../files/provisionalEntries";
+import { renameOpenPaths } from "../tabs/useWorkspaceTabs";
 import { changedDirs } from "../changes/useWorkspaceLive";
 import { readExpandedDirs, writeExpandedDirs } from "../changes/workspaceSnapshot";
 import { scopeQuery, workspaceAgent } from "../health/workspaceScope";
@@ -18,7 +20,13 @@ import { basename, parentDir } from "@intentic/ui/path";
 import { WORKSPACE_TREE } from "../../../lib/queryKeys";
 
 // Shared busy/error state for file actions (rename, delete, save, move); drag-drop uploads use useUploadQueue.
-const { busy, notice: actionError, run } = useAsyncAction();
+// Concurrent, not mutexed: these are independent writes to different paths, and one runner shared by the tree, the
+// mobile browser and the editor's Ctrl+S must never answer the second of two gestures by doing nothing.
+const { busy, notice: actionError, run } = useConcurrentActions();
+
+// Writes in flight at once. Bounds a bulk delete against opening one connection per file, while keeping a wave of
+// twenty a single round trip's wait rather than twenty.
+const WRITE_POOL = 6;
 
 // Lazy children for dirs the walk skipped, keyed by path; kept outside the tree query to survive a refetch.
 const lazyChildren = ref<Map<string, readonly WorkspaceTreeEntry[]>>(new Map());
@@ -62,8 +70,8 @@ const collapseAll = (): void => {
 
 // Resets file-action feedback and lazy state when the active sandbox changes. Open folders are re-scoped, not cleared:
 // each one restores where it was left open.
+// `busy` is not cleared: it counts writes still in flight, and each one decrements itself on the way out.
 export const resetWorkspaceTreeState = (): void => {
-    busy.value = false;
     actionError.value = undefined;
     loadNotice = undefined;
     lazyChildren.value = new Map();
@@ -73,7 +81,7 @@ export const resetWorkspaceTreeState = (): void => {
     restoreExpanded();
     resetUploadQueue();
     // Placeholder rows belong to the tree they were dropped into; another sandbox's tree is not that tree.
-    resetPendingUploads();
+    resetProvisional();
     resetEmptyDirsState();
 };
 
@@ -176,44 +184,110 @@ export function useWorkspaceTree() {
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every });
     // Fires the tree refetch without awaiting it, so callers can markSaved before the file-watch echo races it into a
     // false "changed on disk". `baseHash` 409s the save if the file changed since it was read; omitted for creates.
-    const saveText = async (path: string, text: string, baseHash?: string): Promise<void> => {
-        await sandboxJson<{ ok: true }>(`/workspace/upload?path=${encodeURIComponent(path)}`, {
+    const uploadText = (path: string, text: string, baseHash?: string): Promise<{ ok: true }> =>
+        sandboxJson<{ ok: true }>(`/workspace/upload?path=${encodeURIComponent(path)}`, {
             method: `POST`,
             headers: baseHash === undefined ? undefined : { "x-intentic-base-hash": baseHash },
             body: text,
         });
+    // An editor save: the row is already real, so nothing provisional is involved.
+    const saveText = async (path: string, text: string, baseHash?: string): Promise<void> => {
+        await uploadText(path, text, baseHash);
         void invalidate();
     };
-    const createDir = async (path: string): Promise<void> => {
-        await jsonPost(`/workspace/dir`, { path });
-        await invalidate();
+
+    /*
+     * THE ONE PATH EVERY TREE WRITE TAKES. Each item's provisional rows are already on screen (the callers below note
+     * them before the first byte moves), so this confirms or takes back each item's own rows on that item's own answer:
+     * a bulk delete where three paths are refused keeps the seventeen that landed. The refetch is fired, never awaited
+     * — it is a fresh walk of /work costing hundreds of milliseconds, and the rows it will paint are already painted.
+     * The first refusal is rethrown once every write has settled, so `run` reports it without cancelling the rest.
+     */
+    const settleEach = async <T>(
+        items: readonly T[],
+        rows: (item: T) => readonly string[],
+        write: (item: T) => Promise<unknown>,
+        // Anything else this write moved ahead of the answer, put back. The rows are taken care of here; a move also
+        // carries the open tabs, and one left at a name the daemon refused reads a file that isn't there and closes
+        // itself, taking an unsaved buffer with it.
+        undo?: (item: T) => void,
+    ): Promise<void> => {
+        let failure: { readonly cause: unknown } | undefined;
+        await mapPool(items, WRITE_POOL, async (item: T) => {
+            try {
+                await write(item);
+                for (const path of rows(item)) {
+                    markSettled(path);
+                }
+            } catch (caught) {
+                for (const path of rows(item)) {
+                    dropProvisional(path);
+                }
+                undo?.(item);
+                failure ??= { cause: caught };
+            }
+        });
+        void invalidate();
+        if (failure !== undefined) {
+            // Awaiting a rejection is how the daemon's own error leaves here unchanged; `throw` would need it narrowed.
+            await Promise.reject(failure.cause);
+        }
     };
-    // Rename is the only single move (same parent, new name); every other op goes through a batch variant below.
+
+    // What a moved or copied entry draws as while it is provisional; a renamed folder must not arrive as a file.
+    const typeOf = (path: string): "file" | "dir" => (entriesByPath.value.get(path)?.type === `dir` ? `dir` : `file`);
+
+    const createDir = async (path: string): Promise<void> => {
+        noteArriving(path, { kind: `write`, type: `dir` });
+        await settleEach([path], (dir) => [dir], (dir) => jsonPost(`/workspace/dir`, { path: dir }));
+    };
+    // A new, empty file. Same route as a save, but its row has to exist before the walk agrees and has to be taken back
+    // if the write is refused, which is exactly what an editor save must not do.
+    const createFile = async (path: string): Promise<void> => {
+        noteArriving(path, { kind: `write`, type: `file` });
+        await settleEach([path], (file) => [file], (file) => uploadText(file, ``));
+    };
+    // Rename is the only single move (same parent, new name); every other op goes through a batch variant below. The
+    // pair moves together: the old row goes and the new one arrives in the same frame, so nothing flickers between.
     const moveEntry = async (from: string, to: string): Promise<void> => {
-        await moveRaw(from, to);
-        await invalidate();
+        noteLeaving(from);
+        noteArriving(to, { kind: `write`, type: typeOf(from) });
+        renameOpenPaths(from, to);
+        await settleEach(
+            [{ from, to }],
+            (move) => [move.from, move.to],
+            (move) => moveRaw(move.from, move.to),
+            (move) => renameOpenPaths(move.to, move.from),
+        );
     };
     const removeEntries = async (paths: readonly string[]): Promise<void> => {
         for (const path of paths) {
-            await removeRaw(path);
+            noteLeaving(path);
         }
-        await invalidate();
+        await settleEach(paths, (path) => [path], removeRaw);
     };
     const copyEntries = async (pairs: readonly { from: string; to: string }[]): Promise<void> => {
         for (const { from, to } of pairs) {
-            await copyRaw(from, to);
+            noteArriving(to, { kind: `write`, type: typeOf(from) });
         }
-        await invalidate();
+        await settleEach(pairs, (pair) => [pair.to], (pair) => copyRaw(pair.from, pair.to));
     };
-    // Moves each source into targetDir, skipping ones already there or that would nest a folder in itself; refetches
-    // once at the end.
+    // Moves each source into targetDir, skipping ones already there or that would nest a folder in itself.
     const moveIntoMany = async (sources: readonly string[], targetDir: string): Promise<void> => {
-        for (const source of sources) {
-            if (canMoveInto(source, targetDir)) {
-                await moveRaw(source, joinPath(targetDir, basename(source)));
-            }
+        const moves = sources
+            .filter((source) => canMoveInto(source, targetDir))
+            .map((source) => ({ from: source, to: joinPath(targetDir, basename(source)) }));
+        for (const { from, to } of moves) {
+            noteLeaving(from);
+            noteArriving(to, { kind: `write`, type: typeOf(from) });
+            renameOpenPaths(from, to);
         }
-        await invalidate();
+        await settleEach(
+            moves,
+            (move) => [move.from, move.to],
+            (move) => moveRaw(move.from, move.to),
+            (move) => renameOpenPaths(move.to, move.from),
+        );
     };
 
     const tree = computed<readonly WorkspaceTreeEntry[]>(() => query.data.value?.tree ?? []);
@@ -326,8 +400,9 @@ export function useWorkspaceTree() {
         }
     });
 
-    // Retires an upload's placeholder row the moment the listing it was standing in for arrives.
-    watch(entriesByPath, (entries) => retireListedUploads((path) => entries.has(path)), { immediate: true });
+    // Retires every provisional row the moment the listing agrees with it: an arrival once the path is listed, a
+    // departure once it is gone. This is the only thing that ends one, so a refused write must take its own row back.
+    watch(entriesByPath, (entries) => reconcileProvisional((path: string) => entries.has(path)), { immediate: true });
 
     return {
         tree,
@@ -350,6 +425,7 @@ export function useWorkspaceTree() {
         lazyHidden,
         lazyLoading,
         saveText,
+        createFile,
         createDir,
         moveEntry,
         removeEntries,

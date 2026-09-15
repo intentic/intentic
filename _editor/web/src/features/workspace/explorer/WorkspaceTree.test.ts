@@ -3,6 +3,7 @@
 // file), not just composable state.
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
+import PrimeVue from "primevue/config";
 import type { RowAction } from "./rowActions";
 import type { OpenMode } from "../tabs/workspaceTabs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,14 +23,27 @@ globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Elem
 const SANDBOX = `sb1`;
 localStorage.setItem(`intentic.activeSandboxId`, SANDBOX);
 
-// Records calls instead of hitting the network (no sandbox is registered in tests); every call answers ok.
-const daemon = vi.hoisted(() => ({ calls: [] as { path: string; init?: RequestInit }[] }));
+// Records calls instead of hitting the network (no sandbox is registered in tests); every call answers ok unless a test
+// parks it (`hold`) or refuses it (`refuse`). Parking is what lets a test read the tree in the gap the daemon's answer
+// used to fill — the gap this surface exists to cover.
+const daemon = vi.hoisted(() => ({
+    calls: [] as { path: string; init?: RequestInit }[],
+    hold: undefined as undefined | Promise<void>,
+    release: undefined as undefined | (() => void),
+    refuse: undefined as undefined | string,
+}));
 vi.mock("../../sandbox/client/sandboxClient", async (importOriginal) => {
     const original = await importOriginal<typeof import("../../sandbox/client/sandboxClient")>();
     return {
         ...original,
         sandboxJson: async (path: string, init?: RequestInit): Promise<unknown> => {
             daemon.calls.push({ path, init });
+            if (daemon.hold !== undefined) {
+                await daemon.hold;
+            }
+            if (daemon.refuse !== undefined && path.startsWith(daemon.refuse)) {
+                throw new Error(`the daemon refused that`);
+            }
             return { ok: true };
         },
     };
@@ -37,10 +51,11 @@ vi.mock("../../sandbox/client/sandboxClient", async (importOriginal) => {
 
 const { default: WorkspaceTree } = await import("./WorkspaceTree.vue");
 const { resetWorkspaceTreeState } = await import("./useWorkspaceTree");
-const { markUploadFailed, notePendingUpload, resetPendingUploads, retireListedUploads } = await import("../files/pendingUploads");
+const { markFailed, noteArriving, reconcileProvisional, resetProvisional } = await import("../files/provisionalEntries");
 const { queryClient } = await import("../../../lib/queryPersistence");
 const { useLayout } = await import("../../../shell/window/useLayout");
 const { useNotifications } = await import("../../../shell/notifications/notifications");
+const { useWorkspaceTabs } = await import("../tabs/useWorkspaceTabs");
 
 const layout = useLayout();
 
@@ -97,6 +112,8 @@ const mount = async (props: {
     // Registered app-wide by installUi in the real page.
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, recordTooltip);
+    // The delete confirm and the row menu are PrimeVue overlays; without its config they throw on first paint.
+    app.use(PrimeVue);
     app.use(VueQueryPlugin, { queryClient });
     app.mount(el);
     await nextTick();
@@ -154,6 +171,7 @@ describe(`the explorer after a reload`, () => {
         app = createApp({ render: () => h(WorkspaceTree, { tree: tree.value, selectedPath: `src/api/routes.ts` }) });
         app.component(`Icon`, IconStub);
         app.directive(`tooltip`, recordTooltip);
+        app.use(PrimeVue);
         app.use(VueQueryPlugin, { queryClient });
         app.mount(el);
         await nextTick();
@@ -637,11 +655,11 @@ describe(`files still arriving`, () => {
     const rowNamed = (el: HTMLElement, name: string): HTMLElement =>
         [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === name) as HTMLElement;
 
-    afterEach(() => resetPendingUploads());
+    afterEach(() => resetProvisional());
 
     it(`draws the pasted file in the folder it went into, where its real row will sit`, async () => {
         restoreFrom([`src`]);
-        notePendingUpload(`src/notes.md`, 12);
+        noteArriving(`src/notes.md`, { kind: `upload`, size: 12 });
 
         const el = await mount({ tree: TREE });
 
@@ -654,7 +672,7 @@ describe(`files still arriving`, () => {
 
     it(`opens nothing when a row with no file behind it yet is clicked`, async () => {
         restoreFrom([`src`]);
-        notePendingUpload(`src/notes.md`, 12);
+        noteArriving(`src/notes.md`, { kind: `upload`, size: 12 });
         const opened: string[] = [];
 
         const el = await mount({ tree: TREE, onOpenFile: (path: string) => opened.push(path) });
@@ -665,7 +683,7 @@ describe(`files still arriving`, () => {
     });
 
     it(`stands up the folders of a dropped folder, and opens into them`, async () => {
-        notePendingUpload(`photos/trip/one.jpg`, 3);
+        noteArriving(`photos/trip/one.jpg`, { kind: `upload`, size: 3 });
 
         const el = await mount({ tree: TREE });
         expect(rows(el)).toEqual([`photos`, `src`, `README.md`]);
@@ -678,8 +696,8 @@ describe(`files still arriving`, () => {
 
     it(`marks a failed one, rather than leaving a row that reads as still coming`, async () => {
         restoreFrom([`src`]);
-        notePendingUpload(`src/notes.md`, 12);
-        markUploadFailed(`src/notes.md`);
+        noteArriving(`src/notes.md`, { kind: `upload`, size: 12 });
+        markFailed(`src/notes.md`);
 
         const el = await mount({ tree: TREE });
 
@@ -688,14 +706,156 @@ describe(`files still arriving`, () => {
 
     it(`gives the row up to the real entry once the listing has it`, async () => {
         restoreFrom([`src`]);
-        notePendingUpload(`src/notes.md`, 12);
+        noteArriving(`src/notes.md`, { kind: `upload`, size: 12 });
         const el = await mount({ tree: TREE });
         expect(rows(el)).toContain(`notes.md`);
 
-        retireListedUploads(() => true);
+        reconcileProvisional(() => true);
         await nextTick();
 
         expect(rows(el)).toEqual([`src`, `api`, `main.ts`, `README.md`]);
+    });
+});
+
+/* The explorer is the file system as far as the person using it is concerned, so a gesture has to land in the frame it
+   was made in. The daemon's agreement is a fresh walk of /work costing hundreds of milliseconds; every test here parks
+   that answer and reads the tree in the gap, which is where a rename used to snap back to the old name and a deleted
+   row used to sit there looking undeleted. */
+describe(`a file gesture before the daemon has answered`, () => {
+    const rowNamed = (el: HTMLElement, name: string): HTMLElement =>
+        [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === name) as HTMLElement;
+    // Parks every daemon answer until the test lets go, so the tree under test is the optimistic one.
+    const hold = (): void => {
+        daemon.hold = new Promise<void>((resolve) => {
+            daemon.release = resolve;
+        });
+    };
+    // Lets the parked answers through and drains the microtasks they were waiting on.
+    const answer = async (): Promise<void> => {
+        daemon.release?.();
+        daemon.hold = undefined;
+        await nextTick();
+        await nextTick();
+    };
+    // Commits an inline rename on the focused row, the way F2 then typing then Enter does.
+    const renameTo = async (el: HTMLElement, from: string, to: string): Promise<void> => {
+        const row = rowNamed(el, from);
+        row.click();
+        await nextTick();
+        row.dispatchEvent(new KeyboardEvent(`keydown`, { key: `F2`, bubbles: true }));
+        await nextTick();
+        const input = el.querySelector(`input`) as HTMLInputElement;
+        input.value = to;
+        input.dispatchEvent(new Event(`input`));
+        input.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
+        await nextTick();
+    };
+
+    beforeEach(() => {
+        daemon.calls.length = 0;
+        daemon.refuse = undefined;
+    });
+    afterEach(async () => {
+        await answer();
+        resetProvisional();
+    });
+
+    it(`carries the new name the instant a rename is committed`, async () => {
+        restoreFrom([`src`]);
+        const el = await mount({ tree: TREE });
+        hold();
+
+        await renameTo(el, `main.ts`, `entry.ts`);
+
+        expect(rows(el)).toEqual([`src`, `api`, `entry.ts`, `README.md`]);
+        expect(daemon.calls.filter((call) => call.path === `/workspace/move`).length).toBe(1);
+    });
+
+    it(`puts the old name back when the rename is refused`, async () => {
+        restoreFrom([`src`]);
+        const el = await mount({ tree: TREE });
+        daemon.refuse = `/workspace/move`;
+        hold();
+
+        await renameTo(el, `main.ts`, `entry.ts`);
+        expect(rows(el)).toContain(`entry.ts`);
+        await answer();
+
+        expect(rows(el)).toEqual([`src`, `api`, `main.ts`, `README.md`]);
+    });
+
+    it(`carries the open tab to the new name, and brings it back when the rename is refused`, async () => {
+        restoreFrom([`src`]);
+        const { openFile, strip } = useWorkspaceTabs();
+        openFile(`src/main.ts`);
+        const el = await mount({ tree: TREE });
+        daemon.refuse = `/workspace/move`;
+        hold();
+
+        await renameTo(el, `main.ts`, `entry.ts`);
+        expect(strip.value.main.tabs.map((tab) => tab.id)).toContain(`src/entry.ts`);
+        await answer();
+
+        // A tab left at a name the daemon refused would read a file that isn't there and close itself.
+        expect(strip.value.main.tabs.map((tab) => tab.id)).toContain(`src/main.ts`);
+    });
+
+    it(`takes a deleted row out at the confirm, not at the walk that agrees`, async () => {
+        restoreFrom([`src`]);
+        const el = await mount({ tree: TREE });
+        hold();
+
+        const row = rowNamed(el, `main.ts`);
+        row.click();
+        await nextTick();
+        row.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Delete`, bubbles: true }));
+        await nextTick();
+        const confirm = [...document.body.querySelectorAll(`button`)].find((candidate) => candidate.textContent?.trim() === `Delete`);
+        confirm?.click();
+        await nextTick();
+
+        expect(rows(el)).toEqual([`src`, `api`, `README.md`]);
+    });
+
+    it(`stands the new file up where its row will be, rather than leaving a hole`, async () => {
+        restoreFrom([`src`]);
+        const el = await mount({ tree: TREE });
+        hold();
+
+        rowNamed(el, `src`).dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
+        await nextTick();
+        await nextTick();
+        // The menu teleports to the document, and its command sits on the row's link, not on the list item.
+        const newFile = [...document.querySelectorAll(`a`)].find((link) => (link.textContent ?? ``).includes(`New File`));
+        newFile?.dispatchEvent(new MouseEvent(`click`, { bubbles: true, cancelable: true }));
+        await nextTick();
+        const input = el.querySelector(`input`) as HTMLInputElement;
+        input.value = `notes.md`;
+        input.dispatchEvent(new Event(`input`));
+        input.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
+        await nextTick();
+
+        expect(rows(el)).toContain(`notes.md`);
+    });
+
+    it(`sends a whole multi-select delete at once instead of one round trip per file`, async () => {
+        restoreFrom([`src`]);
+        const el = await mount({ tree: TREE });
+        hold();
+
+        rowNamed(el, `main.ts`).click();
+        await nextTick();
+        rowNamed(el, `README.md`).dispatchEvent(new MouseEvent(`click`, { bubbles: true, ctrlKey: true }));
+        await nextTick();
+        rowNamed(el, `README.md`).dispatchEvent(new KeyboardEvent(`keydown`, { key: `Delete`, bubbles: true }));
+        await nextTick();
+        const confirm = [...document.body.querySelectorAll(`button`)].find((candidate) => candidate.textContent?.trim() === `Delete`);
+        confirm?.click();
+        await nextTick();
+
+        // Both rows gone, and both DELETEs already in flight while the first answer is still parked.
+        expect(rows(el)).toEqual([`src`, `api`]);
+        expect(daemon.calls.filter((call) => call.init?.method === `DELETE`).length).toBe(2);
     });
 });
 

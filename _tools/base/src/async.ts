@@ -167,6 +167,19 @@ export const retry = async <T>(task: () => Promise<T>, delay: number, attempts: 
     throw last;
 };
 
+// Runs `task` over every item with at most `limit` in flight, in item order. Rejects with the first rejection, after
+// the workers already started have settled; a task that must not lose its siblings' results catches its own.
+export const mapPool = async <T>(items: readonly T[], limit: number, task: (item: T) => Promise<void>): Promise<void> => {
+    let next = 0;
+    const worker = async (): Promise<void> => {
+        for (let item = items[next++]; item !== undefined; item = items[next++]) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one worker is sequential by definition; `limit` of them run at once
+            await task(item);
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+};
+
 // Resolves after `ms`, and early, never rejecting, if the signal aborts, so a loop reading its own stop flag next just
 // ends. `unref` keeps a daemon's long waits from holding the process open; a no-op where there is no such handle.
 export const sleep = (ms: number, options?: { readonly signal?: AbortSignal | undefined; readonly unref?: boolean }): Promise<void> =>

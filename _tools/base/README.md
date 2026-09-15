@@ -30,7 +30,10 @@ and a package that offers them as one thing invites being treated as a junk draw
   join it, `SingleFlight` shares one run per key among concurrent callers, and `retry` is the loop with the
   delay in it. Under them sit the three primitives every reconnect loop and readiness wait was hand-rolling
   beside its own `setTimeout`-in-a-promise: `sleep` (interruptible, because a pause a teardown cannot cut
-  short is a teardown that waits for it), `pollUntil`, and `createBackoff`.
+  short is a teardown that waits for it), `pollUntil`, and `createBackoff`. `mapPool` is the odd one out and
+  the opposite question — not "wait longer" but "start more at once, up to a limit": the bounded fan-out a
+  caller reaches for after writing the same `for (… ) await` loop that turns twenty writes into twenty round
+  trips.
 
 ## Delayer or Coalescer
 
