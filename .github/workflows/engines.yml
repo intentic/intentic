@@ -5,9 +5,14 @@
 # repository, which is what makes "blessed" mean "this repo's suite ran against it" — and is also what left the fleet
 # months behind upstream, because moving a pin was a chore nobody was assigned. This workflow is the assignee.
 #
-# It does not verify anything itself, and that is the design. It rewrites the pins, moves the lockfile, and opens ONE
-# pull request; ci.yml runs on that pull request exactly as it does on anyone else's, and auto-merge lands it when the
-# suite is green. The invariant is untouched — CI is still what blesses a version — while the remembering is gone.
+# It runs no engine and no test, and that is the design. It rewrites the pins, resolves the lockfile, checks that what
+# it wrote clears the two checkout gates its own output can fail, and opens ONE pull request; ci.yml runs on that pull
+# request exactly as it does on anyone else's, and auto-merge lands it when the suite is green. The invariant is
+# untouched — CI is still what blesses a version — while the remembering is gone.
+#
+# NEEDS `ENGINE_BUMP_TOKEN`, a fine-grained PAT or App installation token with `contents: write` and
+# `pull requests: write`. Without it the pull request is authored by github-actions[bot] and its runs never start, so
+# there is nothing to bless against; this job fails rather than leaving that looking fine.
 #
 # ONE LONG-LIVED BRANCH, force-pushed. A bump that CI refuses stays open and red, and tomorrow's run rewrites it to
 # whatever upstream published since, so a broken release upstream fixes itself rather than accumulating a PR a day. To
@@ -89,11 +94,20 @@ jobs:
           if [ -n "${VERSION:-}" ]; then args+=("--to=$VERSION"); fi
           node _tools/scripts/engines/bump-engines.mjs "${args[@]}"
 
-      # Only the lockfile: the pull request's own CI does the real install, and resolving without linking keeps this
-      # job to seconds and runs no package's build script on a token that can write to the repository.
+      # A REAL resolution, never `--lockfile-only`: resolving without linking rewrites only some of the importers on a
+      # shared peer set, forking that set in two and stranding the snapshots for the half nothing reaches — which the
+      # `lockfile` code gate refuses, so such a lockfile can never pass the pull request's own CI. `--ignore-scripts`
+      # is what keeps a token that can write to the repository away from every package's build script.
       - name: Move the lockfile
         if: steps.plan.outputs.changed == 'true'
-        run: pnpm install --lockfile-only --no-frozen-lockfile
+        run: pnpm install --no-frozen-lockfile --ignore-scripts
+
+      # The two checkout gates this job's own output is judged by, run where the lockfile is still fixable. Both need
+      # node and git alone, so they cost seconds. A bump that cannot produce a lockfile CI would accept fails here
+      # instead of becoming a pull request nobody can land.
+      - name: Check what the bump wrote
+        if: steps.plan.outputs.changed == 'true'
+        run: node _tools/checks/run.mjs --only lockfile,engines
 
       - name: Commit
         if: steps.plan.outputs.changed == 'true'
@@ -123,9 +137,10 @@ jobs:
             echo "push=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # A pull request opened with GITHUB_TOKEN starts no other workflow — GitHub's own loop prevention — so without a
-      # separate token CI never runs and auto-merge has nothing to wait for. Rather than open a pull request that can
-      # only ever sit there, this says which secret is missing and what it needs.
+      # A pull request opened with GITHUB_TOKEN is authored by github-actions[bot], whom the contributor-approval
+      # policy parks at `action_required`: runs created, zero jobs, no logs, and no check for auto-merge to wait on.
+      # Worth opening anyway, since a maintainer can approve those runs by hand — but never worth calling success, or a
+      # version CI has not run against would look blessed.
       - name: Open the pull request
         if: steps.commit.outputs.push == 'true'
         env:
@@ -147,6 +162,16 @@ jobs:
           Merging is what blesses them, so let CI decide. To stop an engine from being proposed again, give it a
           \`hold\` in engines.json."
 
+          # The pull request is where someone meets the stalled checks, so the reason has to be readable there.
+          if [ -z "${BUMP_TOKEN:-}" ]; then
+            body="$body
+
+          **CI has not run here.** This was opened with \`GITHUB_TOKEN\`, so its runs wait for a maintainer to press
+          *Approve and run* on the Checks tab, and auto-merge has nothing to wait for. An \`ENGINE_BUMP_TOKEN\` secret
+          — a fine-grained PAT or App installation token with \`contents: write\` and \`pull requests: write\` — makes
+          the next run open this as a contributor whose checks start on their own."
+          fi
+
           # BY NUMBER, and only among OPEN ones. `gh pr view <branch>` falls back to the most recent closed pull
           # request for that branch when none is open, so once the first bump merged, every later run would have tried
           # to edit a merged pull request and failed instead of opening the next one.
@@ -160,14 +185,15 @@ jobs:
 
           if [ -z "${BUMP_TOKEN:-}" ]; then
             {
-              echo "### Auto-merge is off"
+              echo "### The bump is open and nothing will verify it"
               echo
-              echo "No \`ENGINE_BUMP_TOKEN\` secret, so the pull request was opened with \`GITHUB_TOKEN\` — GitHub starts"
-              echo "no workflow from that token's events, so CI will not run on it and there is nothing for auto-merge to"
-              echo "wait for. Add a fine-grained PAT or App installation token with \`contents: write\` and"
+              echo "No \`ENGINE_BUMP_TOKEN\` secret, so pull request ${pr} was opened with \`GITHUB_TOKEN\`: its runs are"
+              echo "parked at \`action_required\` until a maintainer approves them on the Checks tab, and auto-merge has"
+              echo "no check to wait for. Add a fine-grained PAT or App installation token with \`contents: write\` and"
               echo "\`pull requests: write\` as \`ENGINE_BUMP_TOKEN\` to close the loop."
             } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            echo "::error title=No ENGINE_BUMP_TOKEN::Pull request ${pr} is open but no CI will start on it, so nothing in it can be blessed."
+            exit 1
           fi
           # Needs "Allow auto-merge" on the repository and a required check to wait for; without either, gh refuses and
           # the pull request simply stays open for a person, which is a worse day, not a broken one.
