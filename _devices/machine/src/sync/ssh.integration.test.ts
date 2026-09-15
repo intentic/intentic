@@ -212,6 +212,23 @@ describe("mutagenCreateArgs", () => {
         expect(IGNORES).not.toContain("/.git");
     });
 
+    // TWO DIRECTORIES SHARE THE NAME `.intentic`, and only one of them is the sandbox's. The workspace's own state
+    // dir is excluded at the root (the `-state` session carries it one way); a REPOSITORY's `.intentic/` is committed
+    // content and must travel, or — since the bridge moves git state while file sync moves the files — its tracked
+    // files read as deleted in the clone for good. Measured: `intentic/.intentic/checks.json` as a phantom `D` in
+    // VS Code that no amount of syncing cleared.
+    it("excludes the workspace's state dir at the root, and no repository's own .intentic anywhere", () => {
+        expect(IGNORES).toContain(`/${STATE_DIR}`);
+        expect(IGNORES).not.toContain(STATE_DIR);
+    });
+
+    // `.git` is the opposite case, and the contrast is the point: git state travels by its own protocol at every
+    // level, so that pattern must stay depth-matched.
+    it("keeps .git depth-matched while the state dir is anchored", () => {
+        expect(IGNORES).toContain(".git");
+        expect(IGNORES).not.toContain("/.git");
+    });
+
     // WHAT BOTH SIDES GENERATE MUST NEVER BE SYNCED. A tree each end writes for itself is a create-vs-create
     // conflict on every file in it, two-way-safe refuses to pick, and a pairing with standing conflicts propagates
     // nothing at all — measured as 98 of them under one dogfooding machine's `.image-out`.

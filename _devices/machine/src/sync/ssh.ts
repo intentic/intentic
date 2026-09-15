@@ -28,7 +28,13 @@ export const IGNORES = [
     "claude.json",
     // No `capabilities.json` entry: its credentials live in the vault now, and the daemon's own copy sits under
     // STATE_DIR already. Keeping it would only exclude a same-named file of the user's.
-    STATE_DIR,
+    // ANCHORED TO THE ROOT, unlike `.git` below, because two different directories share this name: the WORKSPACE's
+    // state dir (the sandbox's own, carried one-way by the `-state` session) and a REPOSITORY's own `.intentic/`,
+    // which is committed content — this repo keeps its `checks.json` there. Depth-matched, the one pattern swallowed
+    // both, and since the bridge moves git state while file sync moves the files, a tracked file that never arrives
+    // reads as deleted in the clone for good: `intentic/.intentic/checks.json` sat in VS Code's Source Control as a
+    // phantom `D` that no amount of syncing could clear.
+    `/${STATE_DIR}`,
     ".git",
     ".pnpm-store",
     // The image build's staging tree, for the same reason as `.astro` above and measured on a dogfooding machine:
