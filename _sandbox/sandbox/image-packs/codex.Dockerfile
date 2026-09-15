@@ -6,4 +6,4 @@
 # packs.integration.test.ts holds the two in step.
 # ponytail: bump together with @openai/codex-sdk.
 RUN --mount=type=cache,target=/root/.npm \
-    npm install -g @openai/codex@0.147.0 && codex --version
+    npm install -g @openai/codex@0.154.0 && codex --version

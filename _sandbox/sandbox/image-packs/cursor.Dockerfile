@@ -21,5 +21,5 @@
 # daemon was compiled against not matching the module it loads; packs.integration.test.ts holds the two in step.
 # ponytail: bump together with the @cursor/sdk catalog pin.
 RUN --mount=type=cache,target=/root/.npm \
-    npm install --prefix /opt/cursor-sdk --no-save --no-package-lock @cursor/sdk@1.0.28 \
+    npm install --prefix /opt/cursor-sdk --no-save --no-package-lock @cursor/sdk@1.0.31 \
     && node -e "process.stdout.write(require('/opt/cursor-sdk/node_modules/@cursor/sdk/package.json').version + '\n')"
