@@ -17,13 +17,16 @@ const shown = computed<ViewBadge | undefined>(() => (badge !== undefined && badg
 <template>
 <!-- Motion, and the reduced-motion answer for it, live on `.ui-badge` in the design system's utilities.css. -->
     <Transition name="ui-badge" appear>
+<!-- EVERY MEASURE IS AN `em` OF THE CHIP'S OWN TYPE, so a surface sets one font-size and the whole object follows
+     it — box, padding, ring and glyph together. Sized in `rem` they drifted apart under the text-size setting,
+     which is how a 16px plate ended up around a 9.6px number on a tile whose box does not scale at all. -->
         <span
             v-if="shown"
-            class="ui-badge inline-flex min-w-4 items-center justify-center rounded-full px-1 text-center font-semibold leading-4"
+            class="ui-badge inline-flex h-[1.6em] min-w-[1.6em] items-center justify-center rounded-full px-[0.3em] font-semibold leading-none tabular-nums ring-2 ring-[color:var(--ui-tile-ground)]"
             :class="badgeClass(shown)"
         >
 <!-- A mark REPLACES the number rather than sitting beside it: the chip is four pixels of glance. -->
-            <Icon v-if="shown.mark !== undefined" :name="shown.mark as IconName" />
+            <Icon v-if="shown.mark !== undefined" :name="shown.mark as IconName" class="text-[0.9em]" />
             <template v-else>{{ badgeText(shown) }}</template>
         </span>
     </Transition>

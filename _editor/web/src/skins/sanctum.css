@@ -602,7 +602,9 @@
 /* Rails use a shadowed recess behind their content. */
 [data-skin="sanctum"] .icon-rail {
 /* The stone picks up the accent's hue through --color-surface-950, but the neutral ramp's chroma is too low to read against this much black. */
-    background-color: color-mix(in oklab, color-mix(in oklab, var(--color-surface-950) 80%, var(--sanctum-gold)) 86%, black);
+/* Named, not inlined, because a tile's count badge is ringed in this exact colour. */
+    --ui-tile-ground: color-mix(in oklab, color-mix(in oklab, var(--color-surface-950) 80%, var(--sanctum-gold)) 86%, black);
+    background-color: var(--ui-tile-ground);
     background-image:
         var(--sanctum-rail),
         linear-gradient(180deg, rgba(255, 250, 238, 0.05), transparent 42%, rgba(0, 0, 0, 0.14));
@@ -612,8 +614,9 @@
 }
 
 /* ICONS ON THE RAIL ARE CUT IN STONE — the same bevel the site's headlines carry, scaled to icon weight. */
-[data-skin="sanctum"] .icon-rail-tile > svg,
-[data-skin="sanctum"] .icon-rail-tile > .icon {
+/* The glyph only: by class rather than by element, so a monogram tile is carved like a drawn one and the
+   corner marks — spans on the same tile — are not, a badge being a thing laid on the stone, not cut into it. */
+[data-skin="sanctum"] .icon-rail-tile > .icon-rail-glyph {
     filter: drop-shadow(0 -1px 0 rgba(247, 234, 208, 0.25))
             drop-shadow(0 1px 0 rgba(0, 0, 0, 0.7))
             drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));

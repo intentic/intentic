@@ -238,9 +238,11 @@ const confirmRemove = async (): Promise<void> => {
             <Icon name="server" v-else class="text-lg" />
         </button>
         <!-- One corner badge: a count when the amount is the message, a glyph otherwise; aria-hidden as redundant. -->
-        <ViewBadgeChip :badge="attentionBadge" class="pointer-events-none absolute -right-1 -top-1 text-[0.6rem]" aria-hidden="true" />
+        <!-- Inside the tile, on the same corner and at the same size as every badge on the rail below it: this is
+             the same object saying the same kind of thing, and hanging it outside made it look like a different one. -->
+        <ViewBadgeChip :badge="attentionBadge" class="sandbox-switcher-mark pointer-events-none absolute right-0.5 top-0.5" aria-hidden="true" />
         <span
-            class="pointer-events-none absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card"
+            class="pointer-events-none absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[color:var(--ui-tile-ground)]"
             :class="connectionDotClass"
         ></span>
     </span>
@@ -437,5 +439,10 @@ const confirmRemove = async (): Promise<void> => {
 .sandbox-switcher {
     width: var(--icon-rail-tile-size, calc(2.75rem / var(--ui-scale)));
     height: var(--icon-rail-tile-size, calc(2.75rem / var(--ui-scale)));
+}
+
+/* Same reading for the corner badge: the rail's mark size when this sits in the rail, its own copy of the number when it doesn't. */
+.sandbox-switcher-mark {
+    font-size: var(--icon-rail-mark-size, calc(0.625rem / var(--ui-scale)));
 }
 </style>

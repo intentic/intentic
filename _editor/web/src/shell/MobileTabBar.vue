@@ -9,7 +9,8 @@ import { useApprovalsTile, useProjectsMonogram } from "./mobileTabs";
 import { homeViewId, PROJECTS_VIEW_ID } from "../core-views/registry";
 import { useVocabulary } from "../core-views/vocabulary";
 import RailIcon from "./rail/RailIcon.vue";
-import RunningMark from "./rail/RunningMark.vue";
+import TileMark from "./rail/TileMark.vue";
+import { RUNNING_MARK_CLASS } from "../core-views/viewBadge";
 import { outgoingMark, outgoingSummary } from "../features/workspace/push/outgoingWork";
 import { pushBadge } from "../features/workspace/push/pushBadge";
 import { useChanges } from "../features/workspace/changes/useChanges";
@@ -123,15 +124,15 @@ const isNavActive = (tab: Tab): boolean => {
             :aria-label="tabLabel(tab)"
         >
             <!-- mark replaces the count when the amount isn't what you act on; aria-hidden, the label already says it. -->
-            <span class="relative">
+<!-- One type size for all three corner marks, the same one the desktop rail sets: each states its own size as a
+                 multiple of it, so the badge, the turning mark and the note weigh the same instead of landing on three numbers. -->
+            <span class="relative text-[0.625rem]">
                 <RailIcon :area="tab.id" :monogram="tab.monogram" class="text-xl" />
-                <ViewBadgeChip :badge="tab.badge" class="absolute -right-2.5 -top-1 text-[0.6rem]" aria-hidden="true" />
+                <ViewBadgeChip :badge="tab.badge" class="absolute -right-2.5 -top-1" aria-hidden="true" />
                 <!-- Work in flight, in the corner the badge and note both leave free; same mark as the desktop rail. -->
-                <RunningMark v-if="tab.badge?.running !== undefined" class="absolute -bottom-1 -right-2" />
+                <TileMark v-if="tab.badge?.running !== undefined" name="spinner" spin :class="[RUNNING_MARK_CLASS, `absolute -bottom-1 -right-2`]" />
                 <!-- Sits in the corner the badge doesn't use; aria-hidden like the badge, since the label already carries it. -->
-                <span v-if="tab.note" class="absolute -bottom-1 -left-2 flex leading-none text-subtle" aria-hidden="true">
-                    <Icon :name="tab.note.icon" class="text-[0.6rem]" />
-                </span>
+                <TileMark v-if="tab.note" :name="tab.note.icon" class="absolute -bottom-1 -left-2 text-subtle" />
             </span>
             <span class="text-2xs font-medium">{{ tab.label }}</span>
         </RouterLink>

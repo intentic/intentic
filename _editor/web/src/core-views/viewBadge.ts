@@ -1,11 +1,16 @@
 import type { ViewBadge } from "@intentic/extension-api";
 
-// Solid fill, not the shared *-fill token: that lightens in dark mode and fails contrast for the white label.
+// A PLATE IS THE TONE'S OWN INK, INVERTED — the four below are BADGE_INK painted rather than written, with the
+// surface those inks were measured against as the label. Opaque, because a chip overlaps the glyph it badges and
+// a wash reads as part of the drawing instead of as something laid on it: the 10–15% tints this replaces measured
+// 1.2:1 against the tile, which is no plate and no tone. Inverting the ink rather than reaching for `*-fill` keeps
+// a skin's own accent: every skin already tunes these four to be legible against its canvas, so the contrast comes
+// with them, and the gold skin gets a gold badge instead of the app's orange.
 const BADGE_TONE: Record<NonNullable<ViewBadge["tone"]>, string> = {
-    neutral: `bg-content/10 text-muted`,
-    info: `bg-primary-600/15 text-link`,
-    warning: `bg-warning/15 text-warning`,
-    danger: `bg-danger-800 text-white`,
+    neutral: `bg-muted text-canvas`,
+    info: `bg-link text-canvas`,
+    warning: `bg-warning text-canvas`,
+    danger: `bg-danger text-canvas`,
 };
 
 // Absent tone defaults to the resting count, the tone every core surface leaves unset.

@@ -123,6 +123,10 @@
     --ui-button-off-line: transparent;
     --ui-button-off-content: var(--color-subtle);
 
+/* WHAT A CORNER BADGE IS RINGED IN. A count chip sits ON the glyph it belongs to, so it carries a ring of the surface
+   behind it and keeps a clean edge across a stroke; a skin that repaints that surface re-points this and the ring follows. */
+    --ui-tile-ground: var(--color-card);
+
 /* AND THE ONE FADE THAT IS STILL RIGHT, for the controls the design system does not paint: a list row, a tile, a menu line, a form field. */
     --ui-off-dim: 0.5;
 

@@ -53,7 +53,8 @@ import { chatDock, terminalDock } from "./window/dockSlots";
 import { type RailSeat, useRailMemory } from "./rail/railMemory";
 import { useRailPins } from "./rail/railPins";
 import RailIcon from "./rail/RailIcon.vue";
-import RunningMark from "./rail/RunningMark.vue";
+import TileMark from "./rail/TileMark.vue";
+import { RUNNING_MARK_CLASS } from "../core-views/viewBadge";
 import PresenceAvatars from "./presence/PresenceAvatars.vue";
 import QuickOpen from "./commands/QuickOpen.vue";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
@@ -117,6 +118,11 @@ const forwardedLabel = computed(() =>
     forwardedPorts.value.length === 1
         ? `Port ${forwardedPorts.value[0]?.port} is publicly reachable`
         : `${forwardedPorts.value.length} ports are publicly reachable: ${forwardedPorts.value.map((entry) => entry.port).join(`, `)}`,
+);
+// One port needs no number — the tile itself is the news. Two or more do, through the same chip as every
+// other tile rather than a hand-rolled span, so the cap, the tone and the arrival are decided in one place.
+const portsBadge = computed<ViewBadge | undefined>(() =>
+    forwardedPorts.value.length > 1 ? { count: forwardedPorts.value.length, tone: `warning` } : undefined,
 );
 
 // Prefix match, not active-class: a splat/optional param (workspace/:path) drops it once one is set.
@@ -440,6 +446,10 @@ const gridStyle = computed(() => {
         "--icon-rail-divider-width": rail(compact ? `1.75rem` : `2rem`),
         "--icon-rail-gap": rail(compact ? `0.375rem` : `0.5rem`),
         "--icon-rail-padding": rail(compact ? `0.5rem` : `0.75rem`),
+        // Half the tile at both widths, so the glyph keeps the same air around it when the rail narrows.
+        "--icon-rail-glyph-size": rail(compact ? `1.25rem` : `1.375rem`),
+        // The type size every corner mark is drawn from: a 1.6em plate on the chip, a 1.1em glyph on a bare mark.
+        "--icon-rail-mark-size": rail(`0.625rem`),
     };
 });
 
@@ -455,6 +465,11 @@ const terminalLabel = computed(() => {
     const what = terminalActivity.summary.value === undefined ? `Terminal` : `Terminal, ${terminalActivity.summary.value} running`;
     return chord === undefined ? what : `${what} (${chord})`;
 });
+// Live sessions, through the shared chip like the ports tile above; `info` is the resting tone, set here
+// rather than left to default so the two runtime badges state their tone side by side.
+const terminalBadge = computed<ViewBadge | undefined>(() =>
+    terminalActivity.count.value > 0 ? { count: terminalActivity.count.value, tone: `info` } : undefined,
+);
 // Registers the shell's built-in palette commands on mount, each with its own keybinding.
 useShellCommands();
 // One "Go to <area>" per rail area, seated or not, so a More-menu area stays a keystroke away.
@@ -470,7 +485,8 @@ useKeybindings();
             <SandboxSwitcher />
             <!-- Other members connected right now, live from the daemon's /events roster. -->
             <PresenceAvatars :members="presenceOthers" direction="column" :size="28" />
-            <span class="mb-1 icon-rail-divider h-px bg-line"></span>
+            <!-- `my-1`, as on the other hairline: with `mb-1` alone this one sat off-centre in its own air. -->
+            <span class="my-1 icon-rail-divider h-px bg-line"></span>
 
 <!-- Bands (Work/Judge/Know) are separated by whitespace, not lines: hairlines mark only the two real boundaries — identity, work areas, live runtime. -->
             <div class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
@@ -484,7 +500,7 @@ useKeybindings();
                             class="icon-rail-tile flex items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40"
                             aria-hidden="true"
                         >
-                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="text-[1.375rem]" />
+                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="icon-rail-glyph" />
                         </span>
                         <RouterLink
                             v-else
@@ -495,32 +511,40 @@ useKeybindings();
                             v-tooltip.right="railTileLabel(tile)"
                             @contextmenu="onTileContextMenu(tile, $event)"
                         >
-                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="text-[1.375rem]" />
+                            <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="icon-rail-glyph" />
+<!-- Three corners, one scale: `.icon-rail-mark` sets the type size all three are drawn from, so the only thing
+     that separates them is the plate — which is the distinction worth seeing, and used to be three sizes. -->
 <!-- One badge for every tile, core or extension: see AreaTile.badge. -->
-                            <ViewBadgeChip :badge="tile.badge" class="absolute right-0.5 top-0.5 text-[0.6rem]" />
+                            <ViewBadgeChip :badge="tile.badge" class="icon-rail-mark absolute right-0.5 top-0.5" />
 <!-- Work in flight behind this tile (ViewBadge.running): its own corner, never the chip. -->
-                            <RunningMark v-if="tile.badge?.running !== undefined" class="absolute bottom-0.5 right-0.5" />
-<!-- Opposite corner from the badge so the two never overlap; muted ink, no plate — it isn't an errand. -->
-                            <span v-if="tile.note" class="absolute bottom-0.5 left-0.5 flex leading-none text-subtle" aria-hidden="true">
-                                <Icon :name="tile.note.icon" class="text-[0.6rem]" />
-                            </span>
+                            <TileMark
+                                v-if="tile.badge?.running !== undefined"
+                                name="spinner"
+                                spin
+                                :class="[RUNNING_MARK_CLASS, `icon-rail-mark absolute bottom-0.5 right-0.5`]"
+                            />
+<!-- Opposite corner from the badge so the two never overlap; muted ink, no tone — it isn't an errand. -->
+                            <TileMark v-if="tile.note" :name="tile.note.icon" class="icon-rail-mark absolute bottom-0.5 left-0.5 text-subtle" />
                         </RouterLink>
                     </template>
                 </template>
             </div>
 
 <!-- Every unseated area; kept outside the scrolling run so it's never scrolled out of sight. -->
+<!-- A door to areas, not an "add one": the same tile as the nav run above it, so the dashed rim is left to the
+                 one control on this rail that really does add something. -->
             <button
                 ref="moreTrigger"
                 type="button"
-                :class="[ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`), { 'border-link bg-primary-600/15 text-link': moreOpen }]"
+                class="icon-rail-tile flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
+                :class="{ 'bg-primary-600/15 text-link': moreOpen }"
                 aria-haspopup="menu"
                 :aria-expanded="moreOpen"
                 :aria-label="moreLabel"
                 v-tooltip.right="moreOpen ? undefined : moreLabel"
                 @click="moreOpen = !moreOpen"
             >
-                <RailIcon area="more" class="text-[1.375rem]" />
+                <RailIcon area="more" class="icon-rail-glyph" />
             </button>
 
             <!-- Same overlay as the switcher and account avatar: AnchoredOverlay rows, not PrimeVue's ContextMenu. -->
@@ -572,7 +596,7 @@ useKeybindings();
                 :aria-label="vpnLabel"
                 v-tooltip.right="vpnLabel"
             >
-                <RailIcon area="vpn" class="text-[1.375rem]" />
+                <RailIcon area="vpn" class="icon-rail-glyph" />
             </RouterLink>
 
             <!-- Present only while a port is forwarded, since the sandbox is then answering the public internet. -->
@@ -583,12 +607,8 @@ useKeybindings();
                 :aria-label="forwardedLabel"
                 v-tooltip.right="forwardedLabel"
             >
-                <RailIcon area="ports" class="text-[1.375rem]" />
-                <span
-                    v-if="forwardedPorts.length > 1"
-                    class="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-warning/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-warning"
-                    >{{ forwardedPorts.length }}</span
-                >
+                <RailIcon area="ports" class="icon-rail-glyph" />
+                <ViewBadgeChip :badge="portsBadge" class="icon-rail-mark absolute right-0.5 top-0.5" />
             </RouterLink>
 
 <!-- Live-runtime surfaces, like the terminal, so they sit in this cluster rather than the nav tiles. -->
@@ -601,11 +621,16 @@ useKeybindings();
                 :aria-label="tileLabel(tile)"
                 v-tooltip.right="tileLabel(tile)"
             >
-                <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="text-[1.375rem]" />
+                <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="icon-rail-glyph" />
                 <!-- No tooltip on the badge, for the same reason as the navigation tiles above. -->
-                <ViewBadgeChip :badge="tile.badge" class="absolute right-0.5 top-0.5 text-[0.6rem]" />
+                <ViewBadgeChip :badge="tile.badge" class="icon-rail-mark absolute right-0.5 top-0.5" />
                 <!-- Same running mark as a navigation tile, so live work reads identically in both clusters. -->
-                <RunningMark v-if="tile.badge?.running !== undefined" class="absolute bottom-0.5 right-0.5" />
+                <TileMark
+                    v-if="tile.badge?.running !== undefined"
+                    name="spinner"
+                    spin
+                    :class="[RUNNING_MARK_CLASS, `icon-rail-mark absolute bottom-0.5 right-0.5`]"
+                />
             </RouterLink>
 
 <!-- Toggles the one global terminal panel, badged with live sessions (background jobs excluded, they never idle). A maker never asked for a shell. -->
@@ -620,12 +645,8 @@ useKeybindings();
                 v-tooltip.right="terminalLabel"
                 @click="terminal.toggle()"
             >
-                <RailIcon area="terminal" class="text-[1.375rem]" />
-                <span
-                    v-if="terminalActivity.count.value > 0"
-                    class="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-primary-600/15 px-1 text-center text-[0.6rem] font-semibold leading-4 text-link"
-                    >{{ terminalActivity.count.value > 99 ? "99+" : terminalActivity.count.value }}</span
-                >
+                <RailIcon area="terminal" class="icon-rail-glyph" />
+                <ViewBadgeChip :badge="terminalBadge" class="icon-rail-mark absolute right-0.5 top-0.5" />
             </button>
 
 <!-- Every "add" here writes to the sandbox's deploy.config.ts or clones into /work, never platform storage. -->
@@ -638,7 +659,7 @@ useKeybindings();
                 aria-label="Add a capability"
                 v-tooltip.right="'Add a capability'"
             >
-                <RailIcon area="capabilities" class="text-[1.375rem]" />
+                <RailIcon area="capabilities" class="icon-rail-glyph" />
             </RouterLink>
 
             <!-- The account control: avatar opening a popover with account identity and actions. -->
@@ -680,6 +701,10 @@ useKeybindings();
     padding-block: var(--icon-rail-padding);
     /* An inset shadow, not a background: layers over a skin's own background-image without a specificity fight. */
     box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--color-brand-950) 11%, transparent);
+    /* What the badge's ring is cut from: the card under that same wash, so the plate keeps a clean edge where it
+       crosses a glyph stroke — including on the open tile, where plate and ink are the same colour. A skin
+       repainting the rail re-points this and the ring follows. */
+    --ui-tile-ground: color-mix(in oklab, var(--color-brand-950) 11%, var(--color-card));
 }
 
 /* flex-shrink: 0 everywhere: with `height` (not min-height) tiles would otherwise compress instead of scrolling. */
@@ -706,6 +731,18 @@ useKeybindings();
 .icon-rail-tile {
     width: var(--icon-rail-tile-size);
     height: var(--icon-rail-tile-size);
+}
+
+/* WHAT A TILE HOLDS IS SIZED LIKE THE TILE ITSELF. Both measures come from `rail()`, so the glyph and the corner
+   marks hold their size across the text-size setting exactly as the box around them does; written in `rem` they
+   grew 20% inside a box that did not, which crowded the corner at the one setting nobody tests. */
+.icon-rail-glyph {
+    font-size: var(--icon-rail-glyph-size);
+}
+
+/* The one type size behind all three corner marks; each states its own size as a multiple of it. */
+.icon-rail-mark {
+    font-size: var(--icon-rail-mark-size);
 }
 
 .icon-rail-tile:focus-visible {

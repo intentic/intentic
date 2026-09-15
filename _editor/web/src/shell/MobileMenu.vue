@@ -20,7 +20,6 @@ import { useSandboxAvailability } from "../features/sandbox/overview/useSandboxA
 import { useWorkspaceTree } from "../features/workspace/explorer/useWorkspaceTree";
 import { environment } from "../app/environments/environment";
 import RailIcon from "./rail/RailIcon.vue";
-import RunningMark from "./rail/RunningMark.vue";
 
 // The mobile Menu tab: everything the desktop rail and its popovers hold, as one page — sandbox
 // switching, the presence roster, the area list, account actions. Same state singletons, different
@@ -235,7 +234,7 @@ const logout = async (): Promise<void> => {
                     }}</span>
 <!-- Running gets a line of its own rather than the rail's corner mark: a row this wide can afford the sentence. -->
                     <span v-if="area.badge?.running !== undefined" class="mt-0.5 flex items-center gap-1 text-xs" :class="RUNNING_MARK_CLASS">
-                        <RunningMark />{{ area.badge.running }}
+                        <Icon name="spinner" spin />{{ area.badge.running }}
                     </span>
                 </span>
                 <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
