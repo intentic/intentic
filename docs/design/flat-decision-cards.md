@@ -10,6 +10,10 @@ The transcript went flat in one pass: the thinking fold, the todo list, the erra
 then `ChatCard` itself each lost their surface (`chat-surface`, `bg-overlay/40`, `border-l-2`, the skin's
 carved plate). What is left is text on the panel's own ground, held together by where it starts.
 
+The first three of those have since stopped being full-width rows at all: thinking, the errand and the
+notes are pills on an edge, and they carry a plate again for a reason that only holds at pill width —
+`transcript-asides.md`.
+
 That pass stopped at the card's edge. Inside the question card, four option rows still carried
 `rounded-lg border` each, so the one element in the transcript a user has to act on read as **four boxes
 floating inside nothing**: the children were heavier than the parent, and the ask above them looked like a

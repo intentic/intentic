@@ -588,27 +588,49 @@ describe(`ChatMessageView errand row`, () => {
     });
 });
 
-// Notes row: same bargain as the errand row, for daemon-prepended context; collapsed by default, openable to the
-// verbatim text.
-describe(`ChatMessageView added-notes row`, () => {
+// Notes pill: same bargain as the errand row, for sandbox-prepended context, in two steps — the pill says how much was
+// added, opening it names each note, opening a note gives its verbatim words.
+describe(`ChatMessageView added-notes pill`, () => {
     const notes = [
         { title: `How to read this message`, text: `## Reading the message below\n\nIt opens with a slash but names no command.` },
         { title: `Dependencies are behind`, text: `Some dependencies declared under /work are not installed.` },
     ];
 
-    it(`names every note and keeps the words the agent got one press away`, async () => {
+    it(`stands for the whole preamble as one pill, and names the notes on press`, async () => {
         const element = mount({ id: 3, role: `user`, text: `fix the bug`, notes });
 
+        const pill = element.querySelector(`[aria-expanded]`)!;
+        expect(pill.textContent).toContain(`Sent with your message`);
+        expect(pill.textContent).toContain(String(notes.length));
+        expect(element.textContent).not.toContain(notes[0]!.title);
+
+        pill.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+        await nextTick();
         expect(element.textContent).toContain(notes[0]!.title);
         expect(element.textContent).toContain(notes[1]!.title);
-        expect(element.textContent).not.toContain(notes[0]!.text);
+        // A list of what was added costs the list, not the text of everything on it.
+        expect(element.textContent).not.toContain(notes[1]!.text);
+    });
 
-        element.querySelector(`[aria-expanded]`)?.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+    it(`opens one note at a time, without repeating the heading its own row already states`, async () => {
+        const element = mount({ id: 4, role: `user`, text: `fix the bug`, notes });
+
+        element.querySelector(`[aria-expanded]`)!.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+        await nextTick();
+        const rows = [...element.querySelectorAll(`[aria-expanded]`)].slice(1);
+        expect(rows).toHaveLength(notes.length);
+
+        rows[0]!.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
         await nextTick();
         expect(element.textContent).toContain(`It opens with a slash but names no command.`);
-        expect(element.textContent).toContain(notes[1]!.text);
         expect(element.textContent).not.toContain(`##`);
         expect(element.textContent).not.toContain(`Reading the message below`);
+        expect(element.textContent).not.toContain(notes[1]!.text);
+
+        rows[1]!.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+        await nextTick();
+        expect(element.textContent).toContain(notes[1]!.text);
+        expect(element.textContent).not.toContain(`It opens with a slash but names no command.`);
     });
 
     it(`sits outside the prompt, so it never rides in the pinned band`, () => {

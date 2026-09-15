@@ -32,7 +32,8 @@ import ChatCommandBlock from "../tools/ChatCommandBlock.vue";
 import ChatDecisionButton from "./cards/ChatDecisionButton.vue";
 import ChatDocumentBody from "./cards/ChatDocumentBody.vue";
 import { capabilityStatus, credentialLane, helpStatus, offerStatus, permissionStatus, planStatus } from "./cards/cardStatus";
-import ChatFold from "./ChatFold.vue";
+import ChatAside from "./ChatAside.vue";
+import ChatNotes from "./ChatNotes.vue";
 import ChatQuestionCard from "./cards/ChatQuestionCard.vue";
 import ChatThinking from "./ChatThinking.vue";
 import ChatTodoList from "./ChatTodoList.vue";
@@ -250,13 +251,6 @@ const defers = computed(() => foldsIntoTurn(props.message));
 // An errand is a prompt the app sent on the user's behalf (errands.ts); shown as a label, exact text one click away.
 const errand = computed(() => errandOf(props.message));
 
-// Notes the daemon prepended to the user's text (rebase, stale deps, retrieved context); named on the shut fold, so the
-// body never repeats them.
-const noteTitles = computed(() => (props.message.notes ?? []).map((note) => note.title).join(`, `));
-
-// Strips a leading markdown heading (first line only); the row's own label already names the note.
-const noteBody = (text: string): string => text.replace(/^#{1,6} .*(\n|$)/, ``).trim();
-
 // Trailer naming the latest thing keeping this turn going, and how many said the same; shown in-flow so it can't shift
 // the pinned row's height.
 const foldedLabel = (message: ChatMessage): string => errandOf(message)?.label ?? message.text.trim();
@@ -419,7 +413,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             // in a bubble. It hangs in the gutter, OUTSIDE this row's box, and .chat-message paint-contains the
             // row — see .chat-gutter-host in chat.css for what that did to it.
             'chat-gutter-host': message.role === 'user' && errand === undefined,
-            'items-end': message.role === 'user' && errand === undefined,
+            // Everything the user's side sent — typed or on their behalf — hangs off the same edge.
+            'items-end': message.role === 'user',
             'chat-prompt-open': expanded,
             'chat-prompt-pinned': pinned,
             'chat-doomed': doomed,
@@ -427,10 +422,10 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         @click="onMarkdownClick"
         @pointerdown="copyCodeFromEvent"
     >
-        <!-- The errand row: one line naming what the app asked for, opening to the exact words it sent. -->
-        <ChatFold v-if="errand" :icon="errand.icon" :label="errand.label" :detail="errand.detail">
-            <p class="whitespace-pre-wrap">{{ message.text }}</p>
-        </ChatFold>
+        <!-- The errand pill: what the app asked for and why, opening to the exact words it sent. -->
+        <ChatAside v-if="errand" :icon="errand.icon" :label="errand.label" :detail="errand.detail" end>
+            <pre class="max-h-64 overflow-auto rounded border border-line bg-canvas px-2 py-1 whitespace-pre-wrap">{{ message.text }}</pre>
+        </ChatAside>
         <div v-else-if="message.role === 'user'" class="group relative flex max-w-[85%] flex-col items-end gap-1.5">
             <!-- Attachments stack above the prompt when they cannot fit beside it. -->
             <ChatAttachmentStrip
@@ -859,16 +854,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         >
     </div>
 
-    <!-- One line naming each note the daemon prepended, opening to the exact text. -->
+    <!-- Its own row, not part of the bubble above: a pinned prompt charges its whole height against reading room. -->
     <div v-if="message.notes?.length" class="chat-message chat-stack flex flex-col" :class="{ 'chat-doomed': doomed }">
-        <!-- Notes use a text icon because they are app-added words, not attachments. -->
-        <ChatFold icon="align-left" label="Sent with your message" :detail="noteTitles">
-            <div class="flex flex-col gap-2">
-                <div v-for="note in message.notes" :key="note.title" class="flex flex-col gap-0.5">
-                    <span class="font-medium text-muted">{{ note.title }}</span>
-                    <span class="whitespace-pre-wrap">{{ noteBody(note.text) }}</span>
-                </div>
-            </div>
-        </ChatFold>
+        <ChatNotes :notes="message.notes" />
     </div>
 </template>
