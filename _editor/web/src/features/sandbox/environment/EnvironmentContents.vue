@@ -88,7 +88,8 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
 
 <template>
     <!-- `gap-5` separates the sections, since none of them draws its own box any more. -->
-    <div class="flex flex-col gap-5">
+    <!-- `@container`: what fits on a row is a fact about this list's width, and the hub's body is a pane the docked chat can leave far narrower than the window. -->
+    <div class="@container flex flex-col gap-5">
         <!-- `flat`: this list already sits inside the Environment group's own frame. -->
         <RowGroup v-for="group in rowGroups" :key="group.origin" flat undivided :label="group.label" :count="countLabel(group)">
             <!-- Expandable rows keep their disclosure control in the lead slot. -->
@@ -135,7 +136,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                         <span
                             v-if="item.purpose !== undefined && !open.has(item.id)"
                             v-tooltip.bottom.overflow="item.purpose"
-                            class="hidden min-w-0 truncate text-2xs font-normal text-muted sm:block"
+                            class="hidden min-w-0 truncate text-2xs font-normal text-muted @xl:block"
                         >
                             {{ item.purpose }}
                         </span>
@@ -143,7 +144,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                 </template>
                 <!-- Only what's worth interrupting for: an attribution that isn't already obvious, and any non-default state. -->
                 <template #meta>
-                    <span v-if="attribution(item) !== undefined" class="hidden shrink-0 sm:inline">{{ attribution(item) }}</span>
+                    <span v-if="attribution(item) !== undefined" class="hidden shrink-0 @md:inline">{{ attribution(item) }}</span>
                     <span v-if="stateOf(item) !== undefined" :class="stateOf(item)?.tone" class="inline-flex items-center gap-1 font-medium">
                         <Icon :name="stateOf(item)!.icon" />{{ stateOf(item)!.label }}
                     </span>

@@ -335,7 +335,7 @@ const eagernessOptions = [
 
             <!-- Per-group, acting on that group alone (a page-wide select-all would span blocks with nothing in common). -->
             <template #actions>
-                <div v-if="viewOf(block.id) === `advanced`" class="flex flex-wrap items-center gap-2 max-md:hidden">
+                <div v-if="viewOf(block.id) === `advanced`" class="flex flex-wrap items-center gap-2 @max-xl:hidden">
                     <label class="flex cursor-pointer items-center gap-2 text-2xs text-muted">
                         <Checkbox
                             :model-value="allSelectedIn(block.ids)"

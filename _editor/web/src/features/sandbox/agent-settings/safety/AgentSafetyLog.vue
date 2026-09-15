@@ -224,7 +224,7 @@ const groupCount = computed(() => {
                     <template #meta>
                         <span
                             v-if="entry.machine"
-                            class="hidden items-center gap-1 font-mono text-2xs text-subtle sm:inline-flex"
+                            class="hidden items-center gap-1 font-mono text-2xs text-subtle @xl:inline-flex"
                             :title="`Ran on ${entry.machine}`"
                         >
                             <Icon name="desktop" class="text-3xs" />

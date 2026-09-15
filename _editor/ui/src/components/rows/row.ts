@@ -9,11 +9,40 @@ export type RowDensity = `comfortable` | `compact` | `dense`;
 
 export type RowTone = `default` | `danger` | `warning` | `success` | `info`;
 
+// `headline` is the width the title column refuses to go below: it is the headline's flex-basis, so once the
+// trailing cluster can no longer sit beside that much text the cluster wraps to its own line instead of
+// squeezing the title into one word per line. A floor, not a size — with room the headline still takes the rest.
 /* A tier is read in one place rather than reassembled from five ternaries down a template. */
 export const ROW_TIERS = {
-    comfortable: { pad: `px-4.5 py-3.5`, gap: `gap-3`, icon: `text-xl`, title: `font-semibold leading-tight`, description: `text-xs`, mark: 28 },
-    compact: { pad: `px-4 py-2.5`, gap: `gap-3`, icon: `text-lg`, title: `text-sm font-medium leading-tight`, description: `text-2xs`, mark: 22 },
-    dense: { pad: `px-2.5 py-2`, gap: `gap-2.5`, icon: `text-base`, title: `text-xs font-medium leading-tight`, description: `text-2xs`, mark: 18 },
+    comfortable: {
+        pad: `px-4.5 py-3.5`,
+        gap: `gap-3`,
+        icon: `text-xl`,
+        title: `font-semibold leading-tight`,
+        description: `text-xs`,
+        headline: `basis-56`,
+        mark: 28,
+    },
+    compact: {
+        pad: `px-4 py-2.5`,
+        gap: `gap-3`,
+        icon: `text-lg`,
+        title: `text-sm font-medium leading-tight`,
+        description: `text-2xs`,
+        headline: `basis-44`,
+        mark: 22,
+    },
+    // Lowest of the three on purpose: the nav rail is a fixed 16rem and its rows carry a chip at most, so a
+    // wrap there would be the tier reflowing a column that was never short of room.
+    dense: {
+        pad: `px-2.5 py-2`,
+        gap: `gap-2.5`,
+        icon: `text-base`,
+        title: `text-xs font-medium leading-tight`,
+        description: `text-2xs`,
+        headline: `basis-24`,
+        mark: 18,
+    },
 } as const satisfies Record<RowDensity, Record<string, string | number>>;
 
 // Lead icon colour by state, said before the sentence is read. `info` is the link colour, not named

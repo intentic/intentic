@@ -74,7 +74,8 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
 </script>
 
 <template>
-    <div class="flex flex-col gap-6">
+    <!-- `@container`: every category below thins against this pane, which the docked chat can leave a third of the window's width. -->
+    <div class="@container flex flex-col gap-6">
 <!-- No border under the strip: on mobile the hub draws its own bordered pill row above this one, and two bordered strips would read as two controls. -->
         <SegmentedControl v-model="section" :options="SECTIONS" aria-label="Agent settings category" />
 

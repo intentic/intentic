@@ -363,21 +363,22 @@ const revoke = async (target: string): Promise<void> => {
                         </Notice>
                         <form class="flex flex-col gap-1.5" @submit.prevent="invite">
                             <!-- Address first, role beside Invite, since inviting is the primary action and the tier a refinement. -->
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <!-- Wraps on its own width, not the window's: this form sits in a pane the docked chat can leave 20rem wide on a screen the `sm:` breakpoint calls roomy. -->
+                            <div class="flex flex-wrap items-center gap-2">
                                 <input
                                     v-model="email"
                                     type="email"
                                     autocomplete="off"
                                     placeholder="teammate@example.com"
                                     :class="[
-                                        ui.inputSm('min-w-0 sm:flex-1'),
+                                        ui.inputSm('min-w-0 flex-1 basis-56'),
                                         emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())
                                             ? 'ui-field-error-box'
                                             : '',
                                     ]"
                                     @blur="emailTouched = true"
                                 />
-                                <div class="flex items-center gap-2">
+                                <div class="ml-auto flex shrink-0 items-center gap-2">
                                     <Picker
                                         v-model="inviteRole"
                                         :options="ROLE_OPTIONS"
@@ -385,7 +386,7 @@ const revoke = async (target: string): Promise<void> => {
                                         :disabled="busy"
                                         aria-label="Invite role"
                                         header="Invite as"
-                                        class="ui-field-sm min-w-0 flex-1 sm:w-36 sm:flex-none"
+                                        class="ui-field-sm w-36 min-w-0"
                                     />
                                     <Button
                                         type="submit"

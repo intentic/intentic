@@ -159,7 +159,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
                 :placeholder="view === `installed` ? `Name or contribution…` : `Name, publisher, what it does…`"
                 :count="matched"
                 :aria-label="view === `installed` ? `Filter installed extensions` : `Search published extensions`"
-                class="flex-1"
+                class="min-w-0 flex-1 basis-64"
             >
                 <template v-if="view === `installed`" #controls>
                     <SegmentedControl
@@ -184,25 +184,28 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
             </FilterBar>
             <div v-else class="flex-1"></div>
 
-            <!-- A labelled button, not an icon: it creates something, unlike the others which only narrow or refresh. -->
-            <template v-if="view === `installed`">
-                <Button label="New extension" size="small" @click="creating = true">
-                    <template #icon><Icon name="plus" /></template>
-                </Button>
-                <button type="button" :class="ui.iconButton(`h-8 w-8`)" :disabled="reloading" v-tooltip.top="`Reload extensions`" v-action="reload">
-                    <Icon name="refresh" :spin="reloading" />
+            <!-- One cluster, so the two verbs wrap together onto the row's next line instead of the refresh stranding on a line of its own. -->
+            <div class="ml-auto flex shrink-0 items-center gap-2">
+                <!-- A labelled button, not an icon: it creates something, unlike the others which only narrow or refresh. -->
+                <template v-if="view === `installed`">
+                    <Button label="New extension" size="small" @click="creating = true">
+                        <template #icon><Icon name="plus" /></template>
+                    </Button>
+                    <button type="button" :class="ui.iconButton(`h-8 w-8`)" :disabled="reloading" v-tooltip.top="`Reload extensions`" v-action="reload">
+                        <Icon name="refresh" :spin="reloading" />
+                    </button>
+                </template>
+                <button
+                    v-else
+                    type="button"
+                    :class="ui.iconButton(`h-8 w-8`)"
+                    :disabled="isFetching"
+                    v-tooltip.top="`Re-read the registry`"
+                    @click="refetch"
+                >
+                    <Icon name="refresh" :spin="isFetching" />
                 </button>
-            </template>
-            <button
-                v-else
-                type="button"
-                :class="ui.iconButton(`h-8 w-8`)"
-                :disabled="isFetching"
-                v-tooltip.top="`Re-read the registry`"
-                @click="refetch"
-            >
-                <Icon name="refresh" :spin="isFetching" />
-            </button>
+            </div>
         </div>
 
         <NewExtensionDialog v-model="creating" :create="create" @created="created" />

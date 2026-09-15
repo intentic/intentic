@@ -70,9 +70,10 @@ watch(
 <!-- Wide because the index spends 14rem of it: at the 56rem default the body would be left narrower than it was before the column arrived. -->
     <SplitView :title="title" :description="description" scroll="page">
 <!-- Mobile keeps the strip. -->
+<!-- It wraps rather than scrolls: this is the index of everything the hub holds, and a section a reader can't see is a section they won't look for. -->
         <template #compact>
-            <div class="overflow-x-auto border-b border-line-subtle pb-2">
-                <SegmentedControl :model-value="activeSlug" :options="options" @update:model-value="select" />
+            <div class="border-b border-line-subtle pb-2">
+                <SegmentedControl :model-value="activeSlug" :options="options" wrap @update:model-value="select" />
             </div>
         </template>
 

@@ -116,7 +116,7 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
                 aria-label="Filter skills"
                 autocapitalize="off"
                 spellcheck="false"
-                class="w-full max-w-64 sm:w-64"
+                class="w-full max-w-64"
             />
         </template>
 
@@ -165,8 +165,8 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
             >
                 <Icon name="chevron-right" aria-hidden="true" class="shrink-0 text-2xs text-subtle transition-transform group-open/fold:rotate-90" />
                 <span class="text-sm text-muted">{{ borrowed.length }} came with what you installed and connected</span>
-                <!-- Hidden on narrow screens rather than wrapped, since it's a footnote to the line above, not a second fact. -->
-                <span class="hidden min-w-0 truncate text-2xs text-subtle sm:inline">to drop one, drop the thing that ships it</span>
+                <!-- Hidden in a narrow pane rather than wrapped, since it's a footnote to the line above, not a second fact. -->
+                <span class="hidden min-w-0 truncate text-2xs text-subtle @xl:inline">to drop one, drop the thing that ships it</span>
             </summary>
             <div class="divide-y divide-line-subtle border-t border-line-subtle">
                 <SkillRow
