@@ -14,6 +14,7 @@ import {
     CapabilityStatusSchema,
 } from "../schemas/capabilities.js";
 import { MarketplaceRequestSchema, MarketplaceSchema } from "../schemas/marketplace.js";
+import { RemoteRefsRequestSchema, RemoteRefsSchema } from "../schemas/remote-refs.js";
 import { OkSchema } from "../schemas/shared.js";
 
 // The sandbox's unified capability manifest, spanning `list`/`add`/`remove`/`status`/`marketplace`. A VAULTED marker
@@ -108,6 +109,17 @@ export const capabilitiesContract = {
         })
         .input(MarketplaceRequestSchema)
         .output(MarketplaceSchema),
+    // What the install form pins to, so nobody has to read a commit sha off a web page and paste it.
+    refs: oc
+        .route({
+            method: "POST",
+            path: "/capabilities/refs",
+            summary: "The versions a repository offers",
+            description:
+                "Asks a git remote what it advertises and hands back every branch and tag with the commit it points at, plus which branch is its default. Nothing is cloned and nothing is written, so this is cheap enough to answer a form as someone types a repository into it.",
+        })
+        .input(RemoteRefsRequestSchema)
+        .output(RemoteRefsSchema),
     dismiss: oc
         .route({
             method: "DELETE",

@@ -19,6 +19,7 @@ import { secretFieldsOf } from "./secret-fields.js";
 import { contributionFor, contributionRegistry } from "./contributions.js";
 import { totpCode } from "./totp.js";
 import { browseMarketplace } from "./marketplace.js";
+import { readRemoteRefs, RemoteRefsError } from "./remote-refs.js";
 import { probeCapability } from "./probe.js";
 import { capabilityRecommendations } from "./recommend.js";
 import { registry } from "./registry.js";
@@ -78,6 +79,18 @@ const withKeptSecrets = async (services: Services, input: Capability): Promise<C
         });
     }
     return CapabilitySchema.parse({ ...input, config: { ...config, ...Object.fromEntries(kept.map((key) => [key, storedConfig[key]])) } });
+};
+
+// The same keep-the-credential move as withKeptSecrets, for the one read that happens before there is a config to
+// keep: a form editing a live install has never been shown its token, so it sends the marker and names the connection.
+// Nothing stored behind the marker reads as no token, which the remote then refuses in its own words.
+const keptToken = async (services: Services, token: string | undefined, keeping: string | undefined): Promise<string | undefined> => {
+    if (!isVaulted(token)) {
+        return token;
+    }
+    const stored = keeping === undefined ? undefined : await services.capabilities.get(keeping);
+    const value = (stored?.config as Record<string, unknown> | undefined)?.["token"];
+    return typeof value === "string" && !isVaulted(value) ? value : undefined;
 };
 
 // `add` streams progress frames, then records the manifest entry, then a terminal `result`, after checking any
@@ -306,6 +319,18 @@ export const createCapabilitiesRoutes = (services: Services) => {
             return { id: capability.id, kind: capability.kind, config };
         }),
         marketplace: i.marketplace.handler(async ({ input }) => browseMarketplace(ctx, input.url, input.token)),
+        // A refusal here is about the address or the token the caller just typed, so it answers 400 with git's reason
+        // in the form's own terms rather than a 500 nobody can act on.
+        refs: i.refs.handler(async ({ input }) => {
+            try {
+                return await readRemoteRefs(services.workspace.root, input.url, await keptToken(services, input.token, input.keeping));
+            } catch (error) {
+                if (error instanceof RemoteRefsError) {
+                    throw new ORPCError("BAD_REQUEST", { message: error.message });
+                }
+                throw error;
+            }
+        }),
         // Re-derives the recommendation here rather than trusting the client, so the dismissal matches what was
         // actually on screen and lapses when the workspace changes.
         dismiss: i.dismiss.handler(async ({ input }) => {

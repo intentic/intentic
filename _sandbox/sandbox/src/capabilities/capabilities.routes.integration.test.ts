@@ -181,3 +181,10 @@ test("capabilities.add keeps a credential the sender never saw, and refuses to k
     // Nothing stored behind the marker: a fresh id has no credential to keep.
     expect(await addFailure({ id: "fresh", kind: "vpn", config: { provider: "wireguard", config: VAULTED } })).toBe("BAD_REQUEST");
 });
+
+// The one refusal this route can give without touching the network. It matters because the alternative is silent: git
+// asked for an unknown host key with no terminal to answer on would sit there until the form gave up.
+test("capabilities.refs refuses a remote git could only read by prompting someone", async () => {
+    const client = clientFor(createApp(services({ workspace: tempWorkspace([]), capabilities: memoryCapabilitiesStore([]) })));
+    expect(await errorCode(client.capabilities.refs({ url: "ssh://git@github.com/owner/repo.git" }))).toBe("BAD_REQUEST");
+});

@@ -8,6 +8,7 @@ import {
     type Marketplace,
     MarketplaceSchema,
 } from "@intentic/api-contract";
+import { type RemoteRefs, RemoteRefsSchema } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { readIntenticLines } from "../../../lib/intenticStream";
@@ -40,6 +41,21 @@ export const browseMarketplace = async (url: string, token?: string): Promise<Ma
             headers: { "content-type": `application/json` },
             body: JSON.stringify({ url, ...(token !== undefined && token !== `` ? { token } : {}) }),
         }),
+    );
+
+// What a repository offers, so a form can pin a commit without anyone reading a sha off a web page: the daemon asks
+// the remote with `git ls-remote`, cloning nothing. POST for the same reason as the marketplace read, the token.
+export const readRemoteRefs = async (url: string, token?: string, keeping?: string): Promise<RemoteRefs> =>
+    RemoteRefsSchema.parse(
+        await sandboxJson(
+            `/capabilities/refs`,
+            jsonBody(`POST`, {
+                url,
+                ...(token === undefined || token === `` ? {} : { token }),
+                // Names the connection whose stored token a VAULTED marker stands for; nothing to resolve on an add.
+                ...(keeping === undefined || keeping === `` ? {} : { keeping }),
+            }),
+        ),
     );
 
 // Dials the service the way the connection would and returns what it said (daemon's capabilities/probe.ts). Nothing

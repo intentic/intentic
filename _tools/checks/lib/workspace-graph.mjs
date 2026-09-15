@@ -22,8 +22,51 @@ const workspaceDeps = (pkg) => {
     return deps;
 };
 
-// Every package.json outside node_modules, and the `workspace:` edges between them.
+// `packages:` from pnpm-workspace.yaml, in order; a later entry wins, which is pnpm's own rule for a negation. Read by
+// hand rather than with a YAML parser, since this file is on the path of checks that must run with nothing installed.
+const WORKSPACE_FILE = "pnpm-workspace.yaml";
+const LIST_ITEM = /^\s+-\s*["']?([^"'#\s]+)/;
+
+const workspaceGlobs = (root) => {
+    const globs = [];
+    let listing = false;
+    for (const line of readFileSync(join(root, WORKSPACE_FILE), "utf8").split("\n")) {
+        if (/^packages:\s*$/.test(line)) {
+            listing = true;
+            continue;
+        }
+        // The next top-level key ends the list; comments and blank lines inside it do not.
+        if (listing && /^\S/.test(line)) {
+            break;
+        }
+        const item = listing ? LIST_ITEM.exec(line) : null;
+        if (item !== null) {
+            globs.push(item[1]);
+        }
+    }
+    return globs;
+};
+
+// `*` spans one path segment, `**` any number: the subset the workspace file uses.
+const globMatcher = (glob) =>
+    new RegExp(
+        `^${glob
+            .split("/")
+            .map((part) => (part === "**" ? "[^]*" : part.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*")))
+            .join("/")}$`,
+    );
+
+// A repository holds manifests pnpm never links: a seed template, a test fixture, a store shell held out by a negated
+// glob. Recording one as a package makes a file inside it seed a name turbo has never heard of, which fails the whole
+// run; it belongs to the member that contains it instead.
+const memberTest = (root) => {
+    const rules = workspaceGlobs(root).map((glob) => ({ include: !glob.startsWith("!"), match: globMatcher(glob.replace(/^!/, "")) }));
+    return (dir) => rules.reduce((member, rule) => (rule.match.test(dir) ? rule.include : member), false);
+};
+
+// Every workspace member's package.json, and the `workspace:` edges between them.
 export const readWorkspaceGraph = (root) => {
+    const isMember = memberTest(root);
     const packages = new Map(); // name -> { name, dir, deps: Set<string> }
     const byDir = []; // [dir, name], longest dir first
     (function walk(dir, depth) {
@@ -36,7 +79,7 @@ export const readWorkspaceGraph = (root) => {
             }
             const child = dir ? `${dir}/${entry.name}` : entry.name;
             const manifest = join(root, child, "package.json");
-            if (existsSync(manifest)) {
+            if (existsSync(manifest) && isMember(child)) {
                 const pkg = JSON.parse(readFileSync(manifest, "utf8"));
                 packages.set(pkg.name, { name: pkg.name, dir: child, deps: workspaceDeps(pkg) });
                 byDir.push([child, pkg.name]);
@@ -44,6 +87,11 @@ export const readWorkspaceGraph = (root) => {
             walk(child, depth + 1);
         }
     })("", 0);
+    // An empty graph means the globs were not understood, which would otherwise read as "nothing changed" and test
+    // nothing at all.
+    if (packages.size === 0) {
+        throw new Error(`no workspace members matched the \`packages:\` globs in ${WORKSPACE_FILE}`);
+    }
     byDir.sort((a, b) => b[0].length - a[0].length);
     // dependency -> packages that declare it, so a change propagates upward to consumers.
     const dependents = new Map();

@@ -49,12 +49,12 @@ pnpm test                 # node --test against dist/ — build first
 pnpm build            # → dist/extension.js, one file, 5 kB
 
 git add -f dist/extension.js && git commit -m "release 1.0.0" && git push
-git rev-parse HEAD       # this sha is what you install
 ```
 
-Then in the app: **Capabilities → Add → Extension**, paste the repo URL and that sha. There is no packaging step
-and no upload: the daemon clones the sha you name and runs what is in it, which is why `dist/` is committed and
-why `.gitignore` deliberately does not list it.
+Then in the app: **Capabilities → Add → Extension**, paste the repo URL and pick the branch or tag you just
+pushed. The form reads your remote and pins that name to the commit it points at; nothing has to be copied out
+of a commit list. There is no packaging step and no upload: the daemon clones the pinned commit and runs what is
+in it, which is why `dist/` is committed and why `.gitignore` deliberately does not list it.
 
 Reload the app to load the UI; the agent-side contributions (`bin`, `agent`) apply from the next turn.
 

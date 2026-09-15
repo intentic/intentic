@@ -645,8 +645,9 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         description: "An intentic extension from a git repo.",
         fields: [
             { key: "url", label: "Git URL", placeholder: "https://github.com/owner/extension" },
-            // A full sha, not a branch: extension code runs trusted, so installs pin exactly the reviewed commit.
-            { key: "ref", label: "Commit sha (full 40 characters)" },
+            // A full sha, not a branch: extension code runs trusted, so installs pin exactly the reviewed commit. The
+            // app resolves the branch or release picked here into that sha (capabilities/GitRefField.vue).
+            { key: "ref", label: "Version" },
             { key: "path", label: "Subdirectory", optional: true },
             { key: "token", label: "Access token", secret: true, optional: true },
         ],
@@ -654,7 +655,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             scopes: "private repos: read access (e.g. GitHub `repo`)",
             steps: [
                 "Point at a repo with an `intentic-extension.json`.",
-                "Pin the exact commit sha you reviewed, branches are not accepted.",
+                "Pick a branch or release: it is pinned to that commit, and an install never follows it.",
                 "Reload the app after installing to load its UI.",
             ],
         },

@@ -233,9 +233,10 @@ const workspace = `.intentic/config/workspace-extensions/
     <p>Commit the built bundle. The sha you push is the identity your extension installs under.</p>
     <DocsCodeBlock code={ship} lang="bash" title="Your machine" />
     <p>
-        In the app, go to <strong>Capabilities → Add → Extension</strong> and give it the repo URL and that full commit sha (plus a token for
-        a private repo). The daemon clones into a staging directory, validates the manifest and checks that the entry bundle really exists{" "}
-        <em>before</em> anything goes live, so a broken push can't replace a working install.
+        In the app, go to <strong>Capabilities → Add → Extension</strong> and give it the repo URL (plus a token for a private repo). The
+        form asks your remote what it offers and pins whichever branch or release is picked to the commit it points at, so nobody installing
+        your extension has to copy a sha out of your commit list. The daemon clones into a staging directory, validates the manifest and
+        checks that the entry bundle really exists <em>before</em> anything goes live, so a broken push can't replace a working install.
     </p>
     <p>
         Reload the app and your view is in the rail. Agent-side contributions (<code>agent</code>, <code>bin</code>) apply from the next

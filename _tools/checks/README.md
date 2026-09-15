@@ -26,7 +26,10 @@ Every check that reads the checkout and nothing else, listed once and run everyw
 - [lib/repo.mjs](lib/repo.mjs): the workspace packages, the test files, the export maps a workspace import
   resolves through, read once and without `node_modules`.
 - [lib/workspace-graph.mjs](lib/workspace-graph.mjs): the `workspace:` dependency graph and "which packages do
-  these changed paths reach", shared by CI's `changes` job and the turn-ending check.
+  these changed paths reach", shared by CI's `changes` job and the turn-ending check. It reads
+  `pnpm-workspace.yaml`'s globs first, because a `package.json` is not the same thing as a workspace member: a seed
+  template, a test fixture and a store shell each carry one, and a change inside any of them belongs to the member
+  that contains it rather than to a name turbo would refuse.
 
 ## How it fits
 

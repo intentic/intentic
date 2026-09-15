@@ -33,6 +33,12 @@ machinery is uniform:
   ([capabilities.contract.ts](../../_shared/sandbox-contract/src/contracts/capabilities.contract.ts), orchestrated
   by [capabilities.routes.ts](../../_sandbox/sandbox/src/capabilities/capabilities.routes.ts): precondition check →
   streamed `apply` → manifest upsert → environment recompose).
+- **Two reads the form makes before anything is written**: `probe` dials the service the settings describe, and
+  `refs` asks a git remote what it advertises
+  ([remote-refs.ts](../../_sandbox/sandbox/src/capabilities/remote-refs.ts): one `ls-remote`, no clone, no disk).
+  `refs` is what lets the extension card offer branches and releases and store the commit each one points at. The
+  install is still pinned to an exact sha, which is the security rule; a person copying that sha out of somebody's
+  commit list never was.
 - **One total registry**: `Record<CapabilityKind, CapabilityHandler>` where a handler is
   `{ requires?, fragment?, apply, status, remove? }`
   ([registry.ts](../../_sandbox/sandbox/src/capabilities/registry.ts),

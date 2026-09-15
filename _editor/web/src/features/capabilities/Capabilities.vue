@@ -27,12 +27,13 @@ import {
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
-import type { CapabilityKind, ForticlientConnection, HostSummary, WebExtSummary } from "@intentic/sandbox-contract";
+import { type CapabilityKind, type ForticlientConnection, type HostSummary, VAULTED, type WebExtSummary } from "@intentic/sandbox-contract";
 import { type ComputedRef, computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import BrowserProfileDialog from "./connect/BrowserProfileDialog.vue";
 import CapabilityFieldRow from "./connect/CapabilityFieldRow.vue";
 import ForticlientImport from "./connect/ForticlientImport.vue";
+import GitRefField from "./connect/GitRefField.vue";
 import HostConnectDialog from "./connect/HostConnectDialog.vue";
 import WebExtConnectDialog from "./connect/WebExtConnectDialog.vue";
 import PluginRegistryBrowse from "./connect/PluginRegistryBrowse.vue";
@@ -77,6 +78,7 @@ import {
     shownFields,
 } from "./model/form";
 import { type ConfSummary, containerUrlFix, expandPaste, normalizeFieldValue, summarisesWireguard, wireguardSummary } from "./model/normalize";
+import { picksVersion } from "./model/refs";
 import { HOST_PRESETS, hostGrantSummary, localModelMemorySummary, matchHostPreset, walletPolicySummary } from "./model/previews";
 import { pushWalletPolicy } from "./model/walletPolicy";
 import { probeCapability, useCapabilities } from "./connect/useCapabilities";
@@ -388,6 +390,12 @@ const fieldPlaceholder = (field: CapabilityField): string | undefined =>
     keptField(field) ? `•••••••••••• already set, leave blank to keep it` : field.placeholder;
 // Fields shown for a card: const-valued ones are baked in; `when`-gated ones appear as their toggle changes.
 const formFields = (entry: CapabilityCatalogEntry): readonly CapabilityField[] => shownFields(entry, values);
+// What the version read authorizes with: the token typed here, or the marker for one this edit is keeping, which the
+// daemon resolves against the connection. Without it, editing a private repo's install could never list its versions.
+const versionToken = computed<string>(() => {
+    const typed = (values[`token`] ?? ``).trim();
+    return typed === `` && keptSecrets.value.has(`token`) ? VAULTED : typed;
+});
 // Main fields are the card's actual questions; advanced ones default correctly for nearly everyone and fold behind
 // one line. The fold opens by default only when an edit holds a non-default advanced value.
 const mainFields = (entry: CapabilityCatalogEntry): readonly CapabilityField[] => formFields(entry).filter((field) => field.advanced !== true);
@@ -1402,24 +1410,36 @@ const submitLabel = computed(() => {
                             </label>
 
 <!-- Main fields first, rarely-changed ones folded behind Advanced. -->
-                            <CapabilityFieldRow
-                                v-for="field in mainFields(selected)"
-                                :key="field.key"
-                                :field="field"
-                                :values="values"
-                                :inline="inlineField(field)"
-                                :placeholder="fieldPlaceholder(field)"
-                                :alarm="fieldAlarm(field)"
-                                :quiet="fieldQuiet(field)"
-                                :checked="fieldChecked(field)"
-                                :url-fix="fieldUrlFix(field)"
-                                :note="pasteNotes[field.key]"
-                                :summary="fieldConfSummary(field)"
-                                @edited="onFieldInput(field)"
-                                @pasted="onFieldPaste(field, $event)"
-                                @left="finishField(field)"
-                                @fix="applyUrlFix(field)"
-                            />
+                            <template v-for="field in mainFields(selected)" :key="field.key">
+<!-- An extension pins a commit, so that box is answered from the repository rather than typed into. -->
+                                <GitRefField
+                                    v-if="picksVersion(selected, field)"
+                                    :field="field"
+                                    :values="values"
+                                    :url="values['url'] ?? ''"
+                                    :token="versionToken"
+                                    :keeping="editing?.id"
+                                    :alarm="fieldAlarm(field)"
+                                    @left="finishField(field)"
+                                />
+                                <CapabilityFieldRow
+                                    v-else
+                                    :field="field"
+                                    :values="values"
+                                    :inline="inlineField(field)"
+                                    :placeholder="fieldPlaceholder(field)"
+                                    :alarm="fieldAlarm(field)"
+                                    :quiet="fieldQuiet(field)"
+                                    :checked="fieldChecked(field)"
+                                    :url-fix="fieldUrlFix(field)"
+                                    :note="pasteNotes[field.key]"
+                                    :summary="fieldConfSummary(field)"
+                                    @edited="onFieldInput(field)"
+                                    @pasted="onFieldPaste(field, $event)"
+                                    @left="finishField(field)"
+                                    @fix="applyUrlFix(field)"
+                                />
+                            </template>
                             <template v-if="advancedFields(selected).length > 0">
                                 <button type="button" :class="ui.textAction(`gap-1`)" @click="advancedOpen = !advancedOpen">
                                     <Icon :name="advancedOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
