@@ -64,7 +64,7 @@ overrides:
   # not astro's — and 0.34.x carries four libvips CVEs (GHSA-f88m-g3jw-g9cj). Overriding globally is also what
   # keeps the single-copy property the catalog entry asks for: astro, the site and @huggingface/transformers
   # (which already wanted 0.35.x) all land on one sharp.
-  sharp: 0.35.3
+  sharp: 0.35.4
   # astro-opengraph-images > tw-to-css pins postcss to an exact 8.4.31, which has two sourceMappingURL
   # arbitrary-file-read advisories (GHSA-6g55-p6wh-862q, GHSA-r28c-9q8g-f849). Same major, and it dedupes onto
   # the 8.5.x copy the rest of the tree already resolves.
@@ -149,6 +149,8 @@ minimumReleaseAgeExclude:
   - '@oven/bun-windows-aarch64@1.4.0-canary.20260903.1'
   - '@oven/bun-windows-x64@1.4.0-canary.20260903.1'
   - bun@1.4.0-canary.20260903.1
+  - image-size@2.0.4
+  - astro@7.3.2
 
 allowBuilds:
   "@ast-grep/lang-go": true
@@ -188,7 +190,7 @@ catalog:
   "@agentclientprotocol/sdk": 1.3.0
   "@anthropic-ai/claude-agent-sdk": 0.3.257
   "@astrojs/check": 0.9.10
-  "@astrojs/sitemap": 3.7.3
+  "@astrojs/sitemap": 3.7.4
   "@commitlint/cli": 21.2.1
   "@commitlint/config-conventional": 21.2.0
   "@commitlint/types": 21.2.0
@@ -281,7 +283,7 @@ catalog:
   "@ast-grep/lang-go": 0.0.6
   "@ast-grep/lang-rust": 0.0.7
   "@ast-grep/lang-java": 0.0.7
-  astro: 7.1.6
+  astro: 7.3.2
   astro-opengraph-images: 1.17.4
   # The WhatsApp gateway's protocol library. Its `latest` tag is a release candidate — 7.0.0 has been in rc for
   # the whole of the 7.x line — so the pin looks provisional but is in fact the newest published build.
@@ -307,7 +309,7 @@ catalog:
   hono: 4.12.34
   idb-keyval: 6.3.0
   # fileq's image dimensions, header-only (no pixel decode, no native code).
-  image-size: 2.0.2
+  image-size: 2.0.4
   ignore: 7.0.6
   imapflow: 1.6.5
   jose: 6.2.5
@@ -316,7 +318,7 @@ catalog:
   # generator declares in its own signatures, so a converter feeding that generator has to speak the same one.
   json-schema-typed: 8.0.2
   knip: 6.31.0
-  mailparser: 3.9.14
+  mailparser: 3.9.20
   # fileq's docx deriver: docx → semantic HTML, which webq's markdown writer then renders.
   mammoth: 1.12.2
   marked: 18.0.7
@@ -356,7 +358,7 @@ catalog:
   # site has to declare it even though astro carries the same optional dependency. The two still share one
   # copy, but it now takes the `sharp` override above to hold that: astro 6.4 asks for ^0.34.0 and 0.34.x is
   # the vulnerable line.
-  sharp: 0.35.3
+  sharp: 0.35.4
   shiki: 4.4.1
   # TOML for the sandbox-definition surface (sandbox.toml): a strict 1.0 parser with no coercion surprises.
   smol-toml: 1.7.1
