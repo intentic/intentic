@@ -32,20 +32,26 @@ const course = (cx: number, n: number, row: number): Stone[] => {
 /** Two decimals: these are written into attributes verbatim. */
 const n = (v: number): number => Math.round(v * 100) / 100;
 
-/* Quarry stones are what the reader brings. Inscriptions are 24×24 and stroked, never filled: a stone is cut into. */
+/* Quarry stones are what the reader brings, and the inscription is the whole point of the stone, so it is drawn at the
+   size of the face rather than as a badge on it: a 26×14 box inside a 38×20 stone, in stone units, unscaled. Landscape
+   is what the room allows — a stone 20 deep cannot hold a tall glyph — so every one of these is a thing that is wide:
+   a bubble, a folder, a table, a run of text, a pair of braces. Stroked and never filled, because a stone is cut into. */
+const CUT = { w: 26, h: 14, dx: 6, dy: 3 };
 const INSCRIPTIONS = {
-    prompt: "M6 8.5 11 12 6 15.5M13 15.5h5.5",
-    notes: "M4.5 7.5h15M4.5 12h15M4.5 16.5h9",
-    file: "M6.5 4h8l3.5 3.5V20h-11.5zM14.5 4v3.5h3.5",
-    code: "M10.5 5.5c-2.2 0-2.6 1.2-2.6 3.2s-.6 2.8-2.4 3.3c1.8.5 2.4 1.3 2.4 3.3s.4 3.2 2.6 3.2M13.5 5.5c2.2 0 2.6 1.2 2.6 3.2s.6 2.8 2.4 3.3c-1.8.5-2.4 1.3-2.4 3.3s-.4 3.2-2.6 3.2",
-    data: "M4.5 5.5h15v13h-15zM4.5 12h15M12 5.5v13",
+    /* What you asked for, said in the one shape nothing else on the page uses. */
+    prompt: "M3 .5h20a2.5 2.5 0 0 1 2.5 2.5v5a2.5 2.5 0 0 1-2.5 2.5h-12l-5 3.5V10.5H3A2.5 2.5 0 0 1 .5 8V3A2.5 2.5 0 0 1 3 .5zM4 4h18M4 7.2h11",
+    /* Four rules, the last one short: a paragraph, not a list. */
+    doc: "M1 2h24M1 5.5h24M1 9h24M1 12.5h15",
+    files: "M.5 1.5h8l2 2.5h15v9h-25z",
+    code: "M6.5 1C4.5 1 4.1 2 4.1 3.7S3.5 6.3 1.9 6.9C3.5 7.5 4.1 8.3 4.1 10S4.5 13 6.5 13M19.5 1c2 0 2.4 1 2.4 2.7s.6 2.6 2.2 3.2c-1.6.6-2.2 1.4-2.2 3.1S21.5 13 19.5 13M9 5h8M9 9h5",
+    data: "M.5 1h25v12h-25zM.5 5h25M9 1v12M17.5 1v12",
 } as const;
 
 const quarryCx = PANEL.quarry / 2;
 const quarryStones = [...course(quarryCx, 4, 0), ...course(quarryCx, 3, 1), ...course(quarryCx, 1, 2)];
 /* Read in laying order, four then three then one, so the apex is the prompt: the last thing you put on the pile is
    the thing you actually asked for. It repeats rather than runs out, so a course resized here leaves no blank stone. */
-const PILE = ["file", "data", "notes", "file", "code", "notes", "data", "prompt"] as const satisfies readonly (keyof typeof INSCRIPTIONS)[];
+const PILE = ["files", "code", "doc", "data", "doc", "files", "code", "prompt"] as const satisfies readonly (keyof typeof INSCRIPTIONS)[];
 const quarried = quarryStones.map((stone, index) => ({ ...stone, cut: INSCRIPTIONS[PILE[index % PILE.length]!] }));
 
 /* Temple stones form a three-tier platform and towers. */
@@ -96,7 +102,7 @@ const carriers = roster.slice(1, -1);
 const WALK = { on: -30, off: 450, span: 9.6, from: 30, to: 396 };
 /* The stretch of causeway the terrace takes up. Resting places step over it: reduced motion freezes the crew where
    they stand, and a walker whose resting place is the middle of the panel stands inside you. */
-const TERRACE = { from: 168, to: 252 };
+const TERRACE = { from: 150, to: 270 };
 const room = WALK.to - WALK.from - (TERRACE.to - TERRACE.from);
 const crew = carriers.map((account, index) => {
     /* Two in three walk loaded; the third is going back empty for the next stone. */
@@ -113,9 +119,17 @@ const crew = carriers.map((account, index) => {
     };
 });
 
-/* A head with a mark struck into it needs the room: 4 is a dot, and a brand path inside one is a smudge. It sits
-   higher than a plain head by the difference, so the neck below it is the length it always was. */
-const HEAD = { cy: -40.5, r: 6.5, box: 10 };
+/* Every figure is drawn at one scale, and it is not 1: at the size these were posed at, a 24×24 brand path inside a
+   head came out under twelve screen pixels and read as a smudge. Scaled, a crew figure stands about three and a half
+   stones tall, which is roughly what a person standing next to a block that size actually looks like. Strokes scale
+   with it, so the widths in the stylesheet below are authored small on purpose. */
+const FIG = 1.5;
+/* The head is the only part of a figure carrying information, so it is sized to the mark rather than to the body: the
+   box is 79% of the head's width, which is the most a mark that reaches its own corners (Meta's, Z.ai's) can take
+   without crossing the outline. A head this size needs a torso to match — the crew were posed with one 14 long, and
+   against it the new head read as a sign on a stick — so every figure is now built to the same 56: head to -42, trunk
+   to -24, legs to the ground. */
+const HEAD = { cy: -49, r: 7, box: 11 };
 const MARK_AT = `translate(${-HEAD.box / 2} ${HEAD.cy - HEAD.box / 2}) scale(${n(HEAD.box / 24)})`;
 
 const CONTROL_ICONS: Record<TempleControl["icon"], string> = {
@@ -159,18 +173,18 @@ const glyph = (paths: string) =>
                 <path class="tp-seam" d="M48 174v126M96 208v92M148 248v52" />
 
                 {/* The cutter is the only figure beside an uncut stone: it shapes what you brought before anyone carries it. */}
-                <g class="tp-fig" transform={`translate(226 ${GROUND})`}>
+                <g class="tp-fig" transform={`translate(226 ${GROUND}) scale(${FIG})`}>
                     <circle class="tp-head" cx="0" cy={HEAD.cy} r={HEAD.r} />
                     <g class="tp-brand" transform={MARK_AT}>
                         <path d={PROVIDER_BRAND_PATHS[cutter.logo]} fill-rule={providerFillRule(cutter.logo)} />
                     </g>
-                    <path d="M0-34v14" />
-                    <path d="M0-31-9-37M0-31 6-24" />
-                    {/* Clear of the head, which is wider than a plain one: a mallet resting against the face reads as a wound. */}
+                    <path d="M0-42v20" />
+                    {/* Both arms below the head and the mallet out past them: swung up beside the face it vanishes behind it. */}
+                    <path d="M0-38-15-32M0-38 7-29" />
                     <g class="tp-mallet">
-                        <rect class="tp-load" x="-21" y="-43" width="11" height="8" rx="1" />
+                        <rect class="tp-load" x="-26" y="-36" width="11" height="8" rx="1" />
                     </g>
-                    <path d="M0-20-6 0M0-20 6 0" />
+                    <path d="M0-22-7 0M0-22 7 0" />
                 </g>
 
                 <g class="tp-pile">
@@ -178,7 +192,7 @@ const glyph = (paths: string) =>
                         quarried.map((stone) => (
                             <g>
                                 <rect class="tp-stone" x={stone.x} y={stone.y} width={STONE.w} height={STONE.h} rx="1.5" />
-                                <path class="tp-cut" d={stone.cut} transform={`translate(${stone.x + 12} ${stone.y + 3}) scale(0.583)`} />
+                                <path class="tp-cut" d={stone.cut} transform={`translate(${stone.x + CUT.dx} ${stone.y + CUT.dy})`} />
                             </g>
                         ))
                     }
@@ -219,24 +233,26 @@ const glyph = (paths: string) =>
                                 style={`--from:${worker.from}; --to:${worker.to}; --rest:${worker.rest}; --d:${worker.delay}s`}
                             >
                                 {/* Carrier keeps the stone below the head so the silhouette reads as a person. */}
-                                <g class="tp-fig" transform={`translate(0 ${GROUND})`}>
+                                <g class="tp-fig" transform={`translate(0 ${GROUND}) scale(${FIG})`}>
                                     <circle class="tp-head" cx="0" cy={HEAD.cy} r={HEAD.r} />
                                     <g class="tp-brand" transform={MARK_AT}>
                                         <path d={PROVIDER_BRAND_PATHS[worker.logo]} fill-rule={providerFillRule(worker.logo)} />
                                     </g>
-                                    <path d="M0-34v14" />
-                                    {worker.load ? <path d="M0-31-8-25M0-31 8-25" /> : <path d="M0-31-5-22M0-31 5-22" />}
+                                    {/* A loaded trunk stops at the slab and the legs start under it, so the slab IS the waist. Drawn
+                                        full length it ran straight through the stone, and the arms with it: a box on a skewer. */}
+                                    {worker.load ? <path d="M0-42v11" /> : <path d="M0-42v20" />}
+                                    {worker.load ? <path d="M0-38-10-31M0-38 10-31" /> : <path d="M0-38-6-28M0-38 6-28" />}
                                     {
                                         worker.load && (
                                             <Fragment>
-                                                <rect class="tp-load" x="-10" y="-28" width="20" height="9" rx="1.5" />
+                                                <rect class="tp-load" x="-10" y="-31" width="20" height="9" rx="1.5" />
                                                 {/* Two rules on the load: what is being carried is the inscribed stone, not a crate. */}
-                                                <path class="tp-load-rule" d="M-6-25.2h12M-6-22.4h7.5" />
+                                                <path class="tp-load-rule" d="M-6-28.2h12M-6-25.4h7.5" />
                                             </Fragment>
                                         )
                                     }
-                                    <g class="tp-legs tp-legs-a"><path d="M0-20-6 0M0-20 6 0" /></g>
-                                    <g class="tp-legs tp-legs-b"><path d="M0-20-2 0M0-20 5 0" /></g>
+                                    <g class="tp-legs tp-legs-a"><path d="M0-22-7 0M0-22 7 0" /></g>
+                                    <g class="tp-legs tp-legs-b"><path d="M0-22-2 0M0-22 6 0" /></g>
                                 </g>
                             </g>
                         ))
@@ -245,11 +261,12 @@ const glyph = (paths: string) =>
 
                 {/* The warm ring identifies the watching position. */}
                 <g class="tp-you" transform={`translate(${PANEL.site / 2} ${GROUND + 16})`}>
-                    <ellipse class="tp-lantern" cx="0" cy="-30" rx="86" ry="62" fill="url(#tp-halo)" />
-                    <path class="tp-dais" d="M-30 0h60v7h-60zM-38 7h76v8h-76z" />
+                    {/* Ring and dais carry the figure's scale: a terrace narrower than the person on it reads as a stool. */}
+                    <ellipse class="tp-lantern" cx="0" cy="-38" rx="108" ry="76" fill="url(#tp-halo)" />
+                    <path class="tp-dais" d="M-44 0h88v8h-88zM-54 8h108v9h-108z" />
                     {/* Your head matches the crew's in size and stays unfilled: the one figure in the yard wearing no mark. */}
-                    <g class="tp-fig tp-fig-you">
-                        <circle cx="0" cy="-49" r={HEAD.r} />
+                    <g class="tp-fig tp-fig-you" transform={`scale(${FIG})`}>
+                        <circle cx="0" cy={HEAD.cy} r={HEAD.r} />
                         <path d="M0-42v18" />
                         <path d="M0-38 15-45" />
                         <path d="M0-35-12-30" />
@@ -291,16 +308,16 @@ const glyph = (paths: string) =>
                 {/* The setter lifts the arriving stone without moving its ground position. */}
                 <g transform={`translate(44 ${GROUND})`}>
                     <g class="tp-setter">
-                        <g class="tp-fig">
+                        <g class="tp-fig" transform={`scale(${FIG})`}>
                             <circle class="tp-head" cx="0" cy={HEAD.cy} r={HEAD.r} />
                             <g class="tp-brand" transform={MARK_AT}>
                                 <path d={PROVIDER_BRAND_PATHS[setter.logo]} fill-rule={providerFillRule(setter.logo)} />
                             </g>
-                            <path d="M0-34v14" />
-                            <path d="M0-31-8-25M0-31 8-25" />
-                            <rect class="tp-load" x="-10" y="-28" width="20" height="9" rx="1.5" />
-                            <path class="tp-load-rule" d="M-6-25.2h12M-6-22.4h7.5" />
-                            <path d="M0-20-6 0M0-20 6 0" />
+                            <path d="M0-42v11" />
+                            <path d="M0-38-10-31M0-38 10-31" />
+                            <rect class="tp-load" x="-10" y="-31" width="20" height="9" rx="1.5" />
+                            <path class="tp-load-rule" d="M-6-28.2h12M-6-25.4h7.5" />
+                            <path d="M0-22-7 0M0-22 7 0" />
                         </g>
                     </g>
                 </g>
@@ -421,21 +438,24 @@ const glyph = (paths: string) =>
         stroke: var(--color-line-strong);
         stroke-width: 1;
     }
-    /* An inscription is cut into the face, so it is stroked; a filled mark would sit on the stone like a sticker. */
+    /* An inscription is cut into the face, so it is stroked; a filled mark would sit on the stone like a sticker. Its
+       width is in stone units — the glyph is drawn at the stone's own scale — and sits a third above the stone's own
+       outline, which is what makes the cut read as deeper than the edge it is inside. */
     .tp-cut {
         fill: none;
         stroke: var(--color-gold);
-        stroke-width: 2;
+        stroke-width: 1.3;
         stroke-linecap: round;
         stroke-linejoin: round;
-        opacity: 0.72;
+        opacity: 0.78;
     }
 
-    /* Figures use one rounded stroke and no fill. */
+    /* Figures use one rounded stroke and no fill. Every width in this block is multiplied by the figure scale in the
+       frontmatter, so they are authored below the weight they render at. */
     .tp-fig {
         fill: none;
         stroke: var(--color-gold);
-        stroke-width: 2;
+        stroke-width: 1.5;
         stroke-linecap: round;
         stroke-linejoin: round;
     }
@@ -467,12 +487,12 @@ const glyph = (paths: string) =>
     /* The viewer figure uses the warm accent. */
     .tp-fig-you {
         stroke: var(--color-primary-400);
-        stroke-width: 2.3;
+        stroke-width: 1.75;
     }
     .tp-plan {
         fill: var(--role-figure-halo);
         stroke: var(--color-primary-400);
-        stroke-width: 1.6;
+        stroke-width: 1.2;
     }
     .tp-dais {
         fill: url(#tp-face);
@@ -571,8 +591,10 @@ const glyph = (paths: string) =>
         .tp-stage-site .tp-panel {
             aspect-ratio: 12 / 5;
         }
+        /* `slice` crops this panel from the top, and at 37/20 the cut fell through the lotus — the one thing on the
+           summit the whole build animates towards. 5/3 shows the finial with about ten units of sky above it. */
         .tp-stage-temple .tp-panel {
-            aspect-ratio: 37 / 20;
+            aspect-ratio: 5 / 3;
         }
         .tp-stage-site,
         .tp-stage-temple {
@@ -702,7 +724,7 @@ const glyph = (paths: string) =>
             transform: translate(0, 0);
         }
         78% {
-            transform: translate(2px, 6px);
+            transform: translate(1.2px, 3.6px);
         }
     }
 
