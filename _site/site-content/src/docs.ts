@@ -29,14 +29,14 @@ export const docsBook: Book = {
                         {
                             // Before Architecture on purpose: that page is a system map, and this is the vocabulary it
                             // is drawn in. Owns "persona" and "project", which no other page defined.
-                            id: "anatomy",
-                            title: "Anatomy",
+                            id: "worksite",
+                            title: "The worksite",
                             blurb: "Machine, sandbox, persona and project, in one picture",
                             meta: {
-                                title: "Anatomy · intentic docs",
+                                title: "The worksite · intentic docs",
                                 description:
-                                    "The four words these docs assume: the machine your work runs on, a sandbox, the persona that scopes a turn, and the projects agents reach for.",
-                                datePublished: "2026-09-14",
+                                    "The four words these docs assume, drawn as a building camp: the machine your work runs on, a sandbox, the persona that scopes a turn, and the projects agents are put on.",
+                                datePublished: "2026-09-15",
                             },
                         },
                         {

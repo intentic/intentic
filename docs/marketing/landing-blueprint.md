@@ -129,14 +129,20 @@ mechanisms (branches, checks, terminals) named to make sense, which is exactly t
 first-time reader does not have. The building site says the same thing with three nouns a stranger
 already owns. If this band is ever redrawn, redraw the temple.
 
-**The octopus lives in the docs, and only there (2026-09-14, recorded decision).** `/docs/anatomy/` explains
-machine, sandbox, persona and project as one body whose arms have brains of their own, and that is not a
-breach of the rule above. The rule governs the page that has to land ONE claim on a stranger, where a second
-metaphor costs the whole argument. A docs page is read by somebody who already bought the claim and now has
-four nouns to hold, two of which (**persona**, **project**) were defined nowhere on the site before that page
-existed; there a second picture costs a paragraph and buys the vocabulary every later page spends. Both
-directions of the mistake are regressions: do not promote the octopus onto this page, and do not delete it
-from the docs as a rule violation. If a picture of those four nouns is ever wanted *here*, redraw the temple.
+**The camp lives in the docs, and only there (2026-09-15, recorded decision).** `/docs/worksite/` explains
+machine, sandbox, persona and project as a building camp: the camp is the machine, each worker in it is a
+sandbox, the board hanging in a worker's bay is its persona, and the buildings going up beyond the wall are
+the projects. Two of those four (**persona**, **project**) are defined nowhere else on the site, which is what
+the page is for. It was drawn as an octopus for a day — one body whose arms have brains of their own — and
+that was a second metaphor, allowed on the argument that a docs reader has already bought the claim and can
+afford the switch. The camp does not ask for the switch: it is this page's own building site at closer range,
+so a reader arriving from `#build` meets the same ground, the same stone and the same crew. Both directions of
+the old mistake are still regressions: do not promote the camp onto this page, which carries the temple and
+has no room for four definitions, and do not delete it from the docs as a rule violation. If a picture of
+those four nouns is ever wanted *here*, redraw the temple. Both halves are read by
+`_tools/checks/metaphor-home.mjs`, which finds the picture by its shape rather than its path and refuses a
+home page that reaches it, a docs shelf that does not, and a second module defining the same four nouns —
+this paragraph stood alone for a day and was edited on the first turn that touched the drawing.
 
 ## Where the page lives
 

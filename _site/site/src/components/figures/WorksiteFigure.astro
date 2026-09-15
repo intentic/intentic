@@ -1,0 +1,667 @@
+---
+import { worksiteScene, type WorksitePart } from "@intentic/site-content/worksite";
+
+/* The relief on /docs/worksite/: one walled camp, a bay and a worker for each sandbox, a board on each bay, buildings
+   going up beyond the wall. Geometry is COMPUTED from a stone grid and a bay pitch, not drawn by hand, so a bay added
+   or a course laid carries its worker, its board, its report line and its label pin with it. The words are
+   worksite.ts's. Highlighting is CSS only (`:has`), so a browser without it shows the whole relief at rest rather than
+   a figure that needs a script to read. */
+
+const scene = worksiteScene;
+
+type Pt = readonly [number, number];
+
+/* `top` crops the sky the drawing does not use; every coordinate below is written in the uncropped box. */
+const VIEW = { top: 56, w: 760, h: 494 };
+/* Two ground lines, and the gap between them is the whole depth of the drawing: buildings stand on the far one. */
+const BACK = 300;
+const GROUND = 476;
+/* The wall starts inside the frame and leaves through it: a camp that ended twice would be counting its bays. */
+const WALL = { from: 70, top: 328, base: 356 };
+const GATE = { from: 346, to: 414 };
+
+/** Two decimals: enough for a 760-unit box, and it keeps the emitted paths from doubling in size. */
+const n = (v: number): number => Math.round(v * 100) / 100;
+
+/* One stone grid for every building, so two at different heights still read as one site rather than two drawings. */
+const STONE = { w: 30, h: 14 };
+const PITCH = { x: 32, y: 16 };
+
+/** One course of `count` stones, centred on `cx`, `row` courses above the far ground. */
+const course = (cx: number, count: number, row: number) => {
+    const y = BACK - STONE.h - row * PITCH.y;
+    const x0 = cx - (count * PITCH.x) / 2 + (PITCH.x - STONE.w) / 2;
+    return Array.from({ length: count }, (_, i) => ({ x: n(x0 + i * PITCH.x), y }));
+};
+
+interface Site {
+    cx: number;
+    /** Stones per course, ground up. An empty list is a plot pegged out and not started. */
+    courses: readonly number[];
+    scaffold?: "left" | "right";
+}
+
+/* Four plots for three workers, and the last two have nobody on them: a project nobody has been put on is the
+   ordinary case, and a drawing where every project is worked would be saying otherwise. */
+const plots: Site[] = [
+    { cx: 210, courses: [3, 3, 2, 2, 2, 1], scaffold: "right" },
+    { cx: 420, courses: [4, 4, 3, 3, 2, 2, 1, 1], scaffold: "left" },
+    { cx: 558, courses: [] },
+    { cx: 672, courses: [3, 3, 2] },
+];
+
+/** Footprint, from the widest course a plot has or will have. */
+const widthOf = (plot: Site): number => Math.max(...plot.courses, 3) * PITCH.x;
+const topOf = (plot: Site): number => BACK - STONE.h - Math.max(plot.courses.length - 1, 0) * PITCH.y;
+
+/** Two poles, their ledgers and a brace up one flank, standing against the work and one lift above it. */
+const scaffoldOf = (plot: Site): { frame: string; deck: string } | undefined => {
+    if (!plot.scaffold) {
+        return undefined;
+    }
+    const side = plot.scaffold === "left" ? -1 : 1;
+    const near = plot.cx + side * (widthOf(plot) / 2 + 5);
+    const far = near + side * 18;
+    const top = topOf(plot) - 9;
+    const lifts = Math.max(2, Math.round((BACK - top) / 26));
+    const ledgers = Array.from({ length: lifts }, (_, i) => {
+        const y = n(BACK - ((BACK - top) * i) / lifts);
+        return `M${n(near)} ${y}L${n(far)} ${y}`;
+    });
+    return {
+        frame: `M${n(near)} ${BACK}V${n(top)}M${n(far)} ${BACK}V${n(top)}${ledgers.join("")}M${n(near)} ${BACK}L${n(far)} ${n(BACK - (BACK - top) / lifts)}`,
+        /* The plank across the top lift is what separates scaffolding from a ladder leaning on nothing. */
+        deck: `M${n(Math.min(near, far) - 4)} ${n(top)}h${n(Math.abs(far - near) + 8)}`,
+    };
+};
+
+const built = plots.map((plot) => ({
+    stones: plot.courses.flatMap((count, row) => course(plot.cx, count, row)),
+    /* A plot not started is still pegged out: the outline of its first course, with nothing standing in it. */
+    pegged: plot.courses.length === 0 ? course(plot.cx, 3, 0) : [],
+    scaffold: scaffoldOf(plot),
+    footing: `M${n(plot.cx - widthOf(plot) / 2 - 6)} ${BACK}h${n(widthOf(plot) + 12)}`,
+}));
+
+/* The yard, divided: one bay per worker, all of one pitch, and nothing in one bay reaches into the next. */
+const BAY = { from: 210, to: 714, beam: 372 };
+const BOARD = { w: 40, h: 30, dx: 16, y: 386 };
+const CHEST = { w: 30, h: 20, dx: -72 };
+
+interface Station {
+    /** Tools this shift's assignment put on the belt; a 0 is one it left off, drawn as an empty peg. */
+    live: readonly (0 | 1)[];
+    /** Index into `plots`: the building this worker reports to. Two stations may name the same one. */
+    on: number;
+}
+
+const crew: Station[] = [
+    { live: [1, 1, 0, 1, 1], on: 0 },
+    { live: [1, 0, 1, 1, 1], on: 1 },
+    { live: [0, 1, 1, 0, 1], on: 1 },
+];
+
+const bayWidth = (BAY.to - BAY.from) / crew.length;
+
+const stations = crew.map((station, index) => {
+    const cx = BAY.from + bayWidth * (index + 0.5);
+    const board = { x: n(cx + BOARD.dx), y: BOARD.y };
+    const plot = plots[station.on]!;
+    /* The report line meets the near foot of the building, so it never crosses the stones it is pointing at. */
+    const toward = Math.sign(plot.cx - (board.x + BOARD.w / 2)) || 1;
+    const foot: Pt = [n(plot.cx - toward * (widthOf(plot) / 2 - 5)), BACK];
+    return {
+        left: n(cx - bayWidth / 2),
+        right: n(cx + bayWidth / 2),
+        worker: n(cx - 14),
+        chest: n(cx + CHEST.dx),
+        board,
+        pegs: station.live.map((live, i) => ({ cx: n(board.x + 7 + i * 6.5), cy: board.y + BOARD.h - 8, live })),
+        rules: `M${n(board.x + 6)} ${board.y + 9}h${BOARD.w - 12}M${n(board.x + 6)} ${board.y + 15}h${BOARD.w - 19}`,
+        reports: `M${n(board.x + BOARD.w / 2)} ${board.y}L${foot[0]} ${foot[1]}`,
+        foot,
+        /* Seconds of offset on the hammer, so no two workers strike together. */
+        delay: n(-1.7 * index),
+    };
+});
+
+/* The fire, standing in the yard past the last bay: the one thing in the camp that belongs to no worker. */
+const BRAZIER = { cx: 736, bowl: GROUND - 26 };
+
+/** A pin naming one part: what it points at, where its plate sits, and which way the plate hangs off the leader. */
+interface Pin {
+    part: WorksitePart;
+    anchor: Pt;
+    at: Pt;
+    align: "start" | "end" | "center";
+}
+
+const pinnedTo: Record<WorksitePart["id"], Omit<Pin, "part">> = {
+    /* On the yard floor, which is the part of the camp every bay stands on. */
+    machine: { anchor: [500, GROUND], at: [500, 516], align: "center" },
+    /* The worker's plate sits below the board's, so the two leaders run in their own lanes instead of crossing. */
+    sandbox: { anchor: [stations[0]!.worker, GROUND - 38], at: [180, 452], align: "end" },
+    persona: { anchor: [stations[0]!.board.x, BOARD.y + 13], at: [180, 392], align: "end" },
+    project: { anchor: [plots[1]!.cx, topOf(plots[1]!)], at: [420, 96], align: "center" },
+};
+
+const pins: Pin[] = scene.parts.map((part) => ({ part, ...pinnedTo[part.id] }));
+
+/** Leader: a hairline from the thing to the plate, its last stretch horizontal so it meets the plate square on. */
+const leader = (pin: Pin): string => {
+    const [ax, ay] = pin.anchor;
+    const [px, py] = pin.at;
+    if (pin.align === "center") {
+        return `M${n(ax)} ${n(ay)}L${px} ${py}`;
+    }
+    const turn = pin.align === "end" ? px + 18 : px - 18;
+    return `M${n(ax)} ${n(ay)}L${n(turn)} ${py}L${px} ${py}`;
+};
+
+/* Plate positions are percentages of the CROPPED box, or a plate and the leader pointing at it drift apart. */
+const leftPct = (x: number): string => `${n((x / VIEW.w) * 100)}%`;
+const topPct = (y: number): string => `${n(((y - VIEW.top) / VIEW.h) * 100)}%`;
+
+/* The highlight table, emitted from the parts list rather than written out four times: a fifth part would otherwise
+   light nothing and no test would notice. `:has` is the whole mechanism, so a browser without it simply never dims.
+   Pointer and focus are transient; a tapped plate (`:target`) is sticky and steps aside for them, because two parts
+   lit at once is the one state that makes the drawing say nothing. */
+const HOT = `:is(:hover, :focus-visible, :focus-within)`;
+const lit = (id: string, tail: string, body: string): string =>
+    `${[`.ws:has(.ws-t[data-part="${id}"]${HOT})`, `.ws:not(:has(.ws-t${HOT})):has(.ws-t[data-part="${id}"]:target)`]
+        .map((scope) => `${scope} ${tail}`)
+        .join(",")}{${body}}`;
+
+const highlightCss = [
+    `.ws:has(.ws-t:is(:hover, :focus-visible, :focus-within, :target)) .ws-art{--ink:var(--color-line-bright);--face:url(#ws-quiet)}`,
+    ...scene.parts.flatMap((part) => [
+        lit(part.id, `.ws-p-${part.id}`, `--ink:var(--color-primary-400);--face:url(#ws-lit);filter:drop-shadow(0 0 9px var(--role-figure-halo))`),
+        lit(part.id, `:is(.ws-pin,.ws-def)[data-part="${part.id}"]`, `--ws-edge:var(--color-primary-400);--ws-word:var(--color-primary-300)`),
+        lit(part.id, `.ws-lead-${part.id} .ws-lead-line`, `stroke:var(--color-primary-400)`),
+    ]),
+].join("");
+---
+
+{/* Plain divs, not <figure>/<figcaption>/<article>. The markdown mirror the site emits for machines renders a
+    figcaption as one italic run-on, and it finds a page's readable region by matching the outermost <article>, which
+    a nested one inside a docs page is one edit away from cutting short. The drawing is labelled on the <svg> itself. */}
+<div class="ws">
+    <div class="ws-stage">
+        {/* `slice` is inert while the height is intrinsic; it only bites in the narrow rule, which crops the empty
+            strip the camp plate used to stand in. */}
+        <svg class="ws-art" viewBox={`0 ${VIEW.top} ${VIEW.w} ${VIEW.h}`} preserveAspectRatio="xMidYMin slice" role="img" aria-label={scene.label}>
+            <defs>
+                <linearGradient id="ws-face" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="var(--color-gold)" stop-opacity="0.26" />
+                    <stop offset="1" stop-color="var(--color-gold)" stop-opacity="0.07" />
+                </linearGradient>
+                <linearGradient id="ws-lit" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="var(--color-primary-400)" stop-opacity="0.3" />
+                    <stop offset="1" stop-color="var(--color-primary-500)" stop-opacity="0.08" />
+                </linearGradient>
+                <linearGradient id="ws-quiet" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="var(--color-gold)" stop-opacity="0.1" />
+                    <stop offset="1" stop-color="var(--color-gold)" stop-opacity="0.03" />
+                </linearGradient>
+                <radialGradient id="ws-glow">
+                    <stop offset="0" stop-color="var(--color-primary-500)" stop-opacity="0.38" />
+                    <stop offset="0.6" stop-color="var(--color-primary-500)" stop-opacity="0.1" />
+                    <stop offset="1" stop-color="var(--color-primary-500)" stop-opacity="0" />
+                </radialGradient>
+            </defs>
+
+            {/* The far ground, and the buildings standing on it. */}
+            <g class="ws-part ws-p-project">
+                <path class="ws-back-line" d={`M0 ${BACK}h${VIEW.w}`} />
+                {
+                    built.map((plot) => (
+                        <g class="ws-plot">
+                            <path class="ws-footing" d={plot.footing} />
+                            {
+                                plot.scaffold && (
+                                    <Fragment>
+                                        <path class="ws-scaffold" d={plot.scaffold.frame} />
+                                        <path class="ws-deck" d={plot.scaffold.deck} />
+                                    </Fragment>
+                                )
+                            }
+                            {plot.pegged.map((stone) => <rect class="ws-peg-stone" x={stone.x} y={stone.y} width={STONE.w} height={STONE.h} rx="1.5" />)}
+                            {plot.stones.map((stone) => <rect class="ws-stone" x={stone.x} y={stone.y} width={STONE.w} height={STONE.h} rx="1.5" />)}
+                        </g>
+                    ))
+                }
+            </g>
+
+            {/* The camp: the wall it is bounded by, its return, the gate through it, the yard floor and the fire. */}
+            <g class="ws-part ws-p-machine">
+                {/* The opening first, in the dark the plates use, so the gate reads as a way through and not a table. */}
+                <rect class="ws-gate-way" x={GATE.from} y={WALL.top - 14} width={GATE.to - GATE.from} height={WALL.base - WALL.top + 14} />
+                <path class="ws-wall" d={`M${WALL.from} ${WALL.top}H${GATE.from}V${WALL.base}H${WALL.from}Z`} />
+                <path class="ws-wall" d={`M${GATE.to} ${WALL.top}H${VIEW.w}V${WALL.base}H${GATE.to}Z`} />
+                <path
+                    class="ws-wall-joint"
+                    d={Array.from({ length: 19 }, (_, i) => WALL.from + 4 + i * 38)
+                        .filter((x) => x < GATE.from - 6 || x > GATE.to + 6)
+                        .map((x) => `M${x} ${WALL.top}v${WALL.base - WALL.top}`)
+                        .join("")}
+                />
+                {/* The wall turns toward the viewer where it ends, which is what makes the yard a yard. */}
+                <path class="ws-wall-return" d={`M${WALL.from} ${WALL.top}L30 448M${WALL.from} ${WALL.base}L30 ${GROUND - 6}`} />
+                <path
+                    class="ws-gate-post"
+                    d={`M${GATE.from - 9} ${WALL.top - 14}h9v${WALL.base - WALL.top + 14}h-9Z M${GATE.to} ${WALL.top - 14}h9v${WALL.base - WALL.top + 14}h-9Z`}
+                />
+                <path class="ws-gate-lintel" d={`M${GATE.from - 13} ${WALL.top - 22}H${GATE.to + 13}v8H${GATE.from - 13}Z`} />
+
+                <path class="ws-ground-line" d={`M0 ${GROUND}h${VIEW.w}`} />
+                <path class="ws-ground-joint" d={Array.from({ length: 9 }, (_, i) => `M${40 + i * 84} ${GROUND}v9`).join("")} />
+
+                {/* The fire: the one thing in the yard every bay draws on and none of them owns. */}
+                <ellipse class="ws-fire" cx={BRAZIER.cx} cy={BRAZIER.bowl} rx="44" ry="32" fill="url(#ws-glow)" />
+                <path class="ws-brazier" d={`M${BRAZIER.cx - 16} ${BRAZIER.bowl}h32l-6 12h-20Z`} />
+                <path class="ws-brazier-legs" d={`M${BRAZIER.cx - 10} ${BRAZIER.bowl + 12}L${BRAZIER.cx - 14} ${GROUND}M${BRAZIER.cx + 10} ${BRAZIER.bowl + 12}L${BRAZIER.cx + 14} ${GROUND}M${BRAZIER.cx} ${BRAZIER.bowl + 12}V${GROUND}`} />
+            </g>
+
+            {/* One bay per sandbox: its own frame, its own worker, its own locked kit. */}
+            <g class="ws-part ws-p-sandbox">
+                {
+                    stations.map((station) => (
+                        <g class="ws-bay">
+                            <rect class="ws-bay-floor" x={station.left} y={BAY.beam} width={n(bayWidth)} height={GROUND - BAY.beam} />
+                            <path class="ws-bay-frame" d={`M${station.left} ${GROUND}V${BAY.beam}H${station.right}V${GROUND}`} />
+                            <rect class="ws-chest" x={station.chest} y={GROUND - CHEST.h} width={CHEST.w} height={CHEST.h} rx="1.5" />
+                            <path class="ws-chest-band" d={`M${station.chest} ${GROUND - CHEST.h + 7}h${CHEST.w}`} />
+                            <circle class="ws-chest-lock" cx={n(station.chest + CHEST.w / 2)} cy={GROUND - CHEST.h + 13} r="2.4" />
+                            {/* Head, trunk, a steady arm and a hammer arm that swings; the legs carry no motion. */}
+                            <g class="ws-fig" transform={`translate(${station.worker} ${GROUND})`}>
+                                <circle cx="0" cy="-38" r="4" />
+                                <path d="M0-34v14" />
+                                <path d="M0-31-9-24" />
+                                <g class="ws-hammer" style={`--d:${station.delay}s`}>
+                                    <path d="M0-31 11-33" />
+                                    <path class="ws-hammer-head" d="M11-36v6" />
+                                </g>
+                                <path d="M0-20-6 0M0-20 6 0" />
+                            </g>
+                        </g>
+                    ))
+                }
+            </g>
+
+            {/* One board per bay: the trade written on it, the tools it carries, and the building it reports to. */}
+            <g class="ws-part ws-p-persona">
+                {
+                    stations.map((station) => (
+                        <g class="ws-order">
+                            <path class="ws-report" d={station.reports} />
+                            <circle class="ws-report-dot" cx={station.foot[0]} cy={station.foot[1]} r="3" />
+                            <path class="ws-hanger" d={`M${n(station.board.x + BOARD.w / 2)} ${BAY.beam}V${station.board.y}`} />
+                            <rect class="ws-board" x={station.board.x} y={station.board.y} width={BOARD.w} height={BOARD.h} rx="1.5" />
+                            <path class="ws-board-rule" d={station.rules} />
+                            {
+                                station.pegs.map((peg) => (
+                                    <circle class:list={["ws-peg", peg.live === 1 && "ws-peg-on"]} cx={peg.cx} cy={peg.cy} r="2.3" />
+                                ))
+                            }
+                        </g>
+                    ))
+                }
+            </g>
+
+            {/* Leaders, drawn last so nothing crosses over them. */}
+            <g class="ws-leads">
+                {
+                    pins.map((pin) => (
+                        <g class={`ws-lead ws-lead-${pin.part.id}`}>
+                            <path class="ws-lead-line" d={leader(pin)} />
+                            <circle class="ws-lead-dot" cx={n(pin.anchor[0])} cy={n(pin.anchor[1])} r="3.4" />
+                        </g>
+                    ))
+                }
+            </g>
+        </svg>
+
+        {/* Real links, over the drawing rather than inside it: they carry the words, and tapping one opens its card. */}
+        {
+            pins.map((pin) => (
+                <a
+                    class:list={["ws-t", "ws-pin", `ws-pin-${pin.align}`]}
+                    data-part={pin.part.id}
+                    href={`#ws-${pin.part.id}`}
+                    style={`left:${leftPct(pin.at[0])};top:${topPct(pin.at[1])}`}
+                >
+                    {pin.part.word}
+                </a>
+            ))
+        }
+    </div>
+
+    <div class="ws-defs">
+        {
+            scene.parts.map((part) => (
+                <div class="ws-t ws-def" data-part={part.id} id={`ws-${part.id}`}>
+                    {/* The gloss is a sibling of the heading, not a span inside it: in the markdown mirror an inline
+                        one reads as part of the heading ("### The machine the camp"). */}
+                    <div class="ws-def-head">
+                        <h3 class="ws-def-word">{part.word}</h3>
+                        <p class="ws-def-drawn">{part.drawnAs}</p>
+                    </div>
+                    <p class="ws-def-gloss">{part.gloss}</p>
+                    <p class="ws-def-literal">{part.literal}</p>
+                    <ul class="ws-holds">{part.holds.map((held) => <li>{held}</li>)}</ul>
+                    {/* In its own paragraph for the same reason: a bare link after a list is glued to the last item. */}
+                    <p class="ws-def-link"><a class="ws-def-more" href={part.href}>{part.page}</a></p>
+                </div>
+            ))
+        }
+    </div>
+</div>
+
+<style is:inline set:html={highlightCss}></style>
+
+<style>
+    /* The figure sizes its own parts off its width, not the viewport: it sits in a docs column beside a rail. */
+    .ws {
+        container-type: inline-size;
+    }
+
+    .ws-stage {
+        position: relative;
+    }
+    .ws-art {
+        display: block;
+        width: 100%;
+        height: auto;
+        /* Both are inherited by every part below, which is how one rule dims the relief and another relights one bay. */
+        --ink: var(--color-gold);
+        --face: url(#ws-face);
+    }
+    .ws-part {
+        transition: filter 0.35s ease;
+    }
+
+    /* One stroke vocabulary for the whole carving. */
+    .ws-ground-line {
+        fill: none;
+        stroke: var(--color-line-bright);
+        stroke-width: 1.2;
+    }
+    .ws-back-line,
+    .ws-ground-joint,
+    .ws-footing {
+        fill: none;
+        stroke: var(--color-line);
+        stroke-width: 1;
+    }
+    /* The way through the wall, in the plate's own dark: an opening drawn in the stone's face is a doorway on a box. */
+    .ws-gate-way {
+        fill: var(--role-figure-doorway);
+        stroke: var(--ink);
+        stroke-width: 1;
+        opacity: 0.9;
+    }
+    .ws-wall,
+    .ws-gate-post,
+    .ws-gate-lintel,
+    .ws-brazier,
+    .ws-stone,
+    .ws-chest,
+    .ws-board {
+        fill: var(--face);
+        stroke: var(--ink);
+        stroke-width: 1.4;
+        stroke-linejoin: round;
+    }
+    .ws-wall-joint,
+    .ws-wall-return,
+    .ws-brazier-legs,
+    .ws-chest-band {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 1;
+        opacity: 0.55;
+    }
+    .ws-chest-lock {
+        fill: var(--ink);
+        opacity: 0.8;
+    }
+    .ws-scaffold {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 1.2;
+        stroke-linecap: round;
+        opacity: 0.75;
+    }
+    .ws-deck {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 3.4;
+        opacity: 0.85;
+    }
+    /* A plot pegged out and not begun: the first course as an outline, with nothing standing in it. */
+    .ws-peg-stone {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 1.1;
+        stroke-dasharray: 4 4;
+        opacity: 0.6;
+    }
+    .ws-fire {
+        opacity: 0.85;
+    }
+
+    /* A bay is a frame and a patch of floor, and nothing in it reaches into the next one. */
+    .ws-bay-floor {
+        fill: var(--color-overlay);
+        opacity: 0.5;
+    }
+    .ws-bay-frame {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 1.4;
+        stroke-linejoin: round;
+        opacity: 0.85;
+    }
+    .ws-fig {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+    .ws-hammer-head {
+        stroke-width: 3.4;
+    }
+
+    .ws-hanger {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 1;
+        opacity: 0.6;
+    }
+    .ws-board-rule {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 1.1;
+        stroke-linecap: round;
+        opacity: 0.5;
+    }
+    /* A tool the assignment mounted is filled; one it left off is the empty peg beside it, because nothing here is
+       switched off somewhere the agent can see. */
+    .ws-peg {
+        fill: var(--color-canvas);
+        stroke: var(--ink);
+        stroke-width: 1.1;
+        opacity: 0.5;
+    }
+    .ws-peg-on {
+        fill: var(--ink);
+        opacity: 1;
+    }
+    .ws-report {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 1.1;
+        stroke-dasharray: 5 7;
+        opacity: 0.55;
+    }
+    .ws-report-dot {
+        fill: var(--ink);
+        opacity: 0.7;
+    }
+
+    .ws-lead-line {
+        fill: none;
+        stroke: var(--color-line-bright);
+        stroke-width: 1;
+        transition: stroke 0.3s ease;
+    }
+    .ws-lead-dot {
+        fill: var(--color-gold);
+    }
+
+    /* The hammer taps. Nothing else in the yard moves, because four moving figures read as a cartoon. */
+    .ws-hammer {
+        transform-box: fill-box;
+        transform-origin: 0% 50%;
+        animation: ws-tap 2.4s ease-in-out infinite;
+        animation-delay: var(--d);
+    }
+    @keyframes ws-tap {
+        0%,
+        62%,
+        100% {
+            transform: rotate(0deg);
+        }
+        76% {
+            transform: rotate(22deg);
+        }
+    }
+
+    /* A label plate, sitting on the drawing at a point the frontmatter computed. */
+    .ws-pin {
+        position: absolute;
+        display: block;
+        border: 1px solid var(--ws-edge, var(--color-line-strong));
+        background: var(--role-figure-panel);
+        padding: 0.3rem 0.6rem;
+        font-family: var(--font-mark);
+        font-size: 0.8125rem;
+        font-weight: var(--font-weight-semibold);
+        line-height: 1.1;
+        white-space: nowrap;
+        color: var(--ws-word, var(--color-content));
+        text-decoration: none;
+        transition:
+            border-color 0.3s ease,
+            color 0.3s ease;
+    }
+    .ws-pin-start {
+        transform: translate(0, -50%);
+    }
+    .ws-pin-end {
+        transform: translate(-100%, -50%);
+    }
+    .ws-pin-center {
+        transform: translate(-50%, -50%);
+    }
+
+    /* The four definitions. Always present and always readable: the highlight is an aid, never the way in. */
+    .ws-defs {
+        display: grid;
+        gap: 0.75rem;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 1.5rem;
+    }
+    .ws-def {
+        border: 1px solid var(--ws-edge, var(--color-line));
+        background: var(--color-card);
+        padding: 1.1rem 1.2rem 1.2rem;
+        transition: border-color 0.3s ease;
+    }
+    .ws-def-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.2rem 0.6rem;
+    }
+    .ws-def-word {
+        font-family: var(--font-mark);
+        font-size: 1.0625rem;
+        font-weight: var(--font-weight-semibold);
+        line-height: 1.2;
+        color: var(--ws-word, var(--color-content));
+        transition: color 0.3s ease;
+    }
+    .ws-def-drawn {
+        font-family: var(--font-sans);
+        font-size: 0.75rem;
+        font-weight: var(--font-weight-normal);
+        letter-spacing: 0.02em;
+        color: var(--color-gold);
+    }
+    .ws-def-gloss {
+        margin-top: 0.7rem;
+        border-left: 2px solid var(--color-line-strong);
+        padding-left: 0.7rem;
+        font-size: 0.875rem;
+        line-height: 1.5;
+        color: var(--color-gold-bright);
+    }
+    .ws-def-literal {
+        margin-top: 0.8rem;
+        font-size: 0.875rem;
+        line-height: 1.6;
+        color: var(--color-muted);
+    }
+    .ws-holds {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-top: 0.9rem;
+        padding: 0;
+        list-style: none;
+    }
+    .ws-holds li {
+        border: 1px solid var(--color-line);
+        background: var(--color-overlay);
+        padding: 0.15rem 0.5rem;
+        font-size: var(--text-2xs);
+        line-height: 1.4;
+        color: var(--color-subtle);
+    }
+    .ws-def-link {
+        margin-top: 0.9rem;
+    }
+    .ws-def-more {
+        font-size: 0.8125rem;
+        color: var(--color-link);
+    }
+    .ws-def-more::after {
+        content: " →";
+    }
+    .ws-def-more:hover {
+        text-decoration: underline;
+    }
+
+    /* Narrow: the plates come off the drawing, which has no room for them, the strip below the yard is cropped away,
+       and the cards stack. The drawing is decorative at this width; every word it labels is in the cards. */
+    @container (max-width: 40rem) {
+        .ws-pin,
+        .ws-leads {
+            display: none;
+        }
+        .ws-art {
+            aspect-ratio: 760 / 436;
+        }
+        .ws-defs {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .ws-hammer {
+            animation: none;
+        }
+    }
+</style>

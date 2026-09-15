@@ -25,12 +25,13 @@ The public website at intentic.dev: an Astro build, all copy imported rather tha
   home page and a feature page carry, so it takes its arrangement from a `@container` query rather than the
   window: wide in the home page's 1296px plate, stacked in a column half that, from the same markup. Its words
   are `site-content/automate.ts`; its motion is one gold pulse a beat, and none under `prefers-reduced-motion`.
-- [src/components/figures/AnatomyFigure.astro](src/components/figures/AnatomyFigure.astro): the relief on
-  `/docs/anatomy/` — one body, arms with brains of their own, a band on each arm, tablets on the floor. Every
-  curve is computed from a list of waypoints, so a reshaped arm carries its ganglion, its band, its suckers, its
-  patch of floor and its label plate with it. Highlighting is `:has()` and nothing else: no script, so a browser
-  without it shows the whole relief at rest instead of a figure that needs JavaScript to be legible, and a tapped
-  plate (`:target`) stands aside for the pointer so only one part is ever lit.
+- [src/components/figures/WorksiteFigure.astro](src/components/figures/WorksiteFigure.astro): the relief on
+  `/docs/worksite/` — a walled camp, one bay and one worker inside it per sandbox, a board hanging in each bay,
+  buildings going up beyond the wall. Every stone, bay and report line is computed from one course grid and one bay
+  pitch, so a bay added carries its worker, its board, the building it reports to and its label plate with it.
+  Highlighting is `:has()` and nothing else: no script, so a browser without it shows the whole relief at rest
+  instead of a figure that needs JavaScript to be legible, and a tapped plate (`:target`) stands aside for the
+  pointer so only one part is ever lit.
 - [src/components/PageBackdrop.astro](src/components/PageBackdrop.astro): the temple behind every page's
   first screen. The home page's hero paints its own; every other page gets this one, which is why the bar
   has the same carved band behind it wherever you are.

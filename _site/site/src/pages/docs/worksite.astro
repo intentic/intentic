@@ -1,12 +1,12 @@
 ---
-import { anatomyScene } from "@intentic/site-content/anatomy";
-import AnatomyFigure from "../../components/figures/AnatomyFigure.astro";
+import { worksiteScene } from "@intentic/site-content/worksite";
 import DocsLayout from "../../components/docs/DocsLayout.astro";
 import DocsRelated from "../../components/docs/DocsRelated.astro";
+import WorksiteFigure from "../../components/figures/WorksiteFigure.astro";
 
 /* THE MENTAL MODEL, not a feature list. Four nouns every later page spends without introducing. */
 
-const scene = anatomyScene;
+const scene = worksiteScene;
 
 /* The practical payoff of the picture: the same four parts, as the thing a reader actually decides to add. */
 const reaches = [
@@ -34,17 +34,18 @@ const reaches = [
 ---
 
 <DocsLayout
-    pageId="anatomy"
-    heading="Anatomy"
+    pageId="worksite"
+    heading="The worksite"
     lead="Four words the rest of these docs spend as though you already had them: the machine, a sandbox, a persona, a project. This page is the one picture they all sit in, and the place each of them is defined."
 >
     <h2>{scene.heading}</h2>
     <p>
-        {scene.sub} An octopus is the useful shape to borrow, because the thing people expect to be true of it is the thing that is
-        actually true here: the arms do most of the thinking, and they carry on while the head is looking somewhere else.
+        {scene.sub} A building camp is the useful shape to borrow, because the thing everyone already knows about a site is the thing that
+        is actually true here: the ground decides nothing, the work is done by people who each carry their own tools and their own orders,
+        and what goes up outlasts every shift that worked on it.
     </p>
     <div class="docs-embed my-8">
-        <AnatomyFigure />
+        <WorksiteFigure />
     </div>
 
     <h2>Which one do you reach for</h2>
@@ -81,8 +82,8 @@ const reaches = [
 
     <h2>Where the drawing stops being true</h2>
     <p>
-        A picture that is never corrected turns into a belief. Three things about the animal do not hold, and each of them is a place
-        readers otherwise guess wrong.
+        A picture that is never corrected turns into a belief. Four things about a building camp do not hold here, and each of them is a
+        place readers otherwise guess wrong.
     </p>
     {
         scene.limits.map((limit) => (
@@ -98,7 +99,7 @@ const reaches = [
             { href: "/docs/architecture/", title: "Architecture", why: "the same parts as a system map: where identity, code, state and compute actually live." },
             { href: "/docs/glossary/", title: "Glossary", why: "every other word these docs use as if you had it." },
             { href: "/where-it-runs/", title: "Where it runs", why: "the machine choice in full, including what it costs." },
-            { href: "/docs/parallel-agents/", title: "Parallel agents", why: "what happens when several agents reach for one project at once." },
+            { href: "/docs/parallel-agents/", title: "Parallel agents", why: "what happens when several agents are put on one project at once." },
         ]}
     />
 </DocsLayout>

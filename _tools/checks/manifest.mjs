@@ -30,6 +30,7 @@ export const CHECKS = [
     { id: "paths", file: "path-literals.mjs", needs: "checkout", gate: "tidy", about: "no hand-spelled roots and no counted ones (ratcheted)" },
     { id: "layout", file: "layout.mjs", needs: "checkout", gate: "tidy", about: "no ghost directories, no over-full ones, no twin or colliding names, no dead ones (ratcheted)" },
     { id: "md-links", file: "md-links.mjs", needs: "checkout", gate: "tidy", about: "every relative link in the documentation resolves" },
+    { id: "metaphor-home", file: "metaphor-home.mjs", needs: "checkout", gate: "tidy", about: "the four-noun picture is defined once, reached from the docs, and never from the home page" },
     { id: "alias-targets", file: "alias-targets.mjs", needs: "checkout", gate: "code", about: "every resolver alias points at a path that exists" },
     { id: "tailwind", file: "tailwind-bypass.mjs", needs: "checkout", gate: "tidy", about: "no arbitrary colours or pixel sizes in class attributes" },
     { id: "display", file: "display-descenders.mjs", needs: "checkout", gate: "tidy", about: "clipped display type keeps its descender clearance" },
