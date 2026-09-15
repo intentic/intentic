@@ -222,7 +222,9 @@ const confirmRemove = async (): Promise<void> => {
         deletingThere.value = true;
         thereFailed.value = undefined;
         try {
-            await manageDeviceSandbox(hostId, slug, `remove`);
+            // Deleting the box serving this page kills the daemon relaying the call, so the stream dies instead of
+            // answering; that is the removal landing, and only a refusal the device sent still counts as a failure.
+            await manageDeviceSandbox(hostId, slug, `remove`, { severing: target.id === sandbox.activeSandboxId.value });
         } catch (error) {
             thereFailed.value = error instanceof Error ? error.message : String(error);
             return;

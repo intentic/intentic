@@ -19,12 +19,12 @@ test(`matches the switches back to the preset they spell`, () => {
         expect(matchHostPreset(preset.grants)).toBe(preset.key);
     }
     // A hand-tuned mix is nobody's preset, and must not claim to be one.
-    expect(matchHostPreset({ shell: `on`, write: `on`, screen: `off`, control: `off`, sandboxes: `off`, sandboxRemove: `off` })).toBeUndefined();
+    expect(matchHostPreset({ shell: `on`, write: `on`, screen: `off`, control: `off`, sandboxes: `off` })).toBeUndefined();
 });
 
 /* The grant, in one line and from the allowed half only: listing the blocked half too ran to three lines of a form whose whole problem was length. */
 test(`states the grant in one line, from what is allowed`, () => {
-    expect(hostGrantSummary({ shell: `on`, write: `off`, screen: `on`, control: `off`, sandboxes: `off`, sandboxRemove: `off` })).toBe(
+    expect(hostGrantSummary({ shell: `on`, write: `off`, screen: `on`, control: `off`, sandboxes: `off` })).toBe(
         `May run commands and see the screen, and nothing else.`,
     );
     expect(hostGrantSummary({ shell: `on` })).toBe(`May run commands, and nothing else.`);
@@ -37,12 +37,9 @@ test(`states the grant in one line, from what is allowed`, () => {
             screen: `on`,
             control: `on`,
             sandboxes: `on`,
-            sandboxRemove: `on`,
             destructive: `on`,
         }),
-    ).toBe(
-        `May run commands, change files, see the screen, use the mouse and keyboard, manage its sandboxes, remove its sandboxes and delete folders and wipe disks.`,
-    );
+    ).toBe(`May run commands, change files, see the screen, use the mouse and keyboard, manage and remove its sandboxes and delete folders and wipe disks.`);
 });
 
 test(`does the local model's RAM sum so the reader doesn't`, () => {

@@ -90,7 +90,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
         sandboxUrl: flags.url,
         id,
         token,
-        scopes: { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", sandboxRemove: "off", destructive: "off" },
+        scopes: { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off" },
     };
     // Added to the link list, not written over it, or connecting a second sandbox silently disconnects the first.
     const links = await upsertLink(link);

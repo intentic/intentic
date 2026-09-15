@@ -46,7 +46,6 @@ const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
     screen: "on",
     control: "on",
     sandboxes: "on",
-    sandboxRemove: "on",
     destructive: "on",
     ...overrides,
 });
@@ -94,7 +93,6 @@ test("a pushed grant takes effect on the machine", async () => {
         screen: "on",
         control: "off",
         sandboxes: "off",
-        sandboxRemove: "off",
         destructive: "off",
     });
 });

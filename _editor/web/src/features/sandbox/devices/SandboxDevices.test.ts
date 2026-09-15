@@ -352,7 +352,7 @@ const labels = (el: HTMLElement): string[] => [...el.querySelectorAll(`button, a
 // Every switch granted: the state the verb tests below assume; without it the row states the missing grant
 // instead.
 const granted = (): void => {
-    capabilities.value = [{ id: `host-1`, kind: `host`, config: { platform: `linux`, shell: `on`, sandboxes: `on`, sandboxRemove: `on` } }];
+    capabilities.value = [{ id: `host-1`, kind: `host`, config: { platform: `linux`, shell: `on`, sandboxes: `on` } }];
 };
 
 it(`puts one verb on the row and everything else behind a menu`, () => {
@@ -449,7 +449,6 @@ it(`says nothing about connecting a device that is already managing its sandboxe
     const text = mount([managed(true)]).textContent ?? ``;
     expect(text).not.toContain(`Connect it as a device`);
     expect(text).not.toContain(`Manage sandboxes on this device`);
-    expect(text).not.toContain(`Remove sandboxes from this device`);
 });
 
 // A machine paired by the desktop app alone: that door never reports containers, so this row used to show an
@@ -491,11 +490,12 @@ it(`names the switch a connected device is missing before anything is clicked`, 
     expect(labels(el)).toContain(`Open its permissions`);
 });
 
-it(`names the removal switch on a machine that may do everything else`, () => {
+// One switch for the whole lifecycle: granting it leaves no second gate to explain, removal included.
+it(`asks for nothing more on a machine granted sandbox management`, () => {
     capabilities.value = [{ id: `host-1`, kind: `host`, config: { platform: `linux`, shell: `on`, sandboxes: `on` } }];
-    const text = mount([managed(true)]).textContent ?? ``;
-    expect(text).toContain(`Remove sandboxes from this device`);
-    expect(text).not.toContain(`Turn on "Manage sandboxes on this device"`);
+    const el = mount([managed(true)]);
+    expect(el.textContent ?? ``).not.toContain(`Turn on "Manage sandboxes on this device"`);
+    expect(labels(el)).not.toContain(`Open its permissions`);
 });
 
 // Folding only helps if the closed line still answers "is this one fine"; these pin both what disappears and
@@ -1346,8 +1346,8 @@ const distroSide = (): Device => ({
 
 const bothDoors = (): void => {
     capabilities.value = [
-        { id: `rog`, kind: `host`, config: { platform: `windows`, shell: `on`, sandboxes: `on`, sandboxRemove: `on` } },
-        { id: `rog-wsl-arch`, kind: `host`, config: { platform: `linux`, shell: `on`, sandboxes: `on`, sandboxRemove: `on` } },
+        { id: `rog`, kind: `host`, config: { platform: `windows`, shell: `on`, sandboxes: `on` } },
+        { id: `rog-wsl-arch`, kind: `host`, config: { platform: `linux`, shell: `on`, sandboxes: `on` } },
     ];
 };
 

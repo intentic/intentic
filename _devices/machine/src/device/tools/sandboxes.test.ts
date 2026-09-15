@@ -28,7 +28,6 @@ const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
     screen: "on",
     control: "on",
     sandboxes: "on",
-    sandboxRemove: "on",
     destructive: "on",
     ...overrides,
 });
@@ -224,10 +223,8 @@ test("a runner start with no way home is refused before anything is spawned", ()
     expect(() => icRunnerArgs("runner-up", "rig", "https://sandbox-x.intentic.dev", "")).toThrow(/pairing/i);
 });
 
-test("both runner ops ride the sandboxes switch, and removal does NOT take the removal one", async () => {
-    // A runner's /work is a mirror of the parent's git, so removing it destroys nothing the parent still has: the
-    // switch that guards somebody's workspace is not the switch that guards this.
-    const off = scopes({ sandboxes: "off", sandboxRemove: "on" });
+test("both runner ops ride the sandboxes switch", async () => {
+    const off = scopes({ sandboxes: "off" });
     await expect(runnerFlow("runner-up", "rig", "https://x", "p", {}, off, () => undefined)).rejects.toBeInstanceOf(ScopeError);
     await expect(runnerFlow("runner-remove", "rig", undefined, undefined, {}, off, () => undefined)).rejects.toBeInstanceOf(ScopeError);
 });
@@ -281,11 +278,11 @@ test("swapping is refused by the sandboxes switch, like managing", async () => {
     await expect(swapSandbox("update", "work", undefined, scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
 });
 
-// The point of the separate switch, asserted: a user who delegated the fleet did not thereby agree to lose one
-// of it.
-test("removal takes its own switch: managing sandboxes does not imply destroying one", async () => {
-    await expect(removeSandbox("work", scopes({ sandboxRemove: "off" }), () => {})).rejects.toThrow(/Remove sandboxes from this device/);
-    await expect(removeSandbox("work", scopes({ sandboxes: "on", sandboxRemove: "off" }), () => {})).rejects.toThrow(ScopeError);
+// One switch for the whole lifecycle: a fleet the owner may manage is one the owner may clean up, and the refusal
+// they get for trying names the switch the card actually has.
+test("removal is refused by the sandboxes switch, like every other verb", async () => {
+    await expect(removeSandbox("work", scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(ScopeError);
+    await expect(removeSandbox("work", scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
 });
 
 test("reading a log is covered by either grant, like listing", async () => {

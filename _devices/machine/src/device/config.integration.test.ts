@@ -16,7 +16,6 @@ const scopes = (shell: HostScopes["shell"]): HostScopes => ({
     screen: "off",
     control: "off",
     sandboxes: "off",
-    sandboxRemove: "off",
     destructive: "off",
 });
 

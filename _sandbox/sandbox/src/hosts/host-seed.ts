@@ -6,9 +6,9 @@ import { hostHandler } from "../capabilities/handlers/host.handler.js";
 import type { Services } from "../composition.js";
 import { jsonFile } from "../store/json-file.js";
 
-// Setup auto-connects the machine that ran the installer, granted only `sandboxes` (no shell, files, screen or
-// removal): consenting to run a sandbox is not consenting to a shell on your own laptop. The card is created once ever;
-// the pairing re-arms every boot since only redemption burns it. Already-seeded ids are remembered on /history so a
+// Setup auto-connects the machine that ran the installer, granted only `sandboxes` (no shell, files or screen):
+// consenting to run a sandbox is not consenting to a shell on your own laptop. The card is created once ever; the
+// pairing re-arms every boot since only redemption burns it. Already-seeded ids are remembered on /history so a
 // deleted card is never re-offered.
 
 // What a setup-connected device may do; spelled out in full as this feature's whole security posture.
@@ -18,7 +18,6 @@ export const SETUP_HOST_SCOPES = {
     screen: "off",
     control: "off",
     sandboxes: "on",
-    sandboxRemove: "off",
     destructive: "off",
 } as const;
 

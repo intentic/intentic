@@ -232,17 +232,7 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
             { value: "off", label: "Blocked" },
             { value: "on", label: "Allowed" },
         ],
-        hint: "Start, stop and update this machine's Intentic sandboxes.",
-    },
-    {
-        key: "sandboxRemove",
-        label: "Remove sandboxes from this device",
-        default: "off",
-        options: [
-            { value: "off", label: "Blocked" },
-            { value: "on", label: "Allowed" },
-        ],
-        hint: "Deletes a sandbox with its files and history: nothing undoes it.",
+        hint: "Start, stop, update and remove this machine's Intentic sandboxes. Removing one deletes its files and its history: nothing undoes it.",
     },
     {
         key: "destructive",

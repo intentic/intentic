@@ -187,11 +187,9 @@ export type ManageBlock =
     // files sync perfectly yet no verb works, since every verb needs this door.
     | { readonly kind: `offline`; readonly connection: string; readonly card?: string | undefined }
     // Connected, but "Manage sandboxes on this device" is off, so every verb here would be refused.
-    | { readonly kind: `sandboxes-off`; readonly connection: string; readonly card?: string | undefined }
-    // Everything works except the one that can't be undone, gated by its own switch.
-    | { readonly kind: `remove-off`; readonly connection: string; readonly card?: string | undefined };
+    | { readonly kind: `sandboxes-off`; readonly connection: string; readonly card?: string | undefined };
 
-// Capability config as the owner set it; both switches default off, so a freshly connected device lists
+// Capability config as the owner set it; the switch defaults off, so a freshly connected device lists
 // containers but refuses every button.
 export type DeviceScopes = Readonly<Record<string, string | number | boolean>>;
 
@@ -232,8 +230,5 @@ export const manageBlock = (device: Device, scopes: DeviceScopes | undefined): M
     if (device.gap !== undefined && !described(device)) {
         return undefined;
     }
-    if (scopes?.[`sandboxes`] !== `on`) {
-        return { kind: `sandboxes-off`, ...link };
-    }
-    return scopes[`sandboxRemove`] === `on` ? undefined : { kind: `remove-off`, ...link };
+    return scopes?.[`sandboxes`] === `on` ? undefined : { kind: `sandboxes-off`, ...link };
 };

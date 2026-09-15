@@ -146,6 +146,9 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     const accessKey = (environment: DeviceRow): string => `${environment.device.key}:access`;
     const rowKey = (group: DeviceSandboxGroup): string => `${machine().key}:${group.sandboxId}`;
     const selfGroup = (group: DeviceSandboxGroup): boolean => isSelfMachine(machine(), group, ownSlug.value);
+    // Whether this verb on this row takes down the connection the page is watching it through: what the dialog warns
+    // about beforehand, and what makes a dead stream the answer rather than a failure afterwards.
+    const severs = (group: DeviceSandboxGroup, verb: SandboxVerb): boolean => selfGroup(group) && SEVERING.has(OP[verb]);
 
     // `${rowKey}:${verb}`, so one string says both which row is working and at what.
     const busy = ref<string | undefined>();
@@ -193,7 +196,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             // real question.
             header: asked?.header ?? `${label} ${pending.group.title}?`,
             body: asked?.body,
-            severing: selfGroup(pending.group) && SEVERING.has(OP[pending.verb]),
+            severing: severs(pending.group, pending.verb),
             label,
             destructive: pending.verb === `remove`,
         };
@@ -220,6 +223,8 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             const message = await manageDeviceSandbox(hostId, slug, OP[verb], {
                 resources,
                 onLine: (line) => (runLines.value = { ...runLines.value, [key]: [...(runLines.value[key] ?? []), line] }),
+                // The same severing the dialog warned about: losing the stream is the answer, not a failure to report.
+                severing: severs(group, verb),
             });
             // A log tail's result line would only restate the pane above it, so it's left to be the answer.
             outcome.value = verb === `logs` ? undefined : { key, message };
@@ -270,7 +275,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             outcome.value = undefined;
             return;
         }
-        if (sandboxVerbPrompt(verb, group.title) !== undefined || (selfGroup(group) && SEVERING.has(OP[verb]))) {
+        if (sandboxVerbPrompt(verb, group.title) !== undefined || severs(group, verb)) {
             confirmingAct.value = { group, verb };
             return;
         }

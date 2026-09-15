@@ -184,10 +184,8 @@ export const HostScopesSchema = z.object({
     screen: hostScope.default("on"),
     // Its own switch, not part of `screen`: looking and touching are different permissions. Default off, like `write`.
     control: hostScope.default("off"),
-    // Narrower than `shell`: named fleet operations, so an agent can supervise sandboxes without a shell at all.
+    // Narrower than `shell`: named fleet operations — start, stop, update, reshape, remove — with no shell at all.
     sandboxes: hostScope.default("off"),
-    // Separate from `sandboxes`: everything that grants is reversible by doing it again, removal is undone by nothing.
-    sandboxRemove: hostScope.default("off"),
     // Its own switch under `shell`, default off while `shell` defaults on: a laptop has no disposable image to recreate
     // from.
     destructive: hostScope.default("off"),

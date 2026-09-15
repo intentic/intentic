@@ -47,7 +47,6 @@ const laptop: Capability = {
         screen: "on",
         control: "off",
         sandboxes: "off",
-        sandboxRemove: "off",
         destructive: "off",
     },
 };
@@ -102,7 +101,6 @@ test("echoConfig renders the grant back and host holds no manifest secret", () =
         screen: "on",
         control: "off",
         sandboxes: "off",
-        sandboxRemove: "off",
         destructive: "off",
     });
     expect(secretField(laptop, new Map())).toBeUndefined();

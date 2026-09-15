@@ -45,7 +45,7 @@ export const assertPath = (path: string, scopes: HostScopes, intent: string): st
 // Throws unless the named switch is on. One message shape for all of them, naming the card's own label.
 export const assertScope = (
     scopes: HostScopes,
-    scope: "shell" | "write" | "screen" | "control" | "sandboxes" | "sandboxRemove" | "destructive",
+    scope: "shell" | "write" | "screen" | "control" | "sandboxes" | "destructive",
 ): void => {
     if (scopes[scope] === "on") {
         return;
@@ -56,7 +56,6 @@ export const assertScope = (
         screen: "See the screen",
         control: "Use the mouse and keyboard",
         sandboxes: "Manage sandboxes on this device",
-        sandboxRemove: "Remove sandboxes from this device",
         destructive: "Run destructive commands",
     }[scope];
     throw new ScopeError(`Refused: "${label}" is switched off for this device. Turn it on in its capability card to allow this.`);

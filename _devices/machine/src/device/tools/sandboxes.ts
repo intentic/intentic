@@ -504,7 +504,6 @@ export const reshapeSandbox = async (
     return `Reshaped sandbox "${slug}". Its files and its history were kept, and the new share survives every later update.`;
 };
 
-// sandboxes scope, not sandboxRemove: /work and /history survive a reconnect.
 export const reconnectSandbox = async (
     slug: string,
     setupCode: string | undefined,
@@ -528,8 +527,10 @@ export const reconnectSandbox = async (
     return `Reconnected sandbox "${slug}". Its files and its history were kept, and it now has what it was missing.`;
 };
 
+// Rides `sandboxes` like every other verb: a fleet nobody may delete from is one the owner can't clean up. Nothing
+// here is undoable, so the confirmation is the caller's job.
 export const removeSandbox = async (slug: string, scopes: HostScopes, onLine: (line: string) => void): Promise<string> => {
-    assertScope(scopes, "sandboxRemove");
+    assertScope(scopes, "sandboxes");
     await find(slug);
     icInFlight.add(slug);
     let run: { code: number; output: string };

@@ -341,7 +341,7 @@ test(`states the halves without offering the switches on a machine it cannot rea
 // what a machine wants from the reader
 
 // Every per-device switch granted, so a case about the agent is not also a case about permissions.
-const GRANTED = { sandboxes: `on`, sandboxRemove: `on` };
+const GRANTED = { sandboxes: `on` };
 
 // `canPair` is the reader's own standing (owner, by default here): the daemon refuses a member's mint, so it
 // decides whether a machine that isn't answering is offered a fresh pairing at all.

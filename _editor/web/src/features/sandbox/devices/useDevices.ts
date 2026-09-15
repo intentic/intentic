@@ -61,6 +61,9 @@ export interface DeviceSandboxPayload {
     // The short-lived setup code reconnect redeems on the host machine for a drifted container's missing values.
     setupCode?: string | undefined;
     onLine?: ((line: string) => void) | undefined;
+    // Set when the op is aimed at the sandbox relaying it: the daemon dies mid-stream, so a lost connection is the
+    // op landing rather than a failure. Only the caller knows which sandbox is serving the page.
+    severing?: boolean | undefined;
 }
 
 // hash/resources/setupCode are included only when present; the schema rejects an explicit undefined.
@@ -78,9 +81,19 @@ const flowInput = (
     ...(setupCode === undefined ? {} : { setupCode }),
 });
 
-// A stream ending without a terminal frame means the connection dropped, not that the operation stopped;
-// the next fleet read reflects the real outcome.
-const outcomeOf = async (body: ReadableStream<Uint8Array>, onLine: ((line: string) => void) | undefined): Promise<string> => {
+// Stands in for the device's own sentence when the op that succeeded took the connection carrying it down: the
+// daemon relaying the call lived in the container the call acted on, so no result frame can ever arrive.
+const severedOutcome = (op: DeviceSandboxOp, slug: string): string =>
+    op === `remove`
+        ? `Removed "${slug}" from this device: its container, its files and its history are gone.`
+        : `"${slug}" took this connection down with it, which is what ${op} does from inside it. What it is now shows up once the page reconnects.`;
+
+// Everything the flow said: its result sentence, and its refusal if it sent one. A refusal is returned rather than
+// thrown so the caller can tell one the device SENT from the connection dying under it.
+const flowSaid = async (
+    body: ReadableStream<Uint8Array>,
+    onLine: ((line: string) => void) | undefined,
+): Promise<{ outcome: string | undefined; refusal: string | undefined }> => {
     let outcome: string | undefined;
     for await (const line of readIntenticLines(body)) {
         if (line[`kind`] === `line`) {
@@ -91,16 +104,38 @@ const outcomeOf = async (body: ReadableStream<Uint8Array>, onLine: ((line: strin
             continue;
         }
         if (line[`kind`] === `error`) {
-            throw new Error(frameText(line, `message`) ?? `That operation failed on the device.`);
+            return { outcome, refusal: frameText(line, `message`) ?? `That operation failed on the device.` };
         }
         if (line[`kind`] === `result`) {
             outcome = frameText(line, `message`) ?? outcome;
         }
     }
-    if (outcome === undefined) {
-        throw new Error(`Lost contact with that device while this was running: it may still have finished. Refresh to see where it got to.`);
+    return { outcome, refusal: undefined };
+};
+
+// A stream ending without a terminal frame means the connection dropped, not that the operation stopped;
+// the next fleet read reflects the real outcome. `severed` is that drop's answer for an op that causes it.
+const outcomeOf = async (
+    body: ReadableStream<Uint8Array>,
+    onLine: ((line: string) => void) | undefined,
+    severed: string | undefined,
+): Promise<string> => {
+    const said = await flowSaid(body, onLine).catch((error: unknown) => {
+        if (severed === undefined) {
+            throw error;
+        }
+        return { outcome: severed, refusal: undefined };
+    });
+    if (said.refusal !== undefined) {
+        throw new Error(said.refusal);
     }
-    return outcome;
+    if (said.outcome !== undefined) {
+        return said.outcome;
+    }
+    if (severed !== undefined) {
+        return severed;
+    }
+    throw new Error(`Lost contact with that device while this was running: it may still have finished. Refresh to see where it got to.`);
 };
 
 export async function manageDeviceSandbox(hostId: string, slug: string, op: DeviceSandboxOp, payload: DeviceSandboxPayload = {}): Promise<string> {
@@ -112,7 +147,7 @@ export async function manageDeviceSandbox(hostId: string, slug: string, op: Devi
     if (!response.ok || !response.body) {
         throw await sandboxError(response, { method: `POST`, path: `/system/devices/{id}/sandboxes/{slug}` });
     }
-    return outcomeOf(response.body, payload.onLine);
+    return outcomeOf(response.body, payload.onLine, payload.severing === true ? severedOutcome(op, slug) : undefined);
 }
 
 // Update/restart kills the process serving the request, so an untimely stream end here is success, not

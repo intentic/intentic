@@ -226,13 +226,8 @@ test(`names the sandbox switch when a connected device has not been granted it`,
         connection: `my-pc`,
         card: `windows`,
     });
-    // Removal has its own grant, since nothing undoes it.
-    expect(manageBlock(connected, { platform: `windows`, shell: `on`, sandboxes: `on` })).toEqual({
-        kind: `remove-off`,
-        connection: `my-pc`,
-        card: `windows`,
-    });
-    expect(manageBlock(connected, { platform: `windows`, shell: `on`, sandboxes: `on`, sandboxRemove: `on` })).toBeUndefined();
+    // The one switch carries the whole lifecycle, so granting it leaves nothing to explain.
+    expect(manageBlock(connected, { platform: `windows`, shell: `on`, sandboxes: `on` })).toBeUndefined();
 });
 
 // The card comes from what the connection pinned, not from the row's own platform.
@@ -247,10 +242,9 @@ test(`stays quiet about permissions on a device that cannot be reached`, () => {
     expect(manageBlock(device({ hostId: `my-pc`, online: true, gap: `no-agent` }), undefined)).toBeUndefined();
 });
 
-// The card setup writes for a new sandbox: sandbox management granted, "Run commands" not. The machine lists its
-// containers and describes nothing else, so those rows have working buttons and what gates them is still worth a
-// sentence — silence here was a row of buttons with nothing explaining them.
-test(`still names the switches on a machine that listed containers without describing itself`, () => {
+// "Run commands" alone is enough to read the container list, so a machine can list its sandboxes, describe nothing
+// else, and still refuse every button — silence here was a row of buttons with nothing explaining them.
+test(`still names the switch on a machine that listed containers without describing itself`, () => {
     const locked = device({
         hostId: `my-pc`,
         online: true,
@@ -258,12 +252,13 @@ test(`still names the switches on a machine that listed containers without descr
         gap: `scope-off`,
         sandboxes: [{ slug: `work`, container: `intentic-sandbox-work`, running: true, image: `img:1` }],
     });
-    expect(manageBlock(locked, { platform: `linux`, shell: `off`, sandboxes: `on` })).toEqual({
-        kind: `remove-off`,
+    expect(manageBlock(locked, { platform: `linux`, shell: `on`, sandboxes: `off` })).toEqual({
+        kind: `sandboxes-off`,
         connection: `my-pc`,
         card: `linux`,
     });
-    expect(manageBlock(locked, { platform: `linux`, shell: `off`, sandboxes: `on`, sandboxRemove: `on` })).toBeUndefined();
+    // The card setup writes for a new sandbox: management granted, so every button below it works.
+    expect(manageBlock(locked, { platform: `linux`, shell: `off`, sandboxes: `on` })).toBeUndefined();
 });
 
 // The device door can be shut while the sync door stays open (files syncing fine, sandbox socket down):

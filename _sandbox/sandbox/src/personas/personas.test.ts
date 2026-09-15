@@ -33,7 +33,6 @@ const device = (id: string): Capability => ({
         screen: "off",
         control: "off",
         sandboxes: "off",
-        sandboxRemove: "off",
         destructive: "off",
     },
 });

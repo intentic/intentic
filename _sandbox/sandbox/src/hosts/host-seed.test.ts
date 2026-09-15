@@ -12,14 +12,17 @@ test("a device connected by setup may manage sandboxes and do nothing else", () 
         screen: "off",
         control: "off",
         sandboxes: "on",
-        sandboxRemove: "off",
         destructive: "off",
     });
 });
 
-test("setup never grants removal or destructive commands", () => {
-    expect(SETUP_HOST_SCOPES.sandboxRemove).toBe("off");
-    expect(SETUP_HOST_SCOPES.destructive).toBe("off");
+// `sandboxes` carries the whole container lifecycle, removal included, so the machine that installed a sandbox can
+// clean it up again. Nothing beyond the containers is granted: that is the line this test holds.
+test("setup grants the fleet and nothing that reaches the machine itself", () => {
+    expect(SETUP_HOST_SCOPES.sandboxes).toBe("on");
+    for (const scope of ["shell", "write", "screen", "control", "destructive"] as const) {
+        expect(SETUP_HOST_SCOPES[scope]).toBe("off");
+    }
 });
 
 test("the seeded grant answers for every switch the card has", () => {

@@ -12,7 +12,6 @@ const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
     screen: "on",
     control: "on",
     sandboxes: "on",
-    sandboxRemove: "on",
     destructive: "on",
     ...overrides,
 });
