@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { Services } from "../composition.js";
 import type { PeerDoor } from "./peer.js";
 import type { PeerHub } from "./peer-hub.js";
-import { createPeerRoutes } from "./peer-routes.js";
+import { admitPeer, createPeerRoutes } from "./peer-routes.js";
 import type { PeerStore } from "./peer-store.js";
 
 // The two files a door keeps on /history, spelled the way the doors spell them.
@@ -184,4 +184,32 @@ test("a door without a bridge has no mcp route", () => {
         summaries: async () => [],
     });
     expect(routes.mcp).toBeUndefined();
+});
+
+// The hello frame resolves which peer is knocking; the card decides whether anything still grants it a machine, and its
+// config IS the grant pushed over the socket.
+const laptopCard = { id: "laptop", kind: "host", config: { platform: "linux", shell: "on" } };
+
+const admission = async (verified: string | undefined, cards: readonly typeof laptopCard[]) =>
+    admitPeer<{ platform: string }>(
+        { capabilities: { list: async () => cards } } as unknown as Services,
+        door,
+        { verify: async () => verified },
+        "presented-token",
+    );
+
+test("an enrolled peer whose card still grants it attaches with that card's config as its scopes", async () => {
+    expect(await admission("laptop", [laptopCard])).toEqual({ id: "laptop", scopes: laptopCard.config });
+});
+
+test("a token the store does not know is refused without naming anything back", async () => {
+    expect(await admission(undefined, [laptopCard])).toEqual({ refusal: "unauthorized" });
+});
+
+// The state this exists for: a card removed while the enrollment survived (a hand-edited manifest, a landed checkout).
+// Attaching would run on whatever scopes the device was last pushed, which nobody is granting any more.
+test("an enrollment no card holds is refused, and told where a connection comes back from", async () => {
+    expect(await admission("ghost", [laptopCard])).toEqual({
+        refusal: `this device is not connected to this sandbox: add it again from its capability card`,
+    });
 });

@@ -16,6 +16,8 @@ import { testConfig } from "../testing.js";
 import { clientFor, proven, rejectAuth, rejectForbidden } from "../harness/route-client.testing.js";
 import { fakeFiles, fakeProcesses } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
+import { HOST_PEER } from "../hosts/host-peer.js";
+import { filePeerStore } from "../peers/peer-store.js";
 import { publishRuntimeChange } from "./runtime-watch.js";
 
 // System routes, driven over the daemon's HTTP surface as the browser does. Fakes and the client are shared
@@ -437,13 +439,17 @@ test("POST /system/sync/pair: the operating tier may mint sync, lower roles are 
 
 test("DELETE /system/authorized-key: a sync token self-revokes just its own enrollment", async () => {
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-revoke-"));
+    const historyRoot = mkdtempSync(join(tmpdir(), "sync-history-"));
     const svc = services({
         config: {
             ...testConfig,
             connectToken: "token",
-            historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
+            historyRoot,
             sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
         },
+        // The owner's revoke reaches the device door too, so this machine can hold both: the real store over the same
+        // empty history, where nothing is enrolled and the ssh key is all there is to drop.
+        hosts: filePeerStore(historyRoot, HOST_PEER.store),
     });
     const app = createApp(svc);
     const enroll = (key: string) =>

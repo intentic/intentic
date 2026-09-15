@@ -45,6 +45,29 @@ const scopesOf = async <Scopes>(services: Services, kind: "host" | "webext", id:
     return capability === undefined ? undefined : (capability.config as Scopes);
 };
 
+// Who is at the socket and what still grants them anything: the enrollment says which peer, the card says whether the
+// owner is still lending it a machine. An enrollment that outlived its card is refused rather than attached on
+// whatever scopes the peer was last pushed; refused and not revoked, so a manifest that is merely unreadable for a
+// moment costs a reconnect instead of a re-pairing.
+export const admitPeer = async <Scopes>(
+    services: Services,
+    door: Pick<PeerDoor<{ token: string }, unknown, Record<never, never>>, "noun" | "scopesKind">,
+    store: Pick<PeerStore<unknown>, "verify">,
+    token: string,
+): Promise<{ readonly id: string; readonly scopes: Scopes | undefined } | { readonly refusal: string }> => {
+    const id = await store.verify(token);
+    if (id === undefined) {
+        return { refusal: "unauthorized" };
+    }
+    if (door.scopesKind === undefined) {
+        return { id, scopes: undefined };
+    }
+    const scopes = await scopesOf<Scopes>(services, door.scopesKind, id);
+    return scopes === undefined
+        ? { refusal: `this ${door.noun} is not connected to this sandbox: add it again from its capability card` }
+        : { id, scopes };
+};
+
 interface McpRequest {
     readonly id?: unknown;
     readonly method?: unknown;
@@ -172,12 +195,13 @@ export const createPeerRoutes = <
                     ws.close(1008, "unauthorized");
                     return;
                 }
-                const id = await store.verify(hello.data.token);
-                if (id === undefined) {
-                    services.logger.warn(`${door.slug}: rejected an unenrolled token`);
-                    ws.close(1008, "unauthorized");
+                const admitted = await admitPeer<Scopes>(services, door, store, hello.data.token);
+                if ("refusal" in admitted) {
+                    services.logger.warn({ reason: admitted.refusal }, `${door.slug}: refused a socket`);
+                    ws.close(1008, admitted.refusal);
                     return;
                 }
+                const { id, scopes } = admitted;
                 clearTimeout(deadline);
                 // `.raw` is the real `ws` socket with the surface oRPC's link needs; WSContext is only a send/close
                 // façade.
@@ -187,11 +211,8 @@ export const createPeerRoutes = <
 
                 // Scopes pushed before facts, so a reconnect after the owner tightens a grant enforces it from the
                 // first call.
-                if (door.scopesKind !== undefined) {
-                    const scopes = await scopesOf<Scopes>(services, door.scopesKind, id);
-                    if (scopes !== undefined) {
-                        await hub.pushScopes(id, scopes);
-                    }
+                if (scopes !== undefined) {
+                    await hub.pushScopes(id, scopes);
                 }
                 hub.observe(id, await client.describe());
             },

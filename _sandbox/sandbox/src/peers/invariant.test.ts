@@ -1,3 +1,4 @@
+import type { Capability, CapabilityKind } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { checks, type PeerRegistryDeps } from "./invariant.js";
 
@@ -12,16 +13,36 @@ const door = (enrolled: readonly string[], connected: readonly string[]) => ({
     hub: { connected: () => connected },
 });
 
-const run = async (name: string, enrolled: readonly string[], connected: readonly string[]): Promise<void> => {
+// Only id and kind are read; the config each kind carries is another check's subject.
+const card = (id: string, kind: CapabilityKind): Capability => ({ id, kind, config: {} }) as unknown as Capability;
+
+// Which door each check reads, so one fixture can be pointed at any of them and the others stay empty.
+const DOORS: Record<string, "hosts" | "webexts" | "runners"> = {
+    "live-hosts-are-enrolled": "hosts",
+    "enrolled-devices-have-cards": "hosts",
+    "live-browsers-are-enrolled": "webexts",
+    "enrolled-browsers-have-cards": "webexts",
+    "live-runners-are-enrolled": "runners",
+};
+
+// `cards` defaults to the enrolled ids, so a test about live sockets never trips the grant checks by accident.
+const run = async (
+    name: string,
+    enrolled: readonly string[],
+    connected: readonly string[],
+    cards: readonly Capability[] = enrolled.flatMap((id) => [card(id, "host"), card(id, "webext")]),
+): Promise<void> => {
     const quiet = door([], []);
     const under = door(enrolled, connected);
+    const at = (which: string) => (DOORS[name] === which ? under : quiet);
     const deps: PeerRegistryDeps = {
-        hosts: name === "live-hosts-are-enrolled" ? under.store : quiet.store,
-        hostHub: name === "live-hosts-are-enrolled" ? under.hub : quiet.hub,
-        webexts: name === "live-browsers-are-enrolled" ? under.store : quiet.store,
-        webextHub: name === "live-browsers-are-enrolled" ? under.hub : quiet.hub,
-        runners: name === "live-runners-are-enrolled" ? under.store : quiet.store,
-        runnerHub: name === "live-runners-are-enrolled" ? under.hub : quiet.hub,
+        hosts: at("hosts").store,
+        hostHub: at("hosts").hub,
+        webexts: at("webexts").store,
+        webextHub: at("webexts").hub,
+        runners: at("runners").store,
+        runnerHub: at("runners").hub,
+        capabilities: { list: async () => [...cards] },
     };
     const check = checks(deps).find((entry) => entry.name === name);
     if (check === undefined) {
@@ -43,4 +64,20 @@ test("a socket the store no longer vouches for is named, with the door's own sta
 
 test("the three doors are checked independently: one door's stray is not another's", async () => {
     await expect(run("live-hosts-are-enrolled", ["laptop"], ["laptop"])).resolves.toBeUndefined();
+});
+
+test("an enrollment every card still holds reports nothing, connected or not", async () => {
+    await expect(run("enrolled-devices-have-cards", ["laptop", "rig"], [])).resolves.toBeUndefined();
+    await expect(run("enrolled-browsers-have-cards", ["my-chrome"], ["my-chrome"])).resolves.toBeUndefined();
+});
+
+test("an enrollment no card holds is named, since nothing on either screen would list it", async () => {
+    await expect(run("enrolled-devices-have-cards", ["laptop", "ghost"], [], [card("laptop", "host")])).rejects.toThrow(
+        /no capability card \(ghost\).*no screen lists/,
+    );
+    await expect(run("enrolled-browsers-have-cards", ["old-chrome"], [], [])).rejects.toThrow(/no capability card \(old-chrome\)/);
+});
+
+test("a card of another kind is not a grant: same name, different door", async () => {
+    await expect(run("enrolled-devices-have-cards", ["laptop"], [], [card("laptop", "webext")])).rejects.toThrow(/\(laptop\)/);
 });

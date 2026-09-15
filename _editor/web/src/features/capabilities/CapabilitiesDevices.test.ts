@@ -4,6 +4,7 @@
 // mount the Linux PC card with exactly that machine in the daemon's device list.
 import type { Device } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
+import PrimeVue from "primevue/config";
 import { expect, it, vi } from "vitest";
 import { computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 
@@ -70,9 +71,11 @@ vi.mock(`../sandbox/devices/useVpn`, () => ({
 vi.mock(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 vi.mock(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
-// The daemon's device registry, the list both screens now read. Only `useDevices` is replaced; everything else in
-// that module keeps working for whatever else the page mounts.
+// The daemon's device registry, the list both screens now read. Only `useDevices` and the revoke are replaced;
+// everything else in that module keeps working for whatever else the page mounts.
 const fleet = ref<Device[]>([]);
+// Which machine the card asked the daemon to cut off; no device connection needed, unlike everything else here.
+const revoked: string[] = [];
 vi.mock(import(`../sandbox/devices/useDevices`), async (importOriginal) => ({
     ...(await importOriginal()),
     useDevices: () => ({
@@ -82,6 +85,7 @@ vi.mock(import(`../sandbox/devices/useDevices`), async (importOriginal) => ({
         isLoading: ref(false),
         refetch: vi.fn(),
     }),
+    revokeSyncDevice: async (machine: string) => void revoked.push(machine),
 }));
 
 const { default: Capabilities } = await import("./Capabilities.vue");
@@ -107,6 +111,8 @@ const mount = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     const app = createApp({ render: () => h(Capabilities) });
+    // The confirmation dialog is a PrimeVue Dialog and reads the plugin's config while rendering.
+    app.use(PrimeVue);
     app.component(`Icon`, IconStub);
     app.component(
         `RouterLink`,
@@ -154,6 +160,30 @@ it(`carries the machine's own name into the form that connects it`, async () => 
     expect(push).toHaveBeenCalledWith(
         expect.objectContaining({ params: { card: `linux` }, query: expect.objectContaining({ device: `radarsu-rog` }) }),
     );
+});
+
+// The row's other half. A machine listed under "your connections" holds no capability to remove, so without this the
+// only way off this screen was the Devices board — which is where the reader is not.
+it(`ends the machine's access from the card that lists it, after naming what stops`, async () => {
+    fleet.value = [syncOnly()];
+    revoked.length = 0;
+    const el = mount();
+    await nextTick();
+
+    const disconnect = [...(connectionsGroup(el)?.querySelectorAll(`button`) ?? [])].find((button) => button.textContent?.includes(`Disconnect`));
+    disconnect?.click();
+    await nextTick();
+
+    // The confirm is the whole point of the second click: revoking stops file sync and port mirroring.
+    expect(document.body.textContent).toContain(`Disconnect radarsu-rog?`);
+    expect(revoked).toEqual([]);
+
+    // Last, not first: the row's own button carries the same word, and the dialog's is the one that acts.
+    const confirm = [...document.body.querySelectorAll(`button`)].findLast((button) => button.textContent?.trim() === `Disconnect`);
+    confirm?.click();
+    await nextTick();
+
+    expect(revoked).toEqual([`radarsu-rog`]);
 });
 
 it(`says nothing about a machine already connected as a device`, async () => {

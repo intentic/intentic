@@ -1,6 +1,6 @@
 import type { InvariantCheck } from "../invariants/invariants.js";
 
-/* No runtime invariant: a connected device is a peer door, and the one promise a door makes — every live socket belongs to an id the enrollment store still holds — is checked for all three doors by peers/invariant.ts. */
+/* No runtime invariant: a connected device is a peer door, and both promises a door makes — every live socket belongs to an id the enrollment store still holds, and every enrollment to a capability card that still grants it — are checked by peers/invariant.ts. */
 
 export const owner = "hosts";
 

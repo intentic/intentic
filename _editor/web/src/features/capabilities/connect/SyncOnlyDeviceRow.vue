@@ -4,7 +4,7 @@ import { Button, Row, StatusBadge } from "@intentic/ui";
 import type { DeviceConnection } from "../model/deviceConnections";
 
 defineProps<{ device: DeviceConnection }>();
-const emit = defineEmits<{ connect: [] }>();
+const emit = defineEmits<{ connect: []; disconnect: [] }>();
 </script>
 
 <template>
@@ -26,9 +26,16 @@ const emit = defineEmits<{ connect: [] }>();
             </span>
         </template>
         <template #control>
-            <Button label="Connect" size="small" :text="true" @click="emit(`connect`)">
-                <template #icon><Icon name="desktop" /></template>
-            </Button>
+<!-- Both verbs the row has, since a machine listed under "your connections" the reader cannot end is a dead end: this
+             one holds no capability to remove, so ending its desktop sync is the only removal it has. -->
+            <span class="flex items-center gap-1">
+                <Button label="Disconnect" size="small" :text="true" severity="danger" @click="emit(`disconnect`)">
+                    <template #icon><Icon name="times" /></template>
+                </Button>
+                <Button label="Connect" size="small" :text="true" @click="emit(`connect`)">
+                    <template #icon><Icon name="desktop" /></template>
+                </Button>
+            </span>
         </template>
     </Row>
 </template>

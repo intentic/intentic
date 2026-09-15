@@ -2,6 +2,7 @@ import { DeviceReportSchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
+import { revokeCardlessHost } from "../hosts/host-peer.js";
 import type { AppEnv } from "../app-env.js";
 import {
     deviceReports,
@@ -17,9 +18,9 @@ import {
 // Desktop sync's enrollment surface: a browser-minted pairing token is redeemed once at /system/authorized-key to land
 // an SSH key. The pairing carries the mode: owner gets sync, a member only ever mirror. Transport is sync-ssh.ts.
 
-export type SyncRoutesDeps = Pick<Services, "auth" | "config" | "syncPairings">;
-
-export const createSyncRoutes = (services: SyncRoutesDeps) => ({
+// Whole Services, not a slice of it: revoking a machine reaches past desktop sync into the device door it may also
+// hold, and that teardown runs the capability handler.
+export const createSyncRoutes = (services: Services) => ({
     // Runs through the bearer middleware, so an unauthenticated caller is already 401'd; a caller the operating gate
     // refuses is narrowed to mirror, not refused.
     pair: async (c: Context<AppEnv>): Promise<Response> => {
@@ -94,8 +95,11 @@ export const createSyncRoutes = (services: SyncRoutesDeps) => ({
         if (denied !== undefined) {
             return denied;
         }
-        return (await revokeEnrollmentByMachine(services.config.historyRoot, c.req.param("machine") ?? ""))
-            ? c.json({ ok: true })
-            : c.json({ error: "no device is enrolled under that name" }, 404);
+        const machine = c.req.param("machine") ?? "";
+        // A machine can hold two doors and this screen shows one: the ssh key it syncs with, and a device enrollment
+        // whose card is gone, which no screen lists. Both end here, or "revoked" would leave a live credential behind.
+        const door = await revokeCardlessHost(services, machine);
+        const key = await revokeEnrollmentByMachine(services.config.historyRoot, machine);
+        return key || door ? c.json({ ok: true }) : c.json({ error: "no device is enrolled under that name" }, 404);
     },
 });

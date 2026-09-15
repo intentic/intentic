@@ -1,6 +1,8 @@
 import { join } from "node:path";
 import { HOST_HEARTBEAT_MS,type hostContract,type HostFacts,type HostHello,HostHelloSchema,type HostScopes,type HostSummary } from "@intentic/sandbox-contract";
 import type { ContractRouterClient } from "@orpc/contract";
+import { capabilityCtx } from "../capabilities/capability.js";
+import { hostHandler } from "../capabilities/handlers/host.handler.js";
 import type { Services } from "../composition.js";
 import { PEER_BRIDGES, type PeerDoor } from "../peers/peer.js";
 import type { PeerHub } from "../peers/peer-hub.js";
@@ -62,6 +64,19 @@ export const hostSummaries = async (services: Services): Promise<HostSummary[]> 
             },
         ];
     });
+
+// A card is the whole of a device's grant, so an enrollment outliving one is a credential nothing lists and nothing can
+// withdraw: dropped with the rest of that machine's access. A carded device is left alone, since its card owns it.
+export const revokeCardlessHost = async (services: Services, id: string): Promise<boolean> => {
+    if (id === "" || !(await services.hosts.enrolled(id))) {
+        return false;
+    }
+    if ((await services.capabilities.list()).some((capability) => capability.kind === "host" && capability.id === id)) {
+        return false;
+    }
+    await hostHandler.remove?.(capabilityCtx(services), id, {});
+    return true;
+};
 
 export const hostPeerRoutes = (services: Services) =>
     createPeerRoutes(services, HOST_PEER, {

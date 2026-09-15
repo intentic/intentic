@@ -216,6 +216,16 @@ and the Capabilities device cards, which state a sync-only machine as a row of t
 colour the board gives it and the one thing it cannot do yet. Before that, Capabilities knew only the card door, so a
 live machine could be listed on one screen and missing from the other.
 
+Removal follows the same shape. A row the reader cannot end is a dead end, so the sync-only row carries **Disconnect**
+beside Connect and presses the revoke the Devices board presses (`DELETE /system/authorized-key/<machine>`). That route
+ends every door the machine holds, not only the ssh key: a device enrollment no card grants goes with it
+([host-peer.ts](../../_sandbox/sandbox/src/hosts/host-peer.ts)), since nothing lists it and no button would reach it.
+The rule behind that is the card being the whole grant — `admitPeer`
+([peer-routes.ts](../../_sandbox/sandbox/src/peers/peer-routes.ts)) refuses a socket whose id no card holds rather than
+attaching it on whatever scopes it was last pushed, and `peers/invariant.ts` names an enrollment the manifest does not.
+The manifest is a workspace file a checkout or a land can rewrite behind the daemon, which is how the two records drift
+apart in the first place.
+
 That list is a contract route (`system.devices`), not a hand-written one beside them, so the daemon advertises its
 payload shape along with every other route's. It has to be: which machine runs this sandbox is read out of this
 payload, and every "do it out there" button is gated on that answer — so a daemon that shapes the payload differently

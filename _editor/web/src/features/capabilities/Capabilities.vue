@@ -86,7 +86,7 @@ import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } fr
 import { useTerminalPanel } from "../terminal/useTerminalPanel";
 import { HOST_DOOR, usePeerConnect, WEBEXT_DOOR } from "../sandbox/devices/usePeerConnect";
 import { useVpn } from "../sandbox/devices/useVpn";
-import { useDevices } from "../sandbox/devices/useDevices";
+import { revokeSyncDevice, useDevices } from "../sandbox/devices/useDevices";
 import { type DeviceConnection, deviceConnections, isDeviceConnection, machineNamed } from "./model/deviceConnections";
 
 // Capabilities give the agent tools (GitHub, MCP servers, SSH hosts, Stripe) and scaffold managed repos. Core cards are
@@ -181,7 +181,7 @@ const cards = computed<CatalogCard[]>(() =>
 // The other door a machine can arrive through. Desktop sync is capability-free by design, so a laptop syncing files
 // holds no card — which used to mean this page showed no trace of a machine the Devices board called live. Both read
 // the daemon's one device registry now; shared without polling it, since the Devices tab owns that cadence.
-const { devices: fleet, readAt: fleetReadAt } = useDevices({ poll: false });
+const { devices: fleet, readAt: fleetReadAt, refetch: refetchFleet } = useDevices({ poll: false });
 const syncOnlyDevices = computed<DeviceConnection[]>(() => deviceConnections(fleet.value, fleetReadAt.value));
 // This card's share of them, for the card pane's own list.
 const selectedDevices = computed<DeviceConnection[]>(() =>
@@ -874,6 +874,32 @@ const stopEditing = (): void => {
 // rather than something a single click does quietly.
 const connectSyncedDevice = (device: DeviceConnection): void => openConnection(device.cardId, device.id);
 
+// Disconnect, from the same row. The machine holds no capability to remove, so this ends the enrollment it is listed
+// for — the daemon takes every other door that machine holds with it, including one whose card is already gone.
+const disconnecting = ref<DeviceConnection>();
+const disconnectingDevice = ref(false);
+const askDisconnectDevice = (device: DeviceConnection): void => {
+    disconnecting.value = device;
+};
+const confirmDisconnectDevice = async (): Promise<void> => {
+    const device = disconnecting.value;
+    if (device === undefined) {
+        return;
+    }
+    disconnectingDevice.value = true;
+    error.value = null;
+    try {
+        await revokeSyncDevice(device.machine);
+    } catch (err) {
+        error.value = noticeFrom(err, `Could not disconnect that machine.`);
+    } finally {
+        disconnectingDevice.value = false;
+        disconnecting.value = undefined;
+        // Refetched whether or not the call threw: the row is losing its enrollment either way.
+        refetchFleet();
+    }
+};
+
 // Walks the recommended cards one at a time, reusing each card's own ordinary form rather than a separate wizard.
 // The queue is derived from the query, never snapshotted, so connecting or dismissing a card removes it by itself.
 const SETUP = `recommended`;
@@ -1229,6 +1255,7 @@ const submitLabel = computed(() => {
                                     :key="device.id"
                                     :device="device"
                                     @connect="connectSyncedDevice(device)"
+                                    @disconnect="askDisconnectDevice(device)"
                                 />
                             </RowGroup>
 
@@ -1629,6 +1656,24 @@ const submitLabel = computed(() => {
                 <p class="text-sm text-content">
                     Remove <b>{{ confirmRemoveId }}</b> from your sandbox? This tears down its configuration and can't be undone.
                 </p>
+            </ConfirmDialog>
+
+            <!-- Names what stops as precisely as the Devices board does: this is the same revoke, pressed from the card. -->
+            <ConfirmDialog
+                :open="disconnecting !== undefined"
+                :header="`Disconnect ${disconnecting?.title ?? `this machine`}?`"
+                confirm-label="Disconnect"
+                confirm-icon="times"
+                :destructive="true"
+                :loading="disconnectingDevice"
+                @cancel="disconnecting = undefined"
+                @confirm="void confirmDisconnectDevice()"
+            >
+                <p class="text-sm text-content">
+                    <span class="font-mono">{{ disconnecting?.title }}</span> loses access to this sandbox: its file sync stops and its mirrored ports
+                    drop off its localhost within a minute. Nothing on that machine is deleted, and its agent stays installed.
+                </p>
+                <p class="mt-2 text-sm text-muted">Connecting it again means running a fresh command on that machine.</p>
             </ConfirmDialog>
 
             <!-- The one edit that's a migration rather than a form field; see askRename. -->
