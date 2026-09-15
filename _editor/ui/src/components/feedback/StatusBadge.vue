@@ -1,6 +1,8 @@
 <!-- Status pill: shared chrome for active, error, and pending states. -->
 <script lang="ts">
-export type StatusVariant = `success` | `danger` | `warning` | `info` | `neutral` | `primary`;
+import type { StatusVariant } from "./statusBadge.js";
+
+export type { StatusVariant };
 
 const VARIANT: Record<StatusVariant, string> = {
     success: `bg-success/10 text-success`,

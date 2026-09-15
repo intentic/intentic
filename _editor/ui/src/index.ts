@@ -67,6 +67,26 @@ export { default as InfoTable } from "./components/feedback/InfoTable.vue";
 // Body of one device's sync detail (folders, localhost ports, watcher liveness); the desktop app and web Devices
 // tab frame it differently.
 export { default as DeviceDetail } from "./components/sandbox/DeviceDetail.vue";
+// A device's agent as a group of its own: the build its loop serves, what that loop wants, and the verbs that
+// move it. The web Devices tab and the desktop app's manager window draw the same block from their own facts.
+export { default as DeviceAgentGroup } from "./components/sandbox/DeviceAgentGroup.vue";
+// Just the column of lines, for a surface that lists several agents and can't give each one a group.
+export { default as DeviceAgentNotes } from "./components/sandbox/DeviceAgentNotes.vue";
+export {
+    AGENT_DUTIES,
+    type AgentAction,
+    type AgentNote,
+    type AgentPanel,
+    agentCarries,
+    // The panel's notes and its blocked reason as one column, for a surface drawing them outside the group.
+    agentLines,
+    // The wording both callers share: the badge's word for a reported loop, and the two errands it can carry.
+    agentLoopNote,
+    agentLoopState,
+    agentSkewNote,
+    type DeviceAgentState,
+    RESTART_AGENT,
+} from "./components/sandbox/deviceAgent.js";
 // Verbatim machine output pane under a working row; shared by the desktop app and web, which drive the same
 // containers.
 export { default as DeviceRunLog } from "./components/sandbox/DeviceRunLog.vue";
@@ -79,7 +99,6 @@ export {
     type DeviceSandboxGroup,
     type DeviceSandboxResources,
     type DeviceSandboxRow,
-    type DeviceAgentState,
     // Whether the device is off this sandbox's ports; decides which way a Stop/Start button points.
     mirroringOff,
     // Whether a pairing has a file-sync session at all; decides whether Pause syncing has anything to act on.

@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import {
     Button,
+    DeviceAgentGroup,
     DeviceDetail,
     DeviceRunLog,
     type DeviceSandboxGroup,
     type DeviceSandboxRow,
-    type DeviceAgentState,
     Notice,
     type ResourcesAsk,
+    Row,
+    RowGroup,
+    RowNote,
     SandboxResourcesDialog,
+    sandboxGroups,
     type SandboxVerb,
     SandboxVerbs,
     sandboxVerbPrompt,
@@ -21,6 +25,7 @@ import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 import { initAnalytics, track, trackBeforeExit } from "./analytics";
 import Requirements from "./components/Requirements.vue";
+import { desktopAgentPanel } from "./deviceAgent";
 import SetupProgress from "./components/SetupProgress.vue";
 import { dragWindow } from "./dragWindow";
 import { useFitToContent } from "./fitWindow";
@@ -278,35 +283,25 @@ const sandboxRows = computed<DeviceSandboxRow[]>(() =>
     })),
 );
 
-// Compares the agent's running build against what's installed, since the loop keeps serving its starting build
-// until restarted after an upgrade.
-const deviceAgent = computed<DeviceAgentState | undefined>(() => {
-    const agent = status.value?.sync.agent;
-    if (agent === undefined) {
-        return undefined;
-    }
-    const runningBuild = agent.build;
-    const installed = agent.installed;
-    // An unstamped running build predates the stamp (older, not missing); `0.0.0` marks a working-tree agent, never
-    // stale.
-    if (!agent.running || installed === undefined || installed === `0.0.0` || runningBuild === installed) {
-        return agent;
-    }
-    return { ...agent, staleBuild: { running: runningBuild, installed } };
-});
+// The agent as the kit's panel (deviceAgent.ts), the same object the SPA's Devices tab hands <DeviceAgentGroup>.
+const agentPanel = computed(() => desktopAgentPanel(status.value));
 
 // Restarting the loop from the window: this app runs ON the device the two commands were for, so nothing here has
 // any business asking for a terminal. The report is re-read afterwards, since the agent's state IS the answer.
 const agentRestarting = ref(false);
 const agentRestartError = ref<string | undefined>(undefined);
+// What the loop said back, in its own words, the way the SPA's Devices tab reports the same op.
+const agentRestartOutcome = ref<string | undefined>(undefined);
 const restartAgent = async (): Promise<void> => {
     if (agentRestarting.value) {
         return;
     }
     agentRestarting.value = true;
     agentRestartError.value = undefined;
+    agentRestartOutcome.value = undefined;
     try {
-        await deviceAgentRestart();
+        const said = await deviceAgentRestart();
+        agentRestartOutcome.value = said.trim() === `` ? `The agent restarted.` : said.trim();
     } catch (error) {
         agentRestartError.value = String(error);
     } finally {
@@ -319,11 +314,17 @@ const restartAgent = async (): Promise<void> => {
 // The docker row behind a view group, which every verb below needs.
 const slugOf = (group: DeviceSandboxGroup): string | undefined => group.sandbox?.slug;
 
-// Whether the shared view has anything to draw: containers, folders and ports independently, since a pruned
-// container can leave only the latter two.
-const hasRows = computed(
-    () => sandboxes.value.length > 0 || (status.value?.sync.pairings.length ?? 0) > 0 || (status.value?.sync.ports.length ?? 0) > 0,
+// The rows the list will draw, folded exactly as <DeviceDetail> folds them, so the group's count is the number
+// of rows under it rather than a second arithmetic that can disagree.
+const groups = computed(() => sandboxGroups(status.value?.sync.pairings ?? [], status.value?.sync.ports ?? [], sandboxRows.value));
+
+// The machine's own facts in the quietest ink: what identifies this computer among several enrolled ones.
+const hardware = computed(() =>
+    [status.value?.sync.hostname, status.value?.sync.os ?? info.value?.os].filter((fact) => fact !== undefined && fact !== ``).join(` · `),
 );
+
+// Named rather than "this device" wherever the machine can name itself; the hover sentence reads as prose.
+const machineName = computed(() => status.value?.sync.hostname ?? `this device`);
 
 // Last phase id before a failure, not the sentence, so wording changes don't break funnel comparisons.
 const stepOf = (event: RunEvent): string | undefined =>
@@ -1028,22 +1029,34 @@ onUnmounted(() => {
 
 <!-- THE MANAGER: what this machine is running, once nothing is being handed over. -->
             <template v-else>
-                <header class="flex items-center gap-3 select-none" @mousedown="dragWindow">
-                    <h1 class="flex-1 text-base font-semibold">This device</h1>
-                    <span v-if="info" class="font-mono text-2xs text-subtle">v{{ info.version }}</span>
-                    <Button size="small" severity="secondary" :text="true" label="Refresh" :disabled="running" @click="refresh">
-                        <template #icon><Icon name="refresh" /></template>
-                    </Button>
-                    <button
-                        type="button"
-                        :class="ui.iconButton(`h-7 w-7`)"
-                        aria-label="Back to your workspace"
-                        v-tooltip.left="'Back to your workspace'"
-                        @click="openWorkspace()"
-                    >
-                        <Icon name="times" />
-                    </button>
-                </header>
+<!-- THE MASTHEAD IS THE TITLE BAR: the SPA's device page masthead (DevicePage.vue), and every press on it that isn't a control moves the window (dragWindow.ts). -->
+                <Row :flush="true" :heading="2" density="comfortable" title="This device" class="select-none" @mousedown="dragWindow">
+                    <template #lead="{ mark }">
+                        <span
+                            class="flex shrink-0 items-center justify-center rounded-md bg-content/10 text-content"
+                            :style="{ width: `${mark}px`, height: `${mark}px` }"
+                        >
+                            <Icon name="desktop" class="text-sm" />
+                        </span>
+                    </template>
+                    <template v-if="hardware !== ``" #description>{{ hardware }}</template>
+<!-- This app's own version, not the agent's: the agent states its build in the group below, as it does on the web page. -->
+                    <template v-if="info" #meta><span class="font-mono">v{{ info.version }}</span></template>
+                    <template #control>
+                        <Button size="small" severity="secondary" :text="true" label="Refresh" :disabled="running" @click="refresh">
+                            <template #icon><Icon name="refresh" /></template>
+                        </Button>
+                        <button
+                            type="button"
+                            :class="ui.iconButton(`h-7 w-7`)"
+                            aria-label="Back to your workspace"
+                            v-tooltip.left="'Back to your workspace'"
+                            @click="openWorkspace()"
+                        >
+                            <Icon name="times" />
+                        </button>
+                    </template>
+                </Row>
 
 <!-- Describes what's true now, never what will happen later. -->
             <Notice v-if="update.kind === `ready`" tone="info" class="items-center">
@@ -1065,9 +1078,32 @@ onUnmounted(() => {
                 <span>Docker isn't reachable, so there is nothing to show yet. Start Docker, or set a sandbox up from your workspace.</span>
             </p>
             <!-- Hidden while a sync enrollment is on screen, or the empty-state message would contradict it. -->
-            <p v-else-if="!hasRows && !syncSetup" class="text-2xs text-muted">
+            <p v-else-if="groups.length === 0 && !syncSetup" class="text-2xs text-muted">
                 No sandboxes here yet. Set one up from your workspace: this screen is where you manage it afterwards.
             </p>
+
+<!-- The agent didn't answer, which is a different absence from having none: said here rather than under a list it explains the emptiness of. -->
+            <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
+
+<!--
+    The SPA's own agent group (DeviceAgentGroup), drawn from this machine's own reading instead of a device
+    registry. This window IS the device, so its one verb never needs a command to go and type.
+-->
+            <DeviceAgentGroup
+                v-if="agentPanel"
+                :panel="agentPanel"
+                :subject="machineName"
+                :busy="running || busy !== undefined"
+                :running="agentRestarting ? `restart` : undefined"
+                :activity="agentRestartError !== undefined || agentRestartOutcome !== undefined"
+                @run="void restartAgent()"
+            >
+<!-- The agent's own answer, refusal or otherwise; the row above already shows whether the loop came back. -->
+                <template #activity>
+                    <Notice v-if="agentRestartError" tone="danger" class="text-2xs">{{ agentRestartError }}</Notice>
+                    <p v-else class="text-xs text-muted">{{ agentRestartOutcome }}</p>
+                </template>
+            </DeviceAgentGroup>
 
 <!-- A sync enrollment in flight: folder picked in the system dialog, same script as the card's one-liner, narrating here. -->
             <section v-if="syncSetup" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
@@ -1110,55 +1146,36 @@ onUnmounted(() => {
                 </div>
             </section>
 
-<!-- One row per sandbox with its folder, ports, image and verbs, matching the SPA's Devices tab. -->
-            <section v-if="hasRows || reportError" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
-                <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
-                <!-- The agent's own refusal, in its words; the row above already shows whether the loop came back. -->
-                <Notice v-if="agentRestartError" tone="danger" class="text-2xs">{{ agentRestartError }}</Notice>
-                <DeviceDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows" :agent="deviceAgent">
-                    <!-- This window IS that device, so its agent is restarted here rather than named as two commands. -->
-                    <template #agentAction>
-                        <Button
-                            size="small"
-                            severity="secondary"
-                            :label="agentRestarting ? `Restarting…` : `Restart agent`"
-                            :loading="agentRestarting"
-                            :disabled="running || busy !== undefined"
-                            @click="void restartAgent()"
-                        />
-                    </template>
-                    <!-- Agent state is a fact about the machine, shown once here rather than repeated per row. -->
-                    <template #heading>
-                        <span class="flex items-center gap-2 text-2xs font-semibold tracking-wide text-subtle uppercase">
-                            Sandboxes on this device
-                            <span v-if="status?.version" class="font-mono normal-case">agent v{{ status.version }}</span>
-                        </span>
-                    </template>
-                    <template #actions="{ group }">
-                        <SandboxVerbs
-                            v-if="group.sandbox"
-                            :running="group.sandbox.running"
-                            :busy="busyVerb(group)"
-                            :disabled="running || busy !== undefined"
-                            :logs-open="logOpen(group)"
-                            @act="(verb) => act(group, verb)"
-                        />
-                    </template>
-                    <!-- The machine's own output, while a row works and for as long as its log tail stays open. -->
-                    <template #footer="{ group }">
-                        <DeviceRunLog
-                            v-if="busyVerb(group) || logOpen(group)"
-                            :lines="paneLines(group)"
-                            :running="busyVerb(group) !== undefined"
-                            empty="Starting on this device…"
-                            note="Running on this device: it keeps going even if you close this window."
-                        />
-                        <Notice v-if="rowFailure && rowFailure.slug === group.sandbox?.slug" tone="danger" class="text-2xs">
-                            {{ rowFailure.message }}
-                        </Notice>
-                    </template>
-                </DeviceDetail>
-            </section>
+<!-- One row per sandbox with its folder, ports, image and verbs, in the SPA's Devices tab's own group. -->
+            <RowGroup v-if="groups.length > 0" label="Sandboxes on this device" :count="groups.length">
+                <RowNote variant="block">
+                    <DeviceDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows">
+                        <template #actions="{ group }">
+                            <SandboxVerbs
+                                v-if="group.sandbox"
+                                :running="group.sandbox.running"
+                                :busy="busyVerb(group)"
+                                :disabled="running || busy !== undefined"
+                                :logs-open="logOpen(group)"
+                                @act="(verb) => act(group, verb)"
+                            />
+                        </template>
+                        <!-- The machine's own output, while a row works and for as long as its log tail stays open. -->
+                        <template #footer="{ group }">
+                            <DeviceRunLog
+                                v-if="busyVerb(group) || logOpen(group)"
+                                :lines="paneLines(group)"
+                                :running="busyVerb(group) !== undefined"
+                                empty="Starting on this device…"
+                                note="Running on this device: it keeps going even if you close this window."
+                            />
+                            <Notice v-if="rowFailure && rowFailure.slug === group.sandbox?.slug" tone="danger" class="text-2xs">
+                                {{ rowFailure.message }}
+                            </Notice>
+                        </template>
+                    </DeviceDetail>
+                </RowNote>
+            </RowGroup>
 
             <footer class="flex flex-wrap items-center gap-2 pt-1">
                 <Button size="small" severity="secondary" label="Open workspace" @click="openWorkspace()">

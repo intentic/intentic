@@ -38,17 +38,6 @@ export interface DeviceFolderRow {
     backupStatus?: string | undefined;
 }
 
-// The agent, in the three states a reader can act on. `stalled` is decided by the caller (see
-// `agentStalled` in the sandbox contract), so browser and terminal can't disagree about one machine.
-export interface DeviceAgentState {
-    running: boolean;
-    stalled?: boolean | undefined;
-    pid?: number | undefined;
-    // The build serving now, and the newer one installed beside it, when a machine hasn't picked up an update yet.
-    // Optional: a loop old enough to predate the build stamp reports no build at all, while still running.
-    staleBuild?: { readonly running: string | undefined; readonly installed: string } | undefined;
-}
-
 // One container's share of its machine right now: caps, whether privileged, whether the GPU rides along,
 // and who asked for each privilege (`overlayRuntime`: the approved environment; `hostRuntime`: the owner).
 export interface DeviceSandboxResources {

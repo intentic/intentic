@@ -39,9 +39,10 @@ from any device. The app adds no third plane. It is three thin native things aro
    its image, its share of this machine and its verbs: start, stop, restart, resources (the memory and CPU caps,
    privileged, GPU, applied as a recreate onto the same image), update, roll back, logs, remove. What **desktop sync** is
    doing here is read by spawning `intentic-machine status --json` exactly as the lifecycle actions spawn their
-   scripts, and the whole row is `@intentic/ui`'s `DeviceDetail` with `@intentic/ui`'s `SandboxVerbs` on it:
-   the same two components the web app's Devices tab uses, so the two cannot describe one machine
-   differently or offer different buttons for it.
+   scripts, and the whole screen is the web app's device page rebuilt from the same parts: `@intentic/ui`'s
+   `Row` as the masthead, `DeviceAgentGroup` for what this machine's agent is doing, and a `RowGroup` of
+   `DeviceDetail` rows with `SandboxVerbs` on them. The two screens cannot describe one machine differently,
+   offer different buttons for it, or look like two different products.
 
    That third item was the app's largest blind spot: `SYNC_DIR` rides the setup link into `connect.sh` and was
    never heard from again, so the window that exists to be the no-terminal way to run a sandbox could show a

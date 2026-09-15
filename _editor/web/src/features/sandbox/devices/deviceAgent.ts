@@ -1,11 +1,21 @@
 import type { Device, DeviceAgentOp } from "@intentic/sandbox-contract";
-import type { IconName, StatusVariant } from "@intentic/ui";
-import type { NoticeTone } from "@intentic/ui/notice";
+// The kit's DOM-free subpath, not the barrel: this module is pure, and its tests run without a document.
+import {
+    type AgentAction,
+    agentLoopNote,
+    agentLoopState,
+    type AgentNote,
+    type AgentPanel,
+    agentSkewNote,
+    RESTART_AGENT,
+} from "@intentic/ui/device-agent";
 import { agentBehind, deviceReconnecting } from "./deviceFacts";
-import type { DeviceRow, RowAgent } from "./deviceRows";
+import type { DeviceRow } from "./deviceRows";
 
-// The agent running on one device, as the panel that both states it and changes it: the build its loop
-// serves, whether that is the build on disk and the build published, and the two verbs that move either.
+// What this sandbox's device registry knows about one machine's agent, folded into the kit's AgentPanel —
+// the shape <DeviceAgentGroup> draws on both this tab and the desktop app's manager window. The wording every
+// caller shares lives in the kit; what is here is what only a registry can answer: whether the machine is
+// reachable at all, and whether a newer agent has been published.
 // Pure, so every rule below is checkable without mounting anything (deviceAgent.test.ts).
 
 // Both verbs are offered whenever the machine can hear them, not only when this sandbox has decided
@@ -13,53 +23,13 @@ import type { DeviceRow, RowAgent } from "./deviceRows";
 // sandbox that never reached the registry, or on an agent published since this sandbox last looked — and
 // each of those is a walk to the machine to type `intentic-machine upgrade` by hand.
 
-export interface AgentAction {
-    readonly op: DeviceAgentOp;
-    readonly label: string;
-    readonly hint: string;
-}
-
-export interface AgentNote {
-    readonly text: string;
-    /** Absent for a remark that is merely true; a tone makes it a notice with an errand behind it. */
-    readonly tone?: NoticeTone;
-    /** The glyph for an untoned remark; a toned one wears its notice's own. */
-    readonly icon?: IconName;
-    /** The sentence the line was cut down from, on hover: detail nobody has to read to act. */
-    readonly hint?: string;
-}
-
-// What this one process carries, as the row's description: three glyphs, not a sentence about them.
-export const AGENT_DUTIES: readonly { readonly icon: IconName; readonly label: string }[] = [
-    { icon: `folder`, label: `Folders` },
-    { icon: `ports`, label: `Ports` },
-    { icon: `terminal`, label: `Commands` },
-];
-
-export interface AgentPanel {
-    /** The build the loop serves, or the best-known version; absent when no door has named one. */
-    readonly version: string | undefined;
-    /** The loop's own state, in the badge's word and colour. */
-    readonly state: { readonly word: string; readonly variant: StatusVariant };
-    /** Facts too small for a sentence, in the meta cluster's ink. */
-    readonly facts: readonly string[];
-    /** In falling severity; a settled agent still gets one, so the buttons beside it are not unexplained. */
-    readonly notes: readonly AgentNote[];
-    /** Empty on a machine no click could reach, where `blocked` says why instead. */
-    readonly actions: readonly AgentAction[];
-    readonly blocked: AgentNote | undefined;
-}
-
-const RESTART: AgentAction = {
-    op: `restart`,
-    label: `Restart agent`,
-    hint: `Stops and starts this device's agent loop. Nothing is downloaded — the build already installed there is the one that comes up.`,
-};
+/** This tab's panel: every op the contract names, since a connected machine can hear all of them. */
+export type DeviceAgentPanel = AgentPanel<DeviceAgentOp>;
 
 // Worded for a current agent as much as a stale one, since it is offered on both: "the newest there is",
 // never "the newest we know of", because the device resolves that for itself when it downloads. This hint is
 // where the panel keeps what it no longer says out loud — what an update touches, and what it leaves alone.
-const UPGRADE: AgentAction = {
+const UPGRADE: AgentAction<DeviceAgentOp> = {
     op: `upgrade`,
     label: `Update agent`,
     hint: `Fetches the newest agent onto this device, installs it, and restarts its loop — the one process this sandbox reaches the device through. Safe on an agent that is already current; its folders, pairings and mirrored ports are untouched either way.`,
@@ -67,7 +37,7 @@ const UPGRADE: AgentAction = {
 
 // Update leads: it is the errand people come to this group for, and it restarts the loop on its way past,
 // which makes Restart the narrower of the two rather than the first thing to try.
-const ACTIONS: readonly AgentAction[] = [UPGRADE, RESTART];
+const ACTIONS: readonly AgentAction<DeviceAgentOp>[] = [UPGRADE, RESTART_AGENT];
 
 // Every verb here travels over the device's own outbound socket, so a machine not holding one gets the
 // sentence without the controls. Wider than the container verbs' `commandable`, by one case: a device
@@ -118,8 +88,8 @@ const blockedWhy = (device: Device, readAt: number): AgentNote | undefined => {
     return device.gap === undefined ? GAP_BLOCKED.offline : GAP_BLOCKED[device.gap];
 };
 
+// Two states only a registry can be in, ahead of the loop's own three (agentLoopState).
 const stateOf = (row: DeviceRow, readAt: number): AgentPanel[`state`] => {
-    const agent = row.agent;
     // A loop whose socket dropped seconds ago reported perfectly well a moment before; the reading is missing
     // because the machine is between connections, which is the badge's own word for it rather than the absence.
     if (deviceReconnecting(row.device, readAt)) {
@@ -127,48 +97,14 @@ const stateOf = (row: DeviceRow, readAt: number): AgentPanel[`state`] => {
     }
     // A machine that has never reported has an agent this sandbox has only ever been dialled by; its
     // version is known from the hello frame, its loop is not.
-    if (agent === undefined) {
+    if (row.agent === undefined) {
         return { word: `not reported`, variant: `neutral` };
     }
-    if (!agent.running) {
-        return { word: `stopped`, variant: `warning` };
-    }
-    return agent.stalled ? { word: `stalled`, variant: `warning` } : { word: `running`, variant: `success` };
+    return agentLoopState(row.agent);
 };
-
-// A dead loop and a stalled one are the same errand — bring the loop back — so at most one of them is said.
-const loopNote = (agent: RowAgent | undefined): AgentNote | undefined => {
-    if (agent === undefined) {
-        return undefined;
-    }
-    if (!agent.running) {
-        return { text: `Loop stopped — nothing reaches its folders or ports.`, tone: `warning` };
-    }
-    return agent.stalled
-        ? {
-              text: `Loop stalled — what is below may be out of date.`,
-              tone: `warning`,
-              hint: `Its agent is alive but has stopped making rounds, so this sandbox's picture of its folders and ports is as old as the last one.`,
-          }
-        : undefined;
-};
-
-// A separate errand from the loop's own state: the file on disk is newer than what the process runs, which a
-// restart alone closes and a download would not.
-const skewNote = (skew: RowAgent[`staleBuild`]): AgentNote | undefined =>
-    skew === undefined
-        ? undefined
-        : {
-              text:
-                  skew.running === undefined
-                      ? `Serving a build older than the ${skew.installed} installed — a restart picks it up.`
-                      : `Serving ${skew.running}, ${skew.installed} installed — a restart picks it up.`,
-              tone: `warning`,
-              hint: `A loop keeps the build it started with until it restarts, so replacing the file on disk changes nothing on its own.`,
-          };
 
 // Judged on the installed build, since that is what an update downloads over; a device whose only problem is
-// a stale loop is skewNote's, not this one's.
+// a stale loop is agentSkewNote's, not this one's.
 const publishedNote = (row: DeviceRow, latest: string): AgentNote => {
     const held = row.device.report?.agent.installed ?? row.chip?.version;
     return {
@@ -198,7 +134,7 @@ const standingNote = (latest: string | undefined, offered: boolean): AgentNote =
 // agent still gets one line, so the buttons beside it are never unexplained.
 const notesOf = (row: DeviceRow, latest: string | undefined, offered: boolean): AgentNote[] => {
     const behind = latest !== undefined && agentBehind(row.device, latest);
-    const notes = [loopNote(row.agent), skewNote(row.agent?.staleBuild), behind ? publishedNote(row, latest) : undefined].filter(
+    const notes = [agentLoopNote(row.agent), agentSkewNote(row.agent?.staleBuild), behind ? publishedNote(row, latest) : undefined].filter(
         (note) => note !== undefined,
     );
     return notes.length === 0 ? [standingNote(latest, offered)] : notes;
@@ -206,7 +142,7 @@ const notesOf = (row: DeviceRow, latest: string | undefined, offered: boolean): 
 
 // Nothing to say and nothing to do: a machine with no version from either door and no command door is one
 // this group would draw an empty heading for.
-export const deviceAgentPanel = (row: DeviceRow, latest: string | undefined, readAt: number): AgentPanel | undefined => {
+export const deviceAgentPanel = (row: DeviceRow, latest: string | undefined, readAt: number): DeviceAgentPanel | undefined => {
     const { device } = row;
     const version = row.chip?.version;
     if (version === undefined && device.hostId === undefined) {

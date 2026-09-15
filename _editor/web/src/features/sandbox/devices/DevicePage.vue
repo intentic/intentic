@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import {
+    agentLines,
     Button,
     ConfirmDialog,
+    DeviceAgentGroup,
+    DeviceAgentNotes,
     DeviceDetail,
     DeviceRunLog,
     type DeviceSandboxGroup,
@@ -22,7 +25,7 @@ import { type RouteLocationRaw, RouterLink } from "vue-router";
 import DeviceConcern from "./DeviceConcern.vue";
 import DeviceRunners from "./DeviceRunners.vue";
 import { boardRoute } from "./deviceLinks";
-import { AGENT_DUTIES, deviceAgentPanel } from "./deviceAgent";
+import { deviceAgentPanel } from "./deviceAgent";
 import { blockAttention, type DeviceCardFix, deviceAttention } from "./deviceAttention";
 import {
     commandable,
@@ -99,15 +102,11 @@ const concernsOf = (row: DeviceRow) =>
 // and the two verbs that change either. Undefined only on a machine with no version and no command door.
 const agentOf = (row: DeviceRow) => deviceAgentPanel(row, latest, readAt);
 
-// The panel's lines in reading order: what the agent wants, then why it has no buttons. One list, so the
-// two render as one column of short lines instead of two blocks that happen to sit together.
+// A many-sided machine draws its environments' notes itself, outside any group of their own.
 const agentLinesOf = (row: DeviceRow) => {
     const panel = agentOf(row);
-    return panel === undefined ? [] : [...panel.notes, ...(panel.blocked === undefined ? [] : [panel.blocked])];
+    return panel === undefined ? [] : agentLines(panel);
 };
-
-// The sentence the duty strip replaced, kept where a reader can still reach for it.
-const agentIs = (row: DeviceRow): string => `Everything this sandbox does on ${row.device.label} goes through this one process.`;
 
 // Whether an environment's agent block has anything to show: an op in flight, its log, or its answer.
 const agentActivity = (row: DeviceRow): boolean =>
@@ -226,70 +225,29 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             </template>
         </div>
 
-        <!--
-            The agent, as an object with verbs rather than a version printed under the machine's name. Above the
-            two lists because it is what makes their buttons work, and because updating it used to mean walking to
-            the machine: the controls are standing ones, offered on a healthy agent too, since "behind" is a
-            comparison this sandbox can only make when it knows what has been published.
-        -->
-        <RowGroup v-if="lone && agentOf(lone)" label="Agent on this device">
-            <Row icon="desktop" :title="agentOf(lone)?.version === undefined ? `Agent` : `Agent ${agentOf(lone)?.version}`">
-                <!-- What the process carries, as three glyphs: the sentence it replaced is on hover, and the rest is on Update agent. -->
-                <template #description>
-                    <span v-tooltip.top="agentIs(lone)" class="flex w-fit flex-wrap items-center gap-x-3 gap-y-0.5">
-                        <span v-for="duty in AGENT_DUTIES" :key="duty.label" class="inline-flex items-center gap-1">
-                            <Icon :name="duty.icon" aria-hidden="true" />{{ duty.label }}
-                        </span>
-                    </span>
-                </template>
-                <template #meta>
-                    <span v-for="fact in agentOf(lone)?.facts" :key="fact" class="font-mono">{{ fact }}</span>
-                    <StatusBadge :variant="agentOf(lone)?.state.variant ?? `neutral`" size="xs" :dot="true" :label="agentOf(lone)?.state.word ?? ``" />
-                </template>
-                <!-- Both ops run on that device over its own socket, so both spin the whole page's one-op-at-a-time lock. -->
-                <template v-if="(agentOf(lone)?.actions.length ?? 0) > 0" #control>
-                    <Button
-                        v-for="action in agentOf(lone)?.actions"
-                        :key="action.op"
-                        size="small"
-                        severity="secondary"
-                        :label="action.label"
-                        :loading="ops.agentRunning(lone, action.op)"
-                        :disabled="ops.working.value"
-                        v-tooltip.top="action.hint"
-                        @click="void ops.runAgent(lone, action.op)"
-                    />
-                </template>
-            </Row>
-
-            <!-- What this agent wants, what has been published, and why the buttons are missing; the settled case still gets its one quiet line. -->
-            <RowNote variant="block">
-                <div class="flex flex-col gap-2">
-                    <template v-for="note in agentLinesOf(lone)" :key="note.text">
-                        <Notice v-if="note.tone" v-tooltip.top="note.hint" :tone="note.tone">{{ note.text }}</Notice>
-                        <p v-else v-tooltip.top="note.hint" class="flex w-fit items-center gap-1.5 text-xs text-muted">
-                            <Icon v-if="note.icon" :name="note.icon" aria-hidden="true" class="shrink-0" />{{ note.text }}
-                        </p>
-                    </template>
-                </div>
-            </RowNote>
-
-            <!-- Agent operations report status and output in one block. -->
-            <RowNote v-if="agentActivity(lone)" variant="block">
-                <div class="flex min-w-0 flex-col gap-2">
-                    <p v-if="ops.agentWaiting(lone)" class="text-xs text-muted">{{ ops.agentWaiting(lone) }}</p>
-                    <DeviceRunLog
-                        v-if="ops.agentBusy(lone) || ops.agentLines(lone).length > 0"
-                        :lines="ops.agentLines(lone)"
-                        :running="ops.agentBusy(lone)"
-                        empty="Starting on that device…"
-                        note="Runs on that device, and keeps going if you leave this page or the connection drops."
-                    />
-                    <Notice v-if="ops.failure.value?.key === ops.agentKey(lone)" :of="ops.failure.value.notice" />
-                    <p v-else-if="ops.outcome.value?.key === ops.agentKey(lone)" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
-                </div>
-            </RowNote>
-        </RowGroup>
+        <!-- The kit's agent group, the same block the desktop app's manager window draws for the device it runs on. -->
+        <DeviceAgentGroup
+            v-if="lone && agentOf(lone)"
+            :panel="agentOf(lone)!"
+            :subject="lone.device.label"
+            :busy="ops.working.value"
+            :running="ops.agentOp(lone)"
+            :activity="agentActivity(lone)"
+            @run="(op) => void ops.runAgent(lone!, op)"
+        >
+            <template #activity>
+                <p v-if="ops.agentWaiting(lone)" class="text-xs text-muted">{{ ops.agentWaiting(lone) }}</p>
+                <DeviceRunLog
+                    v-if="ops.agentBusy(lone) || ops.agentLines(lone).length > 0"
+                    :lines="ops.agentLines(lone)"
+                    :running="ops.agentBusy(lone)"
+                    empty="Starting on that device…"
+                    note="Runs on that device, and keeps going if you leave this page or the connection drops."
+                />
+                <Notice v-if="ops.failure.value?.key === ops.agentKey(lone)" :of="ops.failure.value.notice" />
+                <p v-else-if="ops.outcome.value?.key === ops.agentKey(lone)" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
+            </template>
+        </DeviceAgentGroup>
 
         <!--
             A many-sided machine: one row per environment, each its own door with its own agent, permissions and
@@ -325,7 +283,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                             size="small"
                             severity="secondary"
                             :label="action.label"
-                            :loading="ops.agentRunning(environment, action.op)"
+                            :loading="ops.agentOp(environment) === action.op"
                             :disabled="ops.working.value"
                             v-tooltip.top="action.hint"
                             @click="void ops.runAgent(environment, action.op)"
@@ -346,12 +304,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                             :route="concern.fix?.kind === `card` ? cardRoute(concern.fix) : undefined"
                             @connect="reconnecting = environment.device.key"
                         />
-                        <template v-for="note in agentLinesOf(environment)" :key="note.text">
-                            <Notice v-if="note.tone" v-tooltip.top="note.hint" :tone="note.tone">{{ note.text }}</Notice>
-                            <p v-else v-tooltip.top="note.hint" class="flex w-fit items-center gap-1.5 text-xs text-muted">
-                                <Icon v-if="note.icon" :name="note.icon" aria-hidden="true" class="shrink-0" />{{ note.text }}
-                            </p>
-                        </template>
+                        <DeviceAgentNotes :notes="agentLinesOf(environment)" />
                         <template v-if="agentActivity(environment)">
                             <p v-if="ops.agentWaiting(environment)" class="text-xs text-muted">{{ ops.agentWaiting(environment) }}</p>
                             <DeviceRunLog

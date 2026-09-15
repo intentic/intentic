@@ -1,6 +1,7 @@
-<!-- A device's synced folders, ports, containers, and agent status. -->
+<!-- A device's synced folders, ports and containers. What its agent is doing is <DeviceAgentGroup>'s, stated
+     once above this list rather than a second time riding it. -->
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useId, useSlots, watch } from "vue";
+import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
 import CopyButton from "../primitives/CopyButton.vue";
 import Icon from "../primitives/Icon.vue";
 import {
@@ -15,7 +16,6 @@ import {
     type DevicePortRow,
     type DeviceSandboxGroup,
     type DeviceSandboxRow,
-    type DeviceAgentState,
     mirroringOff,
     portHolder,
     portNote,
@@ -29,7 +29,6 @@ const {
     pairings = [],
     ports = [],
     sandboxes = [],
-    agent,
     open = [],
     undivided = false,
 } = defineProps<{
@@ -38,9 +37,6 @@ const {
     // Containers on the machine, when known (desktop's own `docker ps`, or a `host`-capability daemon read);
     // absent, every row is just a folder and its ports.
     sandboxes?: readonly DeviceSandboxRow[];
-    // The device's agent, for a caller with nowhere else to show it; the web Devices tab states this itself
-    // above the list, so it passes none.
-    agent?: DeviceAgentState | undefined;
     // Sandbox ids the caller wants unfolded on arrival; the component unfolds anything needing attention on
     // its own, this is only for what it can't know.
     open?: readonly string[];
@@ -50,8 +46,6 @@ const {
 }>();
 
 defineSlots<{
-    /** What the caller calls this list, on the same line as the agent's own state, when passed. */
-    heading?: () => unknown;
     /** Anything else worth saying about one sandbox, beside its name. */
     badges?: (props: { group: DeviceSandboxGroup }) => unknown;
     /** What can be done to it, right-aligned on the same line; the caller owns the verbs. */
@@ -68,19 +62,7 @@ defineSlots<{
     sync?: (props: { group: DeviceSandboxGroup }) => unknown;
     /** What follows the row while it's working: a run log, the result of the last action. */
     footer?: (props: { group: DeviceSandboxGroup }) => unknown;
-    // Restarting this device's agent, beside the state that asks for it. A caller that can reach the machine
-    // (this app IS it; the web tab has the device's socket) fills this, and the two-command prose below is
-    // dropped: a command to type is for a machine nobody here can act on.
-    agentAction?: () => unknown;
 }>();
-
-const slots = useSlots();
-// Whether a click can close this agent's state, which decides between the caller's button and prose naming the two
-// commands. Read off the slot, not a prop: a caller either has a way to that machine or it doesn't.
-const canRestart = computed(() => slots[`agentAction`] !== undefined);
-// The states a restart closes: a dead loop, a stalled one, or one on a build this machine has already replaced. Judged
-// here rather than by the caller, so its button appears in the same three cases the prose named.
-const restartOwed = computed(() => agent !== undefined && (!agent.running || agent.stalled === true || agent.staleBuild !== undefined));
 
 const groups = computed(() => sandboxGroups(pairings, ports, sandboxes));
 
@@ -147,58 +129,6 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
 
 <template>
     <div class="flex flex-col gap-3">
-<!-- Agent status gates the machine details below. -->
-        <div v-if="agent || $slots[`heading`]" class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <slot name="heading" />
-            <div v-if="agent" class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-<!-- An alive but inactive agent uses the stopped-state colour. -->
-                <template v-if="agent.stalled === true">
-                    <StatusBadge variant="warning" :dot="true" size="xs" label="agent stalled" />
-                    <span class="text-xs text-warning">
-                        Its process is alive but has stopped making rounds, so ports and commits below may be out of date.
-                        <template v-if="!canRestart">
-                            Restart it with <span class="font-mono">intentic-machine run --stop</span> then
-                            <span class="font-mono">intentic-machine run</span>
-                        </template>
-                    </span>
-                </template>
-                <template v-else-if="agent.running">
-                    <span class="inline-flex items-center gap-1.5 text-xs text-muted">
-                        <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
-                        Agent running
-                    </span>
-                    <span v-if="agent.pid !== undefined" class="font-mono text-2xs text-subtle">pid {{ agent.pid }}</span>
-<!-- Working on a build this machine has already replaced; not a badge, since nothing is broken and only a restart is owed. -->
-                    <span v-if="agent.staleBuild !== undefined" class="text-xs text-warning">
-                        <template v-if="agent.staleBuild.running">
-                            on <span class="font-mono">{{ agent.staleBuild.running }}</span>, while
-                            <span class="font-mono">{{ agent.staleBuild.installed }}</span> is installed here
-                        </template>
-                        <!-- Too old to report which build it's running; that absence is itself the answer. -->
-                        <template v-else>
-                            on a build older than the <span class="font-mono">{{ agent.staleBuild.installed }}</span> installed here
-                        </template>
-<!-- The two commands stay whole across a wrap; this sentence is long enough to break mid-command otherwise. -->
-                        <!-- The colon hugs the word: a `<template>` boundary opening on the next line inserts a space before it. -->
-                        — it keeps the build it started with, so it owes a restart<template v-if="!canRestart"
-                            >: <span class="font-mono whitespace-nowrap">intentic-machine run --stop</span> then
-                            <span class="font-mono whitespace-nowrap">intentic-machine run</span></template
-                        >
-                    </span>
-                </template>
-                <template v-else>
-                    <StatusBadge variant="warning" :dot="true" size="xs" label="agent stopped" />
-                    <span class="text-xs text-warning">
-                        Nothing is reaching this device's folders or ports until it restarts<template v-if="!canRestart"
-                            >: <span class="font-mono">intentic-machine run</span></template
-                        >
-                    </span>
-                </template>
-                <!-- The caller's own way to that machine, beside whichever state is asking for a restart. -->
-                <slot v-if="restartOwed" name="agentAction" />
-            </div>
-        </div>
-
         <div class="flex flex-col">
             <div
                 v-for="group in groups"
@@ -273,7 +203,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                             </span>
                             <span v-else class="text-xs text-subtle">no folder synced</span>
                             <CopyButton v-if="group.folder.localDir" :text="group.folder.localDir" v-tooltip.top="`Copy path`" />
-<!-- Silent when healthy (`watching`): the machine's own "agent running" line already says the sync is alive. -->
+<!-- Silent when healthy (`watching`): the agent group above this list already says the sync is alive. -->
                             <StatusBadge
                                 v-if="folderState(group.folder) && !restingSync(group.folder)"
                                 :variant="folderTone(folderState(group.folder))"

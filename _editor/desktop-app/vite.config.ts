@@ -14,6 +14,9 @@ export default defineConfig({
     plugins: [vue(), tailwindcss()],
     resolve: {
         alias: {
+            // Subpath before the barrel: a string alias also matches `<key>/…`, so the barrel would swallow this
+            // and resolve into a directory.
+            "@intentic/ui/device-agent": join(root, `_editor/ui/src/components/sandbox/deviceAgent.ts`),
             "@intentic/ui": join(root, `_editor/ui/src/index.ts`),
         },
     },

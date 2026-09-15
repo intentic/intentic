@@ -123,7 +123,8 @@ export interface DeviceOps {
 
     // One environment's agent and its two ops.
     readonly runAgent: (environment: DeviceRow, op: DeviceAgentOp) => Promise<void>;
-    readonly agentRunning: (environment: DeviceRow, op: DeviceAgentOp) => boolean;
+    /** Which of this environment's ops is in flight; a row has one thing to say. */
+    readonly agentOp: (environment: DeviceRow) => DeviceAgentOp | undefined;
     readonly agentBusy: (environment: DeviceRow) => boolean;
     readonly agentLines: (environment: DeviceRow) => readonly string[];
     readonly agentWaiting: (environment: DeviceRow) => string | undefined;
@@ -449,7 +450,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         confirmingUnpair,
         confirmUnpair,
         runAgent,
-        agentRunning: (environment, op) => agentOp.value?.key === agentKey(environment) && agentOp.value.op === op,
+        agentOp: (environment) => (agentOp.value?.key === agentKey(environment) ? agentOp.value.op : undefined),
         agentBusy: (environment) => agentOp.value?.key === agentKey(environment),
         agentLines: (environment) => (agentLog.value?.key === agentKey(environment) ? agentLog.value.lines : []),
         agentWaiting: (environment) => (waiting.value?.key === agentKey(environment) ? waiting.value.text : undefined),

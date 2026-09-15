@@ -19,9 +19,12 @@ import {
     InfoDialog,
     InfoHint,
     InfoTable,
+    type AgentPanel,
+    DeviceAgentGroup,
     DeviceDetail,
     type DeviceFolderRow,
     DeviceRunLog,
+    RESTART_AGENT,
     mirroringOff,
     type DevicePortRow,
     type DeviceSandboxRow,
@@ -134,6 +137,18 @@ const KIT_PORTS: readonly DevicePortRow[] = [
     { port: 6379, sandboxId: `work-intentic-dev`, state: `busy`, command: `/usr/bin/docker-proxy -proto tcp -host-port 6379` },
     { port: 5173, sandboxId: `lab-intentic-dev`, state: `held-by-sandbox`, heldBy: `work-intentic-dev`, command: `node vite` },
 ];
+// A healthy loop with both verbs offered: the standing case, where the quiet note is what makes the buttons legible.
+const KIT_AGENT: AgentPanel = {
+    version: `1.275.0`,
+    state: { word: `running`, variant: `success` },
+    facts: [`pid 12716`],
+    notes: [{ text: `Newest agent this sandbox knows of.`, icon: `check-circle` }],
+    actions: [
+        { op: `upgrade`, label: `Update agent`, hint: `Fetches the newest agent onto this device, installs it, and restarts its loop.` },
+        RESTART_AGENT,
+    ],
+    blocked: undefined,
+};
 
 // One ref per stateful part, mirroring how each surface tracks its own flag.
 const modalSize = ref<(typeof MODAL_SIZES)[number]>(`md`);
@@ -454,26 +469,28 @@ const pickedTier = ref(`collaborator`);
                 </div>
             </section>
 
-            <!-- Shown here since the desktop app's manager window (which draws the same UI) can't be opened in a browser. -->
+            <!-- Shown here since the desktop app's manager window (which draws the same two blocks) can't be opened in a browser. -->
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">A device's sandboxes</h2>
-                <div class="rounded-xl border border-line bg-canvas p-4">
-                    <DeviceDetail :pairings="KIT_PAIRINGS" :ports="KIT_PORTS" :sandboxes="KIT_SANDBOXES" :agent="{ running: true, pid: 4821 }">
-                        <template #heading><span :class="ui.sectionLabel()">Sandboxes on this device</span></template>
-                        <template #actions="{ group }">
-                            <SandboxVerbs v-if="group.sandbox" :running="group.sandbox.running" />
-                        </template>
-                        <!-- Clears this device's localhost only, stops nothing in the sandbox; row three shows mirroring off. -->
-                        <template #ports="{ group }">
-                            <Button
-                                size="small"
-                                severity="secondary"
-                                :text="true"
-                                :label="mirroringOff(group.folder) ? `Start mirroring` : `Stop mirroring`"
-                            />
-                        </template>
-                    </DeviceDetail>
-                </div>
+                <h2 :class="ui.sectionLabel()">A device's agent and its sandboxes</h2>
+                <DeviceAgentGroup :panel="KIT_AGENT" subject="this device" />
+                <RowGroup label="Sandboxes on this device" :count="KIT_SANDBOXES.length">
+                    <RowNote variant="block">
+                        <DeviceDetail :pairings="KIT_PAIRINGS" :ports="KIT_PORTS" :sandboxes="KIT_SANDBOXES">
+                            <template #actions="{ group }">
+                                <SandboxVerbs v-if="group.sandbox" :running="group.sandbox.running" />
+                            </template>
+                            <!-- Clears this device's localhost only, stops nothing in the sandbox; row three shows mirroring off. -->
+                            <template #ports="{ group }">
+                                <Button
+                                    size="small"
+                                    severity="secondary"
+                                    :text="true"
+                                    :label="mirroringOff(group.folder) ? `Start mirroring` : `Stop mirroring`"
+                                />
+                            </template>
+                        </DeviceDetail>
+                    </RowNote>
+                </RowGroup>
                 <DeviceRunLog
                     :lines="[`intentic: pulling ghcr.io/intentic/sandbox:stable`, `intentic: recreating the container`, `ready`]"
                     :running="true"

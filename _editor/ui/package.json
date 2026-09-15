@@ -70,6 +70,10 @@
             "types": "./src/components/sandbox/deviceDetail.ts",
             "default": "./src/components/sandbox/deviceDetail.ts"
         },
+        "./device-agent": {
+            "types": "./src/components/sandbox/deviceAgent.ts",
+            "default": "./src/components/sandbox/deviceAgent.ts"
+        },
         "./sandbox-resources": {
             "types": "./src/components/sandbox/sandboxResources.ts",
             "default": "./src/components/sandbox/sandboxResources.ts"
