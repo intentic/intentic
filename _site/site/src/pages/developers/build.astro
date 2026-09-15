@@ -3,6 +3,8 @@ import { developersBook } from "@intentic/site-content/developers";
 import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
 import DocsLayout from "../../components/docs/DocsLayout.astro";
 import DocsRelated from "../../components/docs/DocsRelated.astro";
+// Imported rather than written here: a sample holding a script tag breaks vite's dep scan of an .astro file.
+import { incidentsView } from "../../lib/sfc-samples";
 
 const install = `mkdir acme-incidents && cd acme-incidents
 pnpm init
@@ -70,27 +72,6 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
         }),
     );
 };`;
-
-const view = `<script setup lang="ts">
-import { useQuery } from "@tanstack/vue-query";
-import { host } from "./host";
-
-// One activation per repo. The host binds \`repo\` (and any extra props) for you.
-const props = defineProps<{ repo: string }>();
-
-const { data } = useQuery({
-    // Always prefix with api.sandbox.key(...) so the cache can't bleed across a sandbox switch.
-    queryKey: host.sandbox.key(\`incidents\`, props.repo),
-    queryFn: () => host.sandbox.json<{ lines: string[] }>(\`/logs\`),
-    enabled: () => host.sandbox.reachable(),
-});
-</script>
-
-<template>
-    <ul>
-        <li v-for="line in data?.lines ?? []" :key="line">{{ line }}</li>
-    </ul>
-</template>`;
 
 const viteConfig = `import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
@@ -185,7 +166,7 @@ const workspace = `.intentic/config/workspace-extensions/
         Views are ordinary Vue components. The host binds <code>repo</code> and any props from the activation, and provides its own Vue,
         vue-query and design-system instances, so your component joins the shell's single query cache and re-themes with it.
     </p>
-    <DocsCodeBlock code={view} lang="typescript" title="src/IncidentsView.vue" />
+    <DocsCodeBlock code={incidentsView} lang="typescript" title="src/IncidentsView.vue" />
     <p>
         Two rules make caching behave. Prefix every query key with <code>api.sandbox.key(...)</code> so a sandbox switch can't serve you
         another box's data, and gate fetches on <code>api.sandbox.reachable()</code> so a sleeping sandbox doesn't produce a wall of errors.

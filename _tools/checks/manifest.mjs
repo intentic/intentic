@@ -39,5 +39,6 @@ export const CHECKS = [
     { id: "buttons", file: "button-tiers.mjs", needs: "checkout", gate: "tidy", about: "every action button is <Button>" },
     { id: "inputs", file: "input-tiers.mjs", needs: "checkout", gate: "tidy", about: "every field is ui-field-box" },
     { id: "run-settings", file: "run-settings-tier.mjs", needs: "checkout", gate: "tidy", about: "effort, extended thinking and speed are one control" },
+    { id: "astro-scripts", file: "astro-scripts.mjs", needs: "checkout", gate: "tidy", about: "no script tag inside an .astro frontmatter" },
     { id: "vue-templates", file: "vue-templates.mjs", needs: "node_modules", gate: "code", about: "every .vue template compiles (attempted where vue is installed)" },
 ];

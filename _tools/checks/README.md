@@ -11,8 +11,9 @@ Every check that reads the checkout and nothing else, listed once and run everyw
   shrunk wire contract arrives declared, the daemon's module seams stay where they are, no build script removes
   a directory agent turns have mounted over, the UI draws from its design system, a mark beside a run of text is
   placed by the rule that computes it rather than by a hand-tuned offset, no tracked text file carries a control
-  byte, every skill description fits the budget the prompt pays for on every call, and the one picture that
-  defines the site's four product nouns is read from a docs page and never from the home page.
+  byte, every skill description fits the budget the prompt pays for on every call, no `.astro` frontmatter holds a
+  script tag for vite's dependency scan to lift out and parse, and the one picture that defines the site's four
+  product nouns is read from a docs page and never from the home page.
 
 ## Key files
 
