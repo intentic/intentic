@@ -1,4 +1,5 @@
 import {
+    type AgentChecklist,
     type AgentEvent,
     type AgentStatus,
     type AgentSummary,
@@ -196,6 +197,19 @@ const openSteps = (list: readonly TodoItem[]): UnfinishedWork["steps"] => {
     // What it would pick up next: the one already in progress, else the first still waiting.
     const next = (open.find((item) => item.status === "in_progress") ?? open[0])?.content;
     return { open: open.length, total: list.length, ...(next !== undefined ? { next } : {}) };
+};
+
+// Where the checklist stands, for a card rather than for a verdict: the live list while the daemon still holds it,
+// else what the last turn recorded as left open. An empty list is no list, and says so by carrying nothing.
+const checklistOf = (entry: PersistedAgent, state: RuntimeState | undefined): AgentChecklist | undefined => {
+    const live = state?.checklist;
+    if (live !== undefined) {
+        return live.length === 0 ? undefined : { done: live.filter((item) => item.status === "completed").length, total: live.length };
+    }
+    // The only reading that survives a daemon restart, and only for a turn that ended with work open: `unfinished` is
+    // persisted, the runtime list is not.
+    const steps = entry.unfinished?.steps;
+    return steps === undefined ? undefined : { done: steps.total - steps.open, total: steps.total };
 };
 
 // The check's verdict, only when it ran and failed; passed, cancelled, or never run leaves nothing.
@@ -552,6 +566,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(outputTokens > 0 ? { outputTokens } : {}),
             ...contextFill(state),
             ...(state?.activity !== undefined ? { activity: state.activity } : {}),
+            ...opt("checklist", checklistOf(entry, state)),
             // Live account of the commit message being drafted; kept until the next land replaces it.
             ...(messageDrafts.has(entry.id) ? { landedMessageDraft: messageDrafts.get(entry.id) } : {}),
             // The finished sentence itself, the moment it exists; the Changes panel's 'From' chip reads it straight off

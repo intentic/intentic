@@ -1387,6 +1387,62 @@ describe("agents registry", () => {
             await registry.finish("c1", 4_000);
             expect(registry.get("c1")?.unfinished).toEqual({ at: 4_000, steps: left });
         });
+
+        // The card's rim, unlike the mark above, is NOT held back mid-turn: watching it fill is the whole point.
+        describe("checklist progress", () => {
+            it("counts the live list the moment a turn publishes one", async () => {
+                const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+                await registry.init();
+                await registry.begin(turn(), 1_000);
+                registry.observe("c1", list(["Read the registry", "completed"], ["Draw the mark", "in_progress"], ["Cover it with tests", "pending"]));
+                expect(registry.get("c1")?.checklist).toEqual({ done: 1, total: 3 });
+            });
+
+            it("reads a settled turn's completed list as whole", async () => {
+                const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+                await registry.init();
+                await registry.begin(turn(), 1_000);
+                registry.observe("c1", list(["Read the registry", "completed"], ["Draw the mark", "completed"]));
+                await registry.finish("c1", 2_000);
+                // `unfinished` is cleared by the same turn: nothing was left open, and the rim still says 2 of 2.
+                expect(registry.get("c1")?.unfinished).toBeUndefined();
+                expect(registry.get("c1")?.checklist).toEqual({ done: 2, total: 2 });
+            });
+
+            // `begin` installs a blank runtime state, so between it and the turn's first `todos` frame the only
+            // surviving reading is what the last turn recorded as left open.
+            it("carries the last turn's standing across the start of the next one", async () => {
+                const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+                await registry.init();
+                await registry.begin(turn(), 1_000);
+                registry.observe("c1", list(["Draw the mark", "completed"], ["Cover it with tests", "pending"], ["Update the pages", "pending"]));
+                await registry.finish("c1", 2_000);
+                expect(registry.get("c1")?.checklist).toEqual({ done: 1, total: 3 });
+
+                await registry.begin(turn({ prompt: "carry on" }), 3_000);
+                expect(registry.get("c1")?.checklist).toEqual({ done: 1, total: 3 });
+
+                registry.observe("c1", list(["Draw the mark", "completed"], ["Cover it with tests", "completed"], ["Update the pages", "pending"]));
+                expect(registry.get("c1")?.checklist).toEqual({ done: 2, total: 3 });
+            });
+
+            it("carries nothing for a conversation that kept no list", async () => {
+                const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+                await registry.init();
+                await registry.begin(turn(), 1_000);
+                await registry.finish("c1", 2_000);
+                expect(Object.keys(registry.get("c1") ?? {})).not.toContain("checklist");
+            });
+
+            // An empty list is no list: a zero-segment rim would be a ring saying nothing, not a ring saying none done.
+            it("carries nothing for an empty list", async () => {
+                const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+                await registry.init();
+                await registry.begin(turn(), 1_000);
+                registry.observe("c1", list());
+                expect(Object.keys(registry.get("c1") ?? {})).not.toContain("checklist");
+            });
+        });
     });
 
     it("subscribe delivers an immediate snapshot and change broadcasts", async () => {

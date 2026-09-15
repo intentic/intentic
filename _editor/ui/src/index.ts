@@ -164,6 +164,8 @@ export { default as RowGroup } from "./components/rows/RowGroup.vue";
 export { default as RowNote } from "./components/rows/RowNote.vue";
 export { default as SearchBar } from "./components/forms/SearchBar.vue";
 export { default as SegmentedControl } from "./components/forms/SegmentedControl.vue";
+// ProgressRing's countable sibling: one arc per item, for progress through a list rather than a fraction.
+export { default as SegmentRing } from "./components/charts/SegmentRing.vue";
 // Accent to palette-slot resolver, for a view with authored accents (e.g. a documentation map) to paint them the
 // way a figure would.
 export { seriesColor } from "./components/charts/seriesAccent.js";

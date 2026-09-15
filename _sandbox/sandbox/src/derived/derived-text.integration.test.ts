@@ -103,11 +103,19 @@ test("never more than two children at once, however many files a reader opens", 
     };
     const all = Promise.all(Array.from({ length: 6 }, (_, index) => deriveText(root, `file${index}.zip`, exec)));
     // Released one at a time, so a queue that let everything through would have shown its peak before the first ends.
-    // A fixed number of turns rather than "until the list is empty": the next child starts a tick after the one before
-    // it ends, so an empty list mid-drain means "not started yet". Six handoffs need six of these; the rest are slack.
-    for (let turn = 0; turn < 30; turn += 1) {
-        releases.shift()?.();
-        await new Promise((resolve) => setImmediate(resolve));
+    // Waits for each child to ARRIVE rather than spending a fixed number of event-loop turns on the drain: a handoff
+    // costs several turns of real filesystem work, and more of them on a loaded machine, so a turn budget sized against
+    // an idle run empties mid-drain and leaves `all` pending until the suite's own timeout.
+    const releaseNext = async (): Promise<void> => {
+        let release = releases.shift();
+        while (release === undefined) {
+            await new Promise((resolve) => setImmediate(resolve));
+            release = releases.shift();
+        }
+        release();
+    };
+    for (let child = 0; child < 6; child += 1) {
+        await releaseNext();
     }
     await all;
     expect(peak).toBe(2);

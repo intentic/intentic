@@ -12,8 +12,9 @@ import {
     activityLine,
     agentStatusMeta,
     attentionReason,
-    contextPct,
     type FleetLane,
+    type TileRim,
+    tileRim,
     turnInFlight,
     unreadBadge,
 } from "../../agents/fleet/agentStatus";
@@ -245,11 +246,10 @@ const statusOf = (entry: OpenChat): { name: IconName; spin?: boolean; class: str
     return { name: icon.name, spin: icon.spin, class: `text-xs ${icon.class}`, "aria-label": statusLabel(status) };
 };
 
-// How much of the model's context window this chat has spent, for the mark's rim. Only the fleet agent knows it:
-// a conversation this window holds but the roster has not filed has nothing measured, and its mark wears the empty
-// rim rather than a guess.
-const contextOf = (entry: OpenChat): number | undefined =>
-    entry.agent === undefined ? undefined : contextPct(entry.agent.contextTokens, entry.agent.contextWindow);
+// What the mark's rim draws: the chat's own checklist, or how much of the context window it has spent. Only the fleet
+// agent knows either, so a conversation this window holds but the roster has not filed wears the empty rim rather than
+// a guess. Not `quiet`: every row here is an open session, not a destination.
+const rimOf = (entry: OpenChat): TileRim | undefined => (entry.agent === undefined ? undefined : tileRim(entry.agent, { quiet: false }));
 
 // The board's cooling chip at rail width: the glyph and its sentence, without the countdown, since a second clock
 // beside the title would read as the turn's own. Absent for a conversation the roster has not filed, like the rim above.
@@ -649,7 +649,7 @@ const keepTab = (event: Event, id: string): void => {
                             :match-case="matchCase"
                             :provider="agent?.provider ?? c.provider.value"
                             :status="statusOf({ conversation: c, agent })"
-                            :context="contextOf({ conversation: c, agent })"
+                            :rim="rimOf({ conversation: c, agent })"
                             :unfinished="agent?.unfinished"
                             :live="liveOf({ conversation: c, agent })"
                             :now="now"

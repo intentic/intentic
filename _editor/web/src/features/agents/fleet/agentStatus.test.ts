@@ -9,7 +9,9 @@ import {
     type ClientAgentStatus,
     laneOf,
     limitCountdown,
+    type RimAgent,
     reviewAction,
+    tileRim,
     turnInFlight,
     unfinishedMark,
     unregistered,
@@ -449,4 +451,66 @@ it(`effectiveLimitMove reads the conversation's override over the sandbox defaul
     expect(effectiveLimitMove(undefined, true)).toBe(true);
     expect(effectiveLimitMove({ moveAfterLimit: false }, true)).toBe(false);
     expect(effectiveLimitMove({ moveAfterLimit: true }, false)).toBe(true);
+});
+
+// The identity tile's rim: which of the two readings it draws, how far round, and in what ink. One function, because
+// the board card and the rail card render from it and may not disagree.
+describe(`tileRim`, () => {
+    const at = (over: Partial<RimAgent> = {}): RimAgent => ({ status: `idle`, attention: none, ...over });
+    // A window and a fill that divide to exactly 61%, so the assertions can state the percentage.
+    const context = { contextTokens: 122_000, contextWindow: 200_000 };
+
+    it(`draws the context arc for a session that kept no list`, () => {
+        expect(tileRim(at(context), { quiet: false })).toEqual({ kind: `context`, percent: 61, tone: `text-primary-500`, hint: `61% of context used` });
+    });
+
+    it(`draws nothing at all when neither reading exists`, () => {
+        expect(tileRim(at(), { quiet: false })).toBeUndefined();
+    });
+
+    // 80 is the band's own edge, not a value near it: at exactly 80 the rim is already amber.
+    it(`turns the context arc amber from 80% up, and quiet ink outranks both`, () => {
+        expect(tileRim(at({ contextTokens: 79, contextWindow: 100 }), { quiet: false })?.tone).toBe(`text-primary-500`);
+        expect(tileRim(at({ contextTokens: 80, contextWindow: 100 }), { quiet: false })?.tone).toBe(`text-warning`);
+        expect(tileRim(at({ contextTokens: 95, contextWindow: 100 }), { quiet: true })?.tone).toBe(`text-subtle`);
+    });
+
+    // THE RIM'S RULE: a checklist takes it whenever there is one, and the context reading rides the hover instead.
+    it(`gives the rim to the checklist and keeps context in the hover`, () => {
+        expect(tileRim(at({ ...context, checklist: { done: 1, total: 4 } }), { quiet: false })).toEqual({
+            kind: `steps`,
+            segments: 5,
+            filled: 1,
+            tone: `text-primary-500`,
+            hint: `1 of 4 steps done · 61% of context used`,
+        });
+    });
+
+    it(`names the steps alone when nothing measured the window`, () => {
+        expect(tileRim(at({ checklist: { done: 1, total: 1 } }), { quiet: false })?.hint).toBe(`1 of 1 step done`);
+    });
+
+    // ITEMS PLUS ONE, AND THE LAST IS THE TURN'S OWN ENDING. A list emptied by a turn still running leaves one segment
+    // bare; only the settled card closes the ring.
+    it(`holds the last segment back until the turn settles`, () => {
+        const whole = { checklist: { done: 3, total: 3 } };
+        expect(tileRim(at({ ...whole, status: `running` }), { quiet: false })).toMatchObject({ segments: 4, filled: 3 });
+        expect(tileRim(at({ ...whole, status: `idle` }), { quiet: false })).toMatchObject({ segments: 4, filled: 4 });
+    });
+
+    // A land spends no model and has no list left to move, so it counts as settled here exactly as it does for the
+    // card's elapsed clock (turnWorking).
+    it(`counts a landing card as settled`, () => {
+        expect(tileRim(at({ checklist: { done: 2, total: 2 }, status: `landing` }), { quiet: false })).toMatchObject({ segments: 3, filled: 3 });
+    });
+
+    // A partly-done list on a card at rest is the commonest reading on the board, and it must not round up to whole.
+    it(`leaves a rested but unfinished list short of its last two segments`, () => {
+        expect(tileRim(at({ checklist: { done: 2, total: 3 } }), { quiet: false })).toMatchObject({ segments: 4, filled: 2 });
+    });
+
+    // The daemon promises done <= total; a frame that broke it would otherwise light more segments than exist.
+    it(`cannot light more segments than the list has`, () => {
+        expect(tileRim(at({ checklist: { done: 9, total: 3 } }), { quiet: false })).toMatchObject({ segments: 4, filled: 4, hint: `3 of 3 steps done` });
+    });
 });

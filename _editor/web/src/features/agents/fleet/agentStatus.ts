@@ -123,6 +123,10 @@ export const turnInFlight = (agent: AgentStanding): boolean =>
     agent.status === `resuming` ||
     agent.status === `landing`;
 
+// A turn actually producing something, as a card's readouts mean it: `landing` is in flight for the hands-off guards
+// but spends no model, and its `startedAt` belongs to the turn before it, so an elapsed clock would be someone else's.
+export const turnWorking = (agent: AgentStanding): boolean => turnInFlight(agent) && agent.status !== `landing`;
+
 // A person already ended this turn and it's unwinding, whether by Stop or by waving away the question it was
 // parked on; both differ only in the lane they settle in (see laneOf). Narrower than `turnInFlight`, which also
 // covers turns nobody ended.
@@ -469,9 +473,60 @@ export const formatElapsed = (startedAt: number, now: number): string => {
     return minutes < 60 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 };
 
-// Context-window fill percentage (0–100), clamped; undefined when either side is unknown.
-export const contextPct = (tokens: number | undefined, window: number | undefined): number | undefined =>
+// Context-window fill percentage (0–100), clamped; undefined when either side is unknown. Private: `tileRim` is the
+// only reader, and a second caller would be a second opinion about what the rim says.
+const contextPct = (tokens: number | undefined, window: number | undefined): number | undefined =>
     tokens === undefined || window === undefined || window === 0 ? undefined : Math.min(100, Math.round((tokens / window) * 100));
+
+// Enough of an agent to draw its identity tile's rim; a FleetAgent, a roster AgentSummary and a test literal all fit.
+export type RimAgent = AgentStanding & Pick<AgentSummary, "checklist" | "contextTokens" | "contextWindow">;
+
+interface RimInk {
+    // Tailwind text-* class: SegmentRing and ProgressRing both draw in `currentColor`.
+    readonly tone: string;
+    // One sentence naming both readings, since the rim can only draw one of them.
+    readonly hint: string;
+}
+export type TileRim =
+    | (RimInk & { readonly kind: "steps"; readonly segments: number; readonly filled: number })
+    | (RimInk & { readonly kind: "context"; readonly percent: number });
+
+const contextSpent = (percent: number): string => `${percent}% of context used`;
+
+// Amber past 80%, the band where a compaction is close; accent below it. A quiet rim states its number without
+// arguing for it, which is what a receipt and a destination row both want.
+const contextRim = (percent: number, quiet: boolean): TileRim => ({
+    kind: `context`,
+    percent,
+    tone: quiet ? `text-subtle` : percent >= 80 ? `text-warning` : `text-primary-500`,
+    hint: contextSpent(percent),
+});
+
+// ONE RIM, SO ONE READING, AND THE CHECKLIST WINS IT. "2 of 4 steps" says what a session will do next; a fill
+// percentage says only when it will start forgetting, which matters to fewer readers more rarely. So the context arc
+// keeps the rim only for the conversations that wrote no list, which is most short ones, and rides the hover for the
+// rest.
+// SEGMENTS ARE ITEMS PLUS ONE, and the extra closes only once the turn settles with every item done: a list emptied
+// mid-turn is not a finished session, and a ring already full while the agent works would claim it was.
+export const tileRim = (agent: RimAgent, { quiet }: { quiet: boolean }): TileRim | undefined => {
+    const percent = contextPct(agent.contextTokens, agent.contextWindow);
+    const list = agent.checklist;
+    if (list === undefined) {
+        return percent === undefined ? undefined : contextRim(percent, quiet);
+    }
+    const done = Math.min(list.done, list.total);
+    const settled = done === list.total && !turnWorking(agent);
+    return {
+        kind: `steps`,
+        segments: list.total + 1,
+        filled: settled ? list.total + 1 : done,
+        tone: quiet ? `text-subtle` : `text-primary-500`,
+        // Noun agrees with the total, not the count done: '1 of 4 steps', but '1 of 1 step'.
+        hint: [`${done} of ${list.total} ${list.total === 1 ? `step` : `steps`} done`, percent === undefined ? undefined : contextSpent(percent)]
+            .filter((part): part is string => part !== undefined)
+            .join(` · `),
+    };
+};
 
 // The activity line's icon by tool family, a glanceable "what is it doing" glyph, mock-style.
 export const activityIcon = (tool: string | undefined): IconName => {

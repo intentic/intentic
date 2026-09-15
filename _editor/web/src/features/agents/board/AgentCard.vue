@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ProgressRing, ui, useDevice } from "@intentic/ui";
+import { Button, ProgressRing, SegmentRing, ui, useDevice } from "@intentic/ui";
 import { errorMessage, useNow } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
@@ -19,7 +19,6 @@ import {
     activityLine,
     agentStatusMeta,
     attentionReason,
-    contextPct,
     formatCost,
     formatElapsed,
     landedAway,
@@ -29,7 +28,9 @@ import {
     limited,
     loopMeta,
     reviewAction,
+    tileRim,
     turnInFlight,
+    turnWorking,
     unreadBadge,
     unregistered,
     watching,
@@ -221,11 +222,10 @@ const landAsk = computed(() => {
 // Its own flag, not a wider `landing`: each button must name back only the action actually pressed.
 const relanding = computed(() => props.pending === `reland`);
 const handingOver = computed(() => props.pending === `resolve`);
-const context = computed(() => contextPct(props.agent.contextTokens, props.agent.contextWindow));
 // Gated on exactly what it renders, no more and no less: gating on a subset hides what should show (subagents
 // mid-turn), a superset opens an empty strip.
-// The diff clause matches the diff chip's own condition, not merely `diff exists`, since renames alone render nothing.
-// Context is deliberately absent: it moved to the identity tile's ring (see `tileHint`), so a card whose only stat was
+// The diff chip's own condition, not merely `diff exists`, since renames alone render nothing.
+// Context is deliberately absent: it moved to the identity tile's rim (see `rim`), so a card whose only stat was
 // its context now opens no summary row at all.
 const stats = computed(
     () =>
@@ -233,36 +233,24 @@ const stats = computed(
         (props.agent.diff !== undefined && (props.agent.diff.insertions > 0 || props.agent.diff.deletions > 0)) ||
         props.agent.subagents !== undefined,
 );
-// THE IDENTITY TILE IS ALSO THE FUEL GAUGE. The kind-of-work glyph was doing one job, telling cards apart, and it
-// did it in the strongest position a card has — leading, where the eye lands first — while the one number that
-// predicts what a session is about to do sat as a 14px ring in the summary row, last, among four other stats.
-// So the ring moved around the tile: how much of the model's context window this session has spent. It is the stat
-// that changes what to do next (an agent at 90% is one turn from compacting and starting to forget, which is when
-// you split the work rather than send another message), and unlike cost it has a denominator, so it can be a ring at
-// all. Cost stays a number, because "$3.26 of what?" has no answer to draw an arc against.
-// Amber past 80%, the band where compaction is close; accent while the work is live; plain ink on a receipt, where
-// the number is history rather than a warning.
-const ringTone = computed(() => {
-    if (receipt.value) {
-        return `text-subtle`;
-    }
-    return (context.value ?? 0) >= 80 ? `text-warning` : `text-primary-500`;
-});
-// One hover for a tile that now carries two facts, since two nested tooltips would raise two boxes over the same
-// 28 pixels. Either half can be missing: a title the category reading declines still has a context ring, and a fresh
-// agent has a category and no context yet.
+// THE IDENTITY TILE IS ALSO THE PROGRESS GAUGE. The kind-of-work glyph was doing one job, telling cards apart, and it
+// did it in the strongest position a card has — leading, where the eye lands first — while the readings that say where
+// a session has got to sat in the summary row, last, among four other stats. So the rim went around the tile, and
+// `tileRim` decides which reading it draws: the agent's own checklist when it kept one, how full the context window
+// is otherwise. Cost stays a number either way, because "$3.26 of what?" has no denominator to draw an arc against.
+// Plain ink on a receipt, where either reading is history rather than a live gauge.
+const rim = computed(() => tileRim(props.agent, { quiet: receipt.value }));
+// One hover for a tile carrying the category as well, since two nested tooltips would raise two boxes over the same
+// 28 pixels. Either half can be missing: a title the category reading declines still has a rim, and a fresh agent has
+// a category and nothing measured yet.
 const tileHint = computed(() => {
-    const parts = [category.value?.type, context.value === undefined ? undefined : `${context.value}% of context used`].filter(
-        (part): part is string => part !== undefined,
-    );
+    const parts = [category.value?.type, rim.value?.hint].filter((part): part is string => part !== undefined);
     return parts.length === 0 ? undefined : parts.join(` · `);
 });
 // Only a card with a daemon registry entry may claim "Completed": client-only standings have no such account of a turn.
 // A history-reopened chat sits in this lane too but says nothing here, since its own chip already states what it is.
 const completed = computed(() => lane.value === `finished` && !unregistered(props.agent.status));
-// A turn actually producing something, as the card's readouts mean it: `landing` is in flight for the hands-off guards
-// but spends no model, and its `startedAt` belongs to the turn before it, so the elapsed clock would be someone else's.
-const working = computed(() => turnInFlight(props.agent) && props.agent.status !== `landing`);
+const working = computed(() => turnWorking(props.agent));
 // Whether the card can show a date at all: an untouched draft can't, and neither can a running turn, whose own elapsed
 // readout takes the same slot.
 const dated = computed(() => props.agent.archivedAt !== undefined || (!working.value && props.agent.updatedAt > 0));
@@ -422,9 +410,26 @@ const grab = (event: PointerEvent): void => {
             <span
                 v-tooltip.top="tileHint"
                 class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
-                :class="context === undefined ? 'ring-(length:--ring-track) ring-inset ring-content/12' : ''"
+                :class="rim === undefined ? 'ring-(length:--ring-track) ring-inset ring-content/12' : ''"
             >
-                <ProgressRing v-if="context !== undefined" :value="context" :size="28" :stroke="1.5" class="absolute inset-0" :class="ringTone" />
+<!-- Ticks for a checklist, an arc for a context window; `tileRim` picks, and both draw at the same size and weight. -->
+                <SegmentRing
+                    v-if="rim?.kind === `steps`"
+                    :segments="rim.segments"
+                    :filled="rim.filled"
+                    :size="28"
+                    :stroke="1.5"
+                    class="absolute inset-0"
+                    :class="rim.tone"
+                />
+                <ProgressRing
+                    v-else-if="rim?.kind === `context`"
+                    :value="rim.percent"
+                    :size="28"
+                    :stroke="1.5"
+                    class="absolute inset-0"
+                    :class="rim.tone"
+                />
                 <IdentityTile :title="agent.title" :provider="agent.provider" class="h-5.5 w-5.5 text-xs" />
             </span>
             <input

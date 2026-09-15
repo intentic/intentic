@@ -41,6 +41,13 @@ export const AgentActivitySchema = z.object({
     todo: z.string().optional().describe("The item on its own list that it is working through."),
 });
 export type AgentActivity = z.infer<typeof AgentActivitySchema>;
+// Where the agent is on its own checklist right now, unlike UnfinishedWorkSchema's account of where a turn stopped.
+// Counts items, never segments: how a rim or a bar divides them is the reader's business.
+export const AgentChecklistSchema = z.object({
+    done: z.number().describe("Items it has completed."),
+    total: z.number().describe("Items on the list. Never zero: a conversation that kept no list carries no clause at all."),
+});
+export type AgentChecklist = z.infer<typeof AgentChecklistSchema>;
 // Which "needs you" flags are raised, the fleet badge aggregates these across all agents.
 export const AgentAttentionSchema = z.object({
     plan: z.boolean().describe("It has proposed a plan and is waiting for a yes."),
@@ -266,6 +273,11 @@ export const AgentSummarySchema = z.object({
             "When this conversation's prompt cache was last kept alive and how long it lasts, which together say when picking the conversation up stops being cheap. Absent when the provider publishes nothing to ground it on.",
         ),
     activity: AgentActivitySchema.optional().describe("What it is doing at this moment."),
+    // Beside `activity` because both answer "where is it", one in a sentence and one as a fraction. Live while a turn
+    // runs, and left standing after it, so a settled card still says how far the work got.
+    checklist: AgentChecklistSchema.optional().describe(
+        "How far it is through its own checklist. Absent for a conversation that kept no list, which is most short ones.",
+    ),
     // The whole drafting story (which models, how long, what refused), replacing a boolean that hid all of it;
     // runtime-only, forgotten on restart like the draft itself.
     landedMessageDraft: LandedMessageDraftSchema.optional().describe(

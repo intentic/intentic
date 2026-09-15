@@ -1,10 +1,10 @@
 <!-- Shared session-card shell for every rail. -->
 <script setup lang="ts">
 import type { AgentProvider, MatchSnippet, UnfinishedWork } from "@intentic/sandbox-contract";
-import { type IconName, ProgressRing } from "@intentic/ui";
+import { type IconName, ProgressRing, SegmentRing } from "@intentic/ui";
 import { computed } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
-import { formatElapsed } from "../features/agents/fleet/agentStatus";
+import { formatElapsed, type TileRim } from "../features/agents/fleet/agentStatus";
 import StatusGlyph from "../features/agents/fleet/StatusGlyph.vue";
 import { markSegments } from "../features/agents/review/markSegments";
 import IdentityTile from "../features/capabilities/connect/IdentityTile.vue";
@@ -20,9 +20,10 @@ const props = defineProps<{
     icon?: IconName;
     // Spread onto the Icon via v-bind; the host derives it once (agentStatusMeta) rather than field by field.
     status?: { name: IconName; spin?: boolean; class: string; "aria-label"?: string };
-    // Percent of the model's context window this session has spent, drawn as the identity mark's rim. Undefined
-    // for a row with nothing measured (and for every row that isn't a session), which wears the empty rim instead.
-    context?: number;
+    // What the identity mark's rim draws: checklist ticks or a context arc, decided once by agentStatus.tileRim so
+    // this card and the board's cannot disagree. Undefined for a row with nothing measured (and for every row that
+    // isn't a session), which wears the empty rim instead.
+    rim?: TileRim;
     // What the last turn left open, as the daemon measured it. Present only for a card at rest; it puts the amber
     // dot on the status glyph, the one thing a resting status cannot say about itself.
     unfinished?: UnfinishedWork;
@@ -47,15 +48,6 @@ const props = defineProps<{
 }>();
 
 const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, props.matchCase === true));
-// The rim's ink, on the board's rule (AgentCard.ringTone): amber past 80%, where a compaction is close and the
-// session is about to start forgetting; the accent below it. A `quiet` row is a destination rather than an open
-// session, so its rim states the number without arguing for it.
-const ringTone = computed(() => {
-    if (props.quiet === true) {
-        return `text-subtle`;
-    }
-    return (props.context ?? 0) >= 80 ? `text-warning` : `text-primary-500`;
-});
 // StatusGlyph's shape from this card's own: the two describe the same thing in different words (`name`/`icon`,
 // `aria-label`/`label`) because `status` is spread straight onto an Icon by every caller that has no unfinished
 // work to report. Adapted here rather than at each call site, so the callers keep one prop shape.
@@ -85,9 +77,25 @@ const statusMeta = computed(() =>
                 <span
                     v-if="provider !== undefined || icon !== undefined"
                     class="relative -mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
-                    :class="context === undefined ? 'ring-(length:--ring-track) ring-inset ring-content/12' : ''"
+                    :class="rim === undefined ? 'ring-(length:--ring-track) ring-inset ring-content/12' : ''"
                 >
-                    <ProgressRing v-if="context !== undefined" :value="context" :size="24" :stroke="1.5" class="absolute inset-0" :class="ringTone" />
+                    <SegmentRing
+                        v-if="rim?.kind === `steps`"
+                        :segments="rim.segments"
+                        :filled="rim.filled"
+                        :size="24"
+                        :stroke="1.5"
+                        class="absolute inset-0"
+                        :class="rim.tone"
+                    />
+                    <ProgressRing
+                        v-else-if="rim?.kind === `context`"
+                        :value="rim.percent"
+                        :size="24"
+                        :stroke="1.5"
+                        class="absolute inset-0"
+                        :class="rim.tone"
+                    />
                     <IdentityTile v-if="provider !== undefined" :title="title" :provider="provider" class="h-4.5 w-4.5 text-2xs" />
                     <!-- A row that is not a session (a workflow run, a search hit) wears its glyph on the same disc. -->
                     <span v-else class="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
