@@ -446,7 +446,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <div v-if="message.text" class="chat-surface relative rounded-lg" :class="{ 'chat-prompt-clamped': overflowing && !expanded }">
                     <div
                         ref="bubble"
-                        class="chat-prompt-text scrollbar-thin whitespace-pre-wrap px-3 py-2 text-xs leading-relaxed text-content"
+                        class="chat-prompt-text whitespace-pre-wrap px-3 py-2 text-xs leading-relaxed text-content"
                         :class="{ 'cursor-pointer': overflowing && !expanded }"
                         @scroll="onBubbleScroll"
                         @click="onBubbleClick"

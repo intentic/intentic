@@ -130,7 +130,7 @@ watch(
                 <div v-if="html" v-html="html"></div>
                 <pre
                     v-else
-                    class="scrollbar-thin overflow-x-auto rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs text-content"
+                    class="overflow-x-auto rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs text-content"
                     :class="{ 'whitespace-pre-wrap': wrap, 'break-words': wrap }"
                     >{{ code }}</pre>
 <!-- `bg-canvas`, not transparent: it sits over the code surface; the block's right padding keeps text clear of it. -->

@@ -41,7 +41,7 @@ providePageBack(back);
     <div class="flex h-dvh flex-col overflow-hidden bg-canvas text-content" style="overscroll-behavior: none">
         <main class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <SandboxGate>
-                <div class="min-h-0 flex-1 overflow-auto scrollbar-thin" style="overscroll-behavior: contain">
+                <div class="min-h-0 flex-1 overflow-auto" style="overscroll-behavior: contain">
                     <RouterView />
                 </div>
             </SandboxGate>

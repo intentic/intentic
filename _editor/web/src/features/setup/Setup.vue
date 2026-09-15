@@ -1288,7 +1288,7 @@ const warmSandboxCredential = async (): Promise<void> => {
 
 <template>
     <!-- dvh not vh: a phone's collapsing chrome makes 100vh taller than the screen, hiding the last step. -->
-    <div class="entry vestibule scrollbar-thin w-full overflow-auto">
+    <div class="entry vestibule w-full overflow-auto">
         <!-- Reuses the sign-in screen's plaque art, cropped to a band, dissolved by the veil: depth behind the masthead. -->
         <div class="entry-plate" aria-hidden="true">
             <div class="entry-plate-img"></div>

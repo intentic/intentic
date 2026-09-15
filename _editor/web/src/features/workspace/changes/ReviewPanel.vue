@@ -922,7 +922,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 v-model="commitMessage"
                 rows="1"
                 :placeholder="chipNotice ?? commitPlaceholder"
-                class="ui-field-box ui-field-sm scrollbar-thin block max-h-[142px] w-full min-w-0 resize-none overflow-y-auto leading-snug"
+                class="ui-field-box ui-field-sm block max-h-[142px] w-full min-w-0 resize-none overflow-y-auto leading-snug"
                 @keydown.ctrl.enter="doCommit"
                 @keydown.meta.enter="doCommit"
             ></textarea>
@@ -1220,7 +1220,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             </button>
         </div>
 
-        <div class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
+        <div class="min-h-0 flex-1 overflow-auto py-1">
             <!-- Loading appears only before the first answer. -->
             <p v-if="!changes.loaded.value && !changes.error.value" class="px-3 py-2 text-2xs text-subtle">Loading changes…</p>
             <!-- An explicitly clean tree distinguishes empty results from missing data. -->

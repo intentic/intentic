@@ -6,7 +6,7 @@ import InfraDeclare from "./InfraDeclare.vue";
 </script>
 
 <template>
-    <div class="scrollbar-thin h-full min-h-0 overflow-auto">
+    <div class="h-full min-h-0 overflow-auto">
         <Page width="wide">
             <PageHeader title="Infrastructure" />
             <InfraDeclare />

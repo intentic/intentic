@@ -121,7 +121,7 @@ onBeforeUnmount(() => {
             <p v-if="!finished && currentName !== ``" class="mt-0.5 truncate text-2xs text-subtle">{{ currentName }}</p>
 
             <!-- Per-folder breakdown: what's landing where -->
-            <ul class="scrollbar-thin mt-2 max-h-28 space-y-1 overflow-auto">
+            <ul class="mt-2 max-h-28 space-y-1 overflow-auto">
                 <li v-for="group in groups" :key="group.name" class="flex items-center gap-2 text-2xs">
                     <Icon name="folder" class="text-[0.6rem] text-muted" />
                     <span class="flex-1 truncate">{{ group.name }}</span>
@@ -130,7 +130,7 @@ onBeforeUnmount(() => {
             </ul>
 
             <!-- Failures spelled out. This is the one phase that never retires itself. -->
-            <ul v-if="failures.length > 0" class="scrollbar-thin mt-3 max-h-24 space-y-1 overflow-auto">
+            <ul v-if="failures.length > 0" class="mt-3 max-h-24 space-y-1 overflow-auto">
                 <li v-for="file in failures" :key="file.path" class="text-2xs text-danger" v-tooltip.left="file.error">
                     <span class="truncate">{{ file.path }}</span>
                     <span class="text-subtle">: {{ file.error }}</span>

@@ -84,7 +84,7 @@ const pick = (entry: RegistryEntry): void => {
                     <input v-model="token" type="password" autocomplete="off" placeholder="Token" :class="ui.input('w-28')" />
                     <Button label="Browse" size="small" :disabled="url.trim().length === 0 || browsing" :loading="browsing" @click="browse" />
                 </div>
-                <div v-if="market" class="scrollbar-thin flex max-h-40 flex-col gap-0.5 overflow-auto">
+                <div v-if="market" class="flex max-h-40 flex-col gap-0.5 overflow-auto">
                     <button
                         v-for="entry in entries"
                         :key="entry.name"

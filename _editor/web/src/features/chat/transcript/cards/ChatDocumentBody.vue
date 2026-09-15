@@ -107,7 +107,7 @@ const onProseClick = (event: MouseEvent): void => {
         </div>
         <div
             v-if="shown"
-            class="scrollbar-thin md-prose chat-markdown chat-markdown-compact overflow-auto"
+            class="md-prose chat-markdown chat-markdown-compact overflow-auto"
             :class="bodyClass"
             :style="{ maxHeight }"
             @click="onProseClick"

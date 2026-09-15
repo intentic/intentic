@@ -360,7 +360,7 @@ const roster = computed(() => {
                     />
                 </div>
 
-                <div v-if="rosterOpen" class="scrollbar-thin overflow-x-auto">
+                <div v-if="rosterOpen" class="overflow-x-auto">
                     <table class="w-full text-2xs">
                         <thead class="text-left text-subtle">
                             <tr class="border-b border-line-subtle">

@@ -674,7 +674,7 @@ useKeybindings();
 
         <main class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">
             <SandboxGate>
-                <div class="min-h-0 flex-1 overflow-auto scrollbar-thin">
+                <div class="min-h-0 flex-1 overflow-auto">
                     <RouterView />
                 </div>
                 <!-- Inside the gate: a docked terminal stays mounted through a stall, its own recovery keeping scrollback. -->

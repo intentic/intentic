@@ -505,7 +505,7 @@ const openHistory = (event: Event): void => {
                     placeholder="Search chats…"
                     class="m-1 shrink-0"
                 />
-                <div class="scrollbar-thin flex min-h-0 max-h-80 flex-col gap-0.5 overflow-auto p-1 pt-0">
+                <div class="flex min-h-0 max-h-80 flex-col gap-0.5 overflow-auto p-1 pt-0">
                     <PastChatList
                         :sessions="sessions"
                         :query="query"

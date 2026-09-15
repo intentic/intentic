@@ -1322,7 +1322,7 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
         <div v-if="barrenBranches.length > 0 && filter.trim() === ''" class="sticky bottom-0 z-10 border-t border-line bg-card">
             <!-- Every branch is named, and each can be kept individually rather than all-or-nothing. -->
             <!-- Space between entries, since each is up to two lines and adjacent ones would otherwise blur together. -->
-            <ul v-if="sweepOpen && barrenBranches.length > 1" class="scrollbar-thin max-h-40 space-y-1.5 overflow-auto border-b border-line py-1.5">
+            <ul v-if="sweepOpen && barrenBranches.length > 1" class="max-h-40 space-y-1.5 overflow-auto border-b border-line py-1.5">
                 <li v-for="branch in barrenBranches" :key="branch.path" class="flex items-start gap-2 pr-2 pl-3">
                     <button
                         type="button"

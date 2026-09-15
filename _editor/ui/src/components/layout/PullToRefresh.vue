@@ -62,7 +62,7 @@ const onTouchEnd = async (): Promise<void> => {
 <template>
     <div
         ref="scroller"
-        class="scrollbar-thin relative min-h-0 flex-1 overflow-auto"
+        class="relative min-h-0 flex-1 overflow-auto"
         style="overscroll-behavior: contain"
         @touchstart.passive="onTouchStart"
         @touchmove="onTouchMove"

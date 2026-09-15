@@ -3,7 +3,6 @@
     .ui-code .shiki {
         margin: 0;
         overflow-x: auto;
-        scrollbar-width: thin;
         border: 1px solid var(--color-line);
         border-radius: var(--radius-md);
         /* Blend with the app surface (overrides Shiki's inline theme background). */
@@ -40,12 +39,6 @@
     .ui-code.ui-code-scroll pre {
         max-height: calc(var(--ui-code-clamp-lines) * 1lh + var(--spacing) * 2 + 2px);
         overflow-y: auto;
-    }
-
-    /* Match `.scrollbar-thin`'s 6px webkit bar so Code.vue's copy-chip offset (`right-4`) clears it. */
-    .ui-code.ui-code-scroll .shiki::-webkit-scrollbar,
-    .ui-code.ui-code-scroll pre::-webkit-scrollbar {
-        width: 6px;
     }
 
 /* THE BOX <CodeField> STACKS ITS TWO HALVES IN. */

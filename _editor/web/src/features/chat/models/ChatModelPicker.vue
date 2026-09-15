@@ -130,7 +130,7 @@ const footerVisible = computed(
 <!-- bg-canvas marks the footer as the surface the list stands on, not more list; a rule alone read unclearly on a tall picker. -->
             <div
                 v-if="footerVisible"
-                class="scrollbar-thin flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2"
+                class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2"
             >
 <!-- Account list and harness axis, shared with the shell's own picker. -->
                 <PickerAccounts

@@ -688,7 +688,7 @@ const seamWidth = computed<number>({
                     </span>
                 </div>
 
-                <div class="scrollbar-thin min-h-0 flex-1 overflow-auto">
+                <div class="min-h-0 flex-1 overflow-auto">
                     <div v-for="group in groups" :key="group.repo">
 <!-- Sticky, since scrolling is what takes the repo context away. -->
                         <div

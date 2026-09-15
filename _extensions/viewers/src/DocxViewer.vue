@@ -53,7 +53,7 @@ watch(
 
 <template>
     <div class="relative h-full min-h-0">
-        <div ref="container" class="docx-host scrollbar-thin h-full overflow-auto bg-muted/20"></div>
+        <div ref="container" class="docx-host h-full overflow-auto bg-muted/20"></div>
         <div v-if="loading" class="absolute inset-0 flex items-center justify-center bg-canvas text-muted">
             <Icon name="spinner" class="text-xl" spin />
         </div>

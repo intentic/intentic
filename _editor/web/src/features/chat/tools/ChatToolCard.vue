@@ -217,7 +217,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             <!-- A sub-agent's own thinking, grouped on its card rather than merged into the parent turn's. -->
             <pre
                 v-if="tool.thinking"
-                class="scrollbar-thin ml-4 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs italic leading-relaxed text-subtle"
+                class="ml-4 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs italic leading-relaxed text-subtle"
                 >{{ tool.thinking }}</pre>
 <!-- A sub-agent's nested transcript, indented under the delegation so the whole run reads as one unit; recursive. -->
             <div v-if="tool.children?.length" class="ml-4 flex flex-col gap-1">
@@ -261,13 +261,13 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 </div>
                 <pre
                     v-if="view.body.output"
-                    class="scrollbar-thin max-h-40 overflow-auto whitespace-pre-wrap px-2 py-1 text-2xs leading-relaxed"
+                    class="max-h-40 overflow-auto whitespace-pre-wrap px-2 py-1 text-2xs leading-relaxed"
                     :class="failed ? 'text-danger' : 'text-muted'"
                     >{{ view.body.output }}</pre>
             </div>
             <div
                 v-else-if="view.body?.kind === 'files'"
-                class="scrollbar-thin ml-4 flex max-h-40 flex-col overflow-auto rounded border border-line bg-canvas px-1 py-1"
+                class="ml-4 flex max-h-40 flex-col overflow-auto rounded border border-line bg-canvas px-1 py-1"
             >
                 <component
                     :is="openFile ? 'button' : 'div'"
@@ -288,7 +288,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             <ChatCodeBody v-else-if="view.body?.kind === 'code'" :code="view.body.code" :lang="view.body.lang" :first-line="view.body.firstLine" />
             <pre
                 v-else-if="view.body"
-                class="scrollbar-thin ml-4 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs leading-relaxed"
+                class="ml-4 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs leading-relaxed"
                 :class="failed ? 'text-danger' : 'text-muted'"
                 >{{ view.body.text }}</pre>
         </template>

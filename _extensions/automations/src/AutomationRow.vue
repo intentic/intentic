@@ -333,7 +333,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                 <div class="flex min-w-0 flex-col gap-3 @3xl:col-span-2">
                     <div class="flex flex-col gap-1">
                         <span :class="ui.sectionLabel(`text-2xs`)">Prompt</span>
-                        <p class="scrollbar-thin max-h-32 overflow-auto text-2xs leading-relaxed whitespace-pre-wrap text-muted">
+                        <p class="max-h-32 overflow-auto text-2xs leading-relaxed whitespace-pre-wrap text-muted">
                             {{ automation.prompt }}
                         </p>
                     </div>
@@ -402,7 +402,7 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                 <div class="flex min-w-0 flex-col gap-1">
                     <span :class="ui.sectionLabel(`text-2xs`)">Runs</span>
                     <p v-if="automation.runs.length === 0" class="text-2xs text-subtle">Nothing yet. Run now to try it.</p>
-                    <div v-else class="scrollbar-thin -mx-1 flex max-h-40 flex-col overflow-y-auto">
+                    <div v-else class="-mx-1 flex max-h-40 flex-col overflow-y-auto">
                         <component
                             :is="run.conversationId ? `button` : `div`"
                             v-for="run in automation.runs"

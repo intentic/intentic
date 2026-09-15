@@ -38,7 +38,7 @@ const selected = computed<string>({
         <div v-if="activations.length > 1" class="flex h-8 shrink-0 items-center border-b border-line px-1.5">
             <SegmentedControl v-model="selected" size="xs" :options="options" />
         </div>
-        <div class="min-h-0 flex-1 overflow-auto scrollbar-thin">
+        <div class="min-h-0 flex-1 overflow-auto">
             <ExtensionView :extension="active.extension" :activation="active.activation" />
         </div>
     </div>

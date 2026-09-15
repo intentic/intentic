@@ -583,7 +583,7 @@ const keepTab = (event: Event, id: string): void => {
 <!-- A different list, not this one regrouped — its own component (see ChatPersonaRail). -->
         <ChatPersonaRail v-if="grouping === `persona`" @select="onPersonaSelect" />
 <!-- LANE BREAKS OUTRANK CARD BREAKS, and at 12px against 10px they barely did: the eye groups by proximity. -->
-        <div v-else ref="scroller" class="scrollbar-thin flex min-h-0 flex-1 flex-col items-stretch gap-4 overflow-y-auto">
+        <div v-else ref="scroller" class="flex min-h-0 flex-1 flex-col items-stretch gap-4 overflow-y-auto">
 <!-- An empty lane isn't drawn at all (see occupiedLanes); one emptied only by the filter keeps its header. -->
             <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :dot="lane.dot" :count="countIn(lane.key)">
 <!-- Closing a chat is lossless in every lane. -->

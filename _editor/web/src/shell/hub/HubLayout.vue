@@ -71,7 +71,7 @@ watch(
     <SplitView :title="title" :description="description" scroll="page">
 <!-- Mobile keeps the strip. -->
         <template #compact>
-            <div class="scrollbar-thin overflow-x-auto border-b border-line-subtle pb-2">
+            <div class="overflow-x-auto border-b border-line-subtle pb-2">
                 <SegmentedControl :model-value="activeSlug" :options="options" @update:model-value="select" />
             </div>
         </template>

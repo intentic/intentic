@@ -1,11 +1,5 @@
-/* Custom utilities — thin scrollbars and loading placeholders, themed via role tokens. */
+/* Custom utilities — scrollbar exceptions and loading placeholders, themed via role tokens. */
 @layer utilities {
-/* The thin scrollbar's LOOK, and nothing else — reserving space is `.scrollbar-stable` below. */
-    .scrollbar-thin {
-        scrollbar-width: thin;
-        scrollbar-color: var(--color-line-strong) transparent;
-    }
-
     /* Hover utilities use the scheme's overlay surface. */
     .hover\:bg-overlay:hover,
     .focus\:bg-overlay:focus,
@@ -41,20 +35,6 @@
 /* Reserve the scrollbar's strip even while the box isn't overflowing, so its content doesn't reflow sideways the moment the scrollbar appears. */
     .scrollbar-stable {
         scrollbar-gutter: stable;
-    }
-
-    .scrollbar-thin::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-    }
-
-    .scrollbar-thin::-webkit-scrollbar-thumb {
-        background: var(--color-line-strong);
-        border-radius: 9999px;
-    }
-
-    .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-        background: var(--color-muted);
     }
 
 /* NO SCROLLBAR AT ALL, on a box that still scrolls. */
@@ -230,6 +210,15 @@
 
     .ui-softscroll:hover {
         scrollbar-color: color-mix(in srgb, var(--color-content) 26%, transparent) transparent;
+    }
+
+/* Chromium reads these instead of `scrollbar-color` once base.css's global bar matches the same scroller, so the whisper is said twice. */
+    .ui-softscroll::-webkit-scrollbar-thumb {
+        background: color-mix(in srgb, var(--color-content) 10%, transparent);
+    }
+
+    .ui-softscroll:hover::-webkit-scrollbar-thumb {
+        background: color-mix(in srgb, var(--color-content) 26%, transparent);
     }
 }
 

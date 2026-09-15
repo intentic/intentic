@@ -166,7 +166,7 @@ const onShow = async (): Promise<void> => {
                     @keydown.esc="isOpen = false"
                 />
             </div>
-            <div v-if="commandMode" id="quick-open-list" class="scrollbar-thin max-h-80 overflow-auto py-1" role="listbox" aria-label="Commands">
+            <div v-if="commandMode" id="quick-open-list" class="max-h-80 overflow-auto py-1" role="listbox" aria-label="Commands">
                 <template v-for="(entry, index) in commandRows" :key="entry.command">
                     <!-- Two headings at most, and only over an unfiltered list: with a query typed there is one run, ranked. -->
                     <p v-if="recentRows.length > 0 && index === 0" class="px-3 pb-1 pt-0.5 text-2xs font-medium uppercase tracking-wide text-subtle">
@@ -206,7 +206,7 @@ const onShow = async (): Promise<void> => {
             <div
                 v-else-if="sessionRef !== undefined"
                 id="quick-open-list"
-                class="scrollbar-thin max-h-80 overflow-auto py-1"
+                class="max-h-80 overflow-auto py-1"
                 role="listbox"
                 aria-label="Agent"
             >
@@ -223,7 +223,7 @@ const onShow = async (): Promise<void> => {
                     <span class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ sessionRef }}</span>
                 </button>
             </div>
-            <div v-else id="quick-open-list" class="scrollbar-thin max-h-80 overflow-auto py-1" role="listbox" aria-label="Files">
+            <div v-else id="quick-open-list" class="max-h-80 overflow-auto py-1" role="listbox" aria-label="Files">
                 <p v-if="showingRecents && rows.length > 0" class="px-3 pb-1 pt-0.5 text-2xs font-medium uppercase tracking-wide text-subtle">
                     Recently opened
                 </p>

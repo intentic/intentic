@@ -320,7 +320,7 @@ watch(
                     <span class="min-w-0 flex-1 truncate">{{ focusTitle }}</span>
                     <span class="shrink-0 text-link">Show all</span>
                 </RouterLink>
-                <div class="scrollbar-thin flex min-h-0 flex-1 flex-col items-stretch gap-3 overflow-y-auto">
+                <div class="flex min-h-0 flex-1 flex-col items-stretch gap-3 overflow-y-auto">
                     <template v-for="lane in lanes" :key="lane.label">
                         <!-- Cards go in bare; the lane insets and spaces its own contents. -->
                         <RailLane v-if="lane.rows.length > 0" :label="lane.label" :dot="lane.dot" :count="lane.rows.length">
@@ -365,7 +365,7 @@ watch(
                 </p>
 
 <!-- One scroller for the report and the work below it, told apart by a label and air rather than a rule, so nothing seams-breaks between them. -->
-                <div ref="pane" class="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto px-1 py-3" @scroll.passive="onPaneScroll">
+                <div ref="pane" class="flex min-h-0 flex-1 flex-col overflow-y-auto px-1 py-3" @scroll.passive="onPaneScroll">
                     <div class="chat-turns">
                         <!-- Its own spacing: the report-to-transcript gap is bigger than the gap between two turns. -->
                         <div class="flex min-w-0 flex-col gap-6">

@@ -30,6 +30,14 @@ DNS-safe: lowercase letters, digits and hyphens only, at most 42 characters.
   HMR websockets are proxied too.
 - Preview URLs are PUBLIC (no sign-in in front of them): do not serve secrets on them.
 - The panel is a normal web app: install its own deps in `operator/` (its `package.json`).
+- **Declare `color-scheme` on the page.** The browser draws the scrollbar, the form controls and the canvas
+  under a transparent page from the PAGE's own declaration: a framed page inherits neither the editor's around
+  it nor the reader's OS preference. A dark panel that declares nothing gets the light-mode scrollbar in the
+  preview — a pale bar down the side of a dark app. One line, in the panel's own stylesheet:
+
+  ```css
+  html { color-scheme: dark; } /* or `light`, or `light dark` for a page that follows the reader */
+  ```
 
 ## Talking to the daemon from a panel
 

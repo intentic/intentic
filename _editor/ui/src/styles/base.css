@@ -14,6 +14,28 @@
 /* Deliberately NO `scrollbar-gutter: stable` here. */
     }
 
+/* THE BAR ON EVERY SCROLLER, rather than on the ones that remembered to ask for it. The two ways out — `.scrollbar-none`
+   and the `.ui-softscroll` whisper — sit in later layers (utilities.css), so they win over this without `!important`. */
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--color-line-strong) transparent;
+    }
+
+/* Chromium drops `scrollbar-color` for any scroller a `::-webkit-scrollbar` rule matches, so the two must draw the same bar. */
+    ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: var(--color-line-strong);
+        border-radius: 9999px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: var(--color-muted);
+    }
+
     body {
         min-height: 100%;
         margin: 0;

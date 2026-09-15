@@ -587,7 +587,7 @@ const runPending = async (): Promise<void> => {
         </div>
 
         <!-- One row per commit: an SVG gutter (lanes/edges/node) then metadata. -->
-        <div class="scrollbar-thin min-h-0 flex-1 overflow-auto">
+        <div class="min-h-0 flex-1 overflow-auto">
             <!-- Skeleton rows stand in for the ones about to load: a gutter dot, a subject line, an author line. -->
             <div v-if="loading && commits.length === 0" role="status" aria-busy="true">
                 <span class="sr-only">Reading this repository's history…</span>
@@ -745,7 +745,7 @@ const runPending = async (): Promise<void> => {
                                 {{ files.length }} changed {{ files.length === 1 ? "file" : "files" }}
                             </p>
                             <!-- Changed files form a collapsible tree beside the diff. -->
-                            <div class="scrollbar-thin max-h-64 overflow-auto">
+                            <div class="max-h-64 overflow-auto">
                                 <template v-for="row in fileRows" :key="`${row.kind}:${row.path}`">
                                     <button
                                         v-if="row.kind === 'dir'"

@@ -345,7 +345,7 @@ const hasSpend = computed(() => current.value.length > 0);
                         </button>
                     </div>
 
-                    <div v-if="tableOpen" class="scrollbar-thin mt-3 overflow-x-auto">
+                    <div v-if="tableOpen" class="mt-3 overflow-x-auto">
                         <table class="w-full text-2xs">
                             <thead class="text-left text-subtle">
                                 <tr class="border-b border-line-subtle">

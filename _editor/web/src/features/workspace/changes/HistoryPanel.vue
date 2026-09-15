@@ -91,7 +91,7 @@ const confirmRestore = (id: string): void => {
         <p v-if="error" class="shrink-0 truncate px-2 py-1 text-2xs text-danger" v-tooltip.right.overflow="error">{{ error }}</p>
         <Notice v-if="actionError" :of="actionError" class="mx-2 shrink-0" />
 
-        <div class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
+        <div class="min-h-0 flex-1 overflow-auto py-1">
             <p v-if="snapshots.length === 0" class="px-3 py-2 text-2xs text-subtle">{{ words.restoreEmpty }}</p>
             <!-- No hairline per row; the open row gets a tint instead, which is where a boundary is actually needed. -->
             <div v-for="snapshot in snapshots" :key="snapshot.id" class="cv-row" :class="selectedId === snapshot.id ? `bg-content/4` : ``">

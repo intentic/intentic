@@ -45,7 +45,7 @@ const toggle = (): void => {
             <Icon :name="open ? `chevron-up` : `chevron-down`" class="shrink-0 text-2xs opacity-60 transition-opacity group-hover/fold:opacity-100" />
         </button>
 <!-- Capped and scrolled, not clamped, so long material stays reachable without pushing the answer off screen. -->
-        <div v-if="open" class="scrollbar-thin max-h-64 overflow-auto pt-1 pb-1.5 pl-5 text-2xs leading-relaxed text-subtle">
+        <div v-if="open" class="max-h-64 overflow-auto pt-1 pb-1.5 pl-5 text-2xs leading-relaxed text-subtle">
             <slot />
         </div>
     </div>

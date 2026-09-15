@@ -29,6 +29,10 @@ export const dialogStyles = (accent: string): string => {
     line-height: 1.5;
     color: #111827;
 }
+/* The app's 6px bar (ui/styles/base.css) in this dialog's own greys: base.css cannot reach across the shadow boundary. */
+*, *::before, *::after { scrollbar-width: thin; scrollbar-color: #d1d5db transparent; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 9999px; }
 .backdrop {
     position: fixed;
     inset: 0;
@@ -109,6 +113,8 @@ button.cancel:hover { background: #f3f4f6; }
     textarea, input { background: #1f2937; border-color: #374151; color: #e5e7eb; }
     button.cancel { color: #9ca3af; }
     button.cancel:hover { background: #1f2937; }
+    *, *::before, *::after { scrollbar-color: #374151 transparent; }
+    ::-webkit-scrollbar-thumb { background: #374151; }
 }
 @media (prefers-reduced-motion: no-preference) {
     .panel { animation: rise 140ms ease-out; }

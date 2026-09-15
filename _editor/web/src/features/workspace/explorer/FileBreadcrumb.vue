@@ -30,7 +30,7 @@ const fullTitle = computed(() => (sizeLabel.value === `` ? path : `${path} · ${
             <div
                 v-if="crumbs.length > 0"
                 class="flex min-w-0 items-center gap-1 whitespace-nowrap font-mono text-2xs text-subtle"
-                :class="hoisted ? `max-w-56 overflow-hidden` : `scrollbar-thin flex-1 overflow-x-auto`"
+                :class="hoisted ? `max-w-56 overflow-hidden` : `flex-1 overflow-x-auto`"
                 v-tooltip.bottom="fullTitle"
             >
                 <template v-for="(seg, index) in crumbs" :key="index">

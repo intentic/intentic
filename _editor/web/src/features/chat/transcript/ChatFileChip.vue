@@ -270,7 +270,7 @@ onBeforeUnmount(() => clearTimeout(timer));
                     </div>
                     <span v-if="meta" class="shrink-0 text-2xs whitespace-nowrap text-muted">{{ meta }}</span>
                 </div>
-                <div class="scrollbar-thin min-h-0 flex-1 overflow-auto px-3 py-2">
+                <div class="min-h-0 flex-1 overflow-auto px-3 py-2">
                     <p v-if="nothingToShow" class="text-2xs text-subtle">{{ nothingToShow }}</p>
                     <template v-else>
                         <pre class="font-mono text-2xs leading-relaxed whitespace-pre text-muted">{{ peek?.head }}</pre>

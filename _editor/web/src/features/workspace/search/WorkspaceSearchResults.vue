@@ -194,7 +194,7 @@ const onKeydown = (event: KeyboardEvent): void => {
         </p>
         <div
             ref="scroller"
-            class="scrollbar-thin min-h-0 flex-1 overflow-auto"
+            class="min-h-0 flex-1 overflow-auto"
             role="listbox"
             aria-label="Search results"
             @scroll.passive="onScroll"

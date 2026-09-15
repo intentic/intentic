@@ -98,7 +98,7 @@ watch(
             <div v-else-if="chapters.length === 0" class="flex h-full items-center justify-center text-sm text-muted">This book has no chapters in it.</div>
             <div v-else class="flex h-full min-h-0">
                 <!-- The book's own table of contents, beside the text rather than over it. -->
-                <nav v-if="showContents" class="scrollbar-thin w-64 shrink-0 overflow-auto border-r border-line-subtle py-2">
+                <nav v-if="showContents" class="w-64 shrink-0 overflow-auto border-r border-line-subtle py-2">
                     <button
                         v-for="(chapter, position) in chapters"
                         :key="chapter.path"

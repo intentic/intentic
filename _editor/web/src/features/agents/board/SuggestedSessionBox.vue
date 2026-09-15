@@ -63,7 +63,7 @@ onMounted(() => {
 
 <template>
     <div class="rounded-xl border border-line bg-canvas">
-        <div ref="scroller" class="scrollbar-thin max-h-64 overflow-y-auto">
+        <div ref="scroller" class="max-h-64 overflow-y-auto">
             <CodeField
                 ref="codeField"
                 v-model="conversation.draft.value"

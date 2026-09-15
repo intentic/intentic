@@ -185,7 +185,7 @@ const sessionsOf = (row: PersonaRow) =>
 <template>
     <!-- Card ground cannot match `--color-card`, or the card disappears. -->
     <div class="flex min-h-0 min-w-0 flex-col rounded-xl bg-canvas p-2">
-        <div class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+        <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
         <template v-if="empty">
             <!-- A real link, since the sandbox hub has an address and this is often the first place someone finds it. -->
             <RouterLink to="/sandbox/personas" :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)">

@@ -119,7 +119,7 @@ const toggleThinking = (index: number): void => {
                             </button>
                             <div
                                 v-if="openThinking[index] === true"
-                                class="scrollbar-thin max-h-64 overflow-auto px-3 pb-2 text-xs leading-relaxed whitespace-pre-wrap text-muted"
+                                class="max-h-64 overflow-auto px-3 pb-2 text-xs leading-relaxed whitespace-pre-wrap text-muted"
                             >
                                 {{ message.thinking }}
                             </div>

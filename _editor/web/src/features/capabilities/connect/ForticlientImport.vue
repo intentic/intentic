@@ -120,7 +120,7 @@ const protocolOf = (connection: ForticlientConnection): string => (connection.pr
                 <p v-if="fileName !== '' && connections.length === 0" class="text-2xs text-warning">No VPN connections found in {{ fileName }}.</p>
                 <template v-if="connections.length > 0">
                     <p class="text-2xs text-subtle">From {{ fileName }}: pick the connection to fill the form with.</p>
-                    <div class="scrollbar-thin flex max-h-48 flex-col gap-0.5 overflow-auto">
+                    <div class="flex max-h-48 flex-col gap-0.5 overflow-auto">
                         <button
                             v-for="connection in connections"
                             :key="`${connection.provider}-${connection.id}`"

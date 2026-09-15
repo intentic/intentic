@@ -52,7 +52,7 @@ const rowClass = (row: DiffRow): string => {
             <span v-if="truncated" class="shrink-0 text-subtle">truncated</span>
         </component>
         <pre
-            class="scrollbar-thin max-h-56 overflow-auto py-0.5 text-2xs leading-relaxed"
+            class="max-h-56 overflow-auto py-0.5 text-2xs leading-relaxed"
         ><code v-for="(row, index) in rows" :key="index" class="block whitespace-pre-wrap px-2" :class="rowClass(row)">{{ gutterOf(row) }} {{ row.text }}</code></pre>
     </div>
 </template>

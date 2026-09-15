@@ -71,7 +71,7 @@ defineExpose({ move, pickActive });
 <template>
     <ComposerPopover :icon="header.icon" :title="header.label" :busy="searching || pending">
         <!-- Capped and scrolled so a drilled model list stays a sheet over the composer, not a wall. -->
-        <div class="scrollbar-thin max-h-80 overflow-y-auto">
+        <div class="max-h-80 overflow-y-auto">
             <button
                 v-for="(row, index) in rows"
                 :key="row.key"

@@ -272,7 +272,7 @@ onMounted(() => {
             <div
                 role="radiogroup"
                 aria-label="Filter by provider"
-                class="scrollbar-thin flex w-full shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-1.5 py-1.5"
+                class="flex w-full shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-1.5 py-1.5"
             >
                 <button
                     type="button"
@@ -323,7 +323,7 @@ onMounted(() => {
 
             <div
                 id="model-picker-list"
-                class="scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-auto py-1 max-md:overflow-visible"
+                class="min-h-0 min-w-0 flex-1 overflow-y-auto py-1 max-md:overflow-visible"
                 role="listbox"
                 aria-label="Models"
             >

@@ -159,6 +159,12 @@ export const styles = (config: WebchatPublicConfig): string => {
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* The app's 6px bar (ui/styles/base.css), in this widget's own tokens: base.css cannot reach across the shadow boundary. */
+*, *::before, *::after { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
 button {
     font: inherit;
     color: inherit;

@@ -959,7 +959,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                     />
                 </div>
                 <!-- Bottom padding belongs to the tree, not this scrollport, or scrolled rows peek under the pinned empty line. -->
-                <div v-else-if="layout.sidebarPanel.value === 'files'" class="scrollbar-thin min-h-0 flex-1 overflow-auto pt-1">
+                <div v-else-if="layout.sidebarPanel.value === 'files'" class="min-h-0 flex-1 overflow-auto pt-1">
                     <WorkspaceTree
                         :tree="scopedTree"
                         :root-dir="workspaceDir"

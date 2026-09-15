@@ -228,7 +228,7 @@ const caption = computed(() =>
                     <!-- Client's own text (e.g. a --servercert digest); preserved verbatim and wrapped, not truncated. -->
                     <pre
                         v-if="failures[row.id]"
-                        class="scrollbar-thin max-h-32 overflow-auto whitespace-pre-wrap rounded-md border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-2xs text-danger"
+                        class="max-h-32 overflow-auto whitespace-pre-wrap rounded-md border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-2xs text-danger"
                         >{{ failures[row.id] }}</pre>
                     <div v-if="otpFor === row.id" class="flex items-center gap-2">
 <!-- Prevents on keydown, not keyup: this list sits inside the card's form, so a bare Enter would submit it. -->

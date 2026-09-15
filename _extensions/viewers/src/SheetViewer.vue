@@ -121,7 +121,7 @@ onBeforeUnmount(() => {
                 <p class="text-sm text-danger">{{ error }}</p>
             </div>
             <div v-else-if="columnCount === 0" class="flex h-full items-center justify-center text-sm text-muted">This sheet is empty.</div>
-            <div v-else class="xlsx-sheet scrollbar-thin h-full overflow-auto p-4">
+            <div v-else class="xlsx-sheet h-full overflow-auto p-4">
                 <table>
                     <thead v-if="headerRow !== undefined">
                         <tr>

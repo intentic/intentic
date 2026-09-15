@@ -316,7 +316,7 @@ const openStartOver = (): void => {
             <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
                 <!-- `basis-0` with a ~3-circle floor: the graph is the one element here that can give ground, but not below legibility. -->
 <!-- Padding is `hover:scale-110`'s headroom: without it, a scaled circle overflows the box's exact-fit size and flashes both scrollbars. -->
-                <div class="scrollbar-thin flex max-w-max min-w-24 flex-1 basis-0 items-center overflow-x-auto p-1">
+                <div class="flex max-w-max min-w-24 flex-1 basis-0 items-center overflow-x-auto p-1">
                     <PipelineGraph v-if="stages.length > 0" :stages="stages" :recurring="recurring" />
                     <!-- Same circles-and-connectors geometry as the real graph, so the row doesn't re-flow once jobs land. -->
                     <div v-else-if="jobsLoading" class="flex items-center" aria-hidden="true">

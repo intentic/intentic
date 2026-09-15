@@ -191,7 +191,7 @@ const pickAccount = (id: string): void => {
             id="picker-account-list"
             ref="accountsList"
             class="-mx-3 flex flex-col"
-            :class="{ 'scrollbar-thin max-h-44 overflow-y-auto': accountsOpen }"
+            :class="{ 'max-h-44 overflow-y-auto': accountsOpen }"
             role="group"
             aria-label="Account"
         >
@@ -266,7 +266,7 @@ const pickAccount = (id: string): void => {
         <div
             id="picker-routed-list"
             class="-mx-3 flex flex-col"
-            :class="{ 'scrollbar-thin max-h-44 overflow-y-auto': routedOpen }"
+            :class="{ 'max-h-44 overflow-y-auto': routedOpen }"
             role="group"
             aria-label="Subscription"
         >

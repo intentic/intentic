@@ -38,7 +38,7 @@ const blockClass = (block: ProseBlock): string =>
 </script>
 
 <template>
-    <div class="scrollbar-thin h-full min-h-0 overflow-auto px-6 py-4">
+    <div class="h-full min-h-0 overflow-auto px-6 py-4">
         <p v-if="changed === 0" class="mb-4 text-2xs text-subtle">Nothing in the text changed; only spacing or line breaks did.</p>
         <div class="mx-auto flex max-w-3xl flex-col gap-4 leading-relaxed text-content">
             <template v-for="(run, index) in runs" :key="index">

@@ -989,7 +989,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
         >
             <!-- One pill per split group, one segment per session, styled like FileTabs: glyph, label, and a hover ×. -->
             <div
-                class="scrollbar-thin flex min-w-0 flex-1 gap-x-0.5 gap-y-1 overflow-x-hidden overflow-y-auto"
+                class="flex min-w-0 flex-1 gap-x-0.5 gap-y-1 overflow-x-hidden overflow-y-auto"
                 :class="vertical ? 'min-h-0 flex-col items-stretch' : 'max-h-13 flex-wrap items-center'"
             >
                 <div
@@ -1235,7 +1235,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 </Button>
             </div>
             <!-- Touch extra keys preserve terminal focus while the keyboard is open. -->
-            <div v-if="coarse" class="scrollbar-thin flex shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-card px-1.5 py-1.5">
+            <div v-if="coarse" class="flex shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-card px-1.5 py-1.5">
                 <button
                     type="button"
                     :class="[KEY_CLASS, ctrlArmed ? 'border-primary-500/60 bg-primary-500/16 text-primary-500' : '']"
@@ -1277,7 +1277,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 <pre
                     v-if="scrollback"
                     ref="scrollbackText"
-                    class="scrollbar-thin min-h-0 flex-1 overflow-auto rounded-md bg-terminal p-3 font-mono text-xs whitespace-pre text-content select-text"
+                    class="min-h-0 flex-1 overflow-auto rounded-md bg-terminal p-3 font-mono text-xs whitespace-pre text-content select-text"
                     >{{ scrollback.text }}</pre>
             </div>
         </Modal>

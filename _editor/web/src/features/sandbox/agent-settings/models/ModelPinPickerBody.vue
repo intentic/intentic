@@ -97,7 +97,7 @@ const unpickable = (entry: PickerEntry): boolean =>
             <!-- Composer footer's own spacing, so a reader can't tell whether this opened from a settings row or the composer. -->
             <div
                 v-if="footerVisible"
-                class="scrollbar-thin flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2"
+                class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2"
             >
                 <!-- Labels whose settings these are: the picker above browses every provider, this configures only the one entry. -->
                 <div class="flex items-center justify-between gap-2">

@@ -110,7 +110,7 @@
 @source inline("scroll-{auto,smooth}");
 @source inline("{snap-none,snap-x,snap-y,snap-start,snap-center,snap-end,snap-mandatory,snap-proximity}");
 /* This app's own, promised by name for the same reason as everything above. */
-@source inline("{scrollbar-thin,scrollbar-stable,scrollbar-none,ui-softscroll,ui-row-select,ui-row-select-on,skeleton}");
+@source inline("{scrollbar-stable,scrollbar-none,ui-softscroll,ui-row-select,ui-row-select-on,skeleton}");
 /* THE CHIP, promised for the same reason as the field and the row: it is a hand-written control everywhere it is not named. */
 @source inline("{ui-chip,ui-chip-on}");
 /* THE FIELD, promised by name — which is half of why it is a class and not a utility string (primeng.css). */

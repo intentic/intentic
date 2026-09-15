@@ -66,7 +66,7 @@ const pinned = computed(() => sticky && !scroll);
             <p v-if="$slots[`meta`]" class="flex flex-wrap items-center gap-x-1.5 text-2xs text-subtle"><slot name="meta" /></p>
         </div>
 
-        <div v-if="scroll" class="scrollbar-thin min-h-0 flex-1 overflow-auto"><slot /></div>
+        <div v-if="scroll" class="min-h-0 flex-1 overflow-auto"><slot /></div>
         <slot v-else />
     </section>
 </template>

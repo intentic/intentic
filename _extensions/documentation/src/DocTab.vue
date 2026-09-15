@@ -76,7 +76,7 @@ const areaLink = computed(() => {
         <!-- An invitation, not an error, since undocumented is ordinary; it links to generation, not a scope choice. -->
         <div
             v-else-if="dir === undefined ? set?.prose === undefined : packageQuery.data.value === undefined"
-            class="min-h-0 flex-1 overflow-y-auto p-6 scrollbar-thin"
+            class="min-h-0 flex-1 overflow-y-auto p-6"
         >
             <div :class="ui.emptyState()">
                 <p class="text-sm">{{ label }} has no documentation yet.</p>

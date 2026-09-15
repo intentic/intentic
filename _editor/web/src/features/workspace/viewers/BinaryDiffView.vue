@@ -166,7 +166,7 @@ const panes = computed(() =>
             <span class="min-w-0 truncate" v-tooltip.bottom.overflow="verdict">{{ verdict }}</span>
         </div>
 
-        <div class="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-auto" :class="split ? 'md:flex-row' : ''">
+        <div class="flex min-h-0 flex-1 flex-col overflow-auto" :class="split ? 'md:flex-row' : ''">
             <div
                 v-for="(pane, index) in panes"
                 :key="pane.key"

@@ -1155,7 +1155,7 @@ const submitLabel = computed(() => {
 
         <template #detail>
 <!-- Capability configuration and apply share the card layout. -->
-            <div v-if="selected" class="scrollbar-thin scrollbar-stable @container min-h-0 flex-1 overflow-y-auto pr-2">
+            <div v-if="selected" class="scrollbar-stable @container min-h-0 flex-1 overflow-y-auto pr-2">
                 <div class="mx-auto flex max-w-xl flex-col @3xl:max-w-none @3xl:flex-row @3xl:items-start @3xl:justify-center @3xl:gap-6">
                     <!-- Capped below the reading measure: this column holds single-line inputs, not prose. -->
                     <div class="flex min-w-0 flex-1 flex-col @3xl:max-w-lg">
@@ -1561,7 +1561,7 @@ const submitLabel = computed(() => {
                 />
 
 <!-- `pr-2` keeps tiles clear of the scrollbar; the reserved gutter stops the grid shifting when a filter removes the last row. -->
-                <div class="scrollbar-thin scrollbar-stable @container flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pr-2">
+                <div class="scrollbar-stable @container flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pr-2">
 <!-- The one slice that isn't a shorter catalog: it answers "what have I got" with the connections themselves, named and stated. -->
                     <CapabilityConnections v-if="showingConnections" :groups="connectionGroups" @open="openConnection" />
 

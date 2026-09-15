@@ -53,7 +53,7 @@ const ROWS = [
 
                 <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
                     <!-- Stage circles and connectors: the row's most distinctive shape, and what a reader scans first. -->
-                    <div class="scrollbar-thin flex max-w-max min-w-24 flex-1 basis-0 items-center overflow-x-auto">
+                    <div class="flex max-w-max min-w-24 flex-1 basis-0 items-center overflow-x-auto">
                         <template v-for="stage in row.stages" :key="stage">
                             <span v-if="stage > 1" class="h-px w-3 shrink-0 bg-line"></span>
                             <span class="skeleton h-6 w-6 shrink-0 rounded-full"></span>

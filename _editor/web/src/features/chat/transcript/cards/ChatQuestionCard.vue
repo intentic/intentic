@@ -203,7 +203,7 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
                                 <span class="text-xs font-medium text-content">{{ option.label }}</span>
                                 <span class="text-2xs leading-snug text-muted">{{ option.description }}</span>
                                 <!-- Preformatted mock-up (ASCII layout, diff, config), so options are compared side by side. -->
-                                <pre v-if="option.preview" class="chat-option-preview scrollbar-thin">{{ option.preview }}</pre>
+                                <pre v-if="option.preview" class="chat-option-preview">{{ option.preview }}</pre>
                             </span>
                         </button>
                         <!-- The custom-answer field stays below the ordinary Other option. -->
@@ -238,7 +238,7 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
                             @input="onOtherInput(index, $event)"
                             @keydown="otherKeydown"
                             placeholder="Type your answer…"
-                            class="ui-field-box ui-field-sm scrollbar-thin max-h-48 resize-none overflow-y-auto leading-relaxed"
+                            class="ui-field-box ui-field-sm max-h-48 resize-none overflow-y-auto leading-relaxed"
                         ></textarea>
                         <!-- Shown from the moment the row is picked, not as an error; explains the disabled Submit. -->
                         <span v-if="otherPending(index)" class="text-2xs text-subtle">Write your answer to submit.</span>

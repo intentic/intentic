@@ -190,7 +190,7 @@ onMounted(async () => {
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <div class="scrollbar-thin min-h-0 flex-1 overflow-auto">
+        <div class="min-h-0 flex-1 overflow-auto">
             <Page width="wide">
                 <PageHeader :title="headerTitle">
                     <template #actions>

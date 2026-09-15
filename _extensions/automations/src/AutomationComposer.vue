@@ -174,7 +174,7 @@ const finish = (id: string): void => {
                         :class="ui.inputSm()"
                         @keydown.enter.prevent="pickFirstMatch"
                     />
-                    <div class="scrollbar-thin @container flex max-h-panel flex-col gap-2 overflow-y-auto">
+                    <div class="@container flex max-h-panel flex-col gap-2 overflow-y-auto">
                         <template v-for="group in recipeGroups" :key="group.label">
                             <span :class="ui.sectionLabel('px-0.5 pt-1 text-2xs first:pt-0')">{{ group.label }}</span>
                             <div class="grid gap-1.5 @lg:grid-cols-2 @3xl:grid-cols-3">

@@ -574,18 +574,32 @@
     }
 
     /* EDGES OF THE WINDOW The scrollbar as a brass runner, the selection in the accent, the loading placeholder sweeping gold. */
-    [data-skin="sanctum"] .scrollbar-thin {
+/* The skin's attribute sits on <html>, itself a scroller, so each of these names the root as well as everything under it. */
+    [data-skin="sanctum"],
+    [data-skin="sanctum"] * {
         scrollbar-color: rgba(201, 160, 92, 0.26) transparent;
     }
-    [data-skin="sanctum"] .scrollbar-thin::-webkit-scrollbar-thumb {
+    [data-skin="sanctum"]::-webkit-scrollbar-thumb,
+    [data-skin="sanctum"] ::-webkit-scrollbar-thumb {
         background: rgba(201, 160, 92, 0.26);
         border-radius: 0;
     }
-    [data-skin="sanctum"] .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    [data-skin="sanctum"]::-webkit-scrollbar-thumb:hover,
+    [data-skin="sanctum"] ::-webkit-scrollbar-thumb:hover {
         background: var(--sanctum-gold);
+    }
+/* The whisper survives the brass: these follow the runner's rules above, which would otherwise light every soft column. */
+    [data-skin="sanctum"] .ui-softscroll {
+        scrollbar-color: rgba(201, 160, 92, 0.1) transparent;
     }
     [data-skin="sanctum"] .ui-softscroll:hover {
         scrollbar-color: rgba(201, 160, 92, 0.22) transparent;
+    }
+    [data-skin="sanctum"] .ui-softscroll::-webkit-scrollbar-thumb {
+        background: rgba(201, 160, 92, 0.1);
+    }
+    [data-skin="sanctum"] .ui-softscroll:hover::-webkit-scrollbar-thumb {
+        background: rgba(201, 160, 92, 0.22);
     }
 
     [data-skin="sanctum"] ::selection {

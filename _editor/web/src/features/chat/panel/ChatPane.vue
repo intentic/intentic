@@ -1155,7 +1155,7 @@ watch(
 <!-- `.chat-scroller` is the IntersectionObserver root each prompt uses to tell if it's pinned. -->
         <div
             ref="scroller"
-            class="chat-scroller scrollbar-thin flex flex-1 flex-col overflow-x-hidden overflow-y-auto"
+            class="chat-scroller flex flex-1 flex-col overflow-x-hidden overflow-y-auto"
             :class="{ 'chat-realize': realizing }"
         >
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
@@ -1351,7 +1351,7 @@ watch(
                                     name="draft"
                                     :disabled="!canDrive"
                                     :placeholder="composerPlaceholder"
-                                    class="field-bare scrollbar-thin block w-full resize-none overflow-y-auto px-4 py-3 leading-relaxed md:text-xs"
+                                    class="field-bare block w-full resize-none overflow-y-auto px-4 py-3 leading-relaxed md:text-xs"
                                     :style="{ maxHeight: `${composerCap}px` }"
                                     @input="onInput"
                                     @keydown="onKeydown"

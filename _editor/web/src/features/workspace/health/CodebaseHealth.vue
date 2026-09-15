@@ -62,7 +62,7 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
 
         <p v-if="error" class="shrink-0 truncate px-3 py-1 text-2xs text-danger" v-tooltip.bottom.overflow="error">{{ error }}</p>
 
-        <div class="scrollbar-thin min-h-0 flex-1 overflow-auto px-3 py-3">
+        <div class="min-h-0 flex-1 overflow-auto px-3 py-3">
             <p v-if="totals === undefined" class="py-3 text-2xs text-subtle">{{ loading ? "Reading the index…" : "No report yet." }}</p>
             <template v-else>
                 <p v-if="building" class="mb-3 flex items-center gap-1.5 text-2xs text-warning">

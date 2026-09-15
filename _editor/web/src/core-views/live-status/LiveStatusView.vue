@@ -100,7 +100,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
 </script>
 
 <template>
-    <div class="scrollbar-thin h-full min-h-0 overflow-auto">
+    <div class="h-full min-h-0 overflow-auto">
         <Page width="full">
             <PageHeader title="Live status">
                 <template #info>

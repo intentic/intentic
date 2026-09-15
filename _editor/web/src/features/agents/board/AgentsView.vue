@@ -1045,7 +1045,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             </button>
         </div>
 <!-- No padding of its own: the stacked board's sticky lane headers pin to top-0, and padding would leave a gap above them. -->
-        <div v-else class="scrollbar-thin scrollbar-stable min-h-0 flex-1 overflow-auto">
+        <div v-else class="scrollbar-stable min-h-0 flex-1 overflow-auto">
 <!-- `content-start` stops the stacked grid's rows from stretching to fill `h-full`, which would otherwise float a lane's cards above the next header. -->
             <div
                 class="grid gap-3.5 p-3.5 sm:gap-4 sm:p-4"
@@ -1263,7 +1263,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <span class="shrink-0 font-medium text-link">{{ showBeyond ? "Hide" : "Show" }}</span>
                 <Icon :name="showBeyond ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs" />
             </button>
-            <div v-if="showBeyond" class="scrollbar-thin mt-2 flex min-h-0 flex-col gap-3 overflow-auto">
+            <div v-if="showBeyond" class="mt-2 flex min-h-0 flex-col gap-3 overflow-auto">
                 <section v-if="archivedHits.length > 0" class="flex min-w-0 flex-col gap-2.5">
                     <div class="flex items-center gap-2 px-1">
                         <Icon name="box" class="shrink-0 text-2xs text-subtle" />

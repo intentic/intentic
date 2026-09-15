@@ -131,7 +131,7 @@ onMounted(() => {
             role="listbox"
             :aria-label="listLabel"
             tabindex="-1"
-            class="scrollbar-thin max-h-72 min-w-0 overflow-y-auto py-1 focus:outline-none"
+            class="max-h-72 min-w-0 overflow-y-auto py-1 focus:outline-none"
         >
             <template v-for="group in shown" :key="group.key">
                 <p

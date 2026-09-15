@@ -125,7 +125,7 @@ const remeasureLabel = computed(() =>
 
         <template v-else>
 <!-- Gap widens with nesting depth (lane < account < provider); it must grow with lane count or multi-bar accounts read as one long ladder. -->
-            <div class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-3">
+            <div class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-3">
 <!-- Every provider spent at once is an ordinary end-of-week state, not an error, so it's stated plainly. -->
                 <p v-if="capacity.providers.length === 0" class="text-2xs text-muted">Nothing has room right now.</p>
 

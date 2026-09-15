@@ -9,7 +9,7 @@ const PARAGRAPHS = [
 </script>
 
 <template>
-    <div class="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-6" role="status" aria-busy="true">
+    <div class="min-h-0 flex-1 overflow-y-auto p-6" role="status" aria-busy="true">
         <span class="sr-only">Reading the documentation…</span>
         <!-- The measure the renderer sets its prose to, so the outline wraps where the document will. -->
         <div class="mx-auto flex max-w-3xl flex-col gap-6" aria-hidden="true">
