@@ -156,16 +156,24 @@ test("starts the checkout's rebuild in the background, logging where ic's own lo
     const line = DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "/home/ada/intentic", sandboxId: "someone-else" }));
     expect(line).toBe(
         'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"; ' +
+            'detach=$(command -v setsid 2>/dev/null || true); ' +
             'mkdir -p "$HOME/.intentic/logs" && cd "/home/ada/intentic" && ' +
-            `nohup sh -c 'pnpm rebuild:sandbox work-abc; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"' ` +
+            `$detach nohup sh -c 'pnpm rebuild:sandbox work-abc; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"' ` +
             '> "$HOME/.intentic/logs/dev-rebuild-work-abc.log" 2>&1 & sleep 1',
     );
 });
 
-// Measured on a crossed call, not reasoned about: `wsl.exe --exec sh -lc <script>` kills the session's processes when
-// it exits, and without that second of foreground the exit won the race — no build, and no log file to show for it.
-test("holds the crossed session open long enough for the detached build to start", () => {
-    expect(DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "/home/ada/intentic" }))).toMatch(/ & sleep 1$/);
+// Both measured on a crossed call, not reasoned about. WSL tears down the session `wsl.exe --exec` made: without the
+// second of foreground its exit beat the background job to the fork and left no log file at all, and without a
+// session of its own the pnpm/node tree was killed the moment the build phase ended — 77 KB of build output, no exit
+// mark, and a card that span for as long as anyone watched it.
+test("gives the detached build a session of its own and a moment to start", () => {
+    const line = DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "/home/ada/intentic" })) ?? "";
+    expect(line).toContain("detach=$(command -v setsid 2>/dev/null || true);");
+    expect(line).toContain("$detach nohup sh -c");
+    expect(line).toMatch(/ & sleep 1$/);
+    // Resolved, never spelled: a machine with no setsid expands `$detach` to nothing rather than failing the line.
+    expect(line).not.toContain("setsid nohup");
 });
 
 // The status is appended by the BUILD's own shell, not by the daemon: by the time a rebuild ends, the daemon that

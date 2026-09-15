@@ -200,6 +200,21 @@ it(`reports a finished rebuild with how long it took`, async () => {
     expect(buttonSaying(`Rebuild from checkout`)).toBeInstanceOf(HTMLButtonElement);
 });
 
+// A full rebuild on the machine this repo is developed on has taken two hours. A card that gave up at 45 minutes
+// called a healthy build lost, with its log still growing on screen.
+it(`keeps following a build that runs for hours while its log keeps growing`, async () => {
+    const slug = nextSlug();
+    const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`3`, `#10 [builder 6/9] RUN cargo install cargo-xwin`));
+    await useDevRebuild(slug).start(`host-1`);
+
+    await settleUi(95 * 60_000);
+
+    expect(el.textContent).toContain(`Building the image from your checkout`);
+    expect(el.textContent).not.toContain(`stopped reporting`);
+    expect(el.textContent).toMatch(/95m \d\ds/);
+});
+
 it(`gives a failed rebuild its exit status and points at the whole log`, async () => {
     const slug = nextSlug();
     const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });

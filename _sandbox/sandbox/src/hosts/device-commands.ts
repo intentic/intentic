@@ -71,6 +71,13 @@ const shellDir = (dir: string): string => `"${dir.replace(/^~(?=[\\/]|$)/, "$HOM
 // substituted: a PATH that already has pnpm keeps winning, and a machine that keeps it elsewhere is unaffected.
 const WITH_PNPM = 'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH";';
 
+// WHAT MAKES A DETACHED BUILD OUTLIVE A CROSSED CALL. `in: "wsl:<distro>"` runs as `wsl.exe --exec sh -lc <script>`,
+// and WSL tears that session down as it exits. Measured on a real one: `nohup` alone does not save a pnpm/node tree —
+// it died the instant the build phase ended, leaving no exit mark and a card that span forever — and a session of its
+// own does. Resolved rather than spelled, so a machine without `setsid` (macOS) expands it to nothing and keeps the
+// shape that has always worked there.
+const OWN_SESSION = "detach=$(command -v setsid 2>/dev/null || true);";
+
 // The install one-liner for this sandbox, in the dialect of the device's own shell — the same script, environment and
 // single-use token the card's copyable command carries, built from the same table (@intentic/constants).
 const installLine = (facts: DeviceCommandFacts): string | undefined => {
@@ -129,10 +136,13 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
         // `wsl.exe --exec sh -lc <script>`, and WSL kills the session's processes the moment that exits — with
         // nothing else in the foreground, the exit races the background job and wins, leaving no build and not even
         // a log file. A started child survives; this is what gets it started.
+        // `$detach` is the other half of the same lesson, measured the same way: `nohup` saves a lone `sh` but not a
+        // pnpm/node tree, which was killed as the build phase ended — 77 KB of build output and no exit mark, so the
+        // card span for as long as anyone watched it. A session of its own is what survives.
         line: (facts) =>
             facts.devRoot === undefined || facts.ownSlug === undefined
                 ? undefined
-                : `${WITH_PNPM} mkdir -p "$HOME/.intentic/logs" && cd ${shellDir(facts.devRoot)} && nohup sh -c 'pnpm rebuild:sandbox ${facts.ownSlug}; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"' > ${shellDir(devRebuildLogPath(facts.ownSlug))} 2>&1 & sleep 1`,
+                : `${WITH_PNPM} ${OWN_SESSION} mkdir -p "$HOME/.intentic/logs" && cd ${shellDir(facts.devRoot)} && $detach nohup sh -c 'pnpm rebuild:sandbox ${facts.ownSlug}; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"' > ${shellDir(devRebuildLogPath(facts.ownSlug))} 2>&1 & sleep 1`,
         needs: "only a dev sandbox launched by dev-sandbox.sh knows which checkout to rebuild from",
         path: (facts) => facts.devRoot,
     },

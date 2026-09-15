@@ -49,8 +49,6 @@ const TICK_MS = 1_000;
 const ABANDON_S = 15 * 60;
 // A log that isn't there yet is a redirect that hasn't landed; past this it is a log that never will.
 const GRACE_MS = 20_000;
-// Nothing is followed past this, however the reads are going: a build this old has stopped being news.
-const CEILING_MS = 45 * 60_000;
 // How recently the log must have grown for a rebuild nobody here started to be worth adopting on sight.
 const ADOPT_WITHIN_S = 120;
 // Past this, a marker left by a tab closed mid-build describes a rebuild nobody is waiting for.
@@ -159,10 +157,9 @@ const poll = async (slug: string, hostId: string): Promise<void> => {
     if (!rebuildRunning(run.phase)) {
         return;
     }
-    if (Date.now() - (run.startedAt ?? Date.now()) > CEILING_MS) {
-        settle(run, slug, "lost");
-        return;
-    }
+    // No wall-clock ceiling on the follow: a log still growing after two hours is a slow build, not a lost one, and
+    // this repo's own rebuild has taken that long on a laptop. What ends a follow is the log going quiet (ABANDON_S)
+    // or the exit mark arriving — both facts about the build rather than about how long a reader has been waiting.
     timers.set(
         slug,
         setTimeout(() => void poll(slug, hostId), POLL_MS),
