@@ -1,4 +1,12 @@
-import { type Device, DeviceSandboxSchema, hostHoldingPath, hostRunningSandbox, pathReach } from "@intentic/sandbox-contract";
+import {
+    type Device,
+    DeviceSandboxSchema,
+    HOST_NATIVE_ENVIRONMENT,
+    hostHoldingPath,
+    hostRunningSandbox,
+    type HostSummary,
+    pathReach,
+} from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { machineReach } from "./self-host.js";
 
@@ -51,26 +59,31 @@ test("refuses to guess a machine for a sandbox it cannot name", () => {
     expect(hostRunningSandbox(devices, "")).toBeUndefined();
 });
 
-// Two doors onto one PC are the case a prompt has to be told about; a single door is one computer already.
-test("names the machines a turn could mistake for two, and only those", () => {
-    const windows = device({ key: "rog", hostId: "rog", facts: { os: "Windows", arch: "x64", shell: "PowerShell 7", home: "C:\\Users\\radar", roots: [], hostname: "rog" } });
-    const distro = device({
-        key: "rog-wsl",
-        hostId: "rog-wsl",
-        facts: { os: "Arch Linux", arch: "x64", shell: "/usr/bin/zsh", home: "/home/radarsu", roots: [], hostname: "rog", wsl: { distro: "Arch" } },
+// A MACHINE IS ITS CARD; ITS OS INSTALLS ARE ENVIRONMENTS OF IT. What a turn needs told is not a second device but
+// which side a call lands in, so the reach is read off the card's own environment list.
+test("names the machines with more than one environment, and only those", () => {
+    const summary = (id: string, environments: HostSummary["environments"]): HostSummary => ({
+        id,
+        platform: "windows",
+        environments,
+        online: environments[0]?.online ?? false,
     });
-    const lone = device({ key: "omen", hostId: "omen", facts: { os: "Windows", arch: "x64", shell: "PowerShell 7", home: "C:\\Users\\r", roots: [], hostname: "omen" } });
-    expect(machineReach([distro, windows, lone], ["rog", "rog-wsl", "omen"])).toEqual([
+    const rog = summary("rog", [
+        { key: HOST_NATIVE_ENVIRONMENT, online: true, facts: { ...WINDOWS, hostname: "rog" } },
+        { key: "wsl:archlinux", online: true, facts: { ...ARCH, hostname: "rog", wsl: { distro: "archlinux" } } },
+    ]);
+    const omen = summary("omen", [{ key: HOST_NATIVE_ENVIRONMENT, online: true, facts: { ...WINDOWS, hostname: "omen" } }]);
+    expect(machineReach([rog, omen], ["rog", "omen"])).toEqual([
         {
-            label: "rog",
-            doors: [
-                { id: "rog", distro: undefined, shell: "PowerShell 7", home: "C:\\Users\\radar" },
-                { id: "rog-wsl", distro: "Arch", shell: "/usr/bin/zsh", home: "/home/radarsu" },
+            id: "rog",
+            environments: [
+                { key: HOST_NATIVE_ENVIRONMENT, distro: undefined, shell: WINDOWS.shell, home: WINDOWS.home },
+                { key: "wsl:archlinux", distro: "archlinux", shell: ARCH.shell, home: ARCH.home },
             ],
         },
     ]);
-    // A door the turn was not granted is not one to describe, and a machine left with one door is no longer two.
-    expect(machineReach([distro, windows, lone], ["rog", "omen"])).toEqual([]);
+    // A machine this turn was not granted is not one to describe.
+    expect(machineReach([rog, omen], ["omen"])).toEqual([]);
 });
 
 // THE DOOR A CHECKOUT VERB TAKES. One engine serves every door of a PC, so both of these report the same container

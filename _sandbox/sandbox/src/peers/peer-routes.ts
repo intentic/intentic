@@ -34,6 +34,9 @@ export interface PeerRouteDeps<Client extends PeerClient<Facts, Scopes>, Announc
     readonly bridgeToken?: string;
     // Refusal returns as a tool result, not an error, so the model reads it; the peer's own scopes stay the floor.
     readonly beforeCall?: (payload: unknown, c: Context) => Promise<{ readonly refusal: string } | undefined>;
+    // A peer came up and said what it is. Fire-and-forget by contract: the hosts door uses it to put an agent in the
+    // rest of that computer, and a connect must not wait on a download.
+    readonly onConnected?: (id: string, facts: Facts) => void;
     // What a `tools/call` answer becomes on its way back to the model, by tool name.
     readonly sealAnswer?: (id: string, tool: string, answer: unknown) => unknown;
 }
@@ -216,7 +219,9 @@ export const createPeerRoutes = <
                 if (scopes !== undefined) {
                     await hub.pushScopes(id, scopes);
                 }
-                hub.observe(id, await client.describe());
+                const facts = await client.describe();
+                hub.observe(id, facts);
+                deps.onConnected?.(id, facts);
             },
             onClose: () => {
                 clearTimeout(deadline);

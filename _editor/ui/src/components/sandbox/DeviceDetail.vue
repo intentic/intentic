@@ -62,6 +62,10 @@ defineSlots<{
     // Verbs for this row's ports, at the end of the ports line rather than in `actions`: a mirroring toggle
     // beside the container's own Stop would read as the same stop.
     ports?: (props: { group: DeviceSandboxGroup }) => unknown;
+    // Turning file sync ON, for a row that has no pairing to hang `folder` under. Its own slot because the
+    // emptiness is the prompt: a reader looking at a sandbox this device does not sync wants the folder field,
+    // not a line telling them there is no folder.
+    sync?: (props: { group: DeviceSandboxGroup }) => unknown;
     /** What follows the row while it's working: a run log, the result of the last action. */
     footer?: (props: { group: DeviceSandboxGroup }) => unknown;
     // Restarting this device's agent, beside the state that asks for it. A caller that can reach the machine
@@ -323,6 +327,12 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                         >
                             <slot name="folder" :group="group" />
                         </span>
+                    </template>
+
+<!-- Nothing synced yet: the offer to start, in the same value column the folder would have used. -->
+                    <template v-if="!group.folder && $slots[`sync`]">
+                        <span class="text-2xs text-subtle">Sync</span>
+                        <div class="min-w-0"><slot name="sync" :group="group" /></div>
                     </template>
 
 <!-- Survives having no ports: an empty list has two causes (nothing served, or mirroring off). -->

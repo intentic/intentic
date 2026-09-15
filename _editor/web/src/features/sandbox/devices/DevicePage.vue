@@ -43,6 +43,7 @@ import {
 import { useDeviceOps } from "./deviceOps";
 import { environmentFacts, environmentTitle, wslDistroRows } from "./machineEnvironments";
 import { type ConflictAsk, conflictAsk } from "./sync/conflictAsk";
+import SandboxSyncToggles from "./sync/SandboxSyncToggles.vue";
 import { type DeviceScopes, deviceDoors, deviceHardware, lastSeenNote, manageBlock, osLabel, osTitle, syncNote, syncStopped } from "./deviceFacts";
 import { startAgent } from "../../agents/fleet/agentActions";
 import HostConnectDialog from "../../capabilities/connect/HostConnectDialog.vue";
@@ -502,6 +503,11 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                                 @click="ops.confirmingUnpair.value = { environment: ownerOf(group)!, group }"
                             />
                         </div>
+                    </template>
+                    <!-- Nothing synced here yet: the folder field and the two ways to start, for this sandbox alone —
+                         a pairing belongs to one sandbox and one machine, and only this one's daemon can mint it. -->
+                    <template #sync="{ group }">
+                        <SandboxSyncToggles v-if="ops.selfGroup(group)" :machine="machine" :group="group" :ops="ops" />
                     </template>
                     <!-- The switch that clears the user's own localhost, under the ports it's about rather than with the container verbs. -->
                     <template #ports="{ group }">

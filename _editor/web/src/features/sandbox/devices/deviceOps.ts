@@ -30,9 +30,14 @@ const OP: Record<SandboxVerb, DeviceSandboxOp> = {
 // own warning instead.
 const SEVERING = new Set<DeviceSandboxOp>([`stop`, `restart`, `update`, `rebuild`, `rollback`, `remove`]);
 
+// Everything this page can do to one machine's file sync: the switches over a pairing that exists, and the one that
+// starts one. Enrolling belongs with them rather than in the add-a-device dialog — a folder on a machine already
+// connected is a toggle on its row, not a one-liner to paste.
+type SyncCommand = DeviceSyncSwitch | "sync-install";
+
 // Pause/resume and mirror on/off are one button wearing two labels; the label flips on the next report, not
 // the click, so a spinner must answer to either direction.
-const PAIRED_WITH: Partial<Record<DeviceSyncSwitch, DeviceSyncSwitch>> = {
+const PAIRED_WITH: Partial<Record<SyncCommand, SyncCommand>> = {
     "sync-pause": `sync-resume`,
     "sync-resume": `sync-pause`,
     "mirror-off": `mirror-on`,
@@ -41,20 +46,24 @@ const PAIRED_WITH: Partial<Record<DeviceSyncSwitch, DeviceSyncSwitch>> = {
 
 // Kept beside each other rather than inlined at each call site, so a verb and its failure sentence can't
 // drift apart.
-const COMMAND_REFUSAL: Record<DeviceSyncSwitch, string> = {
+// `sync-install` rides these too: turning sync ON is the same kind of act as the switches beside it, and the row it
+// is pressed on is the row its answer belongs under.
+const COMMAND_REFUSAL: Record<SyncCommand, string> = {
     "mirror-off": `That device didn't change its port mirroring.`,
     "mirror-on": `That device didn't change its port mirroring.`,
     "sync-pause": `That device didn't pause its file syncing.`,
     "sync-resume": `That device didn't resume its file syncing.`,
     "sync-unpair": `That device didn't unpair this sandbox.`,
+    "sync-install": `That device didn't start syncing this sandbox.`,
 };
 
-const COMMAND_UNREACHED: Record<DeviceSyncSwitch, string> = {
+const COMMAND_UNREACHED: Record<SyncCommand, string> = {
     "mirror-off": `Couldn't reach that device to change its port mirroring.`,
     "mirror-on": `Couldn't reach that device to change its port mirroring.`,
     "sync-pause": `Couldn't reach that device to pause its file syncing.`,
     "sync-resume": `Couldn't reach that device to resume its file syncing.`,
     "sync-unpair": `Couldn't reach that device to unpair this sandbox.`,
+    "sync-install": `Couldn't reach that device to start syncing this sandbox.`,
 };
 
 // Update and restart both stop the resident process carrying the request, so the page can't claim an
@@ -99,9 +108,16 @@ export interface DeviceOps {
     readonly applyReshape: (ask: ResourcesAsk) => void;
     readonly selfGroup: (group: DeviceSandboxGroup) => boolean;
 
-    // The two sync switches, per pairing and machine-wide, through the environment holding the pairing.
-    readonly runSync: (environment: DeviceRow, key: string, sandboxId: string | undefined, command: DeviceSyncSwitch) => Promise<void>;
-    readonly syncRunning: (key: string, command: DeviceSyncSwitch) => boolean;
+    // Everything one machine's file sync can be told to do: the switches over a pairing, and the one that starts
+    // one. `folder` rides only the latter, and is what picks the environment that ends up running mutagen.
+    readonly runSync: (
+        environment: DeviceRow,
+        key: string,
+        sandboxId: string | undefined,
+        command: SyncCommand,
+        folder?: { readonly mode: "sync" | "mirror"; readonly localDir?: string },
+    ) => Promise<void>;
+    readonly syncRunning: (key: string, command: SyncCommand) => boolean;
     readonly confirmingUnpair: Ref<{ environment: DeviceRow; group: DeviceSandboxGroup } | undefined>;
     readonly confirmUnpair: () => void;
 
@@ -134,7 +150,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     const busy = ref<string | undefined>();
     // Kept out of `busy`, which also drives which container-verb button spins; keyed by row and command,
     // since three buttons on a row must not spin together.
-    const syncBusy = ref<{ key: string; command: DeviceSyncSwitch } | undefined>();
+    const syncBusy = ref<{ key: string; command: SyncCommand } | undefined>();
     // The agent op in flight and whose agent it is, so the log lands under that environment's row.
     const agentOp = ref<{ key: string; op: DeviceAgentOp } | undefined>();
     const revoking = ref(false);
@@ -277,9 +293,16 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     };
 
     // No confirmation for the reversible four; `sync-unpair` alone routes through the dialog. `sandboxId`
-    // present targets one pairing, absent runs the bare machine-wide CLI form. The environment is the one
-    // holding the pairing: its own agent owns the folder and the mirrored ports.
-    const runSync = async (environment: DeviceRow, key: string, sandboxId: string | undefined, command: DeviceSyncSwitch): Promise<void> => {
+    // present targets one pairing, absent runs the bare machine-wide CLI form. The environment named here is the door
+    // the line is SENT to; which environment ends up running it is the daemon's call, made from the folder
+    // (hosts/device-commands.ts) — mutagen can only watch the filesystem that holds it.
+    const runSync = async (
+        environment: DeviceRow,
+        key: string,
+        sandboxId: string | undefined,
+        command: SyncCommand,
+        folder?: { readonly mode: "sync" | "mirror"; readonly localDir?: string },
+    ): Promise<void> => {
         const hostId = environment.device.hostId;
         if (hostId === undefined || working.value) {
             return;
@@ -288,7 +311,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         failure.value = undefined;
         outcome.value = undefined;
         try {
-            const result = await runDeviceCommand(hostId, command, { sandboxId });
+            const result = await runDeviceCommand(hostId, command, { sandboxId, ...folder });
             // The machine's own sentence either way: a refusal names the switch to flip rather than throwing.
             outcome.value = result.ok ? { key, message: result.message } : undefined;
             failure.value = result.ok ? undefined : { key, notice: { tone: `warning`, title: COMMAND_REFUSAL[command], detail: result.message } };
@@ -302,7 +325,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         }
     };
 
-    const syncRunning = (key: string, command: DeviceSyncSwitch): boolean =>
+    const syncRunning = (key: string, command: SyncCommand): boolean =>
         syncBusy.value?.key === key && (syncBusy.value.command === command || syncBusy.value.command === PAIRED_WITH[command]);
 
     // Unpairing doesn't undo itself (a fresh one-liner re-enrolls), so it parks in the app's own dialog like

@@ -225,6 +225,23 @@ Three rules hold the line:
   the switch. Anything that restarts the sandbox serving the request is expected to lose its own answer, so the
   caller treats a dropped connection as the ending rather than a failure.
 
+## One card is one computer
+
+A `host` card is a COMPUTER, not an OS install on one. Windows and every WSL distro on it keep their own agent —
+mutagen has to watch the filesystem it syncs, and a distro's login shell and PATH are its own — but each connects
+under a key of the same card: the native environment's key IS the card id (`rog`), a sibling hangs off it
+(`rog::wsl:archlinux`), and `admitPeer` admits every one of them on the switches the owner ticked once for that
+machine (`PeerDoor.cardOf`). `HostSummary.environments` is the list, native first, each with its own liveness and
+version, and `run_command`'s `in` is how a call says which one to land in — one device, one tool prefix, one grant,
+the side as an argument.
+
+Connecting is therefore one act wherever it starts. The moment any environment holds a socket, the daemon puts an
+agent in the rest of that computer — from Windows into every distro it lists, from a distro onto the Windows side —
+minting a single-use pairing per environment and running the same bootstrap shim across
+([environment-bootstrap.ts](../../_sandbox/sandbox/src/hosts/environment-bootstrap.ts)). It is idempotent, cooled down
+per environment so a laptop waking does not retry a refusal every time, and never fatal to the connection that
+triggered it.
+
 ## One list of machines, two doors onto them
 
 A machine reaches this sandbox through either of two doors, and only one of them is a capability. The `host` card

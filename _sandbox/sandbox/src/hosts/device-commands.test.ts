@@ -1,6 +1,7 @@
 import type { DeviceCommandInput } from "@intentic/sandbox-contract";
 import {
     DEV_REBUILD_EXIT_MARK,
+    HOST_NATIVE_ENVIRONMENT,
     DEV_REBUILD_QUIET_MARK,
     DeviceCommandInputSchema,
     DeviceLocalDirSchema,
@@ -21,6 +22,8 @@ const facts = (over: Partial<DeviceCommandFacts> = {}): DeviceCommandFacts => ({
     hostFacts: undefined,
     mode: undefined,
     localDir: undefined,
+    pairedDir: undefined,
+    connections: [],
     pairToken: undefined,
     ...over,
 });
@@ -239,15 +242,36 @@ test("crosses a checkout's command into the distro of the Windows PC that holds 
         devRoot: "/home/radarsu/intentic",
         hostFacts: { ...WINDOWS_PC, wslDistros: ["archlinux", "docker-desktop"] },
     });
-    expect(doorRoute(DEVICE_COMMANDS["dev-rebuild"], windowsSide, asked("dev-rebuild"))).toEqual({ in: "wsl:archlinux" });
-    expect(doorRoute(DEVICE_COMMANDS["dev-reload"], windowsSide, asked("dev-reload"))).toEqual({ in: "wsl:archlinux" });
+    expect(doorRoute(DEVICE_COMMANDS["dev-rebuild"], windowsSide, asked("dev-rebuild"))).toEqual({ environment: "wsl:archlinux", in: "wsl:archlinux" });
+    expect(doorRoute(DEVICE_COMMANDS["dev-reload"], windowsSide, asked("dev-reload"))).toEqual({ environment: "wsl:archlinux", in: "wsl:archlinux" });
     // Reading the log is the same question: it sits in the home of whichever environment ran the build.
-    expect(doorRoute(DEVICE_COMMANDS["dev-rebuild-log"], windowsSide, asked("dev-rebuild-log"))).toEqual({ in: "wsl:archlinux" });
+    expect(doorRoute(DEVICE_COMMANDS["dev-rebuild-log"], windowsSide, asked("dev-rebuild-log"))).toEqual({ environment: "wsl:archlinux", in: "wsl:archlinux" });
     // The distro's own door needs no crossing, and no crossing is ever sent to it.
     const distroSide = facts({ platform: "linux", devRoot: "/home/radarsu/intentic" });
     for (const command of ["dev-rebuild", "dev-reload", "dev-rebuild-log"] as const) {
-        expect(doorRoute(DEVICE_COMMANDS[command], distroSide, asked(command))).toEqual({});
+        expect(doorRoute(DEVICE_COMMANDS[command], distroSide, asked(command))).toEqual({ environment: HOST_NATIVE_ENVIRONMENT });
     }
+});
+
+// ITS OWN AGENT BEATS CROSSING. Once the distro is connected in its own right — which one install now does for the
+// whole computer — the line goes down that connection: one hop fewer, its own login shell, and no `wsl.exe` session
+// to be torn down under a detached build.
+test("talks to a connected distro directly instead of crossing into it", () => {
+    const bothUp = facts({
+        platform: "windows",
+        devRoot: "/home/radarsu/intentic",
+        hostFacts: { ...WINDOWS_PC, wslDistros: ["archlinux"] },
+        connections: [HOST_NATIVE_ENVIRONMENT, "wsl:archlinux"],
+    });
+    expect(doorRoute(DEVICE_COMMANDS["dev-rebuild"], bothUp, asked("dev-rebuild"))).toEqual({
+        environment: "wsl:archlinux",
+        connection: "rog::wsl:archlinux",
+    });
+    // The same machine before that environment came up: crossing is the fallback, not the plan.
+    expect(doorRoute(DEVICE_COMMANDS["dev-rebuild"], { ...bothUp, connections: [HOST_NATIVE_ENVIRONMENT] }, asked("dev-rebuild"))).toEqual({
+        environment: "wsl:archlinux",
+        in: "wsl:archlinux",
+    });
 });
 
 // What is genuinely out of reach still earns a refusal in words, rather than a PowerShell parse error the reader has
@@ -269,12 +293,43 @@ test("refuses a checkout's command only where nothing of that computer can reach
     expect(ambiguous).toContain("connect the one that does");
 });
 
-// Every other action is the CLI's own name, or a line already written in the door's dialect (sync-install), so no
-// door is the wrong one for it and none is ever asked to cross.
+// A command that names no path at all: the CLI's own name, acting on a pairing nothing has reported a folder for.
 test("asks nothing about the door for a command that names no path", () => {
-    const windowsSide = facts({ platform: "windows", pairToken: "pair_abc", mode: "sync", localDir: "C:\\Users\\Ada\\work" });
-    expect(doorRoute(DEVICE_COMMANDS["sync-install"], windowsSide, asked("sync-install"))).toEqual({});
+    const windowsSide = facts({ platform: "windows" });
     expect(doorRoute(DEVICE_COMMANDS["mirror-off"], windowsSide, asked("mirror-off"))).toEqual({});
+    expect(doorRoute(DEVICE_COMMANDS["sync-pause"], windowsSide, asked("sync-pause"))).toEqual({});
+});
+
+// WHICH SIDE SYNCS IS THE FOLDER'S ANSWER. The browser names a machine and a folder; nothing about the door decides
+// where mutagen ends up running, because only one filesystem has that folder in it.
+test("enrolls sync in the environment that holds the folder, in that environment's dialect", () => {
+    const pc = { platform: "windows", pairToken: "pair_abc", mode: "sync" as const, hostFacts: { ...WINDOWS_PC, wslDistros: ["archlinux"] } };
+    // A distro's folder, asked of the PC's Windows door: crossed, and written for sh.
+    const inDistro = facts({ ...pc, localDir: "/home/radarsu/intentic/work" });
+    const distroRoute = doorRoute(DEVICE_COMMANDS["sync-install"], inDistro, asked("sync-install"));
+    expect(distroRoute).toEqual({ environment: "wsl:archlinux", in: "wsl:archlinux" });
+    const distroLine = DEVICE_COMMANDS["sync-install"].line(inDistro, distroRoute) ?? "";
+    expect(distroLine).toContain("curl -fsSL https://intentic.dev/sync");
+    expect(distroLine).toContain('SYNC_DIR="/home/radarsu/intentic/work"');
+    // A Windows folder on the same machine: no crossing, and PowerShell.
+    const onWindows = facts({ ...pc, localDir: "C:\\Users\\radar\\intentic" });
+    const windowsRoute = doorRoute(DEVICE_COMMANDS["sync-install"], onWindows, asked("sync-install"));
+    expect(windowsRoute).toEqual({ environment: HOST_NATIVE_ENVIRONMENT });
+    expect(DEVICE_COMMANDS["sync-install"].line(onWindows, windowsRoute) ?? "").toContain("irm https://intentic.dev/sync.ps1 | iex");
+});
+
+// A switch over an existing pairing reaches only the agent that started that mutagen session, and the folder the
+// pairing reports is what names its environment.
+test("sends a sync switch to the environment whose folder the pairing names", () => {
+    const pc = { platform: "windows", hostFacts: { ...WINDOWS_PC, wslDistros: ["archlinux"] }, sandboxId: "work-abc" };
+    const distro = facts({ ...pc, pairedDir: "/home/radarsu/intentic/work" });
+    for (const command of ["sync-pause", "sync-resume", "sync-unpair", "mirror-off", "mirror-on"] as const) {
+            expect(doorRoute(DEVICE_COMMANDS[command], distro, asked(command))).toEqual({ environment: "wsl:archlinux", in: "wsl:archlinux" });
+    }
+    // The same pairing held on the Windows side needs no crossing.
+    expect(doorRoute(DEVICE_COMMANDS["sync-pause"], facts({ ...pc, pairedDir: "C:\\Users\\radar\\intentic" }), asked("sync-pause"))).toEqual({ environment: HOST_NATIVE_ENVIRONMENT });
+    // Ports-only: no folder anywhere, so the switch goes to the side the card is named after, where its forwarder is.
+    expect(doorRoute(DEVICE_COMMANDS["mirror-on"], facts(pc), asked("mirror-on"))).toEqual({});
 });
 
 // The same enrollment the card's copyable one-liner carries — script, env and single-use token — spoken in the shell

@@ -42,6 +42,22 @@ The fact has to arrive at connect time. It used to ride only the sync report, wh
 fold read that silence as agreement. `HostFacts` carries `hostname` and `wsl` now, and an agent old enough to send
 neither says nothing rather than something false.
 
+## 2b. One install, and where sync lands
+
+Installing on either side connects the whole computer: the daemon reads the rest off the side that connected
+(`wslDistros` from Windows, "the Windows side" from a distro), mints a pairing per environment and runs the bootstrap
+shim across with `run_command`'s `in`. Nothing is asked of the agent beyond the release that took that argument, and
+the pairing stays a credential only the daemon mints.
+
+File sync then needs no second decision: mutagen can only watch the filesystem that holds the folder, so the FOLDER
+picks the environment. A `C:\…` path enrols the Windows side, a `/home/…` path the distro, and the daemon routes the
+line accordingly — including the install one-liner, which is written in the dialect of the environment it lands in
+rather than the door it was sent to. The same rule carries every switch over an existing pairing: pause, resume,
+unpair and the mirroring toggle go where that pairing's folder is, because only that agent holds its session.
+
+An environment with its own agent is talked to directly; crossing is the fallback for one that has none. That is one
+hop fewer, its own login shell, and no `wsl.exe` session to be torn down under a detached build.
+
 ## 3. What each screen does with it
 
 The board's unit is the machine: one card, the environments as lines with their own state (a live Windows side and a

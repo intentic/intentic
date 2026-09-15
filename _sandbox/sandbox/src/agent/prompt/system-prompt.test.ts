@@ -357,34 +357,36 @@ test("a connected device is named, with the machine running this sandbox called 
     expect(preset.append).toContain("`ada-laptop`");
 });
 
-// Windows and the distro on it are two devices to the tools and one PC to the owner; a turn told only the ids keeps
-// them in step or runs Linux work through PowerShell. The sentence names the sides, the crossing and the paths.
-test("says which connected devices are one computer, and how to cross between them", () => {
+// ONE CARD, SEVERAL OS INSTALLS. A turn told only the machine's id would look for a second device that does not
+// exist, or run a Linux path through PowerShell. The sentence names the sides, how `in` picks one, and the two names
+// every folder has.
+test("says a connected machine has several environments, and how a command picks one", () => {
     const prompt = sdkSystemPrompt({
         ...BASE,
         mode: "intentic",
         custom: undefined,
         hostDevices: {
-            ids: ["rog", "rog-wsl"],
+            ids: ["rog"],
             self: "rog",
             slug: "work-abc",
             machines: [
                 {
-                    label: "radarsu-rog",
-                    doors: [
-                        { id: "rog", shell: "PowerShell 7", home: "C:\\Users\\radar" },
-                        { id: "rog-wsl", distro: "Arch", shell: "/usr/bin/zsh", home: "/home/radarsu" },
+                    id: "rog",
+                    environments: [
+                        { key: "native", shell: "PowerShell 7", home: "C:\\Users\\radar" },
+                        { key: "wsl:archlinux", distro: "archlinux", shell: "/usr/bin/zsh", home: "/home/radarsu" },
                     ],
                 },
             ],
         },
     }) as string;
-    expect(prompt).toContain("`rog` and `rog-wsl` are ONE computer, radarsu-rog");
-    expect(prompt).toContain("`rog` is its Windows side (PowerShell 7, home C:\\Users\\radar): the screen, the GUI and the clipboard live there");
-    expect(prompt).toContain('`rog-wsl` is the WSL distro "Arch" on it (/usr/bin/zsh, home /home/radarsu)');
-    expect(prompt).toContain('`in: "wsl:Arch"` on `rog` runs a Linux command in that distro, and `in: "windows"` on `rog-wsl` runs PowerShell');
-    expect(prompt).toContain("C:\\Users\\radar is /mnt/c/Users/radar from a distro; /home/radarsu is \\\\wsl.localhost\\Arch\\home\\radarsu from Windows");
-    // A single-door machine gets no such sentence: there is nothing to mistake for two.
+    expect(prompt).toContain("`rog` is ONE computer with 2 environments on it");
+    expect(prompt).toContain("`native` is the metal (PowerShell 7, home C:\\Users\\radar), where the screen, the GUI and the clipboard live");
+    expect(prompt).toContain('`wsl:archlinux` is the WSL distro "archlinux" on it (/usr/bin/zsh, home /home/radarsu)');
+    expect(prompt).toContain('`in: "wsl:archlinux"` runs it in that distro');
+    expect(prompt).toContain('`in: "windows"` from inside a distro runs PowerShell on the Windows side');
+    expect(prompt).toContain("C:\\Users\\radar is /mnt/c/Users/radar from a distro; /home/radarsu is \\\\wsl.localhost\\archlinux\\home\\radarsu from Windows");
+    // A machine with one OS install gets no such sentence: every command lands in the only place it could.
     const lone = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, hostDevices: { ids: ["ada-laptop"] } }) as string;
     expect(lone).not.toContain("ONE computer");
 });

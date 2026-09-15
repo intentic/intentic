@@ -20,6 +20,7 @@ import { PEER_BRIDGES, type PeerDoor } from "../peers/peer.js";
 import type { PeerHub } from "../peers/peer-hub.js";
 import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
+import { bootstrapEnvironments } from "./environment-bootstrap.js";
 import { commandInCall, judgeHostCommand } from "./host-command-gate.js";
 
 // The user's own computer as a peer door: @intentic/machine dials in with an enrollment token and serves `hostContract`
@@ -127,6 +128,9 @@ export const hostPeerRoutes = (services: Services) =>
         hub: services.hostHub,
         bridgeToken: services.hostBridgeToken,
         summaries: () => hostSummaries(services),
+        // One install connects the whole computer: whichever side the owner ran it on, the daemon puts an agent in
+        // the rest from here (environment-bootstrap.ts).
+        onConnected: (id, facts) => bootstrapEnvironments(services, id, facts),
         // The owner's safety policy, applied here since the bridge is the last thing to see a call while someone can
         // still be asked. The machine's own scopes remain the floor; a refusal here only stops what the machine might
         // otherwise have run.

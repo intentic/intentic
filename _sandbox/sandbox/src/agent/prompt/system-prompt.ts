@@ -1,7 +1,7 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { type AgentCapabilities, type SystemPromptMode, type TurnNote, windowsPathOf, wslPathOf } from "@intentic/sandbox-contract";
-import type { DoorReach, HostDeviceReach, MachineReach } from "../../hosts/self-host.js";
+import type { EnvironmentReach, HostDeviceReach, MachineReach } from "../../hosts/self-host.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { INTENTIC_PROMPT } from "./intentic-prompt.js";
 import { MEMORY_NOTE_TITLE } from "./workspace-memory.js";
@@ -164,42 +164,43 @@ const DIAGNOSTICS_GUIDANCE =
     "`mcp__diagnostics__resources` is memory, OOM kills and event-loop stalls over time. Each takes a window and " +
     "answers newest-first; none can write.";
 
-// What one side of a two-sided PC is, in the words the tools use: the door id, the shell behind it, its home.
-const sideOf = (door: DoorReach): string => {
-    const facts = [door.shell, door.home === undefined ? undefined : `home ${door.home}`].filter((fact) => fact !== undefined).join(", ");
-    const what = door.distro === undefined ? `its Windows side` : `the WSL distro "${door.distro}" on it`;
-    const owns = door.distro === undefined ? `: the screen, the GUI and the clipboard live there` : ``;
-    return `\`${door.id}\` is ${what}${facts === "" ? "" : ` (${facts})`}${owns}`;
+// What one environment of a many-sided PC is, in the words the tools use: the key `in` takes, the shell behind it,
+// its home.
+const sideOf = (environment: EnvironmentReach): string => {
+    const facts = [environment.shell, environment.home === undefined ? undefined : `home ${environment.home}`]
+        .filter((fact) => fact !== undefined)
+        .join(", ");
+    const what = environment.distro === undefined ? `the metal` : `the WSL distro "${environment.distro}" on it`;
+    const owns = environment.distro === undefined ? `, where the screen, the GUI and the clipboard live` : ``;
+    return `\`${environment.key}\` is ${what}${facts === "" ? "" : ` (${facts})`}${owns}`;
 };
 
-// One folder, two names, for the Windows home and each distro's: the translation a turn would otherwise guess at.
-const pathsOf = (windows: DoorReach | undefined, distros: readonly DoorReach[]): string[] => [
-    ...(windows?.home === undefined || wslPathOf(windows.home) === undefined ? [] : [`${windows.home} is ${wslPathOf(windows.home)} from a distro`]),
-    ...distros.flatMap((door) =>
-        door.home === undefined || door.distro === undefined ? [] : [`${door.home} is ${windowsPathOf(door.distro, door.home)} from Windows`],
+// One folder, two names, for the native home and each distro's: the translation a turn would otherwise guess at.
+const pathsOf = (native: EnvironmentReach | undefined, distros: readonly EnvironmentReach[]): string[] => [
+    ...(native?.home === undefined || wslPathOf(native.home) === undefined ? [] : [`${native.home} is ${wslPathOf(native.home)} from a distro`]),
+    ...distros.flatMap((environment) =>
+        environment.home === undefined || environment.distro === undefined
+            ? []
+            : [`${environment.home} is ${windowsPathOf(environment.distro, environment.home)} from Windows`],
     ),
 ];
 
-// How `run_command` crosses between the doors, named per door so the example is the call to make.
-const crossingsOf = (windows: DoorReach | undefined, distros: readonly DoorReach[]): string[] => distros.map((door) =>
-        windows === undefined
-            ? `\`in: "windows"\` on \`${door.id}\` runs PowerShell on the Windows side`
-            : `\`in: "wsl:${door.distro ?? ""}"\` on \`${windows.id}\` runs a Linux command in that distro, and \`in: "windows"\` on \`${door.id}\` runs PowerShell on the Windows side`,
-    );
-
-// Windows and the distros on it answer as separate devices while being one PC with one engine, one screen and one
-// set of disks; without this a turn keeps them "in step" or picks the wrong side for the job.
-const machineGuidance = ({ label, doors }: MachineReach): string => {
-    const windows = doors.find((door) => door.distro === undefined);
-    const distros = doors.filter((door) => door.distro !== undefined);
-    const paths = pathsOf(windows, distros);
+// ONE DEVICE, ONE TOOL SET, THE SIDE AS AN ARGUMENT. A PC with WSL on it is one card with one grant: the tools are
+// named after the machine, and `in` is how a call says which of its OS installs to land in. Without this a turn looks
+// for a second device that does not exist, or runs a Linux path through PowerShell.
+const machineGuidance = ({ id, environments }: MachineReach): string => {
+    const native = environments.find((environment) => environment.distro === undefined);
+    const distros = environments.filter((environment) => environment.distro !== undefined);
+    const paths = pathsOf(native, distros);
+    const crossings = distros.map((environment) => `\`in: "wsl:${environment.distro ?? ""}"\` runs it in that distro`);
     return (
-        `${doors.map((door) => `\`${door.id}\``).join(" and ")} are ONE computer, ${label}: ${doors.map(sideOf).join("; ")}. One Docker ` +
-        `engine serves both, so \`list_sandboxes\` answers the same through either door and a sandbox on it is managed ` +
-        `through either. Either side reaches the other from \`run_command\`: ${crossingsOf(windows, distros).join("; ")}, with no ` +
-        `quoting through the first shell.${paths.length === 0 ? "" : ` The same files have two names: ${paths.join("; ")}.`} Pick ` +
-        `the door by the job — Linux shell work through the distro, anything on screen through Windows — and never treat ` +
-        `them as two machines to keep in step.`
+        `\`${id}\` is ONE computer with ${environments.length} environments on it: ${environments.map(sideOf).join("; ")}. Its tools are the ` +
+        `machine's, and \`run_command\`'s \`in\` picks the side: omitted it runs on ${native === undefined ? `the side the card is named after` : `the metal`}, ` +
+        `${crossings.join("; ")}${native === undefined ? `` : `, and \`in: "windows"\` from inside a distro runs PowerShell on the Windows side`} — ` +
+        `argv built on the machine, with no quoting through the first shell. One Docker engine serves every environment, ` +
+        `so \`list_sandboxes\` answers the same whichever side a command lands in.` +
+        `${paths.length === 0 ? "" : ` The same files have two names: ${paths.join("; ")}.`} Pick the side by the job — Linux shell work in ` +
+        `the distro, anything on screen on Windows — and never treat them as two machines to keep in step.`
     );
 };
 

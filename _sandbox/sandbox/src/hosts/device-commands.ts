@@ -1,6 +1,15 @@
 import { installScriptUrl } from "@intentic/constants";
 import type { DeviceCommand, DeviceCommandInput, DeviceCommandResult, HostFacts } from "@intentic/sandbox-contract";
-import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath, pathReach } from "@intentic/sandbox-contract";
+import {
+    DEV_REBUILD_EXIT_MARK,
+    DEV_REBUILD_QUIET_MARK,
+    devRebuildLogPath,
+    HOST_NATIVE_ENVIRONMENT,
+    hostCardOf,
+    hostConnectionKey,
+    hostEnvironmentOf,
+    pathReach,
+} from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import { callTool, forgetPull, heldHostDevices } from "./device-reports.js";
@@ -33,8 +42,28 @@ export interface DeviceCommandFacts {
     readonly hostFacts: HostFacts | undefined;
     readonly mode: "sync" | "mirror" | undefined;
     readonly localDir: string | undefined;
+    // The folder of the pairing a sync switch acts on, from readings already held. Which environment of that computer
+    // runs mutagen for it is decided by where that folder is, so this is what routes the switch.
+    readonly pairedDir: string | undefined;
+    // This machine's connections holding a socket right now, by environment key. An environment with its own agent is
+    // talked to directly; one without is reached by crossing from the door that is open.
+    readonly connections: readonly string[];
     /** Minted for this one call, and only for a command whose spec asks for one. */
     readonly pairToken: string | undefined;
+}
+
+// Where this command will run, once the route is known: the environment it lands in decides the dialect a line is
+// written in, which is why the route is computed before the line rather than after.
+export interface DeviceCommandRoute {
+    /** The environment the line runs in (`native`, `wsl:<distro>`); absent for a command that names no path. */
+    readonly environment?: string;
+    // That environment's OWN connection of this machine, when it holds a socket: one hop fewer than crossing, its own
+    // login shell, and no `wsl.exe` session to be torn down under a detached build.
+    readonly connection?: string;
+    /** `run_command`'s crossing, for an environment of that computer with no agent of its own. */
+    readonly in?: string;
+    /** Why nothing of that computer can run it; the line is never built when this is set. */
+    readonly refusal?: string;
 }
 
 interface DeviceCommandSpec {
@@ -42,7 +71,10 @@ interface DeviceCommandSpec {
     readonly done: string;
     // The command line, or undefined when this sandbox cannot form one; `needs` then says what is missing, since
     // "no line" is a fact about where this sandbox runs rather than a failure on the device.
-    readonly line: (facts: DeviceCommandFacts) => string | undefined;
+    // Takes the route because a crossed command lands in another shell: `sync-install` writes PowerShell for the
+    // Windows side and sh for a distro, and which of those it is follows the folder, not the door. An absent route
+    // means the line runs in the door's own shell, which is every command that names no path.
+    readonly line: (facts: DeviceCommandFacts, route?: DeviceCommandRoute) => string | undefined;
     /** Why a command could not be formed here, in the refusal's own words. */
     readonly needs?: string;
     // True when the command refuses to run fleet-wide and needs a sandbox id; only the destructive action sets it.
@@ -78,15 +110,18 @@ const WITH_PNPM = 'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; exp
 // shape that has always worked there.
 const OWN_SESSION = "detach=$(command -v setsid 2>/dev/null || true);";
 
-// The install one-liner for this sandbox, in the dialect of the device's own shell — the same script, environment and
-// single-use token the card's copyable command carries, built from the same table (@intentic/constants).
-const installLine = (facts: DeviceCommandFacts): string | undefined => {
+// The install one-liner for this sandbox, in the dialect of the environment it will RUN in — the same script,
+// environment and single-use token the card's copyable command carries, built from the same table
+// (@intentic/constants). The folder is what picks that environment (`doorRoute`), so a folder in a distro gets the sh
+// form inside that distro even when the door is the PC's Windows side.
+const installLine = (facts: DeviceCommandFacts, route: DeviceCommandRoute = {}): string | undefined => {
     if (facts.pairToken === undefined || facts.publicUrl === "") {
         return undefined;
     }
     // Mirror enrollments carry no folder at all: they forward ports and touch no files.
     const dir = facts.mode === "mirror" ? undefined : facts.localDir;
-    if (facts.platform === "windows") {
+    const windowsTarget = route.environment === undefined ? facts.platform === "windows" : route.environment === HOST_NATIVE_ENVIRONMENT;
+    if (windowsTarget) {
         const env = `$env:SANDBOX_URL='${facts.publicUrl}'; $env:PAIR_TOKEN='${facts.pairToken}';${
             dir === undefined ? "" : ` $env:SYNC_DIR=${shellDir(dir)};`
         }`;
@@ -96,28 +131,39 @@ const installLine = (facts: DeviceCommandFacts): string | undefined => {
     return `curl -fsSL ${installScriptUrl("desktopSh")} | ${env} sh`;
 };
 
+// EVERY SWITCH OVER AN EXISTING PAIRING GOES WHERE ITS FOLDER IS. One agent per OS install holds the mutagen session
+// it started, so `intentic-machine sync …` only reaches it in that environment — and the folder the pairing reports is
+// what says which. A ports-only enrollment has no folder and stays on the side the card is named after, which is
+// where its forwarder runs.
+const pairedFolder = (facts: DeviceCommandFacts): string | undefined => facts.pairedDir;
+
 export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>> = {
     "mirror-off": {
         done: "Port mirroring is off on that device. File syncing is untouched.",
         line: ({ sandboxId }) => forSandbox("intentic-machine sync mirror off", sandboxId),
+        path: pairedFolder,
     },
     "mirror-on": {
         done: "Port mirroring is back on. Ports return to that device's localhost within a few seconds.",
         line: ({ sandboxId }) => forSandbox("intentic-machine sync mirror on", sandboxId),
+        path: pairedFolder,
     },
     // Pausing sync also pauses the workspace's state backup, so it never writes into a folder mid-pause.
     "sync-pause": {
         done: "File syncing is paused on that device. Its ports keep being mirrored.",
         line: ({ sandboxId }) => forSandbox("intentic-machine sync pause", sandboxId),
+        path: pairedFolder,
     },
     "sync-resume": {
         done: "File syncing has resumed on that device.",
         line: ({ sandboxId }) => forSandbox("intentic-machine sync resume", sandboxId),
+        path: pairedFolder,
     },
     // Uninstall ends both sync sessions and self-revokes enrollment; the sandbox and local folder are untouched.
     "sync-unpair": {
         done: "That device has stopped syncing this sandbox. Its local folder is left exactly as it is.",
         line: ({ sandboxId }) => forSandbox("intentic-machine sync uninstall", sandboxId),
+        path: pairedFolder,
         scoped: true,
     },
     // Enrolls the device we are already talking to, instead of printing its one-liner for someone to paste there. The
@@ -128,6 +174,10 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
         needs: "this sandbox has no public address for a device to dial yet",
         timeoutMs: LONG_COMMAND_TIMEOUT_MS,
         mints: true,
+        // WHICH SIDE SYNCS IS THE FOLDER'S ANSWER, not a second thing to choose: mutagen has to watch the filesystem
+        // that holds it, so a `C:\…` folder enrolls the Windows side and a `/home/…` folder the distro, whichever
+        // door the browser happened to name. A ports-only enrollment has no folder and stays where it was sent.
+        path: (facts) => (facts.mode === "mirror" ? undefined : facts.localDir),
     },
     /* Dev rebuilds run detached and record an exit mark for later polling. */
     "dev-rebuild": {
@@ -194,6 +244,8 @@ const commandFacts = async (services: Services, input: DeviceCommandInput): Prom
         hostFacts: door?.facts,
         mode: input.mode,
         localDir: input.localDir,
+        pairedDir: door?.report?.pairings.find((pairing) => pairing.sandboxId === input.sandboxId)?.localDir,
+        connections: services.hostHub.connected().filter((key) => hostCardOf(key) === hostCardOf(input.id)).map(hostEnvironmentOf),
         pairToken: spec.mints === true ? services.syncPairings.mint(input.mode ?? "sync").token : undefined,
     };
 };
@@ -203,21 +255,22 @@ const commandFacts = async (services: Services, input: DeviceCommandInput): Prom
 // connected only on its Windows side still rebuilds the checkout in its distro — one connected machine is enough,
 // whichever side of it the owner connected. The refusal is for what is genuinely out of reach, and it names the
 // candidates when a PC has two distros and nothing says which one has the folder.
-export const doorRoute = (
-    spec: DeviceCommandSpec,
-    facts: DeviceCommandFacts,
-    input: DeviceCommandInput,
-): { readonly in?: string; readonly refusal?: string } => {
+export const doorRoute = (spec: DeviceCommandSpec, facts: DeviceCommandFacts, input: DeviceCommandInput): DeviceCommandRoute => {
     const path = spec.path?.(facts);
     if (path === undefined) {
         return {};
     }
     const reach = pathReach(facts.platform, facts.hostFacts, path);
     if (reach.kind === "direct") {
-        return {};
+        return { environment: hostEnvironmentOf(input.id) };
     }
     if (reach.kind === "wsl") {
-        return { in: `wsl:${reach.distro}` };
+        const environment = `wsl:${reach.distro}`;
+        // Its own agent if it has one — a distro connected in its own right needs no interop hop, and its login shell
+        // is the one the owner's tools are installed in. Crossing is the fallback for an environment with no agent.
+        return facts.connections.includes(environment)
+            ? { environment, connection: hostConnectionKey(hostCardOf(input.id), environment) }
+            : { environment, in: environment };
     }
     const several =
         reach.distros.length > 1
@@ -229,6 +282,10 @@ export const doorRoute = (
             `and no environment of that computer is reachable from it.${several}`,
     };
 };
+
+// Which connection of that machine carries the call: the target environment's own agent when it has one, else the
+// door the caller named, which then crosses.
+const sentTo = (route: DeviceCommandRoute, id: string): string => route.connection ?? id;
 
 // run_command answers with an exit line plus fenced stdout/stderr; success reads the exit line only, never what was
 // printed.
@@ -278,7 +335,7 @@ export const runDeviceCommand = async (services: Services, input: DeviceCommandI
     if (route.refusal !== undefined) {
         throw new ORPCError("CONFLICT", { message: route.refusal });
     }
-    const line = spec.line(facts);
+    const line = spec.line(facts, route);
     // A line this sandbox cannot form is a fact about where it runs, not something the device could answer.
     if (line === undefined) {
         throw new ORPCError("CONFLICT", { message: `"${input.command}" isn't available here: ${spec.needs ?? "this sandbox cannot form it"}.` });
@@ -287,7 +344,7 @@ export const runDeviceCommand = async (services: Services, input: DeviceCommandI
     try {
         const answer = await callTool(
             services,
-            input.id,
+            sentTo(route, input.id),
             "run_command",
             // `in` only when the line has to cross: an agent old enough to reject the argument is never sent one,
             // because the same release that took `in` is the one that reports the distros the route is read from.
