@@ -1,9 +1,9 @@
-import type { DocumentProviderRegistration, IntenticApi, RepoFacts } from "@intentic/extension-api";
+import type { DocumentProviderRegistration, IntenticApi, RepoFacts, ViewRegistration } from "@intentic/extension-api";
 import { describe, expect, it, vi } from "vitest";
 import { activate } from "./extension.js";
 
-// Pins which rows get the icon and what the palette command opens; both fail silently, a wrong `detect()` or an empty
-// command looks like nothing went wrong.
+// Pins which repositories get a Git tab and what the palette command opens; both fail silently, a wrong `detect()` or
+// an empty command looks like nothing went wrong.
 
 const facts = (repo: string): RepoFacts => ({
     repo,
@@ -19,10 +19,17 @@ const facts = (repo: string): RepoFacts => ({
 
 // Records every registration `activate` makes, on a stub shaped like the host's api, narrowed to this extension.
 const capture = (repos: readonly RepoFacts[]) => {
+    const views: ViewRegistration[] = [];
     const documents: DocumentProviderRegistration[] = [];
     const commands = new Map<string, () => unknown>();
     const open = vi.fn();
     const api = {
+        views: {
+            register: (view: ViewRegistration) => {
+                views.push(view);
+                return { dispose: () => {} };
+            },
+        },
         documents: {
             register: (provider: DocumentProviderRegistration) => {
                 documents.push(provider);
@@ -39,47 +46,35 @@ const capture = (repos: readonly RepoFacts[]) => {
         workspace: { repos: () => repos },
     } as unknown as IntenticApi;
     activate(api, { extensionId: `intentic.git-history`, subscriptions: [] });
-    return { documents, commands, open };
+    return { views, documents, commands, open };
 };
 
 describe(`ext-git-history`, () => {
-    it(`offers its document on a repository row and nowhere else`, () => {
-        const { documents } = capture([facts(`intentic`)]);
-        const provider = documents[0]!;
+    // The tab is bound to the repository's own path, which is what GitHistoryTab resolves its repo from.
+    it(`gives every repository a Git tab in its management panel`, () => {
+        const { views } = capture([facts(`intentic`), facts(`shop`)]);
+        const view = views[0]!;
 
-        expect(provider.detect(`intentic`)).toEqual({ icon: `sitemap`, tooltip: `Open git history`, title: `History` });
-        // A package inside the monorepo is a directory, not a repository: it has files, but no history of its own.
+        expect(view.surface).toBe(`directory`);
+        expect(view.detect([facts(`intentic`), facts(`shop`)], [])).toEqual([
+            { key: `intentic`, title: `Git`, repo: `intentic`, props: { path: `intentic` } },
+            { key: `shop`, title: `Git`, repo: `shop`, props: { path: `shop` } },
+        ]);
+    });
+
+    // Auxiliary, or a history every repo has would claim every repo and starve the views that serve unclaimed ones.
+    it(`adds its tab without claiming the repository`, () => {
+        expect(capture([]).views[0]!.auxiliary).toBe(true);
+    });
+
+    // The workspace root has no tree row and so no management panel, so its history stays a document the palette
+    // opens; a repository row must not offer one too, or the icon the tab replaced comes back.
+    it(`offers its document on the workspace root and nowhere else`, () => {
+        const provider = capture([facts(`intentic`)]).documents[0]!;
+
+        expect(provider.detect(``)).toEqual({ icon: `sitemap`, tooltip: `Open git history`, title: `History` });
+        expect(provider.detect(`intentic`)).toBeUndefined();
         expect(provider.detect(`intentic/_editor/web`)).toBeUndefined();
-        expect(provider.detect(`not-a-repo`)).toBeUndefined();
-    });
-
-    // The workspace root has no tree row (it's the container every other repo is discovered inside), so
-    // `workspace.repos()` omits it; if this breaks, root's history becomes unreachable.
-    it(`offers the workspace root's history under the empty path`, () => {
-        const { documents } = capture([]);
-        expect(documents[0]!.detect(``)).toMatchObject({ title: `History` });
-    });
-
-    // detect() reads live facts, so a cloned repo must flip from undefined to a result with no re-registration.
-    it(`tracks the live repo set rather than a snapshot taken at activation`, () => {
-        const repos: RepoFacts[] = [];
-        const documents: DocumentProviderRegistration[] = [];
-        const api = {
-            documents: {
-                register: (p: DocumentProviderRegistration) => {
-                    documents.push(p);
-                    return { dispose: () => {} };
-                },
-                open: vi.fn(),
-            },
-            commands: { register: () => ({ dispose: () => {} }) },
-            workspace: { repos: () => repos },
-        } as unknown as IntenticApi;
-        activate(api, { extensionId: `intentic.git-history`, subscriptions: [] });
-
-        expect(documents[0]!.detect(`fresh-clone`)).toBeUndefined();
-        repos.push(facts(`fresh-clone`));
-        expect(documents[0]!.detect(`fresh-clone`)).toMatchObject({ title: `History` });
     });
 
     it(`opens the root repository's history from the palette command`, () => {

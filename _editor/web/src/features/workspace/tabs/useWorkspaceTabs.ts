@@ -249,9 +249,10 @@ const fillDiff = (payload: DiffPayload): void => {
 };
 
 // Directory tab opens/focuses by dir path (DirectoryOperator surface), so re-selecting never stacks a duplicate.
-const openDirectory = (dir: string): void => {
+// `view` names the tab to land on; an already-open panel is re-pointed at it rather than left where it was.
+const openDirectory = (dir: string, view?: string): void => {
     const id = `dir:${dir}`;
-    place(paneOf(strip.value, id) ?? focused.value, { kind: `directory`, id, dir }, `keep`);
+    place(paneOf(strip.value, id) ?? focused.value, { kind: `directory`, id, dir, ...(view === undefined ? {} : { view }) }, `keep`);
 };
 
 // Health-report tab opens/focuses by repo, like openDirectory: re-opening never stacks a duplicate.

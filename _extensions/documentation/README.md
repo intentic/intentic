@@ -121,12 +121,15 @@ view. The tool returns them repo-relative, which is what every reader of the ind
 | --- | --- | --- |
 | Rail tile (`/ext/documentation`) | the workspace | reading the MAP: a system is rarely one repository |
 | Directory panel (a repo's cog) | one repository | its overview beside that repo's other panels |
-| **Tree row icon** | one **directory** | "what is this package?" is asked while looking at the package |
+| **Tree row icon** | one **package** | "what is this package?" is asked while looking at the package |
 
 The third is the one the other two cannot reach. A view's `detect()` answers per repo off the daemon's facts, and
 a document is per package: dozens of them in this monorepo, each mirroring a directory already sitting in the
 file tree. So it rides `contributes.documents` (a path-keyed contribution point in the extension API), and it opens
 in the Workspace's own editor area as a tab rather than navigating away from the files it describes.
+
+A repository's own row is left out of it: that row carries one cog, and the repository's overview is the Docs tab
+behind it. The icon is a package mark, and the packages are what have no panel of their own.
 
 **That icon stays on the row when the pointer is elsewhere** (`evidence: true` on the offer), which is the one
 place this surface departs from every other icon in the tree. The rest are revealed on hover, rightly: they are

@@ -2,19 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerDocumentProvider } from "../../../core-views/documentRegistry";
 import { rowActionsFor, type RowActionSources } from "./rowActions";
 
-// Composition rule for a tree row's icons: the one place git repos, directory-surface extensions, document providers
-// and personas meet on the same row.
+// Composition rule for a tree row's icons: the one place directory-surface extensions, document providers and personas
+// meet on the same row.
 
 const sources = (over: Partial<RowActionSources> = {}): RowActionSources => ({
-    repoDirs: new Set<string>(),
     manageableDirs: new Set<string>(),
-    previewableDirs: new Set<string>(),
     personaDirs: new Map<string, number>(),
     checkDirs: new Map<string, { adopted: boolean; changed: boolean }>(),
-    openHealth: vi.fn(),
     openDirectory: vi.fn(),
     openPersonas: vi.fn(),
-    openPreview: vi.fn(),
     openChecks: vi.fn(),
     openDocument: vi.fn(),
     ...over,
@@ -51,21 +47,26 @@ describe(`rowActionsFor`, () => {
         expect(rowActionsFor(`intentic/_editor/web/src`, source).map((action) => action.id)).toEqual([`personas`]);
     });
 
-    it(`gives a repo its health, and a managed repo its cog`, () => {
-        const actions = rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]), manageableDirs: new Set([`intentic`]) }));
-        expect(actions.map((action) => action.id)).toEqual([`health`, `directory`]);
+    // A repository's git history, docs and health are tabs of its management panel, so the row offers the one cog that
+    // opens it and nothing else: an icon per surface is what the panel replaced.
+    it(`gives a managed repo one cog and no second affordance`, () => {
+        const source = sources({ manageableDirs: new Set([`intentic`]) });
+        const actions = rowActionsFor(`intentic`, source);
+        expect(actions.map((action) => action.id)).toEqual([`directory`]);
+        expect(actions[0]?.tooltip).toBe(`Open management panel`);
+        actions[0]?.run();
+        expect(source.openDirectory).toHaveBeenCalledWith(`intentic`);
     });
 
     // A repository's own checks are evidence the file exists, so they stand rather than waiting for a hover, and they
-    // sit with what the folder CARRIES (personas) rather than with what can be done to it (preview, manage).
+    // sit with what the folder CARRIES (personas) rather than with what can be done to it (manage).
     it(`gives a repo that declares checks a standing shield, before the cog`, () => {
         const source = sources({
-            repoDirs: new Set([`intentic`]),
             manageableDirs: new Set([`intentic`]),
             checkDirs: new Map([[`intentic`, { adopted: true, changed: false }]]),
         });
         const actions = rowActionsFor(`intentic`, source);
-        expect(actions.map((action) => action.id)).toEqual([`health`, `checks`, `directory`]);
+        expect(actions.map((action) => action.id)).toEqual([`checks`, `directory`]);
         const checks = actions.find((action) => action.id === `checks`);
         expect(checks?.standing).toBe(true);
         checks?.run();
@@ -81,27 +82,14 @@ describe(`rowActionsFor`, () => {
         expect(changed[0]?.tooltip).toBe(`Its checks changed since you switched them on, so they are not running`);
     });
 
-    // Eye opens the Preview area, not another in-tree tab.
-    it(`gives a previewable repo its eye, ahead of the cog`, () => {
-        const source = sources({
-            repoDirs: new Set([`shop`]),
-            manageableDirs: new Set([`shop`]),
-            previewableDirs: new Set([`shop`]),
-        });
-        const actions = rowActionsFor(`shop`, source);
-        expect(actions.map((action) => action.id)).toEqual([`health`, `preview`, `directory`]);
-        actions.find((action) => action.id === `preview`)?.run();
-        expect(source.openPreview).toHaveBeenCalledWith(`shop`);
-    });
-
     // Document leads the row, matching the rail's ordering, not appended after existing affordances.
     it(`puts a document ahead of the repo's own affordances`, () => {
         provider(`architecture`, `intentic`);
-        const actions = rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]) }));
-        expect(actions.map((action) => action.id)).toEqual([`document:acme.docs:architecture`, `health`]);
+        const actions = rowActionsFor(`intentic`, sources({ manageableDirs: new Set([`intentic`]) }));
+        expect(actions.map((action) => action.id)).toEqual([`document:acme.docs:architecture`, `directory`]);
     });
 
-    // Documents are path-keyed, independent of repo/management status: a non-repo package can still have one.
+    // Documents are path-keyed, independent of management status: a package with no panel of its own can still have one.
     it(`offers a document on a package directory that is not a repo`, () => {
         provider(`architecture`, `intentic/_sandbox/acp-bridge`);
         const source = sources();
@@ -122,14 +110,10 @@ describe(`rowActionsFor`, () => {
     it(`lets an offer stand on the row, and never the repo's own affordances`, () => {
         provider(`architecture`, `intentic/_deploy/graph`, true);
         expect(rowActionsFor(`intentic/_deploy/graph`, sources()).map((action) => action.standing)).toEqual([true]);
-        expect(
-            rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]), manageableDirs: new Set([`intentic`]) })).map(
-                (action) => action.standing,
-            ),
-        ).toEqual([false, false]);
+        expect(rowActionsFor(`intentic`, sources({ manageableDirs: new Set([`intentic`]) })).map((action) => action.standing)).toEqual([false]);
     });
 
-    // A permanent-but-non-evidence offer (e.g. git history) still waits for hover like any other affordance.
+    // A permanent-but-non-evidence offer still waits for hover like any other affordance.
     it(`leaves an offer that is not evidence on hover`, () => {
         provider(`history`, `intentic`);
         expect(rowActionsFor(`intentic`, sources()).map((action) => action.standing)).toEqual([false]);
@@ -172,6 +156,6 @@ describe(`rowActionsFor`, () => {
                 component: () => Promise.resolve({}),
             }),
         );
-        expect(rowActionsFor(`intentic`, sources({ repoDirs: new Set([`intentic`]) })).map((action) => action.id)).toEqual([`health`]);
+        expect(rowActionsFor(`intentic`, sources({ manageableDirs: new Set([`intentic`]) })).map((action) => action.id)).toEqual([`directory`]);
     });
 });

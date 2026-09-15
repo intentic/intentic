@@ -31,6 +31,7 @@ const {
     activeId,
     previewId,
     openDiff,
+    openDirectory,
     openFile,
     openDocument,
     keepTab,
@@ -385,4 +386,18 @@ it(`leaves the strip untouched when nothing open was in what moved`, () => {
     renameOpenPaths(`docs/elsewhere.md`, `docs/moved.md`);
 
     expect(strip.value.main).toBe(before);
+});
+
+// A caller can name the panel's tab ("show the graph" from an agent review). A panel already open has to be
+// re-pointed at it, or the press lands the reader on whichever tab they left that panel showing.
+it(`opens a directory panel on the tab a caller named, re-pointing one already open`, () => {
+    startFresh();
+    openDirectory(`shop`);
+
+    expect(strip.value.main.tabs).toEqual([{ kind: `directory`, id: `dir:shop`, dir: `shop` }]);
+
+    openDirectory(`shop`, `git-history-repo`);
+
+    expect(strip.value.main.tabs).toEqual([{ kind: `directory`, id: `dir:shop`, dir: `shop`, view: `git-history-repo` }]);
+    expect(activeId.value).toBe(`dir:shop`);
 });

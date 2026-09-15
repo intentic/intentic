@@ -34,7 +34,7 @@ const emit = defineEmits<{
     pick: [];
 }>();
 
-const { strip, focusedPane, openLine, openFile, openHealth, focusPane, collapseSplit } = useWorkspaceTabs();
+const { strip, focusedPane, openLine, focusPane, collapseSplit } = useWorkspaceTabs();
 const { entry } = useWorkspaceTree();
 
 // Teleport seats are named after this pane, so the companion's breadcrumb can't land in the wrong one.
@@ -148,11 +148,11 @@ const diffOutline = useLoadingReveal(
             </div>
         </template>
         <div v-else-if="activeTab?.kind === 'directory'" class="min-h-0 flex-1">
-            <DirectoryOperator :dir="activeTab.dir" />
+            <DirectoryOperator :dir="activeTab.dir" :view="activeTab.view" />
         </div>
+        <!-- The workspace root's report; a nested repository's is the Health tab of its management panel. -->
         <div v-else-if="activeTab?.kind === 'health'" class="min-h-0 flex-1">
-            <!-- Every ranked row is an anchor: clicking one opens the file it names. -->
-            <CodebaseHealth :repo="activeTab.repo" @open-file="openFile" @switch-repo="openHealth" />
+            <CodebaseHealth :repo="activeTab.repo" />
         </div>
         <!-- A directory's document, rendered by whichever extension has something to say about it. -->
         <div v-else-if="activeTab?.kind === 'document'" class="min-h-0 flex-1">

@@ -42,6 +42,11 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
         api.documents.register({
             id: `architecture`,
             detect: (path) => {
+                // A repository's own page is the Docs tab of its management panel; this icon is for the packages
+                // inside it, which have no panel of their own.
+                if (api.workspace.repos().some((facts) => facts.repo === path)) {
+                    return undefined;
+                }
                 const present = documentAt(path);
                 if (present === undefined) {
                     return undefined;

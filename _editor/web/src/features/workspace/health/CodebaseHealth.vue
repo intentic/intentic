@@ -4,15 +4,18 @@ import { computed, ref } from "vue";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { useCodebaseHealth } from "./useCodebaseHealth";
 import { useRepos } from "../explorer/useRepos";
+import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { type ChurnWindow, CHURN_WINDOWS, formatCount, hotspotRows, moduleRows, perFile } from "./codebaseHealth";
 
-// Repo-level surface beside the management panel (cog) and git history (graph); answers where the risk sits,
-// via hotspots (churn x complexity) and map (PageRank over imports). Every number is a count a reader can
+// A repository's Health tab in the management panel, and the workspace root's own health tab; answers where the risk
+// sits, via hotspots (churn x complexity) and map (PageRank over imports). Every number is a count a reader can
 // recount, never a grade, so a row opens a file, not a score. Its action hands that file to an agent, using the row's
 // own numbers.
 
 const { repo } = defineProps<{ repo: string }>();
-const emit = defineEmits<{ "open-file": [path: string]; "switch-repo": [repo: string] }>();
+// Opens through the tab store rather than an emit: the management panel mounts this view through ExtensionView, which
+// binds props and listens to nothing.
+const { openFile, openHealth } = useWorkspaceTabs();
 
 const repoRef = computed(() => repo);
 const churnWindow = ref<ChurnWindow>(`all`);
@@ -41,7 +44,7 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                 variant="ghost"
                 class="max-w-48"
                 aria-label="Repository"
-                @update:model-value="(value: string | undefined) => value !== undefined && emit('switch-repo', value)"
+                @update:model-value="(value: string | undefined) => value !== undefined && openHealth(value)"
             />
             <span v-else class="text-xs font-medium text-content">{{ repo }}</span>
             <span class="flex-1"></span>
@@ -127,7 +130,7 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                                 class="group/row flex items-center gap-2 rounded px-1 py-1 transition-colors hover:bg-overlay"
                             >
                                 <!-- One hue for every bar; length already encodes magnitude, so color must not. -->
-                                <button type="button" :class="`${ROW_CLASS} min-w-0 flex-1 text-left`" @click="emit('open-file', row.path)">
+                                <button type="button" :class="`${ROW_CLASS} min-w-0 flex-1 text-left`" @click="openFile(row.path)">
                                     <span class="text-2xs tabular-nums text-subtle">{{ index + 1 }}</span>
                                     <!-- Truncate directories separately so filenames remain readable. -->
                                     <span class="flex min-w-0 overflow-hidden text-xs">
@@ -173,7 +176,7 @@ const ROW_CLASS = `grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_3.5rem_4rem] items
                             :key="module.path"
                             class="group/row flex items-center gap-2 rounded px-1 py-1 transition-colors hover:bg-overlay"
                         >
-                            <button type="button" class="flex min-w-0 flex-1 items-center gap-2 text-left" @click="emit('open-file', module.path)">
+                            <button type="button" class="flex min-w-0 flex-1 items-center gap-2 text-left" @click="openFile(module.path)">
                                 <span class="w-5 shrink-0 text-2xs tabular-nums text-subtle">{{ index + 1 }}</span>
                                 <span class="flex min-w-0 flex-1 overflow-hidden text-xs">
                                     <span class="truncate text-subtle" v-tooltip.top.overflow="module.dir">{{ module.dir }}</span>

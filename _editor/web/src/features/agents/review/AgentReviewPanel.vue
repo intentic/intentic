@@ -24,6 +24,8 @@ import { type Blocker, REASON_COPY } from "./conflictResolution";
 import { AGENT_FILE_DIFF_OPTIONS, agentFileDiffKey, type AgentReviewFile, readAgentFileDiff, useAgentChanges } from "./useAgentChanges";
 import { useAgentHistory } from "../fleet/useAgentHistory";
 import { documentsAt } from "../../../core-views/documentRegistry";
+import { GIT_TAB } from "../../workspace/directory-ui/directoryTabs";
+import { useDirectoryTabs } from "../../workspace/directory-ui/useDirectoryTabs";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { defaultReviewListWidth, MAX_REVIEW_LIST_WIDTH, MIN_REVIEW_LIST_WIDTH, useLayout } from "../../../shell/window/useLayout";
 import { toAppPx, toScreenPx, uiLength } from "../../../shell/window/uiScale";
@@ -73,7 +75,8 @@ const router = useRouter();
 const { mobile } = useDevice();
 const { explorerStyle } = useExplorerStyle();
 const shell = useLayout();
-const { openDiff, openDocument } = useWorkspaceTabs();
+const { openDiff, openDirectory, openDocument } = useWorkspaceTabs();
+const { tabsFor } = useDirectoryTabs();
 
 // What the review can no longer show because the user committed it (`absorbed`). Enabled off that count alone,
 // and its rows arrive already shaped like the review's own (useAgentHistory).
@@ -198,27 +201,32 @@ const historyStamp = (authored: number): string => new Date(authored).toLocaleDa
 // Shown only with several commits; with one the summary above has already named it.
 const manyCommits = computed(() => history.commits.value.length > 1);
 
-// The graph is found via the document registry (which provider offers git-history for a repo's directory) rather
-// than hard-coded, since it comes from an extension; nothing renders if it's off. Never offered for a
-// cross-sandbox review, since "the workspace" is this box's own /work.
+// Both ways in are discovered rather than hard-coded, since the graph comes from an extension and nothing should
+// render when it's off: a repository has it as the Git tab of its management panel, and the workspace root, which has
+// no panel, keeps it as a document. Never offered for a cross-sandbox review, since "the workspace" is this box's own
+// /work.
 const HISTORY_DOCUMENT = `git-history`;
-const graphAt = (repo: string) => {
+const graphAt = (repo: string): (() => void) | undefined => {
     if (at !== undefined) {
         return undefined;
     }
-    // The tree addresses a repo by its root-relative directory; the workspace root is the empty path.
-    const path = repo === `root` ? `` : repo;
-    const found = documentsAt(path).find((entry) => entry.provider.id === HISTORY_DOCUMENT);
-    return found === undefined ? undefined : { path, ...found };
+    if (repo !== `root`) {
+        return tabsFor(repo).some(({ extension }) => extension.id === GIT_TAB) ? (): void => openDirectory(repo, GIT_TAB) : undefined;
+    }
+    // The workspace root is the empty path, which is the only path this document is offered for.
+    const found = documentsAt(``).find((entry) => entry.provider.id === HISTORY_DOCUMENT);
+    return found === undefined
+        ? undefined
+        : (): void => openDocument(found.provider.owner, found.provider.id, ``, found.offer.title, found.offer.icon);
 };
-// Resolved once per commit, not per binding, since each ask calls every provider's detect(); stays reactive.
+// Resolved once per commit, not per binding, since each ask runs every detect(); stays reactive.
 const graphs = computed(() => new Map(history.commits.value.map((commit) => [commit.repo, graphAt(commit.repo)])));
 const openGitHistory = (repo: string): void => {
-    const graph = graphs.value.get(repo);
-    if (graph === undefined) {
+    const open = graphs.value.get(repo);
+    if (open === undefined) {
         return;
     }
-    openDocument(graph.provider.owner, graph.provider.id, graph.path, graph.offer.title, graph.offer.icon);
+    open();
     void router.push({ name: `workspace` });
 };
 

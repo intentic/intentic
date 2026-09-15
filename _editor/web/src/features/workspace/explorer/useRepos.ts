@@ -15,7 +15,7 @@ export function useRepos() {
     const all = computed<readonly string[]>(() => query.data.value?.repos ?? []);
     // The open project's repositories only (app/projectScope.ts), like every other repository-keyed source.
     const nested = computed<readonly string[]>(() => all.value.filter(withinScope));
-    // The dir ids that are repos, the tree tests membership by a row's (root-relative) path against this set.
+    // The dir ids that are repos; a changed file's (root-relative) path is attributed to one by testing this set.
     const repoDirs = computed<ReadonlySet<string>>(() => new Set(nested.value));
     // "root" first, then the nested repos, the graph switcher's option list; the workspace's own repository is outside
     // every project, so it is offered only when none is open.

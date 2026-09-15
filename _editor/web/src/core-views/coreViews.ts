@@ -3,6 +3,7 @@ import type { ViewRegistration } from "@intentic/extension-api";
 // Stay in-app rather than move to `_extensions/*`: each touches privileged internals a clean extension can't reach.
 // - infrastructure + live-status: platform (Cloudflare provisioning), build environment, secret management.
 // - directory-ui: DirectoryUiHost's sandboxed-iframe bridge, shared with the workspace file-open path.
+// - codebase-health: the index the daemon builds for the workspace, and the tab store it opens files through.
 // Everything else separable has moved to a package, via extension-host/builtins.ts.
 
 export const coreViews: readonly ViewRegistration[] = [
@@ -28,6 +29,16 @@ export const coreViews: readonly ViewRegistration[] = [
             return target === undefined ? [] : [{ key: target.repo, title: `Live status`, icon: `cloud`, repo: target.repo }];
         },
         view: async () => (await import(`./live-status/LiveStatusView.vue`)).default,
+    },
+    {
+        id: `codebase-health`,
+        label: `Health`,
+        surface: `directory`,
+        // Auxiliary: every repository has a report, so claiming them would starve views that serve unclaimed repos.
+        auxiliary: true,
+        // The workspace root is absent from discovery and has no tree row; its report opens from the toolbar instead.
+        detect: (repos) => repos.map((repo) => ({ key: repo.repo, title: `Health`, repo: repo.repo })),
+        view: async () => (await import(`../features/workspace/health/CodebaseHealth.vue`)).default,
     },
     {
         id: `directory-ui`,

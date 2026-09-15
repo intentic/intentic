@@ -15,13 +15,17 @@ One repository's commit graph, its branches, and the actions you can take on the
 - [src/commitFileTree.ts](src/commitFileTree.ts): one commit's changes as a tree.
 - [src/useGitLog.ts](src/useGitLog.ts): reading history from the daemon, paged.
 - [src/useUndo.ts](src/useUndo.ts): what "undo" means for a git operation, and what it refuses to do.
-- [src/extension.ts](src/extension.ts): activation, and the argument for a document rather than a view.
+- [src/extension.ts](src/extension.ts): activation: the repository's Git tab, and the workspace root's document.
 
 ## How it fits
 
-**A document, not a view.** A repository's history is read while looking at that repository's files, so it opens
-as a tab in the Workspace's editor area rather than navigating away from them. That is the same argument the
-documentation extension makes for its architecture pages, and the same grain: a path.
+**A tab in the repository's management panel.** A repository's history is read while looking at that
+repository's files, so it opens in the Workspace's editor area rather than navigating away from them. It is the
+first tab of the panel a directory row's cog opens, beside Docs, Health, Apps and the rest: everything a
+repository offers to be read or run is behind that one icon, rather than an icon per surface on the row.
+
+The workspace root is the exception. It has no tree row, and so no panel, so its history stays a document the
+palette opens (`git-history.open`) and no repository row offers one.
 
 The graph is WIDE, which is why it earns the editor area rather than the sidebar. This is the division VSCode
 makes between its SCM list and its Git Graph tab; the uncommitted half of the story: the Changes review:

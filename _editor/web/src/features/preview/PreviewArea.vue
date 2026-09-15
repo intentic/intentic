@@ -15,7 +15,7 @@ const route = useRoute();
 // would be a blank page.
 markPreviewOpened();
 
-// `/preview?target=repo:shop` picks the target the way the tree row's eye does, so a link from outside this area
+// `/preview?target=repo:shop` picks the target the way the panel's own switcher does, so a link from outside this area
 // (an extension's See it) lands on the thing it names rather than on whatever was shown last. Read on every
 // arrival, since the same route with a new query is not a remount.
 watch(

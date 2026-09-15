@@ -1007,7 +1007,7 @@ const onRowDrop = (event: DragEvent, row: Row): void => {
 };
 
 // Text menu items for a row's hover-only action icons, unreachable by touch or keyboard otherwise. The one non-pointer
-// route to a directory's docs, health, and history; read-only, so it stays in the read-only menu too.
+// route to a directory's document and its management panel; read-only, so it stays in the read-only menu too.
 const dirActionItems = (target: WorkspaceTreeEntry | undefined, multi: boolean): MenuItem[] =>
     target?.type === `dir` && !multi
         ? actionsFor(target.path).map((action) => ({ label: action.tooltip, icon: action.icon, command: () => runAction(target, action) }))

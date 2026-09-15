@@ -44,6 +44,7 @@
         ]
     },
     "contributes": {
+        "views": [{ "id": "git-history-repo", "label": "Git", "surface": "directory" }],
         "documents": [
             {
                 "id": "git-history",

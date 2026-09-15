@@ -21,7 +21,7 @@ What that person meets today, by surface:
 | Rail | Chat, Agents, Workspace, Preview always seated | `_editor/web/src/core-views/registry.ts` `RAIL_GROUPS` |
 | Workspace | a file tree of every repo, dotfiles, lockfiles, `.intentic/`, config, tests | `features/workspace/explorer/WorkspaceTree.vue` |
 | Workspace sidebar | Files / Changes, the second being VSCode's SCM: repos, staged and unstaged sides, Stage, Unstage, Commit with a message box, Discard, Publish, Sync, Push, ahead and behind counts, Fetch every repo | `features/workspace/changes/ReviewPanel.vue`, `push/outgoingWork.ts` |
-| Row actions | codebase health, git history, personas, checks, apps, dependencies | `features/workspace/explorer/rowActions.ts` |
+| Row actions | personas, checks, and the cog onto a repository's management panel (git history, docs, codebase health, apps, dependencies as its tabs) | `features/workspace/explorer/rowActions.ts`, `directory-ui/directoryTabs.ts` |
 | Empty workspace | "Clone a repository. Paste a Git address" | `features/workspace/explorer/WorkspaceEmptyState.vue` |
 | Agents board | a card names its branch `agent/…`, its runner and model, and offers Land now, Land again, Request land, Discard | `features/agents/board/AgentCard.vue` |
 | Agent review | a file list with diffs, mark as reviewed, a conflict report naming paths that refused | `features/agents/review/` |
@@ -273,7 +273,8 @@ Review tab keeps pointing at Approvals when that pack is on, else at the workspa
 
 ### 6.9 What the maker audience hides
 
-The Changes panel, the terminal panel, and the codebase health, checks, personas and git history row actions.
+The Changes panel, the terminal panel, the checks and persona row actions, and the management panel's Git and
+Health tabs.
 Restore points stay: they are the maker's way back. Every hidden thing is back behind "Switch to the developer
 view", and none of their state is lost by switching.
 
@@ -398,8 +399,9 @@ Written after phases 0 to 4 were built, where the code disagreed with the plan a
   Every destination is an anchor built with `appLink(api.href(...))`, which the repo's link rule
   (`navigatingControl.test.ts`) enforces across extensions.
 - **The developer's surfaces step aside by audience, in place.** The Changes tab and the Restore points
-  button leave the workspace sidebar, the health, history, persona and check row actions leave the tree
-  (`rowActions.ts`, `plain`), and the terminal tile leaves the rail and the phone menu. Each is one `maker`
+  button leave the workspace sidebar, the persona and check row actions leave the tree (`rowActions.ts`, `plain`)
+  and the Git and Health tabs leave the management panel (`directoryTabs.ts`), and the terminal tile leaves the
+  rail and the phone menu. Each is one `maker`
   read at the call site, and each comes back with the other answer.
 - **A `home` glyph was added to the icon set** while the first home existed; the dashboard wears `th-large`.
 

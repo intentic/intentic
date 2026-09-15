@@ -1,15 +1,15 @@
 import type { IconName } from "@intentic/ui";
 import { documentsAt } from "../../../core-views/documentRegistry";
 
-// One model for every icon a directory row offers. Documents differ from repo-based actions (health, history,
-// management): per directory, contributed by an extension, not known here. The tree just renders what it's given and
-// runs the click; this module decides what those are.
+// One model for every icon a directory row offers. Documents differ from the management panel: per directory,
+// contributed by an extension, not known here. The tree just renders what it's given and runs the click; this module
+// decides what those are.
 
 export interface RowAction {
     // Stable per row, the v-for key, and what a test names.
     readonly id: string;
     readonly icon: IconName;
-    // Names the action ("Open git history", not "Git history").
+    // Names the action ("Open management panel", not "Management panel").
     readonly tooltip: string;
     // True when the icon itself is evidence (e.g. a page exists); actions you can do to a repo stay hover-only.
     readonly standing: boolean;
@@ -18,32 +18,25 @@ export interface RowAction {
 
 // The affordances the app itself puts on a row, plus whatever the open document providers offer for it.
 export interface RowActionSources {
-    // A maker's row: what the directory is (documents), what can be looked at (preview) and run (manage); the health,
-    // history, persona and check affordances are a developer's and stay off.
+    // A maker's row: what the directory is (documents) and what can be opened (manage); the persona and check
+    // affordances are a developer's and stay off.
     readonly plain?: boolean;
-    // Directory paths that are git repos, each carries its own health report.
-    readonly repoDirs: ReadonlySet<string>;
-    // Directory paths a directory-surface extension serves (Apps, the repo's own UI).
+    // Directory paths a directory-surface extension serves. One cog per repository, behind which sit its git history,
+    // docs, health, apps and dependencies as tabs, rather than an icon each on the row.
     readonly manageableDirs: ReadonlySet<string>;
-    // Directory paths the Preview area can show live (a runnable repo, or a monorepo whose apps preview).
-    readonly previewableDirs: ReadonlySet<string>;
     // Count of personas starting here, not a set: the icon says whether there's one or several.
     readonly personaDirs: ReadonlyMap<string, number>;
     // Repositories that declare checks of their own, and whether those are running: the icon is evidence the file
     // exists, and its tooltip is the one thing a reader wants from it, which is whether anything happens.
     readonly checkDirs: ReadonlyMap<string, { readonly adopted: boolean; readonly changed: boolean }>;
-    readonly openHealth: (repo: string) => void;
     readonly openDirectory: (dir: string) => void;
     readonly openPersonas: (dir: string) => void;
     readonly openChecks: (dir: string) => void;
-    // Opens the Preview area's rail panel with this repo's target selected, not an in-tree tab.
-    readonly openPreview: (dir: string) => void;
     readonly openDocument: (extension: string, provider: string, path: string, title: string, icon: string) => void;
 }
 
-// Actions in reading order: what the directory is (documents), has been (health, history), what it carries (personas,
-// checks), and what can be done to it (preview, manage), matching the rail. Called per row on every render, so lookups
-// here stay cheap.
+// Actions in reading order: what the directory is (documents), what it carries (personas, checks), and the one thing
+// that can be done to it (open its management panel). Called per row on every render, so lookups here stay cheap.
 export const rowActionsFor = (dir: string, sources: RowActionSources): readonly RowAction[] => {
     const actions: RowAction[] = documentsAt(dir).map(({ provider, offer }) => ({
         id: `document:${provider.owner}:${provider.id}`,
@@ -55,16 +48,7 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
         run: (): void => sources.openDocument(provider.owner, provider.id, dir, offer.title, offer.icon),
     }));
     if (sources.plain === true) {
-        return [...actions, ...doableActions(dir, sources)];
-    }
-    if (sources.repoDirs.has(dir)) {
-        actions.push({
-            id: `health`,
-            icon: `wave-pulse`,
-            tooltip: `Open codebase health`,
-            standing: false,
-            run: (): void => sources.openHealth(dir),
-        });
+        return [...actions, ...manageAction(dir, sources)];
     }
     // Shown only once a folder has a persona (standing: true), evidence-tier like a document. Personas are set up in
     // sandbox settings; an empty folder offers no hover action either.
@@ -73,10 +57,7 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
         actions.push({
             id: `personas`,
             icon: `user`,
-            tooltip:
-                personaCount === 1
-                    ? `Change who works here: 1 persona`
-                    : `Change who works here, ${personaCount} personas`,
+            tooltip: personaCount === 1 ? `Change who works here: 1 persona` : `Change who works here, ${personaCount} personas`,
             standing: true,
             run: (): void => sources.openPersonas(dir),
         });
@@ -96,30 +77,20 @@ export const rowActionsFor = (dir: string, sources: RowActionSources): readonly 
             run: (): void => sources.openChecks(dir),
         });
     }
-    return [...actions, ...doableActions(dir, sources)];
+    return [...actions, ...manageAction(dir, sources)];
 };
 
-// What can be done to a directory, as opposed to read about it: the Preview area with this repo's target selected,
-// and its management panel. Hover-only, and the half of the row both audiences get.
-const doableActions = (dir: string, sources: RowActionSources): RowAction[] => {
-    const actions: RowAction[] = [];
-    if (sources.previewableDirs.has(dir)) {
-        actions.push({
-            id: `preview`,
-            icon: `eye`,
-            tooltip: `Open live preview`,
-            standing: false,
-            run: (): void => sources.openPreview(dir),
-        });
-    }
-    if (sources.manageableDirs.has(dir)) {
-        actions.push({
-            id: `directory`,
-            icon: `cog`,
-            tooltip: `Open management panel`,
-            standing: false,
-            run: (): void => sources.openDirectory(dir),
-        });
-    }
-    return actions;
-};
+// The one affordance a directory row carries, hover-only and the half of the row both audiences get: everything a
+// repository offers to be read or run lives behind it, as a tab.
+const manageAction = (dir: string, sources: RowActionSources): RowAction[] =>
+    sources.manageableDirs.has(dir)
+        ? [
+              {
+                  id: `directory`,
+                  icon: `cog`,
+                  tooltip: `Open management panel`,
+                  standing: false,
+                  run: (): void => sources.openDirectory(dir),
+              },
+          ]
+        : [];

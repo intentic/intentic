@@ -217,7 +217,7 @@ describe(`a row's icons at rest`, () => {
         name === `src`
             ? [
                   { id: `document:acme.docs:architecture`, icon: `question-circle`, tooltip: `What src is`, standing: true, run: () => {} },
-                  { id: `health`, icon: `wave-pulse`, tooltip: `Open codebase health`, standing: false, run: () => {} },
+                  { id: `directory`, icon: `cog`, tooltip: `Open management panel`, standing: false, run: () => {} },
               ]
             : [];
 
@@ -226,7 +226,7 @@ describe(`a row's icons at rest`, () => {
 
         const row = el.querySelector(`[role="treeitem"]`) as HTMLElement;
         expect(row.querySelector(`[data-icon="question-circle"]`)?.className).toContain(`opacity-40`);
-        expect(row.querySelector(`[data-icon="wave-pulse"]`)?.className).toContain(`pointer-events-none opacity-0`);
+        expect(row.querySelector(`[data-icon="cog"]`)?.className).toContain(`pointer-events-none opacity-0`);
     });
 
     it(`shows all of them on the selected row`, async () => {
@@ -236,7 +236,7 @@ describe(`a row's icons at rest`, () => {
         await nextTick();
         const row = el.querySelector(`[role="treeitem"]`) as HTMLElement;
         expect(row.querySelector(`[data-icon="question-circle"]`)?.className).toContain(`opacity-100`);
-        expect(row.querySelector(`[data-icon="wave-pulse"]`)?.className).toContain(`opacity-100`);
+        expect(row.querySelector(`[data-icon="cog"]`)?.className).toContain(`opacity-100`);
     });
 });
 

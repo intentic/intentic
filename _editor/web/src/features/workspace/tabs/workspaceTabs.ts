@@ -19,7 +19,9 @@ export type WorkspaceTab =
     | { readonly kind: "file"; readonly id: string; readonly path: string }
     // Diff payload minus `key`/`scope`: `id` already resolves them (diffTabId); keeping both duplicates one fact.
     | ({ readonly kind: "diff"; readonly id: string } & Omit<DiffPayload, "key" | "scope">)
-    | { readonly kind: "directory"; readonly id: string; readonly dir: string }
+    // `view` is the tab the panel opens on, for a caller that wants a named surface (the review's "show the graph");
+    // absent leaves the panel on its first tab, which is what a tree row's cog asks for.
+    | { readonly kind: "directory"; readonly id: string; readonly dir: string; readonly view?: string }
     | { readonly kind: "health"; readonly id: string; readonly repo: string }
     | {
           readonly kind: "document";
@@ -134,4 +136,3 @@ export const placeTab = (tabs: readonly WorkspaceTab[], tab: WorkspaceTab, repla
     const slot = replaceId === null ? -1 : tabs.findIndex((existing) => existing.id === replaceId);
     return slot === -1 ? [...tabs, tab] : tabs.with(slot, tab);
 };
-

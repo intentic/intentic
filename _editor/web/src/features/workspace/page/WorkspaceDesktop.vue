@@ -4,13 +4,10 @@ import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
-import { useRouter } from "vue-router";
 import { WORKSPACE } from "../../../shell/commands/categories";
 import { commandShortcut, type CommandRegistration, registerCommand } from "../../../shell/commands/useCommands";
 import { useAudience } from "../../../app/useAudience";
 import { useVocabulary } from "../../../core-views/vocabulary";
-import { openPreview } from "../../preview/previewSurface";
-import { repoTargetId } from "../../preview/previewModel";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { usePanels } from "../../extensions/usePanels";
 import { personaStartDirs } from "../../sandbox/personas/personaCard";
@@ -35,7 +32,6 @@ import { reportOpenPath } from "../../../shell/presence/usePresence";
 import { outgoingMark, outgoingSummary } from "../push/outgoingWork";
 import { useDiffStat } from "../changes/useDiffStat";
 import { useChanges } from "../changes/useChanges";
-import { useRepos } from "../explorer/useRepos";
 import { useUploadQueue } from "../files/upload/useUploadQueue";
 import { useWorkspaceRoute } from "../health/useWorkspaceRoute";
 import { useExplorerSearch } from "../search/useExplorerSearch";
@@ -109,8 +105,6 @@ const scopedBarren = computed(() => (workspaceDir.value === `` ? barren.value : 
 const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { forget, dirtyPaths } = useEditBuffers();
 const changes = useChanges();
-// Every git repo under /work; marks tree rows with a git-history affordance and feeds the graph's repo switcher.
-const { repoDirs } = useRepos();
 
 const openReview = (): void => layout.setSidebarPanel(`changes`);
 
@@ -263,7 +257,8 @@ watch(
     { immediate: true },
 );
 
-// Repos a directory-surface extension serves (Apps, UI); selecting one opens its management tab, not an editor.
+// Repos a directory-surface extension serves (Git, Docs, Health, Apps, UI); selecting one opens its management tab,
+// not an editor.
 const { panels } = usePanels();
 const { capabilities } = useCapabilities();
 const manageableDirs = computed(
@@ -274,9 +269,6 @@ const manageableDirs = computed(
             ),
         ),
 );
-// Repos the Preview area can show live; the row's eye walks to /preview instead of opening an editor tab.
-const router = useRouter();
-const previewableDirs = computed(() => new Set(panels.value.filter((panel) => panel.hasPanel || panel.monorepo).map((panel) => panel.repo)));
 // Personas whose sessions start in each folder, computed once per render rather than re-filtered per row.
 const { personas } = usePersonas();
 const personaDirs = computed(() => personaStartDirs(personas.value));
@@ -292,19 +284,15 @@ const checkDirs = computed(
 // Repository whose checks are open in the quick panel; undefined means closed.
 const checksDir = ref<string | undefined>(undefined);
 
-// What each directory row offers beside its name (documents, health, history, personas, management). Composed
-// here, where the openers live; passed as a function so only on-screen rows are asked.
+// What each directory row offers beside its name (documents, personas, checks, management). Composed here, where the
+// openers live; passed as a function so only on-screen rows are asked.
 const rowActions = (dir: string): readonly RowAction[] =>
     rowActionsFor(dir, {
         plain: maker.value,
-        repoDirs: repoDirs.value,
         manageableDirs: manageableDirs.value,
-        previewableDirs: previewableDirs.value,
         personaDirs: personaDirs.value,
         checkDirs: checkDirs.value,
-        openHealth,
         openDirectory,
-        openPreview: (target: string): void => openPreview(router, repoTargetId(target)),
         openPersonas: (target: string): void => {
             personaDir.value = target;
         },
