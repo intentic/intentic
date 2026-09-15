@@ -3,7 +3,7 @@ import { useTheme } from "@intentic/ui";
 import { onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { announceDesktopMode, DESKTOP_WINDOW_EVENT, type DesktopWindowEvent, desktopFrameless, workDesktopWindow } from "../../app/environments/desktop";
-import { BAR, type BarEdges, edgeBar, TITLE_BAR, titleBarGesture, topRow } from "./titleBar";
+import { BAR, type BarEdges, barsChanged, edgeBar, TITLE_BAR, titleBarGesture, topRow } from "./titleBar";
 
 /* THE WINDOW'S OWN THREE BUTTONS, IN THE ROW THIS APP ALREADY DRAWS — AND THAT ROW DRESSED AS A TITLE BAR. */
 
@@ -23,6 +23,9 @@ let scheduled = 0;
 /* THE BARS, WATCHED FOR MOVING. */
 let observer: ResizeObserver | undefined;
 const watched = new Set<Element>();
+
+/* THE DOCUMENT, WATCHED FOR BARS ARRIVING AND LEAVING. */
+let arrivals: MutationObserver | undefined;
 
 const watchBars = (bars: readonly HTMLElement[]): void => {
     if (observer === undefined) {
@@ -77,6 +80,20 @@ const schedule = (): void => {
     }
 };
 
+// A bar arrives wearing its own background (the file-tab row's `bg-card`), and every view mounts through a dynamic
+// import (asyncView), so none of the events below is still pending when its bars land. Measured on the spot rather
+// than on the next frame: this runs at the microtask checkpoint after the patch that inserted the bar, still before
+// that patch is painted, so no frame paints a bar that has not been asked which row it is in.
+const onArrivals = (records: MutationRecord[]): void => {
+    if (!barsChanged(records)) {
+        return;
+    }
+    if (scheduled !== 0) {
+        cancelAnimationFrame(scheduled);
+    }
+    measure();
+};
+
 /* --- The bar as a title bar ---------------------------------------------------------------------------- */
 
 /* `mousedown`, not `pointerdown`: a pointer event's `detail` is 0 by specification, and `detail` is how many clicks deep this press is. */
@@ -108,6 +125,8 @@ onMounted(() => {
     // What turns the reserve on for every bar in this window (styles.css).
     document.documentElement.setAttribute(`data-frameless`, ``);
     observer = typeof ResizeObserver === `undefined` ? undefined : new ResizeObserver(schedule);
+    arrivals = typeof MutationObserver === `undefined` ? undefined : new MutationObserver(onArrivals);
+    arrivals?.observe(document.body, { childList: true, subtree: true });
     window.addEventListener(DESKTOP_WINDOW_EVENT, onWindowEvent);
     // Capture, because a bar's own handlers may stop a press from bubbling, and a window that cannot be
     // dragged from part of its title bar is a window with a broken title bar.
@@ -131,6 +150,8 @@ onUnmounted(() => {
     observer?.disconnect();
     observer = undefined;
     watched.clear();
+    arrivals?.disconnect();
+    arrivals = undefined;
     window.removeEventListener(DESKTOP_WINDOW_EVENT, onWindowEvent);
     window.removeEventListener(`mousedown`, onPress, true);
     window.removeEventListener(`resize`, schedule);

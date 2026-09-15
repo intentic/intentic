@@ -194,8 +194,12 @@ a window**: the bars standing in the top row wear a fill mixed down from the can
 shadow onto the content under them (`data-title-bar`, `styles.css`), and a screen with no bar in its top row —
 the login page, a gate, an error — gets a strip of the same material drawn across it, which drags and
 double-clicks like any bar. Which bars are in the top row is measured, not declared: the terminal panel's bar
-and an agent's detail row wear the same class and must never wear the fill. Where the launcher's header is an
-ordinary drag region calling the window API, this face **has no command surface and does not get one for this**:
+and an agent's detail row wear the same class and must never wear the fill. That measurement follows the
+document, not the frame clock. A view's bars arrive from a dynamic import, well after the click and the route
+change that asked for them, so a bar entering or leaving the document is measured in the microtask after the
+patch that moved it — before it can paint once in its own colours (the file-tab row is `bg-card` grey) and turn
+black a frame later. Where the launcher's header is an ordinary drag region calling the window API, this face
+**has no command surface and does not get one for this**:
 
 - Every press is an `intentic://window?do=…` navigation, **including the drag**: Rust answers it with
   `start_dragging()`, which hands the window to the platform's own move loop — the same call a Tauri drag region

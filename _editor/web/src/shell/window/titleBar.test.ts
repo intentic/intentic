@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { edgeBar, titleBarGesture, topRow } from "./titleBar";
+import { barsChanged, edgeBar, titleBarGesture, topRow } from "./titleBar";
 
 /* The app's top row standing in for a title bar it no longer has (desktop-app windows.rs). */
 
@@ -60,6 +60,50 @@ describe(`titleBarGesture`, () => {
 
         expect(titleBarGesture(strip, 1, atTop)).toBe(`drag`);
         expect(titleBarGesture(strip, 2, atTop)).toBe(`maximize`);
+    });
+});
+
+/* WHAT THE ROW IS RE-MEASURED ON. Every view arrives through a dynamic import, so its bars land after the click and the
+   route change that asked for them; a bar that paints before it is measured paints in its own colours, which is the
+   flicker (grey `bg-card` file-tab row, then the title fill). */
+describe(`barsChanged`, () => {
+    // Real records off a real observer: a hand-built MutationRecord would only prove the shape this file invented.
+    const recordsOf = (mutate: (view: HTMLElement) => void): MutationRecord[] => {
+        const view = rowOf(`<section></section>`).firstElementChild as HTMLElement;
+        const observer = new MutationObserver(() => {});
+        observer.observe(document.body, { childList: true, subtree: true });
+        mutate(view);
+        const records = observer.takeRecords();
+        observer.disconnect();
+        return records;
+    };
+
+    it(`sees a bar that arrived inside a view, which is how every bar arrives`, () => {
+        const records = recordsOf((view) => {
+            view.innerHTML = `<div class="ws"><div class="view-header">file tabs</div><div class="pane"></div></div>`;
+        });
+
+        expect(barsChanged(records)).toBe(true);
+    });
+
+    it(`sees a bar that left with the view it belonged to`, () => {
+        const records = recordsOf((view) => {
+            view.innerHTML = `<div class="ws"><div class="view-header">file tabs</div></div>`;
+            view.replaceChildren();
+        });
+
+        expect(barsChanged(records)).toBe(true);
+    });
+
+/* THE CHEAP ANSWER IS THE COMMON ONE: a chat streaming tokens mutates the document constantly, and none of it moves the row. */
+    it(`ignores churn that brought no bar with it`, () => {
+        const records = recordsOf((view) => {
+            view.append(document.createTextNode(`a token`));
+            view.insertAdjacentHTML(`beforeend`, `<p class="message">and another</p>`);
+        });
+
+        expect(records.length).toBeGreaterThan(0);
+        expect(barsChanged(records)).toBe(false);
     });
 });
 

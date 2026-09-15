@@ -30,6 +30,14 @@ export const titleBarGesture = (target: Element | null, clicks: number, topOf: (
     return clicks >= 2 ? `maximize` : `drag`;
 };
 
+/* A bar arriving or leaving is the only DOM change that can make the top row a different set of bars than it was. */
+const holdsBar = (nodes: NodeList): boolean =>
+    [...nodes].some((node) => node instanceof Element && (node.matches(BAR) || node.querySelector(BAR) !== null));
+
+/** Whether a batch of DOM records put a bar into the document or took one out of it. */
+export const barsChanged = (records: readonly MutationRecord[]): boolean =>
+    records.some((record) => holdsBar(record.addedNodes) || holdsBar(record.removedNodes));
+
 /** As much of a bar's box as any question here needs. */
 export interface BarEdges {
     readonly top: number;
