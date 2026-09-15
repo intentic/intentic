@@ -13,7 +13,6 @@ import { engineVisual } from "./engineVisual";
 const { canShip: canOperate } = useRole();
 const {
     engines,
-    view,
     updatable,
     query,
     isFetching,
@@ -138,9 +137,5 @@ const CHANNELS: readonly PickerOption<`blessed` | `latest` | `pinned` | `image`>
         </Row>
 
         <Notice v-if="actionNotice" :of="actionNotice" class="m-3" />
-
-        <p v-if="view?.listReadAt === undefined" class="mx-4 mb-4 text-xs break-words text-muted">
-            The recommended list at {{ view?.listSource }} has not been reachable from here, so recommended rows are showing whatever they last knew.
-        </p>
     </RowGroup>
 </template>
