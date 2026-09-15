@@ -36,8 +36,9 @@ const {
     spin?: boolean;
     /** Drops the tier's padding, for a row whose container already provides it. */
     flush?: boolean;
-    // Lets the trailing cluster take the title's leftover space (`basis-0 grow`) instead of claiming its own
-    // width, so a wrapping control (many swatches) takes a second line rather than squeezing the title.
+    // Sizes the trailing cluster from its own content (`grow basis-auto`, not `basis-0`, which would cap it at
+    // half the free space and wrap a wide control that still fits), so a wrapping control (many swatches) stays
+    // on one line while there is room and takes a line of its own — never squeezing the title — when there isn't.
     wideControl?: boolean;
     // Makes the left region (lead, title, description) one `<button>`, with `#meta`/`#control` outside it as
     // separate controls; for <DisclosureRow>, so trailing verbs don't nest inside the toggle.
@@ -165,7 +166,7 @@ const picked = as === `button`;
                     <div
                         v-if="$slots[`meta`] || $slots[`control`] || chevron || href !== undefined"
                         class="flex items-center gap-2"
-                        :class="wideControl ? `grow basis-0 flex-wrap justify-end` : `ml-auto shrink-0`"
+                        :class="wideControl ? `grow basis-auto flex-wrap justify-end` : `ml-auto shrink-0`"
                     >
 <!-- Facts, not controls: tabular so a column of sizes/times lines up, muted so the row's name still leads. -->
                         <div v-if="$slots[`meta`]" class="flex shrink-0 items-center gap-2 text-2xs tabular-nums text-subtle">
