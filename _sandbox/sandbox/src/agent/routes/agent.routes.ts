@@ -1382,6 +1382,8 @@ async function* runTurn(
                   verification: proven.state,
                   ...(proven.check !== undefined ? { check: proven.check.slice(0, VERIFICATION_CHECK_CHARS) } : {}),
                   filesEdited: verification.edited().length,
+                  // Recorded on every turn, not just the quiet ones: zero is only legible beside the turns that acted.
+                  toolCalls: metrics.calls(),
                   compactions,
                   ...(checklist !== undefined
                       ? {

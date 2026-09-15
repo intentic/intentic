@@ -151,6 +151,31 @@ test("turns separates the ones that finished from the ones that only stopped", a
     expect(unproven).not.toContain("proved");
 });
 
+// The shape a model leaves when it announces a step and stops: it spoke, it called nothing, it changed nothing.
+test("turns counts the ones that ran without calling a tool, and can isolate them", async () => {
+    const deps = await setup({}, [
+        turn({ outcome: "ok", conversationId: "worked", verification: "verified", filesEdited: 2, toolCalls: 9 }),
+        turn({ outcome: "ok", conversationId: "spoke", verification: "no-code", filesEdited: 0, toolCalls: 0 }),
+    ]);
+
+    const all = await call(deps, "turns", {});
+    expect(all).toContain("1 ran without calling a tool");
+    expect(all).toContain(`"toolCalls":0`);
+    // A turn that did act prints no count: the number is noise, only its absence carries a signal.
+    expect(all).not.toContain(`"toolCalls":9`);
+
+    const stalled = await call(deps, "turns", { only: "silent" });
+    expect(stalled).toContain("spoke");
+    expect(stalled).not.toContain("worked");
+});
+
+// A row written before the field cannot answer the question, so it must not be read as having called nothing.
+test("a turn with no recorded tool count is never counted as one that called nothing", async () => {
+    const deps = await setup({}, [turn({ outcome: "ok", conversationId: "older" })]);
+    expect(await call(deps, "turns", {})).toContain("0 ran without calling a tool");
+    expect(await call(deps, "turns", { only: "silent" })).toMatch(/^No turns match/);
+});
+
 test("a turn with no recorded verdict is never counted as unproven", async () => {
     const deps = await setup({}, [turn({ outcome: "error", errorCode: "claude-not-entitled" }), turn({ outcome: "ok", verification: "no-code" })]);
     expect(await call(deps, "turns", {})).toContain("0 finished with unproven");

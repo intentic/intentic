@@ -528,7 +528,30 @@ test("a turn that ends with nothing to show for it is reported as a failure, not
     expect("code" in (failure ?? {})).toBe(false);
 
     await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
-    expect(ledger[0]).toMatchObject({ outcome: "error", errorMessage: expect.stringContaining("nothing to show for it"), filesEdited: 0 });
+    expect(ledger[0]).toMatchObject({ outcome: "error", errorMessage: expect.stringContaining("nothing to show for it"), filesEdited: 0, toolCalls: 2 });
+});
+
+// The preamble-and-stop shape: the model announces a step, calls nothing, and the SDK reports a clean success. Prose is
+// structurally identical to a short answer, so the turn must not be accused; the ledger is where it stays visible.
+test("a turn that only promises to act is left alone in chat but recorded as having called nothing", async () => {
+    const ledger: Record<string, unknown>[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent() {
+                    yield { kind: "delta", text: "I'll start by finding the topbar code." };
+                    yield { kind: "usage", costUsd: 0.25 };
+                    yield { kind: "done" };
+                },
+                usage: { record: async (turn) => void ledger.push(turn) },
+            }),
+        ),
+    );
+    const { facts } = await runAgentTurn(client, { prompt: "fix the topbar", conversationId: "conv-preamble" });
+
+    expect(facts.filter((fact) => fact.kind === "error")).toEqual([]);
+    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    expect(ledger[0]).toMatchObject({ outcome: "ok", toolCalls: 0, filesEdited: 0 });
 });
 
 test("a turn that stops after thinking and nothing else is reported the same way, and lands on the board as an error", async () => {

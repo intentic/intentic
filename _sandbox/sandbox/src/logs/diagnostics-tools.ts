@@ -27,6 +27,68 @@ export interface DiagnosticsToolDeps {
 // `no-code` and absent verification: neither is evidence of a problem.
 const unproven = (row: UsageTurn): boolean => row.verification === "unproven" || row.verification === "failing";
 
+// A turn that ran, called nothing and changed nothing. Rows predating `toolCalls` can't answer, so they never match.
+const silent = (row: UsageTurn): boolean => row.outcome === "ok" && row.toolCalls === 0 && (row.filesEdited ?? 0) === 0;
+
+// The endings `only` can name, resolved in one place so the filter and the tool's own description cannot drift apart.
+const matchesOnly = (row: UsageTurn, only: "failed" | "unproven" | "silent" | undefined): boolean => {
+    switch (only) {
+        case "failed":
+            return row.outcome === "error" || row.outcome === "cancelled";
+        case "unproven":
+            return unproven(row);
+        case "silent":
+            return silent(row);
+        default:
+            return true;
+    }
+};
+
+// What the turn did and what it left open. Verification is present only once something checked the turn; absent means
+// nothing was watched, not that nothing was wrong. A finished checklist is the common case and would be a zero column.
+const workOf = (row: UsageTurn): Record<string, unknown> => ({
+    ...(row.verification !== undefined ? { verification: row.verification } : {}),
+    ...(row.check !== undefined ? { check: row.check } : {}),
+    ...(row.filesEdited !== undefined && row.filesEdited > 0 ? { filesEdited: row.filesEdited } : {}),
+    // Shown only at zero: the count is noise beside filesEdited, but its absence is the whole signal.
+    ...(row.toolCalls === 0 ? { toolCalls: 0 } : {}),
+    ...(row.checklistOpen !== undefined && row.checklistOpen > 0
+        ? { checklistOpen: row.checklistOpen, checklistTotal: row.checklistTotal }
+        : {}),
+});
+
+// How much room the turn had. contextPct is a percent of the window, the readable signal that a turn ran out of it.
+const roomOf = (row: UsageTurn): Record<string, unknown> => ({
+    ...(row.compactions !== undefined && row.compactions > 0 ? { compactions: row.compactions } : {}),
+    ...(row.contextTokens !== undefined && row.contextWindow !== undefined && row.contextWindow > 0
+        ? { contextPct: Math.round((row.contextTokens / row.contextWindow) * 100) }
+        : {}),
+});
+
+// Which model actually served it. `asked` appears only when it differs from `model`; always printing it would bury the
+// rows where it matters.
+const ranOn = (row: UsageTurn): Record<string, unknown> => ({
+    provider: row.provider,
+    ...(row.model !== undefined ? { model: row.model } : {}),
+    ...(row.modelRequested !== undefined && row.modelRequested !== row.model ? { asked: row.modelRequested } : {}),
+    harness: row.harness,
+    ...(row.conversationId !== undefined ? { conversation: row.conversationId } : {}),
+});
+
+// One turn as a single JSON line. Absent `outcome` predates the field; distinct from success, so it reads `unrecorded`.
+const turnRow = (row: UsageTurn): string =>
+    JSON.stringify({
+        at: new Date(row.at).toISOString(),
+        outcome: row.outcome ?? "unrecorded",
+        ...(row.errorCode !== undefined ? { errorCode: row.errorCode } : {}),
+        ...(row.errorMessage !== undefined ? { error: row.errorMessage } : {}),
+        ...workOf(row),
+        ...roomOf(row),
+        ...ranOn(row),
+        costUsd: row.costUsd,
+        durationMs: row.durationMs,
+    });
+
 const sinceOf = (now: number, minutes: number | undefined): number | undefined =>
     minutes === undefined ? undefined : now - Math.min(minutes, MAX_MINUTES) * 60_000;
 
@@ -134,16 +196,19 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     '`verification` is the part a status word cannot give you: "verified" means a check passed after the last code ' +
                     'edit and `check` names it, "unproven" means nothing ran, "failing" means the last one did not pass, "no-code" ' +
                     "means nothing a check could speak to was edited. A turn ending with `checklistOpen` above zero abandoned a plan " +
-                    "it wrote itself, which is what a turn that stopped rather than finished looks like from here.",
+                    "it wrote itself, which is what a turn that stopped rather than finished looks like from here. `toolCalls` shows " +
+                    "only when it is zero: the turn produced words and acted on nothing, the shape of a model that announced a step " +
+                    "and then stopped. A turn that simply answered a question reads the same, so weigh it against what was asked.",
                 {
                     sinceMinutes: z.number().int().min(1).max(MAX_MINUTES).optional(),
                     conversationId: z.string().max(200).optional().describe("Narrow to one conversation."),
                     only: z
-                        .enum(["failed", "unproven"])
+                        .enum(["failed", "unproven", "silent"])
                         .optional()
                         .describe(
                             'Narrow to one kind of ending: "failed" is turns that failed or were cancelled, "unproven" is turns that ' +
-                                "changed code and finished with nothing having checked it (including ones whose last check broke). " +
+                                "changed code and finished with nothing having checked it (including ones whose last check broke), " +
+                                '"silent" is turns that ran but called no tool and changed no file. ' +
                                 "Leave it out for every turn.",
                         ),
                     limit: z.number().int().min(1).max(MAX_LINES).optional(),
@@ -158,8 +223,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                         (row) =>
                             (since === undefined || row.at >= since) &&
                             (conversationId === undefined || row.conversationId === conversationId) &&
-                            (only !== "failed" || row.outcome === "error" || row.outcome === "cancelled") &&
-                            (only !== "unproven" || unproven(row)),
+                            matchesOnly(row, only),
                     );
                     if (matching.length === 0) {
                         return ok(
@@ -170,45 +234,11 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     const failed = matching.filter((row) => row.outcome === "error").length;
                     return ok(
                         [
-                            // Both counts needed: unproven work looks identical to a finished turn unless counted
-                            // separately.
-                            `${matching.length} turns, ${failed} failed, ${matching.filter(unproven).length} finished with unproven code changes. Newest ${shown.length} below.`,
-                            // Absent `outcome` predates the field; distinct from success, so it renders as
-                            // `unrecorded`.
+                            // Counted separately because each is invisible in the rows: unproven work and a turn that
+                            // never acted both look identical to a finished one.
+                            `${matching.length} turns, ${failed} failed, ${matching.filter(unproven).length} finished with unproven code changes, ${matching.filter(silent).length} ran without calling a tool. Newest ${shown.length} below.`,
                             "",
-                            ...shown.map((row) =>
-                                JSON.stringify({
-                                    at: new Date(row.at).toISOString(),
-                                    outcome: row.outcome ?? "unrecorded",
-                                    ...(row.errorCode !== undefined ? { errorCode: row.errorCode } : {}),
-                                    ...(row.errorMessage !== undefined ? { error: row.errorMessage } : {}),
-                                    // Present only once something checked the turn; absent means nothing was watched,
-                                    // not that nothing was wrong.
-                                    ...(row.verification !== undefined ? { verification: row.verification } : {}),
-                                    ...(row.check !== undefined ? { check: row.check } : {}),
-                                    ...(row.filesEdited !== undefined && row.filesEdited > 0 ? { filesEdited: row.filesEdited } : {}),
-                                    // Included only when nonzero; a finished checklist is the common case and would
-                                    // just be a zero column.
-                                    ...(row.checklistOpen !== undefined && row.checklistOpen > 0
-                                        ? { checklistOpen: row.checklistOpen, checklistTotal: row.checklistTotal }
-                                        : {}),
-                                    ...(row.compactions !== undefined && row.compactions > 0 ? { compactions: row.compactions } : {}),
-                                    // Reported as a percent of the context window, the readable signal that a turn ran
-                                    // out of room.
-                                    ...(row.contextTokens !== undefined && row.contextWindow !== undefined && row.contextWindow > 0
-                                        ? { contextPct: Math.round((row.contextTokens / row.contextWindow) * 100) }
-                                        : {}),
-                                    provider: row.provider,
-                                    ...(row.model !== undefined ? { model: row.model } : {}),
-                                    // Included only when it differs from `model`; printing it always would bury the
-                                    // rows where it matters.
-                                    ...(row.modelRequested !== undefined && row.modelRequested !== row.model ? { asked: row.modelRequested } : {}),
-                                    harness: row.harness,
-                                    ...(row.conversationId !== undefined ? { conversation: row.conversationId } : {}),
-                                    costUsd: row.costUsd,
-                                    durationMs: row.durationMs,
-                                }),
-                            ),
+                            ...shown.map(turnRow),
                         ].join("\n"),
                     );
                 },

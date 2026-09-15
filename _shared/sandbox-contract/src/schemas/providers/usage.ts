@@ -71,9 +71,11 @@ export const UsageTurnSchema = z.object({
     // (nothing editable changed). Folded from tool-call frames, subagents included.
     // check: the command that spoke, so a targeted test is never read as the whole suite.
     // filesEdited: every file written, prose included; verification speaks only about code.
+    // toolCalls: every call the turn made, subagents' included; zero is a turn that spoke and acted on nothing.
     verification: z.enum(["verified", "unproven", "failing", "no-code"]).optional(),
     check: z.string().optional(),
     filesEdited: z.number().optional(),
+    toolCalls: z.number().optional(),
     // The agent's own checklist at turn end (Task tool frames); checklistOpen is pending plus in-progress. Absent means
     // the turn kept no checklist at all.
     checklistTotal: z.number().optional(),
