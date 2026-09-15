@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { describe, expect, it } from "vitest";
-import { mutagenCreateArgs, sessionMatchesSpec, sessionName, type SyncSessionSpec } from "./mutagen.js";
+import { convergePlan, mutagenCreateArgs, sessionMatchesSpec, sessionName, type SyncSessionSpec } from "./mutagen.js";
 import {
     BACKUP_IGNORES,
     IGNORES,
@@ -212,6 +212,15 @@ describe("mutagenCreateArgs", () => {
         expect(IGNORES).not.toContain("/.git");
     });
 
+    // WHAT BOTH SIDES GENERATE MUST NEVER BE SYNCED. A tree each end writes for itself is a create-vs-create
+    // conflict on every file in it, two-way-safe refuses to pick, and a pairing with standing conflicts propagates
+    // nothing at all — measured as 98 of them under one dogfooding machine's `.image-out`.
+    it("ignores the trees each side generates for itself, not just the ones git ignores", () => {
+        for (const generated of [".image-out", "dist", ".turbo", ".astro", ".cache", "node_modules"]) {
+            expect(IGNORES).toContain(generated);
+        }
+    });
+
     // A drifted session is recreated, and a recreate must not quietly resume a sync the user paused.
     it("creates pre-paused when asked, with the flag ahead of the endpoint positionals", () => {
         const paused = mutagenCreateArgs(spec, true);
@@ -269,6 +278,23 @@ describe("sessionMatchesSpec", () => {
         alpha: { path: "/home/u/proj" },
         beta: { host: "intentic-sync-x", path: WORKSPACE_ROOT },
         ignore,
+    });
+
+    // WHAT A NAME MAY HOLD IS ONE SESSION. Mutagen lets several share one, and two synchronizers over the same pair
+    // of roots flag each other's writes as conflicts: a real machine sat at 2 sessions, 108 conflicts, and nothing
+    // moving in either direction while both reported "Watching for changes". Reading the first of them called that
+    // converged.
+    describe("convergePlan", () => {
+        const matching = live({ paths: [...IGNORES] });
+        it("keeps exactly one session that matches, and replaces duplicates of it", () => {
+            expect(convergePlan([matching], spec)).toBe("keep");
+            expect(convergePlan([matching, matching], spec)).toBe("replace");
+        });
+
+        it("creates when there is none, and replaces one that drifted", () => {
+            expect(convergePlan([], spec)).toBe("create");
+            expect(convergePlan([live({ paths: [] })], spec)).toBe("replace");
+        });
     });
 
     it("matches a session created by this build", () => {

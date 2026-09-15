@@ -31,6 +31,10 @@ export const IGNORES = [
     STATE_DIR,
     ".git",
     ".pnpm-store",
+    // The image build's staging tree, for the same reason as `.astro` above and measured on a dogfooding machine:
+    // both sides write their own `package.json`/`pnpm-lock.yaml` per extension into it, which is 98 create-vs-create
+    // conflicts that two-way-safe will never settle — and while they stand, that pairing propagates nothing at all.
+    ".image-out",
 ];
 
 // The state dir's own one-way, sandbox-first backup, since the workspace session excludes it wholesale from

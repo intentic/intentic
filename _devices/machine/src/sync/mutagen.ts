@@ -201,12 +201,13 @@ interface LiveSession {
 
 // The session of this name, or undefined if none: a non-zero exit is Mutagen's "no match" or an unreachable
 // daemon, and the create that follows fails loudly with the real reason.
-const readSession = (mutagen: string, name: string): LiveSession | undefined => {
+// EVERY session under that name, not the first of them. Mutagen allows several to share one, and two synchronizers
+// on one pair of roots flag each other's writes as conflicts and neither ever converges: measured on a dogfooding
+// machine as 2 identical sessions, 108 conflicts, and nothing propagating in either direction while a status of
+// "Watching for changes" claimed all was well. Reading `[0]` hid the second one from every check below.
+const readSessions = (mutagen: string, name: string): LiveSession[] => {
     const result = spawnSync(mutagen, ["sync", "list", "--template", "{{json .}}", name], { encoding: "utf8", windowsHide: true });
-    if (result.status !== 0) {
-        return undefined;
-    }
-    return (JSON.parse(result.stdout) as LiveSession[])[0];
+    return result.status === 0 ? ((JSON.parse(result.stdout) as LiveSession[]) ?? []) : [];
 };
 
 // Two-way-safe flags conflicts by path, not just a count; alpha is always this device (workspace session is
@@ -261,7 +262,9 @@ export const readSessionState = (
     conflicts?: number | undefined;
     conflictedPaths?: DeviceConflict[] | undefined;
 } => {
-    const session = readSession(mutagen, name);
+    // The first of them is enough for a report: what a reader needs is that this pairing is syncing and how it is
+    // doing, and duplicates are converged away by `convergeSession` rather than described here.
+    const session = readSessions(mutagen, name)[0];
     if (session === undefined) {
         return { exists: false };
     }
@@ -350,12 +353,28 @@ export const ensureSyncSession = async (mutagen: string, pairing: Pairing, log: 
     }
 };
 
+// What to do with what `sync list <name>` answered. Kept pure and beside `sessionMatchesSpec` so the one case that
+// cost a dogfooding machine its file sync — SEVERAL sessions under one name, each flagging the other's writes as
+// conflicts — is a rule with a test rather than a branch inside a process spawner.
+export const convergePlan = (sessions: readonly LiveSession[], spec: SyncSessionSpec): "keep" | "create" | "replace" => {
+    if (sessions.length === 0) {
+        return "create";
+    }
+    const only = sessions.length === 1 ? sessions[0] : undefined;
+    return only !== undefined && sessionMatchesSpec(only, spec) ? "keep" : "replace";
+};
+
 const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log): Promise<void> => {
-    const live = readSession(mutagen, spec.name);
-    if (live !== undefined && sessionMatchesSpec(live, spec)) {
+    const sessions = readSessions(mutagen, spec.name);
+    const plan = convergePlan(sessions, spec);
+    if (plan === "keep") {
         return;
     }
-    if (live !== undefined) {
+    const live = sessions.length === 1 ? sessions[0] : undefined;
+    if (sessions.length > 1) {
+        log(`${spec.name}: ${sessions.length} sync sessions share this name, which conflict with each other; replacing them with one.`);
+    }
+    if (plan === "replace") {
         // Never tears down a session it can't replace: `sync create` needs the sandbox to answer, so the transport is
         // probed first, and an unreachable sandbox keeps its drifted session (retried next pass) rather than losing
         // sync entirely.
