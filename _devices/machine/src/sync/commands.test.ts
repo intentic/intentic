@@ -1,8 +1,9 @@
 import { DEV_VERSION, type DevicePairing, type DeviceReport, AGENT_STALL_AFTER_MS, HostScopesSchema } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { agentLine, buildSkewLine, conflictLines, linkLine, pairingLine, statusSummary } from "../status.js";
-import { enrollKey, selectPairings } from "./commands.js";
+import { enrollKey, selectPairings, syncSwitchPlan } from "./commands.js";
 import type { Pairing, SyncState } from "./config.js";
+import { syncSessionNames } from "./mutagen.js";
 
 const jsonResponse = (status: number, body: unknown): Response =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -100,6 +101,41 @@ describe("selectPairings", () => {
 
     it("refuses an unknown fragment, listing what this machine does pair", () => {
         expect(() => selectPairings(state, "nope")).toThrow(/no paired sandbox matches "nope".*0738cd6b5027/s);
+    });
+});
+
+// `mutagen sync pause a b` resolves every name or none, so a pairing with no session used to take the whole
+// command down with Mutagen's own "did not match any sessions" — which is what the Pause syncing button showed.
+describe("syncSwitchPlan", () => {
+    const pairing = (sandboxId: string): Pairing => ({ sandboxUrl: `https://${sandboxId}/`, sandboxId, mode: "sync" });
+    const one = pairing("sandbox-aacfe05c01ce-sbx-intentic-dev");
+    const two = pairing("sandbox-bce57bb9fe3b-intentic-dev");
+    // Both of a pairing's sessions, named the way the agent names them rather than spelled out here.
+    const both = (held: Pairing): string[] => [...syncSessionNames(held.sandboxId)];
+
+    it("names nothing, and nothing to act on, when the daemon holds no session for any of them", () => {
+        expect(syncSwitchPlan([one, two], [])).toEqual({ names: [], acted: [], idle: [one, two] });
+    });
+
+    it("drops the pairing with no session instead of failing the whole command for the one that has them", () => {
+        const plan = syncSwitchPlan([one, two], both(two));
+        expect(plan.names).toEqual(both(two));
+        expect(plan.acted).toEqual([two]);
+        expect(plan.idle).toEqual([one]);
+    });
+
+    // The backup session is created after the workspace one, so the half-created pairing is the common case, not
+    // an edge: naming the missing half would fail the pause for the half that is running.
+    it("acts on the half a pairing has when its backup session was never created", () => {
+        const workspaceOnly = syncSessionNames(one.sandboxId)[0]!;
+        const plan = syncSwitchPlan([one], [workspaceOnly]);
+        expect(plan.names).toEqual([workspaceOnly]);
+        expect(plan.acted).toEqual([one]);
+        expect(plan.idle).toEqual([]);
+    });
+
+    it("passes both names through when the daemon holds both", () => {
+        expect(syncSwitchPlan([one], both(one)).names).toEqual(both(one));
     });
 });
 

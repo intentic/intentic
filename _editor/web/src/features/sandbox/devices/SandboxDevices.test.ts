@@ -1139,6 +1139,22 @@ it(`does not offer to pause a device that only mirrors ports`, async () => {
     expect(labels(el)).toContain(`Stop mirroring`);
 });
 
+// A sync pairing whose sandbox was unreachable when its session was due has the mode and no session: the
+// machine reports no status for it, and Pause would ask Mutagen for a name it cannot resolve.
+it(`says a sync pairing is not syncing, and offers no Pause, when the machine reports no session`, async () => {
+    const row = mirrored(`on`);
+    const sessionless = {
+        ...row,
+        report: { ...row.report!, pairings: [{ ...row.report!.pairings[0]!, mutagenStatus: undefined }] },
+    };
+    const el = mount([sessionless]);
+    await openRow(el, `work`);
+    expect(el.textContent ?? ``).toContain(`not syncing`);
+    expect(labels(el)).not.toContain(`Pause syncing`);
+    // Unpairing still works: the pairing is real, it is the session that is missing.
+    expect(labels(el)).toContain(`Unpair`);
+});
+
 // Ends a pairing only a fresh one-liner remakes, so it asks first and goes to the machine, which self-revokes.
 it(`asks before unpairing, then tells the machine to do it`, async () => {
     const el = mount([mirrored(`on`)]);

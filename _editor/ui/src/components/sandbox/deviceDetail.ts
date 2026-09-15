@@ -186,7 +186,9 @@ export const sandboxGroups = (
 export const mirroringOff = (folder: DeviceFolderRow | undefined): boolean => folder?.mirroring === `off`;
 
 // What a sync is doing, in Mutagen's own words rather than mapped onto a traffic light: its halted
-// states name their own cause. Paused wins, since it's the one state the user chose.
+// states name their own cause. Paused wins, since it's the one state the user chose. A sync pairing with no
+// session at all gets our own word rather than a blank, the way `backupState` does: the report carries that as
+// an absent status, and silence reads exactly like healthy.
 export const folderState = (folder: DeviceFolderRow): string | undefined => {
     // A mirror enrollment has no session to be in a state; the row already says so in words.
     if (folder.mode === `mirror`) {
@@ -195,8 +197,13 @@ export const folderState = (folder: DeviceFolderRow): string | undefined => {
     if (folder.paused === true) {
         return `paused`;
     }
-    return folder.mutagenStatus;
+    return folder.mutagenStatus ?? `not syncing`;
 };
+
+// Whether this pairing has a file-sync session at all. Not the same question as `mode === "sync"`: a pairing
+// whose sandbox was unreachable when its session was due keeps the mode and has nothing running.
+export const syncSessionLive = (folder: DeviceFolderRow | undefined): boolean =>
+    folder?.mode === `sync` && folder.mutagenStatus !== undefined;
 
 // Whether this sandbox's state is kept anywhere else; the one row where an absence must be louder than
 // any word Mutagen could return. Undefined for a mirror or a paused pairing: neither is a backup that failed.

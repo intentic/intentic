@@ -82,6 +82,8 @@ export {
     type DeviceAgentState,
     // Whether the device is off this sandbox's ports; decides which way a Stop/Start button points.
     mirroringOff,
+    // Whether a pairing has a file-sync session at all; decides whether Pause syncing has anything to act on.
+    syncSessionLive,
     // One sandbox's machine-resource share as a single line, for display outside the row.
     resourcesSummary,
     // The view's own grouping, for a caller that needs to count sandboxes and attention flags before drawing.

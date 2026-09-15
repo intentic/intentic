@@ -15,6 +15,7 @@ import { retirePairingMirror, teardownAllForwards } from "./mirror.js";
 import {
     ensureMutagen,
     ensureSyncSession,
+    existingSyncSessions,
     registerMutagenAutostart,
     retireOrphanSessions,
     runMutagen,
@@ -298,6 +299,22 @@ const sandboxFlag = {
     },
 } as const;
 
+// The sessions a pause/resume can actually name, and which pairings that covers. `mutagen sync pause a b` is
+// all-or-nothing: one unresolved name fails the call for every other pairing in it, so a pairing whose sandbox was
+// unreachable when its session was due to be created used to take the whole command down with Mutagen's own
+// "did not match any sessions". Pure and exported so that rule is checkable without a Mutagen daemon.
+export const syncSwitchPlan = (
+    syncing: readonly Pairing[],
+    held: readonly string[],
+): { readonly names: readonly string[]; readonly acted: readonly Pairing[]; readonly idle: readonly Pairing[] } => {
+    const running = new Set(held);
+    const covered = (pairing: Pairing): string[] => syncSessionNames(pairing.sandboxId).filter((name) => running.has(name));
+    const acted = syncing.filter((pairing) => covered(pairing).length > 0);
+    return { names: acted.flatMap(covered), acted, idle: syncing.filter((pairing) => covered(pairing).length === 0) };
+};
+
+const named = (pairings: readonly Pairing[]): string => pairings.map((pairing) => pairing.sandboxId).join(", ");
+
 // Pause/resume act on file sync, skipped with a note for a mirror-only enrollment (mirroring rides the
 // resident loop, not a Mutagen pause).
 const fileSyncOnly = (brief: string, verb: "pause" | "resume") =>
@@ -318,10 +335,20 @@ const fileSyncOnly = (brief: string, verb: "pause" | "resume") =>
             }
             const mutagen = await ensureMutagen();
             // Pause and resume act on the pair: leaving the backup running under a deliberate `pause` would keep
-            // writing
-            // to a folder the owner just asked this agent to stop touching.
-            runMutagen(mutagen, ["sync", verb, ...syncing.flatMap((pairing) => syncSessionNames(pairing.sandboxId))]);
-            out(`${verb === "pause" ? "Paused" : "Resumed"} file sync for: ${syncing.map((pairing) => pairing.sandboxId).join(", ")}`);
+            // writing to a folder the owner just asked this agent to stop touching. Only the names the daemon holds
+            // reach Mutagen, since one it can't resolve fails the call for every pairing named beside it.
+            const plan = syncSwitchPlan(syncing, existingSyncSessions(mutagen, syncing.flatMap((pairing) => syncSessionNames(pairing.sandboxId))));
+            if (plan.names.length === 0) {
+                // Not a failure: a pairing whose sandbox has never answered has no session yet, and there is nothing
+                // here to pause. The agent creates it as soon as the sandbox is reachable.
+                out(`No file-sync session is running for: ${named(syncing)}. Nothing to ${verb}; syncing starts when the sandbox answers again.`);
+                return;
+            }
+            runMutagen(mutagen, ["sync", verb, ...plan.names]);
+            out(`${verb === "pause" ? "Paused" : "Resumed"} file sync for: ${named(plan.acted)}`);
+            if (plan.idle.length > 0) {
+                out(`No file-sync session to ${verb} for: ${named(plan.idle)}.`);
+            }
         },
     });
 
@@ -357,12 +384,11 @@ const mirrorSwitch = (brief: string, off: boolean) =>
                     await retirePairingMirror(mutagen, pairing.sandboxId);
                 }
             }
-            const named = selected.map((pairing) => pairing.sandboxId).join(", ");
             if (off) {
-                out(`Port mirroring OFF for: ${named}. Those ports are off this device's localhost. File syncing is untouched.`);
+                out(`Port mirroring OFF for: ${named(selected)}. Those ports are off this device's localhost. File syncing is untouched.`);
                 return;
             }
-            out(`Port mirroring on for: ${named}. Their ports return to localhost within a few seconds.`);
+            out(`Port mirroring on for: ${named(selected)}. Their ports return to localhost within a few seconds.`);
             // The watcher is what puts them back, so a stopped agent turns this command into a promise nothing keeps.
             if ((await readResidentPid()) === undefined) {
                 out("Note: this machine's agent is NOT running, so nothing will mirror until you start it: `intentic-machine run`.");

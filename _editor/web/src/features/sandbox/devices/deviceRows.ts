@@ -18,6 +18,7 @@ import {
     isSameSandbox,
     mirroringOff,
     sandboxGroups,
+    syncSessionLive,
 } from "@intentic/ui/device";
 import { type AgentChip, agentChip, agentHalted, deviceDoors, deviceQuiet, lastSeenNote, machineWarnings, osLabel } from "./deviceFacts";
 
@@ -204,9 +205,11 @@ export const manageable = (device: Device, group: DeviceSandboxGroup): boolean =
 export const commandable = (device: Device, group: DeviceSandboxGroup): boolean =>
     device.hostId !== undefined && device.online === true && device.gap === undefined && group.folder !== undefined;
 
-// Offered only where there's a file sync to pause; a mirror-only enrollment has no session for it.
+// Offered only where there's a running file sync to pause: a mirror-only enrollment has no session for it, and
+// neither does a sync pairing whose sandbox was unreachable when its session was due — asking the machine to
+// pause that one is asking Mutagen for a name it cannot resolve.
 export const pausable = (device: Device, group: DeviceSandboxGroup): boolean =>
-    commandable(device, group) && group.folder?.mode === `sync`;
+    commandable(device, group) && syncSessionLive(group.folder);
 
 // A conflict has no switch: choosing between two edited copies is judgement per file, so the control is a
 // turn an agent can run against both ends, not a one-click winner.
