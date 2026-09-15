@@ -2,6 +2,7 @@ import DOMPurify from "dompurify";
 import { Marked } from "marked";
 import { type CodeBlock, codeBlockHtml, escapeHtml } from "./code.js";
 import { type Figure, splitFigureSegments } from "./figures.js";
+import { refineTables } from "./tables.js";
 
 // Renders untrusted markdown (workspace files, chat output, memory notes) to sanitized HTML for v-html, which does
 // not sanitize on its own. The one markdown engine in the product; surface-specific behavior goes through a
@@ -83,6 +84,7 @@ const parseParts = (text: string, decorate: MarkdownDecorator | undefined): Mark
     collected = [];
     try {
         const fragment = DOMPurify.sanitize(marked.parse(text, { async: false }), { RETURN_DOM_FRAGMENT: true });
+        refineTables(fragment);
         decorate?.(fragment);
         const holder = document.createElement(`div`);
         holder.append(fragment);

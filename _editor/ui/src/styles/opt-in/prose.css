@@ -194,12 +194,17 @@
     text-decoration: underline solid var(--color-link);
 }
 
-/* Tables. */
+/* Tables. The failure to design against is a table WIDER THAN ITS COLUMN: the layout then collapses every column
+   to its longest word and scrolls anyway, so the fit is bought in the cells — break opportunities (tables.ts) and a
+   measure per column — rather than paid for in scrolling. */
 .md-prose table {
     display: block;
     width: fit-content;
     max-width: 100%;
     overflow-x: auto;
+    /* The rare table that still cannot fit SAYS SO: an overlay scrollbar is invisible until something touches it. */
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--color-content) 18%, transparent) transparent;
     margin: var(--prose-gap) 0;
     border-collapse: collapse;
     font-size: var(--prose-size);
@@ -207,12 +212,33 @@
 /* A CELL WRAPS ON WORDS, never mid-word, and that is a column-width rule rather than a typographic one. */
 .md-prose th,
 .md-prose td {
+    /* The measure, in the cell's own type (~65 characters): past it the width goes to the neighbouring columns. */
+    max-width: 34em;
     overflow-wrap: break-word;
     word-break: normal;
-    padding: 0.5em 0.7em;
-    text-align: left;
+    padding: 0.45em 0.7em;
+    /* A step under the prose lead: a cell is scanned down its column, not read in paragraphs. */
+    line-height: 1.5;
     vertical-align: top;
     border-bottom: 1px solid var(--color-line);
+    /* Digits stack under digits, whichever way the column reads. */
+    font-variant-numeric: tabular-nums;
+}
+/* A cell holding a token no column can place (a hash, a base64 blob) gives way rather than holding its column
+   open; tables.ts marks those, so a short code token — a flag, a commit id — is never split. */
+.md-prose :is(th, td)[data-md-break],
+.md-prose :is(th, td)[data-md-break] code {
+    overflow-wrap: anywhere;
+}
+/* The alignment the markdown wrote, which a blanket `text-align` on the cell would otherwise beat. */
+.md-prose :is(th, td):not([align]) {
+    text-align: left;
+}
+.md-prose :is(th, td)[align="center"] {
+    text-align: center;
+}
+.md-prose :is(th, td)[align="right"] {
+    text-align: right;
 }
 .md-prose th {
     font-weight: var(--font-weight-semibold);

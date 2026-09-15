@@ -419,3 +419,82 @@ describe(`code block copy`, () => {
         expect(written).toEqual([`export const keyed = 6;`]);
     });
 });
+
+// A table is the one block whose SPACING the reader judges before the words: prose.css sizes the columns, and this
+// pass (markdown/tables.ts) gives it the facts CSS cannot read — where a token may break, which column is numeric.
+describe(`tables`, () => {
+    const table = (markdown: string): HTMLTableElement => {
+        const container = document.createElement(`div`);
+        container.innerHTML = renderMarkdown(markdown);
+        return container.querySelector(`table`) as HTMLTableElement;
+    };
+    const cells = (rendered: HTMLTableElement, selector: string): HTMLElement[] => [...rendered.querySelectorAll<HTMLElement>(selector)];
+
+    it(`breaks a long path at its separators, and nowhere else`, () => {
+        const cell = table(`| Where |\n| --- |\n| /history/transcripts/solid-condor-urdu.jsonl |`).querySelector(`td`)!;
+
+        expect(cell.querySelectorAll(`wbr`).length).toBe(4);
+        expect([...cell.childNodes].filter((node) => node.nodeType === 3).map((node) => node.textContent)).toEqual([
+            `/`,
+            `history/`,
+            `transcripts/`,
+            `solid-condor-urdu.`,
+            `jsonl`,
+        ]);
+    });
+
+    it(`leaves the text itself untouched, so the cell copies out as it was written`, () => {
+        const path = `/work/.intentic/records/artifacts/image.png`;
+        expect(table(`| Where |\n| --- |\n| ${path} |`).querySelector(`td`)!.textContent).toBe(path);
+    });
+
+    it(`keeps a short token whole — a flag is a unit, not a place to wrap`, () => {
+        const rendered = table(`| Flag | What |\n| --- | --- |\n| \`--budget\` | Caps the answer |`);
+
+        expect(rendered.querySelectorAll(`wbr`).length).toBe(0);
+        expect(rendered.querySelector(`code`)!.textContent).toBe(`--budget`);
+    });
+
+    it(`adds no break after a hyphen, which already breaks on its own`, () => {
+        expect(table(`| Id |\n| --- |\n| solid-condor-urdu-and-then-some |`).querySelectorAll(`wbr`).length).toBe(0);
+    });
+
+    it(`marks the cell whose token no column can place, and only that one`, () => {
+        const rendered = table(
+            `| Commit | Tree |\n| --- | --- |\n| \`2882b90fc\` | \`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\` |`,
+        );
+
+        expect(cells(rendered, `td[data-md-break]`).map((cell) => cell.textContent)).toEqual([
+            `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+        ]);
+    });
+
+    it(`reads a numeric column right, header included`, () => {
+        const rendered = table(`| Package | Files |\n| --- | --- |\n| _sandbox | 1544 |\n| _editor | 707 |`);
+
+        expect(cells(rendered, `[align="right"]`).map((cell) => cell.textContent)).toEqual([`Files`, `1544`, `707`]);
+    });
+
+    it(`counts a percentage, a sign and a currency as numbers, and a version or a time as words`, () => {
+        const rendered = table(
+            `| Cost | Coverage | Version | Active |\n| --- | --- | --- | --- |\n| $4.36 | +1.4% | 1.2.3 | 20:42 |\n| $18.02 | -0.2% | 4.5.6 | 21:03 |`,
+        );
+
+        expect(cells(rendered, `thead [align="right"]`).map((cell) => cell.textContent)).toEqual([`Cost`, `Coverage`]);
+    });
+
+    it(`leaves a numeric column alone where the markdown aligned it itself`, () => {
+        const rendered = table(`| N |\n| :--- |\n| 1 |\n| 2 |`);
+
+        expect(rendered.querySelector(`th`)!.getAttribute(`align`)).toBe(`left`);
+        expect(cells(rendered, `[align="right"]`)).toEqual([]);
+    });
+
+    it(`keeps the markdown's own centring through the sanitizer`, () => {
+        expect(table(`| A |\n| :---: |\n| x |`).querySelector(`th`)!.getAttribute(`align`)).toBe(`center`);
+    });
+
+    it(`touches nothing outside a table: a path in a paragraph is prose, not a column`, () => {
+        expect(renderMarkdown(`See /history/transcripts/solid-condor-urdu.jsonl for the record.`)).not.toContain(`<wbr>`);
+    });
+});
