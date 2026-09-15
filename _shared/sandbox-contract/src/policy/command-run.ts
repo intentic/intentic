@@ -1,4 +1,5 @@
 import type { CommandRun } from "../schemas/ci.js";
+import { sleep } from "@intentic/base/async";
 
 // The heading over a settled run, shown both on the workspace card and in a phone notification, so the two must agree
 // on wording. `subject` is what ran, in the clicked button's own words ("Checks", "Push", "Publish").
@@ -12,17 +13,6 @@ export interface FollowRunOptions<R extends CommandRun> {
     // A poll that failed, not a run that failed: the run is still going, and following continues.
     readonly onError?: ((cause: unknown) => void) | undefined;
 }
-
-const sleep = (ms: number, signal: AbortSignal | undefined): Promise<void> =>
-    new Promise((resolve) => {
-        const timer = setTimeout(done, ms);
-        function done(): void {
-            clearTimeout(timer);
-            signal?.removeEventListener("abort", done);
-            resolve();
-        }
-        signal?.addEventListener("abort", done, { once: true });
-    });
 
 // Follows a run to its verdict: reads state until it is no longer running. The one shared loop, so a dropped poll isn't
 // handled differently by every caller; reads once immediately, so an already-settled run returns without a wait.
@@ -41,7 +31,7 @@ export const followCommandRun = async <R extends CommandRun>(read: () => Promise
         } catch (cause) {
             onError?.(cause);
         }
-        await sleep(intervalMs, signal);
+        await sleep(intervalMs, { signal });
     }
 };
 

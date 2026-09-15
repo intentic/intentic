@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { gunzipSync } from "fflate";
+import { plural } from "@intentic/base/format";
 import { gzipHead, listWithTar, looksLikeTar, tarEntries, tarOnPath, zipEntries, type ArchiveEntry } from "../archives.js";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
@@ -44,8 +45,6 @@ const formatBytes = (bytes: number): string => {
     }
     return `${unit === 0 ? value : value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
 };
-
-const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 // The capsule above the table: what the container is and how much is in it, so a reader knows the shape before the list.
 const summaryOf = (container: Container, entries: readonly ArchiveEntry[]): string[] => {

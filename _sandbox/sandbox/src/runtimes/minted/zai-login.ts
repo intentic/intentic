@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
+import { sleep } from "@intentic/base/async";
 import type { MintedCredential, MintedLoginAttempt, MintedLoginContext, MintedLoginDriver } from "./minted-login.js";
 
 // Z.ai's sign-in: the ZCode flow on either estate, then provisioning (mintKey) that turns its token, not an inference
@@ -108,16 +109,6 @@ interface ZaiIdentity {
     readonly email: string;
 }
 
-const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
-    new Promise((resolve) => {
-        const timer = setTimeout(resolve, ms);
-        timer.unref?.();
-        signal.addEventListener("abort", () => {
-            clearTimeout(timer);
-            resolve();
-        }, { once: true });
-    });
-
 // Unwraps the envelope, carrying the vendor's own `msg` into the error: both roots answer business errors with HTTP 200
 // and a non-zero code, so a status check alone would read a refusal as data.
 const envelope = async (input: {
@@ -203,7 +194,7 @@ const startMediated = async (context: MintedLoginContext, hosts: ZaiLoginHosts):
         const intervalMs = Math.max(MIN_POLL_INTERVAL_MS, poll_interval_sec * 1_000);
         let consecutiveErrors = 0;
         while (Date.now() < expiresAt) {
-            await sleep(intervalMs, signal);
+            await sleep(intervalMs, { signal, unref: true });
             if (signal.aborted) {
                 throw new Error("The Z.ai sign-in was abandoned.");
             }

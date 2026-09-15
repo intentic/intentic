@@ -1,6 +1,7 @@
 import type { IconName } from "@intentic/ui";
 import { type CardDocument, documentOf, type ToolCallContent, type TranscriptTool } from "@intentic/sandbox-contract";
 import { codeLangForPath } from "@intentic/code-read";
+import { plural } from "@intentic/base/format";
 import { diffStat } from "./chatToolDiff";
 
 // Per-tool rendering table for the chat's tool cards: a presenter is looked up by the tool's normalized display name
@@ -58,9 +59,6 @@ export const TEXT_CAP = 4000;
 const FILE_ROW_CAP = 50;
 
 const countLines = (text: string): number => (text === `` ? 0 : text.split(`\n`).filter((line) => line !== ``).length);
-
-// "1 match" / "2 matches"; pluralizes sibilant endings with -es.
-const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? `` : /(?:s|x|z|ch|sh)$/.test(noun) ? `es` : `s`}`;
 
 // Parses a `path[:line[:match]]` line as ripgrep/glob tools emit it; requires a path-shaped segment (`/` or a
 // dot-extension, no leading `-`), else undefined.

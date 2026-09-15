@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { access } from "node:fs/promises";
 import { sleep } from "@intentic/base/async";
+import { clamp } from "@intentic/base/format";
 import type { AgentTurn } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { WakeFn } from "../../automations/scheduler.js";
@@ -315,8 +316,6 @@ const schedule = (live: WatcherRuntime, record: WatcherRecord): void => {
     // A watchdog must never hold the event loop open on its own (idle-stop's rule, same reason).
     record.timer.unref();
 };
-
-const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
 export type ArmOutcome =
     // The condition already held when asked, nothing armed, no wake coming.

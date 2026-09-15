@@ -1,4 +1,5 @@
 import type { Advisory, ChoreSignals, OutdatedPackage, ProbeId, ProbeResult } from "../schemas/maintenance.js";
+import { plural } from "@intentic/base/format";
 import { bucketOf, digestOf } from "./digest.js";
 import { CHORE_INVARIANTS, composeAsk, REPORT_INVARIANTS, TRIAGE_NOTE } from "./prompt.js";
 import { componentStem, frameworksOf, idiomRule, normalizePath, UI_FRAMEWORKS, usesTailwind } from "./stack.js";
@@ -95,8 +96,6 @@ export const repoLabel = (repo: string): string => (repo === `root` || repo === 
 // The same repository, named for a narrow column or chip; `repoLabel`'s prose truncates badly there ("the
 // workspace root reposi…").
 export const repoName = (repo: string): string => (repo === `root` || repo === `` ? `workspace root` : repo);
-
-const plural = (count: number, one: string, many = `${one}s`): string => `${count} ${count === 1 ? one : many}`;
 
 // One outdated dependency, as the panel lists it; the semver step leads, since it decides whether the row is a
 // morning's work or a project.

@@ -1,8 +1,8 @@
 import { open, readdir, realpath, stat } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { PUBLIC_DIR } from "@intentic/workspace-ignore";
+import { escapeHtml } from "@intentic/base/format";
 import type { Refusal } from "../panels/interstitial.js";
-import { escapeHtml } from "../panels/interstitial.js";
 
 // Everything under public/ is served to anyone with the URL, no auth. Every guard runs at serve time against the bytes
 // on disk, since the write path can't be trusted and a file safe today may not be tomorrow.

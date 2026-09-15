@@ -1,5 +1,6 @@
 import type { WorkspaceSearchHit, WorkspaceSearchSpan } from "@intentic/api-contract";
 import { type CodeToken, useHighlighter } from "@intentic/ui";
+import { clamp } from "@intentic/base/format";
 import { ref } from "vue";
 
 // One search-result line ready to render: the visible slice cut into coloured pieces with the matched span flagged.
@@ -28,8 +29,6 @@ const MAX_TEXT = 240;
 // Match past MAX_LEAD is pulled left to KEEP_BEFORE chars of lead, tuned to the sidebar's ~26-char width.
 const MAX_LEAD = 16;
 const KEEP_BEFORE = 6;
-
-const clamp = (value: number, low: number, high: number): number => Math.min(Math.max(value, low), high);
 
 // Builds what to render for one hit: offsets are into the whole line so they move with the cut, and are clamped
 // since a stale hit can point past the given text. Keeps every span the line reported, not just the one that framed it.

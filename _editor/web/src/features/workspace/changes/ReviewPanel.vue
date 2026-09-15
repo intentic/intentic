@@ -2,6 +2,7 @@
 import type { GitChange, GitDiffSide, LandedMessage, LandedMessageDraft, RepoChanges, RepoTarget } from "@intentic/api-contract";
 import { Button, ChangeStatusMark, growTextarea, ui, Modal, timeAgo, useDevice, type IconName, vAction } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
+import { plural } from "@intentic/base/format";
 import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
 import HoverCard from "../../../components/HoverCard.vue";
@@ -73,7 +74,6 @@ const toggleGroup = (repo: string): void => {
 };
 
 const changeLabel = (repo: string, change: GitChange): string => (repo === `root` ? change.path : `${repo}/${change.path}`);
-const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? `` : `s`}`;
 
 // Per row: a colour rail plus a provider chip, since "did an agent touch this" is scanned before it's read.
 // Per panel: a legend that IS the filter, not a grouping — a file two agents landed can't be grouped under one.

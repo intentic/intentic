@@ -204,6 +204,7 @@
         "lock": "tsgo -b && node scripts/write-lock.mjs"
     },
     "dependencies": {
+        "@intentic/base": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/registry": "workspace:*",

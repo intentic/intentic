@@ -1,4 +1,5 @@
 import type { TodoItem, TurnNote } from "@intentic/sandbox-contract";
+import { plural } from "@intentic/base/format";
 import type { Services } from "../../composition.js";
 import { changedFiles } from "../../git/changes/changes.js";
 import { workspaceRelative } from "../../rules/turn-ending.js";
@@ -140,8 +141,6 @@ const readChecklist = async (deps: HandoffStateDeps, state: HandoffState): Promi
     }
     return (state.checklist ?? []).map((item) => ({ text: item.content, status: item.status }));
 };
-
-const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 const repoLine = (reading: RepoReading, withPaths: boolean): string => {
     if (reading.paths.length === 0) {

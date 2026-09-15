@@ -13,3 +13,17 @@ export const sizeLabel = (bytes: number): string => {
 // ~4 chars/token, no tokenizer: every budget in the product (iq's render budgets, fileq/webq's caps, the daemon's
 // savings report) is the same estimate, so they agree. cleaner-bench.mjs keeps its own copy, build-step-free.
 export const estimateTokens = (text: string): number => Math.ceil(text.length / 4);
+
+// "1 file" / "3 files"; sibilant endings (s, x, z, ch, sh) get -es. Pass `many` for irregular plurals ("advisory" →
+// "advisories") where the suffix rule cannot reach.
+export const plural = (count: number, one: string, many?: string): string =>
+    `${count} ${count === 1 ? one : (many ?? (/(s|x|z|ch|sh)$/.test(one) ? `${one}es` : `${one}s`))}`;
+
+const HTML_ENTITIES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+
+// Replaces the five characters that are active in HTML text and attribute contexts; safe for both template-literal HTML
+// and v-html injection.
+export const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, (ch) => HTML_ENTITIES[ch] ?? ch);
+
+// Constrains a value to [min, max]; used everywhere a pixel, percentage, or index must stay in bounds.
+export const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));

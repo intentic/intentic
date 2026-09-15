@@ -1,5 +1,5 @@
 import type { SharePayload } from "@intentic/sandbox-contract";
-import { escapeHtml } from "../panels/interstitial.js";
+import { escapeHtml } from "@intentic/base/format";
 
 // The payload is fully attacker-influenced: a prompt can contain any character, and conversations here are full of HTML
 // and script tags. Every `<` in the JSON script block is written as a unicode escape, so the HTML parser can never find

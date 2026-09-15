@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { InviteDelivery, InviteRecord } from "@intentic/api-contract";
 import type { GrantedRole } from "@intentic/sandbox-contract";
+import { plural } from "@intentic/base/format";
 import {
     Avatar,
     Button,
@@ -73,9 +74,6 @@ const handover = ref<string>();
 
 // Other doors, counted, not managed here; answers what else can reach the sandbox without a person.
 const { inventory, loading: inventoryLoading } = useAccessInventory();
-
-// The plural is spelled, not suffixed, to avoid "repositorys".
-const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
 
 const webhooksLine = computed(() =>
     inventory.value.webhooks === undefined

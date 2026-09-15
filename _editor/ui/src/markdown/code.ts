@@ -13,8 +13,11 @@ export interface CodeBlock {
     readonly lang: string;
 }
 
-// Minimal HTML escape for rendering arbitrary text inertly inside v-html; shared with renderMarkdown's fallback.
-export const escapeHtml = (text: string): string => text.replace(/&/g, `&amp;`).replace(/</g, `&lt;`).replace(/>/g, `&gt;`).replace(/"/g, `&quot;`);
+const HTML_ENTITIES: Record<string, string> = { "&": `&amp;`, "<": `&lt;`, ">": `&gt;`, '"': `&quot;`, "'": `&#39;` };
+
+// Minimal HTML escape for rendering arbitrary text inertly inside v-html; shared with renderMarkdown's fallback. Local
+// rather than @intentic/base's copy: this package carries no workspace dependency but @intentic/code-read.
+export const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, (ch) => HTML_ENTITIES[ch] ?? ch);
 
 // Fence info strings mapped to shipped grammar ids; unlisted ones are tried as-is and remembered as unsupported
 // after one miss. JSON-figure langs (figures.ts) alias to `json`, since a figure that fails to render still shows

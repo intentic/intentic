@@ -1,11 +1,6 @@
 // CTA for the interstitial: Intentic's only surface controlled end-to-end, served by the proxy, never injected.
 const INTENTIC_URL = "https://intentic.dev";
 
-// Escapes only the dynamic bits of a status message (repo/slot/file name from an attacker-controlled Host or path); the
-// static sentence is author-controlled.
-export const escapeHtml = (value: string): string =>
-    value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
-
 // Branded status page for every response on the sandbox's public HTTP surface; inlined since this server ships no
 // assets. `message` is text content, pre-escaped at the call site; literal quotes must stay literal.
 export const interstitial = (title: string, message: string): string =>

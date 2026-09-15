@@ -1,4 +1,5 @@
 import { computed, type ComputedRef } from "vue";
+import { plural } from "@intentic/base/format";
 import { showWorkTerminals } from "./useWorkTerminals";
 import { useTerminalsQuery } from "./terminalsQuery";
 
@@ -14,8 +15,6 @@ interface TerminalActivity {
     // Tooltip text summarizing counts by kind, e.g. '2 shells, 1 dev server'.
     readonly summary: ComputedRef<string | undefined>;
 }
-
-const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
 // Kinds counted only once showWorkTerminals is on, keeping the badge and the strip in agreement.
 const WORK_KINDS = new Set([`agent`, `job`]);

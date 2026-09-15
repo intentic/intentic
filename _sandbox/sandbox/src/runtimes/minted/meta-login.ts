@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sleep } from "@intentic/base/async";
 import type { MintedCredential, MintedLoginAttempt, MintedLoginContext, MintedLoginDriver } from "./minted-login.js";
 
 // Meta's sign-in: RFC 8628 device flow, then an exchange that turns the dca: device token (which Meta's model endpoint
@@ -89,16 +90,6 @@ const form = (fields: Record<string, string>): string => new URLSearchParams(fie
 
 const headers = { "content-type": "application/x-www-form-urlencoded", accept: "application/json", "user-agent": USER_AGENT };
 
-const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
-    new Promise((resolve) => {
-        const timer = setTimeout(resolve, ms);
-        timer.unref?.();
-        signal.addEventListener("abort", () => {
-            clearTimeout(timer);
-            resolve();
-        }, { once: true });
-    });
-
 export const metaLoginDriver =
     (hosts: MetaLoginHosts = META_LOGIN_HOSTS): MintedLoginDriver =>
     async (context: MintedLoginContext): Promise<MintedLoginAttempt> => {
@@ -129,7 +120,7 @@ export const metaLoginDriver =
             let intervalMs = Math.max(MIN_POLL_INTERVAL_MS, interval * 1_000);
             const deadline = Date.now() + expires_in * 1_000;
             while (Date.now() < deadline) {
-                await sleep(intervalMs, signal);
+                await sleep(intervalMs, { signal, unref: true });
                 if (signal.aborted) {
                     throw new Error("The Meta sign-in was abandoned.");
                 }

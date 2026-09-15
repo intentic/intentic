@@ -1,4 +1,5 @@
 import { computed } from "vue";
+import { plural } from "@intentic/base/format";
 import PushQuestionBody from "./PushQuestionBody.vue";
 import UploadProgressBody from "../../features/workspace/files/upload/UploadProgressBody.vue";
 import { useAppUpdate } from "../../app/appUpdate";
@@ -69,8 +70,6 @@ interface UploadHeadline {
     readonly tone: NotificationTone;
     readonly spin: boolean;
 }
-
-const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
 const uploadHeadline = (phase: UploadPhase, state: UploadState): UploadHeadline => {
     switch (phase) {

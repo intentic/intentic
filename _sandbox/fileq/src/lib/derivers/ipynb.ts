@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { plural } from "@intentic/base/format";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
 /* Jupyter notebooks: JSON whose cells ARE the document. */
@@ -78,8 +79,6 @@ const sectionOf = (cell: Cell, language: string, counters: Counters): string | u
     // Markdown cells are already markdown; raw cells are fenced so their text cannot pose as prose.
     return cell.cell_type === "markdown" ? source : ["```text", source, "```"].join("\n");
 };
-
-const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 const notesOf = (cellCount: number, counters: Counters): string[] => {
     const notes: string[] = [];

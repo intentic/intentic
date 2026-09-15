@@ -1,9 +1,10 @@
 import http from "node:http";
 import https from "node:https";
 import { panelFromHost, portSlotFromHost, publicSlotFromHost, sandboxSubdomain } from "@intentic/sandbox-contract";
+import { escapeHtml } from "@intentic/base/format";
 import type { PortTarget } from "../ports/port-forwards.js";
 import type { PublicHandler } from "../public/public-serve.js";
-import { escapeHtml, interstitial, type Refusal } from "./interstitial.js";
+import { interstitial, type Refusal } from "./interstitial.js";
 import type { PanelServer, PanelUpstreamResolver } from "./panel-upstream.js";
 
 // Resolves a panel key to what its hostname actually serves: the assigned port, a self-pinned port, or the ambiguity
