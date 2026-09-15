@@ -54,3 +54,27 @@ test("a report in a shape this page has no screen for is nothing", async () => {
     expect(readDesktopSetupReport({ state: `running`, percent: `10` })).toBeUndefined();
     expect(readDesktopSetupReport({ state: `running`, percent: Number.NaN })).toBeUndefined();
 });
+
+/* THE LOOK THE READER ARRIVED IN rides the sign-in handoff, and only when there is one. */
+test("the auth handoff carries the profile when the browser has one", async () => {
+    const { desktopAuthLink } = await load();
+    const bare = new URL(desktopAuthLink(`row+1`, `nonce`));
+    expect(bare.host).toBe(`auth`);
+    expect(bare.searchParams.get(`handoff`)).toBe(`row+1`);
+    expect(bare.searchParams.get(`state`)).toBe(`nonce`);
+    expect(bare.searchParams.get(`profile`)).toBeNull();
+    expect(new URL(desktopAuthLink(`row`, `nonce`, `desk`)).searchParams.get(`profile`)).toBe(`desk`);
+});
+
+test("the scheme is announced only inside the app", async () => {
+    const { announceDesktopMode } = await load();
+    const location = { href: `` };
+    (globalThis as { location?: unknown }).location = location;
+    (globalThis as { document?: unknown }).document = { readyState: `complete` };
+    // A browser has no app to tell.
+    announceDesktopMode(`light`);
+    expect(location.href).toBe(``);
+    (globalThis as { window: { __INTENTIC_DESKTOP__?: unknown } }).window.__INTENTIC_DESKTOP__ = { version: `1.0.0`, installId: `id`, update: null };
+    announceDesktopMode(`light`);
+    expect(location.href).toBe(`intentic://window?do=mode&mode=light`);
+});

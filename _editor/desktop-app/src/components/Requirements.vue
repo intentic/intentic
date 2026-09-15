@@ -1,16 +1,22 @@
 <script setup lang="ts">
 import { Button, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
-import type { Requirement, RequirementAction, RequirementProgress } from "../desktop";
+import type { Requirement, RequirementAction, RequirementProgress, SessionEnd } from "../desktop";
 
 // Requirements render as actionable rows — what's missing, what will happen, one button — not a raw error box.
 // The install's first pass changes nothing and only reports; rows this app can't fix (like firmware
 // virtualization) show the installer's own walkthrough instead.
 //
 // Nothing here is said twice: a single row is its own heading, its badge only earns its place while several rows
-// are being scanned, and the remedy is only printed for rows no button below does for you.
+// are being scanned, and the remedy is only printed where it says something the button under it does not.
 
-const props = defineProps<{ requirements: Requirement[]; busy: boolean; progress?: Record<string, RequirementProgress> }>();
+const props = defineProps<{
+    requirements: Requirement[];
+    busy: boolean;
+    progress?: Record<string, RequirementProgress>;
+    /** How the session ended for this setup before it resumed, when it did (App.vue `resumedHow`). */
+    resumedFrom?: SessionEnd;
+}>();
 const emit = defineEmits<{ install: []; restart: []; signout: []; recheck: []; elsewhere: [] }>();
 
 // Looks up a row's live progress. A row with no report is simply pending; nothing here invents an intermediate
@@ -54,22 +60,30 @@ const STATE_BADGE: Record<string, string | undefined> = {
     failed: `didn't work`,
 };
 
-// The actions a button below already performs, whose remedy sentence would only restate that button.
-const PRESSED_HERE = new Set<RequirementAction>([`fix`, `fixElevated`, `restart`, `signOut`]);
+// The two actions whose remedy is the button under the list and nothing more; every other remedy says
+// something the button does not (what gets downloaded, that Windows will ask, what to do by hand).
+const SAID_BY_BUTTON = new Set<RequirementAction>([`restart`, `signOut`]);
 
 const ourCount = computed(
     () => props.requirements.filter((requirement) => requirement.action === `fix` || requirement.action === `fixElevated`).length,
 );
 const ours = computed(() => ourCount.value > 0);
+// A row that was tried and did not work: the button becomes a retry, since "continue" is not what it would do.
+const anyFailed = computed(() => props.requirements.some((requirement) => stateOf(requirement.id)?.state === `failed`));
 // Button label matches the per-row promise in BADGE, so the two verbs never disagree (e.g. "Install" when the
 // real job is just starting Docker).
-const doLabel = computed(() => (ourCount.value > 1 ? `Do these and continue` : `Do this and continue`));
+const doLabel = computed(() => (anyFailed.value ? `Try again` : ourCount.value > 1 ? `Do these and continue` : `Do this and continue`));
 const restarting = computed(() => props.requirements.some((requirement) => requirement.action === `restart`));
 // docker-users membership needs a Windows sign-out to take effect, not a recheck; setup is parked and resumes via
 // the same RunOnce as a restart.
 const signingOut = computed(() => props.requirements.some((requirement) => requirement.action === `signOut`));
+// The sign-out was already taken and Windows still hands out the old sign-in: the next thing that issues a fresh
+// one is a restart, so that is the button — asking for the same sign-out again is the loop this exists to end.
+const signOutAgain = computed(() => signingOut.value && props.resumedFrom === `signout`);
+// …and one a restart did not settle either is out of this app's hands.
+const signOutExhausted = computed(() => signingOut.value && props.resumedFrom === `restart`);
 // None of these rows are fixable here, so the only honest control left is Check again.
-const stuck = computed(() => !ours.value && !restarting.value && !signingOut.value);
+const stuck = computed(() => (!ours.value && !restarting.value && !signingOut.value) || signOutExhausted.value);
 const needsAdmin = computed(() => props.requirements.some((requirement) => requirement.action === `fixElevated`));
 // A single row states the problem in its own title; a list of them needs saying what the list is.
 const many = computed(() => props.requirements.length > 1);
@@ -77,7 +91,21 @@ const many = computed(() => props.requirements.length > 1);
 const badgeOf = (requirement: Requirement): string | undefined =>
     STATE_BADGE[stateOf(requirement.id)?.state ?? `pending`] ?? (many.value ? BADGE[requirement.action] : undefined);
 
-const remedyOf = (requirement: Requirement): string | undefined => (PRESSED_HERE.has(requirement.action) ? undefined : requirement.remedy);
+const remedyOf = (requirement: Requirement): string | undefined => (SAID_BY_BUTTON.has(requirement.action) ? undefined : requirement.remedy);
+
+// What the session-ending button will do, said once under the buttons rather than per row.
+const sessionNote = computed(() => {
+    if (signOutExhausted.value) {
+        return `Even a restart didn't apply it. Whoever looks after this PC may have to add your account to Docker's group by hand; until then, your sandbox can run on a machine we host.`;
+    }
+    if (signOutAgain.value) {
+        return `Signing out and back in didn't refresh it on this PC. A restart always does: your setup is saved and continues on its own once you're back.`;
+    }
+    if (restarting.value || signingOut.value) {
+        return `Your setup is saved: this window picks it up again once you're back.`;
+    }
+    return undefined;
+});
 </script>
 
 <template>
@@ -111,8 +139,14 @@ const remedyOf = (requirement: Requirement): string | undefined => (PRESSED_HERE
                             <span v-if="badgeOf(requirement)" class="text-2xs text-subtle">{{ badgeOf(requirement) }}</span>
                         </div>
                         <p class="text-2xs text-muted">{{ requirement.problem }}</p>
-                        <!-- Live detail replaces the static remedy once the row is running. -->
-                        <p v-if="stateOf(requirement.id)?.detail" class="text-2xs text-subtle">{{ stateOf(requirement.id)?.detail }}</p>
+                        <!-- Live detail replaces the static remedy once the row is running; after a failure it is the reason, and what to do. -->
+                        <p
+                            v-if="stateOf(requirement.id)?.detail"
+                            class="text-2xs"
+                            :class="stateOf(requirement.id)?.state === `failed` ? 'text-content' : 'text-subtle'"
+                        >
+                            {{ stateOf(requirement.id)?.detail }}
+                        </p>
                         <p v-else-if="remedyOf(requirement)" class="text-2xs text-subtle">{{ remedyOf(requirement) }}</p>
                         <button v-if="requirement.detail" type="button" :class="ui.linkButton(`mt-1 text-2xs`)" @click="toggle(requirement.id)">
                             {{ opened[requirement.id] ? `Hide the steps` : `Show me how` }}
@@ -137,13 +171,14 @@ const remedyOf = (requirement: Requirement): string | undefined => (PRESSED_HERE
             <Button v-if="ours" :label="doLabel" @click="emit(`install`)">
                 <template #icon><Icon name="bolt" /></template>
             </Button>
-            <Button v-if="restarting" label="Restart now" @click="emit(`restart`)">
+            <Button v-if="restarting || signOutAgain" label="Restart now" @click="emit(`restart`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
-            <Button v-if="signingOut" label="Sign out now" @click="emit(`signout`)">
+            <Button v-else-if="signingOut && !signOutExhausted" label="Sign out now" @click="emit(`signout`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
-            <Button severity="secondary" :text="true" label="Check again" @click="emit(`recheck`)">
+            <!-- The only control when nothing here can act: primary, so a screen with one honest move shows it as one. -->
+            <Button :severity="stuck ? undefined : `secondary`" :text="!stuck" label="Check again" @click="emit(`recheck`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
             <!-- The one escape hatch: run in a hosted browser instead, when this device can't meet the requirements. -->
@@ -152,6 +187,6 @@ const remedyOf = (requirement: Requirement): string | undefined => (PRESSED_HERE
                 <span>Run it on a machine we host</span>
             </button>
         </div>
-        <p v-if="restarting || signingOut" class="text-2xs text-subtle">Your setup is saved: this window picks it up again once you're back.</p>
+        <p v-if="sessionNote && !busy" class="text-2xs text-subtle">{{ sessionNote }}</p>
     </div>
 </template>

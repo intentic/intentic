@@ -31,6 +31,17 @@ pub struct Settings {
     pub platform_url: Option<String>,
 }
 
+/// The two ways a Windows session ends on a requirement's behalf. Both come back to the same place — RunOnce
+/// fires at the next sign-in either way — so what differs is how far the machine goes down in between, and
+/// which of the two a resumed setup should remember: a sign-out that did not refresh a login token is
+/// answered by a restart, and only the resumed run can know it is the second attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SessionEnd {
+    Restart,
+    SignOut,
+}
+
 /// A setup parked across a Windows restart. See [`AppState::park_setup`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,6 +50,36 @@ pub struct ParkedSetup {
     /// Unix seconds. The point of writing it down: after a restart there is nothing else left that knows how
     /// long ago this was, and the setup code inside expires.
     pub saved_at: u64,
+    /// Which way the session ended on this setup's behalf. Absent on a file an older build wrote.
+    #[serde(default)]
+    pub how: Option<SessionEnd>,
+}
+
+/// The colour scheme the workspace is in, as its page last announced it — the one fact the app's own faces
+/// need in order to be drawn in the same light as the screen they stand in for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Mode {
+    Light,
+    Dark,
+}
+
+impl Mode {
+    /// The wire spelling, on a link and in the page's own `data-mode`.
+    pub fn parse(value: &str) -> Option<Mode> {
+        match value {
+            "light" => Some(Mode::Light),
+            "dark" => Some(Mode::Dark),
+            _ => None,
+        }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Mode::Light => "light",
+            Mode::Dark => "dark",
+        }
+    }
 }
 
 pub struct AppState {
@@ -55,6 +96,10 @@ pub struct AppState {
     names: Mutex<BTreeMap<String, String>>,
     /// Minted on first read, then held for the process — see [`AppState::install_id`].
     install_id: Mutex<Option<String>>,
+    /// The workspace's colour scheme, as last announced; `None` until any page has said. Kept on disk so a
+    /// card opened before the workspace (a resume after a restart, the tray's "This device") is drawn the
+    /// way the workspace was last seen rather than the way this binary happens to default.
+    ui_mode: Mutex<Option<Mode>>,
 }
 
 impl AppState {
@@ -63,6 +108,7 @@ impl AppState {
         std::fs::create_dir_all(&config_dir)?;
         let settings = read_json(&config_dir.join("settings.json")).unwrap_or_default();
         let names = read_json(&config_dir.join("sandboxes.json")).unwrap_or_default();
+        let ui_mode = read_json(&config_dir.join("ui-mode.json"));
         Ok(AppState {
             config_dir,
             settings: Mutex::new(settings),
@@ -71,7 +117,24 @@ impl AppState {
             pending_sync: Mutex::new(None),
             names: Mutex::new(names),
             install_id: Mutex::new(None),
+            ui_mode: Mutex::new(ui_mode),
         })
+    }
+
+    pub fn ui_mode(&self) -> Option<Mode> {
+        *self.ui_mode.lock().unwrap()
+    }
+
+    /// Remember the scheme the workspace announced. Written only when it changed: the page says it on every
+    /// load, and a file rewritten on every load is a file that is sometimes half-written.
+    pub fn remember_ui_mode(&self, mode: Mode) -> bool {
+        let mut held = self.ui_mode.lock().unwrap();
+        if *held == Some(mode) {
+            return false;
+        }
+        *held = Some(mode);
+        write_json(&self.config_dir.join("ui-mode.json"), &mode);
+        true
     }
 
     pub fn app_url(&self) -> String {
@@ -114,13 +177,14 @@ impl AppState {
     }
 
     /* A SETUP THAT A RESTART INTERRUPTED — the one piece of this app's state that has to outlive the process by design rather than by accident. */
-    pub fn park_setup(&self, args: &SetupArgs) {
+    pub fn park_setup(&self, args: &SetupArgs, how: SessionEnd) {
         let parked = ParkedSetup {
             args: args.clone(),
             saved_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|since| since.as_secs())
                 .unwrap_or(0),
+            how: Some(how),
         };
         write_json(&self.parked_setup_path(), &parked);
     }
@@ -198,7 +262,54 @@ mod tests {
             pending_sync: Mutex::new(None),
             names: Mutex::new(BTreeMap::new()),
             install_id: Mutex::new(None),
+            // Read the way `load` reads it: the test below is about what survives a launch.
+            ui_mode: Mutex::new(read_json(&config_dir.join("ui-mode.json"))),
         }
+    }
+
+    /* THE FILE A RESTART LEAVES BEHIND has to say which way the session ended, and survive an older one that did not. */
+    #[test]
+    fn a_parked_setup_remembers_how_the_session_ended() {
+        let dir = std::env::temp_dir().join(format!("intentic-parked-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("temp config dir");
+        let args = SetupArgs {
+            code: "abc".into(),
+            name: None,
+            cf_token: None,
+            sync_dir: None,
+            platform_url: None,
+        };
+        state_in(&dir).park_setup(&args, SessionEnd::SignOut);
+        let parked = state_in(&dir).parked_setup().expect("parked");
+        assert_eq!(parked.how, Some(SessionEnd::SignOut));
+        assert_eq!(parked.args.code, "abc");
+
+        // A file written before `how` existed still resumes; it just cannot say which way it went.
+        std::fs::write(
+            dir.join("resume-setup.json"),
+            r#"{"args":{"code":"old","name":null,"cfToken":null,"syncDir":null,"platformUrl":null},"savedAt":1}"#,
+        )
+        .expect("write");
+        let older = state_in(&dir).parked_setup().expect("older file parses");
+        assert_eq!(older.how, None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_ui_mode_is_kept_across_launches_and_written_only_on_change() {
+        let dir = std::env::temp_dir().join(format!("intentic-mode-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("temp config dir");
+        assert_eq!(state_in(&dir).ui_mode(), None);
+        let state = state_in(&dir);
+        assert!(state.remember_ui_mode(Mode::Light));
+        assert!(
+            !state.remember_ui_mode(Mode::Light),
+            "same answer, nothing to write"
+        );
+        assert_eq!(state_in(&dir).ui_mode(), Some(Mode::Light));
+        assert_eq!(Mode::parse("dark"), Some(Mode::Dark));
+        assert_eq!(Mode::parse("sepia"), None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /* This id ties an install run to the workspace it opens. */

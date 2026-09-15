@@ -28,6 +28,22 @@ pub fn daemon_reachable() -> bool {
     ok(&["version", "--format", "{{.Server.Version}}"])
 }
 
+/// Why the daemon could not be reached, in the CLI's own words — `None` when it answered. The same round
+/// trip as [`daemon_reachable`], kept separately because the WORDS matter on Windows: "Access is denied" is
+/// an engine that is up and refusing this account, which is a different requirement from one that is not
+/// running, and nothing but this text tells the two apart.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn daemon_refusal() -> Option<String> {
+    let output = docker(&["version", "--format", "{{.Server.Version}}"])
+        .stdout(Stdio::null())
+        .output();
+    match output {
+        Ok(output) if output.status.success() => None,
+        Ok(output) => Some(String::from_utf8_lossy(&output.stderr).trim().to_string()),
+        Err(error) => Some(format!("could not run docker: {error}")),
+    }
+}
+
 /// Which kind of container this daemon runs, lowercased — `linux`, or `windows` on a Docker Desktop switched
 /// to Windows containers. `docker version` rather than `docker info` for the reason [`daemon_reachable`]
 /// gives: same fast round-trip, no CLI-plugin aggregation to hang on.

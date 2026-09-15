@@ -346,8 +346,13 @@ export const resumableSetup = (): Promise<ResumableSetup | null> => invoke(`resu
 /** Forget it, taken when the user backs out, or when its code has expired. */
 export const forgetResumableSetup = (): Promise<void> => invoke(`forget_resumable_setup`);
 
+/** Which way Windows was asked to end the session for a setup (commands.rs `SessionEnd`). */
+export type SessionEnd = `restart` | `signout`;
+
 export interface ResumableSetup {
     readonly args: SetupArgs;
     /** Seconds since it was saved. Setup codes last 30 minutes, and a restart can eat most of that. */
     readonly agedSeconds: number;
+    /** How the session ended for it; null for a setup an older build parked. */
+    readonly how: SessionEnd | null;
 }

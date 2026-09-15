@@ -71,6 +71,7 @@ import {
     type RequirementProgress,
     type RunEvent,
     type SandboxStatus,
+    type SessionEnd,
     type SetupArgs,
     type SetupReport,
     type SyncArgs,
@@ -154,6 +155,9 @@ const consented = ref(false);
 // A setup resumed after a Windows restart, and whether its code has gone stale.
 const resuming = ref(false);
 const expired = ref(false);
+// Which way the session ended for it, so a sign-out that changed nothing is answered with a restart rather than
+// asked for again (Requirements.vue).
+const resumedHow = ref<SessionEnd | undefined>(undefined);
 
 // Path to the SPA's Devices tab, which manages the same containers via the machine's own connection.
 const DEVICES_PATH = `/sandbox/devices`;
@@ -494,7 +498,9 @@ const reportState = computed<SetupReport[`state`]>(() => {
     if (running.value) {
         return `running`;
     }
-    if (awaitingConsent.value) {
+    // A requirements card is a question on this screen whichever exit code put it there, and the workspace's
+    // strip should say so rather than "stopped" (which reads as broken) beside a button that opens it.
+    if (awaitingConsent.value || requirementsShown.value) {
         return `waiting`;
     }
     if (wasStopped.value) {
@@ -573,6 +579,7 @@ const loadResumable = async (): Promise<void> => {
     }
     pending.value = parked.args;
     setupOpen.value = true;
+    resumedHow.value = parked.how ?? undefined;
     if (parked.agedSeconds > RESUME_WINDOW_SECONDS) {
         await forgetResumableSetup();
         expired.value = true;
@@ -586,6 +593,13 @@ const loadResumable = async (): Promise<void> => {
     await runSetup();
 };
 
+// The way on from a code that ran out: the setup page mints a fresh one and, inside this app, hands it straight
+// back here (setupArrival.ts) — so this is one click rather than "open the setup page again".
+const freshCode = async (): Promise<void> => {
+    track(`desktop_install_fresh_code`, {});
+    await workspaceOpen(`/setup`);
+};
+
 // A parked setup runs on arrival, unasked: installing and signing in to run a sandbox here already is the
 // consent. Administrator is still asked separately, on the requirements screen. An OS-originated link is gated in
 // windows.rs before it's ever parked.
@@ -596,6 +610,9 @@ const loadPending = async (): Promise<void> => {
     if (taken !== null) {
         pending.value = taken;
         setupOpen.value = true;
+        // A fresh link is a fresh conversation: nothing about an earlier session's ending applies to it.
+        resumedHow.value = undefined;
+        expired.value = false;
     }
     // Set now, in the same tick as `setupOpen`, so the frame titles once; everything after is the setup happening,
     // already announced.
@@ -918,7 +935,7 @@ onUnmounted(() => {
                     <Icon name="bolt" class="mt-0.5 text-primary-400" />
                     <div class="min-w-0 flex-1">
                         <h1 class="font-semibold leading-tight">Setting up {{ pending?.name ?? `your sandbox` }} on this device</h1>
-                        <p class="text-2xs text-subtle">Exactly what the install command does: your sandbox in Docker, then your workspace.</p>
+                        <p class="text-2xs text-subtle">Your sandbox runs in Docker on this computer: this gets Docker ready, then opens your workspace.</p>
                     </div>
 <!-- SAYS WHERE IT GOES, in its label, because a bare × on a screen that fills its window reads as "close Intentic", which is the one thing it does not do. -->
                     <button
@@ -931,10 +948,13 @@ onUnmounted(() => {
                         <Icon name="times" />
                     </button>
                 </header>
-<!-- The code this window came back to is older than the platform will accept. -->
-                <Notice v-if="expired" tone="warning" class="text-2xs">
-                    Your setup code ran out while this device restarted. Open the setup page again for a fresh one: everything the restart was for
-                    is already done.
+<!-- The code this window came back to is older than the platform will accept: not a dead end, one click. -->
+                <Notice v-if="expired" tone="warning" class="items-center text-2xs">
+                    <span class="flex-1">
+                        Your setup code ran out while this device was away. Everything the restart was for is already done; it just needs a fresh
+                        code to carry on.
+                    </span>
+                    <Button class="ml-2 shrink-0" size="small" severity="secondary" label="Get a fresh code" @click="freshCode" />
                 </Notice>
                 <p v-else-if="resuming" class="flex items-start gap-2 text-2xs text-subtle">
                     <Icon name="refresh" class="mt-0.5 shrink-0" />
@@ -955,6 +975,7 @@ onUnmounted(() => {
                     :requirements="requirements"
                     :busy="running"
                     :progress="requirementState"
+                    :resumed-from="resumedHow"
                     @install="installRequirements"
                     @restart="endSession(`restart`)"
                     @signout="endSession(`signout`)"

@@ -125,6 +125,16 @@ a stale ic still runs a new image correctly.
   that as a crash shows the user `exited with status 3` instead of the diagnosis it just printed. See
   `docs/cli-output-protocol.md` §2c, and §2b for the two `intentic-requirement…:` markers the desktop app
   draws its checklist from.
+- **`ic docker prepare` judges Docker's permission by Docker's own answer.** The login token (`whoami /groups`)
+  is read, but it never sends anybody to sign out on its own: an engine that answered this account has settled
+  the question, and one that refused with *Access is denied* (`docker_denied`) is a running engine asking for a
+  sign-in — never one to start. Only a stopped engine consults the group's roster, and then only to grant a
+  membership that is plainly missing. The same probe asks every way an install can say where Docker Desktop
+  went (Docker's registry key, both Uninstall keys, `LOCALAPPDATA`, the `docker.exe` on PATH, the Start-menu
+  shortcut), and starting it falls back to that shortcut. Every requirement's title, problem and remedy is
+  written for the person on the desktop app's card, not for a terminal: commands and group names belong in the
+  log. Under `INTENTIC_NO_PROMPT=1` the restart and sign-out endings say the setup resumes on its own instead
+  of printing a command to paste — the app that set the flag is the thing that resumes it.
 - **Decisions are split from the IO that acts on them**, and that split is what the tests hook into: the argv
   that asks the image for its run command, the overlay's base check, the rollback record's arithmetic, the
   image-reference classification. Each is a pure function beside the function that calls docker, so the

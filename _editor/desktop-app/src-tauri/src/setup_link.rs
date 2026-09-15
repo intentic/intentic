@@ -66,13 +66,21 @@ pub struct SyncArgs {
     pub mirror: bool,
 }
 
-/// `intentic://auth?handoff=…&state=…` — the credential coming back from a sign-in that happened in the
-/// user's real browser (see auth.rs for why it never happens in the webview).
+/// `intentic://auth?handoff=…&state=…[&profile=…]` — the credential coming back from a sign-in that happened
+/// in the user's real browser (see auth.rs for why it never happens in the webview).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthArgs {
     pub handoff: String,
     pub state: String,
+    /// The profile that browser was reading the app in (`@intentic/constants` profile.ts: `default`,
+    /// `desk`), carried so the workspace this app opens is in the same look the reader arrived from. The
+    /// page adopts it off its own query string; nothing here interprets it beyond checking it is a name.
+    pub profile: Option<String>,
 }
+
+/// The profile names the page will adopt. Anything else is dropped rather than forwarded: the value lands
+/// on a URL this app navigates to, and a name is the only thing it is allowed to be.
+const PROFILES: [&str; 2] = ["default", "desk"];
 
 /* Window links carry their action in the `do` query parameter. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +95,9 @@ pub enum WindowVerb {
     Close,
     /// A press on an empty stretch of the bar: hand the window to the platform's own move loop.
     Drag,
+    /// The page saying which colour scheme it is drawn in, on load and whenever it changes — how the app's
+    /// own faces come to be drawn in the same light as the workspace they stand in for.
+    Mode(crate::state::Mode),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -165,6 +176,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         "auth" => Some(Link::Auth(AuthArgs {
             handoff: get("handoff")?,
             state: get("state")?,
+            profile: get("profile").filter(|name| PROFILES.contains(&name.as_str())),
         })),
         // The page's own title bar. App-window only, and one verb per press — an unknown verb is a page newer
         // than this app, which is the ordinary skew between the two and is answered by doing nothing.
@@ -174,6 +186,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             "maximize" => WindowVerb::Maximize,
             "close" => WindowVerb::Close,
             "drag" => WindowVerb::Drag,
+            "mode" => WindowVerb::Mode(crate::state::Mode::parse(&get("mode")?)?),
             _ => return None,
         })),
         "window" => None,
@@ -359,6 +372,14 @@ mod tests {
             ("intentic://window?do=maximize", WindowVerb::Maximize),
             ("intentic://window?do=close", WindowVerb::Close),
             ("intentic://window?do=drag", WindowVerb::Drag),
+            (
+                "intentic://window?do=mode&mode=light",
+                WindowVerb::Mode(crate::state::Mode::Light),
+            ),
+            (
+                "intentic://window?do=mode&mode=dark",
+                WindowVerb::Mode(crate::state::Mode::Dark),
+            ),
         ] {
             assert_eq!(
                 parse_link(link, Source::App),
@@ -380,6 +401,12 @@ mod tests {
             None
         );
         assert_eq!(parse_link("intentic://window", Source::App), None);
+        // A scheme this app cannot draw is not one it remembers.
+        assert_eq!(
+            parse_link("intentic://window?do=mode&mode=sepia", Source::App),
+            None
+        );
+        assert_eq!(parse_link("intentic://window?do=mode", Source::App), None);
     }
 
     #[test]
@@ -391,6 +418,29 @@ mod tests {
         };
         assert_eq!(args.handoff, "tok");
         assert_eq!(args.state, "nonce");
+        assert_eq!(args.profile, None);
+    }
+
+    /* THE LOOK THE READER ARRIVED IN rides the handoff — and only a name this app knows does. */
+    #[test]
+    fn an_auth_handoff_carries_a_known_profile_and_drops_anything_else() {
+        let Some(Link::Auth(desk)) = parse_link(
+            "intentic://auth?handoff=tok&state=nonce&profile=desk",
+            Source::External,
+        ) else {
+            panic!("expected an auth link");
+        };
+        assert_eq!(desk.profile.as_deref(), Some("desk"));
+        let Some(Link::Auth(odd)) = parse_link(
+            "intentic://auth?handoff=tok&state=nonce&profile=..%2Fevil",
+            Source::External,
+        ) else {
+            panic!("expected an auth link");
+        };
+        assert_eq!(
+            odd.profile, None,
+            "a value that is not a profile name never reaches a URL"
+        );
     }
 
     #[test]

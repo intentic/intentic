@@ -7,7 +7,8 @@ import { idTokenClaims } from "./googleToken";
 import { apiClient } from "../../lib/useApi";
 import { useAuth } from "./useAuth";
 import { useGoogleIdentity } from "./useGoogleIdentity";
-import { signInThroughBrowser } from "../../app/environments/desktop";
+import { desktopAuthLink, signInThroughBrowser } from "../../app/environments/desktop";
+import { arrivingProfile } from "../../app/useProfile";
 import AppBrand from "../../components/AppBrand.vue";
 
 // Runs in the user's real browser, not the app's webview (Google refuses OAuth there; see environments/desktop.ts).
@@ -82,7 +83,7 @@ const hand = async (): Promise<void> => {
         stage.value = `handing`;
         const { handoff } = await apiClient.desktop.handoff({ idToken, challenge });
         stage.value = `done`;
-        globalThis.location.href = `intentic://auth?handoff=${encodeURIComponent(handoff)}&state=${encodeURIComponent(state)}`;
+        globalThis.location.href = desktopAuthLink(handoff, state, arrivingProfile());
     };
     working.value = true;
     error.value = undefined;

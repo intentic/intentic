@@ -462,9 +462,10 @@ Two more things the screen gained at the same time:
 - **Nothing on the card is said twice.** One requirement is its own heading, so *Before your sandbox can run
   here:* above a single row is gone, and so is the *needs a restart* badge beside a title that already says
   restart — the badge is a scanning aid for a list, so it returns the moment there are two rows, and a live
-  state (*working on it*, *done*, *didn't work*) always outranks it. The remedy sentence is printed only for
-  rows no button below does for you: *restart this PC, then run the setup again* under a **Restart now**
-  button is the instruction and the control arguing about whose job it is.
+  state (*working on it*, *done*, *didn't work*) always outranks it. The remedy sentence is printed for every
+  row except the two whose remedy IS the button under the list: *restart this PC* under a **Restart now**
+  button is the instruction and the control arguing about whose job it is. The others earn their line by
+  saying what the button will not: that 600 MB is coming, that Windows will ask, what to do by hand.
 - **The button says what will actually happen.** It read *Install and continue* for every list, including the
   commonest one on a developer's machine — Docker Desktop installed and merely not running, where nothing is
   installed and the entire job is to start it. It is *Do this and continue* / *Do these and continue* now,
@@ -483,6 +484,55 @@ So the requirements card carries one quiet line (*Not on this computer? Run it o
 hands the window back to the SPA's setup page at `?elsewhere=1`, the one arrival there that starts nothing on
 its own and shows both rungs instead. Local stays the loud, preselected default everywhere else, including the
 same page reached any other way.
+
+### What a fresh PC met, 2026-09-15
+
+A walk through the install on a Windows machine with neither WSL2 nor Docker Desktop — the machine this app
+exists for — found that every hard step was delivered as a log line, and two of them were not delivered at
+all. Seven things changed, and each is the smallest fix for what was actually observed:
+
+- **The restart came back to the wrong screen.** `RunOnce` started the app after the reboot exactly as
+  designed, and the app opened the *workspace*: the parked setup is resumed by the app's own face, which
+  nothing showed. The user was back on the setup page they had already been through, and the setup they had
+  agreed to sat behind a tray menu. A cold start with a parked setup now opens on the card that resumes it
+  (`lib.rs`), which is the whole of what "the setup picks up where it left off" was ever supposed to mean.
+- **A sign-out that changed nothing was asked for again.** `ic` decided *sign out and back in* from the login
+  token alone (`whoami /groups`), and on some PCs the next sign-in still carried the old answer — so the same
+  card came back, forever. Two halves fix it. `ic` no longer predicts Docker's verdict: an engine that answers
+  this account has settled the question whatever the token says, and one that refuses with *Access is denied*
+  is running and asks for a sign-in, never for a start (`prepare/plan.rs`, `docker_denied`). And the parked
+  setup now remembers *how* the session ended (`state.rs` `SessionEnd`), so a card that comes back from a
+  sign-out to the same requirement offers **Restart now** — a restart always mints a fresh sign-in — and one
+  that comes back from a restart to it stops asking and says who has to act (`Requirements.vue`).
+- **"could not find Docker Desktop to start it."** The probe looked in `Program Files` and nowhere else, and
+  the person on the screenshot had installed Docker by hand into a folder of its own. It now asks every way an
+  install answers where it went — Docker's own registry key, both Uninstall keys, `LOCALAPPDATA`, the
+  `docker.exe` on PATH, the Start-menu shortcut — and starting it falls back to launching that shortcut,
+  which is what a click in the Start menu does. What is left when even that finds nothing is a sentence telling
+  the reader to open Docker Desktop themselves and choose **Check again**, not an `error:`.
+- **Failures are sentences, in the row they belong to.** A fix that did not work used to end three ways at
+  once on one screen: a red *Stopped at Set up Docker* over the bar, a monospace `error: …` notice, and the
+  log forced open — all above a requirements row that also said *didn't work*. With a requirements card up,
+  the progress card is quiet now: the heading is *Waiting for you*, the bar is amber, no notice, no log
+  (`SetupProgress.vue` `parked`). The row carries the reason as prose, and the button under it says **Try
+  again** rather than *continue*. Every requirement `ic` produces was reworded for the person reading it: no
+  command in backticks, no *docker-users group*, no *login token* — those stay in the log, which is one click
+  away and now says something true under the app: *your setup is saved and continues on its own* rather than
+  `irm https://intentic.dev/connect.ps1 | iex`, which is what it told app users to paste into a terminal they
+  did not have (`prepare/mod.rs` `unattended`).
+- **A code that ran out has a button.** The expired card said "open the setup page again" and offered nothing
+  to press. It offers **Get a fresh code** now: inside this app the setup page mints one and hands it straight
+  back here.
+- **The card is drawn in the workspace's light.** `index.html` pinned `data-mode="dark"`, so a reader who
+  chose the light look (the `desk` profile, intentic.dev/desk) got a dark card in the middle of a light
+  workspace. The page announces its scheme to the app (`intentic://window?do=mode`, on load and on change),
+  the app remembers it (`ui-mode.json`) and hands it to its own faces before they paint
+  (`face_init_script`); a face that has heard nothing follows the OS. The sign-in handoff carries the
+  browser's profile the same way (`intentic://auth?…&profile=desk` → `/desktop-auth/complete?…&profile=desk`),
+  so the workspace this app opens is in the look the reader arrived from rather than the app's default.
+- **The Windows installer itself is unchanged** — it is stock NSIS and cannot be built or looked at from this
+  workspace (see *What the installer looks like* above). It is the one screen of this walk still wearing a
+  toolkit's defaults.
 
 ## Sign-in never happens in the webview
 
@@ -619,6 +669,7 @@ install's outcome was invisible. It now sends named events of its own
 | `desktop_install_elsewhere` | the requirements card's hosted escape hatch is taken | which prerequisites made them take it |
 | `desktop_install_restart` | Windows is restarted **or signed out of** mid-setup | which of the two, and which prerequisites asked for it |
 | `desktop_install_resumed` / `_resume_expired` | the app comes back after that restart | how long the parked setup sat there |
+| `desktop_install_fresh_code` | the expired card's **Get a fresh code** is pressed | nothing: the count is the fact |
 | `desktop_recreate_started` / `_finished` | an update or an environment rebuild | the same, plus which of the two, and whether it came from this screen or from the SPA's card |
 
 Two of these exist because the funnel lies without them. **Dismissal**: the × stops nothing, the script is a

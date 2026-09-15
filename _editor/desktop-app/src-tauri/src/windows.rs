@@ -11,7 +11,7 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::commands::SetupReport;
 use crate::setup_link::{parse_link, Link, SetupArgs, Source, WindowVerb};
-use crate::state::CloseAction;
+use crate::state::{CloseAction, Mode};
 
 /* ONE WINDOW ON SCREEN, EVER — these two labels are two FACES of it, not two windows, and there is no exception to that any more. */
 pub const WORKSPACE: &str = "workspace";
@@ -256,6 +256,55 @@ fn workspace_init_script(install_id: &str, update: Option<&str>) -> String {
     )
 }
 
+/* THE APP'S OWN FACES ARE DRAWN IN THE WORKSPACE'S LIGHT. */
+
+/// What the two local pages read before they paint (their index.html): the scheme the workspace was last
+/// seen in, or nothing, in which case the page follows the OS. Absent rather than defaulted on purpose — a
+/// binary that always said "dark" is how a reader who chose the light look got a dark card in the middle
+/// of a light workspace.
+fn face_init_script(mode: Option<Mode>) -> String {
+    match mode {
+        Some(mode) => format!("window.__INTENTIC_MODE__ = \"{}\";", mode.id()),
+        None => String::new(),
+    }
+}
+
+/// The frame between "window mapped" and the page's first paint, in the same light the page will paint in.
+/// Mirrors `--color-canvas` (@intentic/ui semantic-colors.css) in each scheme; the light value is the one
+/// the OS is likelier to be in when nothing has been announced, and the dark value is what every face has
+/// always opened on.
+fn face_background(mode: Option<Mode>) -> tauri::window::Color {
+    match mode {
+        Some(Mode::Light) => tauri::window::Color(244, 241, 236, 255),
+        _ => tauri::window::Color(15, 13, 10, 255),
+    }
+}
+
+/// The page announced its scheme, or the sign-in handoff implied one: remember it, and repaint the local
+/// faces that are already built — they are built once and kept, so a page that read the mode at load would
+/// otherwise wear it until the app was next started.
+pub fn apply_mode(app: &AppHandle, mode: Mode) {
+    let state = app.state::<crate::state::AppState>();
+    if !state.remember_ui_mode(mode) {
+        return;
+    }
+    for label in [LAUNCHER, CONFIRM_CLOSE] {
+        if let Some(window) = app.get_webview_window(label) {
+            let _ = window.set_background_color(Some(face_background(Some(mode))));
+            let _ = window.eval(mode_script(mode));
+        }
+    }
+}
+
+/// What the running page does with a scheme that arrived after it painted — the same attribute its own
+/// pre-paint script sets, flipped in place.
+fn mode_script(mode: Mode) -> String {
+    match mode {
+        Mode::Dark => "document.documentElement.setAttribute('data-mode', 'dark');".to_string(),
+        Mode::Light => "document.documentElement.removeAttribute('data-mode');".to_string(),
+    }
+}
+
 /// Whether a URL should stay inside the workspace webview. Everything else — a provider's token page, docs,
 /// mailto — is opened in the user's default browser instead.
 fn stays_in_webview(url: &Url, app_origin: &Url) -> bool {
@@ -490,6 +539,8 @@ fn work_the_window(app: &AppHandle, verb: WindowVerb) {
         WindowVerb::Drag => {
             let _ = window.start_dragging();
         }
+        // Answered before this is reached (`handle_link`); it is about the app's faces, not this window.
+        WindowVerb::Mode(mode) => apply_mode(app, mode),
     }
 }
 
@@ -526,6 +577,7 @@ fn ask_before_closing(app: &AppHandle) {
         return;
     }
     let parent = app.get_webview_window(WORKSPACE);
+    let mode = app.state::<crate::state::AppState>().ui_mode();
     let mut builder =
         WebviewWindowBuilder::new(app, CONFIRM_CLOSE, WebviewUrl::App("index.html".into()))
             .title("Close Intentic?")
@@ -543,8 +595,8 @@ fn ask_before_closing(app: &AppHandle) {
             .skip_taskbar(true)
             // The frame between "window mapped" and "webview painted", which is white by default and reads as
             // a flash on a dark dialog — the exact impression of malfunction this whole change is about.
-            // Mirrors `--color-canvas` in dark mode (@intentic/ui semantic-colors.css), which index.html pins.
-            .background_color(tauri::window::Color(15, 13, 10, 255))
+            .background_color(face_background(mode))
+            .initialization_script(face_init_script(mode))
             // Nothing here reaches loopback. It carries the arguments so every window in this process agrees
             // on them, because the first one built is the one that configures the environment (BROWSER_ARGS).
             .additional_browser_args(BROWSER_ARGS)
@@ -642,6 +694,7 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
         LAUNCHER_WIDTH,
         fitted_height(LAUNCHER_OPENING_HEIGHT, screen.map(|screen| screen.size.1)),
     );
+    let mode = app.state::<crate::state::AppState>().ui_mode();
     let result = WebviewWindowBuilder::new(app, LAUNCHER, WebviewUrl::App("index.html".into()))
         .title("Intentic")
         .inner_size(size.0, size.1)
@@ -657,7 +710,8 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
         .shadow(true)
         .maximizable(false)
 /* The frame between "window mapped" and "webview painted", which is white by default and reads as a flash on a dark screen. */
-        .background_color(tauri::window::Color(15, 13, 10, 255))
+        .background_color(face_background(mode))
+        .initialization_script(face_init_script(mode))
         // Same reason as the confirmation dialog's: one environment, one set of arguments (BROWSER_ARGS).
         .additional_browser_args(BROWSER_ARGS)
         .visible(false)
@@ -783,6 +837,8 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         Some(Link::Update) => crate::update::act(app),
         // The setup page's way back to a card that stepped aside: the same face, holding the same run.
         Some(Link::Launcher) => show_launcher(app),
+        // The page saying what light it is drawn in; about this app's faces, not the workspace window.
+        Some(Link::Window(WindowVerb::Mode(mode))) => apply_mode(app, mode),
         // The page's own title bar, working the window it is drawn in (`work_the_window`). Nothing is parked
         // and no face is swapped: these are presses on this window, answered on this window.
         Some(Link::Window(verb)) => work_the_window(app, verb),
@@ -873,6 +929,41 @@ mod loopback_tests {
     fn the_page_is_told_the_window_has_no_frame_of_its_own() {
         let script = workspace_init_script("install-1", None);
         assert!(script.contains("frameless: true"), "{script}");
+    }
+}
+
+#[cfg(test)]
+mod mode_tests {
+    use super::*;
+
+    /* WHAT THE LOCAL PAGES READ BEFORE THEY PAINT, and what flips them afterwards. */
+    #[test]
+    fn a_known_mode_is_handed_to_the_page_and_an_unknown_one_leaves_it_to_the_os() {
+        assert_eq!(
+            face_init_script(Some(Mode::Light)),
+            "window.__INTENTIC_MODE__ = \"light\";"
+        );
+        assert_eq!(
+            face_init_script(Some(Mode::Dark)),
+            "window.__INTENTIC_MODE__ = \"dark\";"
+        );
+        assert_eq!(
+            face_init_script(None),
+            "",
+            "nothing said means the page asks the OS"
+        );
+        assert!(mode_script(Mode::Dark).contains("setAttribute('data-mode', 'dark')"));
+        assert!(mode_script(Mode::Light).contains("removeAttribute('data-mode')"));
+    }
+
+    #[test]
+    fn the_frame_behind_a_face_is_the_canvas_it_will_paint() {
+        assert_eq!(face_background(None), tauri::window::Color(15, 13, 10, 255));
+        assert_eq!(
+            face_background(Some(Mode::Dark)),
+            tauri::window::Color(15, 13, 10, 255)
+        );
+        assert_ne!(face_background(Some(Mode::Light)), face_background(None));
     }
 }
 

@@ -1,13 +1,16 @@
 <script setup lang="ts">
+import { useTheme } from "@intentic/ui";
 import { onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { DESKTOP_WINDOW_EVENT, type DesktopWindowEvent, desktopFrameless, workDesktopWindow } from "../../app/environments/desktop";
+import { announceDesktopMode, DESKTOP_WINDOW_EVENT, type DesktopWindowEvent, desktopFrameless, workDesktopWindow } from "../../app/environments/desktop";
 import { BAR, type BarEdges, edgeBar, TITLE_BAR, titleBarGesture, topRow } from "./titleBar";
 
 /* THE WINDOW'S OWN THREE BUTTONS, IN THE ROW THIS APP ALREADY DRAWS — AND THAT ROW DRESSED AS A TITLE BAR. */
 
 const frameless = desktopFrameless();
 const maximized = ref(false);
+/* The app's own screens follow this page's light; it cannot see this window's storage, so the scheme is announced. */
+const { scheme } = useTheme();
 /* No bar stands in the top row, so the strip does (titleBar.ts `STRIP`). */
 const bare = ref(false);
 const route = useRoute();
@@ -96,6 +99,7 @@ const onWindowEvent = (event: Event): void => {
 };
 
 let stopWatching: (() => void) | undefined;
+let stopAnnouncing: (() => void) | undefined;
 
 onMounted(() => {
     if (!frameless) {
@@ -115,6 +119,8 @@ onMounted(() => {
     schedule();
 /* The app is waiting to hear this. */
     workDesktopWindow(`ready`);
+    announceDesktopMode(scheme.value);
+    stopAnnouncing = watch(scheme, (next) => announceDesktopMode(next));
 });
 
 onUnmounted(() => {
@@ -131,6 +137,7 @@ onUnmounted(() => {
     window.removeEventListener(`click`, schedule, true);
     window.removeEventListener(`keyup`, schedule, true);
     stopWatching?.();
+    stopAnnouncing?.();
     if (scheduled !== 0) {
         cancelAnimationFrame(scheduled);
     }

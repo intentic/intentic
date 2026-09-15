@@ -96,6 +96,15 @@ export const DESKTOP_LAUNCHER_LINK = `intentic://launcher`;
 /* `frameless` above says the window arrived without a platform frame; these are the presses that work it. */
 export type DesktopWindowVerb = "ready" | "minimize" | "maximize" | "close" | "drag";
 
+// The app's own screens (its setup card, its close question) are drawn in whatever light this page announced
+// last: it has no way to read this window's localStorage, so the scheme travels as a link, on load and on change.
+export const announceDesktopMode = (scheme: `light` | `dark`): void => {
+    if (desktopVersion() === undefined) {
+        return;
+    }
+    openDesktopLink(`intentic://window?do=mode&mode=${scheme}`);
+};
+
 /* A drag is the one verb that cannot be held back the way `openDesktopLink` holds every early link: it is a press. */
 export const workDesktopWindow = (verb: DesktopWindowVerb): void => {
     if (verb === `drag` && !pageLoaded()) {
@@ -147,6 +156,17 @@ export const desktopSetupLink = (args: DesktopSetupArgs): string => {
 // implemented by WebKitGTK). Credentials return over `intentic://auth`, and the app reopens this SPA at
 // /desktop-auth/complete.
 export const DESKTOP_SIGN_IN_LINK = `intentic://signin`;
+
+// The credential going back to the app: only the parked row's id and the app's own nonce, never a token. `profile`
+// is the look this browser reads the app in (useProfile.ts), so the workspace the app opens wears it too; the
+// app's webview is a separate storage and would otherwise open on the default look whatever the reader chose.
+export const desktopAuthLink = (handoff: string, state: string, profile?: string): string => {
+    const params = new URLSearchParams({ handoff, state });
+    if (profile !== undefined) {
+        params.set(`profile`, profile);
+    }
+    return `intentic://auth?${params.toString()}`;
+};
 
 export interface DesktopSyncArgs {
     // The sandbox's URL and single-use pairing token, the same two values the card's one-liner carries as

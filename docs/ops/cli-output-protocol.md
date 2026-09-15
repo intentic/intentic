@@ -96,6 +96,11 @@ watching a spinner. So the app says so outright rather than being inferred about
 Exactly `1`. An unset variable, an empty one and a `0` all leave the probes in charge, because the one thing
 this must never do is silence a question a real person is sitting in front of.
 
+It also decides what the two parked endings of `ic docker prepare` (§2c, code `4`) say about what happens
+next. With nobody at a terminal there is nobody to paste *run this again* to, and the caller that set the flag
+is the thing that parks the setup and brings it back: so those endings say the setup resumes on its own, and
+the command to paste is printed only for a person.
+
 ---
 
 ## 2b. Machine-readable side channels

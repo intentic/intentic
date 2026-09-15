@@ -91,11 +91,34 @@ pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
     }
     let attempt = slot.take().unwrap();
     drop(slot);
-    let path = format!(
-        "/desktop-auth/complete?handoff={}&verifier={}",
-        args.handoff, attempt.verifier
-    );
+    let path = complete_path(&args.handoff, &attempt.verifier, args.profile.as_deref());
+    // The profile decides the page's scheme before it paints (web index.html), so the app's own faces can
+    // be drawn in that light from here on rather than waiting for the page to announce it.
+    if let Some(mode) = mode_of_profile(args.profile.as_deref()) {
+        crate::windows::apply_mode(app, mode);
+    }
     crate::windows::show_workspace_at(app, Some(&path));
+}
+
+/// The page the webview redeems the handoff at. The profile rides along verbatim (setup_link.rs has already
+/// reduced it to a known name), and the page consumes it off its query string before its router looks.
+fn complete_path(handoff: &str, verifier: &str, profile: Option<&str>) -> String {
+    let mut path = format!("/desktop-auth/complete?handoff={handoff}&verifier={verifier}");
+    if let Some(profile) = profile {
+        path.push_str("&profile=");
+        path.push_str(profile);
+    }
+    path
+}
+
+/// What each profile paints in — `@intentic/constants` profile.ts, `PROFILES`, whose scheme is the half of
+/// a profile this app can draw itself.
+fn mode_of_profile(profile: Option<&str>) -> Option<crate::state::Mode> {
+    match profile? {
+        "desk" => Some(crate::state::Mode::Light),
+        "default" => Some(crate::state::Mode::Dark),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -128,6 +151,27 @@ mod tests {
             Some("https://app.intentic.dev/desktop-auth?state=a&challenge=b"),
             "a click during a live attempt must re-open that attempt's page, not do nothing"
         );
+    }
+
+    #[test]
+    fn the_profile_rides_the_completion_and_names_the_light_the_app_draws_in() {
+        assert_eq!(
+            complete_path("h", "v", None),
+            "/desktop-auth/complete?handoff=h&verifier=v"
+        );
+        assert_eq!(
+            complete_path("h", "v", Some("desk")),
+            "/desktop-auth/complete?handoff=h&verifier=v&profile=desk"
+        );
+        assert_eq!(
+            mode_of_profile(Some("desk")),
+            Some(crate::state::Mode::Light)
+        );
+        assert_eq!(
+            mode_of_profile(Some("default")),
+            Some(crate::state::Mode::Dark)
+        );
+        assert_eq!(mode_of_profile(None), None);
     }
 
     #[test]

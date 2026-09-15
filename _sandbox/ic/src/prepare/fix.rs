@@ -71,11 +71,15 @@ fn from_exit(output: &shell::Output, what: &str, on_success: Done) -> Fixed {
         .copied()
         .collect::<Vec<&str>>()
         .join("\n         ");
-    Err(Trouble::Failed(if tail.is_empty() {
-        format!("{what} failed (exit {})", output.code)
-    } else {
-        format!("{what} failed (exit {}):\n         {tail}", output.code)
-    }))
+    // The sentence is for the row on the screen; Windows' own last words go to the log, where somebody
+    // reading a transcript can find them under it.
+    if !tail.is_empty() {
+        crate::ui::note(&format!("Windows reported:\n         {tail}"));
+    }
+    Err(Trouble::Failed(format!(
+        "{what} did not finish (Windows reported code {}). The log below has what Windows said; trying again often works.",
+        output.code
+    )))
 }
 
 /* `wsl --install --no-distribution` is the modern one-liner for all three, and `--no-distribution` matters: without it Windows also installs Ubuntu. */
@@ -167,7 +171,7 @@ fn download(url: &str, into: &std::path::Path) -> Result<(), String> {
     let response = agent
         .get(url)
         .call()
-        .map_err(|error| format!("could not download Docker Desktop from {url}: {error}"))?;
+        .map_err(|error| format!("Docker Desktop could not be downloaded from {url} ({error}). Check this PC's internet connection, then try again."))?;
     let total: u64 = response
         .headers()
         .get("content-length")
@@ -185,7 +189,7 @@ fn download(url: &str, into: &std::path::Path) -> Result<(), String> {
     loop {
         let read = reader
             .read(&mut buffer)
-            .map_err(|error| format!("the Docker Desktop download stopped early: {error}"))?;
+            .map_err(|error| format!("The Docker Desktop download stopped early ({error}). Check this PC's internet connection, then try again."))?;
         if read == 0 {
             break;
         }
@@ -238,7 +242,7 @@ pub fn put_docker_on_path(facts: &Facts) -> Fixed {
         .find(|dir| dir.join("docker.exe").exists());
     let Some(dir) = found else {
         return Err(Trouble::Failed(
-            "Docker Desktop is installed but its docker.exe is not where it usually lives - sign out and back in, then re-run.".to_string(),
+            "Docker Desktop is installed, but its docker program is not where it usually lives. Sign out of Windows and back in, then try again.".to_string(),
         ));
     };
     let existing = std::env::var("PATH").unwrap_or_default();
@@ -247,7 +251,7 @@ pub fn put_docker_on_path(facts: &Facts) -> Fixed {
         Ok(Done::Now)
     } else {
         Err(Trouble::Failed(format!(
-            "added {} to this run's PATH, but docker still would not run.",
+            "Docker's program folder ({}) was found, but its docker program still would not run. Repairing Docker Desktop from Windows' Apps settings usually fixes this.",
             dir.display()
         )))
     }
@@ -294,31 +298,43 @@ pub fn add_to_docker_users(facts: &Facts) -> Fixed {
     )
 }
 
+/* STARTING DOCKER DESKTOP, from wherever it is — and if that is nowhere we can see, from the Start menu. */
+const START_DOCKER_DESKTOP: &str = "\
+$candidates = @()\n\
+if ('%PATH%' -ne '') { $candidates += '%PATH%' }\n\
+foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:LOCALAPPDATA, (Join-Path $env:LOCALAPPDATA 'Programs'))) {\n\
+  if ($base) { $candidates += (Join-Path $base 'Docker\\Docker\\Docker Desktop.exe') }\n\
+}\n\
+# The shortcuts Docker's installer leaves: launching one is what a click in the Start menu does.\n\
+$candidates += (Join-Path $env:ProgramData 'Microsoft\\Windows\\Start Menu\\Programs\\Docker Desktop.lnk')\n\
+$candidates += (Join-Path $env:APPDATA 'Microsoft\\Windows\\Start Menu\\Programs\\Docker Desktop.lnk')\n\
+$candidates += (Join-Path $env:PUBLIC 'Desktop\\Docker Desktop.lnk')\n\
+foreach ($candidate in $candidates) {\n\
+  if ($candidate -and (Test-Path $candidate)) { Start-Process -FilePath $candidate; exit 0 }\n\
+}\n\
+exit 2\n";
+
+/// Exit code of [`START_DOCKER_DESKTOP`] when nothing on its list exists.
+const NOT_FOUND: i32 = 2;
+
 /// Start Docker Desktop. Not elevated: it is a desktop app, and starting it as administrator gives its engine
 /// a different user's context than the one that will use it.
 #[cfg(windows)]
 pub fn start_docker_desktop(facts: &Facts) -> Fixed {
-    let path = if facts.docker_desktop_path.is_empty() {
-        std::env::var("ProgramFiles")
-            .map(|root| format!("{root}\\Docker\\Docker\\Docker Desktop.exe"))
-            .unwrap_or_default()
-    } else {
-        facts.docker_desktop_path.clone()
-    };
-    if path.is_empty() || !std::path::Path::new(&path).exists() {
+    let known = facts.docker_desktop_path.replace('\'', "''");
+    let output = shell::run(&START_DOCKER_DESKTOP.replace("%PATH%", &known));
+    if output.ok {
+        return Ok(Done::Now);
+    }
+    if output.code == NOT_FOUND {
         return Err(Trouble::Failed(
-            "could not find Docker Desktop to start it.".to_string(),
+            "Docker Desktop seems to be installed, but not anywhere this setup can find. Open Docker Desktop yourself from the Start menu, wait until it says the engine is running, then choose Check again.".to_string(),
         ));
     }
-    let quoted = path.replace('\'', "''");
-    let output = shell::run(&format!("Start-Process -FilePath '{quoted}'\nexit 0\n"));
-    if !output.ok {
-        return Err(Trouble::Failed(format!(
-            "could not start Docker Desktop: {}",
-            output.stderr.trim()
-        )));
-    }
-    Ok(Done::Now)
+    Err(Trouble::Failed(format!(
+        "Docker Desktop would not start ({}). Open it yourself from the Start menu, wait until it says the engine is running, then choose Check again.",
+        output.stderr.trim()
+    )))
 }
 
 /// Wait for the engine, saying so as it goes. The one place in this flow where patience is the fix.
@@ -334,21 +350,27 @@ pub fn wait_for_daemon() -> Fixed {
     const HINT_AFTER: Duration = Duration::from_secs(75);
     let mut hinted = false;
     while Instant::now() < deadline {
-        if crate::docker::daemon_reachable() {
-            return Ok(Done::Now);
+        match crate::docker::daemon_refusal() {
+            None => return Ok(Done::Now),
+            // The engine is up and has turned THIS ACCOUNT away: waiting longer changes nothing, and neither
+            // would starting Docker again. What is left is the sign-in that hands out the group.
+            Some(refusal) if super::plan::engine_denied(&refusal) => {
+                return Ok(Done::AfterSignOut);
+            }
+            Some(_) => {}
         }
         if !hinted && started.elapsed() >= HINT_AFTER {
             hinted = true;
             /* Docker Desktop's first run puts up a licence screen and, depending on the build, an offer to sign in — and it does it in its OWN window. */
             super::progress(
-                "Docker Desktop may be asking you something - check its window for a licence or sign-in screen; a first start also just takes a couple of minutes",
+                "Docker Desktop may be asking you something: look at its window for a welcome or sign-in screen. A first start also just takes a couple of minutes",
             );
         }
         if said.elapsed() >= Duration::from_secs(20) {
             said = Instant::now();
             let left = deadline.saturating_duration_since(Instant::now()).as_secs();
             super::progress(&format!(
-                "still waiting for Docker's engine ({left}s before we give up)"
+                "still waiting for Docker's engine ({left}s before giving up)"
             ));
         }
         std::thread::sleep(Duration::from_secs(3));
@@ -356,7 +378,7 @@ pub fn wait_for_daemon() -> Fixed {
     // Not a failure of ours, and the remedy is a human one: Docker Desktop asks for a licence acceptance and
     // sometimes a sign-in on its first run, and until somebody answers that, no engine appears.
     Err(Trouble::Failed(
-        "Docker Desktop was started but its engine never came up.\n       Open Docker Desktop from the Start menu, accept its licence and finish its first-run screens - it may be waiting on a window behind this one. Then choose Check again.".to_string(),
+        "Docker Desktop was started, but its engine has not come up after five minutes. Look at the Docker Desktop window: it may be waiting for you to accept its terms or skip a sign-in. Once it says the engine is running, choose Check again.".to_string(),
     ))
 }
 
@@ -377,7 +399,7 @@ pub fn switch_to_linux_containers(facts: &Facts) -> Fixed {
     let cli = format!("{root}\\DockerCli.exe");
     if !std::path::Path::new(&cli).exists() {
         return Err(Trouble::Failed(
-            "could not find Docker Desktop's own switcher. Right-click Docker's tray icon and choose \"Switch to Linux containers\", then re-run.".to_string(),
+            "Docker Desktop's own switcher could not be found. Right-click Docker's icon in the system tray, choose \"Switch to Linux containers\", then choose Check again.".to_string(),
         ));
     }
     let quoted = cli.replace('\'', "''");
@@ -386,7 +408,7 @@ pub fn switch_to_linux_containers(facts: &Facts) -> Fixed {
     ));
     if !output.ok {
         return Err(Trouble::Failed(
-            "could not switch Docker to Linux containers. Right-click Docker's tray icon and choose \"Switch to Linux containers\", then re-run.".to_string(),
+            "Docker would not switch to Linux containers on its own. Right-click Docker's icon in the system tray, choose \"Switch to Linux containers\", then choose Check again.".to_string(),
         ));
     }
     // The switch restarts the engine, so the daemon goes away and comes back.
@@ -406,7 +428,7 @@ pub fn restart_windows() -> Result<(), String> {
         return Ok(());
     }
     Err(format!(
-        "could not restart this PC ({}). Restart it yourself, then run the setup again.",
+        "Windows refused to restart ({}). Restart this PC yourself; the setup continues once you are back.",
         output.stderr.trim()
     ))
 }
@@ -480,6 +502,28 @@ mod tests {
         // string - so it stays DATA rather than closing the literal and becoming script.
         let nasty = ADD_TO_DOCKER_USERS.replace("%NAME%", &"a'; exit 0 #".replace('\'', "''"));
         assert!(nasty.contains("$name = 'a''; exit 0 #'"));
+    }
+
+    /* THE REPORTED FAILURE: "could not find Docker Desktop to start it", on a PC that had it. */
+    #[test]
+    fn starting_docker_desktop_falls_back_to_the_start_menu_before_giving_up() {
+        assert!(
+            START_DOCKER_DESKTOP.contains("Docker Desktop.lnk"),
+            "a shortcut is what a click in the Start menu launches, and it exists wherever Docker went"
+        );
+        assert!(START_DOCKER_DESKTOP.contains("$env:LOCALAPPDATA"));
+        assert!(
+            START_DOCKER_DESKTOP.contains("exit 2"),
+            "not found has to be told apart from would not start: the two sentences differ"
+        );
+        assert!(START_DOCKER_DESKTOP.is_ascii());
+        // The known path rides in first, quoted the same way every other substitution here is.
+        let script = START_DOCKER_DESKTOP.replace(
+            "%PATH%",
+            &"C:\\It's\\Docker Desktop.exe".replace('\'', "''"),
+        );
+        assert!(script.contains("'C:\\It''s\\Docker Desktop.exe'"));
+        assert!(!script.contains("%PATH%"));
     }
 
     #[test]

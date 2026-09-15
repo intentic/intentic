@@ -128,7 +128,15 @@ pub fn run() {
 
             /* BEFORE the link, nothing opens. */
             if app.webview_windows().is_empty() {
-                windows::show_workspace(app.handle());
+                // A setup parked across a restart or a sign-out is why this launch is happening at all
+                // (RunOnce, commands.rs `end_session`), and the card that resumes it is the app's own face.
+                // Opening the workspace instead left the user on the setup page they had already been
+                // through, with the parked setup waiting behind a tray menu nobody had been shown.
+                if app.state::<state::AppState>().parked_setup().is_some() {
+                    windows::show_launcher(app.handle());
+                } else {
+                    windows::show_workspace(app.handle());
+                }
             }
             Ok(())
         })

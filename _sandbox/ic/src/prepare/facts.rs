@@ -57,16 +57,42 @@ foreach ($key in @(
   if (Test-Path $key) { $pending = $true }
 }
 
-$dd = ''
-foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
-  if ($base -and ($dd -eq '')) {
-    $candidate = Join-Path $base 'Docker\Docker\Docker Desktop.exe'
-    if (Test-Path $candidate) { $dd = $candidate }
-  }
+# WHERE DOCKER DESKTOP IS, asked every way an install can answer it. Program Files is only the default: the
+# installer takes a folder of its own, newer builds install per user under LOCALAPPDATA, and a PC whose Docker
+# was put somewhere else still has to be found rather than told it has no Docker to start.
+$ddCandidates = @()
+foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:LOCALAPPDATA, (Join-Path $env:LOCALAPPDATA 'Programs'))) {
+  if ($base) { $ddCandidates += (Join-Path $base 'Docker\Docker\Docker Desktop.exe') }
+}
+foreach ($key in @('HKLM:\SOFTWARE\Docker Inc.\Docker\1.0', 'HKCU:\SOFTWARE\Docker Inc.\Docker\1.0')) {
+  $app = (Get-ItemProperty -Path $key).AppPath
+  if ($app) { $ddCandidates += (Join-Path $app 'Docker Desktop.exe') }
 }
 $ddVer = ''
-$uninstall = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Docker Desktop'
-if ($uninstall) { $ddVer = [string]$uninstall.DisplayVersion }
+foreach ($key in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Docker Desktop', 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Docker Desktop')) {
+  $uninstall = Get-ItemProperty -Path $key
+  if ($uninstall) {
+    if (($ddVer -eq '') -and $uninstall.DisplayVersion) { $ddVer = [string]$uninstall.DisplayVersion }
+    if ($uninstall.InstallLocation) { $ddCandidates += (Join-Path $uninstall.InstallLocation 'Docker Desktop.exe') }
+    if ($uninstall.DisplayIcon) { $ddCandidates += ([string]$uninstall.DisplayIcon -replace ',-?\d+$', '').Trim('"') }
+  }
+}
+# The docker CLI ships inside the app: <app>\resources\bin\docker.exe, so a docker on PATH names its own app.
+$cli = Get-Command docker.exe -ErrorAction SilentlyContinue
+if ($cli -and $cli.Source) {
+  $ddCandidates += (Join-Path (Split-Path (Split-Path (Split-Path $cli.Source -Parent) -Parent) -Parent) 'Docker Desktop.exe')
+}
+foreach ($lnk in @(
+  (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Docker Desktop.lnk'),
+  (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Docker Desktop.lnk'))) {
+  if (Test-Path $lnk) {
+    try { $ddCandidates += (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).TargetPath } catch { }
+  }
+}
+$dd = ''
+foreach ($candidate in $ddCandidates) {
+  if (($dd -eq '') -and $candidate -and ($candidate -like '*Docker Desktop.exe') -and (Test-Path $candidate)) { $dd = $candidate }
+}
 
 # Two names for one feature. `LxssManager` is the in-box WSL's service; the modern WSL that ships as a Store
 # package registers `WslService` instead and does NOT create the old one. Asking only for `LxssManager` reads a
@@ -160,7 +186,13 @@ pub fn probe() -> Result<Facts, String> {
     }
     let mut facts = parse(&output.stdout)?;
     facts.docker_cli = crate::docker::cli_present();
-    facts.docker_daemon = facts.docker_cli && crate::docker::daemon_reachable();
+    let refusal = if facts.docker_cli {
+        crate::docker::daemon_refusal()
+    } else {
+        Some("docker is not installed".to_string())
+    };
+    facts.docker_daemon = refusal.is_none();
+    facts.docker_denied = refusal.as_deref().is_some_and(super::plan::engine_denied);
     facts.docker_server_os = if facts.docker_daemon {
         crate::docker::server_os()
     } else {

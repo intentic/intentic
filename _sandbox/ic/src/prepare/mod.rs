@@ -253,18 +253,14 @@ pub fn run(args: Args) -> Result<()> {
                     return restart(&pending, args.yes);
                 }
                 /* The fix worked and changed nothing yet, which is the whole point of `Done::AfterSignOut`. */
+                // Two fixes end here: granting the group, and starting an engine that then refuses the
+                // account. Either way the row that was being worked on is finished, and what is left is the
+                // one requirement plan.rs builds for exactly this — the same words the examination uses.
                 Outcome::SignOut => {
-                    let mut pending = requirement.clone();
-                    pending.action = Action::SignOut;
-                    pending.problem = format!(
-                        "{} was added to the docker-users group, and Windows only picks that up on the next sign-in.",
-                        if facts.user.is_empty() { "this account" } else { &facts.user }
-                    );
-                    pending.remedy =
-                        "sign out of Windows and back in - the setup picks up from there."
-                            .to_string();
+                    let pending = plan::sign_out_requirement(&facts);
+                    announce_state(requirement.id, "done", None);
                     announce(&pending);
-                    announce_state(requirement.id, "done", Some("waiting for the next sign-in"));
+                    announce_state(pending.id, "done", Some("waiting for the next sign-in"));
                     return sign_out(std::slice::from_ref(&pending), &facts.user);
                 }
             }
@@ -297,14 +293,16 @@ fn apply(requirement: &plan::Requirement, facts: &plan::Facts) -> Result<Outcome
     use crate::util::step;
 
     let doing = match requirement.id {
-        "wsl-features" => "turning on WSL2 (Windows will ask for administrator)...",
-        "wsl-kernel" => "updating WSL2...",
+        "wsl-features" => {
+            "turning on the Windows features Docker needs (Windows will ask for permission)..."
+        }
+        "wsl-kernel" => "updating WSL2 (Windows will ask for permission)...",
         "docker-desktop" => "installing Docker Desktop (about 600 MB)...",
         "docker-path" => "finding Docker on this PC...",
-        "docker-users" => "allowing this account to use Docker...",
-        "docker-running" => {
-            "starting Docker Desktop (accept its first-run screens if they appear)..."
+        "docker-users" => {
+            "allowing this account to use Docker (Windows will ask for permission)..."
         }
+        "docker-running" => "starting Docker Desktop (accept its welcome screen if one appears)...",
         "docker-linux-containers" => "switching Docker to Linux containers...",
         _ => "preparing Docker...",
     };
@@ -344,15 +342,12 @@ fn apply(requirement: &plan::Requirement, facts: &plan::Facts) -> Result<Outcome
         // Dismissing the prompt is an ANSWER, and it gets its own sentence: "failed" would be an accusation
         // about a machine that is fine and a decision that was deliberate.
         Err(fix::Trouble::Cancelled) => {
-            announce_state(
-                requirement.id,
-                "failed",
-                Some("the administrator prompt was dismissed"),
+            let reason = format!(
+                "Windows asked for permission and the prompt was closed, so nothing was changed for \"{}\". Try again and choose Yes when Windows asks.",
+                requirement.title
             );
-            bail!(
-                "the administrator prompt was dismissed, so {} was not changed.\n       Run the same command again and choose Yes when Windows asks.",
-                requirement.title.to_lowercase()
-            )
+            announce_state(requirement.id, "failed", Some(reason.as_str()));
+            bail!("{reason}")
         }
         Err(fix::Trouble::Failed(problem)) => {
             announce_state(requirement.id, "failed", Some(problem.as_str()));
@@ -366,7 +361,6 @@ fn apply(requirement: &plan::Requirement, facts: &plan::Facts) -> Result<Outcome
 fn restart(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     use crate::tty;
 
-    let again = rerun_command();
     // A restart request owns the screen: the live step line is erased and the spinner stopped, or it repaints
     // over the one command the reader has to copy before rebooting.
     crate::ui::suspend();
@@ -374,9 +368,7 @@ fn restart(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     println!("{}", explain(unmet));
     println!("Windows has to restart before Docker can run.");
     println!();
-    println!("After it comes back, run this again:");
-    println!();
-    println!("  {again}");
+    println!("{}", resume_hint("After it comes back"));
     println!();
     /* Pre-consent covers installing things, never a restart: the desktop app passes it. */
     if !pre_consented && tty::have_tty() && tty::confirm("Restart this PC now?", false) {
@@ -388,14 +380,17 @@ fn restart(unmet: &[plan::Requirement], pre_consented: bool) -> Result<()> {
     }
     stop(
         EXIT_NEEDS_RESTART,
-        "this PC has to restart before Docker can run - restart it, then run the command above.",
+        if unattended() {
+            "this PC has to restart before Docker can run."
+        } else {
+            "this PC has to restart before Docker can run - restart it, then run the command above."
+        },
     )
 }
 
 /* THE SAME PARKING, ONE SESSION SMALLER — and the outcome that used to leave through `bail!`. */
 #[cfg(windows)]
 fn sign_out(unmet: &[plan::Requirement], user: &str) -> Result<()> {
-    let again = rerun_command();
     let who = if user.is_empty() {
         "this account"
     } else {
@@ -404,17 +399,37 @@ fn sign_out(unmet: &[plan::Requirement], user: &str) -> Result<()> {
     crate::ui::suspend();
     println!();
     println!("{}", explain(unmet));
-    println!("{who} is in the group already. Windows hands it out with a new login");
-    println!("token, and it only issues one at sign-in - so nothing else can happen first.");
+    println!("{who} has the permission already. Windows hands it out with a new sign-in,");
+    println!("and only then - so nothing else can happen first.");
     println!();
-    println!("After you sign back in, run this again:");
-    println!();
-    println!("  {again}");
+    println!("{}", resume_hint("After you sign back in"));
     println!();
     stop(
         EXIT_NEEDS_RESTART,
-        "sign out of Windows and back in, then run the command above.",
+        if unattended() {
+            "sign out of Windows and back in; if you already have, restart the PC instead."
+        } else {
+            "sign out of Windows and back in, then run the command above."
+        },
     )
+}
+
+/// Whether something other than a person started this run — the desktop app says so outright
+/// (`INTENTIC_NO_PROMPT`, cli-output-protocol §2), and it parks the setup and brings it back itself, so
+/// telling its user to paste a command into a terminal they do not have is worse than saying nothing.
+#[cfg(windows)]
+fn unattended() -> bool {
+    std::env::var("INTENTIC_NO_PROMPT").as_deref() == Ok("1")
+}
+
+/// What happens next, for whoever is reading: a saved setup that resumes on its own, or the command to
+/// paste — with a code that may well have expired by then named as such.
+#[cfg(windows)]
+fn resume_hint(when: &str) -> String {
+    if unattended() {
+        return "Your setup is saved: it continues on its own once you are back.".to_string();
+    }
+    format!("{when}, run this again:\n\n  {}", rerun_command())
 }
 
 /* AN EXPECTED STOP, SAID AS ONE. */

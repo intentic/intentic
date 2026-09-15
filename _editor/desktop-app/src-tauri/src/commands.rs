@@ -5,7 +5,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::scripts::{self, Host, ScriptRun};
 use crate::setup_link::{RecreateArgs, SetupArgs, SyncArgs};
-use crate::state::{AppState, CloseAction, Settings};
+use crate::state::{AppState, CloseAction, SessionEnd, Settings};
 
 type CommandResult<T> = Result<T, String>;
 
@@ -239,23 +239,17 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs, install: bool) -> Comman
 /// Park this setup, ask Windows to start this app after the next sign-in, and restart.
 #[tauri::command]
 pub fn restart_for_setup(app: AppHandle, args: SetupArgs) -> CommandResult<()> {
-    app.state::<AppState>().park_setup(&args);
-    end_session(Session::Restart)
+    app.state::<AppState>()
+        .park_setup(&args, SessionEnd::Restart);
+    end_session(SessionEnd::Restart)
 }
 
 /* THE OTHER THING WINDOWS ONLY DOES BETWEEN SESSIONS, and the requirement that had no button. */
 #[tauri::command]
 pub fn sign_out_for_setup(app: AppHandle, args: SetupArgs) -> CommandResult<()> {
-    app.state::<AppState>().park_setup(&args);
-    end_session(Session::SignOut)
-}
-
-/// Which way this session ends. Both come back to the same place — RunOnce fires at the next sign-in either
-/// way — so the only thing that differs is how far the machine goes down in between.
-#[derive(Clone, Copy)]
-pub enum Session {
-    Restart,
-    SignOut,
+    app.state::<AppState>()
+        .park_setup(&args, SessionEnd::SignOut);
+    end_session(SessionEnd::SignOut)
 }
 
 #[derive(Serialize)]
@@ -265,6 +259,9 @@ pub struct ResumableSetup {
     /// How long ago it was parked. The window decides what to do with that — a setup code lives 30 minutes,
     /// and this is the only thing on either side of a restart that knows how much of that is left.
     pub aged_seconds: u64,
+    /// Which way the session ended for it, so the card can tell a sign-out that did not take from a first
+    /// ask. Absent for a file an older build parked.
+    pub how: Option<SessionEnd>,
 }
 
 #[tauri::command]
@@ -279,6 +276,7 @@ pub fn resumable_setup(state: State<'_, AppState>) -> Option<ResumableSetup> {
         // Saturating, because a clock that moved backwards over the restart (they do) must read as "just
         // now" rather than as an age of eighteen quintillion seconds.
         aged_seconds: now.saturating_sub(parked.saved_at),
+        how: parked.how,
     })
 }
 
@@ -288,7 +286,7 @@ pub fn forget_resumable_setup(state: State<'_, AppState>) {
 }
 
 #[cfg(windows)]
-fn end_session(how: Session) -> CommandResult<()> {
+fn end_session(how: SessionEnd) -> CommandResult<()> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -321,11 +319,11 @@ fn end_session(how: Session) -> CommandResult<()> {
     // event either of these requirements is actually waiting for. No `/t` on a sign-out — `shutdown /l` does
     // not accept one, and there is nothing to warn a machine about that is not going down.
     let (verb, ended) = match how {
-        Session::Restart => (
+        SessionEnd::Restart => (
             vec!["/r", "/t", "10", "/c", "intentic: finishing Docker setup"],
             "restart",
         ),
-        Session::SignOut => (vec!["/l"], "sign out"),
+        SessionEnd::SignOut => (vec!["/l"], "sign out"),
     };
     let done = std::process::Command::new("shutdown.exe")
         .args(&verb)
@@ -342,7 +340,7 @@ fn end_session(how: Session) -> CommandResult<()> {
 
 /// Only Windows ever asks for this: no step of the Unix install needs a new session to take effect.
 #[cfg(not(windows))]
-fn end_session(_how: Session) -> CommandResult<()> {
+fn end_session(_how: SessionEnd) -> CommandResult<()> {
     Err("nothing on this system needs a restart to finish installing.".to_string())
 }
 

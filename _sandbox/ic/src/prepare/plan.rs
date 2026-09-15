@@ -80,8 +80,19 @@ pub struct Facts {
     // ---- filled by the caller from crate::docker, not by the probe ----
     pub docker_cli: bool,
     pub docker_daemon: bool,
+    /// The engine is up and REFUSED this account ("Access is denied" on its pipe). Never true alongside
+    /// `docker_daemon`; false when the engine is simply not running. The one fact that settles the
+    /// docker-users question, because it is Docker's own verdict rather than a prediction of it.
+    pub docker_denied: bool,
     /// `docker version --format {{.Server.Os}}` — `windows` here is Docker Desktop in Windows-container mode.
     pub docker_server_os: Option<String>,
+}
+
+/// Whether the daemon's refusal (see `crate::docker::daemon_refusal`) is the engine turning THIS ACCOUNT away
+/// rather than not being there at all. Docker's CLI reports the pipe's own error, and Windows spells a
+/// permission failure on a named pipe exactly one way.
+pub fn engine_denied(refusal: &str) -> bool {
+    refusal.to_ascii_lowercase().contains("access is denied")
 }
 
 /// How an unmet requirement gets met. This is what the app turns into a button and what the terminal turns
@@ -227,6 +238,8 @@ fn virtualization_proven(facts: &Facts) -> bool {
     facts.hypervisor_present == Some(true)
         || wsl_functioning(facts)
         || facts.docker_server_os.as_deref() == Some("linux")
+        // An engine that refused this account is an engine that is RUNNING, on WSL2.
+        || facts.docker_denied
 }
 
 /// True when the hardware can virtualize, as far as anything here can tell. Something already virtualizing is
@@ -246,6 +259,32 @@ fn wsl_ready(facts: &Facts) -> bool {
     facts.service_vmcompute && wsl_functioning(facts)
 }
 
+/// The account, as prose: the name Windows knows it by, or "this account" when even that could not be read.
+fn who(facts: &Facts) -> &str {
+    if facts.user.is_empty() {
+        "this account"
+    } else {
+        &facts.user
+    }
+}
+
+/// THE ONE REQUIREMENT THAT IS ALREADY MET AND STILL IN THE WAY: the account is in Docker's group, and the
+/// session it is signed into predates that. Built here, in one place, because three moments produce it (the
+/// examination, the group fix finishing, the engine refusing a freshly started Docker) and a reader meeting
+/// it twice must meet the same words.
+pub fn sign_out_requirement(facts: &Facts) -> Requirement {
+    req(
+        "docker-users",
+        "Permission to use Docker",
+        &format!(
+            "{} has been given permission to use Docker, and Windows only applies that at the next sign-in.",
+            who(facts)
+        ),
+        "You need to sign out of Windows and back in; the setup continues from there. If you have already done that once and this is still here, restart the PC instead.",
+        Action::SignOut,
+    )
+}
+
 /* Read top to bottom: the early returns are not shortcuts, they are the DEPENDENCY ORDER. */
 pub fn requirements(facts: &Facts) -> Vec<Requirement> {
     let mut found = Vec::new();
@@ -256,13 +295,13 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
     if let Some(arch) = facts.arch.filter(|arch| *arch != ARCH_X64) {
         let (problem, remedy) = if arch == ARCH_ARM64 {
             (
-                "this is an ARM64 PC, and intentic's Windows build is 64-bit Intel/AMD only.",
-                "install Docker Desktop for Windows on ARM yourself (https://docs.docker.com/desktop/setup/install/windows-install/), then re-run - the rest of the setup works under emulation.",
+                "This is an ARM64 PC, and Intentic's Windows build is for 64-bit Intel and AMD processors only.",
+                "Install Docker Desktop for Windows on ARM yourself (https://docs.docker.com/desktop/setup/install/windows-install/), then check again: the rest of the setup works under emulation.",
             )
         } else {
             (
-                "this PC's processor is not 64-bit Intel or AMD, which is what intentic's Windows build needs.",
-                "run your sandbox on another machine, or in the cloud from the setup screen.",
+                "This PC's processor is not a 64-bit Intel or AMD one, which is what Intentic's Windows build needs.",
+                "Run your sandbox on a machine we host instead.",
             )
         };
         found.push(req(
@@ -280,11 +319,11 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
             "windows-version",
             "Windows version",
             &format!(
-                "this is Windows build {} ({}). Docker needs Windows 10 version 21H2 (build {MIN_BUILD}) or newer.",
+                "This is Windows build {} ({}). Docker needs Windows 10 version 21H2 (build {MIN_BUILD}) or newer.",
                 facts.build,
                 if facts.display_version.is_empty() { "unknown release" } else { &facts.display_version }
             ),
-            "install Windows updates until this PC is on 21H2 or later (Settings -> Windows Update), then re-run.",
+            "Install Windows updates (Settings, then Windows Update) until this PC is on 21H2 or later, then check again.",
             Action::Unsupported,
         ));
         found.extend(disk(facts));
@@ -297,8 +336,8 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
         found.push(req(
             "slat",
             "Processor features",
-            "this processor has no Second Level Address Translation (SLAT), which Docker's Linux engine requires.",
-            "Docker cannot run on this PC. Run your sandbox on another machine, or in the cloud from the setup screen.",
+            "This processor lacks a feature Docker's Linux engine requires (Second Level Address Translation).",
+            "Docker cannot run on this PC. Run your sandbox on a machine we host instead.",
             Action::Unsupported,
         ));
         found.extend(disk(facts));
@@ -312,16 +351,16 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
             req(
                 "nested-virtualization",
                 "Hardware virtualization",
-                "this Windows is a virtual machine, and its host is not passing hardware virtualization through.",
-                "switch nested virtualization on for this VM, on the machine hosting it, then start it again.",
+                "This Windows is running inside a virtual machine, and the computer hosting it is not passing hardware virtualization through.",
+                "Switch nested virtualization on for this VM, on the computer hosting it, then start the VM again.",
                 Action::HostVm,
             )
         } else {
             req(
                 "virtualization",
                 "Hardware virtualization",
-                "virtualization is switched off in this PC's firmware (BIOS/UEFI).",
-                "restart into firmware setup and turn it on - Windows cannot do this for you.",
+                "Virtualization is switched off in this PC's firmware (BIOS/UEFI).",
+                "Restart into the firmware settings and turn it on: Windows cannot do this for you. The steps below walk you through it.",
                 Action::Firmware,
             )
         };
@@ -342,8 +381,8 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
         found.push(req(
             "pending-restart",
             "A restart Windows is waiting for",
-            "Windows has updates staged that only a restart finishes, and turning on features before that is unreliable.",
-            "restart this PC, then run the setup again.",
+            "Windows has updates that only a restart finishes, and the features Docker needs cannot be set up until then.",
+            "Restart this PC; the setup continues once you are back.",
             Action::Restart,
         ));
         found.extend(disk(facts));
@@ -356,24 +395,24 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
     if !wsl_functioning(facts) && (!facts.service_wsl || !facts.service_vmcompute) {
         let missing = match (facts.service_wsl, facts.service_vmcompute) {
             (false, false) => {
-                "Windows Subsystem for Linux and Virtual Machine Platform are both off"
+                "the two Windows features it needs (Windows Subsystem for Linux and Virtual Machine Platform) are switched off"
             }
-            (false, true) => "Windows Subsystem for Linux is off",
-            _ => "Virtual Machine Platform is off",
+            (false, true) => "the Windows Subsystem for Linux feature is switched off",
+            _ => "the Virtual Machine Platform feature is switched off",
         };
         found.push(req(
             "wsl-features",
-            "WSL2",
-            &format!("{missing}. Docker runs Linux containers inside WSL2, so they have to be on first."),
-            "turn them on with `wsl --install --no-distribution` (Windows will ask for administrator), then restart.",
+            "Windows features for Docker",
+            &format!("Docker runs its Linux engine inside WSL2, and {missing}."),
+            "We will turn them on. Windows asks for permission once, and then needs a restart.",
             Action::FixElevated,
         ));
     } else if !wsl_ready(facts) {
         found.push(req(
             "wsl-kernel",
-            "WSL2",
-            "WSL is installed but has no current Linux kernel, or is still defaulting to version 1.",
-            "update it with `wsl --update` and make version 2 the default.",
+            "Windows features for Docker",
+            "WSL2 is installed but needs an update before Docker's engine can run inside it.",
+            "We will update it. Windows asks for permission once; no restart is needed.",
             Action::FixElevated,
         ));
     }
@@ -381,16 +420,16 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
     // ---- Docker itself ----
     if facts.docker_desktop_path.is_empty() && !facts.docker_cli {
         let how = if facts.winget {
-            "install Docker Desktop with the Windows package manager (about 600 MB)."
+            "We will install it with the Windows package manager (about 600 MB). Windows asks for permission once."
         } else {
             // The reported failure, and its fix: winget's absence is not a dead end, it is a different
             // download. Docker publishes the installer at a stable URL and it takes silent-install flags.
-            "download Docker Desktop from docker.com and install it (about 600 MB) - this PC has no Windows package manager, so the installer is fetched directly."
+            "We will download it from docker.com and install it (about 600 MB). Windows asks for permission once."
         };
         found.push(req(
             "docker-desktop",
             "Docker Desktop",
-            "Docker Desktop is not installed.",
+            "Docker Desktop is not installed on this PC.",
             how,
             Action::Fix,
         ));
@@ -398,45 +437,44 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
         // Installed a moment ago, or installed by somebody whose PATH this shell never inherited.
         found.push(req(
             "docker-path",
-            "Docker on this session's PATH",
-            "Docker Desktop is installed but `docker` is not on this shell's PATH.",
-            "use Docker's own program folder for this run - nothing to install.",
+            "Docker Desktop",
+            "Docker Desktop is installed, but this setup cannot see it yet.",
+            "We will use Docker's own program folder for this run: nothing to install.",
             Action::Fix,
         ));
     }
 
-    /* Non-administrators need this group to reach the engine, and Docker's installer only adds the user who ran it. */
-    if !facts.in_docker_users && !facts.elevated {
-        let who = if facts.user.is_empty() {
-            "this account"
-        } else {
-            &facts.user
-        };
+    /* PERMISSION: Docker's own verdict outranks every prediction of it. */
+    // An engine that answered has already admitted this account, whatever the login token says about groups;
+    // one that refused with "access is denied" is running and has not. Only when the engine is not there to
+    // ask is the group's roster consulted, and then only to grant a membership that is plainly missing —
+    // never to send somebody to sign out on the strength of a token that Docker has not yet been asked about.
+    let refused = facts.docker_denied;
+    let predicted =
+        !facts.docker_daemon && !refused && !facts.in_docker_users && !facts.in_docker_users_group;
+    if !facts.elevated && (refused || predicted) {
         found.push(if facts.in_docker_users_group {
-            req(
-                "docker-users",
-                "Permission to use Docker",
-                &format!("{who} is in this PC's docker-users group, but this sign-in was issued before that and does not carry it."),
-                "sign out of Windows and back in - the group needs a new login token, and nothing else issues one.",
-                Action::SignOut,
-            )
+            sign_out_requirement(facts)
         } else {
             req(
                 "docker-users",
                 "Permission to use Docker",
-                &format!("{who} is not in this PC's docker-users group, so Docker will refuse the connection."),
-                "add this account to docker-users (Windows will ask for administrator), then sign out and back in.",
+                &format!(
+                    "{} does not have permission to use Docker on this PC yet.",
+                    who(facts)
+                ),
+                "We will grant it. Windows asks for permission once, and then you need to sign out and back in.",
                 Action::FixElevated,
             )
         });
     }
 
-    if !facts.docker_daemon {
+    if !facts.docker_daemon && !refused {
         found.push(req(
             "docker-running",
-            "Docker running",
+            "Docker Desktop running",
             "Docker Desktop is not running.",
-            "start it and wait for its engine to come up.",
+            "We will start it and wait for its engine to come up. If it shows a welcome screen, accept it.",
             Action::Fix,
         ));
     } else if let Some(os) = facts.docker_server_os.as_deref() {
@@ -444,8 +482,8 @@ pub fn requirements(facts: &Facts) -> Vec<Requirement> {
             found.push(req(
                 "docker-linux-containers",
                 "Linux containers",
-                &format!("Docker is running, but in {os}-container mode - a sandbox is a Linux container."),
-                "switch Docker Desktop to Linux containers.",
+                &format!("Docker is running, but in {os}-container mode, and a sandbox is a Linux container."),
+                "We will switch Docker Desktop to Linux containers.",
                 Action::Fix,
             ));
         }
@@ -466,9 +504,9 @@ fn disk(facts: &Facts) -> Option<Requirement> {
         "disk-space",
         "Free disk space",
         &format!(
-            "only {free} GiB free on this PC's system drive - the sandbox image alone needs more than that."
+            "Only {free} GB is free on this PC's system drive, and the sandbox image alone needs more than that."
         ),
-        "free at least 5 GiB (Settings -> System -> Storage), then re-run.",
+        "Free up at least 5 GB (Settings, then System, then Storage), then check again.",
         Action::User,
     ))
 }
@@ -647,6 +685,7 @@ mod tests {
             user_qualified: "omen\\radarsu".to_string(),
             docker_cli: true,
             docker_daemon: true,
+            docker_denied: false,
             docker_server_os: Some("linux".to_string()),
         }
     }
@@ -862,6 +901,11 @@ mod tests {
                 docker_server_os: Some("linux".to_string()),
                 ..bare()
             },
+            // An engine that refused this account is an engine that is running, on WSL2.
+            Facts {
+                docker_denied: true,
+                ..bare()
+            },
         ] {
             let facts = Facts {
                 slat: Some(false),
@@ -957,10 +1001,18 @@ mod tests {
             (
                 false,
                 false,
-                "Windows Subsystem for Linux and Virtual Machine Platform are both off",
+                "Windows Subsystem for Linux and Virtual Machine Platform) are switched off",
             ),
-            (false, true, "Windows Subsystem for Linux is off"),
-            (true, false, "Virtual Machine Platform is off"),
+            (
+                false,
+                true,
+                "Windows Subsystem for Linux feature is switched off",
+            ),
+            (
+                true,
+                false,
+                "Virtual Machine Platform feature is switched off",
+            ),
         ] {
             let facts = Facts {
                 service_wsl: lxss,
@@ -1025,13 +1077,24 @@ mod tests {
         assert!(requirements(&facts).is_empty());
     }
 
+    /// Docker Desktop installed and stopped — the commonest state on a developer's PC, and the one state
+    /// where the group has to be PREDICTED because there is no engine to ask.
+    fn stopped() -> Facts {
+        Facts {
+            docker_daemon: false,
+            docker_denied: false,
+            docker_server_os: None,
+            ..healthy()
+        }
+    }
+
     #[test]
     fn the_docker_group_matters_only_for_a_non_administrator() {
         let plain = Facts {
             in_docker_users: false,
             in_docker_users_group: false,
             elevated: false,
-            ..healthy()
+            ..stopped()
         };
         let group = requirements(&plain)
             .into_iter()
@@ -1044,7 +1107,7 @@ mod tests {
             in_docker_users: false,
             in_docker_users_group: false,
             elevated: true,
-            ..healthy()
+            ..stopped()
         };
         assert!(
             !ids(&admin).contains(&"docker-users"),
@@ -1052,26 +1115,50 @@ mod tests {
         );
     }
 
+    /* THE ENGINE'S OWN ANSWER OUTRANKS THE TOKEN — the fix for a sign-out that was asked for and changed nothing. */
+    #[test]
+    fn an_engine_that_answers_has_settled_the_permission_question() {
+        // The login token says no group, the roster says whatever: Docker just answered this account.
+        for roster in [true, false] {
+            let facts = Facts {
+                in_docker_users: false,
+                in_docker_users_group: roster,
+                elevated: false,
+                ..healthy()
+            };
+            assert!(
+                requirements(&facts).is_empty(),
+                "an engine that answered is proof of permission, whatever whoami says (roster={roster})"
+            );
+        }
+    }
+
     /* THE REPORTED FAILURE, AS A DIAGNOSIS. */
     #[test]
-    fn an_account_already_in_the_group_is_asked_to_sign_out_rather_than_for_administrator() {
+    fn an_engine_that_refuses_an_account_already_in_the_group_asks_for_a_sign_in() {
         let facts = Facts {
+            docker_daemon: false,
+            docker_denied: true,
+            docker_server_os: None,
             in_docker_users: false,
             in_docker_users_group: true,
             elevated: false,
             ..healthy()
         };
-        let group = requirements(&facts)
-            .into_iter()
-            .find(|r| r.id == "docker-users")
-            .expect("a stale token is still a requirement");
+        let found = requirements(&facts);
+        assert_eq!(
+            found.iter().map(|r| r.id).collect::<Vec<_>>(),
+            vec!["docker-users"],
+            "a refusing engine is a RUNNING engine, so nothing may try to start it"
+        );
+        let group = &found[0];
         assert_eq!(
             group.action,
             Action::SignOut,
             "there is nothing left to add, so there is nothing to ask administrator for"
         );
         assert!(
-            group.problem.contains("is in this PC's docker-users group"),
+            group.problem.contains("has been given permission"),
             "it must not accuse the machine of a missing membership it has: {}",
             group.problem
         );
@@ -1081,27 +1168,78 @@ mod tests {
             group.remedy
         );
         assert!(
+            group.remedy.contains("restart"),
+            "and the way out when a sign-out did not do it: {}",
+            group.remedy
+        );
+        assert!(
             !group.remedy.contains("administrator"),
             "asking for a prompt that cannot help is how this stopped at 8%: {}",
             group.remedy
         );
     }
 
-    /// …and the same row keeps its old shape when the account really is missing from the group.
+    /// …and when the engine refuses an account the group really is missing, the administrator route.
     #[test]
-    fn an_account_missing_from_the_group_still_gets_the_administrator_route() {
+    fn an_engine_that_refuses_an_account_missing_from_the_group_grants_it() {
         let facts = Facts {
+            docker_daemon: false,
+            docker_denied: true,
+            docker_server_os: None,
             in_docker_users: false,
             in_docker_users_group: false,
             elevated: false,
             ..healthy()
         };
-        let group = requirements(&facts)
-            .into_iter()
-            .find(|r| r.id == "docker-users")
-            .expect("reported");
-        assert_eq!(group.action, Action::FixElevated);
-        assert!(group.action.ours(), "this half is still ours to do");
+        let found = requirements(&facts);
+        assert_eq!(
+            found.iter().map(|r| r.id).collect::<Vec<_>>(),
+            vec!["docker-users"]
+        );
+        assert_eq!(found[0].action, Action::FixElevated);
+        assert!(found[0].action.ours(), "this half is still ours to do");
+    }
+
+    /// A membership the roster already has and the token does not is NOT a reason to sign out while the
+    /// engine is stopped: the token has not been tested against anything yet. Start Docker; it will say.
+    #[test]
+    fn a_stopped_engine_never_sends_an_account_to_sign_out_on_the_tokens_word_alone() {
+        let facts = Facts {
+            in_docker_users: false,
+            in_docker_users_group: true,
+            elevated: false,
+            ..stopped()
+        };
+        assert_eq!(ids(&facts), vec!["docker-running"]);
+    }
+
+    #[test]
+    fn a_refusal_is_recognised_by_windows_own_words_for_it() {
+        assert!(engine_denied(
+            "error during connect: Get \"http://%2F%2F.%2Fpipe%2FdockerDesktopLinuxEngine/v1.51/version\": open //./pipe/dockerDesktopLinuxEngine: Access is denied."
+        ));
+        assert!(!engine_denied(
+            "error during connect: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified."
+        ));
+        assert!(!engine_denied(""));
+    }
+
+    /// The sign-out row is built once for the three moments that produce it, so they cannot drift.
+    #[test]
+    fn the_sign_out_row_names_the_account_and_is_a_sign_out() {
+        let row = sign_out_requirement(&healthy());
+        assert_eq!(row.id, "docker-users");
+        assert_eq!(row.action, Action::SignOut);
+        assert!(row.problem.starts_with("radarsu "), "{}", row.problem);
+        let anonymous = sign_out_requirement(&Facts {
+            user: String::new(),
+            ..healthy()
+        });
+        assert!(
+            anonymous.problem.starts_with("this account "),
+            "{}",
+            anonymous.problem
+        );
     }
 
     /// A token that already carries the group is the end of it — the roster is not asked, and no row is drawn

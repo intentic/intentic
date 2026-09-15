@@ -21,9 +21,15 @@ const logEnd = ref<HTMLElement | undefined>(undefined);
 
 const lines = computed(() => props.events.flatMap((event) => (event.kind === `line` ? [event] : [])));
 const exit = computed(() => props.events.find((event) => event.kind === `exit`));
+const stoppedShort = computed(() => exit.value?.kind === `exit` && !exit.value.ok);
 // A non-zero exit isn't automatically a failure: a Windows install's first pass exits non-zero by design (it
-// reports what it would change and stops), which App.vue also accounts for.
-const failed = computed(() => !props.awaiting && exit.value?.kind === `exit` && !exit.value.ok);
+// reports what it would change and stops), which App.vue also accounts for. Nor is one with a requirements card
+// above it explaining what to do: that card is the message, and a red bar and a log under it would be this
+// screen calling its own instructions a crash.
+const failed = computed(() => !props.awaiting && props.blocked !== true && stoppedShort.value);
+// The run is parked on something the reader has to answer, whether the script asked (`awaiting`) or stopped on a
+// requirement the card above holds.
+const parked = computed(() => props.awaiting === true || (props.blocked === true && stoppedShort.value));
 // The percentage and the estimate are shown only while the run is the thing that is moving.
 const live = computed(() => props.running && !props.awaiting);
 
@@ -39,7 +45,7 @@ const positionOf = (step: StepView): string => `Step ${props.view.steps.indexOf(
 const position = computed(() => (at.value === undefined ? undefined : positionOf(at.value)));
 const heading = computed(() => {
     const step = at.value;
-    if (props.awaiting) {
+    if (parked.value) {
         return `Waiting for you`;
     }
     if (failed.value) {
@@ -61,12 +67,14 @@ const beside = computed(() => (!started.value || position.value === heading.valu
 // lines of stderr" rule shows the actual message, not boilerplate.
 const isPowerShellDecoration = (text: string): boolean => /^\s*\+ /.test(text) || /^At .+:\d+ char:\d+$/.test(text);
 
-// Shows only the failure's own words: what went wrong, not where (the heading covers that).
+// Shows only the failure's own words: what went wrong, not where (the heading covers that). The `error:` a CLI
+// prints for a terminal is dropped: on this screen the red border already says it, and the sentence after it is
+// written for a person.
 const failure = computed(() =>
     lines.value
         .filter((line) => line.stream === `stderr` && line.text.trim() !== `` && !isPowerShellDecoration(line.text))
         .slice(-4)
-        .map((line) => line.text)
+        .map((line) => line.text.replace(/^\s*error:\s+/i, ``))
         .join(`\n`),
 );
 
@@ -105,7 +113,7 @@ watch(
             <div
                 :class="[
                     'h-full rounded-full transition-[width] duration-500 ease-out',
-                    failed ? 'bg-danger' : awaiting ? 'bg-warning' : 'bg-primary-400',
+                    failed ? 'bg-danger' : parked ? 'bg-warning' : 'bg-primary-400',
                 ]"
                 :style="{ width: `${Math.max(view.percent, 2)}%` }"
             />
@@ -132,7 +140,8 @@ watch(
             </li>
         </ol>
 
-        <Notice v-if="failed && failure !== ``" tone="danger" class="font-mono text-2xs whitespace-pre-wrap">{{ failure }}</Notice>
+        <!-- Prose, not a terminal: the log below is where the machine's own words are, one click away. -->
+        <Notice v-if="failed && failure !== ``" tone="danger" class="text-2xs whitespace-pre-wrap">{{ failure }}</Notice>
 
         <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-2xs">
             <!-- True, and the reason the × on this card is not a trap: the script is a process on this machine, not something this window is holding up. -->

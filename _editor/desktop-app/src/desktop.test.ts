@@ -18,11 +18,11 @@ const REPORTED = [
     `intentic: [checking-docker] checking this PC for Docker...`,
     `intentic: Windows 10 Pro 25H2, build 26200`,
     `  ok    This PC`,
-    `  FAIL  WSL2 — Windows Subsystem for Linux and Virtual Machine Platform are both off. Docker runs Linux containers inside WSL2, so they have to be on first.`,
-    `intentic-requirement: {"action":"fixElevated","detail":null,"id":"wsl-features","problem":"Windows Subsystem for Linux and Virtual Machine Platform are both off. Docker runs Linux containers inside WSL2, so they have to be on first.","remedy":"turn them on with \`wsl --install --no-distribution\` (Windows will ask for administrator), then restart.","title":"WSL2"}`,
-    `intentic-requirement: {"action":"fix","detail":null,"id":"docker-desktop","problem":"Docker Desktop is not installed.","remedy":"download Docker Desktop from docker.com and install it (about 600 MB) - this PC has no Windows package manager, so the installer is fetched directly.","title":"Docker Desktop"}`,
-    `intentic-requirement: {"action":"fixElevated","detail":null,"id":"docker-users","problem":"vicheta-asus is not in this PC's docker-users group, so Docker will refuse the connection.","remedy":"add this account to docker-users (Windows will ask for administrator), then sign out and back in.","title":"Permission to use Docker"}`,
-    `intentic-requirement: {"action":"fix","detail":null,"id":"docker-running","problem":"Docker Desktop is not running.","remedy":"start it and wait for its engine to come up.","title":"Docker running"}`,
+    `  FAIL  WSL2 — Docker runs its Linux engine inside WSL2, and the two Windows features it needs (Windows Subsystem for Linux and Virtual Machine Platform) are switched off.`,
+    `intentic-requirement: {"action":"fixElevated","detail":null,"id":"wsl-features","problem":"Docker runs its Linux engine inside WSL2, and the two Windows features it needs (Windows Subsystem for Linux and Virtual Machine Platform) are switched off.","remedy":"We will turn them on. Windows asks for permission once, and then needs a restart.","title":"Windows features for Docker"}`,
+    `intentic-requirement: {"action":"fix","detail":null,"id":"docker-desktop","problem":"Docker Desktop is not installed on this PC.","remedy":"We will download it from docker.com and install it (about 600 MB). Windows asks for permission once.","title":"Docker Desktop"}`,
+    `intentic-requirement: {"action":"fixElevated","detail":null,"id":"docker-users","problem":"vicheta-asus does not have permission to use Docker on this PC yet.","remedy":"We will grant it. Windows asks for permission once, and then you need to sign out and back in.","title":"Permission to use Docker"}`,
+    `intentic-requirement: {"action":"fix","detail":null,"id":"docker-running","problem":"Docker Desktop is not running.","remedy":"We will start it and wait for its engine to come up. If it shows a welcome screen, accept it.","title":"Docker Desktop running"}`,
 ];
 
 describe(`the reported install, read back`, () => {
@@ -31,7 +31,7 @@ describe(`the reported install, read back`, () => {
         expect(found.map((requirement) => requirement.id)).toEqual([`wsl-features`, `docker-desktop`, `docker-users`, `docker-running`]);
         // Requirements needing administrator must be distinguishable, so users are warned about UAC, not surprised.
         expect(found.map((requirement) => requirement.action)).toEqual([`fixElevated`, `fix`, `fixElevated`, `fix`]);
-        expect(found[0]?.title).toBe(`WSL2`);
+        expect(found[0]?.title).toBe(`Windows features for Docker`);
         expect(found[1]?.remedy).toContain(`600 MB`);
         // `"detail":null` means no long form; it must not render as the string "null".
         expect(found.every((requirement) => requirement.detail === undefined)).toBe(true);
