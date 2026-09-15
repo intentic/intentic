@@ -146,6 +146,13 @@ const blockConcern = (block: ManageBlock, reconnectable: boolean): DeviceConcern
     };
 };
 
+// The block alone, for a machine whose sandboxes are listed once under several environments: it is about the door
+// the buttons go through, not about any one environment, so it is drawn beside the list rather than under a row.
+export const blockAttention = (
+    row: DeviceRow,
+    { block, canPair }: { block: ManageBlock | undefined; canPair: boolean },
+): DeviceConcern | undefined => (block === undefined ? undefined : blockConcern(block, canPair && row.device.hostId !== undefined));
+
 export const deviceAttention = (
     row: DeviceRow,
     {

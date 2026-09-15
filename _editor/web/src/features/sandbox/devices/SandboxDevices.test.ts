@@ -1289,3 +1289,101 @@ it(`states the halves without offering the switches on a device it cannot run co
 it(`draws no switches on a connected device with no pairings`, () => {
     expect(labels(mount([managed(true)]))).not.toContain(`Stop all`);
 });
+
+// one PC, two doors
+// Windows and the WSL distro on it answer as two devices and are one computer: one engine, one screen, one set of
+// disks. The board used to draw two cards with every container twice; the page now draws one machine whose
+// environments are rows of their own and whose sandboxes are listed once.
+
+const CONTAINER = { slug: `work`, container: `intentic-sandbox-work`, running: true, image: `ghcr.io/intentic/sandbox:2.3.1` };
+
+const windowsSide = (): Device => ({
+    key: `rog`,
+    label: `rog`,
+    hostId: `rog`,
+    online: true,
+    platform: `windows`,
+    facts: { os: `Microsoft Windows 11 Home`, arch: `x64`, shell: `PowerShell 7`, home: `C:\\Users\\radar`, roots: [], hostname: `rog`, wslDistros: [`Arch`, `Ubuntu`] },
+    sandboxes: [CONTAINER],
+    report: { hostname: `rog`, os: `win32`, pairings: [], ports: [], agent: { running: true, installed: `1.183.0` }, capturedAt: Date.now() },
+});
+
+const distroSide = (): Device => ({
+    key: `rog-wsl-arch`,
+    label: `rog-wsl-arch`,
+    hostId: `rog-wsl-arch`,
+    online: true,
+    platform: `linux`,
+    sync: paired(`sync`, `rog`),
+    facts: { os: `Arch Linux`, arch: `x64`, shell: `/usr/bin/zsh`, home: `/home/radarsu`, roots: [], hostname: `rog`, wsl: { distro: `Arch` } },
+    sandboxes: [CONTAINER],
+    report: {
+        hostname: `rog`,
+        os: `linux`,
+        wsl: { distro: `Arch` },
+        pairings: [{ sandboxId: `work`, mode: `sync`, localDir: `/home/radarsu/work`, mutagenStatus: `watching` }],
+        ports: [],
+        agent: { running: true, installed: `1.183.0` },
+        capturedAt: Date.now(),
+    },
+});
+
+const bothDoors = (): void => {
+    capabilities.value = [
+        { id: `rog`, kind: `host`, config: { platform: `windows`, shell: `on`, sandboxes: `on`, sandboxRemove: `on` } },
+        { id: `rog-wsl-arch`, kind: `host`, config: { platform: `linux`, shell: `on`, sandboxes: `on`, sandboxRemove: `on` } },
+    ];
+};
+
+it(`draws a Windows PC and its distro as one card, with the container once and each side's own state`, async () => {
+    bothDoors();
+    const el = mount([distroSide(), windowsSide(), managed(true)]);
+    await showBoard();
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`2 environments`);
+    expect(text).toContain(`Microsoft Windows 11 Home`);
+    expect(text).toContain(`Arch Linux on WSL`);
+    // One card, not two: two machines on the board, and the PC's card names its container once.
+    const cards = [...el.querySelectorAll(`a`)];
+    expect(cards).toHaveLength(2);
+    const pc = cards.find((card) => card.textContent?.includes(`2 environments`));
+    expect(pc?.textContent?.match(/work/g)).toHaveLength(1);
+});
+
+it(`opens the PC as one page: an environment row per side, the sandbox once, and the distros the Windows side lists`, async () => {
+    bothDoors();
+    const el = mount([distroSide(), windowsSide()]);
+    await nextTick();
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`Environments on this device`);
+    expect(text).toContain(`Microsoft Windows 11 Home`);
+    expect(text).toContain(`Arch Linux on WSL`);
+    // Each side's door, shell and home, so the ids the tools are named after are on the page.
+    expect(text).toContain(`rog-wsl-arch`);
+    expect(text).toContain(`PowerShell 7`);
+    expect(text).toContain(`/usr/bin/zsh`);
+    // The sandbox list is the machine's, drawn once, with the distro's folder under it.
+    expect(text).toContain(`Sandboxes on this device`);
+    expect(disclosures(el)).toHaveLength(1);
+    // The Windows side's distros: one already connected as a door, one offered.
+    expect(text).toContain(`WSL distros on this PC`);
+    expect(text).toContain(`connected as rog-wsl-arch`);
+    expect(text).toContain(`Ubuntu`);
+    expect(labels(el)).toContain(`Connect it`);
+    // Two agents, two Update buttons: each side runs its own process.
+    expect(labels(el).filter((label) => label === `Update agent`)).toHaveLength(2);
+});
+
+it(`sends a container verb through the Windows door and a folder verb through the distro's`, async () => {
+    bothDoors();
+    const el = mount([distroSide(), windowsSide()]);
+    await nextTick();
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Stop`)?.click();
+    await nextTick();
+    // Stopping the sandbox this page is not using needs no confirmation; the op leaves at once.
+    expect(verbCalls.map((call) => call.hostId)).toEqual([`rog`]);
+    await openRow(el, `work`);
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Pause syncing`)?.click();
+    await nextTick();
+    expect(mirrorCalls).toEqual([{ hostId: `rog-wsl-arch`, command: `sync-pause`, sandboxId: `work` }]);
+});

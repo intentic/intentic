@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { machinesOf } from "@intentic/sandbox-contract";
 import { Button, Code, CopyButton, Notice, RowGroup, RowNote } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { daemonBehind, daemonDrifted, driftedRoutes, missingRoutes } from "./useDaemonRoutes";
@@ -31,10 +32,11 @@ const { devices } = useDevices({ poll: false });
 const onlineDevices = computed(() => devices.value.filter((device) => device.hostId !== undefined && device.online === true));
 // Which machine runs this sandbox is itself read off the daemon's fleet payload, so a daemon far enough behind to
 // disagree about that payload answers "none" — and the one button that fixes it would vanish with the field it was
-// gated on, exactly when this card is on screen. A single online device is not a guess, so it is offered: the reload's
+// gated on, exactly when this card is on screen. A single online machine is not a guess, so it is offered: the reload's
 // argv names this sandbox's own slug on the far side, so a machine that doesn't hold it refuses rather than restarting
-// something else. Two of them is a guess, and stays the printed command.
-const hostId = computed(() => running.value ?? (onlineDevices.value.length === 1 ? onlineDevices.value[0]?.hostId : undefined));
+// something else. Two of them is a guess, and stays the printed command; two doors onto one PC (Windows and a distro
+// on it) are one machine, and either door reaches the same engine.
+const hostId = computed(() => running.value ?? (machinesOf(onlineDevices.value).length === 1 ? onlineDevices.value[0]?.hostId : undefined));
 const reloading = ref(false);
 const reloaded = ref(false);
 const failed = ref<string | undefined>(undefined);

@@ -243,9 +243,38 @@ sandbox's slug on the far side, so a machine that doesn't hold it refuses rather
 
 Folding two readings into one row is where a name stops being enough. **WSL hands a distro the Windows machine's own
 hostname**, and a distro is usually named after the machine too, so both of merge's keys collide between environments
-that share nothing else — separate filesystems, separate agents, separate containers. The agent therefore reports
-which environment it is (`wsl`, [wsl.ts](../../_devices/machine/src/wsl.ts)), and a fold is refused whenever the two
-sides positively disagree about that or about their platform (`differentEnvironment`,
+that share nothing else — separate filesystems, separate agents. The agent therefore reports which environment it is
+(`wsl`, [wsl.ts](../../_devices/machine/src/wsl.ts)), in its connect-time facts as well as its report, so a card with
+"Run commands" off still says which; a fold is refused whenever the two sides positively disagree about that or about
+their platform (`environmentOf`/`differentEnvironment`,
 [schemas/devices.ts](../../_shared/sandbox-contract/src/schemas/devices.ts)). Silence is not disagreement: an agent too
-old to report `wsl` folds exactly as it did before the field existed. A distro says so in the loudest ink its row has
-("Arch on WSL"), since that is the whole difference between it and the Windows row beside it.
+old to report either folds exactly as it did before the fields existed.
+
+## One PC, several environments
+
+Kept apart as rows, Windows and the distros on it are still one computer: one Docker engine (Docker Desktop's, which
+both sides' `list_sandboxes` list identically), one screen, one set of disks under two names. `machinesOf`
+([schemas/devices.ts](../../_shared/sandbox-contract/src/schemas/devices.ts)) is the join, shared by daemon and
+browser: rows whose hostnames agree fold into one **machine** when at least one of them is a WSL environment, and two
+native installs that merely share a name stay two machines. Each **environment** keeps its own door (host capability
+id, scopes, agent process, sync enrollment), because file sync of a WSL folder has to run inside WSL. What reads the
+join:
+
+- The Devices board draws one card per machine, each environment a line with its own state, and the containers once
+  ([deviceRows.ts](../../_editor/web/src/features/sandbox/devices/deviceRows.ts) `machineRows`); the device page is
+  the machine's, with an "Environments on this device" group, per-environment agent controls, the Windows side's
+  distros with a Connect link for any not yet connected, and one sandbox list whose container verbs go through the
+  first open door and whose folder verbs go through the environment holding the pairing.
+- Capabilities states "one PC with `<other door>`" on each such instance
+  ([deviceConnections.ts](../../_editor/web/src/features/capabilities/model/deviceConnections.ts) `sameMachineNote`),
+  and the Linux connect dialog can hand a distro's one-liner to PowerShell (`wsl -d <distro> --exec sh -c "…"`).
+- The turn's prompt says the ids are one computer, which side owns the screen, and how to cross
+  ([self-host.ts](../../_sandbox/sandbox/src/hosts/self-host.ts) `machineReach`,
+  [system-prompt.ts](../../_sandbox/sandbox/src/agent/prompt/system-prompt.ts)); both skill packs carry the same.
+
+Crossing is a parameter, not a quoting exercise: `run_command` takes `in: "wsl:<distro>"` on a Windows device
+(`wsl.exe --exec sh -lc`, the script as one argument) and `in: "windows"` inside a distro (PowerShell through interop,
+a drive-path `cwd` mapped to its `/mnt` form) — [shell.ts](../../_devices/machine/src/device/tools/shell.ts). A
+crossed `cwd` names a folder in the other environment, which this door's roots cannot bound; a command's reach was
+never bounded by its cwd, only its start, and the destructive classifier still reads the command. The reasoning is in
+[machines-and-environments.md](../design/machines-and-environments.md).

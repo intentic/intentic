@@ -34,7 +34,24 @@ start scripts with `$ErrorActionPreference = 'Stop'` so cmdlet failures surface 
 | Clipboard | `Get-Clipboard` / `Set-Clipboard -Value 'text'` |
 | Registry | `Get-ItemProperty 'HKCU:\Software\...'` |
 | JSON | `Get-Content x.json | ConvertFrom-Json`, `$obj | ConvertTo-Json -Depth 10` |
-| WSL | `wsl -d Ubuntu -- bash -lc 'uname -a'` |
+| WSL | `wsl -l -v` lists the distros; running inside one is `in:` below, not a `wsl` command |
+
+### WSL distros on this PC
+`describe` lists them ("WSL distros on this PC: Arch, Ubuntu-22.04"). Each is a Linux install sharing this PC's
+hardware, Docker engine and hostname, with its own filesystem and its own shell.
+
+- **Run a Linux command inside one** with `run_command` and `in: "wsl:<name>"` (or `in: "wsl"` for the default
+  distro). The command runs through `sh -lc` in that distro and never passes through PowerShell, so write plain sh:
+  no `wsl -d … -- bash -lc '…'` and no PowerShell quoting of a Linux command. `cwd` is then a Linux path; it
+  defaults to the distro's home.
+- **One folder, two names.** This PC's drives are under `/mnt` in a distro (`C:\Users\you` is `/mnt/c/Users/you`);
+  a distro's files are under `\\wsl.localhost\<name>\` from here (`/home/you` is `\\wsl.localhost\Arch\home\you`).
+  Prefer working on files from the side they live on: cross-boundary file access is slow and drops permissions.
+- **One Docker engine.** Docker Desktop's containers are the same list from here and from any distro, so
+  `list_sandboxes` agrees on both sides and a sandbox is managed through whichever door is open.
+- **If a distro is also connected as its own device** (the prompt says which ids are one computer), prefer that
+  door for Linux work: its own login shell, PATH and tools, and the same permissions the owner set for it. This
+  door owns the screen, the GUI, the clipboard and PowerShell.
 
 ### Office and other COM apps
 Outlook, Excel and Word are reachable through COM when the app is installed and the user is signed in:

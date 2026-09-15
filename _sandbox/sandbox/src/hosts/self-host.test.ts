@@ -1,5 +1,6 @@
 import { type Device, DeviceSandboxSchema, hostRunningSandbox } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
+import { machineReach } from "./self-host.js";
 
 // The predicate behind every "run it out there instead of asking" path, tested beside the daemon's reader of it
 // (self-host.ts). The browser reads the same function through useHostRunning, so a button and a turn cannot disagree
@@ -48,4 +49,26 @@ test("refuses to guess a machine for a sandbox it cannot name", () => {
     const devices = [device({ hostId: "ada-laptop", online: true, sandboxes: holding(["work-abc"]) })];
     expect(hostRunningSandbox(devices, undefined)).toBeUndefined();
     expect(hostRunningSandbox(devices, "")).toBeUndefined();
+});
+
+// Two doors onto one PC are the case a prompt has to be told about; a single door is one computer already.
+test("names the machines a turn could mistake for two, and only those", () => {
+    const windows = device({ key: "rog", hostId: "rog", facts: { os: "Windows", arch: "x64", shell: "PowerShell 7", home: "C:\\Users\\radar", roots: [], hostname: "rog" } });
+    const distro = device({
+        key: "rog-wsl",
+        hostId: "rog-wsl",
+        facts: { os: "Arch Linux", arch: "x64", shell: "/usr/bin/zsh", home: "/home/radarsu", roots: [], hostname: "rog", wsl: { distro: "Arch" } },
+    });
+    const lone = device({ key: "omen", hostId: "omen", facts: { os: "Windows", arch: "x64", shell: "PowerShell 7", home: "C:\\Users\\r", roots: [], hostname: "omen" } });
+    expect(machineReach([distro, windows, lone], ["rog", "rog-wsl", "omen"])).toEqual([
+        {
+            label: "rog",
+            doors: [
+                { id: "rog", distro: undefined, shell: "PowerShell 7", home: "C:\\Users\\radar" },
+                { id: "rog-wsl", distro: "Arch", shell: "/usr/bin/zsh", home: "/home/radarsu" },
+            ],
+        },
+    ]);
+    // A door the turn was not granted is not one to describe, and a machine left with one door is no longer two.
+    expect(machineReach([distro, windows, lone], ["rog", "omen"])).toEqual([]);
 });

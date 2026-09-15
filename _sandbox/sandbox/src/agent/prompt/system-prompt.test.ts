@@ -356,3 +356,35 @@ test("a connected device is named, with the machine running this sandbox called 
     const preset = sdkSystemPrompt({ ...BASE, mode: "claude", custom: undefined, hostDevices: { ids: ["ada-laptop"] } }) as { append: string };
     expect(preset.append).toContain("`ada-laptop`");
 });
+
+// Windows and the distro on it are two devices to the tools and one PC to the owner; a turn told only the ids keeps
+// them in step or runs Linux work through PowerShell. The sentence names the sides, the crossing and the paths.
+test("says which connected devices are one computer, and how to cross between them", () => {
+    const prompt = sdkSystemPrompt({
+        ...BASE,
+        mode: "intentic",
+        custom: undefined,
+        hostDevices: {
+            ids: ["rog", "rog-wsl"],
+            self: "rog",
+            slug: "work-abc",
+            machines: [
+                {
+                    label: "radarsu-rog",
+                    doors: [
+                        { id: "rog", shell: "PowerShell 7", home: "C:\\Users\\radar" },
+                        { id: "rog-wsl", distro: "Arch", shell: "/usr/bin/zsh", home: "/home/radarsu" },
+                    ],
+                },
+            ],
+        },
+    }) as string;
+    expect(prompt).toContain("`rog` and `rog-wsl` are ONE computer, radarsu-rog");
+    expect(prompt).toContain("`rog` is its Windows side (PowerShell 7, home C:\\Users\\radar): the screen, the GUI and the clipboard live there");
+    expect(prompt).toContain('`rog-wsl` is the WSL distro "Arch" on it (/usr/bin/zsh, home /home/radarsu)');
+    expect(prompt).toContain('`in: "wsl:Arch"` on `rog` runs a Linux command in that distro, and `in: "windows"` on `rog-wsl` runs PowerShell');
+    expect(prompt).toContain("C:\\Users\\radar is /mnt/c/Users/radar from a distro; /home/radarsu is \\\\wsl.localhost\\Arch\\home\\radarsu from Windows");
+    // A single-door machine gets no such sentence: there is nothing to mistake for two.
+    const lone = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, hostDevices: { ids: ["ada-laptop"] } }) as string;
+    expect(lone).not.toContain("ONE computer");
+});

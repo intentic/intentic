@@ -2,13 +2,13 @@
 import { Button, Icon, InfoHint, Notice, type NoticeModel, RowGroup, RowNote, SearchBar, SkeletonRows, StatusTally } from "@intentic/ui";
 import { computed, ref } from "vue";
 import DeviceBoardCard from "./DeviceBoardCard.vue";
-import { type DeviceRow, deviceTally, rowMatches, showFilter } from "./deviceRows";
+import { deviceTally, type MachineRow, rowMatches, showFilter } from "./deviceRows";
 import { desktopApp } from "../../../app/environments/desktop";
 
-// Device cards list paired machines; controls live on each machine's page.
+// Device cards list paired machines, one per PC however many doors it has; controls live on each machine's page.
 
 const { rows, isLoading, notice, outline, ownSlug, readAt } = defineProps<{
-    rows: readonly DeviceRow[];
+    rows: readonly MachineRow[];
     /** The first read only; a refetch must never blank an already-populated board. */
     isLoading: boolean;
     notice: NoticeModel | undefined;
@@ -25,7 +25,7 @@ const emit = defineEmits<{ add: [] }>();
 const query = ref(``);
 const needle = computed(() => query.value.trim().toLowerCase());
 
-const shown = computed<readonly DeviceRow[]>(() => (needle.value === `` ? rows : rows.filter((row) => rowMatches(row, needle.value))));
+const shown = computed<readonly MachineRow[]>(() => (needle.value === `` ? rows : rows.filter((row) => rowMatches(row, needle.value))));
 
 // Desktop app reads its own device without a capability.
 const inDesktopApp = desktopApp() !== undefined;
@@ -83,7 +83,7 @@ const inDesktopApp = desktopApp() !== undefined;
             let the agent work there.
         </RowNote>
 
-        <DeviceBoardCard v-for="row in shown" :key="row.device.key" :row="row" :needle="needle" :own-slug="ownSlug" :read-at="readAt" />
+        <DeviceBoardCard v-for="row in shown" :key="row.key" :machine="row" :needle="needle" :own-slug="ownSlug" :read-at="readAt" />
 
         <!-- A filter that matched nothing says so, rather than leaving a group that looks empty by accident. -->
         <RowNote v-if="shown.length === 0 && rows.length > 0" variant="empty">No device or sandbox here matches "{{ query }}".</RowNote>

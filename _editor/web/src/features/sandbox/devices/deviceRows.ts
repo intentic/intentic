@@ -1,4 +1,14 @@
-import { agentBuildSkew, type Device, type DeviceAgent, type DeviceSyncSwitch } from "@intentic/sandbox-contract";
+import {
+    agentBuildSkew,
+    type Device,
+    type DeviceAgent,
+    type DevicePairing,
+    type DevicePort,
+    type DeviceSandbox,
+    type DeviceSyncSwitch,
+    type Machine,
+    machinesOf,
+} from "@intentic/sandbox-contract";
 import type { StatusVariant, TallyItem } from "@intentic/ui";
 import {
     type DeviceFolderRow,
@@ -9,11 +19,12 @@ import {
     mirroringOff,
     sandboxGroups,
 } from "@intentic/ui/device";
-import { type AgentChip, agentChip, agentHalted, deviceDoors, deviceQuiet, machineWarnings, osLabel } from "./deviceFacts";
+import { type AgentChip, agentChip, agentHalted, deviceDoors, deviceQuiet, lastSeenNote, machineWarnings, osLabel } from "./deviceFacts";
 
-// One machine as the board and the device page both read it: its state in one word and one colour, its
-// sandboxes folded into groups, and the agent verdicts a render needs. Pure throughout, so the same rules
-// can be checked without mounting anything (deviceRows.test.ts).
+// One device as the board and the device page both read it: its state in one word and one colour, its
+// sandboxes folded into groups, and the agent verdicts a render needs; and one MACHINE, the PC those devices are
+// environments of (Windows and the WSL distros on it), whose sandboxes are listed once. Pure throughout, so the
+// same rules can be checked without mounting anything (deviceRows.test.ts).
 
 // `readAt` is when the reading landed here, not the clock: see deviceFacts.ts.
 
@@ -41,11 +52,15 @@ export const deviceState = (device: Device, readAt: number): string => {
 };
 
 // Machines worth reading first: state leads, name breaks ties, so order only changes when a machine's state
-// does. Live ranks above needs-attention, since a live card is the point of the board.
+// does. Live ranks above needs-attention, since a live card is the point of the board; a machine with several
+// environments ranks by its best one, since that is the door that works.
 const RANK: Record<string, number> = { live: 0, "needs attention": 1, "gone quiet": 2, offline: 3 };
 
-export const sortDevices = (devices: readonly Device[], readAt: number): Device[] =>
-    devices.toSorted((a, b) => (RANK[deviceState(a, readAt)] ?? 9) - (RANK[deviceState(b, readAt)] ?? 9) || a.label.localeCompare(b.label));
+const machineRank = (machine: MachineRow, readAt: number): number =>
+    Math.min(...machine.environments.map((environment) => RANK[deviceState(environment.device, readAt)] ?? 9));
+
+export const sortMachines = (machines: readonly MachineRow[], readAt: number): MachineRow[] =>
+    machines.toSorted((a, b) => machineRank(a, readAt) - machineRank(b, readAt) || a.label.localeCompare(b.label));
 
 // The agent with this render's verdicts already attached; absent on a device that never reported.
 export type RowAgent = DeviceAgent & {
@@ -81,8 +96,76 @@ export const deviceRow = (device: Device, latest: string | undefined): DeviceRow
     };
 };
 
-export const deviceRows = (devices: readonly Device[], latest: string | undefined, readAt: number): DeviceRow[] =>
-    sortDevices(devices, readAt).map((device) => deviceRow(device, latest));
+// One PC as the board draws it: its environments in the contract's order (Windows first), and its sandboxes once.
+// A lone device is a machine of one environment whose groups are that device's own.
+export interface MachineRow {
+    readonly key: string;
+    readonly label: string;
+    readonly environments: readonly DeviceRow[];
+    /** Containers deduped by slug across environments; every pairing and port kept, sync pairings leading. */
+    readonly groups: readonly DeviceSandboxGroup[];
+}
+
+// The environment whose report carries this group's folder: the door its file-sync buttons go through. Matched
+// on mode as well as id, since two environments can pair one sandbox in different modes.
+export const folderOwner = (machine: MachineRow, group: DeviceSandboxGroup): DeviceRow | undefined =>
+    group.folder === undefined
+        ? undefined
+        : machine.environments.find((environment) =>
+              (environment.device.report?.pairings ?? []).some(
+                  (pairing) => pairing.sandboxId === group.sandboxId && pairing.mode === group.folder?.mode,
+              ),
+          );
+
+// The door container verbs go through: the first environment holding a socket. One engine serves every
+// environment, so any open door manages every container.
+export const managerOf = (machine: MachineRow): DeviceRow | undefined =>
+    machine.environments.find((environment) => environment.device.hostId !== undefined && environment.device.online === true) ??
+    machine.environments.find((environment) => environment.device.hostId !== undefined);
+
+// The machine's three lists as one. Two environments of one PC list the same containers, so a slug is kept once
+// (Windows leads, and both sides read the same engine); folders and ports are each environment's own and are all
+// kept, sync pairings first so a folder that holds files outranks one that only mirrors ports when both name a
+// sandbox. A lone device's lists are its own, in its own order.
+export interface MachineLists {
+    readonly pairings: readonly DevicePairing[];
+    readonly ports: readonly DevicePort[];
+    readonly sandboxes: readonly DeviceSandbox[];
+}
+
+export const machineLists = (environments: readonly DeviceRow[]): MachineLists => {
+    const pairings = environments.flatMap((environment) => environment.device.report?.pairings ?? []);
+    const sandboxes = new Map<string, DeviceSandbox>();
+    for (const sandbox of environments.flatMap((environment) => environment.device.sandboxes ?? [])) {
+        if (!sandboxes.has(sandbox.slug)) {
+            sandboxes.set(sandbox.slug, sandbox);
+        }
+    }
+    return {
+        pairings: environments.length > 1 ? pairings.toSorted((a, b) => Number(a.mode !== `sync`) - Number(b.mode !== `sync`)) : pairings,
+        ports: environments.flatMap((environment) => environment.device.report?.ports ?? []),
+        sandboxes: [...sandboxes.values()],
+    };
+};
+
+export const machineRow = (environments: readonly DeviceRow[], { key, label }: Pick<Machine, `key` | `label`>): MachineRow => {
+    const lists = machineLists(environments);
+    return { key, label, environments, groups: sandboxGroups(lists.pairings, lists.ports, lists.sandboxes) };
+};
+
+export const machineRows = (devices: readonly Device[], latest: string | undefined, readAt: number): MachineRow[] =>
+    sortMachines(
+        machinesOf(devices).map((machine) =>
+            machineRow(
+                machine.environments.map((device) => deviceRow(device, latest)),
+                machine,
+            ),
+        ),
+        readAt,
+    );
+
+// Whether the machine holds more than one environment: the case the board and the page draw differently.
+export const manySided = (machine: MachineRow): boolean => machine.environments.length > 1;
 
 // The sandbox you're looking at, matched by its container slug on the machine. Both sides must be known:
 // comparing two optionals let a pairing with no container on an unknown-URL sandbox match
@@ -90,8 +173,12 @@ export const deviceRows = (devices: readonly Device[], latest: string | undefine
 export const isSelf = (device: Device, group: DeviceSandboxGroup, ownSlug: string | undefined): boolean =>
     device.hostId !== undefined && ownSlug !== undefined && group.sandbox?.slug === ownSlug;
 
-export const selfGroup = (row: DeviceRow, ownSlug: string | undefined): DeviceSandboxGroup | undefined =>
-    row.groups.find((group) => isSelf(row.device, group, ownSlug));
+// Any environment's door onto the container serving this page names the machine as the one in use.
+export const isSelfMachine = (machine: MachineRow, group: DeviceSandboxGroup, ownSlug: string | undefined): boolean =>
+    machine.environments.some((environment) => isSelf(environment.device, group, ownSlug));
+
+export const selfGroup = (machine: MachineRow, ownSlug: string | undefined): DeviceSandboxGroup | undefined =>
+    machine.groups.find((group) => isSelfMachine(machine, group, ownSlug));
 
 // The machine holding this sandbox's desktop-sync pairing and no command door. A different question from
 // `hostRunningSandbox`, which asks whose docker holds the container and can only ever answer with a device already
@@ -134,20 +221,25 @@ export const groupMatches = (group: DeviceSandboxGroup, needle: string): boolean
     has(needle, group.title, group.subtitle, group.sandboxId, group.sandbox?.slug, group.sandbox?.image, group.folder?.localDir) ||
     group.ports.some((port) => String(port.port).includes(needle));
 
-export const rowMatches = (row: DeviceRow, needle: string): boolean =>
-    has(needle, row.device.label, row.device.key, osLabel(row.device), row.device.hostId, row.device.report?.hostname) ||
-    row.groups.some((group) => groupMatches(group, needle));
+const deviceMatches = (row: DeviceRow, needle: string): boolean =>
+    has(needle, row.device.label, row.device.key, osLabel(row.device), row.device.hostId, row.device.report?.hostname);
+
+export const rowMatches = (machine: MachineRow, needle: string): boolean =>
+    has(needle, machine.label, machine.key) ||
+    machine.environments.some((environment) => deviceMatches(environment, needle)) ||
+    machine.groups.some((group) => groupMatches(group, needle));
 
 // Shown only once there's enough to search: a filter over two machines costs more attention than it saves.
 const FILTER_FLOOR = 3;
 
-export const showFilter = (rows: readonly DeviceRow[]): boolean =>
-    rows.length > 2 || rows.reduce((total, row) => total + row.groups.length, 0) > FILTER_FLOOR;
+export const showFilter = (machines: readonly MachineRow[]): boolean =>
+    machines.length > 2 || machines.reduce((total, machine) => total + machine.groups.length, 0) > FILTER_FLOOR;
 
-// The orientation line, answered before a card is parsed: one measure (sandboxes) split by state.
+// The orientation line, answered before a card is parsed: one measure (sandboxes) split by state. Counted per
+// machine, so a PC with two doors onto one engine counts each container once.
 // `running` stays visible even at zero so the tally never renders as nothing.
-export const deviceTally = (rows: readonly DeviceRow[]): TallyItem[] => {
-    const groups = rows.flatMap((row) => row.groups);
+export const deviceTally = (machines: readonly MachineRow[]): TallyItem[] => {
+    const groups = machines.flatMap((machine) => machine.groups);
     return [
         { label: `running`, value: groups.filter((group) => group.sandbox?.running === true).length, variant: `success`, always: true },
         { label: `stopped`, value: groups.filter((group) => group.sandbox?.running === false).length, variant: `neutral` },
@@ -171,9 +263,22 @@ export interface BoardLine {
 // be the whole board.
 const BOARD_LINES_MAX = 3;
 
-export interface BoardBody {
-    /** The doors this sandbox reaches the machine through, then the build its agent serves. */
+// One environment of a many-sided machine, as its own line on the card: what it is, how it is reached, and its
+// own state, since a PC with a live Windows side and a stopped distro has no single word for itself.
+export interface BoardEnvironment {
+    readonly key: string;
+    readonly label: string;
     readonly doors: readonly string[];
+    readonly state: string;
+    readonly tone: StatusVariant;
+    readonly lastSeen: string | undefined;
+}
+
+export interface BoardBody {
+    /** The doors this sandbox reaches the machine through, then the build its agent serves; a lone device's only. */
+    readonly doors: readonly string[];
+    /** One line per environment on a many-sided machine; empty on a lone device, whose facts ride the card itself. */
+    readonly environments: readonly BoardEnvironment[];
     readonly lines: readonly BoardLine[];
     /** Sandboxes those lines do not account for, counted against what the machine reported. */
     readonly more: number;
@@ -181,13 +286,37 @@ export interface BoardBody {
     readonly warnings: readonly string[];
 }
 
+const doorsOf = (row: DeviceRow): string[] => [
+    ...deviceDoors(row.device).map((door) => door.name),
+    ...(row.chip === undefined ? [] : [`agent ${row.chip.version}`]),
+];
+
+const boardEnvironment = (row: DeviceRow, readAt: number): BoardEnvironment => ({
+    key: row.device.key,
+    label: osLabel(row.device) ?? row.device.label,
+    doors: doorsOf(row),
+    state: deviceState(row.device, readAt),
+    tone: deviceTone(row.device, readAt),
+    lastSeen: lastSeenNote(row.device),
+});
+
+// A many-sided machine's warnings name the side they are about; a lone device's need no prefix.
+const boardWarnings = (machine: MachineRow, readAt: number): readonly string[] =>
+    manySided(machine)
+        ? machine.environments.flatMap((environment) =>
+              machineWarnings(environment.device, readAt).map((warning) => `${osLabel(environment.device) ?? environment.device.label}: ${warning}`),
+          )
+        : machineWarnings(machine.environments[0]?.device ?? { key: ``, label: `` }, readAt);
+
 // While the filter is active every matching sandbox is drawn, however many: a port search whose answer was
 // the fourth line would otherwise land on a card that doesn't show it.
-export const boardBody = (row: DeviceRow, needle: string, ownSlug: string | undefined, readAt: number): BoardBody => {
-    const matched = needle === `` ? row.groups : row.groups.filter((group) => groupMatches(group, needle));
+export const boardBody = (machine: MachineRow, needle: string, ownSlug: string | undefined, readAt: number): BoardBody => {
+    const matched = needle === `` ? machine.groups : machine.groups.filter((group) => groupMatches(group, needle));
     const shown = needle === `` ? matched.slice(0, BOARD_LINES_MAX) : matched;
+    const lone = manySided(machine) ? undefined : machine.environments[0];
     return {
-        doors: [...deviceDoors(row.device).map((door) => door.name), ...(row.chip === undefined ? [] : [`agent ${row.chip.version}`])],
+        doors: lone === undefined ? [] : doorsOf(lone),
+        environments: lone === undefined ? machine.environments.map((environment) => boardEnvironment(environment, readAt)) : [],
         lines: shown.map((group) => {
             const summary = groupSummary(group);
             return {
@@ -196,11 +325,11 @@ export const boardBody = (row: DeviceRow, needle: string, ownSlug: string | unde
                 running: group.sandbox?.running,
                 facts: summary.facts,
                 warnings: summary.warnings,
-                self: isSelf(row.device, group, ownSlug),
+                self: isSelfMachine(machine, group, ownSlug),
             };
         }),
         more: matched.length - shown.length,
-        warnings: machineWarnings(row.device, readAt),
+        warnings: boardWarnings(machine, readAt),
     };
 };
 

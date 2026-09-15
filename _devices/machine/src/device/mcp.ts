@@ -73,10 +73,19 @@ const TOOLS: readonly McpTool<HostScopes>[] = [
     tool({
         name: "run_command",
         description:
-            "Run a command on this device and get back its exit code, stdout and stderr. The shell is PowerShell on Windows and the user's login shell elsewhere (see describe). There is no terminal for anyone to type into: a command that prompts will fail rather than wait. Commands that DELETE (a recursive delete, a formatted disk, a removed Docker volume) need this device's \"Run destructive commands\" switch, which is off unless its owner turned it on: they are refused with a message naming the switch, so ask the owner to turn it on rather than looking for a spelling that gets past it. Prefer one script that does the whole job over many small calls, every call is a network round trip to somebody's laptop.",
+            "Run a command on this device and get back its exit code, stdout and stderr. The shell is PowerShell on Windows and the user's login shell elsewhere (see describe). On a Windows PC with WSL, `in: \"wsl:<distro>\"` runs the command inside that distro through sh -lc instead, and inside a WSL distro `in: \"windows\"` runs it in PowerShell on the Windows side: the same PC, the other environment, with no quoting through the first shell. There is no terminal for anyone to type into: a command that prompts will fail rather than wait. Commands that DELETE (a recursive delete, a formatted disk, a removed Docker volume) need this device's \"Run destructive commands\" switch, which is off unless its owner turned it on: they are refused with a message naming the switch, so ask the owner to turn it on rather than looking for a spelling that gets past it. Prefer one script that does the whole job over many small calls, every call is a network round trip to somebody's laptop.",
         input: z.object({
-            command: required.describe("The command line to run, in this machine's shell."),
-            cwd: required.optional().describe("Working directory. Must be inside the allowed folders. Defaults to the first allowed folder."),
+            command: required.describe("The command line to run, in the shell of the environment it runs in."),
+            cwd: required
+                .optional()
+                .describe(
+                    "Working directory. Here: must be inside the allowed folders, defaults to the first. Crossing with `in`: a path in that environment (a Linux path for a distro, a drive path like C:\\Users\\you for Windows), defaulting to its home.",
+                ),
+            in: required
+                .optional()
+                .describe(
+                    'Where to run it: omit for this device. "wsl" (the default distro) or "wsl:<name>" on a Windows PC; "windows" inside a WSL distro. describe lists the distros and says which side this is.',
+                ),
             timeoutMs: z
                 .int()
                 .positive()
@@ -84,8 +93,8 @@ const TOOLS: readonly McpTool<HostScopes>[] = [
                 .default(DEFAULT_TIMEOUT_MS)
                 .describe(`How long to wait before killing it. Default ${DEFAULT_TIMEOUT_MS}, maximum ${MAX_TIMEOUT_MS}.`),
         }),
-        run: async ({ command, cwd, timeoutMs }, scopes) => {
-            const result = await runCommand({ command, ...(cwd === undefined ? {} : { cwd }), timeoutMs }, scopes);
+        run: async ({ command, cwd, timeoutMs, in: target }, scopes) => {
+            const result = await runCommand({ command, ...(cwd === undefined ? {} : { cwd }), ...(target === undefined ? {} : { in: target }), timeoutMs }, scopes);
             // A non-zero exit is a real answer, not a tool failure; the model reads the code and the streams and
             // decides.
             // Only a command that could not be run comes back as an error.

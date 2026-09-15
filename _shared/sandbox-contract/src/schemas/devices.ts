@@ -1,6 +1,6 @@
 // What one of the user's own machines is running.
 import { z } from "zod";
-import { HostFactsSchema } from "./hosts.js";
+import { type HostFacts, HostFactsSchema, WslEnvironmentSchema } from "./hosts.js";
 import { DEV_VERSION } from "../state/versions.js";
 // Desktop-sync report shape shared by the agent, daemon and browser, produced only by `intentic-machine status --json`.
 // The agent never reports `sandboxes`; the docker half is filled in by whoever reads the report, scoped to the reader's
@@ -303,10 +303,8 @@ export const DeviceReportSchema = z.object({
     // own: a WSL distro inherits the Windows machine's name, so `wsl` below is what tells those apart.
     hostname: z.string(),
     os: z.string(),
-    // Present only inside a WSL distro. `distro` is that distro's own name ("Arch", "Ubuntu-22.04"), empty when the
-    // machine won't say. Windows, and every distro it hosts, all answer `hostname` with the same string while being
-    // separate filesystems running separate agents, so this is the only thing that keeps them apart.
-    wsl: z.object({ distro: z.string() }).optional(),
+    // Present only inside a WSL distro; the same fact rides the connect-time facts, which no scope can withhold.
+    wsl: WslEnvironmentSchema.optional(),
     pairings: z.array(DevicePairingSchema),
     ports: z.array(DevicePortSchema),
     // The one agent this device runs, on disk and in flight, in one block.
@@ -321,20 +319,22 @@ export type DeviceReport = z.infer<typeof DeviceReportSchema>;
 export const REPORT_QUIET_AFTER_MS = 60_000;
 export const reportQuiet = (report: DeviceReport, receivedAt: number): boolean => receivedAt - report.capturedAt > REPORT_QUIET_AFTER_MS;
 
-// The environment a reading came from, as opposed to the machine hosting it: a Windows install and every WSL distro
-// on it are separate filesystems running separate agents, and all of them answer `hostname` with the same string.
-// Undefined when nothing has reported — an absence of evidence, never read as agreement.
-export const environmentOf = (report: DeviceReport | undefined): string | undefined =>
-    report === undefined ? undefined : report.wsl === undefined ? report.os : `wsl:${report.wsl.distro}`;
-
-// Whether two readings positively disagree about which environment they describe. False whenever either side has not
-// said, so this only ever blocks a fold it holds evidence against, and an agent too old to report `wsl` keeps the
-// behaviour it had before the field existed.
-export const differentEnvironment = (left: DeviceReport | undefined, right: DeviceReport | undefined): boolean => {
-    const a = environmentOf(left);
-    const b = environmentOf(right);
-    return a !== undefined && b !== undefined && a !== b;
+// The environment a device's evidence describes, as opposed to the machine hosting it: `wsl:<distro>` inside a
+// distro, `native` for an install on the metal. Connect-time facts are read first, since no scope can withhold them;
+// facts from an agent too old to carry `hostname` say nothing, and a report without `wsl` is native, as it always
+// was. Undefined is an absence of evidence, never read as agreement.
+export const environmentOf = (facts: Pick<HostFacts, "hostname" | "wsl"> | undefined, report: DeviceReport | undefined): string | undefined => {
+    const wsl = facts?.wsl ?? report?.wsl;
+    if (wsl !== undefined) {
+        return `wsl:${wsl.distro}`;
+    }
+    return facts?.hostname !== undefined || report !== undefined ? "native" : undefined;
 };
+
+// Whether two devices positively disagree about which environment they are. False whenever either side has not said,
+// so this only ever blocks a fold it holds evidence against.
+export const differentEnvironment = (left: string | undefined, right: string | undefined): boolean =>
+    left !== undefined && right !== undefined && left !== right;
 
 // Compares running build against installed; silent when the loop is stopped, nothing installed, or installed is a dev
 // build. An unstamped `running` still counts as skew.
@@ -401,6 +401,57 @@ export const DeviceSchema = z.object({
 });
 export type Device = z.infer<typeof DeviceSchema>;
 export const DevicesListSchema = z.object({ devices: z.array(DeviceSchema) });
+
+// The physical computer a device is an environment of. Windows and every WSL distro on it are one machine with one
+// Docker engine, one screen and one set of disks, each environment holding its own agent and its own door.
+export interface Machine {
+    /** A lone device's own key, so its address does not change; a folded machine's is the hostname its doors share. */
+    readonly key: string;
+    readonly label: string;
+    /** Windows first, then distros by label: the side that owns the screen leads. */
+    readonly environments: readonly Device[];
+}
+
+export const deviceHostname = (device: Device): string | undefined => device.facts?.hostname ?? device.report?.hostname;
+export const deviceEnvironment = (device: Device): string | undefined => environmentOf(device.facts, device.report);
+export const isWslDevice = (device: Device): boolean => deviceEnvironment(device)?.startsWith("wsl:") === true;
+
+// Two native installs that merely share a name stay two machines; only a distro joins the machine whose hostname it
+// carries, which is the one fact that makes the name safe to join on.
+const byEnvironment = (a: Device, b: Device): number => Number(isWslDevice(a)) - Number(isWslDevice(b)) || a.label.localeCompare(b.label);
+
+const hostnameKey = (device: Device): string | undefined => deviceHostname(device)?.toLowerCase();
+
+const siblingsOf = (device: Device, devices: readonly Device[]): Device[] => {
+    const key = hostnameKey(device);
+    const shared = key === undefined ? [device] : devices.filter((candidate) => hostnameKey(candidate) === key);
+    return shared.length > 1 && shared.some(isWslDevice) ? shared.toSorted(byEnvironment) : [device];
+};
+
+const machineOf = (device: Device, environments: readonly Device[]): Machine => {
+    if (environments.length === 1) {
+        return { key: device.key, label: device.label, environments };
+    }
+    // Folding needs a hostname, so it is present here; the fallback only keeps the type honest.
+    const hostname = deviceHostname(device) ?? device.key;
+    return { key: hostname, label: hostname, environments };
+};
+
+export const machinesOf = (devices: readonly Device[]): Machine[] => {
+    const folded = new Set<Device>();
+    const machines: Machine[] = [];
+    for (const device of devices) {
+        if (folded.has(device)) {
+            continue;
+        }
+        const environments = siblingsOf(device, devices);
+        for (const environment of environments) {
+            folded.add(environment);
+        }
+        machines.push(machineOf(device, environments));
+    }
+    return machines;
+};
 
 // The connected, online device whose docker reports a given sandbox slug: the machine that sandbox RUNS ON, as opposed
 // to any machine merely paired with it. Answers the question every "run it there instead of asking the owner to type

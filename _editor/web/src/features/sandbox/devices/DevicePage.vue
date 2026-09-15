@@ -22,9 +22,25 @@ import { type RouteLocationRaw, RouterLink } from "vue-router";
 import DeviceRunners from "./DeviceRunners.vue";
 import { boardRoute } from "./deviceLinks";
 import { AGENT_DUTIES, deviceAgentPanel } from "./deviceAgent";
-import { type DeviceCardFix, deviceAttention } from "./deviceAttention";
-import { commandable, type DeviceRow, deviceState, deviceSwitches, deviceTone, fixable, manageable, pausable, selfGroup } from "./deviceRows";
+import { blockAttention, type DeviceCardFix, deviceAttention } from "./deviceAttention";
+import {
+    commandable,
+    type DeviceRow,
+    deviceState,
+    deviceSwitches,
+    deviceTone,
+    fixable,
+    folderOwner,
+    type MachineRow,
+    machineLists,
+    manageable,
+    managerOf,
+    manySided,
+    pausable,
+    selfGroup,
+} from "./deviceRows";
 import { useDeviceOps } from "./deviceOps";
+import { environmentFacts, environmentTitle, wslDistroRows } from "./machineEnvironments";
 import { type ConflictAsk, conflictAsk } from "./sync/conflictAsk";
 import { type DeviceScopes, deviceDoors, deviceHardware, lastSeenNote, manageBlock, osLabel, osTitle, syncNote, syncStopped } from "./deviceFacts";
 import { startAgent } from "../../agents/fleet/agentActions";
@@ -35,10 +51,12 @@ import { useRole } from "../secrets/useRole";
 
 // One machine, as a page rather than an accordion body: who it is, what it wants from you, what this
 // sandbox has on it, and — last, and set apart — how to cut it off. Every button here acts on this one
-// machine, so one op at a time is the whole page's rule (see deviceOps.ts).
+// machine, so one op at a time is the whole page's rule (see deviceOps.ts). A PC connected through several
+// environments (Windows and the distros on it) is still one page: its environments are rows of their own, each
+// with its agent and its concerns, and its sandboxes are listed once, since one engine serves every door.
 
-const { row, latest, ownSlug, readAt, refetch } = defineProps<{
-    row: DeviceRow;
+const { machine, latest, ownSlug, readAt, refetch } = defineProps<{
+    machine: MachineRow;
     /** The release this sandbox knows about; undefined on a dev build or a sandbox that never reached the registry. */
     latest: string | undefined;
     ownSlug: string | undefined;
@@ -47,37 +65,55 @@ const { row, latest, ownSlug, readAt, refetch } = defineProps<{
     refetch: () => void;
 }>();
 
-const device = computed(() => row.device);
-const ops = useDeviceOps(() => row, refetch);
+const environments = computed(() => machine.environments);
+const many = computed(() => manySided(machine));
+// The one device of a one-environment machine: the page reads exactly as it did before machines existed.
+const lone = computed<DeviceRow | undefined>(() => (many.value ? undefined : environments.value[0]));
+const ops = useDeviceOps(() => machine, refetch);
 
 // Why a row has no buttons, read from the capability rather than discovered by a click.
 const { capabilities } = useCapabilities();
-const capability = computed(() =>
-    device.value.hostId === undefined ? undefined : capabilities.value.find((entry) => entry.id === device.value.hostId),
-);
-const scopes = computed<DeviceScopes | undefined>(() => capability.value?.config);
-const block = computed(() => manageBlock(device.value, scopes.value));
+const capabilityOf = (row: DeviceRow) =>
+    row.device.hostId === undefined ? undefined : capabilities.value.find((entry) => entry.id === row.device.hostId);
+const scopesOf = (row: DeviceRow): DeviceScopes | undefined => capabilityOf(row)?.config;
 
 // Owner-only, per machine, no fleet-wide equivalent: the only path that works for a laptop that is lost,
 // wiped, or someone else's. Minting this machine a fresh pairing has the same floor (the daemon refuses a
 // member's), so the same answer decides whether Reconnect is offered at all.
 const { isOwner } = useRole();
 
-const concerns = computed(() => deviceAttention(row, { block: block.value, readAt, canPair: isOwner.value }));
+// The door the sandbox list's buttons go through, and what stands between it and them. On a lone device the
+// block is one of its own concerns; on a many-sided machine it is drawn beside the list it is about.
+const manager = computed(() => managerOf(machine) ?? environments.value[0]);
+const block = computed(() => (manager.value === undefined ? undefined : manageBlock(manager.value.device, scopesOf(manager.value))));
+const listBlock = computed(() =>
+    many.value && manager.value !== undefined ? blockAttention(manager.value, { block: block.value, canPair: isOwner.value }) : undefined,
+);
+
+const concernsOf = (row: DeviceRow) =>
+    deviceAttention(row, { block: many.value ? undefined : block.value, readAt, canPair: isOwner.value });
 
 // The agent as its own object rather than a version printed under the name: what it serves, what it wants,
 // and the two verbs that change either. Undefined only on a machine with no version and no command door.
-const agent = computed(() => deviceAgentPanel(row, latest));
+const agentOf = (row: DeviceRow) => deviceAgentPanel(row, latest);
 
 // The panel's lines in reading order: what the agent wants, then why it has no buttons. One list, so the
 // two render as one column of short lines instead of two blocks that happen to sit together.
-const agentLines = computed(() => {
-    const panel = agent.value;
+const agentLinesOf = (row: DeviceRow) => {
+    const panel = agentOf(row);
     return panel === undefined ? [] : [...panel.notes, ...(panel.blocked === undefined ? [] : [panel.blocked])];
-});
+};
 
 // The sentence the duty strip replaced, kept where a reader can still reach for it.
-const agentIs = computed(() => `Everything this sandbox does on ${device.value.label} goes through this one process.`);
+const agentIs = (row: DeviceRow): string => `Everything this sandbox does on ${row.device.label} goes through this one process.`;
+
+// Whether an environment's agent block has anything to show: an op in flight, its log, or its answer.
+const agentActivity = (row: DeviceRow): boolean =>
+    ops.agentWaiting(row) !== undefined ||
+    ops.agentBusy(row) ||
+    ops.agentLines(row).length > 0 ||
+    ops.failure.value?.key === ops.agentKey(row) ||
+    ops.outcome.value?.key === ops.agentKey(row);
 
 const cardRoute = (fix: DeviceCardFix): RouteLocationRaw => {
     const card = { name: `capabilities`, params: { card: fix.card } };
@@ -86,34 +122,49 @@ const cardRoute = (fix: DeviceCardFix): RouteLocationRaw => {
 
 // The machine's own facts, in the quietest ink: read once per device, mostly to tell two identically-named
 // ones apart. The enrollment's own line joins them, since it is a fact about the machine too.
-const hardware = computed(() => [...deviceHardware(device.value), ...deviceDoors(device.value).map((door) => door.name)].join(` · `));
+const hardware = computed(() =>
+    lone.value === undefined ? `` : [...deviceHardware(lone.value.device), ...deviceDoors(lone.value.device).map((door) => door.name)].join(` · `),
+);
 
-const switches = computed(() => deviceSwitches(row));
+// What the masthead says beside the name: a lone device's OS, or every environment of a many-sided machine.
+const masthead = computed(() =>
+    lone.value === undefined ? environments.value.map((environment) => environmentTitle(environment)).join(` · `) : osLabel(lone.value.device),
+);
+
+// The Windows side's distros, with the door this sandbox already holds into each; the way a second environment
+// is connected from the page of the machine it belongs to.
+const distros = computed(() => wslDistroRows(machine));
+
+// The machine's three lists as the detail kit takes them, merged across environments.
+const lists = computed(() => machineLists(environments.value));
+const described = computed(() => environments.value.some((environment) => environment.device.report !== undefined || environment.device.sandboxes !== undefined));
 
 // Reconnecting is the one remedy that doesn't travel over the machine's own socket — there isn't one — so it is a
 // dialog rather than an op: it mints a fresh single-use command here for the reader to run out there. Opened from
 // the sentence that explains the silence, instead of sending anyone off to find the machine's capability card.
-const reconnecting = ref(false);
+// Held by environment key, since each environment pairs on its own.
+const reconnecting = ref<string | undefined>();
 // Which installer the command is built for: the card's own platform first, the row's fallback second, the same
 // order manageBlock reads them in.
-const connectPlatform = computed(() => String(scopes.value?.[`platform`] ?? device.value.platform ?? `linux`));
-// What the machine will enforce once it is back, in its card's own words; the dialog states it under the command.
-const grants = computed(() => machineGrants(capability.value));
+const connectPlatform = (row: DeviceRow): string => String(scopesOf(row)?.[`platform`] ?? row.device.platform ?? `linux`);
 
-const conflictTurn = (group: DeviceSandboxGroup): ConflictAsk =>
+const conflictTurn = (row: DeviceRow, group: DeviceSandboxGroup): ConflictAsk =>
     conflictAsk({
-        machine: device.value.label,
+        machine: row.device.label,
         // Guarded by `fixable`, which already requires this device to have a host id.
-        hostId: device.value.hostId ?? ``,
+        hostId: row.device.hostId ?? ``,
         localDir: group.folder?.localDir,
         conflicts: group.folder?.conflicts ?? 0,
         conflictedPaths: group.folder?.conflictedPaths ?? [],
     });
 
+// The environment whose agent holds a group's folder: the door its file-sync buttons go through.
+const ownerOf = (group: DeviceSandboxGroup): DeviceRow | undefined => folderOwner(machine, group);
+
 // The one sandbox this page should arrive with unfolded; <DeviceDetail> unfolds anything needing attention
 // on its own.
 const openIds = computed(() => {
-    const mine = selfGroup(row, ownSlug);
+    const mine = selfGroup(machine, ownSlug);
     return mine === undefined ? [] : [mine.sandboxId];
 });
 
@@ -141,66 +192,63 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                 </template>
                 <template #title>
                     <span class="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                        <span class="min-w-0 truncate">{{ device.label }}</span>
-                        <span v-if="osLabel(device)" class="shrink-0 truncate text-sm font-normal text-muted" :title="osTitle(device)">
-                            {{ osLabel(device) }}
+                        <span class="min-w-0 truncate">{{ machine.label }}</span>
+                        <span v-if="masthead" class="shrink-0 truncate text-sm font-normal text-muted" :title="lone ? osTitle(lone.device) : undefined">
+                            {{ masthead }}
                         </span>
                     </span>
                 </template>
                 <template v-if="hardware !== ``" #description>{{ hardware }}</template>
-                <template #meta>
+                <!-- A lone device's state rides its name; a many-sided machine's rides each environment's row. -->
+                <template v-if="lone" #meta>
                     <!-- Noise on a live machine, the most useful fact on one that isn't. -->
-                    <span v-if="lastSeenNote(device)" class="shrink-0">{{ lastSeenNote(device) }}</span>
-                    <StatusBadge
-                        :variant="deviceTone(device, readAt)"
-                        size="xs"
-                        :dot="true"
-                        :label="deviceState(device, readAt)"
-                        class="shrink-0"
-                    />
+                    <span v-if="lastSeenNote(lone.device)" class="shrink-0">{{ lastSeenNote(lone.device) }}</span>
+                    <StatusBadge :variant="deviceTone(lone.device, readAt)" size="xs" :dot="true" :label="deviceState(lone.device, readAt)" class="shrink-0" />
                 </template>
             </Row>
 
-<!-- What this device is doing for the sandbox: the one thing anybody opened the machine to read. -->
-            <p v-if="syncNote(device, readAt)" class="min-w-0 text-xs" :class="syncStopped(device, readAt) ? `text-warning` : `text-muted`">
-                {{ syncNote(device, readAt) }}
+            <!-- What this device is doing for the sandbox: the one thing anybody opened the machine to read. -->
+            <p v-if="lone && syncNote(lone.device, readAt)" class="min-w-0 text-xs" :class="syncStopped(lone.device, readAt) ? `text-warning` : `text-muted`">
+                {{ syncNote(lone.device, readAt) }}
             </p>
 
-<!-- Everything the machine wants, in one place and one visual language, each sentence beside its own remedy. -->
-            <Notice v-for="concern in concerns" :key="concern.key" :tone="concern.tone">
-                <span class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                    <span class="min-w-0">
-                        {{ concern.text }}
-                        <!-- Kept on one line: a command broken across a wrap can't be copied by eye. -->
-                        <template v-if="concern.command">
-                            Run <span class="font-mono whitespace-nowrap text-content">{{ concern.command }}</span> on that device.
-                        </template>
+            <!-- Everything the machine wants, in one place and one visual language, each sentence beside its own remedy. -->
+            <template v-if="lone">
+                <Notice v-for="concern in concernsOf(lone)" :key="concern.key" :tone="concern.tone">
+                    <span class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                        <span class="min-w-0">
+                            {{ concern.text }}
+                            <!-- Kept on one line: a command broken across a wrap can't be copied by eye. -->
+                            <template v-if="concern.command">
+                                Run <span class="font-mono whitespace-nowrap text-content">{{ concern.command }}</span> on that device.
+                            </template>
+                        </span>
+                        <!-- A link wearing the button's clothes, since this fix has an address: hoverable and Ctrl/⌘-clickable. -->
+                        <Button
+                            v-if="concern.fix?.kind === `card`"
+                            :as="RouterLink"
+                            :to="cardRoute(concern.fix)"
+                            size="small"
+                            severity="secondary"
+                            :text="true"
+                            :label="concern.fix.label"
+                        >
+                            <template #icon><Icon name="arrow-up-right" /></template>
+                        </Button>
+                        <!-- Connect actions request a command for the machine without running one locally. -->
+                        <Button
+                            v-else-if="concern.fix?.kind === `connect`"
+                            size="small"
+                            severity="secondary"
+                            :label="concern.fix.label"
+                            v-tooltip.top="concern.fix.hint"
+                            @click="reconnecting = lone.device.key"
+                        >
+                            <template #icon><Icon name="desktop" /></template>
+                        </Button>
                     </span>
-                    <!-- A link wearing the button's clothes, since this fix has an address: hoverable and Ctrl/⌘-clickable. -->
-                    <Button
-                        v-if="concern.fix?.kind === `card`"
-                        :as="RouterLink"
-                        :to="cardRoute(concern.fix)"
-                        size="small"
-                        severity="secondary"
-                        :text="true"
-                        :label="concern.fix.label"
-                    >
-                        <template #icon><Icon name="arrow-up-right" /></template>
-                    </Button>
-                    <!-- Connect actions request a command for the machine without running one locally. -->
-                    <Button
-                        v-else-if="concern.fix?.kind === `connect`"
-                        size="small"
-                        severity="secondary"
-                        :label="concern.fix.label"
-                        v-tooltip.top="concern.fix.hint"
-                        @click="reconnecting = true"
-                    >
-                        <template #icon><Icon name="desktop" /></template>
-                    </Button>
-                </span>
-            </Notice>
+                </Notice>
+            </template>
         </div>
 
         <!--
@@ -209,40 +257,40 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             the machine: the controls are standing ones, offered on a healthy agent too, since "behind" is a
             comparison this sandbox can only make when it knows what has been published.
         -->
-        <RowGroup v-if="agent" label="Agent on this device">
-            <Row icon="desktop" :title="agent.version === undefined ? `Agent` : `Agent ${agent.version}`">
-<!-- What the process carries, as three glyphs: the sentence it replaced is on hover, and the rest is on Update agent. -->
+        <RowGroup v-if="lone && agentOf(lone)" label="Agent on this device">
+            <Row icon="desktop" :title="agentOf(lone)?.version === undefined ? `Agent` : `Agent ${agentOf(lone)?.version}`">
+                <!-- What the process carries, as three glyphs: the sentence it replaced is on hover, and the rest is on Update agent. -->
                 <template #description>
-                    <span v-tooltip.top="agentIs" class="flex w-fit flex-wrap items-center gap-x-3 gap-y-0.5">
+                    <span v-tooltip.top="agentIs(lone)" class="flex w-fit flex-wrap items-center gap-x-3 gap-y-0.5">
                         <span v-for="duty in AGENT_DUTIES" :key="duty.label" class="inline-flex items-center gap-1">
                             <Icon :name="duty.icon" aria-hidden="true" />{{ duty.label }}
                         </span>
                     </span>
                 </template>
                 <template #meta>
-                    <span v-for="fact in agent.facts" :key="fact" class="font-mono">{{ fact }}</span>
-                    <StatusBadge :variant="agent.state.variant" size="xs" :dot="true" :label="agent.state.word" />
+                    <span v-for="fact in agentOf(lone)?.facts" :key="fact" class="font-mono">{{ fact }}</span>
+                    <StatusBadge :variant="agentOf(lone)?.state.variant ?? `neutral`" size="xs" :dot="true" :label="agentOf(lone)?.state.word ?? ``" />
                 </template>
                 <!-- Both ops run on that device over its own socket, so both spin the whole page's one-op-at-a-time lock. -->
-                <template v-if="agent.actions.length > 0" #control>
+                <template v-if="(agentOf(lone)?.actions.length ?? 0) > 0" #control>
                     <Button
-                        v-for="action in agent.actions"
+                        v-for="action in agentOf(lone)?.actions"
                         :key="action.op"
                         size="small"
                         severity="secondary"
                         :label="action.label"
-                        :loading="ops.agentRunning(action.op)"
+                        :loading="ops.agentRunning(lone, action.op)"
                         :disabled="ops.working.value"
                         v-tooltip.top="action.hint"
-                        @click="void ops.runAgent(action.op)"
+                        @click="void ops.runAgent(lone, action.op)"
                     />
                 </template>
             </Row>
 
-<!-- What this agent wants, what has been published, and why the buttons are missing; the settled case still gets its one quiet line. -->
+            <!-- What this agent wants, what has been published, and why the buttons are missing; the settled case still gets its one quiet line. -->
             <RowNote variant="block">
                 <div class="flex flex-col gap-2">
-                    <template v-for="note in agentLines" :key="note.text">
+                    <template v-for="note in agentLinesOf(lone)" :key="note.text">
                         <Notice v-if="note.tone" v-tooltip.top="note.hint" :tone="note.tone">{{ note.text }}</Notice>
                         <p v-else v-tooltip.top="note.hint" class="flex w-fit items-center gap-1.5 text-xs text-muted">
                             <Icon v-if="note.icon" :name="note.icon" aria-hidden="true" class="shrink-0" />{{ note.text }}
@@ -252,77 +300,218 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             </RowNote>
 
             <!-- Agent operations report status and output in one block. -->
-            <RowNote
-                v-if="
-                    ops.agentWaiting.value ||
-                    ops.agentBusy.value ||
-                    ops.agentLines.value.length > 0 ||
-                    ops.failure.value?.key === ops.agentKey.value ||
-                    ops.outcome.value?.key === ops.agentKey.value
-                "
-                variant="block"
-            >
+            <RowNote v-if="agentActivity(lone)" variant="block">
                 <div class="flex min-w-0 flex-col gap-2">
-                    <p v-if="ops.agentWaiting.value" class="text-xs text-muted">{{ ops.agentWaiting.value }}</p>
+                    <p v-if="ops.agentWaiting(lone)" class="text-xs text-muted">{{ ops.agentWaiting(lone) }}</p>
                     <DeviceRunLog
-                        v-if="ops.agentBusy.value || ops.agentLines.value.length > 0"
-                        :lines="ops.agentLines.value"
-                        :running="ops.agentBusy.value"
+                        v-if="ops.agentBusy(lone) || ops.agentLines(lone).length > 0"
+                        :lines="ops.agentLines(lone)"
+                        :running="ops.agentBusy(lone)"
                         empty="Starting on that device…"
                         note="Runs on that device, and keeps going if you leave this page or the connection drops."
                     />
-                    <Notice v-if="ops.failure.value?.key === ops.agentKey.value" :of="ops.failure.value.notice" />
-                    <p v-else-if="ops.outcome.value?.key === ops.agentKey.value" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
+                    <Notice v-if="ops.failure.value?.key === ops.agentKey(lone)" :of="ops.failure.value.notice" />
+                    <p v-else-if="ops.outcome.value?.key === ops.agentKey(lone)" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
                 </div>
             </RowNote>
         </RowGroup>
 
-<!-- One row per sandbox, the page's only disclosure: a row is a summary and its folder, ports, image and share are the evidence. -->
-<!-- Either answer draws rows: a card granting sandbox management alone lists containers and describes no folders. -->
-        <RowGroup v-if="device.report || device.sandboxes" label="Sandboxes on this device" :count="row.groups.length">
-<!-- The same two commands the pairing rows carry, run bare (every sandbox this machine pairs). -->
-            <RowNote v-if="switches.length > 0" variant="block">
-                <div class="flex flex-col gap-2">
-                    <div v-for="half in switches" :key="half.label" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
-                        <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                            <span class="text-xs font-medium text-content">{{ half.label }}</span>
-                            <span
-                                class="inline-flex items-center rounded px-1.5 py-0.5 text-2xs font-medium"
-                                :class="half.state === `off` ? `bg-content/5 text-subtle` : `bg-success/10 text-success`"
-                            >
-                                {{ half.note ?? half.word }}
+        <!--
+            A many-sided machine: one row per environment, each its own door with its own agent, permissions and
+            concerns, since Windows and a distro on it are separate installs that happen to share the hardware.
+        -->
+        <RowGroup v-if="many" label="Environments on this device" :count="environments.length">
+            <template v-for="environment in environments" :key="environment.device.key">
+                <Row icon="desktop" :title="environmentTitle(environment)">
+                    <template #description>
+                        <span class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-2xs">
+                            <template v-for="(fact, index) in environmentFacts(environment)" :key="fact">
+                                <span v-if="index > 0" class="text-subtle" aria-hidden="true">·</span>
+                                <span :class="index === 0 && environment.device.hostId !== undefined ? `font-mono` : ``">{{ fact }}</span>
+                            </template>
+                        </span>
+                    </template>
+                    <template #meta>
+                        <span v-if="lastSeenNote(environment.device)" class="shrink-0">{{ lastSeenNote(environment.device) }}</span>
+                        <span v-if="agentOf(environment)?.version" class="font-mono">agent {{ agentOf(environment)?.version }}</span>
+                        <StatusBadge
+                            :variant="deviceTone(environment.device, readAt)"
+                            size="xs"
+                            :dot="true"
+                            :label="deviceState(environment.device, readAt)"
+                            class="shrink-0"
+                        />
+                    </template>
+                    <!-- The agent's two verbs, per environment: each runs its own process. -->
+                    <template v-if="(agentOf(environment)?.actions.length ?? 0) > 0" #control>
+                        <Button
+                            v-for="action in agentOf(environment)?.actions"
+                            :key="action.op"
+                            size="small"
+                            severity="secondary"
+                            :label="action.label"
+                            :loading="ops.agentRunning(environment, action.op)"
+                            :disabled="ops.working.value"
+                            v-tooltip.top="action.hint"
+                            @click="void ops.runAgent(environment, action.op)"
+                        />
+                    </template>
+                </Row>
+
+                <!-- What this environment is doing for the sandbox, what it wants, and what its agent wants. -->
+                <RowNote variant="block">
+                    <div class="flex flex-col gap-2">
+                        <p v-if="syncNote(environment.device, readAt)" class="min-w-0 text-xs" :class="syncStopped(environment.device, readAt) ? `text-warning` : `text-muted`">
+                            {{ syncNote(environment.device, readAt) }}
+                        </p>
+                        <Notice v-for="concern in concernsOf(environment)" :key="concern.key" :tone="concern.tone">
+                            <span class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                                <span class="min-w-0">
+                                    {{ concern.text }}
+                                    <template v-if="concern.command">
+                                        Run <span class="font-mono whitespace-nowrap text-content">{{ concern.command }}</span> on that device.
+                                    </template>
+                                </span>
+                                <Button
+                                    v-if="concern.fix?.kind === `card`"
+                                    :as="RouterLink"
+                                    :to="cardRoute(concern.fix)"
+                                    size="small"
+                                    severity="secondary"
+                                    :text="true"
+                                    :label="concern.fix.label"
+                                >
+                                    <template #icon><Icon name="arrow-up-right" /></template>
+                                </Button>
+                                <Button
+                                    v-else-if="concern.fix?.kind === `connect`"
+                                    size="small"
+                                    severity="secondary"
+                                    :label="concern.fix.label"
+                                    v-tooltip.top="concern.fix.hint"
+                                    @click="reconnecting = environment.device.key"
+                                >
+                                    <template #icon><Icon name="desktop" /></template>
+                                </Button>
                             </span>
-                            <!-- What "all" means: every label here says "all" without saying all of what. -->
-                            <span class="text-2xs text-subtle">{{ half.scope }}</span>
-                        </div>
-                        <div class="flex flex-wrap items-center gap-1.5">
-                            <Button
-                                v-for="action in half.actions"
-                                :key="action.command"
-                                size="small"
-                                severity="secondary"
-                                :label="action.label"
-                                :loading="ops.syncRunning(ops.machineKey.value, action.command)"
-                                :disabled="ops.working.value"
-                                v-tooltip.top="action.hint"
-                                @click="void ops.runSync(ops.machineKey.value, undefined, action.command)"
+                        </Notice>
+                        <template v-for="note in agentLinesOf(environment)" :key="note.text">
+                            <Notice v-if="note.tone" v-tooltip.top="note.hint" :tone="note.tone">{{ note.text }}</Notice>
+                            <p v-else v-tooltip.top="note.hint" class="flex w-fit items-center gap-1.5 text-xs text-muted">
+                                <Icon v-if="note.icon" :name="note.icon" aria-hidden="true" class="shrink-0" />{{ note.text }}
+                            </p>
+                        </template>
+                        <template v-if="agentActivity(environment)">
+                            <p v-if="ops.agentWaiting(environment)" class="text-xs text-muted">{{ ops.agentWaiting(environment) }}</p>
+                            <DeviceRunLog
+                                v-if="ops.agentBusy(environment) || ops.agentLines(environment).length > 0"
+                                :lines="ops.agentLines(environment)"
+                                :running="ops.agentBusy(environment)"
+                                empty="Starting on that device…"
+                                note="Runs on that device, and keeps going if you leave this page or the connection drops."
                             />
-                        </div>
+                            <Notice v-if="ops.failure.value?.key === ops.agentKey(environment)" :of="ops.failure.value.notice" />
+                            <p v-else-if="ops.outcome.value?.key === ops.agentKey(environment)" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
+                        </template>
                     </div>
-                    <!-- The machine's own answer to a machine-wide click, shown where the click was. -->
-                    <Notice v-if="ops.failure.value?.key === ops.machineKey.value" :of="ops.failure.value.notice" />
-                    <p v-else-if="ops.outcome.value?.key === ops.machineKey.value" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
+                </RowNote>
+            </template>
+
+            <!-- The Windows side's distros, each with the door this sandbox holds into it or the way to open one. -->
+            <RowNote v-if="distros.length > 0" variant="block">
+                <div class="flex flex-col gap-1">
+                    <p class="text-xs font-medium text-content">WSL distros on this PC</p>
+                    <p v-for="distro in distros" :key="distro.name" class="flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-muted">
+                        <span class="font-mono text-content">{{ distro.name }}</span>
+                        <span v-if="distro.connectedAs">connected as <span class="font-mono">{{ distro.connectedAs }}</span></span>
+                        <template v-else>
+                            <span>not connected</span>
+                            <RouterLink :to="distro.connect" class="text-link hover:underline">Connect it</RouterLink>
+                        </template>
+                    </p>
                 </div>
             </RowNote>
+        </RowGroup>
+
+        <!-- One row per sandbox, the page's only disclosure: a row is a summary and its folder, ports, image and share are the evidence. -->
+        <!-- Either answer draws rows: a card granting sandbox management alone lists containers and describes no folders. -->
+        <RowGroup v-if="described" label="Sandboxes on this device" :count="machine.groups.length">
+            <!-- On a many-sided machine the door's block is about this list, so it is said here rather than under a row. -->
+            <RowNote v-if="listBlock" variant="block">
+                <Notice :tone="listBlock.tone">
+                    <span class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                        <span class="min-w-0">
+                            {{ listBlock.text }}
+                            <template v-if="listBlock.command">
+                                Run <span class="font-mono whitespace-nowrap text-content">{{ listBlock.command }}</span> on that device.
+                            </template>
+                        </span>
+                        <Button
+                            v-if="listBlock.fix?.kind === `card`"
+                            :as="RouterLink"
+                            :to="cardRoute(listBlock.fix)"
+                            size="small"
+                            severity="secondary"
+                            :text="true"
+                            :label="listBlock.fix.label"
+                        >
+                            <template #icon><Icon name="arrow-up-right" /></template>
+                        </Button>
+                        <Button
+                            v-else-if="listBlock.fix?.kind === `connect` && manager"
+                            size="small"
+                            severity="secondary"
+                            :label="listBlock.fix.label"
+                            v-tooltip.top="listBlock.fix.hint"
+                            @click="reconnecting = manager.device.key"
+                        >
+                            <template #icon><Icon name="desktop" /></template>
+                        </Button>
+                    </span>
+                </Notice>
+            </RowNote>
+
+            <!-- The same two commands the pairing rows carry, run bare (every sandbox this environment pairs). -->
+            <template v-for="environment in environments" :key="environment.device.key">
+                <RowNote v-if="deviceSwitches(environment).length > 0" variant="block">
+                    <div class="flex flex-col gap-2">
+                        <p v-if="many" class="text-2xs text-subtle">{{ environmentTitle(environment) }}</p>
+                        <div v-for="half in deviceSwitches(environment)" :key="half.label" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
+                            <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span class="text-xs font-medium text-content">{{ half.label }}</span>
+                                <span
+                                    class="inline-flex items-center rounded px-1.5 py-0.5 text-2xs font-medium"
+                                    :class="half.state === `off` ? `bg-content/5 text-subtle` : `bg-success/10 text-success`"
+                                >
+                                    {{ half.note ?? half.word }}
+                                </span>
+                                <!-- What "all" means: every label here says "all" without saying all of what. -->
+                                <span class="text-2xs text-subtle">{{ half.scope }}</span>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <Button
+                                    v-for="action in half.actions"
+                                    :key="action.command"
+                                    size="small"
+                                    severity="secondary"
+                                    :label="action.label"
+                                    :loading="ops.syncRunning(ops.switchKey(environment), action.command)"
+                                    :disabled="ops.working.value"
+                                    v-tooltip.top="action.hint"
+                                    @click="void ops.runSync(environment, ops.switchKey(environment), undefined, action.command)"
+                                />
+                            </div>
+                        </div>
+                        <!-- The machine's own answer to a machine-wide click, shown where the click was. -->
+                        <Notice v-if="ops.failure.value?.key === ops.switchKey(environment)" :of="ops.failure.value.notice" />
+                        <p v-else-if="ops.outcome.value?.key === ops.switchKey(environment)" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>
+                    </div>
+                </RowNote>
+            </template>
 
             <RowNote variant="block">
-<!-- No `agent` prop, deliberately: that state is the strip above, not a second liveness statement riding this list. -->
-                <DeviceDetail
-                    :pairings="device.report?.pairings ?? []"
-                    :ports="device.report?.ports ?? []"
-                    :sandboxes="device.sandboxes ?? []"
-                    :open="openIds"
-                >
+                <!-- No `agent` prop, deliberately: that state is the strip above, not a second liveness statement riding this list. -->
+                <DeviceDetail :pairings="lists.pairings" :ports="lists.ports" :sandboxes="lists.sandboxes" :open="openIds">
                     <!-- The one row on this page that can close the page, said beside the name rather than only in the confirmation. -->
                     <template #badges="{ group }">
                         <StatusBadge v-if="ops.selfGroup(group)" variant="info" size="xs" label="the one you're using" />
@@ -330,7 +519,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                     <!-- The verbs are the kit's, so this page and the desktop app's manager window offer the same row. -->
                     <template #actions="{ group }">
                         <SandboxVerbs
-                            v-if="manageable(device, group)"
+                            v-if="manager && manageable(manager.device, group)"
                             :running="group.sandbox?.running === true"
                             :busy="ops.runningVerb(group)"
                             :disabled="ops.working.value"
@@ -338,23 +527,25 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                             @act="(verb) => ops.act(group, verb)"
                         />
                     </template>
-<!-- Controls for this pairing's files, under the folder rather than up with the container verbs: Pause stops no container, only the file movement. -->
+                    <!-- Controls for this pairing's files, under the folder rather than up with the container verbs: Pause stops no container, only the file movement. -->
                     <template #folder="{ group }">
                         <div class="mt-1 flex flex-wrap items-center gap-2">
-<!-- First, since a row with conflicts is open because of them; starts a turn rather than a command. -->
+                            <!-- Which side of a many-sided machine holds the folder: the path alone says it, but not in words. -->
+                            <span v-if="many && ownerOf(group)" class="text-2xs text-subtle">on {{ environmentTitle(ownerOf(group)!) }}</span>
+                            <!-- First, since a row with conflicts is open because of them; starts a turn rather than a command. -->
                             <Button
-                                v-if="fixable(device, group)"
+                                v-if="ownerOf(group) && fixable(ownerOf(group)!.device, group)"
                                 size="small"
                                 severity="secondary"
                                 label="Fix with agent"
                                 :disabled="ops.working.value"
-                                v-tooltip.top="conflictTurn(group).hint"
-                                @click="startAgent(conflictTurn(group).prompt)"
+                                v-tooltip.top="conflictTurn(ownerOf(group)!, group).hint"
+                                @click="startAgent(conflictTurn(ownerOf(group)!, group).prompt)"
                             >
                                 <template #icon><Icon name="sparkles" /></template>
                             </Button>
                             <Button
-                                v-if="pausable(device, group)"
+                                v-if="ownerOf(group) && pausable(ownerOf(group)!.device, group)"
                                 size="small"
                                 severity="secondary"
                                 :label="group.folder?.paused === true ? `Resume syncing` : `Pause syncing`"
@@ -367,15 +558,16 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                                 "
                                 @click="
                                     void ops.runSync(
+                                        ownerOf(group)!,
                                         ops.rowKey(group),
                                         group.sandboxId,
                                         group.folder?.paused === true ? `sync-resume` : `sync-pause`,
                                     )
                                 "
                             />
-<!-- The one control here nothing undoes in a click. -->
+                            <!-- The one control here nothing undoes in a click. -->
                             <Button
-                                v-if="commandable(device, group)"
+                                v-if="ownerOf(group) && commandable(ownerOf(group)!.device, group)"
                                 size="small"
                                 severity="danger"
                                 :text="true"
@@ -383,15 +575,15 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                                 :loading="ops.syncRunning(ops.rowKey(group), `sync-unpair`)"
                                 :disabled="ops.working.value"
                                 v-tooltip.top="`Stop this device syncing this sandbox. Its local folder is left exactly as it is.`"
-                                @click="ops.confirmingUnpair.value = { group }"
+                                @click="ops.confirmingUnpair.value = { environment: ownerOf(group)!, group }"
                             />
                         </div>
                     </template>
-<!-- The switch that clears the user's own localhost, under the ports it's about rather than with the container verbs. -->
+                    <!-- The switch that clears the user's own localhost, under the ports it's about rather than with the container verbs. -->
                     <template #ports="{ group }">
                         <div class="mt-1 flex flex-wrap items-center gap-2">
                             <Button
-                                v-if="commandable(device, group)"
+                                v-if="ownerOf(group) && commandable(ownerOf(group)!.device, group)"
                                 size="small"
                                 severity="secondary"
                                 :label="mirroringOff(group.folder) ? `Start mirroring` : `Stop mirroring`"
@@ -403,7 +595,12 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                                         : `Take this sandbox's ports off this device's localhost. Files keep syncing.`
                                 "
                                 @click="
-                                    void ops.runSync(ops.rowKey(group), group.sandboxId, mirroringOff(group.folder) ? `mirror-on` : `mirror-off`)
+                                    void ops.runSync(
+                                        ownerOf(group)!,
+                                        ops.rowKey(group),
+                                        group.sandboxId,
+                                        mirroringOff(group.folder) ? `mirror-on` : `mirror-off`,
+                                    )
                                 "
                             />
                         </div>
@@ -424,42 +621,49 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             </RowNote>
         </RowGroup>
 
-<!-- What this sandbox keeps here, as opposed to what the person does: runners it can hand a conversation to. -->
-        <DeviceRunners :device="device" />
+        <!-- What this sandbox keeps here, as opposed to what the person does: runners it can hand a conversation to, per door. -->
+        <template v-for="environment in environments" :key="`runners:${environment.device.key}`">
+            <DeviceRunners v-if="!many || environment.device.hostId !== undefined" :device="environment.device" />
+        </template>
 
-<!-- Cutting this device off entirely, in a group of its own at the bottom: it ends everything above it at once. -->
-        <RowGroup v-if="device.sync && isOwner" label="Danger zone">
-            <Row icon="times" tone="danger" title="Revoke this device's access">
-                <template #description>
-                    Revoking stops this device reaching the sandbox at all. Nothing on it is deleted, and its agent stays installed.
-                </template>
-                <template #control>
-                    <Button
-                        size="small"
-                        severity="danger"
-                        label="Revoke access"
-                        :disabled="ops.working.value"
-                        @click="ops.confirmingRevoke.value = true"
-                    >
-                        <template #icon><Icon name="times" /></template>
-                    </Button>
-                </template>
-            </Row>
-            <RowNote v-if="ops.failure.value?.key === ops.accessKey.value" variant="block">
-                <Notice :of="ops.failure.value.notice" />
-            </RowNote>
-            <RowNote v-else-if="ops.outcome.value?.key === ops.accessKey.value">{{ ops.outcome.value.message }}</RowNote>
-        </RowGroup>
+        <!-- Cutting an enrollment off entirely, in a group of its own at the bottom: it ends everything above it at once. -->
+        <template v-for="environment in environments" :key="`revoke:${environment.device.key}`">
+            <RowGroup v-if="environment.device.sync && isOwner" label="Danger zone">
+                <Row icon="times" tone="danger" :title="many ? `Revoke ${environmentTitle(environment)}'s access` : `Revoke this device's access`">
+                    <template #description>
+                        Revoking stops this device reaching the sandbox at all. Nothing on it is deleted, and its agent stays installed.
+                    </template>
+                    <template #control>
+                        <Button
+                            size="small"
+                            severity="danger"
+                            label="Revoke access"
+                            :disabled="ops.working.value"
+                            @click="ops.confirmingRevoke.value = environment"
+                        >
+                            <template #icon><Icon name="times" /></template>
+                        </Button>
+                    </template>
+                </Row>
+                <RowNote v-if="ops.failure.value?.key === ops.accessKey(environment)" variant="block">
+                    <Notice :of="ops.failure.value.notice" />
+                </RowNote>
+                <RowNote v-else-if="ops.outcome.value?.key === ops.accessKey(environment)">{{ ops.outcome.value.message }}</RowNote>
+            </RowGroup>
+        </template>
 
-<!-- The machine's own pairing dialog, the one its capability card opens, mounted where its silence is read: a fresh single-use command to run out there. -->
-        <HostConnectDialog
-            v-if="device.hostId !== undefined"
-            :id="device.hostId"
-            v-model:visible="reconnecting"
-            :platform="connectPlatform"
-            :permissions="grants"
-            @connected="refetch()"
-        />
+        <!-- Each environment's own pairing dialog, the one its capability card opens, mounted where its silence is read: a fresh single-use command to run out there. -->
+        <template v-for="environment in environments" :key="`connect:${environment.device.key}`">
+            <HostConnectDialog
+                v-if="environment.device.hostId !== undefined"
+                :id="environment.device.hostId"
+                :visible="reconnecting === environment.device.key"
+                :platform="connectPlatform(environment)"
+                :permissions="machineGrants(capabilityOf(environment))"
+                @update:visible="(open) => (reconnecting = open ? environment.device.key : undefined)"
+                @connected="refetch()"
+            />
+        </template>
 
         <!-- Red only for removal: an image swap keeps the sandbox's files, so it isn't destructive. -->
         <ConfirmDialog
@@ -476,12 +680,12 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             </p>
         </ConfirmDialog>
 
-<!-- The device form shows caps, rail size, and serving state. -->
+        <!-- The device form shows caps, rail size, and serving state. -->
         <SandboxResourcesDialog
             :open="ops.reshaping.value !== undefined"
             :name="ops.reshaping.value?.group.title ?? ``"
             :current="ops.reshaping.value?.group.sandbox?.resources"
-            :engine="device.facts?.engine"
+            :engine="manager?.device.facts?.engine"
             :self-warning="ops.reshaping.value !== undefined && ops.selfGroup(ops.reshaping.value.group)"
             @cancel="ops.reshaping.value = undefined"
             @apply="applyReshape"
@@ -497,8 +701,8 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
             @confirm="ops.confirmUnpair()"
         >
             <p>
-                <span class="font-mono text-content">{{ device.label }}</span> stops syncing this sandbox's files and mirroring its ports. Everything
-                already in its local folder stays exactly as it is.
+                <span class="font-mono text-content">{{ ops.confirmingUnpair.value?.environment.device.label ?? machine.label }}</span> stops syncing this
+                sandbox's files and mirroring its ports. Everything already in its local folder stays exactly as it is.
             </p>
             <p v-if="ops.confirmingUnpair.value?.group.folder?.localDir" class="mt-2 break-all font-mono text-xs text-content">
                 {{ ops.confirmingUnpair.value.group.folder.localDir }}
@@ -508,13 +712,13 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
 
         <!-- Named for the machine, explicit that it's this one alone. -->
         <ConfirmDialog
-            :open="ops.confirmingRevoke.value"
-            :header="`Revoke ${device.label}'s access?`"
+            :open="ops.confirmingRevoke.value !== undefined"
+            :header="`Revoke ${ops.confirmingRevoke.value?.device.label ?? machine.label}'s access?`"
             confirm-label="Revoke access"
             confirm-icon="times"
             :destructive="true"
             :loading="ops.revoking.value"
-            @cancel="ops.confirmingRevoke.value = false"
+            @cancel="ops.confirmingRevoke.value = undefined"
             @confirm="void ops.runRevoke()"
         >
             <p>

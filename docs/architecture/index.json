@@ -2589,7 +2589,11 @@
         },
         {
           "path": "_devices/machine/src/wsl.ts",
-          "what": "whether this is a WSL distro, and which one. WSL hands a distro the Windows machine's own hostname, so without this the sandbox cannot tell a distro from the Windows install hosting it, or one distro from its neighbour, and folds two machines into one row."
+          "what": "whether this is a WSL distro, and which one. WSL hands a distro the Windows machine's own hostname, so without this the sandbox cannot tell a distro from the Windows install hosting it, or one distro from its neighbour; reported at connect (describe) as well as in the status report, so it is known even with \"Run commands\" off."
+        },
+        {
+          "path": "_devices/machine/src/device/tools/shell.ts",
+          "what": "runcommand, and its in: crossing: wsl:<distro> from Windows runs wsl.exe --exec sh -lc with the script as one argument, windows from a distro runs PowerShell through interop; no quoting through the first shell either way."
         },
         {
           "path": "_devices/machine/src/device/policy.ts",
@@ -2611,9 +2615,9 @@
       "behind": 2,
       "component": "devices",
       "dir": "_devices/machine",
-      "files": 67,
+      "files": 68,
       "hasTests": true,
-      "loc": 10972,
+      "loc": 11210,
       "name": "@intentic/machine",
       "oneLiner": "The one agent that lives on a user's own device: it lets a sandbox's agent work on the machine, and keeps the machine's folders and ports mirrored with the sandbox — one binary, one resident loop,…",
       "readmeRev": "3241dd07b36dea70856727ec30e71b08b40d020d",
@@ -2738,12 +2742,12 @@
       "dir": "_editor/desktop-app",
       "files": 16,
       "hasTests": true,
-      "loc": 2579,
+      "loc": 2649,
       "name": "@intentic/desktop-app",
       "oneLiner": "The no-terminal way to run an intentic sandbox on your own computer.",
-      "readmeRev": "6eecff40de40bf710b6d97aabddcd59ce23dffee",
+      "readmeRev": "621100144c604750a27e6aa9f3cbe2969afb31fa",
       "stale": false,
-      "updatedAt": 1789430067000
+      "updatedAt": 1789488173000
     },
     {
       "anchors": [
@@ -2764,14 +2768,14 @@
           "what": ": the Rust dependencies."
         }
       ],
-      "behind": 30,
+      "behind": 32,
       "dir": "_editor/desktop-app/src-tauri",
       "files": 11,
       "hasTests": false,
-      "loc": 5254,
+      "loc": 5572,
       "oneLiner": "The Rust half of the desktop app: the native window, the tray, and the permissions the webview is allowed.",
       "readmeRev": "4a1136063a6db1d3bec96653c5532c38137566ef",
-      "reason": "30 commits have touched this package since its README was written",
+      "reason": "32 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306217000
     },
@@ -2830,7 +2834,7 @@
           "what": "what a shared tool call is allowed to show, which is less than"
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "component": "editor",
       "dir": "_editor/share-view",
       "files": 10,
@@ -2839,7 +2843,7 @@
       "name": "@intentic/share-view",
       "oneLiner": "The read-only page a conversation shared to the public is published as.",
       "readmeRev": "b834f65c41d8843e76a0113e04ca45189a992d4f",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788902312000
     },
@@ -2870,17 +2874,18 @@
           "what": ": design tokens + theme.ts (the Theme preset that bridges Tailwind vars ↔ PrimeVue --p-), PrimeVue overrides (@layer primeng), semantic colors. index.css is the whole design system in one import; opt-in/ holds the three sheets only some consumers pay for (prose.css, markdown-editing.css, extension-surface.css). The first two are the two halves of one surface and are imported together: markdown-editing.css adds no type rules of its own, it only hides the markup a MarkdownDocument is holding, hangs a block's opening markers in the gutter and lights the block under the caret, so an app with one sheet and not the other shows an editor with every ## on screen."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "editor",
       "dir": "_editor/ui",
-      "files": 166,
+      "files": 167,
       "hasTests": false,
-      "loc": 15682,
+      "loc": 15756,
       "name": "@intentic/ui",
       "oneLiner": "Shared Vue UI primitives + theme for the platform web app.",
-      "readmeRev": "b51644cac7a2c5a3f869caeb31355086001aeb31",
-      "stale": false,
-      "updatedAt": 1789430819000
+      "readmeRev": "7173e08a2370f2e54d364a38935cf38d0b0f8660",
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1789487076000
     },
     {
       "anchors": [
@@ -2909,18 +2914,17 @@
           "what": ": the full route table."
         }
       ],
-      "behind": 1,
+      "behind": 0,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 1263,
+      "files": 1274,
       "hasTests": true,
-      "loc": 184142,
+      "loc": 186882,
       "name": "@intentic/web",
       "oneLiner": "The Vue 3 SPA (Vite + PrimeVue), the platform's workspace UI.",
-      "readmeRev": "40bf01f96aa02e0e29358837834aee43ef86745a",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1789431460000
+      "readmeRev": "621100144c604750a27e6aa9f3cbe2969afb31fa",
+      "stale": false,
+      "updatedAt": 1789488173000
     },
     {
       "anchors": [
@@ -3085,7 +3089,7 @@
           "what": ": the composer's state and its validation."
         }
       ],
-      "behind": 6,
+      "behind": 7,
       "component": "extensions",
       "dir": "_extensions/automations",
       "files": 18,
@@ -3094,7 +3098,7 @@
       "name": "@intentic/ext-automations",
       "oneLiner": "Standing instructions that start an agent turn on their own: on a schedule, or when something outside happens.",
       "readmeRev": "c2f5cd5a0d70ebf67d0b8e654f8bec40e86aff86",
-      "reason": "6 commits have touched this package since its README was written",
+      "reason": "7 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788725893000
     },
@@ -3216,11 +3220,11 @@
         },
         {
           "path": "_extensions/devices/skills/linux",
-          "what": ": how an agent operates a Linux machine."
+          "what": ": how an agent operates a Linux machine, and what changes when that Linux is a WSL distro of a Windows PC."
         },
         {
           "path": "_extensions/devices/skills/windows",
-          "what": ": the same for Windows, and where the two genuinely differ."
+          "what": ": the same for Windows, where the two genuinely differ, and the WSL distros on the PC."
         }
       ],
       "behind": 1,
@@ -3303,7 +3307,7 @@
           "what": ": the conventions, taught to every turn"
         }
       ],
-      "behind": 5,
+      "behind": 6,
       "component": "extensions",
       "dir": "_extensions/documentation",
       "files": 31,
@@ -3312,7 +3316,7 @@
       "name": "@intentic/ext-documentation",
       "oneLiner": "Plain-language architecture documentation for every repository and package in the workspace.",
       "readmeRev": "d028c6077a7784ab7471ea826a2597424f6612fd",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788704668000
     },
@@ -3343,7 +3347,7 @@
           "what": ": activation, and the argument for a document rather than a view."
         }
       ],
-      "behind": 3,
+      "behind": 4,
       "component": "extensions",
       "dir": "_extensions/git-history",
       "files": 25,
@@ -3352,7 +3356,7 @@
       "name": "@intentic/ext-git-history",
       "oneLiner": "One repository's commit graph, its branches, and the actions you can take on them.",
       "readmeRev": "33fd15fa032e113ab5a30e00aab023fb323da906",
-      "reason": "3 commits have touched this package since its README was written",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788427251000
     },
@@ -3658,7 +3662,7 @@
           "what": ": joins a row to the agent on its failure by re-deriving the conversation id, latest"
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "extensions",
       "dir": "_extensions/pipelines",
       "files": 29,
@@ -3667,7 +3671,8 @@
       "name": "@intentic/ext-pipelines",
       "oneLiner": "CI as it actually went: runs, their jobs, and which failures are a streak rather than a blip.",
       "readmeRev": "19dcb7aec2731b8ae830d7060820664d08d6752e",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1789409816000
     },
     {
@@ -3757,7 +3762,7 @@
           "what": ": activation, and the two shapes a repo can qualify under."
         }
       ],
-      "behind": 9,
+      "behind": 10,
       "component": "extensions",
       "dir": "_extensions/repo-apps",
       "files": 15,
@@ -3766,7 +3771,7 @@
       "name": "@intentic/ext-repo-apps",
       "oneLiner": "A repository's own apps and its workspace package graph, as the panel you open that repo from.",
       "readmeRev": "bec7441f4ec45cadbb78ee452628d0df67918457",
-      "reason": "9 commits have touched this package since its README was written",
+      "reason": "10 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306246000
     },
@@ -3861,8 +3866,8 @@
     {
       "anchors": [
         {
-          "path": "_extensions/viewers/src/manifest.ts",
-          "what": ": which extensions each viewer claims, and how it wants its content delivered."
+          "path": "_extensions/viewers/intentic-extension.json",
+          "what": ": which extensions each viewer claims, and how it wants its"
         },
         {
           "path": "_extensions/viewers/src/MediaViewer.vue",
@@ -3870,7 +3875,7 @@
         },
         {
           "path": "_extensions/viewers/src/SheetViewer.vue",
-          "what": ": spreadsheet tabs, with parsing and selected-sheet conversion delegated to a worker."
+          "what": ": spreadsheet tabs, with parsing and sheet conversion delegated to a"
         },
         {
           "path": "_extensions/viewers/src/PptxViewer.vue",
@@ -3881,6 +3886,22 @@
           "what": ": a .pptx to slides — the layout, master and theme walk behind every shape."
         },
         {
+          "path": "_extensions/viewers/src/odf/",
+          "what": ": OpenDocument, from the zip up — the XML parser, the style resolver, the block model every"
+        },
+        {
+          "path": "_extensions/viewers/src/rtf/",
+          "what": ": the RTF tokenizer and the reader that turns its control words into the same blocks."
+        },
+        {
+          "path": "_extensions/viewers/src/epub/",
+          "what": ": an EPUB's structure, and one chapter as a self-contained document for a sandboxed frame."
+        },
+        {
+          "path": "_extensions/viewers/src/DocumentPaper.vue",
+          "what": ": the page surface and document typography .odt and .rtf share."
+        },
+        {
           "path": "_extensions/viewers/src/mediaControls.ts",
           "what": ": the playback state the media viewers share."
         },
@@ -3889,17 +3910,18 @@
           "what": ": the registration, and the floor this extension sits on."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "extensions",
       "dir": "_extensions/viewers",
-      "files": 27,
+      "files": 53,
       "hasTests": true,
-      "loc": 2883,
+      "loc": 6949,
       "name": "@intentic/ext-viewers",
-      "oneLiner": "Every file format the app can show that is not source code: images, PDFs, video, audio, spreadsheets, documents, presentations.",
-      "readmeRev": "080e7f2a76b57571a57870f440478f77101feebc",
-      "stale": false,
-      "updatedAt": 1789427730000
+      "oneLiner": "Every file format the app can show that is not source code: images, PDFs, video, audio, spreadsheets, documents, presentations and books.",
+      "readmeRev": "bf01472822e6c0687d42a700e250b85cd1408ba7",
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1789467071000
     },
     {
       "anchors": [
@@ -4145,14 +4167,14 @@
       "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/fileq",
-      "files": 35,
+      "files": 38,
       "hasTests": true,
-      "loc": 2956,
+      "loc": 3486,
       "name": "@intentic/fileq",
-      "oneLiner": "Agent-native file reading: any binary workspace file — docx, odt, xlsx, pptx, pdf, epub, ipynb, images, audio, archives — as clean, token-budgeted markdown, kept fresh as sidecars from the moment a…",
-      "readmeRev": "ba7840428ee90aa66bc02d3a69fe829016884706",
+      "oneLiner": "Agent-native file reading: any binary workspace file — docx, odt, rtf, xlsx, ods, pptx, odp, pdf, epub, ipynb, images, audio, archives — as clean, token-budgeted markdown, kept fresh as sidecars…",
+      "readmeRev": "23b6da4563eb064202d3cfb16c422a6319afdbc8",
       "stale": false,
-      "updatedAt": 1789431548000
+      "updatedAt": 1789462463000
     },
     {
       "anchors": [
@@ -4261,17 +4283,16 @@
           "what": ": the root-side machine mutations connect's SELFHOST and machine"
         }
       ],
-      "behind": 5,
+      "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/ic",
       "files": 28,
       "hasTests": false,
-      "loc": 11965,
+      "loc": 12210,
       "oneLiner": "The host-side CLI: the flows that must run on the machine that runs a sandbox, connect, prepare, update, rebuild, rollback, reshape, remove, and enrolling the machine as a deploy target.",
-      "readmeRev": "33c5b1204207aefa24f19814a7e43230ad3e200a",
-      "reason": "5 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1789312312000
+      "readmeRev": "87d109ce9ba2519405222884e2609e2f32ce9639",
+      "stale": false,
+      "updatedAt": 1789477233000
     },
     {
       "anchors": [
@@ -4300,16 +4321,16 @@
           "what": "/ src/styles.ts: the optional report box."
         }
       ],
-      "behind": 3,
+      "behind": 4,
       "component": "sandbox",
       "dir": "_sandbox/issue-sdk",
       "files": 12,
       "hasTests": true,
-      "loc": 1060,
+      "loc": 1066,
       "name": "@intentic/issue-sdk",
       "oneLiner": "The bug reporter a website or app embeds to send crashes and user reports to a sandbox agent.",
       "readmeRev": "1f123029dbf5e4b09d8825c95a8af7460b06b42a",
-      "reason": "3 commits have touched this package since its README was written",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788704775000
     },
@@ -4340,16 +4361,16 @@
           "what": "and src/environment/: what the owner connected, and"
         }
       ],
-      "behind": 6,
+      "behind": 14,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
-      "files": 1335,
+      "files": 1340,
       "hasTests": true,
-      "loc": 202991,
+      "loc": 204040,
       "name": "@intentic/sandbox",
       "oneLiner": "The per-project AI-agent dev daemon, a Docker image that runs as the project's workspace container on the customer's host.",
       "readmeRev": "31bf139d256829405a04f19b4b475abc7b5f86df",
-      "reason": "6 commits have touched this package since its README was written",
+      "reason": "14 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1789421008000
     },
@@ -4408,16 +4429,17 @@
           "what": ": the entry the script tag loads."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "sandbox",
       "dir": "_sandbox/webchat-widget",
       "files": 11,
       "hasTests": true,
-      "loc": 1383,
+      "loc": 1389,
       "name": "@intentic/webchat-widget",
       "oneLiner": "Front Desk: the embeddable chat bubble a website loads to talk to a sandbox agent.",
       "readmeRev": "732e72c2aa27c9b6cea7c0ffc7ecf4f918d16e7a",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1789406342000
     },
     {
@@ -4977,18 +4999,18 @@
           "what": "and contract.lock.json: every exported"
         }
       ],
-      "behind": 30,
+      "behind": 3,
       "component": "shared",
       "dir": "_shared/sandbox-contract",
       "files": 223,
       "hasTests": true,
-      "loc": 30894,
+      "loc": 30992,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire between the sandbox daemon and its browser client: change it here, and both sides follow.",
-      "readmeRev": "f485ae5f05dae413779694ad12607ccf6a10f142",
-      "reason": "30 commits have touched this package since its README was written",
+      "readmeRev": "bf01472822e6c0687d42a700e250b85cd1408ba7",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1788909667000
+      "updatedAt": 1789467071000
     },
     {
       "anchors": [
@@ -5145,7 +5167,7 @@
           "what": ": what the demo allows and what it quietly declines."
         }
       ],
-      "behind": 17,
+      "behind": 18,
       "component": "site",
       "dir": "_site/demo",
       "files": 27,
@@ -5154,7 +5176,7 @@
       "name": "@intentic/demo",
       "oneLiner": "The landing page's playable demo: the real editor, running on a recording instead of a sandbox.",
       "readmeRev": "9e1f06429e5ab33396c2ff4488c7ec956fc33fa2",
-      "reason": "17 commits have touched this package since its README was written",
+      "reason": "18 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788704746000
     },
@@ -5245,7 +5267,7 @@
           "what": ": where the build-time integrations are wired in."
         }
       ],
-      "behind": 7,
+      "behind": 1,
       "component": "site",
       "dir": "_site/site",
       "files": 35,
@@ -5253,10 +5275,10 @@
       "loc": 5610,
       "name": "@intentic/site",
       "oneLiner": "The public website at intentic.dev: an Astro build, all copy imported rather than written in the markup.",
-      "readmeRev": "7b8ed664bd42244894cd13accc2fdccf0318bfff",
-      "reason": "7 commits have touched this package since its README was written",
+      "readmeRev": "d86a16f6854769613a146817f51cbe558edc5c86",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1789416195000
+      "updatedAt": 1789462535000
     },
     {
       "anchors": [
@@ -5293,7 +5315,7 @@
           "what": ": the JSON-LD the site emits."
         }
       ],
-      "behind": 2,
+      "behind": 0,
       "component": "site",
       "dir": "_site/site-content",
       "files": 20,
@@ -5301,10 +5323,9 @@
       "loc": 4874,
       "name": "@intentic/site-content",
       "oneLiner": "Every word on the public website, as data.",
-      "readmeRev": "7b8ed664bd42244894cd13accc2fdccf0318bfff",
-      "reason": "2 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1789416195000
+      "readmeRev": "d86a16f6854769613a146817f51cbe558edc5c86",
+      "stale": false,
+      "updatedAt": 1789462535000
     },
     {
       "anchors": [
@@ -5329,18 +5350,17 @@
           "what": ": the Delayer/Coalescer distinction pinned as behaviour."
         }
       ],
-      "behind": 3,
+      "behind": 0,
       "component": "tools",
       "dir": "_tools/base",
       "files": 15,
       "hasTests": true,
-      "loc": 1781,
+      "loc": 1794,
       "name": "@intentic/base",
       "oneLiner": "The runtime primitives every tier shares: the when condition language, disposal, the async schedulers, and the outside-text neutralizer.",
-      "readmeRev": "f0117256a3c0c95870af239a3ef5e5f4edb6a9ae",
-      "reason": "3 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788379331000
+      "readmeRev": "083d9a113af9d5220a65de9e00efd71d0e2d2d62",
+      "stale": false,
+      "updatedAt": 1789462441000
     },
     {
       "anchors": [
@@ -5464,16 +5484,16 @@
           "what": ": what Windows, Docker, and the desktop say is true."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "component": "tools",
       "dir": "_tools/desktop-smoke-windows",
       "files": 18,
       "hasTests": true,
-      "loc": 2244,
+      "loc": 2277,
       "name": "@intentic/desktop-smoke-windows",
       "oneLiner": "The tiers that meet the Windows installer the way a user's machine does: by running it.",
       "readmeRev": "ee3269321fed39d2aa0ee23c047d75a4a3df9f82",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788945912000
     },
@@ -5527,18 +5547,17 @@
           "what": ": the data the journeys rest on."
         }
       ],
-      "behind": 4,
+      "behind": 0,
       "component": "tools",
       "dir": "_tools/e2e",
       "files": 24,
       "hasTests": true,
-      "loc": 2295,
+      "loc": 2316,
       "name": "@intentic/e2e",
       "oneLiner": "The browser smoke tier: Playwright against the whole stack, including the published daemon image.",
-      "readmeRev": "80e4fbc1ae20b3e1439497d1de21739459798467",
-      "reason": "4 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1789288520000
+      "readmeRev": "80cc511a68f5fa5337f1e7ef59257f243ea6ba98",
+      "stale": false,
+      "updatedAt": 1789465439000
     },
     {
       "anchors": [
@@ -5868,7 +5887,7 @@
       "updatedAt": 1787306252000
     }
   ],
-  "generatedAt": 1789434412825,
+  "generatedAt": 1789491031723,
   "orphans": [],
   "repo": "intentic",
   "undocumented": []

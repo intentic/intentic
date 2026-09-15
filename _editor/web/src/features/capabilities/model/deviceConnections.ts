@@ -1,4 +1,4 @@
-import type { Device } from "@intentic/sandbox-contract";
+import { type Device, machinesOf } from "@intentic/sandbox-contract";
 import type { StatusVariant } from "@intentic/ui";
 import { hostCard, osLabel } from "../../sandbox/devices/deviceFacts";
 import { deviceState, deviceTone } from "../../sandbox/devices/deviceRows";
@@ -84,3 +84,11 @@ export const deviceConnections = (devices: readonly Device[], readAt: number): D
             },
         ];
     });
+
+// What a connected device's row says when it is one side of a PC connected through several doors (Windows and the
+// WSL distros on it): the other doors, by the ids their tools are named after. Undefined for a machine of one door.
+export const sameMachineNote = (devices: readonly Device[], id: string): string | undefined => {
+    const machine = machinesOf(devices).find((candidate) => candidate.environments.some((environment) => environment.hostId === id));
+    const others = (machine?.environments ?? []).filter((environment) => environment.hostId !== undefined && environment.hostId !== id);
+    return others.length === 0 ? undefined : `one PC with ${others.map((environment) => environment.hostId).join(`, `)}`;
+};

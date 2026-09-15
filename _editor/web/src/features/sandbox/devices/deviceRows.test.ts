@@ -3,14 +3,18 @@ import { expect, test } from "vitest";
 import { deviceAttention } from "./deviceAttention";
 import {
     boardBody,
+    type DeviceRow,
     deviceRow,
-    deviceRows,
     deviceState,
     deviceSwitches,
     deviceSyncingSandbox,
     deviceTally,
     deviceTone,
+    folderOwner,
     isSelf,
+    machineRow,
+    machineRows,
+    managerOf,
     rowMatches,
     showFilter,
 } from "./deviceRows";
@@ -56,6 +60,9 @@ const row = (overrides: Partial<Device> = {}, held: Held = {}, latest?: string) 
     const { sandboxes, ...reported } = held;
     return deviceRow(device({ report: report(reported), ...(sandboxes === undefined ? {} : { sandboxes }), ...overrides }), latest);
 };
+
+// The board and its tally read machines; a lone device is a machine of one environment, keyed as itself.
+const card = (entry: DeviceRow) => machineRow([entry], entry.device);
 
 // which machine reads as live
 
@@ -106,7 +113,7 @@ test(`keeps an asleep machine neutral: offline is a state, not a fault`, () => {
 });
 
 test(`puts the machines worth reading first, and breaks ties by name`, () => {
-    const rows = deviceRows(
+    const rows = machineRows(
         [
             device({ key: `zed`, label: `zed`, gap: `offline`, online: false, report: undefined }),
             device({ key: `beta`, label: `beta` }),
@@ -116,7 +123,72 @@ test(`puts the machines worth reading first, and breaks ties by name`, () => {
         undefined,
         NOW,
     );
-    expect(rows.map((entry) => entry.device.label)).toEqual([`alpha`, `beta`, `dead`, `zed`]);
+    expect(rows.map((entry) => entry.label)).toEqual([`alpha`, `beta`, `dead`, `zed`]);
+});
+
+// one PC, several doors
+
+// The Windows side and the distro on it: separate agents and separate doors, one hostname, one engine.
+const WINDOWS: Device[`facts`] = { os: `Microsoft Windows 11 Home`, arch: `x64`, shell: `PowerShell 7`, home: `C:\\Users\\radar`, roots: [], hostname: `rog`, wslDistros: [`Arch`, `Ubuntu`] };
+const ARCH: Device[`facts`] = { os: `Arch Linux`, arch: `x64`, shell: `/usr/bin/zsh`, home: `/home/radarsu`, roots: [], hostname: `rog`, wsl: { distro: `Arch` } };
+
+const CONTAINERS: Device[`sandboxes`] = [{ slug: `work-abc`, container: `sandbox-work-abc`, running: true, image: `img:1` }];
+
+const pc = () =>
+    machineRows(
+        [
+            device({ key: `rog-wsl`, label: `rog-wsl`, hostId: `rog-wsl`, facts: ARCH, sandboxes: CONTAINERS, report: report({ os: `linux`, wsl: { distro: `Arch` }, pairings: PAIRED.pairings, ports: PAIRED.ports }) }),
+            device({ key: `rog`, label: `rog`, hostId: `rog`, facts: WINDOWS, sandboxes: CONTAINERS, report: report({ os: `win32` }) }),
+        ],
+        undefined,
+        NOW,
+    );
+
+test(`folds a Windows install and its distro into one machine, Windows first, with each container once`, () => {
+    const [machine, ...rest] = pc();
+    expect(rest).toEqual([]);
+    expect(machine).toMatchObject({ key: `rog`, label: `rog` });
+    expect(machine?.environments.map((environment) => environment.device.key)).toEqual([`rog`, `rog-wsl`]);
+    // Both doors list the same engine's container; the folder and ports came from the distro's report.
+    expect(machine?.groups.map((group) => group.sandboxId)).toEqual([`work-abc`]);
+    expect(machine?.groups[0]?.folder?.localDir).toBe(`/home/ada/work`);
+    expect(machine?.groups[0]?.ports).toHaveLength(1);
+    expect(deviceTally(pc()).find((item) => item.label === `running`)?.value).toBe(1);
+});
+
+test(`draws a many-sided machine's environments as lines of their own, and names the side a warning is about`, () => {
+    const body = boardBody(pc()[0]!, ``, `work-abc`, NOW);
+    expect(body.doors).toEqual([]);
+    expect(body.environments.map((environment) => environment.label)).toEqual([`Microsoft Windows 11 Home`, `Arch Linux on WSL`]);
+    expect(body.environments.map((environment) => environment.state)).toEqual([`live`, `live`]);
+    // Either door onto the container serving this page marks the machine as the one in use.
+    expect(body.lines[0]?.self).toBe(true);
+    const stopped = machineRows(
+        [device({ key: `rog-wsl`, hostId: `rog-wsl`, facts: ARCH, report: report({ os: `linux`, wsl: { distro: `Arch` }, agent: { running: false } }) }), device({ key: `rog`, hostId: `rog`, facts: WINDOWS, report: report({ os: `win32` }) })],
+        undefined,
+        NOW,
+    );
+    expect(boardBody(stopped[0]!, ``, undefined, NOW).warnings).toEqual([`Arch Linux on WSL: agent stopped`]);
+});
+
+test(`sends container verbs through the first open door and file-sync verbs through the folder's own`, () => {
+    const machine = pc()[0]!;
+    expect(managerOf(machine)?.device.key).toBe(`rog`);
+    expect(folderOwner(machine, machine.groups[0]!)?.device.key).toBe(`rog-wsl`);
+    // A door that is shut is not the one to send through, whichever side it is on.
+    const asleep = machineRows(
+        [device({ key: `rog-wsl`, hostId: `rog-wsl`, facts: ARCH, report: report({ os: `linux`, wsl: { distro: `Arch` } }) }), device({ key: `rog`, hostId: `rog`, online: false, facts: WINDOWS, gap: `offline`, report: undefined })],
+        undefined,
+        NOW,
+    );
+    expect(managerOf(asleep[0]!)?.device.key).toBe(`rog-wsl`);
+});
+
+test(`finds a many-sided machine by either of its doors`, () => {
+    const machine = pc()[0]!;
+    expect(rowMatches(machine, `rog-wsl`)).toBe(true);
+    expect(rowMatches(machine, `arch`)).toBe(true);
+    expect(rowMatches(machine, `8788`)).toBe(true);
 });
 
 // what a card says without being expanded
@@ -133,7 +205,7 @@ const folders = (...ids: string[]): Held => ({
 });
 
 test(`names every sandbox the machine holds, and what its ports came to`, () => {
-    const body = boardBody(row({}, PAIRED), ``, undefined, NOW);
+    const body = boardBody(card(row({}, PAIRED)), ``, undefined, NOW);
     expect(body.lines.map((line) => line.title)).toEqual([`intentic-dev`]);
     expect(body.lines[0]?.running).toBe(true);
     expect(body.lines[0]?.facts).toContain(`1 port`);
@@ -141,19 +213,19 @@ test(`names every sandbox the machine holds, and what its ports came to`, () => 
 });
 
 test(`says how the sandbox reaches the machine, and which build its agent serves`, () => {
-    const body = boardBody(row({ sync: { machine: `rog`, mode: `sync`, seenAt: NOW }, agentVersion: `1.2.0` }, PAIRED), ``, undefined, NOW);
+    const body = boardBody(card(row({ sync: { machine: `rog`, mode: `sync`, seenAt: NOW }, agentVersion: `1.2.0` }, PAIRED)), ``, undefined, NOW);
     expect(body.doors).toEqual([`desktop sync`, `commands`, `agent 1.2.0`]);
 });
 
 test(`caps the lines it draws and counts what it left out`, () => {
-    const body = boardBody(row({}, folders(`a`, `b`, `c`, `d`, `e`)), ``, undefined, NOW);
+    const body = boardBody(card(row({}, folders(`a`, `b`, `c`, `d`, `e`))), ``, undefined, NOW);
     expect(body.lines).toHaveLength(3);
     expect(body.more).toBe(2);
 });
 
 test(`draws every match while the filter is set, so a port search never lands off the list`, () => {
     const held: Held = { ...folders(`a`, `b`, `c`, `d`), ports: [{ port: 8788, host: `127.0.0.1`, sandboxId: `d`, state: `mirrored` }] };
-    const body = boardBody(row({}, held), `8788`, undefined, NOW);
+    const body = boardBody(card(row({}, held)), `8788`, undefined, NOW);
     expect(body.lines.map((line) => line.title)).toEqual([`d`]);
     expect(body.more).toBe(0);
 });
@@ -170,20 +242,20 @@ test(`draws the containers of a machine that would not describe itself`, () => {
 });
 
 test(`separates what is wrong with the machine from what is wrong with its sandboxes`, () => {
-    const body = boardBody(row({}, { ...PAIRED, agent: { running: false } }), ``, undefined, NOW);
+    const body = boardBody(card(row({}, { ...PAIRED, agent: { running: false } })), ``, undefined, NOW);
     expect(body.warnings).toEqual([`agent stopped`]);
     expect(body.lines[0]?.warnings).toEqual([]);
 });
 
 test(`marks the sandbox serving this page, and only when both slugs are known`, () => {
-    expect(boardBody(row({}, PAIRED), ``, `work-abc`, NOW).lines[0]?.self).toBe(true);
+    expect(boardBody(card(row({}, PAIRED)), ``, `work-abc`, NOW).lines[0]?.self).toBe(true);
     // Two unknowns must not compare equal: a pairing with no container on an unknown-URL sandbox is not "you".
     const bare: Partial<Report> = { pairings: PAIRED.pairings };
-    expect(boardBody(row({}, bare), ``, undefined, NOW).lines[0]?.self).toBe(false);
+    expect(boardBody(card(row({}, bare)), ``, undefined, NOW).lines[0]?.self).toBe(false);
 });
 
 test(`finds a machine by a port number, by its sandbox, and by its folder`, () => {
-    const entry = row({}, PAIRED);
+    const entry = card(row({}, PAIRED));
     expect(rowMatches(entry, `8788`)).toBe(true);
     expect(rowMatches(entry, `intentic-dev`)).toBe(true);
     expect(rowMatches(entry, `/home/ada`)).toBe(true);
@@ -191,10 +263,10 @@ test(`finds a machine by a port number, by its sandbox, and by its folder`, () =
 });
 
 test(`offers no filter over a board small enough to read`, () => {
-    expect(showFilter([row()])).toBe(false);
-    expect(showFilter([row(), row(), row()])).toBe(true);
+    expect(showFilter([card(row())])).toBe(false);
+    expect(showFilter([card(row()), card(row()), card(row())])).toBe(true);
     // Or over one machine holding more sandboxes than a reader can hold in their head.
-    expect(showFilter([row({}, folders(`a`, `b`, `c`, `d`))])).toBe(true);
+    expect(showFilter([card(row({}, folders(`a`, `b`, `c`, `d`)))])).toBe(true);
 });
 
 test(`counts the fleet's sandboxes by state, and keeps "running" visible at zero`, () => {
@@ -202,7 +274,7 @@ test(`counts the fleet's sandboxes by state, and keeps "running" visible at zero
         ...PAIRED,
         sandboxes: [{ slug: `work-abc`, container: `sandbox-work-abc`, running: false, image: `img:1` }],
     };
-    const tally = deviceTally([row({}, PAIRED), row({ key: `omen`, label: `omen` }, stopped)]);
+    const tally = deviceTally([card(row({}, PAIRED)), card(row({ key: `omen`, label: `omen` }, stopped))]);
     expect(tally.find((item) => item.label === `running`)?.value).toBe(1);
     expect(tally.find((item) => item.label === `running`)?.always).toBe(true);
     expect(tally.find((item) => item.label === `stopped`)?.value).toBe(1);

@@ -576,3 +576,22 @@ test("an answer the device's RPC layer sent comes through as the refusal it is",
     );
     expect(lines).toEqual([{ kind: "error", message: "This device's agent has no such flow. Run `intentic-machine upgrade` on that device." }]);
 });
+
+// A card with "Run commands" off never reports, and a report was the only thing that said which environment a door
+// is. Its connect-time facts say so too now, so a silent distro no longer folds onto its neighbour's row.
+test("keeps a silent distro off the row of the distro beside it, on its facts alone", () => {
+    const merged = mergeDevices(
+        [enrolled("radarsu-rog")],
+        [{ machine: "radarsu-rog", report: report("radarsu-rog", { wsl: { distro: "Arch" } }) }],
+        [
+            {
+                host: host("radarsu-rog", {
+                    facts: { os: "Ubuntu", arch: "x64", shell: "/bin/bash", home: "/home/r", roots: [], hostname: "radarsu-rog", wsl: { distro: "Ubuntu-22.04" } },
+                }),
+                result: { gap: "scope-off" },
+            },
+        ],
+    );
+    expect(merged).toHaveLength(2);
+    expect(merged.find((row) => row.sync !== undefined)?.hostId).toBeUndefined();
+});

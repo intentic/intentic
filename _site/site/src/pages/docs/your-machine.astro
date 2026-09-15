@@ -101,6 +101,19 @@ const scopes = [
         <strong>on your machine</strong>, not in the sandbox: they are pushed down on every connect and the agent on your device refuses out-of-scope calls itself. A compromised sandbox, or an agent talked into something by a page it read, cannot exceed what you ticked.
     </p>
 
+    <h2>Windows and WSL</h2>
+    <p>
+        A Windows PC and the WSL distros on it are one computer with several environments: Windows itself, and each distro, every one of them
+        with its own agent, its own card and its own switches. Connect the Windows side first; its page then lists the distros it has and offers to
+        connect each one, with the command in PowerShell rather than the distro's own terminal. Once both are connected they appear as one
+        machine here, with each side's state on its own line and every sandbox listed once, since Docker Desktop's engine serves both sides.
+    </p>
+    <p>
+        The agent is told the two are one PC and how to cross between them: <code>run_command</code> takes <code>in: "wsl:&lt;distro&gt;"</code>
+        on the Windows side and <code>in: "windows"</code> inside a distro, so a Linux command never has to be quoted through PowerShell. The
+        screen, the GUI and the clipboard are always the Windows side's.
+    </p>
+
     <h2>Using the device as a runner</h2>
     <p>
         A runner is different from letting an agent operate the host. It is a sandbox container that uses the machine's compute to execute an

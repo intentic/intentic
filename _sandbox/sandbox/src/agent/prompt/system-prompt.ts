@@ -1,7 +1,7 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { HISTORY_ROOT } from "@intentic/constants";
-import type { AgentCapabilities, SystemPromptMode, TurnNote } from "@intentic/sandbox-contract";
-import type { HostDeviceReach } from "../../hosts/self-host.js";
+import { type AgentCapabilities, type SystemPromptMode, type TurnNote, windowsPathOf, wslPathOf } from "@intentic/sandbox-contract";
+import type { DoorReach, HostDeviceReach, MachineReach } from "../../hosts/self-host.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { INTENTIC_PROMPT } from "./intentic-prompt.js";
 import { MEMORY_NOTE_TITLE } from "./workspace-memory.js";
@@ -164,10 +164,49 @@ const DIAGNOSTICS_GUIDANCE =
     "`mcp__diagnostics__resources` is memory, OOM kills and event-loop stalls over time. Each takes a window and " +
     "answers newest-first; none can write.";
 
+// What one side of a two-sided PC is, in the words the tools use: the door id, the shell behind it, its home.
+const sideOf = (door: DoorReach): string => {
+    const facts = [door.shell, door.home === undefined ? undefined : `home ${door.home}`].filter((fact) => fact !== undefined).join(", ");
+    const what = door.distro === undefined ? `its Windows side` : `the WSL distro "${door.distro}" on it`;
+    const owns = door.distro === undefined ? `: the screen, the GUI and the clipboard live there` : ``;
+    return `\`${door.id}\` is ${what}${facts === "" ? "" : ` (${facts})`}${owns}`;
+};
+
+// One folder, two names, for the Windows home and each distro's: the translation a turn would otherwise guess at.
+const pathsOf = (windows: DoorReach | undefined, distros: readonly DoorReach[]): string[] => [
+    ...(windows?.home === undefined || wslPathOf(windows.home) === undefined ? [] : [`${windows.home} is ${wslPathOf(windows.home)} from a distro`]),
+    ...distros.flatMap((door) =>
+        door.home === undefined || door.distro === undefined ? [] : [`${door.home} is ${windowsPathOf(door.distro, door.home)} from Windows`],
+    ),
+];
+
+// How `run_command` crosses between the doors, named per door so the example is the call to make.
+const crossingsOf = (windows: DoorReach | undefined, distros: readonly DoorReach[]): string[] => distros.map((door) =>
+        windows === undefined
+            ? `\`in: "windows"\` on \`${door.id}\` runs PowerShell on the Windows side`
+            : `\`in: "wsl:${door.distro ?? ""}"\` on \`${windows.id}\` runs a Linux command in that distro, and \`in: "windows"\` on \`${door.id}\` runs PowerShell on the Windows side`,
+    );
+
+// Windows and the distros on it answer as separate devices while being one PC with one engine, one screen and one
+// set of disks; without this a turn keeps them "in step" or picks the wrong side for the job.
+const machineGuidance = ({ label, doors }: MachineReach): string => {
+    const windows = doors.find((door) => door.distro === undefined);
+    const distros = doors.filter((door) => door.distro !== undefined);
+    const paths = pathsOf(windows, distros);
+    return (
+        `${doors.map((door) => `\`${door.id}\``).join(" and ")} are ONE computer, ${label}: ${doors.map(sideOf).join("; ")}. One Docker ` +
+        `engine serves both, so \`list_sandboxes\` answers the same through either door and a sandbox on it is managed ` +
+        `through either. Either side reaches the other from \`run_command\`: ${crossingsOf(windows, distros).join("; ")}, with no ` +
+        `quoting through the first shell.${paths.length === 0 ? "" : ` The same files have two names: ${paths.join("; ")}.`} Pick ` +
+        `the door by the job — Linux shell work through the distro, anything on screen through Windows — and never treat ` +
+        `them as two machines to keep in step.`
+    );
+};
+
 // The same failure the terminal sentence below was written for, one machine further out: with a device connected, a
 // turn still hands the owner a command to paste on it. Rides only where those servers were actually mounted, and names
 // the sandbox's own host when the daemon's held readings already say which device that is (hosts/self-host.ts).
-const hostDeviceGuidance = ({ ids, self, slug }: HostDeviceReach): string => {
+const hostDeviceGuidance = ({ ids, self, slug, machines }: HostDeviceReach): string => {
     const which =
         self === undefined
             ? `Which of them runs this sandbox is what \`list_sandboxes\` answers${slug === undefined ? "" : ` — its slug there is \`${slug}\``}.`
@@ -182,7 +221,8 @@ const hostDeviceGuidance = ({ ids, self, slug }: HostDeviceReach): string => {
         `mirroring, file syncing and container management, and they are reading your message rather than sitting at its ` +
         `terminal. Two limits ride with it: anything that restarts, updates, rebuilds or removes THIS sandbox ends your ` +
         `own turn mid-sentence, so say so and get a yes first; and a call refused for a switch that is off is the owner's ` +
-        `decision, to be reported with the switch's name, never routed around.`
+        `decision, to be reported with the switch's name, never routed around.${ 
+        (machines ?? []).map((machine) => ` ${machineGuidance(machine)}`).join("")}`
     );
 };
 

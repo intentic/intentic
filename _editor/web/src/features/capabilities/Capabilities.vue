@@ -89,7 +89,7 @@ import { useTerminalPanel } from "../terminal/useTerminalPanel";
 import { HOST_DOOR, usePeerConnect, WEBEXT_DOOR } from "../sandbox/devices/usePeerConnect";
 import { useVpn } from "../sandbox/devices/useVpn";
 import { revokeSyncDevice, useDevices } from "../sandbox/devices/useDevices";
-import { type DeviceConnection, deviceConnections, isDeviceConnection, machineNamed } from "./model/deviceConnections";
+import { type DeviceConnection, deviceConnections, isDeviceConnection, machineNamed, sameMachineNote } from "./model/deviceConnections";
 
 // Capabilities give the agent tools (GitHub, MCP servers, SSH hosts, Stripe) and scaffold managed repos. Core cards are
 // static catalog data; cli cards derive from enabled extensions' contributes.capabilities. Card facts live in
@@ -631,9 +631,17 @@ const rowState = (entry: CapabilityCatalogEntry, instance: CapabilitySummary): C
 // search for: the name they gave it and the address they typed, neither in any card's prose.
 type ConnectionRow = CapabilityConnection & { readonly category: CapabilityCategory; readonly rank: number; readonly haystack: string };
 
+// A device's facts line: its OS, and the other doors onto the same PC when it has any, so two ids that are one
+// computer read as one on this screen too.
+const hostFacts = (instance: CapabilitySummary): string =>
+    [hostFor(instance.id)?.facts?.os ?? connectionFacts(instance), sameMachineNote(fleet.value, instance.id)]
+        .filter((fact): fact is string => fact !== undefined && fact !== ``)
+        .join(` · `);
+
 const connectionRow = (card: CatalogCard, instance: CapabilitySummary): ConnectionRow => {
     const state = rowState(card.entry, instance);
-    const facts = (card.entry.kind === `vpn` ? vpnAddress(instance.id) : undefined) ?? connectionFacts(instance);
+    const facts =
+        (card.entry.kind === `vpn` ? vpnAddress(instance.id) : undefined) ?? (card.entry.kind === `host` ? hostFacts(instance) : connectionFacts(instance));
     // An unnamed connection took the card's id; the card is then the name, and the line below is free for facts.
     const named = instance.id !== card.entry.id;
     return {
@@ -713,7 +721,7 @@ const nothingMatches = computed(() => (showingConnections.value ? connectionGrou
 // change live.
 const cardRowFacts = (instance: CapabilitySummary): string => {
     if (selected.value?.kind === `host`) {
-        return hostFor(instance.id)?.facts?.os ?? connectionFacts(instance);
+        return hostFacts(instance);
     }
     // A browser names itself and how many sites it may work on; no stored config can answer either.
     if (selected.value?.kind === `webext`) {

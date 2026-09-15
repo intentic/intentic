@@ -3,13 +3,15 @@ import type { DeviceSandboxGroup, NoticeModel, ResourcesAsk, SandboxVerb } from 
 import { sandboxVerbPrompt, VERB_LABEL } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, type ComputedRef, type Ref, ref, watch } from "vue";
-import { type DeviceRow, isSelf } from "./deviceRows";
+import { type DeviceRow, isSelfMachine, type MachineRow, managerOf } from "./deviceRows";
 import { manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "./useDevices";
 import { useSandbox } from "../client/useSandbox";
 
 // Everything one device page does TO its machine: the container verbs, the two sync switches, the agent's
 // own two ops, and revoking the enrollment. One op at a time per machine, since a mirroring switch racing a
-// container verb on the same pairing would be two answers about the same ports.
+// container verb on the same pairing would be two answers about the same ports. A machine with several
+// environments (Windows and the distros on it) is still one page and one lock: container verbs go through
+// whichever door is open, and the ops that belong to one environment's agent or enrollment name it.
 
 // Which machine op each verb sends; only `resources` differs from its verb name (the kit's word for the
 // form vs. the machine's word for what Apply does).
@@ -76,15 +78,15 @@ export interface DeviceOps {
     /** True while anything at all is running on this machine; every button reads it as `disabled`. */
     readonly working: ComputedRef<boolean>;
     readonly rowKey: (group: DeviceSandboxGroup) => string;
-    // Three keys, not one: the switches, the agent and the enrollment each report where they were pressed,
-    // and a single machine key would print one op's answer under another's controls.
-    readonly machineKey: ComputedRef<string>;
-    readonly agentKey: ComputedRef<string>;
-    readonly accessKey: ComputedRef<string>;
+    // Three keys per environment, not one: the switches, the agent and the enrollment each report where they
+    // were pressed, and a single key would print one op's answer under another's controls.
+    readonly switchKey: (environment: DeviceRow) => string;
+    readonly agentKey: (environment: DeviceRow) => string;
+    readonly accessKey: (environment: DeviceRow) => string;
     readonly failure: Ref<{ key: string; notice: NoticeModel } | undefined>;
     readonly outcome: Ref<{ key: string; message: string } | undefined>;
 
-    // Container verbs.
+    // Container verbs, through whichever door is open.
     readonly act: (group: DeviceSandboxGroup, verb: SandboxVerb) => void;
     readonly runningVerb: (group: DeviceSandboxGroup) => SandboxVerb | undefined;
     readonly verbRunning: (group: DeviceSandboxGroup) => boolean;
@@ -97,44 +99,44 @@ export interface DeviceOps {
     readonly applyReshape: (ask: ResourcesAsk) => void;
     readonly selfGroup: (group: DeviceSandboxGroup) => boolean;
 
-    // The two sync switches, per pairing and machine-wide.
-    readonly runSync: (key: string, sandboxId: string | undefined, command: DeviceSyncSwitch) => Promise<void>;
+    // The two sync switches, per pairing and machine-wide, through the environment holding the pairing.
+    readonly runSync: (environment: DeviceRow, key: string, sandboxId: string | undefined, command: DeviceSyncSwitch) => Promise<void>;
     readonly syncRunning: (key: string, command: DeviceSyncSwitch) => boolean;
-    readonly confirmingUnpair: Ref<{ group: DeviceSandboxGroup } | undefined>;
+    readonly confirmingUnpair: Ref<{ environment: DeviceRow; group: DeviceSandboxGroup } | undefined>;
     readonly confirmUnpair: () => void;
 
-    // The agent's own two ops.
-    readonly runAgent: (op: DeviceAgentOp) => Promise<void>;
-    readonly agentRunning: (op: DeviceAgentOp) => boolean;
-    readonly agentBusy: ComputedRef<boolean>;
-    readonly agentLines: ComputedRef<readonly string[]>;
-    readonly agentWaiting: ComputedRef<string | undefined>;
+    // One environment's agent and its two ops.
+    readonly runAgent: (environment: DeviceRow, op: DeviceAgentOp) => Promise<void>;
+    readonly agentRunning: (environment: DeviceRow, op: DeviceAgentOp) => boolean;
+    readonly agentBusy: (environment: DeviceRow) => boolean;
+    readonly agentLines: (environment: DeviceRow) => readonly string[];
+    readonly agentWaiting: (environment: DeviceRow) => string | undefined;
 
-    // Cutting the machine off entirely.
-    readonly confirmingRevoke: Ref<boolean>;
+    // Cutting one environment's enrollment off entirely.
+    readonly confirmingRevoke: Ref<DeviceRow | undefined>;
     readonly revoking: Ref<boolean>;
     readonly runRevoke: () => Promise<void>;
 }
 
-export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceOps {
+export function useDeviceOps(machine: () => MachineRow, refetch: () => void): DeviceOps {
     // The sandbox serving this page, by its container slug on the machine: the daemon's own hostname, same
     // derivation the switcher and setup CLI use.
     const { daemonUrl } = useSandbox();
     const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
 
-    const device = computed(() => row().device);
-    const machineKey = computed(() => device.value.key);
-    const agentKey = computed(() => `${device.value.key}:agent`);
-    const accessKey = computed(() => `${device.value.key}:access`);
-    const rowKey = (group: DeviceSandboxGroup): string => `${device.value.key}:${group.sandboxId}`;
-    const selfGroup = (group: DeviceSandboxGroup): boolean => isSelf(device.value, group, ownSlug.value);
+    const switchKey = (environment: DeviceRow): string => `${environment.device.key}:switches`;
+    const agentKey = (environment: DeviceRow): string => `${environment.device.key}:agent`;
+    const accessKey = (environment: DeviceRow): string => `${environment.device.key}:access`;
+    const rowKey = (group: DeviceSandboxGroup): string => `${machine().key}:${group.sandboxId}`;
+    const selfGroup = (group: DeviceSandboxGroup): boolean => isSelfMachine(machine(), group, ownSlug.value);
 
     // `${rowKey}:${verb}`, so one string says both which row is working and at what.
     const busy = ref<string | undefined>();
     // Kept out of `busy`, which also drives which container-verb button spins; keyed by row and command,
     // since three buttons on a row must not spin together.
     const syncBusy = ref<{ key: string; command: DeviceSyncSwitch } | undefined>();
-    const agentOp = ref<DeviceAgentOp | undefined>();
+    // The agent op in flight and whose agent it is, so the log lands under that environment's row.
+    const agentOp = ref<{ key: string; op: DeviceAgentOp } | undefined>();
     const revoking = ref(false);
     const working = computed(() => busy.value !== undefined || syncBusy.value !== undefined || agentOp.value !== undefined || revoking.value);
 
@@ -158,8 +160,8 @@ export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceO
 
     const confirmingAct = ref<{ group: DeviceSandboxGroup; verb: SandboxVerb } | undefined>();
     const reshaping = ref<{ group: DeviceSandboxGroup } | undefined>();
-    const confirmingUnpair = ref<{ group: DeviceSandboxGroup } | undefined>();
-    const confirmingRevoke = ref(false);
+    const confirmingUnpair = ref<{ environment: DeviceRow; group: DeviceSandboxGroup } | undefined>();
+    const confirmingRevoke = ref<DeviceRow | undefined>();
 
     const actPrompt = computed<ActPrompt | undefined>(() => {
         const pending = confirmingAct.value;
@@ -180,9 +182,12 @@ export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceO
         };
     });
 
+    // The door container verbs travel through; undefined when no environment holds a socket.
+    const door = (): string | undefined => managerOf(machine())?.device.hostId;
+
     // `resources` is the one verb with something to say beyond its name: the form's answer, forwarded unread.
     const runAct = async (group: DeviceSandboxGroup, verb: SandboxVerb, resources?: ResourcesAsk): Promise<void> => {
-        const hostId = device.value.hostId;
+        const hostId = door();
         const slug = group.sandbox?.slug;
         if (hostId === undefined || slug === undefined || working.value) {
             return;
@@ -234,7 +239,7 @@ export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceO
     };
 
     const act = (group: DeviceSandboxGroup, verb: SandboxVerb): void => {
-        if (device.value.hostId === undefined || group.sandbox === undefined || working.value) {
+        if (door() === undefined || group.sandbox === undefined || working.value) {
             return;
         }
         if (verb === `resources`) {
@@ -272,9 +277,10 @@ export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceO
     };
 
     // No confirmation for the reversible four; `sync-unpair` alone routes through the dialog. `sandboxId`
-    // present targets one pairing, absent runs the bare machine-wide CLI form.
-    const runSync = async (key: string, sandboxId: string | undefined, command: DeviceSyncSwitch): Promise<void> => {
-        const hostId = device.value.hostId;
+    // present targets one pairing, absent runs the bare machine-wide CLI form. The environment is the one
+    // holding the pairing: its own agent owns the folder and the mirrored ports.
+    const runSync = async (environment: DeviceRow, key: string, sandboxId: string | undefined, command: DeviceSyncSwitch): Promise<void> => {
+        const hostId = environment.device.hostId;
         if (hostId === undefined || working.value) {
             return;
         }
@@ -305,28 +311,30 @@ export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceO
         const pending = confirmingUnpair.value;
         confirmingUnpair.value = undefined;
         if (pending !== undefined) {
-            void runSync(rowKey(pending.group), pending.group.sandboxId, `sync-unpair`);
+            void runSync(pending.environment, rowKey(pending.group), pending.group.sandboxId, `sync-unpair`);
         }
     };
 
-    // Whether this device is between "we asked" and "its version moved"; survives the call ending, since
-    // the call ending is not the answer.
-    const waiting = ref<string | undefined>();
-    const agentLog = ref<string[]>([]);
+    // Whether an environment's agent is between "we asked" and "its version moved"; survives the call ending,
+    // since the call ending is not the answer. Keyed by agent, so the note lands under the row that was pressed.
+    const waiting = ref<{ key: string; text: string } | undefined>();
+    const agentLog = ref<{ key: string; lines: string[] } | undefined>();
 
-    const runAgent = async (op: DeviceAgentOp): Promise<void> => {
-        const hostId = device.value.hostId;
+    const runAgent = async (environment: DeviceRow, op: DeviceAgentOp): Promise<void> => {
+        const hostId = environment.device.hostId;
         if (hostId === undefined || working.value) {
             return;
         }
-        const key = agentKey.value;
-        agentOp.value = op;
+        const key = agentKey(environment);
+        agentOp.value = { key, op };
         failure.value = undefined;
         outcome.value = undefined;
-        agentLog.value = [];
-        waiting.value = AGENT_ASKED[op];
+        agentLog.value = { key, lines: [] };
+        waiting.value = { key, text: AGENT_ASKED[op] };
         try {
-            const { message } = await runDeviceAgentFlow(hostId, op, { onLine: (line) => (agentLog.value = [...agentLog.value, line]) });
+            const { message } = await runDeviceAgentFlow(hostId, op, {
+                onLine: (line) => (agentLog.value = { key, lines: [...(agentLog.value?.lines ?? []), line] }),
+            });
             // Only the device's own sentence, and only if it managed to send one; no fallback text.
             outcome.value = message === undefined ? undefined : { key, message };
         } catch (error) {
@@ -341,17 +349,20 @@ export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceO
         }
     };
 
+    // The environment whose agent is being waited on, by the key the note was filed under.
+    const waitedOn = (): DeviceRow | undefined => machine().environments.find((environment) => agentKey(environment) === waiting.value?.key);
+
     // Clears once the fact it was waiting for arrives (a live, unstalled, current loop); watched rather than
     // computed so it survives a poll landing mid-restart.
     watch(
         () => {
-            const current = row();
-            return `${current.agent?.build ?? ``}:${current.chip?.installed ?? ``}:${current.chip?.available ?? ``}`;
+            const current = waitedOn();
+            return `${current?.agent?.build ?? ``}:${current?.chip?.installed ?? ``}:${current?.chip?.available ?? ``}`;
         },
         () => {
-            const current = row();
+            const current = waitedOn();
             const settled =
-                current.agent?.running === true &&
+                current?.agent?.running === true &&
                 current.agent.stalled === false &&
                 current.agent.staleBuild === undefined &&
                 current.chip?.available === undefined;
@@ -364,15 +375,16 @@ export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceO
     // Drops the key from the sandbox rather than asking the device to clean up (Unpair does that): the only
     // path that works for a laptop that's lost, wiped, or someone else's.
     const runRevoke = async (): Promise<void> => {
-        const enrollment = device.value.sync;
+        const environment = confirmingRevoke.value;
+        const enrollment = environment?.device.sync;
         // The enrollment may have vanished between opening the dialog and confirming it; nothing left to
         // revoke closes it quietly.
-        if (enrollment === undefined) {
-            confirmingRevoke.value = false;
+        if (environment === undefined || enrollment === undefined) {
+            confirmingRevoke.value = undefined;
             return;
         }
-        const key = accessKey.value;
-        const label = device.value.label;
+        const key = accessKey(environment);
+        const label = environment.device.label;
         revoking.value = true;
         failure.value = undefined;
         outcome.value = undefined;
@@ -382,7 +394,7 @@ export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceO
         } catch (error) {
             failure.value = { key, notice: noticeFrom(error, `Couldn't revoke that device's access.`) };
         } finally {
-            confirmingRevoke.value = false;
+            confirmingRevoke.value = undefined;
             revoking.value = false;
             // The row is losing its enrollment either way, so refetch regardless of whether the call itself
             // succeeded.
@@ -393,7 +405,7 @@ export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceO
     return {
         working,
         rowKey,
-        machineKey,
+        switchKey,
         agentKey,
         accessKey,
         failure,
@@ -414,10 +426,10 @@ export function useDeviceOps(row: () => DeviceRow, refetch: () => void): DeviceO
         confirmingUnpair,
         confirmUnpair,
         runAgent,
-        agentRunning: (op) => agentOp.value === op,
-        agentBusy: computed(() => agentOp.value !== undefined),
-        agentLines: computed(() => agentLog.value),
-        agentWaiting: computed(() => waiting.value),
+        agentRunning: (environment, op) => agentOp.value?.key === agentKey(environment) && agentOp.value.op === op,
+        agentBusy: (environment) => agentOp.value?.key === agentKey(environment),
+        agentLines: (environment) => (agentLog.value?.key === agentKey(environment) ? agentLog.value.lines : []),
+        agentWaiting: (environment) => (waiting.value?.key === agentKey(environment) ? waiting.value.text : undefined),
         confirmingRevoke,
         revoking,
         runRevoke,

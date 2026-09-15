@@ -11,6 +11,7 @@ import {
     type DeviceSandboxFlow,
     DeviceSandboxSchema,
     differentEnvironment,
+    environmentOf,
     REPORT_QUIET_AFTER_MS,
 } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -288,12 +289,14 @@ export const mergeDevices = (
     // hosts claim first, so a name match never outranks a real answer, and no rule may steal an occupied row.
     // Neither key is unique across environments: WSL hands a distro the Windows machine's hostname, and a distro is
     // usually named after the machine too, so both rules would happily merge a Windows install with a Linux one
-    // sitting inside it. A row is claimable only while nothing positively says the two are different environments.
-    const claim = (report: DeviceReport | undefined, id: string, platform: string | undefined): Device | undefined => {
+    // sitting inside it. A row is claimable only while nothing positively says the two are different environments,
+    // judged on the host's connect-time facts as well as its report, so a card with commands off still says which.
+    const claim = (host: HostSummary, report: DeviceReport | undefined, platform: string | undefined): Device | undefined => {
+        const environment = environmentOf(host.facts, report);
         const free = (row: Device): boolean =>
-            row.hostId === undefined && !differentEnvironment(row.report, report) && !differentPlatform(row.platform, platform);
+            row.hostId === undefined && !differentEnvironment(environmentOf(undefined, row.report), environment) && !differentPlatform(row.platform, platform);
         return report === undefined
-            ? rows.find((row) => free(row) && row.label.toLowerCase() === id.toLowerCase())
+            ? rows.find((row) => free(row) && row.label.toLowerCase() === host.id.toLowerCase())
             : rows.find((row) => free(row) && row.key === report.hostname);
     };
 
@@ -306,7 +309,7 @@ export const mergeDevices = (
     const silent = hosts.filter((entry) => !("report" in entry.result));
     for (const { host, result } of [...answered, ...silent]) {
         const { report, platform, known, gap } = pulledHost(host, result);
-        const existing = claim(report, host.id, platform);
+        const existing = claim(host, report, platform);
         if (existing !== undefined) {
             // Pulled report wins; a shut door removes nothing, only sets online:false. gap only when nothing else
             // shows.

@@ -7,7 +7,7 @@ import ContainerHealthCard from "./ContainerHealthCard.vue";
 import DeviceBoard from "./DeviceBoard.vue";
 import DevicePage from "./DevicePage.vue";
 import { boardRoute, deviceRoute, selectedKey } from "./deviceLinks";
-import { deviceRows } from "./deviceRows";
+import { machineRows } from "./deviceRows";
 import { useDevices } from "./useDevices";
 import { useSandbox } from "../client/useSandbox";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
@@ -45,13 +45,15 @@ const { latest } = useSandboxVersion();
 const { daemonUrl } = useSandbox();
 const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
 
-const rows = computed(() => deviceRows(devices.value, latest.value, readAt.value));
+// One row per PC: a Windows install and the WSL distros on it fold into one machine (machinesOf), so a two-door
+// PC is one card and one page rather than two of each.
+const rows = computed(() => machineRows(devices.value, latest.value, readAt.value));
 
 // The machine on screen is whatever the URL names, and nothing else: no derived fallback, or pressing
 // "All devices" on a one-machine fleet would bounce straight back to it.
 const selected = computed(() => {
     const key = selectedKey(route.query[`device`]);
-    return key === undefined ? undefined : rows.value.find((row) => row.device.key === key);
+    return key === undefined ? undefined : rows.value.find((row) => row.key === key);
 });
 
 // One machine means nothing to choose between, so the tab opens on it. Done as a redirect the first time
@@ -66,7 +68,7 @@ watch(
         chosen.value = true;
         const only = known.length === 1 ? known[0] : undefined;
         if (only !== undefined && selectedKey(route.query[`device`]) === undefined) {
-            void router.replace(deviceRoute(only.device.key));
+            void router.replace(deviceRoute(only.key));
         }
     },
     { immediate: true },
@@ -79,7 +81,7 @@ watch(
     [() => route.query[`device`], rows, isLoading],
     ([asked, known, reading]) => {
         const key = selectedKey(asked);
-        if (!reading && key !== undefined && !known.some((row) => row.device.key === key)) {
+        if (!reading && key !== undefined && !known.some((row) => row.key === key)) {
             void router.replace(boardRoute());
         }
     },
@@ -95,8 +97,8 @@ watch(
 
         <DevicePage
             v-if="selected"
-            :key="selected.device.key"
-            :row="selected"
+            :key="selected.key"
+            :machine="selected"
             :latest="latest"
             :own-slug="ownSlug"
             :read-at="readAt"
