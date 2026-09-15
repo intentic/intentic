@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Deploy the image-push stack only when PLATFORM_DEPLOY_STACK names a stack.
+# Deploy the image-push stack only when PLATFORM_DEPLOY_STACK names a stack, and then prove the roll landed:
+# the api answers /health, and the public web origin serves the build this job pushed.
 #
 # KOMODO_API_KEY and KOMODO_API_SECRET must be masked CI variables.
 set -euo pipefail
@@ -54,4 +55,49 @@ until curl -fsS --max-time 10 "$HEALTH_URL" >/dev/null 2>&1; do
     sleep 5
 done
 echo
-echo "$PLATFORM_DEPLOY_STACK is healthy"
+echo "api is serving"
+
+# AND THEN THE WEB, BY BUILD, because the check above is no evidence about it in either direction: the api and
+# the web are separate containers that compose recreates one after another, behind a cloudflared recreated
+# after both (docker-compose.yml depends_on). While the api answers, app.<zone> can still be the outgoing
+# container or the tunnel between containers answering 502 — and the browser smoke that runs next reads either
+# as a fault in the web image's own files.
+#
+# Same contract as deploy-ingress.sh: read the build back off the PUBLIC address, out of the image rather than
+# recomputed here, so a deploy that did not land is a red job.
+WEB_URL="${PLATFORM_WEB_URL:-https://app.intentic.dev}"
+WEB_IMAGE="${PLATFORM_WEB_IMAGE:-ghcr.io/intentic/web:latest}"
+
+docker pull -q "$WEB_IMAGE" >/dev/null
+EXPECTED="$(docker image inspect "$WEB_IMAGE" --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^WEB_BUILD=//p' | head -1)"
+if [ -z "$EXPECTED" ] || [ "$EXPECTED" = "unreleased" ]; then
+    echo >&2 "error: $WEB_IMAGE carries no WEB_BUILD, so a deploy of it could not be verified."
+    echo >&2 "  docker-release.sh bakes it from the turbo hash; an image built by hand does not have it."
+    exit 1
+fi
+
+# Case-insensitively, because the name arrives lowercased over HTTP/2 and capitalised over HTTP/1.1.
+served_build() {
+    curl -fsSI --max-time 10 "$WEB_URL" 2>/dev/null | tr -d '\r' | awk 'tolower($1) == "x-web-build:" { print $2 }' | head -1
+}
+
+echo "waiting for $WEB_URL to serve build $EXPECTED"
+deadline=$((SECONDS + 180))
+until [ "$(served_build)" = "$EXPECTED" ]; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+        serving="$(served_build || true)"
+        echo >&2
+        echo >&2 "error: $WEB_URL is still not serving build $EXPECTED 180s after the deploy."
+        echo >&2 "  It says: ${serving:-(no X-Web-Build header at all)}"
+        echo >&2 "  No header at all is the tunnel's own error page — the container is not up — or a web image"
+        echo >&2 "  older than this check."
+        echo >&2 "  The stack pulls ':latest' with pull_policy: always, so a stuck roll is the registry, the"
+        echo >&2 "  pull, or a stack pinned to another tag via INTENTIC_IMAGE_TAG. Komodo's own log for"
+        echo >&2 "  '$PLATFORM_DEPLOY_STACK' says which."
+        exit 1
+    fi
+    printf '.'
+    sleep 5
+done
+echo
+echo "$PLATFORM_DEPLOY_STACK is healthy and serving build $EXPECTED"

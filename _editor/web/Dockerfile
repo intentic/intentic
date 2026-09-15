@@ -10,6 +10,10 @@
 #   pnpm --filter=@intentic/web build && docker build -t …/web _editor/web
 FROM nginx:1.30.4-alpine3.24@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
+# The build this image is, served back as X-Web-Build (nginx.conf) so a deploy can tell WHICH image answered
+# and not merely that something did. docker-release.sh bakes the content-addressed tag in on seeing this ARG.
+ARG BUILD_ID=unreleased
+ENV WEB_BUILD=$BUILD_ID
 # Staged as a template, not dropped straight into conf.d — the entrypoint renders it. Also NOT into the base
 # image's /etc/nginx/templates/, whose auto-envsubst runs with no variable filter and would blank every $uri.
 COPY nginx.conf /etc/nginx/default.conf.template

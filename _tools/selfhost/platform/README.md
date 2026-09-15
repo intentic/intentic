@@ -104,7 +104,13 @@ volume self-initializes and an image bump self-migrates: no manual db step.
 Run this compose as a **Komodo stack** named `intentic-platform` and every main push redeploys itself:
 `images-platform` ends with [deploy-platform.sh](../../scripts/platform/deploy-platform.sh), which calls Komodo's
 `DeployStack`, the stack's services run `:latest` with `pull_policy: always`, so the redeploy pulls what CI
-just pushed. The stack name is set in the job's `env` (`PLATFORM_DEPLOY_STACK`) and the Komodo core origin
+just pushed.
+
+That script then waits for the roll to **land**, in both services, because `DeployStack` returns as soon as
+Komodo accepts it: the api must answer `/health`, and `app.<zone>` must report the build the job pushed in its
+`X-Web-Build` header (baked into the web image by `docker-release.sh`). Until it does, the origin is either
+the outgoing container or a `cloudflared` recreated after both of them — and the sign-in smoke that runs next
+would read that as a fault in the SPA. The stack name is set in the job's `env` (`PLATFORM_DEPLOY_STACK`) and the Komodo core origin
 defaults to `https://komodo.radarsu.com`, leaving one thing to configure: the api key, as GitHub Actions
 secrets:
 

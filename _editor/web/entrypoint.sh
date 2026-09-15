@@ -22,7 +22,11 @@ export POSTHOG_ASSETS_HOST="${POSTHOG_ASSETS_HOST:-us-assets.i.posthog.com}"
 export NGINX_RESOLVER="${NGINX_RESOLVER:-$(awk '/^nameserver/ { print $2 }' /etc/resolv.conf | head -3 | sed 's/^.*:.*$/[&]/' | tr '\n' ' ')}"
 export NGINX_RESOLVER="${NGINX_RESOLVER:-127.0.0.11}"
 
-envsubst '$NGINX_RESOLVER $POSTHOG_API_HOST $POSTHOG_ASSETS_HOST' \
+# Defaulted rather than required: nginx omits an add_header whose value is empty, so an unset WEB_BUILD would
+# drop the header the deploy waits on instead of answering something a deploy can refuse.
+export WEB_BUILD="${WEB_BUILD:-unreleased}"
+
+envsubst '$NGINX_RESOLVER $POSTHOG_API_HOST $POSTHOG_ASSETS_HOST $WEB_BUILD' \
     < /etc/nginx/default.conf.template > /etc/nginx/conf.d/default.conf
 
 # Staged through /tmp and written back with cat so the target keeps the COPY layer's 0644 (a fresh redirect

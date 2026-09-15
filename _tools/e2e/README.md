@@ -95,12 +95,19 @@ Everything above stubs Google out, and rightly so: a hermetic suite cannot depen
 The consequence was a blind spot with nothing behind it: whether Google still *accepts the deployed origin*
 for our OAuth client is state that lives outside this repo, and when it stopped being true every Google button
 on the site went dead while the entire pipeline stayed green. This is the check that goes red for that. It
-loads the real login page in a real browser and asserts two things: Google's button reaches a pressable size
-(a refused one still exists, at 0×0), and the fallback link that bypasses Google's frame is present.
+loads the real login page in a real browser and asserts three things: the `Content-Security-Policy` still
+admits secure preview frames, Google's button reaches a pressable size (a refused one still exists, at 0×0),
+and the fallback link that bypasses Google's frame is present.
 
-It runs in the **platform deploy job**, straight after the health wait, so a deploy that shuts the front door
-fails the job that rolled it. It is not part of `e2e:browser`: it needs the internet and a live deployment,
-which is the opposite of what that suite is for.
+All three read the app out of the navigation response, so the status comes first: anything but a 200 is
+retried and then reported as one line about the **origin**, never as faults in the page. A page that was never
+served has no CSP to be wrong and no button to be missing, and reporting it as though it did sent a reader to
+two files that were both correct in git.
+
+It runs in the **platform deploy job**, after [deploy-platform.sh](../scripts/platform/deploy-platform.sh) has
+seen the public origin report the build that job pushed, so a deploy that shuts the front door fails the job
+that rolled it. It is not part of `e2e:browser`: it needs the internet and a live deployment, which is the
+opposite of what that suite is for.
 
 Why a browser rather than a curl, given a browser costs a install step in a deploy job: the identical request
 is answered **200 to curl and 400 to Chromium**: with matching origin, referer, user-agent, fetch-metadata

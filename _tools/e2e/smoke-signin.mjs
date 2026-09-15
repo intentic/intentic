@@ -37,9 +37,16 @@ const inspect = async (browser) => {
 
     try {
         const navigation = await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: BUTTON_DEADLINE_MS });
+        // Every check below reads the app out of this response, so a status that is not 200 makes all of them
+        // say the app is broken. 0 stands for a navigation that produced no response at all.
+        const status = navigation?.status() ?? 0;
         const csp = navigation?.headers()["content-security-policy"] ?? "";
         const frameSources = /(?:^|;)\s*frame-src\s+([^;]*)/.exec(csp)?.[1].trim().split(/\s+/) ?? [];
         const previewFramesAllowed = frameSources.includes("https:");
+        // Straight back out, so a retryable status costs the delay and not the button deadline three times over.
+        if (status !== 200) {
+            return { consoleErrors, fallback: 0, loadError: undefined, pressable: false, previewFramesAllowed, refused: [], status };
+        }
 
         // Checks size, not presence: a refused origin still renders the iframe, just stuck at 0×0.
         const pressable = await page
@@ -56,7 +63,7 @@ const inspect = async (browser) => {
 
         const refused = consoleErrors.filter((text) => ORIGIN_REFUSED.test(text));
         const fallback = await page.getByRole("button", { name: /Trouble signing in|Continue with Google/i }).count();
-        return { consoleErrors, fallback, loadError: undefined, pressable, previewFramesAllowed, refused };
+        return { consoleErrors, fallback, loadError: undefined, pressable, previewFramesAllowed, refused, status };
     } catch (error) {
         return {
             consoleErrors,
@@ -65,6 +72,7 @@ const inspect = async (browser) => {
             pressable: false,
             previewFramesAllowed: false,
             refused: [],
+            status: 0,
         };
     } finally {
         await page.close();
@@ -79,15 +87,27 @@ try {
     for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt += 1) {
         result = await inspect(browser);
         const transportErrors = [...result.consoleErrors, result.loadError ?? ``].filter((text) => TRANSIENT_NETWORK.test(text));
-        if (result.refused.length > 0 || result.pressable || transportErrors.length === 0 || attempt === RETRY_ATTEMPTS) {
+        // A status that is not 200 is retried like a transport failure: the origin sits behind a tunnel whose
+        // container the deploy before this step has just recreated.
+        const retryable = transportErrors.length > 0 || (result.loadError === undefined && result.status !== 200);
+        if (result.refused.length > 0 || result.pressable || !retryable || attempt === RETRY_ATTEMPTS) {
             break;
         }
-        console.warn(`sign-in smoke attempt ${attempt}/${RETRY_ATTEMPTS} hit a transport failure; retrying in ${RETRY_DELAY_MS / 1000}s.`);
+        console.warn(`sign-in smoke attempt ${attempt}/${RETRY_ATTEMPTS} did not reach the app; retrying in ${RETRY_DELAY_MS / 1000}s.`);
         await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
     }
 
     if (result.loadError !== undefined) {
         fail(`the sign-in page did not load: ${result.loadError}`);
+    } else if (result.status !== 200) {
+        // Before every page check, because a page that was never served cannot be judged by them.
+        fail(`the origin answered ${result.status === 0 ? "nothing" : result.status}, so the app was never served.`, [
+            "",
+            "Nothing about this page's code is implicated: no Content-Security-Policy, no bundle, no button.",
+            "The web container is not up, or the tunnel in front of it has no origin to reach —",
+            "deploy-platform.sh waits for the public origin to report the build it pushed (X-Web-Build),",
+            "so a status here means the container went away again after that check.",
+        ]);
     } else if (!result.previewFramesAllowed) {
         fail("The editor's Content-Security-Policy refuses secure preview frames.", [
             "",
@@ -125,7 +145,8 @@ try {
     }
 
     // The page must expose either its escape link or the primary redirect button without Google's iframe.
-    if (result.loadError === undefined && result.fallback === 0) {
+    // Gated on a served page like the chain above, since an error page has no controls of ours to be missing.
+    if (result.loadError === undefined && result.status === 200 && result.fallback === 0) {
         fail("The sign-in page offers no fallback way in.", [
             "",
             "Some Google failures are invisible to the page, so a redirect control that",
