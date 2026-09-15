@@ -5,6 +5,7 @@ import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import { publishRuntimeChange } from "../../system/runtime-watch.js";
+import { releaseDisplay } from "../cast/display.js";
 import { ROUTED_BROWSER_SERVER } from "../tools/browser-tools.js";
 import { armPasskeys } from "../tools/passkeys.js";
 
@@ -132,10 +133,28 @@ const watchPage = (record: BrowserSessionRecord, page: Page): void => {
     });
 };
 
+// The X display is keyed by server (browser-tools.ts starts one per account owner), and several conversations can
+// browse the same account, so it goes only once the last record using it has stopped. Without this nothing ever called
+// releaseDisplay: displays accumulated for the daemon's life, and across a restart the adopted ones could not be
+// killed at all — measured, 23 X servers alive for 7 live browsers.
+const releaseIdleDisplay = (server: string): void => {
+    for (const record of sessions.values()) {
+        if (record.server === server && record.finishedAt === undefined) {
+            return;
+        }
+    }
+    releaseDisplay(server);
+};
+
 // Page records stay: a finished session's value is where the agent went. Their Page handles are dead, so
 // browserSessionPage refuses any finished session.
+// Finishing twice is not finishing again: a second close must not re-settle a help request, and must not release a
+// display that a later session has since started on the same account.
 const finish = (record: BrowserSessionRecord): void => {
-    record.finishedAt ??= Date.now();
+    if (record.finishedAt !== undefined) {
+        return;
+    }
+    record.finishedAt = Date.now();
     // Settles any parked help request as not-helped; idempotent against a racing turn-abort settle.
     if (record.help !== undefined) {
         resolveRequest({
@@ -149,6 +168,8 @@ const finish = (record: BrowserSessionRecord): void => {
     record.browser = undefined;
     record.context = undefined;
     record.attaching = undefined;
+    // After finishedAt is stamped, so this record no longer counts itself as a user of its own display.
+    releaseIdleDisplay(record.server);
     publishRuntimeChange("browsers");
 };
 

@@ -256,7 +256,9 @@ import {
     type WorkspaceFileWindow,
     writeWorkspaceFile,
 } from "./workspace/files/workspace-files.js";
+import { coalescingWorkspaceTree } from "./workspace/files/workspace-tree-coalesce.js";
 import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace/files/workspace-tree.js";
+
 import type { WorkspaceScopeDeps } from "./workspace/layout/workspace-scope.js";
 import { statePath } from "./workspace/layout/state-paths.js";
 import { createDependencyCoordinator, type DependencyCoordinator } from "./workspace/deps/reconcile-deps.js";
@@ -1253,7 +1255,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             derive: deriveText,
             status: sidecarStatus,
         },
-        workspaceTree: walkWorkspaceTree,
+        workspaceTree: coalescingWorkspaceTree(walkWorkspaceTree),
         workspaceChildren: listWorkspaceChildren,
         iq,
         sessions: {

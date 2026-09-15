@@ -74,9 +74,35 @@ test("a compound line is judged one command at a time", () => {
     }
 });
 
-test("the split is not a shell parser, and a quoted separator over-matches by design", () => {
-    expect(matched(`git commit -m "a; pnpm test"`)).toBe("package-script");
+test("a quoted argument is data: naming a heavy command inside one does not queue the command that carries it", () => {
+    expect(matched(`git commit -m "a; pnpm test"`)).toBeUndefined();
     expect(matched(`git commit -m "add a test"`)).toBeUndefined();
+    // A shell's quoted argument is not data, it is the command; those still match, over-matching the safe way.
+    expect(matched(`bash -c "pnpm test"`)).toBe("package-script");
+    expect(matched(`sh -c 'pnpm run build'`)).toBe("package-script");
+    expect(matched(`/usr/bin/zsh -c "pnpm test"`)).toBe("package-script");
+});
+
+// The regression: a quoted program is ARGUMENT text, and cutting it into fragments matched the rules against lines
+// that never ran. Measured before this: the awk line below waited in the heavy pool behind two repo-wide test runs.
+test("a separator inside quotes belongs to its argument, not to the command line", () => {
+    const awk = `ps -eo args --no-headers | awk '{ if (x ~ /vitest/) role="vitest"; else if (x ~ /turbo/) role="turbo" }' | sort`;
+    expect(commandSegments(awk)).toEqual(["ps -eo args --no-headers ", ` awk '{ if (x ~ /vitest/) role="vitest"; else if (x ~ /turbo/) role="turbo" }' `, " sort"]);
+    expect(matched(awk)).toBeUndefined();
+    // Single quotes are literal all the way through, double quotes hold their own separators too.
+    expect(commandSegments(`echo 'a|b' && echo "c;d"`)).toEqual(["echo 'a|b' ", ` echo "c;d"`]);
+    // A quote inside the other kind closes nothing, so the run does not end early and split the rest.
+    expect(commandSegments(`echo "it's | fine" ; ls`)).toEqual([`echo "it's | fine" `, " ls"]);
+    // An unbalanced quote keeps its tail whole rather than splitting text nobody can parse.
+    expect(commandSegments(`echo "unclosed | tail`)).toEqual([`echo "unclosed | tail`]);
+    // A backslash-escaped separator is not one; the shell would not have split there either.
+    expect(commandSegments(String.raw`echo a\|b | wc -l`)).toEqual([String.raw`echo a\|b `, " wc -l"]);
+});
+
+// The other half of the same contract: honouring quotes must not let a real heavy command hide inside them.
+test("a real command after a quoted argument is still judged on its own", () => {
+    expect(matched(`echo 'nothing here' && pnpm test`)).toBe("package-script");
+    expect(matched(`grep -rn "a; b" . | pnpm run build`)).toBe("package-script");
 });
 
 test("a rule stays inside one command of a compound line", () => {

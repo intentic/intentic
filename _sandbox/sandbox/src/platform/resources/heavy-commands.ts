@@ -74,10 +74,67 @@ export interface HeavyMatch {
     readonly limit: number;
 }
 
-// Splits a compound line into the commands it runs; not a shell parser, so a quoted separator over-matches on purpose.
-const SEPARATORS = /&&|\|\||[;&|\n]/u;
+// Splits a compound line into the commands it runs. Still not a shell parser — it knows quotes and backslashes and
+// nothing else, so a subshell's contents stay part of the segment that spawns it, which over-matches the safe way.
+//
+// QUOTES ARE THE WHOLE POINT. Splitting on raw separators tore an awk or grep PROGRAM into fragments and then matched
+// the rules against those: measured, `ps -eo … | awk '… if (cmd ~ /vitest/) role="vitest" …' | sort` became thirteen
+// pieces, one of them `else if (cmd ~ /vitest/) role="vitest"`, and a read-only listing waited in the heavy pool for a
+// slot it had no business wanting. A separator that really separates two commands is never inside quotes, so honouring
+// them costs no detection at all: `bash -c "pnpm test"` stays one segment and still matches on `pnpm … test`.
+const SEPARATOR_HEADS = new Set([";", "&", "|", "\n"]);
 
-export const commandSegments = (command: string): string[] => command.split(SEPARATORS).filter((segment) => segment.trim() !== "");
+// The quote run we are inside after reading `char`, or "" for outside one. A run ends only on its own quote character,
+// which is what keeps a `"` inside '…' from closing anything.
+const quoteAfter = (quote: string, char: string): string => {
+    if (quote !== "") {
+        return char === quote ? "" : quote;
+    }
+    return char === "'" || char === '"' ? char : "";
+};
+
+export const commandSegments = (command: string): string[] => {
+    const segments: string[] = [];
+    let current = "";
+    // An unbalanced quote simply runs to the end of the line, which keeps the tail whole rather than splitting it.
+    let quote = "";
+    for (let i = 0; i < command.length; i++) {
+        const char = command[i] as string;
+        // Outside single quotes a backslash protects the next character, separator or not; both stay in this segment.
+        if (char === "\\" && quote !== "'") {
+            current += char + (command[i + 1] ?? "");
+            i += 1;
+            continue;
+        }
+        if (quote === "" && SEPARATOR_HEADS.has(char)) {
+            segments.push(current);
+            current = "";
+            // `&&` and `||` are one separator, not two; the second character must not open an empty segment.
+            if (command[i + 1] === char) {
+                i += 1;
+            }
+            continue;
+        }
+        quote = quoteAfter(quote, char);
+        current += char;
+    }
+    segments.push(current);
+    return segments.filter((segment) => segment.trim() !== "");
+};
+
+// Shells whose quoted argument IS a command line rather than data, so the rules must keep reading inside it.
+const SHELLS = /^\s*(?:\S*\/)?(?:ba|z|da|k)?sh\b/u;
+
+// Quoted runs, single or double, including an unterminated one at the end of the line.
+const QUOTED = /'[^']*'?|"(?:\\.|[^"\\])*"?/gu;
+
+// What a segment's rules are actually matched against: the command, with its quoted ARGUMENTS blanked out.
+//
+// A quoted run is data — an awk program, a grep pattern, a commit message — and matching rules against it is how a
+// `ps … | awk '… /vitest/ …' | sort` came to wait for a repo-wide test run's slot, and how `git commit -m "add a test"`
+// queues a commit. The exception is a shell: `bash -c "pnpm test"` really does run what it quotes, so for those the
+// text stays and over-matches the safe way.
+const matchableText = (segment: string): string => (SHELLS.test(segment) ? segment : segment.replace(QUOTED, " "));
 
 // Whether this command is one of the big ones, as a pure function of the line and config, matched against the agent's
 // own command before the daemon's wrapping and before secret resolution.
@@ -87,7 +144,7 @@ export const matchHeavyCommand = (command: string, config: HeavyCommands, report
         const one = compile(rule, report);
         return one === undefined ? [] : [one];
     });
-    for (const segment of commandSegments(command.slice(0, MATCH_LIMIT))) {
+    for (const segment of commandSegments(command.slice(0, MATCH_LIMIT)).map(matchableText)) {
         for (const { rule, regex } of compiled) {
             if (!regex.test(segment)) {
                 continue;

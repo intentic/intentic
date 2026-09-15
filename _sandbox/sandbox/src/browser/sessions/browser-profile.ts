@@ -2,7 +2,7 @@ import { upgradeWebSocket } from "@hono/node-server";
 import { errorMessage } from "@intentic/base/errors";
 import type { WSContext } from "hono/ws";
 import type { BrowserContext, Page } from "playwright";
-import { ensureDisplay } from "../cast/display.js";
+import { ensureDisplay, releaseDisplay } from "../cast/display.js";
 import { startLiveView, type LiveView } from "../cast/live-view.js";
 import { armPasskeys } from "../tools/passkeys.js";
 import type { ScreencastClientMessage } from "../cast/screencast.js";
@@ -50,6 +50,9 @@ export const createBrowserProfileRoute = (services: Services) =>
             }
             if (owner !== undefined) {
                 releaseProfileLock(owner);
+                // This window is the display's only user: browser-tools.ts skips an owner whose profile is open, so no
+                // agent can be on it. Without this the X server outlived every sign-in that ever happened here.
+                releaseDisplay(owner);
             }
         };
 
