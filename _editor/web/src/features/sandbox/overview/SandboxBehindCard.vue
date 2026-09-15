@@ -4,7 +4,7 @@ import { Button, Code, CopyButton, Notice, RowGroup, RowNote } from "@intentic/u
 import { computed, ref } from "vue";
 import { daemonBehind, daemonDrifted, driftedRoutes, missingRoutes } from "./useDaemonRoutes";
 import { useEnvironment } from "../environment/useEnvironment";
-import { runSeveringDeviceCommand, useDevices, useHostRunning } from "../devices/useDevices";
+import { runSeveringDeviceCommand, useDevices, useHostHolding } from "../devices/useDevices";
 import ConnectDeviceHint from "../devices/ConnectDeviceHint.vue";
 
 // Checks the daemon's route surface against this app's contract, not version strings (SandboxUpdateCard); catches
@@ -20,23 +20,29 @@ const missingLabel = computed(() => areas(missingRoutes.value).map(areaLabel).jo
 const driftedLabel = computed(() => areas(driftedRoutes.value).map(areaLabel).join(`, `));
 // Dev gets the reload; a non-dev user is pointed at the update card instead.
 const isDev = import.meta.env.DEV;
-const { slug } = useEnvironment();
+const { slug, localImage } = useEnvironment();
 // Dev daemon runs the bind-mounted working tree, not the image: a reload fixes drift, a rebuild doesn't.
 const reloadCommand = computed(() => `sh _sandbox/sandbox/scripts/dev-reload.sh${slug.value === undefined ? `` : ` ${slug.value}`}`);
 const reloadPage = (): void => location.reload();
 
-// The machine this sandbox runs on, when it is a connected device: then the reload is a button here and the
-// command below is only for a checkout nothing can reach.
-const running = useHostRunning(() => slug.value);
+// The environment holding this sandbox's checkout, when it is a connected device: then the reload is a button here
+// and the command below is only for a checkout nothing can reach. The checkout, not merely the machine — a PC reports
+// this container through its Windows side too, and the reload is a `sh` line in a folder only one side has.
+const running = useHostHolding(
+    () => slug.value,
+    () => localImage.value?.root,
+);
 const { devices } = useDevices({ poll: false });
 const onlineDevices = computed(() => devices.value.filter((device) => device.hostId !== undefined && device.online === true));
+// dev-reload.sh is a unix line whatever else is true, so a Windows door is never the one to fire it at.
+const unixDoors = computed(() => onlineDevices.value.filter((device) => device.platform !== `windows`));
 // Which machine runs this sandbox is itself read off the daemon's fleet payload, so a daemon far enough behind to
 // disagree about that payload answers "none" — and the one button that fixes it would vanish with the field it was
 // gated on, exactly when this card is on screen. A single online machine is not a guess, so it is offered: the reload's
 // argv names this sandbox's own slug on the far side, so a machine that doesn't hold it refuses rather than restarting
 // something else. Two of them is a guess, and stays the printed command; two doors onto one PC (Windows and a distro
-// on it) are one machine, and either door reaches the same engine.
-const hostId = computed(() => running.value ?? (machinesOf(onlineDevices.value).length === 1 ? onlineDevices.value[0]?.hostId : undefined));
+// on it) are one machine, and the distro's door is the one that can run the script.
+const hostId = computed(() => running.value ?? (machinesOf(onlineDevices.value).length === 1 ? unixDoors.value[0]?.hostId : undefined));
 const reloading = ref(false);
 const reloaded = ref(false);
 const failed = ref<string | undefined>(undefined);

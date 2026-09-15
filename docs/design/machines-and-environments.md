@@ -38,7 +38,9 @@ The board's unit is the machine: one card, the environments as lines with their 
 stopped distro have no single word for themselves), the containers once. The page's unit is the machine too, with the
 environments as rows because each has an agent to update, a door to reconnect and an enrollment to revoke, and one
 sandbox list because one engine serves every door: container verbs go through the first open door, folder verbs
-through the environment whose report carries the pairing. The Windows side's distro listing is what makes the second
+through the environment whose report carries the pairing, and a command written for a path — the dev rebuild and the
+dev reload, `sh` lines that `cd` into the checkout — through the environment that holds that path (`hostHoldingPath`),
+since the first open door is as often the Windows one, which answers a `sh` line with a parse error. The Windows side's distro listing is what makes the second
 environment discoverable from the first: a distro not yet connected is a Connect link into the Linux card's add form,
 named `<pc>-wsl-<distro>` so the two ids read as one PC everywhere, and that name is what flips the Linux connect
 dialog to its PowerShell form.
@@ -64,3 +66,8 @@ Saying so in the code is what keeps the next reader from "fixing" it into a refu
   cheap and both readers hold the contract that defines it.
 - **Merging the two host capabilities into one card.** The card is the grant, and the grants differ per side. The
   Capabilities page says "one PC with …" on each instead.
+- **Crossing instead of choosing, for a checkout command sent to the wrong door.** The daemon could wrap a `sh` line
+  in `in: "wsl:<distro>"` rather than pick the distro's door. It would fail on every machine worth fixing: `in` is
+  newer than the agents out there, and a dogfooding machine's agent is usually older than the sandbox asking, so the
+  call comes back as "Input validation failed". Picking the door needs nothing of the agent, and a PC whose distro
+  door is not connected gets the printed command, which is what it got before.

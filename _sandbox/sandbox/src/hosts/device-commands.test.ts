@@ -7,7 +7,7 @@ import {
     devRebuildLogPath,
 } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { type DeviceCommandFacts, DEVICE_COMMANDS, outcomeOf, streamOf, succeeded } from "./device-commands.js";
+import { type DeviceCommandFacts, DEVICE_COMMANDS, outcomeOf, streamOf, succeeded, wrongDoor } from "./device-commands.js";
 
 // What the daemon knows when it builds a line. Only `sandboxId`, `mode` and `localDir` ever arrive from a caller; the
 // rest is this sandbox's own knowledge of itself, which is the whole reason these lines are built here.
@@ -207,6 +207,35 @@ test("refuses to rebuild a sandbox that has no checkout behind it", () => {
 // A leading `~` is the owner's home on that machine, expanded by the daemon rather than left for a quoted shell.
 test("writes a tilde checkout as $HOME, the one the shell will expand", () => {
     expect(DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "~/intentic" }))).toContain('cd "$HOME/intentic"');
+});
+
+// Parsed from the schema, so a field added to what a caller may ask for cannot leave these asking something stale.
+const asked = (command: DeviceCommandInput["command"], id = "rog"): DeviceCommandInput => DeviceCommandInputSchema.parse({ id, command });
+
+// One computer answers for its containers through every door on it, so the door that reports this sandbox is not yet
+// the door that can `cd` into its checkout: the Windows side of the machine a build runs on lists the same container,
+// and hands a `sh` line to PowerShell, which answers with a parse error rather than a rebuild.
+test("refuses a checkout's command through the door that cannot open it, naming the path that decides", () => {
+    const windowsSide = facts({ platform: "windows", devRoot: "/home/radarsu/intentic" });
+    const refusal = wrongDoor(DEVICE_COMMANDS["dev-rebuild"], windowsSide, asked("dev-rebuild")) ?? "";
+    expect(refusal).toContain("/home/radarsu/intentic");
+    expect(refusal).toContain('"rog"');
+    expect(wrongDoor(DEVICE_COMMANDS["dev-reload"], windowsSide, asked("dev-reload"))).toContain("/home/radarsu/intentic");
+    // Reading the log is the same question: it sits in the home of whichever environment ran the build.
+    expect(wrongDoor(DEVICE_COMMANDS["dev-rebuild-log"], windowsSide, asked("dev-rebuild-log"))).toContain(devRebuildLogPath("work-abc"));
+    // The distro's own door, the one the checkout is in: nothing to refuse.
+    const distroSide = facts({ platform: "linux", devRoot: "/home/radarsu/intentic" });
+    for (const command of ["dev-rebuild", "dev-reload", "dev-rebuild-log"] as const) {
+        expect(wrongDoor(DEVICE_COMMANDS[command], distroSide, asked(command))).toBeUndefined();
+    }
+});
+
+// Every other action is the CLI's own name, or a line already written in the door's dialect (sync-install), so no
+// door is the wrong one for it.
+test("asks nothing about the door for a command that names no path", () => {
+    const windowsSide = facts({ platform: "windows", pairToken: "pair_abc", mode: "sync", localDir: "C:\\Users\\Ada\\work" });
+    expect(wrongDoor(DEVICE_COMMANDS["sync-install"], windowsSide, asked("sync-install"))).toBeUndefined();
+    expect(wrongDoor(DEVICE_COMMANDS["mirror-off"], windowsSide, asked("mirror-off"))).toBeUndefined();
 });
 
 // The same enrollment the card's copyable one-liner carries — script, env and single-use token — spoken in the shell

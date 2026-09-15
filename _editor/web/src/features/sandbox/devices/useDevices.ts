@@ -8,6 +8,7 @@ import {
     type SandboxResourcesAsk,
     DevicesListSchema,
     DeviceCommandResultSchema,
+    hostHoldingPath,
     hostRunningSandbox,
     SyncStatusSchema,
 } from "@intentic/sandbox-contract";
@@ -210,6 +211,14 @@ export async function revokeSyncDevice(machine: string): Promise<void> {
 export function useHostRunning(slug: () => string | undefined): ComputedRef<string | undefined> {
     const { devices } = useDevices({ poll: false });
     return computed(() => hostRunningSandbox(devices.value, slug()));
+}
+
+// The same question for a command written for a PATH out there — the dev checkout, the log beside it — where the one
+// above answers for the container alone. A PC's Windows side and the distro on it report the same containers, so only
+// the path picks between their doors, and the daemon refuses the wrong one by the same rule (`hostHoldingPath`).
+export function useHostHolding(slug: () => string | undefined, path: () => string | undefined): ComputedRef<string | undefined> {
+    const { devices } = useDevices({ poll: false });
+    return computed(() => hostHoldingPath(devices.value, slug(), path()));
 }
 
 // Reads /system/sync, not /system/devices, to avoid polling every laptop just to draw a badge.

@@ -171,6 +171,16 @@ for "which connected, online device reports this sandbox's container", read by t
 through `hostRunningSelf` ([self-host.ts](../../_sandbox/sandbox/src/hosts/self-host.ts)), which answers from readings
 already held so composing a turn never waits on a laptop.
 
+One PC answers that question more than once: Windows and every WSL distro on it share a Docker engine, so each door
+reports the same containers and `hostRunningSandbox` names whichever door comes first. That is right for a container
+verb, which any door of the machine can run, and wrong for a line written for a PATH. `hostHoldingPath` is the second
+question — "which door's environment holds this folder" — answered by the path's own dialect, then by the door whose
+home contains it, which is what tells two distros of one PC apart. The dev rebuild and the dev reload ask it, because
+both are `sh` lines that `cd` into the checkout the container records: sent to the Windows side of the very machine
+the build runs on, they came back as a PowerShell parse error. The daemon refuses a door that cannot hold the path by
+the same rule ([device-commands.ts](../../_sandbox/sandbox/src/hosts/device-commands.ts)) instead of relaying that
+error, and no door holding it leaves the copyable command, as an unreachable machine does.
+
 It answers off the row's own container list (`Device.sandboxes`), not off the machine's report, because the two ride
 different switches: the containers come from `list_sandboxes` behind "Manage sandboxes on this device", the report from
 `intentic-machine status --json` behind "Run commands". A card that grants the first and not the second — which is

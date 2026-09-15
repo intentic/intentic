@@ -1,6 +1,6 @@
 import { installScriptUrl } from "@intentic/constants";
 import type { DeviceCommand, DeviceCommandInput, DeviceCommandResult } from "@intentic/sandbox-contract";
-import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath } from "@intentic/sandbox-contract";
+import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath, doorHoldsPath } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import { callTool, forgetPull } from "./device-reports.js";
@@ -48,6 +48,10 @@ interface DeviceCommandSpec {
     readonly timeoutMs?: number;
     /** Mints a single-use desktop-sync pairing for this call; only the enrolling command asks. */
     readonly mints?: boolean;
+    // The path on the device this line is written for, when it has one. Only the environment holding that path can
+    // run the line, and a PC answers for its containers through every door on it, so the door that reports this
+    // sandbox is not yet the door that can `cd` into its checkout.
+    readonly path?: (facts: DeviceCommandFacts) => string | undefined;
 }
 
 // With an id, acts on one paired sandbox; bare, acts on every sandbox the device pairs. Only the reversible verbs offer
@@ -123,6 +127,7 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
                 ? undefined
                 : `${WITH_PNPM} mkdir -p "$HOME/.intentic/logs" && cd ${shellDir(facts.devRoot)} && nohup sh -c 'pnpm rebuild:sandbox ${facts.ownSlug}; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"' > ${shellDir(devRebuildLogPath(facts.ownSlug))} 2>&1 &`,
         needs: "only a dev sandbox launched by dev-sandbox.sh knows which checkout to rebuild from",
+        path: (facts) => facts.devRoot,
     },
     /* The read side of the command above, polled by whoever is watching. Bounded twice (bytes, then lines) because it
      * is polled every few seconds and a docker build's log is not small; the header is the log's own mtime, which is
@@ -136,6 +141,9 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
                 ? undefined
                 : `log=${shellDir(devRebuildLogPath(facts.ownSlug))}; if [ -f "$log" ]; then at=$(stat -c %Y "$log" 2>/dev/null || stat -f %m "$log" 2>/dev/null || echo); if [ -n "$at" ]; then echo "${DEV_REBUILD_QUIET_MARK} $(( $(date +%s) - at ))"; else echo "${DEV_REBUILD_QUIET_MARK} ?"; fi; tail -c 12000 "$log" | tail -n 80; else echo "${DEV_REBUILD_QUIET_MARK} -"; fi`,
         needs: "this sandbox does not know its own name, so it cannot name the log to read",
+        // The log, not the checkout: this is the one dev command that needs no checkout, and the log lives in the home
+        // of whichever environment ran the build.
+        path: (facts) => (facts.ownSlug === undefined ? undefined : devRebuildLogPath(facts.ownSlug)),
     },
     // The dev inner loop, run where the checkout is: compile the daemon and restart this very container. The slug is
     // this sandbox's own, never the caller's, and the answer usually never arrives — the daemon carrying it is the one
@@ -148,6 +156,7 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
                 : `${WITH_PNPM} sh ${shellDir(facts.devRoot)}/_sandbox/sandbox/scripts/dev-reload.sh ${facts.ownSlug}`,
         needs: "only a dev sandbox launched by dev-sandbox.sh knows which checkout to reload from",
         timeoutMs: LONG_COMMAND_TIMEOUT_MS,
+        path: (facts) => facts.devRoot,
     },
 };
 
@@ -166,6 +175,17 @@ const commandFacts = async (services: Services, input: DeviceCommandInput): Prom
         localDir: input.localDir,
         pairToken: spec.mints === true ? services.syncPairings.mint(input.mode ?? "sync").token : undefined,
     };
+};
+
+// Why this door cannot run this command, though another door of the same computer could. Refused here rather than
+// left to the device: a unix line handed to a PC's Windows side comes back as a PowerShell parse error, which reads
+// as a broken command instead of the wrong door. Exported for the message's own test.
+export const wrongDoor = (spec: DeviceCommandSpec, facts: DeviceCommandFacts, input: DeviceCommandInput): string | undefined => {
+    const path = spec.path?.(facts);
+    return path === undefined || doorHoldsPath(facts.platform, path)
+        ? undefined
+        : `"${input.command}" runs ${path}, which is not a path in the environment "${input.id}" opens onto. One computer answers for its ` +
+              `containers through every door on it — send this to the door whose own shell holds that path.`;
 };
 
 // run_command answers with an exit line plus fenced stdout/stderr; success reads the exit line only, never what was
@@ -211,7 +231,12 @@ export const runDeviceCommand = async (services: Services, input: DeviceCommandI
     if (spec.scoped === true && input.sandboxId === undefined) {
         throw new ORPCError("BAD_REQUEST", { message: `"${input.command}" has to name the sandbox it acts on.` });
     }
-    const line = spec.line(await commandFacts(services, input));
+    const facts = await commandFacts(services, input);
+    const refusal = wrongDoor(spec, facts, input);
+    if (refusal !== undefined) {
+        throw new ORPCError("CONFLICT", { message: refusal });
+    }
+    const line = spec.line(facts);
     // A line this sandbox cannot form is a fact about where it runs, not something the device could answer.
     if (line === undefined) {
         throw new ORPCError("CONFLICT", { message: `"${input.command}" isn't available here: ${spec.needs ?? "this sandbox cannot form it"}.` });

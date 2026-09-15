@@ -3,7 +3,7 @@ import { devRebuildLogPath } from "@intentic/sandbox-contract";
 import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, DeviceRunLog, Notice, type NoticeModel, ui } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import ConnectDeviceHint from "../devices/ConnectDeviceHint.vue";
-import { useHostRunning } from "../devices/useDevices";
+import { useHostHolding } from "../devices/useDevices";
 import { type DevRebuildPhase, rebuildRunning, useDevRebuild } from "./useDevRebuild";
 
 // Rebuilding a sandbox whose base was compiled from a checkout, from that checkout. Not HostRecreate's flow: that one
@@ -29,7 +29,12 @@ const props = defineProps<{
     root?: string | undefined;
 }>();
 
-const hostId = useHostRunning(() => props.slug);
+// The checkout's own door, not merely the machine's: a PC reports this container through its Windows side and the
+// distro on it alike, and only the side holding `root` can run the `sh` line that builds from it.
+const hostId = useHostHolding(
+    () => props.slug,
+    () => props.root,
+);
 const { run, elapsed, start, adopt, dismiss } = useDevRebuild(props.slug);
 
 // The card is drawn from the machine's log, not from having clicked the button: a rebuild started in a terminal, in

@@ -10,9 +10,15 @@ import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const hostId = ref<string | undefined>(`host-1`);
+// What the card asks the door rule about: its own checkout, since one PC answers for this container through several
+// doors and only the checkout's path picks between them.
+const askedAbout: (string | undefined)[] = [];
 const runDeviceCommand = vi.hoisted(() => vi.fn());
 vi.mock(`../devices/useDevices`, () => ({
-    useHostRunning: () => hostId,
+    useHostHolding: (_slug: () => string | undefined, path: () => string | undefined) => {
+        askedAbout.push(path());
+        return hostId;
+    },
     useDevices: () => ({ devices: ref([]) }),
     runDeviceCommand,
 }));
@@ -57,6 +63,7 @@ const settleUi = async (ms = 0): Promise<void> => {
 
 beforeEach(() => {
     vi.useFakeTimers();
+    askedAbout.length = 0;
     runDeviceCommand.mockReset();
     // Nothing has rebuilt anything yet: the card's own probe on mount finds no log.
     runDeviceCommand.mockResolvedValue(log(`-`));
@@ -89,6 +96,9 @@ it(`renders button and reveals command overlay with cost on focus`, async () => 
     const el = mount({ slug: nextSlug(), base: `intentic-sandbox:dev`, root });
     const button = el.querySelector(`button`);
 
+    // The device it fires at is the one that holds this checkout: the Windows door onto the same PC reports the same
+    // container and answers a `sh` line with a parse error.
+    expect(askedAbout).toContain(root);
     expect(button).not.toBeNull();
     expect(el.textContent).not.toContain(`Runs intentic-sandbox:dev from your checkout`);
 

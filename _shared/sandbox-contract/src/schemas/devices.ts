@@ -453,17 +453,54 @@ export const machinesOf = (devices: readonly Device[]): Machine[] => {
     return machines;
 };
 
+// Every door whose docker reports a given sandbox slug, in list order. More than one is the ordinary case, not a
+// conflict: Windows and the WSL distros on it share one engine, so each door answers for the same containers.
+const doorsRunningSandbox = (devices: readonly Device[], slug: string | undefined): Device[] =>
+    slug === undefined || slug === ""
+        ? []
+        : devices.filter((device) => device.hostId !== undefined && device.online === true && (device.sandboxes ?? []).some((box) => box.slug === slug));
+
 // The connected, online device whose docker reports a given sandbox slug: the machine that sandbox RUNS ON, as opposed
 // to any machine merely paired with it. Answers the question every "run it there instead of asking the owner to type
 // it" path starts from, and is `undefined` for a sync-only agent, which reports no containers at all.
 // Reads the row's own container list, not the report's: a card that grants sandbox management without "Run commands"
 // can run every swap this answer leads to while refusing to describe itself, and judging it on the report would print
 // a terminal command for a machine one click could have done it on.
+// Answers with a door, and a container verb may take any door of the machine; a command written for a PATH may not
+// (`hostHoldingPath`).
 export const hostRunningSandbox = (devices: readonly Device[], slug: string | undefined): string | undefined =>
-    slug === undefined || slug === ""
-        ? undefined
-        : devices.find((device) => device.hostId !== undefined && device.online === true && (device.sandboxes ?? []).some((box) => box.slug === slug))
-              ?.hostId;
+    doorsRunningSandbox(devices, slug)[0]?.hostId;
+
+// A drive letter or a UNC share is a Windows path, everything else a unix one. Not a claim about where the folder is
+// on disk: a path only exists in the dialect of the shell that wrote it, and a distro's checkout has no Windows name
+// the line naming it would work under.
+const windowsPath = (path: string): boolean => /^([A-Za-z]:[\\/]|\\\\)/.test(path);
+
+// Whether a door can run a line written for this path. Only a platform that positively disagrees is out: a door that
+// never said which it is stays a candidate, as every other reading of device evidence does. Shared with the daemon,
+// so the refusal a wrong door earns and the pick that avoids it cannot disagree.
+export const doorHoldsPath = (platform: string | undefined, path: string): boolean =>
+    platform === undefined || (platform === "windows") === windowsPath(path);
+
+// A path under a door's own home belongs to that door: the one thing that tells two distros of one PC apart, since
+// both run sh and both answer for the same containers.
+const homeHolds = (device: Device, path: string): boolean => {
+    const home = device.facts?.home;
+    return home !== undefined && (path === home || path.startsWith(`${home}/`) || path.startsWith(`${home}\\`));
+};
+
+// The door for a command written for a path out there — a `cd` into the dev checkout, a script inside it, the log
+// beside it. One PC answers through several doors, so "which device runs this sandbox" has more than one true answer
+// and only the path says which environment can open it: a sh line aimed at /home/… is a parse error on the Windows
+// side of the very machine the build runs on. Undefined when no door opens onto that environment, which is the state
+// the copyable command exists for.
+export const hostHoldingPath = (devices: readonly Device[], slug: string | undefined, path: string | undefined): string | undefined => {
+    if (path === undefined || path === "") {
+        return undefined;
+    }
+    const doors = doorsRunningSandbox(devices, slug).filter((device) => doorHoldsPath(device.platform, path));
+    return (doors.find((device) => homeHolds(device, path)) ?? doors[0])?.hostId;
+};
 // GET /system/sync: sandbox-level facts only, whether sync is possible, whether anything is enrolled, and raw device
 // reports. Cheap: the sidebar badge reads this and must never fan out to a device.
 export const SyncStatusSchema = z.object({

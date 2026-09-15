@@ -1,4 +1,4 @@
-import { type Device, DeviceSandboxSchema, hostRunningSandbox } from "@intentic/sandbox-contract";
+import { type Device, DeviceSandboxSchema, hostHoldingPath, hostRunningSandbox } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { machineReach } from "./self-host.js";
 
@@ -71,4 +71,61 @@ test("names the machines a turn could mistake for two, and only those", () => {
     ]);
     // A door the turn was not granted is not one to describe, and a machine left with one door is no longer two.
     expect(machineReach([distro, windows, lone], ["rog", "omen"])).toEqual([]);
+});
+
+// THE DOOR A CHECKOUT VERB TAKES. One engine serves every door of a PC, so both of these report the same container
+// and either may be sent a container verb; a line that `cd`s into a checkout may not, and the first door that "runs
+// this sandbox" was the Windows one, which answered a `sh` line with a PowerShell parse error.
+const WINDOWS = { os: "Microsoft Windows 11 Home", arch: "x64", shell: "PowerShell 7", home: "C:\\Users\\radar", roots: ["C:\\Users\\radar"] };
+const ARCH = { os: "Arch Linux", arch: "x64", shell: "/usr/bin/zsh", home: "/home/radarsu", roots: ["/home/radarsu"] };
+const runsWorkAbc = { online: true, sandboxes: holding(["work-abc"]) };
+const windowsSide = device({ key: "rog", hostId: "rog", platform: "windows", facts: { ...WINDOWS, hostname: "rog" }, ...runsWorkAbc });
+const archSide = device({
+    key: "rog-wsl",
+    hostId: "rog-wsl",
+    platform: "linux",
+    facts: { ...ARCH, hostname: "rog", wsl: { distro: "Arch" } },
+    ...runsWorkAbc,
+});
+
+test("sends a line written for a unix checkout to the distro's door, not the PC's Windows side", () => {
+    const rog = [windowsSide, archSide];
+    expect(hostRunningSandbox(rog, "work-abc")).toBe("rog");
+    expect(hostHoldingPath(rog, "work-abc", "/home/radarsu/intentic/workspace-82789f4106b4/intentic")).toBe("rog-wsl");
+    // A `~` path is a unix line's too: the daemon writes it as $HOME, which is the distro's home.
+    expect(hostHoldingPath(rog, "work-abc", "~/.intentic/logs/dev-rebuild-work-abc.log")).toBe("rog-wsl");
+    // The same question the other way round, for a folder only the Windows side has.
+    expect(hostHoldingPath(rog, "work-abc", "C:\\Users\\radar\\intentic")).toBe("rog");
+});
+
+// Both distros run sh and both answer for the same containers, so the dialect cannot choose between them; the home
+// the checkout sits under can.
+test("tells two distros of one PC apart by the home the checkout sits under", () => {
+    const ubuntuSide = device({
+        key: "rog-wsl-ubuntu",
+        hostId: "rog-wsl-ubuntu",
+        platform: "linux",
+        facts: { ...ARCH, os: "Ubuntu", home: "/home/ada", roots: ["/home/ada"], hostname: "rog", wsl: { distro: "Ubuntu" } },
+        ...runsWorkAbc,
+    });
+    const rog = [windowsSide, ubuntuSide, archSide];
+    expect(hostHoldingPath(rog, "work-abc", "/home/radarsu/intentic")).toBe("rog-wsl");
+    expect(hostHoldingPath(rog, "work-abc", "/home/ada/intentic")).toBe("rog-wsl-ubuntu");
+    // A checkout under nobody's home is still a unix path: the first door that runs sh, rather than none.
+    expect(hostHoldingPath(rog, "work-abc", "/srv/intentic")).toBe("rog-wsl-ubuntu");
+});
+
+test("answers nothing when only the side that cannot open the checkout is connected", () => {
+    expect(hostHoldingPath([windowsSide], "work-abc", "/home/radarsu/intentic")).toBeUndefined();
+    // No checkout recorded is no question to answer, and a sandbox no door reports has nowhere to send this.
+    expect(hostHoldingPath([windowsSide, archSide], "work-abc", undefined)).toBeUndefined();
+    expect(hostHoldingPath([windowsSide, archSide], "not-here", "/home/radarsu/intentic")).toBeUndefined();
+});
+
+// A door that never said which platform it is: an agent older than `HostFacts`, a card with commands off. Blocking on
+// silence would take away the button that works today, so only positive disagreement is read.
+test("keeps a door that has not said what it is", () => {
+    const quiet = device({ hostId: "ada-laptop", ...runsWorkAbc });
+    expect(hostHoldingPath([quiet], "work-abc", "/home/ada/intentic")).toBe("ada-laptop");
+    expect(hostHoldingPath([quiet], "work-abc", "C:\\Users\\Ada\\intentic")).toBe("ada-laptop");
 });

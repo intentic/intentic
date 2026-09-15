@@ -7,20 +7,21 @@ import { type App, createApp, defineComponent, h, ref } from "vue";
 import { resetDaemonRoutes, setDaemonRoutes } from "./useDaemonRoutes";
 import { IconStub } from "@intentic/ui/testing";
 
-// Sandbox slug the printed reload command names, so it targets this machine's sandbox specifically.
+// Sandbox slug the printed reload command names, so it targets this machine's sandbox specifically, and the checkout
+// the dev image was built from, which is the folder the reload runs in.
 vi.mock(`../environment/useEnvironment`, () => ({
-    useEnvironment: () => ({ slug: ref(`sandbox-abc123`) }),
+    useEnvironment: () => ({ slug: ref(`sandbox-abc123`), localImage: ref({ base: `intentic-sandbox:dev`, root: `/home/ada/intentic` }) }),
 }));
 
-// Whether the machine this sandbox runs on is a connected device, which is what decides between a button here and a
-// command for someone to type out there. Evaluated when the card is first imported, below.
+// Whether the environment holding that checkout is a connected device, which is what decides between a button here
+// and a command for someone to type out there. Evaluated when the card is first imported, below.
 const hostId = ref<string | undefined>(undefined);
 const severingCalls: string[] = [];
 // The daemon's device list, which the card's fallback reads to find a machine already talking to this sandbox:
 // empty stands for "nothing to offer", where only the command remains.
 const fleet = ref<Device[]>([]);
 vi.mock(`../devices/useDevices`, () => ({
-    useHostRunning: () => hostId,
+    useHostHolding: () => hostId,
     useDevices: () => ({ devices: fleet, readAt: ref(0), error: ref(undefined), isLoading: ref(false), refetch: vi.fn() }),
     runSeveringDeviceCommand: (id: string, command: string) => {
         severingCalls.push(`${id}:${command}`);
@@ -144,6 +145,34 @@ it(`reloads on the one connected device when nothing claims to run this sandbox`
     const reload = [...el.querySelectorAll(`button`)].find((button) => button.textContent === `Reload sandbox`);
     reload?.click();
     expect(severingCalls).toEqual([`ada-laptop:dev-reload`]);
+});
+
+// One PC answering through two doors folds to one machine, so the fallback above is offered — but the reload is a
+// `sh` script inside the distro's own filesystem, and the Windows door would hand it to PowerShell.
+it(`reloads through the distro's door, not the Windows side of the same PC`, () => {
+    const facts = { arch: `x64`, roots: [], hostname: `rog` };
+    fleet.value = [
+        {
+            key: `rog`,
+            label: `rog`,
+            hostId: `rog`,
+            online: true,
+            platform: `windows`,
+            facts: { ...facts, os: `Microsoft Windows 11 Home`, shell: `PowerShell 7`, home: `C:\\Users\\ada` },
+        },
+        {
+            key: `rog-wsl`,
+            label: `rog-wsl`,
+            hostId: `rog-wsl`,
+            online: true,
+            platform: `linux`,
+            facts: { ...facts, os: `Arch Linux`, shell: `/usr/bin/zsh`, home: `/home/ada`, wsl: { distro: `Arch` } },
+        },
+    ];
+    setDaemonRoutes(LEVEL, reshaped(`settings.get`));
+    const el = mount();
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent === `Reload sandbox`)?.click();
+    expect(severingCalls).toEqual([`rog-wsl:dev-reload`]);
 });
 
 // Two machines and no reading of which holds this container is a guess, and a reload aimed at the wrong one is a
