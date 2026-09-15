@@ -17,7 +17,7 @@ import {
     sendableThinking,
 } from "./agent-catalog.js";
 import type { AgentCapabilities } from "./agent-runtimes.js";
-import type { AgentHarness, AgentProvider, PermissionMode } from "../schemas/agent.js";
+import { type AgentHarness, type AgentProvider, PermissionModeSchema } from "../schemas/agent.js";
 
 // Every provider × harness pair, generated from the catalog itself, must declare what it can do. A failing pair means a
 // missing row in capabilitiesOf, never a special case in the caller.
@@ -108,15 +108,15 @@ test("codex and grok under the Claude Code harness get the full ceiling, it is t
 
 test("a plan-only runtime offers the two postures it has", () => {
     expect(modesFor(capabilitiesOf("codex", "native"))).toEqual(["plan", "bypassPermissions"]);
-    expect(modesFor(capabilitiesOf("claude", "native"))).toEqual(["default", "acceptEdits", "plan", "bypassPermissions"]);
+    expect(modesFor(capabilitiesOf("claude", "native"))).toEqual(["default", "plan", "bypassPermissions"]);
 });
 
 test("a mode the runtime can't hold falls back to the one it runs; one it can holds", () => {
     const codex = capabilitiesOf("codex", "native");
 
-    expect(clampMode("acceptEdits", codex)).toBe("bypassPermissions");
+    expect(clampMode("default", codex)).toBe("bypassPermissions");
     expect(clampMode("plan", codex)).toBe("plan");
-    expect(clampMode("acceptEdits", capabilitiesOf("claude", "native"))).toBe("acceptEdits");
+    expect(clampMode("default", capabilitiesOf("claude", "native"))).toBe("default");
 });
 
 test("the ceiling has nothing to disclose; a floor names what it lacks", () => {
@@ -212,9 +212,10 @@ test("only the Claude Code loop hosts the js execution backend", () => {
 });
 
 test("the Claude Code loop offers every PermissionMode the wire has", () => {
-    const wire: PermissionMode[] = ["default", "acceptEdits", "plan", "bypassPermissions"];
+    // Read off the schema, not retyped: the claim is that the runtime holds whatever the wire can carry.
+    const wire = PermissionModeSchema.options;
 
-    expect([...modesFor(capabilitiesOf("claude", "native"))].toSorted()).toEqual(wire.toSorted());
+    expect([...modesFor(capabilitiesOf("claude", "native"))].toSorted()).toEqual([...wire].toSorted());
 });
 
 // `effortAllowed` is not a claim about who has the max tier: the picker isn't the only assembler of a turn, so the rule

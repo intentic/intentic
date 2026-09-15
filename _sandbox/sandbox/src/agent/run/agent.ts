@@ -74,7 +74,7 @@ import { workloadStamp } from "../../platform/boot/leftovers.js";
 import { opt } from "./opt.js";
 import { readClaudeUsage } from "../../usage/claude-usage.js";
 import { routedEndpointOf } from "../providers/routed-refusal.js";
-import { defaultQuery, promptInput, type QueryFn, streamSdk } from "./sdk-stream.js";
+import { defaultQuery, promptInput, type QueryFn, streamSdk, type TurnPosture } from "./sdk-stream.js";
 import { checklistCloseHooks } from "./checklist-close.js";
 import { checklistSeedOf } from "./task-store.js";
 import { sdkSystemPrompt } from "../prompt/system-prompt.js";
@@ -701,44 +701,58 @@ const relativePath = (absolute: string | undefined, cwd: string): string | undef
 const nobodyToAsk = (request: AgentRequest): boolean =>
     request.unattended === true && !(request.conversationId !== undefined && turnSteered(request.conversationId));
 
-// Every permission decision the turn needs from the user; the one mode this branches on is plan, which asks nobody.
+// Refuses rather than parks: nobody can answer, and a hung card would read as the agent freezing.
+const unanswerable = (toolName: string): PermissionResult => ({
+    behavior: "deny",
+    message: `${toolName} needs a person to answer, and this turn is running unattended. Proceed another way.`,
+});
+
+/* What an approval card would show: the turn's latest prose, else a plan file it wrote, with that file attached when it
+ * says more than the prose does. Consumes the prose either way, so a retry reads the next one, not this one again. */
+const planCard = (documents: TurnDocuments, prose: TurnProse): { text: string; document?: CardDocument } | undefined => {
+    const adjacent = prose.latest?.trim() ?? "";
+    prose.latest = undefined;
+    const file = documents.latest;
+    if (adjacent === "") {
+        // Nothing said in the turn: a plan file it wrote stands in for the prose, and nothing else does.
+        return file?.plan === true && file.markdown.trim() !== "" ? { text: file.markdown.trim() } : undefined;
+    }
+    return file !== undefined && file.markdown.length > adjacent.length ? { text: adjacent, document: file } : { text: adjacent };
+};
+
+// Every permission decision the turn needs from the user; the two postures this branches on are plan, which asks
+// nobody, and Manual, the only one that asks at all.
 const permissionGate = (
     request: AgentRequest,
     push: (event: AgentEvent) => void,
     shell: { sessionId: string | undefined },
     documents: TurnDocuments,
     prose: TurnProse,
+    // The posture as the SESSION holds it, which the CLI moves too, not only this gate (sdk-stream.ts).
+    posture: TurnPosture,
 ): CanUseTool => {
-    // The posture as the SESSION holds it: the agent enters plan mode itself (EnterPlanMode) and leaves it on approval.
-    let mode: PermissionMode = request.permissionMode ?? "bypassPermissions";
     // The plan card: raised from the turn's latest prose, answered by the owner.
     const decidePlan = async (input: Record<string, unknown>): Promise<PermissionResult> => {
-        const adjacent = prose.latest?.trim();
-        prose.latest = undefined;
-        const written = documents.latest?.plan === true ? documents.latest.markdown.trim() : undefined;
-        const text = adjacent ?? written;
+        if (nobodyToAsk(request)) {
+            return unanswerable("ExitPlanMode");
+        }
+        const card = planCard(documents, prose);
         // A blank card approves nothing; keep plan mode and let the next prose, or a written plan file, retry.
-        if (text === undefined || text === "") {
+        if (card === undefined) {
             return {
                 behavior: "deny",
                 message: "Write the complete plan in your response, then call ExitPlanMode again.",
             };
         }
         const { id, wait } = createRequest("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
-        // The write-up this prose points at, attached only when the file's plan is longer than the summary text
-        // itself.
-        const document =
-            adjacent !== undefined && documents.latest !== undefined && documents.latest.markdown.length > text.length
-                ? documents.latest
-                : undefined;
-        push({ kind: "plan", requestId: id, text, ...(document === undefined ? {} : { document }) });
+        push({ kind: "plan", requestId: id, ...card });
         const { reply, resolved } = await wait(request.signal);
         push(resolved);
         if (!reply.approve) {
             return { behavior: "deny", message: reply.feedback?.trim() || "Keep refining the plan, do not exit plan mode yet." };
         }
         // Setting the mode on the session is what actually moves the SDK out of plan mode.
-        mode = POST_PLAN_MODE;
+        posture.mode = POST_PLAN_MODE;
         push({ kind: "mode", mode: POST_PLAN_MODE });
         // Rebase before the agent builds on the plan, so it isn't working against a moved tree; the agent isn't
         // told.
@@ -789,23 +803,28 @@ const permissionGate = (
         return allowDecision(toolName, input, reply.decision === "always", suggestions);
     };
     return async (toolName, input, options) => {
-        // Refuses rather than parks: nobody can answer, and a hung card would read as the agent freezing.
-        if (nobodyToAsk(request)) {
-            return { behavior: "deny", message: `${toolName} needs a person to answer, and this turn is running unattended. Proceed another way.` };
-        }
         if (toolName === "ExitPlanMode") {
             return decidePlan(input);
         }
         if (UNGATED.has(toolName)) {
-            // The agent put itself into plan mode, so the rest of this turn is planning even though it wasn't launched
-            // that way.
+            // Also set by the stream's own mode frame, but the CLI can ask about the next tool in this block before
+            // the consumer has drained that frame.
             if (toolName === "EnterPlanMode") {
-                mode = "plan";
+                posture.mode = "plan";
             }
             return { behavior: "allow", updatedInput: input };
         }
-        if (mode === "plan") {
+        if (posture.mode === "plan") {
             return planDecision(toolName, input);
+        }
+        /* MANUAL IS THE ONLY POSTURE THAT ASKS A PERSON. Every other one runs the tool: this agent holds a container
+         * and a worktree of its own, so a card per tool spends the user's attention on a boundary the sandbox already
+         * is. */
+        if (posture.mode !== "default") {
+            return { behavior: "allow", updatedInput: input };
+        }
+        if (nobodyToAsk(request)) {
+            return unanswerable(toolName);
         }
         // Consumes an answer already given by a restored card, so the resumed turn's re-ask doesn't re-prompt.
         const granted = consumeRestoredGrant(request.conversationId, toolName);
@@ -837,6 +856,9 @@ export async function* runAgent(
     const push = (event: AgentEvent): void => queue.push(event);
 
     const permissionMode: PermissionMode = request.permissionMode ?? "bypassPermissions";
+    // One posture for the turn, seeded with the mode it launched in: the stream writes every move the CLI makes onto
+    // it, the gate decides on it.
+    const posture: TurnPosture = { mode: permissionMode };
     const tmuxEnabled = tmuxRunEnabled();
     // Shared handle for every agent this turn starts; no conversation means nothing to file children under.
     const subagents: SubagentTurn | undefined =
@@ -899,7 +921,7 @@ export async function* runAgent(
         toolConfig: { askUserQuestion: { previewFormat: "markdown" } },
         planModeInstructions:
             "Write the complete, clear, concise plan in your response, then call ExitPlanMode to ask for approval before executing. When you need the user to choose between options, ask with the AskUserQuestion tool rather than writing the choices as plain text.",
-        canUseTool: permissionGate(request, push, shell, documents, prose),
+        canUseTool: permissionGate(request, push, shell, documents, prose, posture),
     };
 
     // Only a stored-account token reads usage pools at settle; other turns have no pool or account to file under.
@@ -944,6 +966,7 @@ export async function* runAgent(
                 trial: request.trial === true,
                 subagents,
                 checklistSeed,
+                posture,
             })) {
                 // Turn's shell is named after this frame's session id (tmux session), so cards learn it here.
                 if (event.kind === "session") {

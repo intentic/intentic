@@ -77,7 +77,7 @@ Prices come from the existing \`STRIPE_PRICE_*\` env vars, so nothing new needs 
         },
         park: `req_plan_checkout`,
     },
-    { after: 200, event: { kind: `mode`, mode: `acceptEdits` } },
+    { after: 200, event: { kind: `mode`, mode: `bypassPermissions` } },
     { after: 300, event: todos(0, 0) },
     { after: 500, event: { kind: `delta`, text: `Approved, writing the endpoint first.` } },
     { after: 400, event: { kind: `text_end` } },

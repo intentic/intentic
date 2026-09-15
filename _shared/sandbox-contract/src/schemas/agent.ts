@@ -106,9 +106,11 @@ export const AdmissionPolicySchema = z.object({
     workflow: z.enum(["allow", "deny"]).default("allow"),
 });
 export type AdmissionPolicy = z.infer<typeof AdmissionPolicySchema>;
-// How tool calls are gated, the Claude Agent SDK's PermissionMode narrowed to the four the composer offers. Both a turn
-// input and the payload of the `mode` frame, since the agent can move itself between them mid-turn.
-export const PermissionModeSchema = z.enum(["default", "acceptEdits", "plan", "bypassPermissions"]);
+// How tool calls are gated, the Claude Agent SDK's PermissionMode narrowed to the three the composer offers. Both a
+// turn input and the payload of the `mode` frame, since the agent can move itself between them mid-turn. The SDK's
+// acceptEdits is not one of them: only `default` asks a person here, so it would differ from bypassPermissions in name
+// alone.
+export const PermissionModeSchema = z.enum(["default", "plan", "bypassPermissions"]);
 export type PermissionMode = z.infer<typeof PermissionModeSchema>;
 // Where a conversation was cut from, the durable half of a fork, carried on the registry entry. `index` is the message
 // the cut sat above in the source, so its transcript can put the mark back.
@@ -234,12 +236,11 @@ export const AgentTurnSchema = z
             ),
         // How tool calls are gated for this turn (the SDK's permissionMode, verbatim):
         // plan: propose → approve → execute; the proposing half asks nothing, it only withholds writes
-        // default: prompts per tool on the permission side channel
-        // acceptEdits: auto-accepts file edits
+        // default: prompts per tool on the permission side channel, the one mode that interrupts anybody
         // bypassPermissions: runs everything
         // The agent can move itself between modes mid-turn, riding back as a `mode` frame.
         permissionMode: PermissionModeSchema.optional().describe(
-            "How tool calls are gated: ask each time, accept file edits, propose a plan first, or run everything. The agent can move itself between these mid-turn.",
+            "How tool calls are gated: ask before each tool, propose a plan first, or run everything. The agent can move itself between these mid-turn.",
         ),
         // Narrows the turn to these tool names (the SDK option, not the daemon's MCP `tools`/servers); absent means
         // everything the runtime has.

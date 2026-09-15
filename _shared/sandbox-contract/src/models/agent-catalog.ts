@@ -98,9 +98,9 @@ export const capabilitiesOf = (provider: AgentProvider, harness: AgentHarness): 
 export const PI_PROVIDER = "pi";
 
 // Which permission modes a runtime can actually be put in. Under "plan" every other mode collapses onto the autonomous
-// posture the runtime already runs, so offering them would be four names for two behaviours.
+// posture the runtime already runs, so offering them would be three names for two behaviours.
 export const modesFor = (capabilities: AgentCapabilities): readonly PermissionMode[] =>
-    capabilities.permissions === "modes" ? ["default", "acceptEdits", "plan", "bypassPermissions"] : ["plan", "bypassPermissions"];
+    capabilities.permissions === "modes" ? ["default", "plan", "bypassPermissions"] : ["plan", "bypassPermissions"];
 
 // The mode a selection falls back to when the runtime can't hold it, the same shape as clampEffort: a provider switch
 // must not leave the composer showing a posture nothing applies.

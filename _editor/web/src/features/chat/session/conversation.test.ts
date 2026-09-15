@@ -791,14 +791,14 @@ describe(`Conversation`, () => {
     // clamp the effective posture (like effort), not the pick itself.
     it(`a permission mode the runtime can't hold reads as the one it runs, and the pick survives`, () => {
         const conversation = new Conversation(`c-modes`);
-        conversation.modePick.value = `acceptEdits`;
+        conversation.modePick.value = `default`;
 
         conversation.selectProvider(`codex`);
         expect(conversation.mode.value).toBe(`bypassPermissions`);
 
         // Claude Code honours modes directly; the pick was never overwritten, so it returns untouched.
         conversation.selectHarness(`claude-code`);
-        expect(conversation.mode.value).toBe(`acceptEdits`);
+        expect(conversation.mode.value).toBe(`default`);
         expect(conversation.capabilities.value.permissions).toBe(`modes`);
 
         // Native reads as autonomous again; `plan`, which every runtime has (emulated or not), rides through unchanged.

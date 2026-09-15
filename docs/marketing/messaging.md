@@ -191,7 +191,7 @@ free column is your machine, the other is ours (docs/design/pricing-model.md).
 - **plan mode**: the permission mode where the agent proposes and waits for approval; the default
   for a chat on the shared workspace tree, one click away everywhere else. An agent working in its
   own branch defaults to **auto** (it owns that worktree; its output is reviewed as a diff, not
-  approved command by command). Also: accept edits / ask before edits.
+  approved command by command). The third is **manual**, the only mode that asks per tool.
 - **desktop sync**: two-way near-real-time folder sync between the user's editor and the sandbox.
 - **agent**: the coding agent working inside the sandbox (Claude Code, Codex, Grok, …). Name
   providers as examples; never "our AI", never one provider as the brand.

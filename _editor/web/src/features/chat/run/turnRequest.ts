@@ -112,7 +112,6 @@ export const turnRequestBody = (input: {
         // Starting permission posture, passed straight to the SDK:
         //   plan – proposes then executes
         //   default – prompts per tool
-        //   acceptEdits – auto-accepts edits
         //   bypassPermissions – asks nothing
         permissionMode: input.mode,
         // Opt-in file/selection chip; a path in this workspace, so it stays here.

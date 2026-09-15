@@ -358,7 +358,7 @@ test("the account the credential resolver answered with becomes the turn's attri
 const asking = (overrides: Partial<AgentRequest>): TurnContext => ({ ...context, base: { ...base, ...overrides } });
 
 test("a plan-only runtime keeps `plan` and is handed no other permission mode", async () => {
-    const asked = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ permissionMode: "acceptEdits" }));
+    const asked = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ permissionMode: "default" }));
     expect((asked as { request: AgentRequest }).request.permissionMode).toBeUndefined();
 
     const planning = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ permissionMode: "plan" }));
@@ -366,9 +366,9 @@ test("a plan-only runtime keeps `plan` and is handed no other permission mode", 
 });
 
 test("the Claude Code loop keeps every mode: it is the runtime that honours them", async () => {
-    const plan = await planTurn(harnessServices(), turn(), asking({ permissionMode: "acceptEdits" }));
+    const plan = await planTurn(harnessServices(), turn(), asking({ permissionMode: "default" }));
 
-    expect((plan as { request: AgentRequest }).request.permissionMode).toBe("acceptEdits");
+    expect((plan as { request: AgentRequest }).request.permissionMode).toBe("default");
 });
 
 // the JS execution backend: planned with the request, only where the runtime hosts it

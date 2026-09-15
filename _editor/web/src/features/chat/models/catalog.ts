@@ -15,8 +15,7 @@ export const BADGE_META: Record<ModelBadge, { label: string; icon: IconName }> =
 
 // How each mode reads in the selector; which modes a runtime may pick is `modesFor(capabilities)`, not here.
 const MODE_META: Record<PermissionMode, { label: string; icon: IconName; description: string }> = {
-    default: { label: `Manual`, icon: `question-circle`, description: `Ask before each file edit.` },
-    acceptEdits: { label: `Edit automatically`, icon: `check-square`, description: `Apply file edits automatically.` },
+    default: { label: `Manual`, icon: `question-circle`, description: `Ask before each edit and command.` },
     plan: { label: `Plan`, icon: `list-check`, description: `Propose a plan and wait for your approval before running.` },
     bypassPermissions: { label: `Auto`, icon: `forward`, description: `Run everything without asking.` },
 };

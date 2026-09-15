@@ -3,7 +3,7 @@
 // emitted by runAgent, not here.
 import type { Options, SDKAssistantMessage, SDKMessage, SDKUserMessage, SlashCommand } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../runtimes/claude/claude-sdk.js";
-import type { AgentEvent, FastModeState, PermissionMode, TodoItem, UsageWindow } from "@intentic/sandbox-contract";
+import { type AgentEvent, type FastModeState, type PermissionMode, PermissionModeSchema, type TodoItem, type UsageWindow } from "@intentic/sandbox-contract";
 import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract/session-names";
 import { screenshotImage } from "../../browser/cast/browser-artifacts.js";
 import { browserServerOfTool } from "../../browser/sessions/browser-sessions.js";
@@ -177,7 +177,14 @@ async function* sdkTurns(
 }
 
 // Modes the contract models; the SDK also resolves 'dontAsk'/'auto' from settings, which have no UI here.
-const PERMISSION_MODES = new Set<PermissionMode>(["default", "acceptEdits", "plan", "bypassPermissions"]);
+const PERMISSION_MODES = new Set<PermissionMode>(PermissionModeSchema.options);
+
+/* THE POSTURE THE SESSION IS ACTUALLY IN, shared with the permission gate. The CLI moves a session itself
+ * (EnterPlanMode, `init`, `status`), so a gate reading only the mode the turn was launched in decides on a mode the
+ * session left. Written here, at the frame that announces the move, and read in agent.ts's canUseTool. */
+export interface TurnPosture {
+    mode: PermissionMode;
+}
 
 // Every input streamSdk folds, named at its one call site (runAgent); each field's comment says why it can be absent.
 export interface StreamSdkArgs {
@@ -203,6 +210,8 @@ export interface StreamSdkArgs {
     readonly subagents: SubagentTurn | undefined;
     // The checklist the resumed session already holds (task-store.ts); adopted once the fold sees the session id.
     readonly checklistSeed: ChecklistSeed | undefined;
+    // The live permission posture, seeded with the turn's own mode; mutated here and read by the gate.
+    readonly posture: TurnPosture;
 }
 
 type SdkOf<T extends SDKMessage["type"]> = Extract<SDKMessage, { type: T }>;
@@ -273,8 +282,6 @@ class TurnFold {
     private cacheTtlMs: number | undefined;
     // A block's stop always precedes its assistant frame, so introduced tool calls render after it, not before.
     private readonly textBlocks = new Map<string, number>();
-    // Live permission mode, folded and de-duplicated across `init`, `status`, and the tool-call-only EnterPlanMode.
-    private mode: PermissionMode | undefined;
     // Fast-mode speed, de-duplicated on the (state, reason) pair, since a changing reason alone is informative.
     private fastReported: string | undefined;
 
@@ -322,11 +329,14 @@ class TurnFold {
         }
     }
 
+    /* Folds `init`, `status` and the tool-call-only EnterPlanMode onto one posture, and announces each move. The
+     * posture is shared with the permission gate, so it must be written before the frame is handed on: the CLI can ask
+     * about the next tool while the consumer is still draining this one. */
     private modeChange(next: PermissionMode | undefined): AgentEvent | undefined {
-        if (next === undefined || next === this.mode || !PERMISSION_MODES.has(next)) {
+        if (next === undefined || next === this.args.posture.mode || !PERMISSION_MODES.has(next)) {
             return undefined;
         }
-        this.mode = next;
+        this.args.posture.mode = next;
         return { kind: "mode", mode: next };
     }
 

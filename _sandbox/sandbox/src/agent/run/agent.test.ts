@@ -1,7 +1,7 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { homedir } from "node:os";
-import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
+import { type AgentEvent, type AgentReply, type PermissionMode, PermissionModeSchema } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
 import { mergeHooks, type OauthRecoveryOptions, runAgent } from "./agent.js";
 import type { AgentQuery, QueryFn } from "./sdk-stream.js";
@@ -461,7 +461,7 @@ test("'always' grants the whole tool for the session, alongside whatever the SDK
         destination: "localSettings",
     };
     const { result, card } = await decide(
-        { ...request, permissionMode: "acceptEdits" },
+        { ...request, permissionMode: "default" },
         { tool: "Bash", input: { command: "pnpm install" }, suggestions: [suggestion] },
         (event) => ({ kind: "permission", requestId: event.requestId, decision: "always" }),
     );
@@ -508,7 +508,7 @@ test("an approved plan executes with permissions bypassed, whatever the turn pla
 
     // Approving a plan always executes with permissions bypassed, whatever mode the turn planned from; the container is
     // the isolation boundary either way.
-    for (const permissionMode of ["plan", "default", "acceptEdits", "bypassPermissions"] as const) {
+    for (const permissionMode of PermissionModeSchema.options) {
         const { result, frames } = await decide({ ...request, permissionMode }, { tool: "ExitPlanMode", prose: "# Plan" }, approve);
         expect(result).toMatchObject({ updatedPermissions: [{ type: "setMode", mode: "bypassPermissions", destination: "session" }] });
         // The mode frame tells the composer's pill the turn is no longer planning.
@@ -547,9 +547,12 @@ test("ExitPlanMode refuses to raise an empty approval card", async () => {
 const gated = async (
     turn: Parameters<typeof runAgent>[0],
     calls: (gate: NonNullable<Options["canUseTool"]>) => Promise<void>,
+    // What the CLI streams before those calls; a mode the CLI moves itself to arrives this way and no other.
+    stream: SDKMessage[] = [],
 ): Promise<AgentEvent[]> => {
     const frames: AgentEvent[] = [];
     const query: QueryFn = async function* (args) {
+        yield* stream;
         await calls(args.options.canUseTool!);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
@@ -598,6 +601,47 @@ test("the agent entering plan mode mid-turn puts the rest of the turn on the pla
     expect(decisions[1]).toMatchObject({ behavior: "allow" });
     expect(decisions[2]).toMatchObject({ behavior: "deny" });
     expect(asked(frames)).toEqual([]);
+});
+
+// The CLI runs its own mode tool without asking, so a turn that starts anywhere but plan never sees EnterPlanMode at
+// the gate: the assistant message is the whole signal.
+const ENTERS_PLAN_MODE = {
+    type: "assistant",
+    message: { content: [{ type: "tool_use", id: "call-enter-plan", name: "EnterPlanMode", input: {} }] },
+} as SDKMessage;
+
+test("a session the CLI moves into plan mode stops asking, though the gate was never called for EnterPlanMode", async () => {
+    const decisions: (PermissionResult | null)[] = [];
+    const frames = await gated(
+        // Launched on the mode that asks nothing, which is how the CLI comes to gate tools at all: it only started
+        // consulting canUseTool because the session itself moved to plan.
+        { ...request, permissionMode: "bypassPermissions" },
+        async (gate) => {
+            decisions.push(await gate("Bash", { command: "rg todo" }, { signal: request.signal } as never));
+            decisions.push(await gate("Write", { file_path: "src/new.ts" }, { signal: request.signal } as never));
+        },
+        [ENTERS_PLAN_MODE],
+    );
+
+    expect(frames).toContainEqual({ kind: "mode", mode: "plan" });
+    expect(decisions[0]).toEqual({ behavior: "allow", updatedInput: { command: "rg todo" } });
+    // Plan's promise survives the move: the write is refused to the model, not carded at the user.
+    expect(decisions[1]).toMatchObject({ behavior: "deny", message: expect.stringContaining("ExitPlanMode") });
+    expect(asked(frames)).toEqual([]);
+});
+
+test("Manual is the only posture that raises a card: the sandbox is the boundary in the others", async () => {
+    const carded: PermissionMode[] = [];
+    for (const permissionMode of PermissionModeSchema.options) {
+        const frames = await gated({ ...request, permissionMode }, async (gate) => {
+            await gate("Bash", { command: "pnpm install" }, { signal: request.signal } as never);
+        });
+        if (asked(frames).length > 0) {
+            carded.push(permissionMode);
+        }
+    }
+
+    expect(carded).toEqual(["default"]);
 });
 
 // Plan approval rebases onto today's main line before the agent builds; these tests own WHEN the rebase fires.

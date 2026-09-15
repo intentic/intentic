@@ -197,8 +197,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // The named card is released and the turn resumes; emitted the moment its waiter settles, since nothing else on
     // this stream marks a park's end. `reply` is what a rebuilt transcript freezes the card with.
     z.object({ kind: z.literal("resolved"), requestId: z.string(), reply: AgentReplySchema.optional() }),
-    // The turn's permission mode whenever it changes: the user's pick at start, then every move the agent makes on its
-    // own. The composer's mode selector follows this.
+    // Every move off the mode the turn was sent in, the agent's own (EnterPlanMode, an approved plan) included; a turn
+    // that stays in its mode emits none, since the composer's selector already shows the pick it follows.
     z.object({ kind: z.literal("mode"), mode: PermissionModeSchema }),
     // `code` is a machine-readable discriminator for errors the UI reacts to (e.g. dropping a dead session id so the
     // next send self-heals); absent on plain failures.

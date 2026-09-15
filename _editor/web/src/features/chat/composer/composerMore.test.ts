@@ -83,7 +83,7 @@ it(`carries the current value and a sentence on every overflow row`, () => {
 // Asserted, not trusted: descriptions are literals a few lines apart, so only a failing check keeps
 // them short. Checked across every mode.
 it(`keeps every description to a single line`, () => {
-    const modes = [`default`, `acceptEdits`, `plan`, `bypassPermissions`] as const;
+    const modes = [`default`, `plan`, `bypassPermissions`] as const;
     for (const mode of modes) {
         for (const row of overflowRows(chat({ mode, startingMode: mode }))) {
             expect(row.description.length, `${row.label}: "${row.description}"`).toBeLessThanOrEqual(DESCRIPTION_LIMIT);
