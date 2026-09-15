@@ -38,7 +38,7 @@ GH_API_TOKEN="${GITHUB_TOKEN:-}"
 # the trigger it had just been rescued from — so it was a publish workflow nothing could start, and the
 # Marketplace action was never published at all. Being in THIS LIST is what makes a publish workflow reachable;
 # the workflow-policy check (_tools/checks/) refuses any workflow that tries to reach itself with a tag push instead.
-WORKFLOWS=(npm-publish.yml action-publish.yml webstore-publish.yml)
+WORKFLOWS=(npm-publish.yml action-publish.yml webstore-publish.yml msstore-publish.yml)
 
 gh_require_token "it is the only thing that can start the publish workflows"
 

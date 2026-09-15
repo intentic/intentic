@@ -109,6 +109,7 @@ Ordered the way a release runs them:
 | [publish-npm.sh](release/publish-npm.sh) | the npm closure, with provenance — and `--interactive` for a maintainer repairing one |
 | [publish-action.sh](release/publish-action.sh) | sync the built GitHub Action to its own public repository |
 | [publish-webstore.mjs](release/publish-webstore.mjs) | upload and submit the browser extension |
+| [publish-msstore.mjs](release/publish-msstore.mjs) | point the Microsoft Store listing at this release's Windows installer and submit it |
 | [attach-provenance.sh](release/attach-provenance.sh) | the build-provenance bundle, as a Release asset |
 | [post-release-discord.mjs](release/post-release-discord.mjs) | announce it, but only when a user would notice |
 | [rollback-stable.sh](release/rollback-stable.sh) | un-ship one: put `stable` back where it was, in one command |

@@ -478,7 +478,7 @@ jobs:
       #
       # AFTER semantic-release for the obvious reason — the tag they check out does not exist until it has
       # run — and before the attestation below, which is about a different set of artifacts entirely.
-      - name: Publish to npm and the GitHub Marketplace
+      - name: Publish to npm, the GitHub Marketplace and the app stores
         if: ${{ steps.release.outputs.released == 'true' }}
         run: bash _tools/scripts/release/dispatch-publish.sh "$PLANNED_RELEASE_VERSION"
 

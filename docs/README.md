@@ -10,8 +10,8 @@ Which document belongs where, so a reader looking for one thing opens one direct
 - **[audits/](audits)** — what was measured, on a date, and what it said. An audit describes the tree it was
   run against, so a stale path inside one is not a defect (the layout check exempts this directory for exactly
   that reason).
-- **[ops/](ops)** — running the machinery around the code: CI runners, code signing, provider conformance, the
-  CLI's output protocol.
+- **[ops/](ops)** — running the machinery around the code: CI runners, code signing, store publishing,
+  provider conformance, the CLI's output protocol.
 - **[marketing/](marketing)** and **[user-stories/](user-stories)** — what the product says about itself, and
   the jobs it is supposed to do.
 

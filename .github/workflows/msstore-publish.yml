@@ -1,0 +1,72 @@
+# Submit the desktop app to the Microsoft Store, at the tag semantic-release pushes — webstore-publish.yml's
+# shape for the other store this project ships to.
+#
+# NOTHING IS BUILT HERE. A Microsoft Store listing for an EXE installer holds a package URL, not a package: this
+# job points the listing at the versioned installer the release already attached to its GitHub Release, which is
+# the exact file a real Windows session installed and uninstalled in windows-smoke.yml. So there is no second
+# artifact to keep in step, and the bytes that were verified are the bytes Microsoft certifies.
+#
+# DISPATCHED, NOT TAG-TRIGGERED, like its three siblings and for the same reason: semantic-release pushes the tag
+# with the built-in GITHUB_TOKEN, and GitHub starts no workflow from an event that token created. dispatch-publish.sh
+# names this file; that is what makes it reachable, and the workflow-policy check refuses `on: push: tags` here.
+#
+# INERT UNTIL THE LISTING EXISTS. The five MSSTORE_* values are an Entra ID application associated with the
+# Partner Center account, plus the seller and product ids from the dashboard. Without them the publish step SKIPS
+# loudly (a warning annotation on the run) rather than failing: an app with no listing must not take a release
+# red. docs/ops/microsoft-store.md is the one-time setup, and _editor/desktop-app/STORE-LISTING.md is what goes
+# in the listing form.
+#
+# IT CAN ALSO DEFER, and that is not a failure either. Certification takes up to three business days and the API
+# refuses to touch the draft while a submission is in flight, so a release cut during one is announced (a warning
+# annotation) and left for the next release — or for a hand dispatch at that tag once the Store is idle.
+#
+# ON THE FLEET, like webstore-publish.yml: nothing here is npm-attested, so it runs where the rest of the
+# pipeline runs. No pnpm-setup and no build — the script reads the release over the API and calls two of them.
+name: msstore publish
+
+# Run it by hand from a tag the same way the release job does: Actions ▸ msstore publish ▸ Run workflow, with the
+# tag selected as the ref. A ref that is not a release tag fails fast: the Store submits a release, not a branch.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+# One submission at a time, matching the Store's own rule; a second dispatch queues rather than racing the first
+# onto a draft it is already updating.
+concurrency:
+  group: msstore-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    # The Store scans the installer it fetches from the release before a submission may be created, and the
+    # script waits up to 20 minutes for that.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+
+      - name: Submit the installer
+        env:
+          # The Entra ID application associated with the Partner Center account.
+          MSSTORE_TENANT_ID: ${{ secrets.MSSTORE_TENANT_ID }}
+          MSSTORE_CLIENT_ID: ${{ secrets.MSSTORE_CLIENT_ID }}
+          MSSTORE_CLIENT_SECRET: ${{ secrets.MSSTORE_CLIENT_SECRET }}
+          # Identifiers off the dashboard, not credentials.
+          MSSTORE_SELLER_ID: ${{ vars.MSSTORE_SELLER_ID }}
+          MSSTORE_PRODUCT_ID: ${{ vars.MSSTORE_PRODUCT_ID }}
+          # Reads the Release: its installer asset, its checksums, and the notes that become "what's new".
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node _tools/scripts/release/publish-msstore.mjs "${GITHUB_REF_NAME#v}"

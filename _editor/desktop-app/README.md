@@ -726,6 +726,14 @@ on Windows before publication. `release-prepare.sh` then runs `_tools/scripts/de
 `latest.json` and the artifacts land in `dist-bin/`, and `publish-github.sh` attaches them to the **GitHub
 Release**, exactly like `intentic-machine`.
 
+That Release is also the download surface for the **Microsoft Store**: a Store listing for an EXE installer
+holds a package URL rather than a package, so `msstore-publish.yml` points the listing at this release's
+`Intentic-<version>-x64-setup.exe` and submits it — the same bytes Windows just install-verified, with nothing
+built a second time. It skips loudly until the listing is configured, and it refuses to submit an installer
+that carries no Authenticode signature, because Microsoft signs MSIX packages and not installers.
+[`docs/ops/microsoft-store.md`](../../docs/ops/microsoft-store.md) is the setup;
+[`STORE-LISTING.md`](STORE-LISTING.md) is the listing copy.
+
 Updater artifacts are minisign-signed when `TAURI_SIGNING_PRIVATE_KEY` is set in CI (generate a pair with
 `pnpm --filter @intentic/desktop-app exec tauri signer generate`; the pubkey is committed in
 `tauri.conf.json`). Without it the build produces plain installers and skips `latest.json`, which is what every

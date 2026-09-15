@@ -55,6 +55,13 @@ ordinary Authenticode signatures:
 - **`osslsigncode`**: for a certificate you hold as a `.pfx` file. Already in the CI image. In practice this
   means a legacy certificate or a self-made test one.
 
+## It is also what the Microsoft Store needs
+
+The Store signs MSIX packages for free and signs EXE and MSI submissions not at all, so an unsigned installer
+fails certification rather than merely scaring people. Everything for that listing is written and dispatched on
+every release ([microsoft-store.md](microsoft-store.md)); a certificate is the only thing standing between it
+and a published app, which makes this page's decision worth one more reason.
+
 ## Which certificate to buy
 
 Rough costs, and they move; check before committing.

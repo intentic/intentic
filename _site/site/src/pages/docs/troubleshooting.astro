@@ -84,6 +84,30 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
         <code>ic docker prepare --dry-run</code>.
     </p>
 
+    <h3 id="installer-exit-codes">The Windows installer stopped with a code</h3>
+    <p>
+        The installer is an NSIS package, and it answers with one of three codes. The Microsoft Store shows you
+        the code when it installs the app for you, because it runs the same file silently (<code>/S</code>) rather
+        than showing you the installer's own screens.
+    </p>
+    <ul>
+        <li><strong>0</strong>: installed. Nothing to do.</li>
+        <li>
+            <strong>1</strong>: cancelled. Either you closed the installer, or a Windows permission prompt was
+            declined. Run it again and accept the prompt; the app installs for your user only, so it never asks
+            for an administrator.
+        </li>
+        <li>
+            <strong>2</strong>: the install itself failed. Almost always disk space, an antivirus holding the
+            file, or a copy of Intentic already running — quit it from the tray and retry. If it repeats, the
+            installer from the <a href="/download/">download page</a> shows the step it stopped on.
+        </li>
+    </ul>
+    <p>
+        None of these are Docker: the installer only puts the app on disk. Docker is set up later, by the app, on
+        the screen described above.
+    </p>
+
     <h3>The setup code no longer works</h3>
     <p>
         Setup codes expire <strong>30 minutes</strong> after the screen mints one. Reopen the setup screen and a fresh code is minted into a fresh command; nothing else is lost, and it is still the same sandbox. Re-running a command whose code is still valid is also safe: see <a href="/docs/quickstart/#setup-codes">more about setup codes</a>.

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Release-body headings are one contract spelled in four files with no dependency edge: publish-github.sh writes them,
-// three parsers read them back off the Release. A drifted spelling fails nothing at runtime; the section is just
+// Release-body headings are one contract spelled in five files with no dependency edge: publish-github.sh writes them,
+// four parsers read them back off the Release. A drifted spelling fails nothing at runtime; the section is just
 // silently unseen.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
@@ -15,6 +15,7 @@ const HEADING_FILES = [
     "_sandbox/sandbox/src/platform/boot/release-notes.ts",
     "_site/site/src/lib/changelog.ts",
     "_tools/scripts/release/post-release-discord.mjs",
+    "_tools/scripts/release/publish-msstore.mjs",
 ];
 
 const headingDrift = [];
