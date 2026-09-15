@@ -12,8 +12,11 @@ export type Arrival =
 
 export interface ArrivalInput {
     readonly inApp: boolean;
-    // Row has history (redeemed, reported, checked in, provisioned); an unfinished errand this page must not act on.
+    // Row has history (redeemed, reported, checked in); an unfinished errand this page must not act on.
     readonly touched: boolean;
+    // Row carries a machine of ours that nothing has ever run on: a browser's errand to resume, and in the app a
+    // machine to hand back, since installing on this computer is the whole gesture of being in the app.
+    readonly hostedIdle: boolean;
     // Minted by this arrival, not merely untouched; a machine starts only for a row made fresh this visit.
     readonly fresh: boolean;
     // The platform hosts sandboxes at all (`sandbox.hostedOffer`), and this account has an allowance left.
@@ -33,19 +36,25 @@ export interface ArrivalInput {
 // so the explicit ask and the browser default never disagree.
 const hostedTakeable = (input: ArrivalInput): boolean => input.hostedOffered && !input.hostedSpent && !input.hostedFull;
 
+// Nothing this arrival may answer for itself: an errand already in progress, a reader sent here to read the
+// options, or a machine already on the row — which is the browser's own errand to resume, but never the app's,
+// since being in the app is the gesture of running it on this computer.
+const settled = (input: ArrivalInput): boolean => input.touched || input.elsewhere || (input.hostedIdle && !input.inApp);
+
 export const arrivalFor = (input: ArrivalInput): Arrival => {
-    // An errand in progress, or a reader sent here to look at options; neither is a blank first arrival.
-    if (input.touched || input.elsewhere) {
+    if (settled(input)) {
         return `choose`;
     }
-    // Reader's own click, but `hosted` still must be takeable; `mine` always lands on `choose`, even in the app.
+    // A row that already has a machine has nothing to start, whoever asked for it.
+    const startable = !input.hostedIdle && hostedTakeable(input);
+    // Reader's own click, but `hosted` still must be startable; `mine` always lands on `choose`, even in the app.
     if (input.requestedMachine !== undefined) {
-        return input.requestedMachine === `hosted` && hostedTakeable(input) ? `hosted` : `choose`;
+        return input.requestedMachine === `hosted` && startable ? `hosted` : `choose`;
     }
     // In the app, the machine is this window's own; gated on minting addresses, since it redeems a setup code.
     if (input.inApp) {
         return input.commandOffered ? `local` : `choose`;
     }
     // In a browser, hosted only when takeable and this arrival made the row, so a stale reload spends nothing.
-    return input.fresh && hostedTakeable(input) ? `hosted` : `choose`;
+    return input.fresh && startable ? `hosted` : `choose`;
 };

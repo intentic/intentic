@@ -98,10 +98,13 @@ const desktopInstaller = vi.fn<typeof import("../../app/environments/desktopDown
 // Only the four reads that ask something of the machine are stubbed; the rest of the module comes through as
 // itself. A listed-exports-only mock made every new export the page reaches for an import-time crash in a file
 // that tests none of it (DESKTOP_SETUP_EVENT, which useDesktopSetup subscribes to, arrived exactly that way).
+// A browser unless a test sets a version: only the presence of one says "running inside the app", which is the
+// arrival that installs on this computer.
+const desktopApp = ref<string | undefined>(undefined);
 vi.mock(import(`../../app/environments/desktop`), async (importOriginal) => ({
     ...(await importOriginal()),
     desktopSetupLink: () => ``,
-    desktopVersion: () => undefined,
+    desktopVersion: () => desktopApp.value,
     openDesktopLink: vi.fn(),
 }));
 vi.mock(import(`../../app/environments/desktopDownloads`), async (importOriginal) => ({
@@ -170,6 +173,7 @@ const MINTED = { code: `vphf-3wk`, hostname: `sandbox-fa0b431303b8.sbx.intentic.
 beforeEach(() => {
     query.value = {};
     mobileDevice.value = false;
+    desktopApp.value = undefined;
     desktopInstaller.mockReset().mockReturnValue(undefined);
     setupCode.mockReset().mockImplementation(() => new Promise<Minted>(() => {}));
     sandboxes.value = [];
@@ -480,6 +484,42 @@ it(`resumes a hosted sandbox onto the wait card, not the command lane`, async ()
     const el = await mount();
     expect(create).not.toHaveBeenCalled();
     expect(hostedProvision).not.toHaveBeenCalled();
+    expect(el.textContent).toContain(`Starting the machine`);
+});
+
+// The app's own arrival is this computer. An earlier browser visit can have left a machine on the same unfinished
+// row, and adopting it made the app greet its owner with someone else's answer and a machine already booting.
+it(`hands back an untouched machine on arrival in the app, and mints a code for this computer`, async () => {
+    desktopApp.value = `1.275.0`;
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+    const hosted = sandboxRow({ id: `h1`, name: `mine`, hosted: { region: `iad`, warm: false } });
+    sandboxes.value = [hosted];
+    list.mockResolvedValue([hosted]);
+    const el = await mount();
+    await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
+    // The row is kept and nothing is started in its place: the machine is given back, not replaced.
+    expect(create).not.toHaveBeenCalled();
+    expect(hostedProvision).not.toHaveBeenCalled();
+    expect(el.textContent).not.toContain(`Starting the machine`);
+    // The proof the local lane is live: while a machine sits on the row, no setup code is ever minted.
+    await vi.waitFor(() => expect(setupCode).toHaveBeenCalledWith({ sandboxId: `h1` }));
+});
+
+// Handing a machine back is safe only while nothing has run on it; a redeemed code means work no one may lose.
+it(`keeps a machine the app finds mid-errand, and asks instead`, async () => {
+    desktopApp.value = `1.275.0`;
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+    const hosted = sandboxRow({
+        id: `h1`,
+        name: `mine`,
+        hosted: { region: `iad`, warm: false },
+        setupCodeClaimedAt: new Date().toISOString(),
+    });
+    sandboxes.value = [hosted];
+    list.mockResolvedValue([hosted]);
+    const el = await mount();
+    expect(hostedRelease).not.toHaveBeenCalled();
+    expect(setupCode).not.toHaveBeenCalled();
     expect(el.textContent).toContain(`Starting the machine`);
 });
 

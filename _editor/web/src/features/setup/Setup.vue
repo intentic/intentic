@@ -792,6 +792,40 @@ const restartHosted = async (): Promise<void> => {
     }
 };
 
+// Gives the machine on the row back to the platform, so the row carries none: the one gesture that lets the local
+// lane mint a setup code at all (`targetKey` returns nothing while `hostedRow` holds one). False means the platform
+// refused and the machine is still there, with `hostedError` saying so.
+const handBackMachine = async (): Promise<boolean> => {
+    const row = created.value;
+    if (row === null) {
+        return true;
+    }
+    hostedAction += 1;
+    releaseRequested.value = true;
+    releasingHosted.value = true;
+    hostedBusy.value = false;
+    try {
+        created.value = await sandbox.hostedRelease(row.id);
+        releaseRequested.value = false;
+        hostedRequested.value = false;
+        hostedSince.value = undefined;
+        baseline.value = null;
+        bootReport.value = null;
+        announceRefusal.value = null;
+        announced.value = false;
+        noteMachine(undefined);
+        claimedAt.value = null;
+        report.value = null;
+        return true;
+    } catch (err) {
+        hostedError.value = noticeFrom(err, `Couldn't remove the machine we started. Try again in a moment.`);
+        return false;
+    } finally {
+        releasingHosted.value = false;
+        void refreshHostedOffer();
+    }
+};
+
 // Cancellation must remain available while provisioning is in flight.
 const chooseMachine = async (next: "hosted" | "mine"): Promise<void> => {
     const prev = machine.value;
@@ -809,30 +843,9 @@ const chooseMachine = async (next: "hosted" | "mine"): Promise<void> => {
         machine.value = next;
         return;
     }
-    if (row !== null && (rowHosted || hostedRequested.value || hostedBusy.value || releaseRequested.value)) {
-        hostedAction += 1;
-        releaseRequested.value = true;
-        releasingHosted.value = true;
-        hostedBusy.value = false;
-        try {
-            created.value = await sandbox.hostedRelease(row.id);
-            releaseRequested.value = false;
-            hostedRequested.value = false;
-            hostedSince.value = undefined;
-            baseline.value = null;
-            bootReport.value = null;
-            announceRefusal.value = null;
-            announced.value = false;
-            noteMachine(undefined);
-            claimedAt.value = null;
-            report.value = null;
-        } catch (err) {
-            hostedError.value = noticeFrom(err, `Couldn't remove the machine we started. Try again in a moment.`);
-            return;
-        } finally {
-            releasingHosted.value = false;
-            void refreshHostedOffer();
-        }
+    // A refusal leaves the rung where it was: the machine still exists, so saying otherwise would lie.
+    if (row !== null && (rowHosted || hostedRequested.value || hostedBusy.value || releaseRequested.value) && !(await handBackMachine())) {
+        return;
     }
     machine.value = next;
 };
@@ -1023,10 +1036,11 @@ const composeArgs = computed<ComposeArgs | undefined>(() => {
 // genuine acts count.
 const touched = (row: SandboxSummary): boolean =>
     // `?? null` on each: fields are optional as well as nullable, and `undefined !== null` would touch every row.
-    (row.lastSeenAt ?? null) !== null ||
-    (row.setupCodeClaimedAt ?? null) !== null ||
-    (row.setupReport ?? null) !== null ||
-    (row.hosted ?? null) !== null;
+    (row.lastSeenAt ?? null) !== null || (row.setupCodeClaimedAt ?? null) !== null || (row.setupReport ?? null) !== null;
+
+// A machine of ours on a row nothing has ever run on: history to resume in a browser, and in the app a machine to
+// hand back (setupArrival.ts), since it holds no work anyone could lose.
+const hostedIdle = (row: SandboxSummary): boolean => (row.hosted ?? null) !== null && (row.lastSeenAt ?? null) === null;
 
 // One offer read: a 404 is a real answer (feature genuinely off), but a timeout/drop/500 says nothing and must
 // not be recorded as one. Resolve-then-call so a missing client method lands in the catch, not on mount.
@@ -1044,14 +1058,9 @@ const recordOffers = (hosted: OfferRead<HostedOffer>, address: OfferRead<Address
     intenticAvailable.value = address.kind === `answered` ? address.value.enabled : undefined;
 };
 
-const arrive = async (): Promise<void> => {
-    // Offers land together with the row list, so the ladder and address line are right on the first frame.
-    const [rows, hosted, address] = await Promise.all([
-        sandbox.list(),
-        readOffer(() => apiClient.sandbox.hostedOffer(), { enabled: false, remaining: 0 }),
-        readOffer(() => apiClient.sandbox.addressOffer(), { enabled: false }),
-    ]);
-    recordOffers(hosted, address);
+// Settles which row this visit works on: the one named in the query, else the account's single unfinished one, else
+// a fresh draft. Returns whether that row carries a machine nothing has ever run on (`hostedIdle` in setupArrival).
+const openRow = async (rows: readonly SandboxSummary[]): Promise<boolean> => {
     const requested = route.query[`sandbox`];
     const named = typeof requested === `string` ? rows.find((entry) => entry.id === requested) : undefined;
     const unfinished = rows.some((entry) => entry.lastSeenAt !== null)
@@ -1060,17 +1069,56 @@ const arrive = async (): Promise<void> => {
     const found = named ?? unfinished;
     if (found?.role !== `owner`) {
         await autoCreate();
-    } else {
-        sandbox.select(found.id);
-        created.value = found;
-        resuming.value = touched(found);
-        // Resumed sandbox already hosted continues that story; booting or asleep is handled by the wake reflex.
-        if ((found.hosted ?? null) !== null) {
-            machine.value = `hosted`;
-            hostedSince.value = Date.now();
-            void warmSandboxCredential();
-        }
+        return false;
     }
+    sandbox.select(found.id);
+    created.value = found;
+    resuming.value = touched(found);
+    return hostedIdle(found);
+};
+
+// Does what the decided arrival says, once: hands a machine back, resumes one, or starts one. False means what it
+// wanted was refused, so the caller puts the picker back with the reason already on the card.
+const takeArrival = async (asked: MachineOption[`value`] | undefined): Promise<boolean> => {
+    // This computer is the answer while a machine sits on the row: hand it back, exactly as clicking the rung does,
+    // since the local lane mints no setup code until the row carries none.
+    if (hostedRow.value !== null && (arrival.value === `local` || asked === `mine`) && !(await handBackMachine())) {
+        // Refused, so the machine is still there; the picker says so rather than a card awaiting a code never minted.
+        machine.value = `hosted`;
+        return false;
+    }
+    // Resumed sandbox still hosted continues that story; booting or asleep is handled by the wake reflex.
+    if (hostedRow.value !== null) {
+        machine.value = `hosted`;
+        hostedSince.value = Date.now();
+        void warmSandboxCredential();
+        return true;
+    }
+    // Browser's answer, taken automatically; a refusal puts the picker back with the reason on the card, rung shown.
+    if (arrival.value === `hosted`) {
+        machine.value = `hosted`;
+        if (!(await provisionHosted())) {
+            return false;
+        }
+        void warmSandboxCredential();
+        return true;
+    }
+    // The app's answer is this computer, and the handoff below fires it the moment there is a code to hand.
+    if (arrival.value === `local`) {
+        machine.value = `mine`;
+    }
+    return true;
+};
+
+const arrive = async (): Promise<void> => {
+    // Offers land together with the row list, so the ladder and address line are right on the first frame.
+    const [rows, hosted, address] = await Promise.all([
+        sandbox.list(),
+        readOffer(() => apiClient.sandbox.hostedOffer(), { enabled: false, remaining: 0 }),
+        readOffer(() => apiClient.sandbox.addressOffer(), { enabled: false }),
+    ]);
+    recordOffers(hosted, address);
+    const idleMachine = await openRow(rows);
     // A rung picked before this page outranks the arrival: preselects the picker and is `arrivalFor`'s own answer.
     const asked = requestedMachine();
     if (asked !== undefined) {
@@ -1080,6 +1128,7 @@ const arrive = async (): Promise<void> => {
     arrival.value = arrivalFor({
         inApp: desktop.value,
         touched: resuming.value,
+        hostedIdle: idleMachine,
         // Only `autoCreate` sets this, so it's exactly true: the row was minted by this visit and nothing else.
         fresh: createdHere.value,
         hostedOffered: hostedOffered.value,
@@ -1090,22 +1139,12 @@ const arrive = async (): Promise<void> => {
         elsewhere: elsewhere.value,
     });
     // Nothing takeable means nothing to start; the page states which of the four lane facts holds, never switches.
+    // A row carrying a machine is takeable by definition, so nothing below is skipped while one exists.
     if (!laneTakeable.value) {
         return;
     }
-    // Browser's answer, taken automatically; a refusal puts the picker back with the reason on the card, rung shown.
-    if (arrival.value === `hosted`) {
-        machine.value = `hosted`;
-        if (!(await provisionHosted())) {
-            arrival.value = `choose`;
-            return;
-        }
-        void warmSandboxCredential();
-        return;
-    }
-    // The app's answer is this computer, and the handoff below fires it the moment there is a code to hand.
-    if (arrival.value === `local`) {
-        machine.value = `mine`;
+    if (!(await takeArrival(asked))) {
+        arrival.value = `choose`;
     }
 };
 

@@ -97,7 +97,8 @@ it(`lists every passkey the daemon returned, naming another member's, and remove
 
 it(`adds a passkey through the ceremony, sends the label, and keeps the upgraded session`, async () => {
     await mount();
-    expect(shown()).toContain(`No passkey opens this sandbox yet.`);
+    // An account with no passkey yet: the list says nothing, so the form is the whole empty state.
+    expect(buttonLabelled(`Add a passkey`)?.disabled).toBe(false);
 
     const field = document.body.querySelector(`input[type=text]`) as HTMLInputElement;
     field.value = `  work laptop `;

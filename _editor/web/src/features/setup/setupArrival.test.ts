@@ -5,6 +5,7 @@ import { arrivalFor, type ArrivalInput } from "./setupArrival";
 const arrival = (over: Partial<ArrivalInput> = {}): ArrivalInput => ({
     inApp: false,
     touched: false,
+    hostedIdle: false,
     fresh: true,
     hostedOffered: true,
     hostedSpent: false,
@@ -41,6 +42,24 @@ describe(`a platform with no machines left`, () => {
 
     it(`leaves the desktop app's own answer alone`, () => {
         expect(arrivalFor(arrival({ hostedFull: true, inApp: true }))).toBe(`local`);
+    });
+});
+
+// A machine already on the row, nothing ever run on it: an earlier browser visit's own errand. The browser resumes
+// it; the app is the gesture of installing on this computer, so it hands the machine back and goes local instead.
+describe(`a row that already carries a machine`, () => {
+    it(`is resumed in a browser and handed back in the app`, () => {
+        expect(arrivalFor(arrival({ hostedIdle: true }))).toBe(`choose`);
+        expect(arrivalFor(arrival({ hostedIdle: true, inApp: true }))).toBe(`local`);
+    });
+
+    it(`starts nothing more, however the machine was asked for`, () => {
+        expect(arrivalFor(arrival({ hostedIdle: true, requestedMachine: `hosted` }))).toBe(`choose`);
+        expect(arrivalFor(arrival({ hostedIdle: true, inApp: true, requestedMachine: `hosted` }))).toBe(`choose`);
+    });
+
+    it(`still needs an address to hand the app a code for`, () => {
+        expect(arrivalFor(arrival({ hostedIdle: true, inApp: true, commandOffered: false }))).toBe(`choose`);
     });
 });
 
