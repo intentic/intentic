@@ -175,6 +175,25 @@ it(`reloads through the distro's door, not the Windows side of the same PC`, () 
     expect(severingCalls).toEqual([`rog-wsl:dev-reload`]);
 });
 
+// The machine is connected; which of its shells the owner connected it through is not the reader's problem. The
+// daemon crosses into the distro from the Windows door, so the button is offered rather than withheld.
+it(`offers the reload on a PC connected only on its Windows side`, () => {
+    fleet.value = [
+        {
+            key: `rog`,
+            label: `rog`,
+            hostId: `rog`,
+            online: true,
+            platform: `windows`,
+            facts: { os: `Microsoft Windows 11 Home`, arch: `x64`, shell: `PowerShell 7`, home: `C:\\Users\\ada`, roots: [], hostname: `rog` },
+        },
+    ];
+    setDaemonRoutes(LEVEL, reshaped(`settings.get`));
+    const el = mount();
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent === `Reload sandbox`)?.click();
+    expect(severingCalls).toEqual([`rog:dev-reload`]);
+});
+
 // Two machines and no reading of which holds this container is a guess, and a reload aimed at the wrong one is a
 // restart somebody didn't ask for; the command goes back on screen instead.
 it(`prints the command rather than choosing between two connected devices`, () => {

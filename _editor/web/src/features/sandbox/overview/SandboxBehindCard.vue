@@ -34,7 +34,8 @@ const running = useHostHolding(
 );
 const { devices } = useDevices({ poll: false });
 const onlineDevices = computed(() => devices.value.filter((device) => device.hostId !== undefined && device.online === true));
-// dev-reload.sh is a unix line whatever else is true, so a Windows door is never the one to fire it at.
+// dev-reload.sh is a unix line whatever else is true, so a door that runs one itself is the first choice; a Windows
+// door is still offered when it is the only one, since the daemon crosses into that PC's distro from there.
 const unixDoors = computed(() => onlineDevices.value.filter((device) => device.platform !== `windows`));
 // Which machine runs this sandbox is itself read off the daemon's fleet payload, so a daemon far enough behind to
 // disagree about that payload answers "none" — and the one button that fixes it would vanish with the field it was
@@ -42,7 +43,9 @@ const unixDoors = computed(() => onlineDevices.value.filter((device) => device.p
 // argv names this sandbox's own slug on the far side, so a machine that doesn't hold it refuses rather than restarting
 // something else. Two of them is a guess, and stays the printed command; two doors onto one PC (Windows and a distro
 // on it) are one machine, and the distro's door is the one that can run the script.
-const hostId = computed(() => running.value ?? (machinesOf(onlineDevices.value).length === 1 ? unixDoors.value[0]?.hostId : undefined));
+const hostId = computed(
+    () => running.value ?? (machinesOf(onlineDevices.value).length === 1 ? (unixDoors.value[0] ?? onlineDevices.value[0])?.hostId : undefined),
+);
 const reloading = ref(false);
 const reloaded = ref(false);
 const failed = ref<string | undefined>(undefined);

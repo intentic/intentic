@@ -476,11 +476,35 @@ export const hostRunningSandbox = (devices: readonly Device[], slug: string | un
 // the line naming it would work under.
 const windowsPath = (path: string): boolean => /^([A-Za-z]:[\\/]|\\\\)/.test(path);
 
-// Whether a door can run a line written for this path. Only a platform that positively disagrees is out: a door that
-// never said which it is stays a candidate, as every other reading of device evidence does. Shared with the daemon,
-// so the refusal a wrong door earns and the pick that avoids it cannot disagree.
-export const doorHoldsPath = (platform: string | undefined, path: string): boolean =>
-    platform === undefined || (platform === "windows") === windowsPath(path);
+// Docker Desktop's own distros. `wsl -l -q` lists them like any other and neither ever holds a checkout, so counting
+// them would make every Docker Desktop PC look ambiguous.
+const SYSTEM_DISTROS: ReadonlySet<string> = new Set(["docker-desktop", "docker-desktop-data"]);
+
+// How a line written for a host path reaches the environment that holds it, through one door. `none` carries the
+// distros that were candidates, since "this PC has two and nothing says which" is a different answer for the reader
+// than "there is no way in".
+export type PathReach =
+    | { readonly kind: "direct" }
+    | { readonly kind: "wsl"; readonly distro: string }
+    | { readonly kind: "none"; readonly distros: readonly string[] };
+
+// How this door runs a line written for this path. A door whose own shell speaks the path's dialect runs it directly;
+// a Windows door onto the PC whose distro holds it CROSSES, because `run_command` takes the crossing as an argument
+// (`in: "wsl:<distro>"`) and builds the argv on the machine. One connected machine is therefore enough, whichever side
+// of it the owner connected.
+// `wslDistros` is the gate on purpose: it and `in` shipped in the same agent release, so a machine that lists its
+// distros is a machine that understands the crossing, and an older one is left to the refusal instead of being sent
+// an argument it would reject. Two real distros stay a refusal that names them — nothing here knows which one has the
+// folder, and the distro's own door, once connected, answers directly.
+// A platform that never said what it is stays a candidate, as every other reading of device evidence does.
+export const pathReach = (platform: string | undefined, facts: HostFacts | undefined, path: string): PathReach => {
+    if (platform === undefined || (platform === "windows") === windowsPath(path)) {
+        return { kind: "direct" };
+    }
+    const distros = platform === "windows" ? (facts?.wslDistros ?? []).filter((distro) => !SYSTEM_DISTROS.has(distro)) : [];
+    const only = distros.length === 1 ? distros[0] : undefined;
+    return only === undefined ? { kind: "none", distros } : { kind: "wsl", distro: only };
+};
 
 // A path under a door's own home belongs to that door: the one thing that tells two distros of one PC apart, since
 // both run sh and both answer for the same containers.
@@ -492,14 +516,19 @@ const homeHolds = (device: Device, path: string): boolean => {
 // The door for a command written for a path out there — a `cd` into the dev checkout, a script inside it, the log
 // beside it. One PC answers through several doors, so "which device runs this sandbox" has more than one true answer
 // and only the path says which environment can open it: a sh line aimed at /home/… is a parse error on the Windows
-// side of the very machine the build runs on. Undefined when no door opens onto that environment, which is the state
-// the copyable command exists for.
+// side of the very machine the build runs on.
+// A door that runs the line itself wins over one that has to cross — the same PC, one hop fewer, and no distro to
+// guess at — and among direct doors, the one whose own home holds the path, which is what tells two distros apart.
+// Undefined only when no connected door reaches that environment at all, which is the state the copyable command
+// exists for.
 export const hostHoldingPath = (devices: readonly Device[], slug: string | undefined, path: string | undefined): string | undefined => {
     if (path === undefined || path === "") {
         return undefined;
     }
-    const doors = doorsRunningSandbox(devices, slug).filter((device) => doorHoldsPath(device.platform, path));
-    return (doors.find((device) => homeHolds(device, path)) ?? doors[0])?.hostId;
+    const doors = doorsRunningSandbox(devices, slug).map((device) => ({ device, reach: pathReach(device.platform, device.facts, path) }));
+    const direct = doors.filter((door) => door.reach.kind === "direct").map((door) => door.device);
+    const crossing = doors.find((door) => door.reach.kind === "wsl")?.device;
+    return (direct.find((device) => homeHolds(device, path)) ?? direct[0] ?? crossing)?.hostId;
 };
 // GET /system/sync: sandbox-level facts only, whether sync is possible, whether anything is enrolled, and raw device
 // reports. Cheap: the sidebar badge reads this and must never fan out to a device.

@@ -1,4 +1,4 @@
-import { type Device, DeviceSandboxSchema, hostHoldingPath, hostRunningSandbox } from "@intentic/sandbox-contract";
+import { type Device, DeviceSandboxSchema, hostHoldingPath, hostRunningSandbox, pathReach } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { machineReach } from "./self-host.js";
 
@@ -115,8 +115,44 @@ test("tells two distros of one PC apart by the home the checkout sits under", ()
     expect(hostHoldingPath(rog, "work-abc", "/srv/intentic")).toBe("rog-wsl-ubuntu");
 });
 
+// ONE CONNECTED MACHINE IS ENOUGH. The Windows side of the PC cannot open a distro's path with its own shell, but
+// `run_command` takes the crossing as an argument, so the door still reaches it — the owner connected the computer,
+// not one of its shells.
+test("crosses from the Windows door into the distro that holds the checkout", () => {
+    const listing = { ...WINDOWS, hostname: "rog", wslDistros: ["archlinux", "docker-desktop"] };
+    const windowsOnly = device({ key: "rog", hostId: "rog", platform: "windows", facts: listing, ...runsWorkAbc });
+    expect(hostHoldingPath([windowsOnly], "work-abc", "/home/radarsu/intentic")).toBe("rog");
+    expect(pathReach("windows", listing, "/home/radarsu/intentic")).toEqual({ kind: "wsl", distro: "archlinux" });
+    // Docker Desktop's own distros are listed by wsl like any other and hold nobody's checkout; counting them would
+    // make every Docker Desktop PC look ambiguous.
+    expect(pathReach("windows", { ...WINDOWS, wslDistros: ["docker-desktop", "docker-desktop-data"] }, "/home/ada/x")).toEqual({
+        kind: "none",
+        distros: [],
+    });
+});
+
+// A door that runs the line itself is one hop fewer and needs no distro guessed at.
+test("prefers the distro's own door over crossing from the Windows side", () => {
+    const windowsOnly = device({
+        key: "rog",
+        hostId: "rog",
+        platform: "windows",
+        facts: { ...WINDOWS, hostname: "rog", wslDistros: ["archlinux"] },
+        ...runsWorkAbc,
+    });
+    expect(hostHoldingPath([windowsOnly, archSide], "work-abc", "/home/radarsu/intentic")).toBe("rog-wsl");
+});
+
 test("answers nothing when only the side that cannot open the checkout is connected", () => {
+    // A Windows door whose agent never listed any distro: `wslDistros` and `in` shipped together, so silence here is
+    // an agent that would reject the crossing rather than a PC with nothing to cross into.
     expect(hostHoldingPath([windowsSide], "work-abc", "/home/radarsu/intentic")).toBeUndefined();
+    expect(pathReach("windows", windowsSide.facts, "/home/radarsu/intentic")).toEqual({ kind: "none", distros: [] });
+    // Two real distros and no evidence which has the folder: refused, with both named for the reader.
+    expect(pathReach("windows", { ...WINDOWS, wslDistros: ["archlinux", "ubuntu"] }, "/home/radarsu/intentic")).toEqual({
+        kind: "none",
+        distros: ["archlinux", "ubuntu"],
+    });
     // No checkout recorded is no question to answer, and a sandbox no door reports has nowhere to send this.
     expect(hostHoldingPath([windowsSide, archSide], "work-abc", undefined)).toBeUndefined();
     expect(hostHoldingPath([windowsSide, archSide], "not-here", "/home/radarsu/intentic")).toBeUndefined();

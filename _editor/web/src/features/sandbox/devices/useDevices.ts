@@ -215,7 +215,8 @@ export function useHostRunning(slug: () => string | undefined): ComputedRef<stri
 
 // The same question for a command written for a PATH out there — the dev checkout, the log beside it — where the one
 // above answers for the container alone. A PC's Windows side and the distro on it report the same containers, so only
-// the path picks between their doors, and the daemon refuses the wrong one by the same rule (`hostHoldingPath`).
+// the path picks between their doors; the daemon reads the same rule and sends the crossing with the command, so a PC
+// connected on one side only still gets a button rather than a printed command.
 export function useHostHolding(slug: () => string | undefined, path: () => string | undefined): ComputedRef<string | undefined> {
     const { devices } = useDevices({ poll: false });
     return computed(() => hostHoldingPath(devices.value, slug(), path()));

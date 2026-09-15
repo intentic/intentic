@@ -29,8 +29,10 @@ const props = defineProps<{
     root?: string | undefined;
 }>();
 
-// The checkout's own door, not merely the machine's: a PC reports this container through its Windows side and the
-// distro on it alike, and only the side holding `root` can run the `sh` line that builds from it.
+// The door that can reach `root`, not merely one that reports the container: a PC answers through its Windows side
+// and the distro on it alike, and the build is a `sh` line in a folder only one of them has. The distro's own door
+// runs it directly, the Windows door crosses into the distro (the daemon sends the crossing with the command), and
+// only a machine with no way to that folder at all falls through to the command below.
 const hostId = useHostHolding(
     () => props.slug,
     () => props.root,

@@ -1,9 +1,9 @@
 import { installScriptUrl } from "@intentic/constants";
-import type { DeviceCommand, DeviceCommandInput, DeviceCommandResult } from "@intentic/sandbox-contract";
-import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath, doorHoldsPath } from "@intentic/sandbox-contract";
+import type { DeviceCommand, DeviceCommandInput, DeviceCommandResult, HostFacts } from "@intentic/sandbox-contract";
+import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath, pathReach } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import { callTool, forgetPull } from "./device-reports.js";
+import { callTool, forgetPull, heldHostDevices } from "./device-reports.js";
 import { ownSlug } from "./self-host.js";
 
 // This product's own CLI, run from a button on a device the user connected. The set of actions is closed and the
@@ -28,6 +28,9 @@ export interface DeviceCommandFacts {
     readonly devRoot: string | undefined;
     readonly publicUrl: string;
     readonly platform: string | undefined;
+    // That door's connect-time self-description, which is what says whether a Windows PC has a distro to cross into
+    // and whether its agent is new enough to be asked (`wslDistros`). Absent for a card that has never connected.
+    readonly hostFacts: HostFacts | undefined;
     readonly mode: "sync" | "mirror" | undefined;
     readonly localDir: string | undefined;
     /** Minted for this one call, and only for a command whose spec asks for one. */
@@ -122,10 +125,14 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
     /* Dev rebuilds run detached and record an exit mark for later polling. */
     "dev-rebuild": {
         done: "The rebuild is running on that device. Your sandbox restarts on the new image when it is built, and this page reconnects on its own.",
+        // ENDS WITH A SECOND OF FOREGROUND, WHICH IS LOAD-BEARING. A crossed call (`in: "wsl:<distro>"`) is
+        // `wsl.exe --exec sh -lc <script>`, and WSL kills the session's processes the moment that exits — with
+        // nothing else in the foreground, the exit races the background job and wins, leaving no build and not even
+        // a log file. A started child survives; this is what gets it started.
         line: (facts) =>
             facts.devRoot === undefined || facts.ownSlug === undefined
                 ? undefined
-                : `${WITH_PNPM} mkdir -p "$HOME/.intentic/logs" && cd ${shellDir(facts.devRoot)} && nohup sh -c 'pnpm rebuild:sandbox ${facts.ownSlug}; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"' > ${shellDir(devRebuildLogPath(facts.ownSlug))} 2>&1 &`,
+                : `${WITH_PNPM} mkdir -p "$HOME/.intentic/logs" && cd ${shellDir(facts.devRoot)} && nohup sh -c 'pnpm rebuild:sandbox ${facts.ownSlug}; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"' > ${shellDir(devRebuildLogPath(facts.ownSlug))} 2>&1 & sleep 1`,
         needs: "only a dev sandbox launched by dev-sandbox.sh knows which checkout to rebuild from",
         path: (facts) => facts.devRoot,
     },
@@ -165,27 +172,52 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
 const commandFacts = async (services: Services, input: DeviceCommandInput): Promise<DeviceCommandFacts> => {
     const spec = DEVICE_COMMANDS[input.command];
     const card = (await services.capabilities.list()).find((capability) => capability.id === input.id);
+    // Held readings only, never a fresh pull: the facts arrive at connect and a command must not wait on a laptop to
+    // describe itself again before it can be sent.
+    const door = (await heldHostDevices(services)).find((device) => device.hostId === input.id);
     return {
         sandboxId: input.sandboxId,
         ownSlug: ownSlug(services),
         devRoot: services.config.sandbox.devRoot,
         publicUrl: services.config.sandbox.publicUrl,
         platform: card?.kind === "host" ? card.config.platform : undefined,
+        hostFacts: door?.facts,
         mode: input.mode,
         localDir: input.localDir,
         pairToken: spec.mints === true ? services.syncPairings.mint(input.mode ?? "sync").token : undefined,
     };
 };
 
-// Why this door cannot run this command, though another door of the same computer could. Refused here rather than
-// left to the device: a unix line handed to a PC's Windows side comes back as a PowerShell parse error, which reads
-// as a broken command instead of the wrong door. Exported for the message's own test.
-export const wrongDoor = (spec: DeviceCommandSpec, facts: DeviceCommandFacts, input: DeviceCommandInput): string | undefined => {
+// How this door runs this command: itself, or by crossing into the environment of the same computer that holds the
+// path. `in` is a `run_command` argument the machine turns into argv (`wsl.exe --exec sh -lc <script>`), so a PC
+// connected only on its Windows side still rebuilds the checkout in its distro — one connected machine is enough,
+// whichever side of it the owner connected. The refusal is for what is genuinely out of reach, and it names the
+// candidates when a PC has two distros and nothing says which one has the folder.
+export const doorRoute = (
+    spec: DeviceCommandSpec,
+    facts: DeviceCommandFacts,
+    input: DeviceCommandInput,
+): { readonly in?: string; readonly refusal?: string } => {
     const path = spec.path?.(facts);
-    return path === undefined || doorHoldsPath(facts.platform, path)
-        ? undefined
-        : `"${input.command}" runs ${path}, which is not a path in the environment "${input.id}" opens onto. One computer answers for its ` +
-              `containers through every door on it — send this to the door whose own shell holds that path.`;
+    if (path === undefined) {
+        return {};
+    }
+    const reach = pathReach(facts.platform, facts.hostFacts, path);
+    if (reach.kind === "direct") {
+        return {};
+    }
+    if (reach.kind === "wsl") {
+        return { in: `wsl:${reach.distro}` };
+    }
+    const several =
+        reach.distros.length > 1
+            ? ` That PC runs ${reach.distros.join(" and ")}, and nothing here says which holds it — connect the one that does, and it answers directly.`
+            : ``;
+    return {
+        refusal:
+            `"${input.command}" runs ${path}, which "${input.id}" cannot reach: its own shell does not speak that path, ` +
+            `and no environment of that computer is reachable from it.${several}`,
+    };
 };
 
 // run_command answers with an exit line plus fenced stdout/stderr; success reads the exit line only, never what was
@@ -232,9 +264,9 @@ export const runDeviceCommand = async (services: Services, input: DeviceCommandI
         throw new ORPCError("BAD_REQUEST", { message: `"${input.command}" has to name the sandbox it acts on.` });
     }
     const facts = await commandFacts(services, input);
-    const refusal = wrongDoor(spec, facts, input);
-    if (refusal !== undefined) {
-        throw new ORPCError("CONFLICT", { message: refusal });
+    const route = doorRoute(spec, facts, input);
+    if (route.refusal !== undefined) {
+        throw new ORPCError("CONFLICT", { message: route.refusal });
     }
     const line = spec.line(facts);
     // A line this sandbox cannot form is a fact about where it runs, not something the device could answer.
@@ -247,7 +279,9 @@ export const runDeviceCommand = async (services: Services, input: DeviceCommandI
             services,
             input.id,
             "run_command",
-            { command: line, timeoutMs },
+            // `in` only when the line has to cross: an agent old enough to reject the argument is never sent one,
+            // because the same release that took `in` is the one that reports the distros the route is read from.
+            { command: line, timeoutMs, ...(route.in === undefined ? {} : { in: route.in }) },
             AbortSignal.timeout(timeoutMs + CALL_SLACK_MS),
         );
         return outcomeOf(input.command, answer);

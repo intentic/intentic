@@ -40,7 +40,8 @@ environments as rows because each has an agent to update, a door to reconnect an
 sandbox list because one engine serves every door: container verbs go through the first open door, folder verbs
 through the environment whose report carries the pairing, and a command written for a path — the dev rebuild and the
 dev reload, `sh` lines that `cd` into the checkout — through the environment that holds that path (`hostHoldingPath`),
-since the first open door is as often the Windows one, which answers a `sh` line with a parse error. The Windows side's distro listing is what makes the second
+reached directly where its own card is connected and by crossing from the Windows side where it is not. The first
+open door is as often the Windows one, which answers a `sh` line with a parse error. The Windows side's distro listing is what makes the second
 environment discoverable from the first: a distro not yet connected is a Connect link into the Linux card's add form,
 named `<pc>-wsl-<distro>` so the two ids read as one PC everywhere, and that name is what flips the Linux connect
 dialog to its PowerShell form.
@@ -66,8 +67,17 @@ Saying so in the code is what keeps the next reader from "fixing" it into a refu
   cheap and both readers hold the contract that defines it.
 - **Merging the two host capabilities into one card.** The card is the grant, and the grants differ per side. The
   Capabilities page says "one PC with …" on each instead.
-- **Crossing instead of choosing, for a checkout command sent to the wrong door.** The daemon could wrap a `sh` line
-  in `in: "wsl:<distro>"` rather than pick the distro's door. It would fail on every machine worth fixing: `in` is
-  newer than the agents out there, and a dogfooding machine's agent is usually older than the sandbox asking, so the
-  call comes back as "Input validation failed". Picking the door needs nothing of the agent, and a PC whose distro
-  door is not connected gets the printed command, which is what it got before.
+- **Requiring the distro's own card for a command aimed at its checkout.** First written that way, and wrong: the
+  owner connected a computer, not one of its shells, and a PC connected on its Windows side alone would print a
+  command it could perfectly well have run. So a checkout verb CROSSES when it has to — `pathReach` answers
+  `direct` for a door whose shell speaks the path's dialect and `wsl:<distro>` for the Windows door of the PC that
+  has it, and the daemon passes that as `run_command`'s `in`. The distro's own card is still preferred where it
+  exists: one hop fewer and no distro to infer.
+  Two limits are worth stating. The gate is `facts.wslDistros`, because that field and `in` shipped in the same
+  agent release — a machine that lists its distros is one that understands the crossing, and an older one gets the
+  refusal rather than an argument it would reject. And two real distros stay a refusal that names them: nothing here
+  knows which holds the folder, and guessing runs a build in the wrong environment.
+- **Assuming a detached job survives a crossed call.** It does not, by default: `wsl.exe --exec sh -lc <script>` has
+  WSL kill the session's processes as it exits, and the exit beat the background job to the fork — no build, and no
+  log file to explain it. The rebuild line therefore ends with a second of foreground, which is all it takes for a
+  started child to outlive the session.

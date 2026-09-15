@@ -7,16 +7,18 @@ import {
     devRebuildLogPath,
 } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { type DeviceCommandFacts, DEVICE_COMMANDS, outcomeOf, streamOf, succeeded, wrongDoor } from "./device-commands.js";
+import { type DeviceCommandFacts, DEVICE_COMMANDS, doorRoute, outcomeOf, streamOf, succeeded } from "./device-commands.js";
 
 // What the daemon knows when it builds a line. Only `sandboxId`, `mode` and `localDir` ever arrive from a caller; the
-// rest is this sandbox's own knowledge of itself, which is the whole reason these lines are built here.
+// rest is this sandbox's own knowledge of itself and of the door it is talking to, which is the whole reason these
+// lines are built here.
 const facts = (over: Partial<DeviceCommandFacts> = {}): DeviceCommandFacts => ({
     sandboxId: undefined,
     ownSlug: "work-abc",
     devRoot: undefined,
     publicUrl: "https://work-abc.intentic.dev",
     platform: "linux",
+    hostFacts: undefined,
     mode: undefined,
     localDir: undefined,
     pairToken: undefined,
@@ -156,8 +158,14 @@ test("starts the checkout's rebuild in the background, logging where ic's own lo
         'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"; ' +
             'mkdir -p "$HOME/.intentic/logs" && cd "/home/ada/intentic" && ' +
             `nohup sh -c 'pnpm rebuild:sandbox work-abc; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"' ` +
-            '> "$HOME/.intentic/logs/dev-rebuild-work-abc.log" 2>&1 &',
+            '> "$HOME/.intentic/logs/dev-rebuild-work-abc.log" 2>&1 & sleep 1',
     );
+});
+
+// Measured on a crossed call, not reasoned about: `wsl.exe --exec sh -lc <script>` kills the session's processes when
+// it exits, and without that second of foreground the exit won the race — no build, and no log file to show for it.
+test("holds the crossed session open long enough for the detached build to start", () => {
+    expect(DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "/home/ada/intentic" }))).toMatch(/ & sleep 1$/);
 });
 
 // The status is appended by the BUILD's own shell, not by the daemon: by the time a rebuild ends, the daemon that
@@ -212,30 +220,53 @@ test("writes a tilde checkout as $HOME, the one the shell will expand", () => {
 // Parsed from the schema, so a field added to what a caller may ask for cannot leave these asking something stale.
 const asked = (command: DeviceCommandInput["command"], id = "rog"): DeviceCommandInput => DeviceCommandInputSchema.parse({ id, command });
 
-// One computer answers for its containers through every door on it, so the door that reports this sandbox is not yet
-// the door that can `cd` into its checkout: the Windows side of the machine a build runs on lists the same container,
-// and hands a `sh` line to PowerShell, which answers with a parse error rather than a rebuild.
-test("refuses a checkout's command through the door that cannot open it, naming the path that decides", () => {
-    const windowsSide = facts({ platform: "windows", devRoot: "/home/radarsu/intentic" });
-    const refusal = wrongDoor(DEVICE_COMMANDS["dev-rebuild"], windowsSide, asked("dev-rebuild")) ?? "";
-    expect(refusal).toContain("/home/radarsu/intentic");
-    expect(refusal).toContain('"rog"');
-    expect(wrongDoor(DEVICE_COMMANDS["dev-reload"], windowsSide, asked("dev-reload"))).toContain("/home/radarsu/intentic");
+const WINDOWS_PC = { os: "Microsoft Windows 11 Home", arch: "x64", shell: "PowerShell 7", home: "C:\\Users\\radar", roots: ["C:\\Users\\radar"] };
+
+// ONE CONNECTED MACHINE IS ENOUGH. The Windows side cannot open a distro's checkout with its own shell, but the
+// crossing is a `run_command` argument the machine turns into argv, so the door the owner connected still runs the
+// build where the checkout is.
+test("crosses a checkout's command into the distro of the Windows PC that holds it", () => {
+    const windowsSide = facts({
+        platform: "windows",
+        devRoot: "/home/radarsu/intentic",
+        hostFacts: { ...WINDOWS_PC, wslDistros: ["archlinux", "docker-desktop"] },
+    });
+    expect(doorRoute(DEVICE_COMMANDS["dev-rebuild"], windowsSide, asked("dev-rebuild"))).toEqual({ in: "wsl:archlinux" });
+    expect(doorRoute(DEVICE_COMMANDS["dev-reload"], windowsSide, asked("dev-reload"))).toEqual({ in: "wsl:archlinux" });
     // Reading the log is the same question: it sits in the home of whichever environment ran the build.
-    expect(wrongDoor(DEVICE_COMMANDS["dev-rebuild-log"], windowsSide, asked("dev-rebuild-log"))).toContain(devRebuildLogPath("work-abc"));
-    // The distro's own door, the one the checkout is in: nothing to refuse.
+    expect(doorRoute(DEVICE_COMMANDS["dev-rebuild-log"], windowsSide, asked("dev-rebuild-log"))).toEqual({ in: "wsl:archlinux" });
+    // The distro's own door needs no crossing, and no crossing is ever sent to it.
     const distroSide = facts({ platform: "linux", devRoot: "/home/radarsu/intentic" });
     for (const command of ["dev-rebuild", "dev-reload", "dev-rebuild-log"] as const) {
-        expect(wrongDoor(DEVICE_COMMANDS[command], distroSide, asked(command))).toBeUndefined();
+        expect(doorRoute(DEVICE_COMMANDS[command], distroSide, asked(command))).toEqual({});
     }
 });
 
+// What is genuinely out of reach still earns a refusal in words, rather than a PowerShell parse error the reader has
+// to decode. An agent that lists no distro is one that would reject `in`: the field and the argument shipped together.
+test("refuses a checkout's command only where nothing of that computer can reach it", () => {
+    const noDistros = facts({ platform: "windows", devRoot: "/home/radarsu/intentic", hostFacts: WINDOWS_PC });
+    const refusal = doorRoute(DEVICE_COMMANDS["dev-rebuild"], noDistros, asked("dev-rebuild")).refusal ?? "";
+    expect(refusal).toContain("/home/radarsu/intentic");
+    expect(refusal).toContain('"rog"');
+    expect(refusal).not.toContain("and nothing here says which");
+    // Two real distros: named, so the reader knows which card would answer directly instead.
+    const twoDistros = facts({
+        platform: "windows",
+        devRoot: "/home/radarsu/intentic",
+        hostFacts: { ...WINDOWS_PC, wslDistros: ["archlinux", "ubuntu"] },
+    });
+    const ambiguous = doorRoute(DEVICE_COMMANDS["dev-rebuild"], twoDistros, asked("dev-rebuild")).refusal ?? "";
+    expect(ambiguous).toContain("archlinux and ubuntu");
+    expect(ambiguous).toContain("connect the one that does");
+});
+
 // Every other action is the CLI's own name, or a line already written in the door's dialect (sync-install), so no
-// door is the wrong one for it.
+// door is the wrong one for it and none is ever asked to cross.
 test("asks nothing about the door for a command that names no path", () => {
     const windowsSide = facts({ platform: "windows", pairToken: "pair_abc", mode: "sync", localDir: "C:\\Users\\Ada\\work" });
-    expect(wrongDoor(DEVICE_COMMANDS["sync-install"], windowsSide, asked("sync-install"))).toBeUndefined();
-    expect(wrongDoor(DEVICE_COMMANDS["mirror-off"], windowsSide, asked("mirror-off"))).toBeUndefined();
+    expect(doorRoute(DEVICE_COMMANDS["sync-install"], windowsSide, asked("sync-install"))).toEqual({});
+    expect(doorRoute(DEVICE_COMMANDS["mirror-off"], windowsSide, asked("mirror-off"))).toEqual({});
 });
 
 // The same enrollment the card's copyable one-liner carries — script, env and single-use token — spoken in the shell
