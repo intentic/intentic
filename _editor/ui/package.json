@@ -86,6 +86,10 @@
             "types": "./src/composables/preference.ts",
             "default": "./src/composables/preference.ts"
         },
+        "./reduced-motion": {
+            "types": "./src/composables/useReducedMotion.ts",
+            "default": "./src/composables/useReducedMotion.ts"
+        },
         "./text-size": {
             "types": "./src/composables/useTextSize.ts",
             "default": "./src/composables/useTextSize.ts"

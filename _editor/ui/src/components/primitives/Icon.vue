@@ -1,7 +1,8 @@
 <!-- The single icon primitive for the app: draws the native SVG paths in icons/iconSets.ts. -->
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useAttrs } from "vue";
+import { computed, useAttrs } from "vue";
 import { ICONS, type IconName } from "../../icons/iconSets.js";
+import { useReducedMotion } from "../../composables/useReducedMotion.js";
 import type { Glyph } from "../../icons/glyph.js";
 
 const { name, spin = false } = defineProps<{ name: IconName; spin?: boolean }>();
@@ -23,20 +24,7 @@ const drawing = computed<Glyph>(() => ICONS[name]);
 const isSpinner = computed(() => name === `spinner`);
 const SPINNER_STROKE = 2.5;
 
-const reducedMotion = ref(false);
-let motionQuery: MediaQueryList | undefined;
-const readMotionPreference = (): void => {
-    reducedMotion.value = motionQuery?.matches === true;
-};
-onMounted(() => {
-    if (typeof window.matchMedia !== `function`) {
-        return;
-    }
-    motionQuery = window.matchMedia(`(prefers-reduced-motion: reduce)`);
-    readMotionPreference();
-    motionQuery.addEventListener(`change`, readMotionPreference);
-});
-onBeforeUnmount(() => motionQuery?.removeEventListener(`change`, readMotionPreference));
+const reducedMotion = useReducedMotion();
 </script>
 
 <template>
