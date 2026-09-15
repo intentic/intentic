@@ -14,7 +14,7 @@ use tauri::{AppHandle, Manager, RunEvent};
 /// Every `intentic://` link — intercepted webview navigation, OS deep link, or second-instance argv — funnels
 /// through here, carrying which of those it was: only the first is a link this app watched its own window ask
 /// for, and `setup_link::Source` is what that distinction buys.
-pub(crate) fn handle_intentic_link(app: &AppHandle, link: &str, source: setup_link::Source) {
+pub(crate) fn handle_intentic_link(app: &AppHandle, link: &str, source: setup_link::Source<'_>) {
     windows::handle_link(app, link, source);
 }
 

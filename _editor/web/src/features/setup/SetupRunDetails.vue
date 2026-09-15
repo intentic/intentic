@@ -2,7 +2,8 @@
 <script setup lang="ts">
 import { Button, Code, CopyButton, commandLang, useOsPreference } from "@intentic/ui";
 import { computed } from "vue";
-import { DESKTOP_DOWNLOADS, desktopVersion } from "../../app/environments/desktop";
+import { desktopVersion } from "../../app/environments/desktop";
+import { DESKTOP_DOWNLOADS } from "../../app/environments/desktopDownloads";
 
 const { cmdOs } = useOsPreference();
 

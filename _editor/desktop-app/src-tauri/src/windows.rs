@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use tauri::webview::NewWindowResponse;
@@ -11,11 +13,21 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::commands::SetupReport;
 use crate::setup_link::{parse_link, Link, SetupArgs, Source, WindowVerb};
-use crate::state::{CloseAction, Mode};
+use crate::state::{AppState, CloseAction, Mode};
 
-/* ONE WINDOW ON SCREEN, EVER — these two labels are two FACES of it, not two windows, and there is no exception to that any more. */
+/* ONE WINDOW OF THE APP ON SCREEN — these two labels are two FACES of it, not two windows. The only second window is one the PAGE asked for: a panel of its own floated out (`FLOATING`), which is what a browser gives that same page. */
 pub const WORKSPACE: &str = "workspace";
 pub const LAUNCHER: &str = "launcher";
+
+/// The label prefix of a panel the page floated into a window of its own — `floating-chat` for
+/// `/floating/chat` — built when the page's `window.open` names one (`page_window`'s new-window handler) and
+/// destroyed when it is closed, however it is closed. As many as the page has panels, never two of one.
+const FLOATING: &str = "floating-";
+
+/// What a floating window opens at when the page names no size (it always does, from what it remembered),
+/// and the least it can be dragged to: enough for the narrowest of the three panels to stay usable.
+const FLOATING_SIZE: (f64, f64) = (1024.0, 720.0);
+const FLOATING_MIN: (f64, f64) = (480.0, 320.0);
 
 /* Chrome 142 made a request from a public origin to loopback a permission, collected with a dialog about "devices on your local network". */
 const BROWSER_ARGS: &str = concat!(
@@ -350,9 +362,8 @@ fn open_in_browser(app: &AppHandle, url: &str) {
 /// heuristic. Sign-in now happens in the real browser (auth.rs), so nothing in this window ever talks to
 /// Google and the webview can present itself honestly.
 pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
-    let state = app.state::<crate::state::AppState>();
+    let state = app.state::<AppState>();
     let base = state.app_url();
-    let install_id = state.install_id();
     let target = match path {
         Some(path) => format!("{}{path}", base.trim_end_matches('/')),
         None => base,
@@ -378,66 +389,14 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
             .parse()
             .expect("static app url parses"),
     };
-    let link_handler = app.clone();
-    let app_origin: Url = state.app_url().parse().unwrap_or_else(|_| {
-        crate::state::APP_URL
-            .parse()
-            .expect("static app url parses")
-    });
     let screen = work_area(app);
     let (size, min) = opening_bounds(screen.map(|screen| screen.size));
-    let builder = WebviewWindowBuilder::new(app, WORKSPACE, WebviewUrl::External(url))
-        .title("Intentic")
+    let builder = page_window(app, WORKSPACE, url)
         .inner_size(size.0, size.1)
         .min_inner_size(min.0, min.1)
-/* NO PLATFORM TITLE BAR ON EITHER FACE — see [`WindowVerb`] for the bar the page draws in its place. */
-        .decorations(false)
-        .shadow(true)
-        // The frame between "window mapped" and the REMOTE page's first paint, which is white by default and is
-        // longest on the launch that has no HTTP cache to open from. The two local faces have always had this;
-        // the one window that waits on a network was the one without it.
-        .background_color(tauri::window::Color(15, 13, 10, 255))
-/* Windows uses either Tauri drag-drop or HTML5 drag-drop, never both. */
-        .disable_drag_drop_handler()
-        // The one window this is actually for — see BROWSER_ARGS, and `loopbackUngated` below, which tells the
-        // page it was done.
-        .additional_browser_args(BROWSER_ARGS)
         // Built hidden so `swap_in` can place it on the frame it is taking over before it is ever on screen —
         // a finished setup hands the window back, and the workspace must appear where the setup was standing.
-        .visible(false)
-        .initialization_script(workspace_init_script(
-            &install_id,
-            crate::update::stage(app).ready_version(),
-        ))
-        .on_navigation({
-            let link_handler = link_handler.clone();
-            let app_origin = app_origin.clone();
-            move |url| {
-                if url.scheme() == "intentic" {
-                    // Handle off the navigation callback — creating a window inside the webview's navigation
-                    // event would re-enter the webview (WebView2 COM re-entrancy).
-                    let app = link_handler.clone();
-                    let link = url.to_string();
-                    tauri::async_runtime::spawn(async move {
-                        // The one direction that is this app's own window navigating — the SPA's button.
-                        crate::handle_intentic_link(&app, &link, Source::App);
-                    });
-                    return false;
-                }
-                if stays_in_webview(url, &app_origin) {
-                    return true;
-                }
-                open_in_browser(&link_handler, url.as_str());
-                false
-            }
-        })
-        .on_new_window({
-            let link_handler = link_handler.clone();
-            move |url, _features| {
-                open_in_browser(&link_handler, url.as_str());
-                NewWindowResponse::Deny
-            }
-        });
+        .visible(false);
     match builder.build() {
         Ok(window) => {
             let handle = app.clone();
@@ -458,7 +417,7 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
                 }
                 _ => {}
             });
-            arm_frame_fallback(app);
+            arm_frame_fallback(app, WORKSPACE);
             // Before `swap_in`, and while the window is still hidden. This is the placement for a COLD start —
             // a swap that has a frame to inherit overwrites it a line later, which is the right precedence:
             // the window the user is already looking at beats the middle of the screen.
@@ -475,9 +434,210 @@ pub fn show_workspace(app: &AppHandle) {
     show_workspace_at(app, None);
 }
 
+/// The origin the page is served from, which is also the one origin whose links stay inside a page window.
+fn app_origin(state: &AppState) -> Url {
+    state.app_url().parse().unwrap_or_else(|_| {
+        crate::state::APP_URL
+            .parse()
+            .expect("static app url parses")
+    })
+}
+
+/* EVERY WINDOW SHOWING THE PAGE IS BUILT HERE — the workspace, and each panel of it floating on its own. */
+
+/// What the workspace and a floating panel have in common, which is everything but their size and when they
+/// appear: no platform frame (the page draws the bar, see [`WindowVerb`]), the page's own dark under it, the
+/// browser arguments, the page told what window it is in, and the same answer for every link out of it.
+fn page_window<'a>(
+    app: &'a AppHandle,
+    label: &str,
+    url: Url,
+) -> WebviewWindowBuilder<'a, tauri::Wry, AppHandle> {
+    let state = app.state::<AppState>();
+    let origin = app_origin(&state);
+    let install_id = state.install_id();
+    WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
+        .title("Intentic")
+/* NO PLATFORM TITLE BAR ON ANY WINDOW OF THE PAGE — see [`WindowVerb`] for the bar the page draws in its place. */
+        .decorations(false)
+        .shadow(true)
+        // The frame between "window mapped" and the REMOTE page's first paint, which is white by default and is
+        // longest on the launch that has no HTTP cache to open from. The two local faces have always had this;
+        // the windows that wait on a network were the ones without it.
+        .background_color(tauri::window::Color(15, 13, 10, 255))
+/* Windows uses either Tauri drag-drop or HTML5 drag-drop, never both. */
+        .disable_drag_drop_handler()
+        // The windows this is actually for — see BROWSER_ARGS, and `loopbackUngated` in the init script, which
+        // tells the page it was done.
+        .additional_browser_args(BROWSER_ARGS)
+        .initialization_script(workspace_init_script(
+            &install_id,
+            crate::update::stage(app).ready_version(),
+        ))
+        .on_navigation({
+            let app = app.clone();
+            let label = label.to_string();
+            let origin = origin.clone();
+            move |url| {
+                if url.scheme() == "intentic" {
+                    // Handle off the navigation callback — creating a window inside the webview's navigation
+                    // event would re-enter the webview (WebView2 COM re-entrancy).
+                    let app = app.clone();
+                    let label = label.clone();
+                    let link = url.to_string();
+                    tauri::async_runtime::spawn(async move {
+                        // The one direction that is this app's own window navigating — the SPA's button.
+                        crate::handle_intentic_link(&app, &link, Source::App { window: &label });
+                    });
+                    return false;
+                }
+                if stays_in_webview(url, &origin) {
+                    return true;
+                }
+                open_in_browser(&app, url.as_str());
+                false
+            }
+        })
+        // A `window.open`: the page floating one of its own panels gets a window of this app's (its browser
+        // popup, done natively); anything else opened this way leaves for the browser. Denied either way — the
+        // window the page gets is built by this app, off the callback, for the same re-entrancy reason as above.
+        .on_new_window({
+            let app = app.clone();
+            move |url, features| {
+                match floating_panel(&url, &origin) {
+                    Some(panel) => {
+                        let app = app.clone();
+                        let size = features.size();
+                        let position = features.position();
+                        tauri::async_runtime::spawn(async move {
+                            show_floating(&app, &panel, url, size, position);
+                        });
+                    }
+                    None => open_in_browser(&app, url.as_str()),
+                }
+                NewWindowResponse::Deny
+            }
+        })
+}
+
+/* A PANEL IN A WINDOW OF ITS OWN. */
+
+/// The panel a `window.open` names, when it is the page floating one of its own panels: `/floating/<panel>`
+/// under the app's origin (and under its path, where the page is served under one). Anything else — another
+/// origin, a page of the app opened "in a new tab" — is not one, and goes to the browser as it always has.
+fn floating_panel(url: &Url, app_origin: &Url) -> Option<String> {
+    if !matches!(url.scheme(), "http" | "https") || url.origin() != app_origin.origin() {
+        return None;
+    }
+    let panel = url
+        .path()
+        .strip_prefix(app_origin.path().trim_end_matches('/'))?
+        .strip_prefix("/floating/")?;
+    // One lowercase word: the route's own regex admits exactly that, and the label is built from it.
+    (!panel.is_empty() && panel.bytes().all(|byte| byte.is_ascii_lowercase()))
+        .then(|| panel.to_string())
+}
+
+fn floating_label(panel: &str) -> String {
+    format!("{FLOATING}{panel}")
+}
+
+/// "Intentic · Chat": what the taskbar and alt-tab call the window, since a frameless window has no bar of its
+/// own to read the page's `document.title` off.
+fn floating_title(panel: &str) -> String {
+    let mut letters = panel.chars();
+    match letters.next() {
+        Some(first) => format!(
+            "Intentic · {}{}",
+            first.to_ascii_uppercase(),
+            letters.as_str()
+        ),
+        None => "Intentic".to_string(),
+    }
+}
+
+/// Raise the floating window for `panel`, building it if there is none: the page never asks twice while one
+/// is up (it raises the one it can see instead), so a second ask is a page that lost sight of it. Size and
+/// position are what the page put in `window.open`'s features — the frame it remembered for that panel.
+fn show_floating(
+    app: &AppHandle,
+    panel: &str,
+    url: Url,
+    size: Option<LogicalSize<f64>>,
+    position: Option<tauri::LogicalPosition<f64>>,
+) {
+    let label = floating_label(panel);
+    if let Some(window) = app.get_webview_window(&label) {
+        raise(&window);
+        return;
+    }
+    let size = size.unwrap_or_else(|| LogicalSize::new(FLOATING_SIZE.0, FLOATING_SIZE.1));
+    let mut builder = page_window(app, &label, url)
+        .title(floating_title(panel))
+        .inner_size(size.width, size.height)
+        .min_inner_size(FLOATING_MIN.0, FLOATING_MIN.1);
+    builder = match position {
+        Some(position) => builder.position(position.x, position.y),
+        None => builder.center(),
+    };
+    match builder.build() {
+        Ok(window) => {
+            let handle = app.clone();
+            let own = label.clone();
+            window.on_window_event(move |event| match event {
+                /* WHAT THE PAGE'S MAXIMISE BUTTON DRAWS FOLLOWS THE WINDOW, NOT THE PRESS. */
+                WindowEvent::Resized(_) => {
+                    if let Some(window) = handle.get_webview_window(&own) {
+                        announce_frame(&window, false);
+                    }
+                }
+                // Closing IS docking: the page in it stops announcing its claim and the workspace draws the
+                // panel again (the SPA's floating.ts). Nothing is asked and nothing is hidden — a panel is
+                // reopened by popping it out again, not from the tray.
+                WindowEvent::Destroyed => forget_chrome(&own),
+                _ => {}
+            });
+            arm_frame_fallback(app, &label);
+            let _ = window.set_focus();
+        }
+        Err(error) => eprintln!("floating window for {panel} failed to open: {error}"),
+    }
+}
+
+/// In front of the reader, whatever it was doing: hidden, minimised, or under the window that asked.
+fn raise(window: &WebviewWindow) {
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+}
+
 /* THE TITLE BAR THE PAGE DRAWS, AND THE FRAME THAT COMES BACK IF IT DOES NOT. */
-static CHROME_READY: AtomicBool = AtomicBool::new(false);
-static ANNOUNCED_MAXIMIZED: AtomicBool = AtomicBool::new(false);
+
+/// What the page has said about one frameless window: that its bar is up (`Ready`), and the maximised state
+/// last announced to it, so a resize that changes nothing sends nothing. One per window, by label — a floating
+/// panel's page announces its own bar, and the workspace's answer must not stand in for it.
+#[derive(Default)]
+struct Chrome {
+    ready: AtomicBool,
+    maximized: AtomicBool,
+}
+
+static CHROMES: LazyLock<Mutex<HashMap<String, Arc<Chrome>>>> = LazyLock::new(Mutex::default);
+
+fn chrome_of(label: &str) -> Arc<Chrome> {
+    CHROMES
+        .lock()
+        .unwrap()
+        .entry(label.to_string())
+        .or_default()
+        .clone()
+}
+
+/// A destroyed window's record goes with it, so the next window under that label starts unannounced and gets
+/// its own grace rather than inheriting a bar that was up in a window that no longer exists.
+fn forget_chrome(label: &str) {
+    CHROMES.lock().unwrap().remove(label);
+}
 
 /// The event the page listens on for what the window is doing to itself. A DOM event dispatched by `eval` —
 /// the update banner's channel exactly (update.rs `announce_to_workspace`), and one-way for the same reason:
@@ -487,16 +647,19 @@ const FRAME_EVENT: &str = "intentic-desktop-window";
 /* The app and the SPA ship separately — a binary somebody installed once, against a page deployed continuously. */
 const CHROME_GRACE: Duration = Duration::from_secs(8);
 
-/// Hand the platform's frame back if nothing draws a bar in time. Armed once, when the window is built.
-fn arm_frame_fallback(app: &AppHandle) {
+/// Hand the platform's frame back if nothing draws a bar in time. Armed once, when the window is built; the
+/// record it holds is that build's, so a window destroyed and rebuilt within the grace is judged by its own.
+fn arm_frame_fallback(app: &AppHandle, label: &str) {
     let app = app.clone();
+    let label = label.to_string();
+    let chrome = chrome_of(&label);
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(CHROME_GRACE).await;
-        if CHROME_READY.load(Ordering::Relaxed) {
+        if chrome.ready.load(Ordering::Relaxed) || !Arc::ptr_eq(&chrome, &chrome_of(&label)) {
             return;
         }
-        if let Some(window) = app.get_webview_window(WORKSPACE) {
-            eprintln!("no title bar from the workspace page: handing back the platform's frame");
+        if let Some(window) = app.get_webview_window(&label) {
+            eprintln!("no title bar from the page in {label}: handing back the platform's frame");
             let _ = window.set_decorations(true);
         }
     });
@@ -506,7 +669,9 @@ fn arm_frame_fallback(app: &AppHandle) {
 /// in the slow one: a page that arrives after the fallback fired takes the frame off again, so the window ends
 /// in the state the page can actually drive either way round.
 fn chrome_is_up(window: &WebviewWindow) {
-    CHROME_READY.store(true, Ordering::Relaxed);
+    chrome_of(window.label())
+        .ready
+        .store(true, Ordering::Relaxed);
     let _ = window.set_decorations(false);
     // Unconditionally, because this is a page that has just loaded: it knows nothing yet about a window that
     // may have been maximised before it got here.
@@ -517,7 +682,10 @@ fn chrome_is_up(window: &WebviewWindow) {
 /// has no state at all; every other caller is an event, and sends only what CHANGED.
 fn announce_frame(window: &WebviewWindow, always: bool) {
     let maximized = window.is_maximized().unwrap_or(false);
-    let changed = ANNOUNCED_MAXIMIZED.swap(maximized, Ordering::Relaxed) != maximized;
+    let changed = chrome_of(window.label())
+        .maximized
+        .swap(maximized, Ordering::Relaxed)
+        != maximized;
     if !always && !changed {
         return;
     }
@@ -526,9 +694,9 @@ fn announce_frame(window: &WebviewWindow, always: bool) {
     ));
 }
 
-/* A PRESS ON THE PAGE'S OWN TITLE BAR. */
-fn work_the_window(app: &AppHandle, verb: WindowVerb) {
-    let Some(window) = app.get_webview_window(WORKSPACE) else {
+/* A PRESS ON THE PAGE'S OWN TITLE BAR — answered on the window it was pressed in. */
+fn work_the_window(app: &AppHandle, label: &str, verb: WindowVerb) {
+    let Some(window) = app.get_webview_window(label) else {
         return;
     };
     match verb {
@@ -546,15 +714,38 @@ fn work_the_window(app: &AppHandle, verb: WindowVerb) {
             // here is what makes the glyph flip on the press rather than on the platform's next frame.
             announce_frame(&window, false);
         }
-        WindowVerb::Close => request_close(app),
+        // The workspace's × is a question and hides (`request_close`); a floating panel's × is its dock, and
+        // the window simply goes.
+        WindowVerb::Close if label == WORKSPACE => request_close(app),
+        WindowVerb::Close => {
+            let _ = window.close();
+        }
         // The platform's own move loop, started while the button is still down — the same call a Tauri drag
         // region makes, reached by a link instead of by a command.
         WindowVerb::Drag => {
             let _ = window.start_dragging();
         }
+        // The workspace comes back the way the tray brings it back, launcher face and update nudge included.
+        WindowVerb::Raise if label == WORKSPACE => show_workspace(app),
+        WindowVerb::Raise => raise(&window),
+        WindowVerb::Fit(width) => fit_width(&window, f64::from(width)),
         // Answered before this is reached (`handle_link`); it is about the app's faces, not this window.
         WindowVerb::Mode(mode) => apply_mode(app, mode),
     }
+}
+
+/// Widen to `width` CSS pixels (logical, which is what the page measures in), keeping the height; never
+/// narrows, so a window the reader already made wider is left as they made it.
+fn fit_width(window: &WebviewWindow, width: f64) {
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let Ok(size) = window.inner_size() else {
+        return;
+    };
+    let size = size.to_logical::<f64>(scale);
+    if size.width >= width {
+        return;
+    }
+    let _ = window.set_size(LogicalSize::new(width, size.height));
 }
 
 /* THE × IS A QUESTION, ASKED BEFORE ANYTHING HAPPENS — and asked in this app's own voice. */
@@ -818,7 +1009,7 @@ fn setup_announcement(report: &SetupReport) -> String {
 pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
     match parse_link(link, source) {
         Some(Link::Setup(args)) => match source {
-            Source::App => park_setup(app, *args),
+            Source::App { .. } => park_setup(app, *args),
             Source::External => confirm_setup(app, *args),
         },
         Some(Link::Recreate(args)) => {
@@ -856,8 +1047,14 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         // The page saying what light it is drawn in; about this app's faces, not the workspace window.
         Some(Link::Window(WindowVerb::Mode(mode))) => apply_mode(app, mode),
         // The page's own title bar, working the window it is drawn in (`work_the_window`). Nothing is parked
-        // and no face is swapped: these are presses on this window, answered on this window.
-        Some(Link::Window(verb)) => work_the_window(app, verb),
+        // and no face is swapped: these are presses on one window, answered on that window — and only a window
+        // of the app's own sends them (`parse_link`).
+        Some(Link::Window(verb)) => {
+            let Source::App { window } = source else {
+                return;
+            };
+            work_the_window(app, window, verb);
+        }
         None => {}
     }
 }
@@ -1029,6 +1226,68 @@ mod link_tests {
             &origin("mailto:support@intentic.dev"),
             &app
         ));
+    }
+}
+
+#[cfg(test)]
+mod floating_tests {
+    use super::*;
+
+    fn origin(url: &str) -> Url {
+        url.parse().unwrap()
+    }
+
+    /* THE ONE `window.open` THAT GETS A WINDOW OF THIS APP'S: the page floating a panel of its own. */
+    #[test]
+    fn a_panel_of_the_page_floats_into_a_window_of_this_app() {
+        let app = origin("https://app.intentic.dev");
+        assert_eq!(
+            floating_panel(&origin("https://app.intentic.dev/floating/chat"), &app).as_deref(),
+            Some("chat")
+        );
+        assert_eq!(
+            floating_panel(
+                &origin("http://localhost:47146/floating/terminal"),
+                &origin("http://localhost:47146")
+            )
+            .as_deref(),
+            Some("terminal")
+        );
+        // Served under a path, the panel is under that path too.
+        assert_eq!(
+            floating_panel(
+                &origin("https://example.dev/app/floating/preview"),
+                &origin("https://example.dev/app/")
+            )
+            .as_deref(),
+            Some("preview")
+        );
+    }
+
+    #[test]
+    fn every_other_new_window_is_the_browsers() {
+        let app = origin("https://app.intentic.dev");
+        for url in [
+            // A page of the app opened "in a new tab" is still a tab, not a panel.
+            "https://app.intentic.dev/agents",
+            "https://app.intentic.dev/floating/",
+            "https://app.intentic.dev/floating/chat/extra",
+            "https://app.intentic.dev/floating/Chat",
+            "https://app.intentic.dev/floating/chat-2",
+            // The same path on somebody else's origin is somebody else's page.
+            "https://evil.example/floating/chat",
+            "http://app.intentic.dev/floating/chat",
+            "https://app.intentic.dev/app/floating/chat",
+        ] {
+            assert_eq!(floating_panel(&origin(url), &app), None, "{url}");
+        }
+    }
+
+    #[test]
+    fn a_floating_window_is_labelled_and_titled_after_its_panel() {
+        assert_eq!(floating_label("chat"), "floating-chat");
+        assert_eq!(floating_title("chat"), "Intentic · Chat");
+        assert_eq!(floating_title("preview"), "Intentic · Preview");
     }
 }
 

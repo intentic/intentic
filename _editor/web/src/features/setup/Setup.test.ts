@@ -94,16 +94,19 @@ vi.mock(`../extensions/useCloudflareZones`, () => ({
 // with the command, so it is a knob every test below can turn. Undefined by default: the Mac-shaped world,
 // where the command is still the path, which is what most of these tests were written against.
 // Typed off the real export rather than restated, so the knob cannot drift from the function it stands in for.
-const desktopInstaller = vi.fn<typeof import("../../app/environments/desktop").desktopInstaller>(() => undefined);
+const desktopInstaller = vi.fn<typeof import("../../app/environments/desktopDownloads").desktopInstaller>(() => undefined);
 // Only the four reads that ask something of the machine are stubbed; the rest of the module comes through as
 // itself. A listed-exports-only mock made every new export the page reaches for an import-time crash in a file
 // that tests none of it (DESKTOP_SETUP_EVENT, which useDesktopSetup subscribes to, arrived exactly that way).
 vi.mock(import(`../../app/environments/desktop`), async (importOriginal) => ({
     ...(await importOriginal()),
-    desktopInstaller: () => desktopInstaller(),
     desktopSetupLink: () => ``,
     desktopVersion: () => undefined,
     openDesktopLink: vi.fn(),
+}));
+vi.mock(import(`../../app/environments/desktopDownloads`), async (importOriginal) => ({
+    ...(await importOriginal()),
+    desktopInstaller: () => desktopInstaller(),
 }));
 // Steps 2-3's own components, stubbed out: none of their concerns belong to step 1's tests.
 vi.mock(`./SetupCompose.vue`, () => ({ default: defineComponent({ render: () => null }) }));

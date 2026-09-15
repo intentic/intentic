@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, useTemplateRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { closeOwnWindow } from "../../../app/environments/desktop";
 import { useKeybindings } from "../../../shell/commands/useKeybindings";
 import { useShellCommands } from "../../../shell/commands/useShellCommands";
 import { claimFloating, type FloatingPanel } from "../../../shell/window/floating";
@@ -35,11 +36,11 @@ if (panel === `preview`) {
     markPreviewOpened();
 }
 
-// The window going away, asked for from anywhere (this window, another window's Dock press, F9). `window.close()`
-// is ignored for a window the script didn't open, so the fallback is to stop being floating and become an
-// ordinary window; either way the claim releases.
+// The window going away, asked for from anywhere (this window, another window's Dock press, F9). A browser ignores
+// `window.close()` for a window the script didn't open (the desktop app closes its own by link instead), so the
+// fallback is to stop being floating and become an ordinary window; either way the claim releases.
 const dock = (): void => {
-    window.close();
+    closeOwnWindow();
     void router.replace(`/`);
 };
 

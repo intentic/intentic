@@ -10,8 +10,10 @@ import { IconStub } from "@intentic/ui/testing";
 // The one fact that decides this: whether the app has marked this webview as its own.
 const version = { value: undefined as string | undefined };
 vi.mock(`../../app/environments/desktop`, () => ({
-    DESKTOP_DOWNLOADS: { windows: `https://intentic.dev/desktop/windows`, linuxAppImage: `https://intentic.dev/desktop/linux` },
     desktopVersion: () => version.value,
+}));
+vi.mock(`../../app/environments/desktopDownloads`, () => ({
+    DESKTOP_DOWNLOADS: { windows: `https://intentic.dev/desktop/windows`, linuxAppImage: `https://intentic.dev/desktop/linux` },
 }));
 
 const { default: SetupRunDetails } = await import("./SetupRunDetails.vue");

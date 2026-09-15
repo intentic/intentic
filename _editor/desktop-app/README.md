@@ -6,7 +6,8 @@ A Windows and Linux desktop app that installs the sandbox, and the thing that up
 sign in, click **Run on this computer**.
 
 ```
-   ONE WINDOW, THREE SCREENS TAKING TURNS IN IT — never two of them on screen at once
+   ONE WINDOW OF THE APP, THREE SCREENS TAKING TURNS IN IT — never two of them on screen at once
+   (a panel the page pops out is the page's own second window, see "A panel in a window of its own")
 
 ┌─ Intentic ──────────────────┐   ┌─ Intentic, Setting up… ─────┐   ┌─ Intentic, This computer ───┐
 │                             │   │ Setting up work on this PC  │   │ ● work        ▶ ■  update   │
@@ -72,6 +73,34 @@ being read, which is where first-time users stopped.
 So `windows.rs` keeps exactly one of them on screen: the screen being shown comes up, then the other hides.
 The title follows the content (`App.vue` sets it), and clicking a handoff reads as the window changing
 screens.
+
+### A panel in a window of its own
+
+The one second window is the one the **page** asks for. The SPA pops its chat, terminal or preview out with
+`window.open("/floating/<panel>")`, and in a browser that is a popup running a second copy of the app that
+syncs with the first over `BroadcastChannel` (`_editor/web` README, "A panel in a window of its own"). The
+workspace webview used to answer every `window.open` by handing the URL to the default browser — right for a
+provider's token page, and exactly wrong here: the popped-out chat opened as a browser tab beside the app.
+
+`page_window`'s new-window handler now tells the two apart. A same-origin `/floating/<panel>` URL
+(`floating_panel`) gets a window of this app's, labelled `floating-<panel>`, built off the callback by
+`show_floating` with everything the workspace window has — no platform frame, the page's dark behind it, the
+browser arguments, the init script that makes the page draw its own bar — at the size and position the page
+put in the features (the frame it remembered for that panel); asking again while one is up raises it. Every
+other `window.open` still leaves for the browser. The call is denied either way, so the page sees `null`, as it
+would from a refused popup, and keeps drawing the panel until the new window announces itself over the same
+channel: both webviews share this app's one browser profile, so the heartbeat, the Web Lock and the chat
+projection cross between them exactly as between two tabs.
+
+What a page may do to its own window only if its script opened it — close it, raise it, resize it — it does
+here by link, like every other press on the bar: `intentic://window?do=close|raise|fit&width=…`, and
+`setup_link::Source::App` now names the window the link came from, so `work_the_window` answers on that window.
+On a floating window `close` is the dock (the window is destroyed and the workspace draws the panel again);
+on the workspace it remains the question `request_close` asks. `raise` on the workspace is `show_workspace`,
+which is also how an errand from a popped-out panel — a file mention, a link — brings a workspace that was
+closed to the tray back in front of the reader. The bar's readiness and maximised state are kept per window
+(`Chrome`, by label) rather than in two statics that could only describe one. Reasoning and the alternatives
+weighed: [docs/design/desktop-floating-panels.md](../../docs/design/desktop-floating-panels.md).
 
 **The setup screen was exempted from that for three releases, and the exemption is what this section is now
 mostly about.** The argument was good on paper: an install is not somewhere the user *went*, it is something

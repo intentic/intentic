@@ -1,4 +1,5 @@
 import { computed, type ComputedRef, getCurrentScope, onScopeDispose, shallowRef } from "vue";
+import { closeOwnWindow, raiseOwnWindow, widenOwnWindow } from "../../app/environments/desktop";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import { uuid } from "../../lib/uuid";
 
@@ -281,7 +282,7 @@ export const claimFloating = (panel: FloatingPanel, onDock: () => void): void =>
             return;
         }
         if (note.kind === `raise`) {
-            window.focus();
+            raiseOwnWindow();
             return;
         }
         // Older claim wins, ties broken by id: exactly one of two racing claims for the same panel closes itself.
@@ -377,20 +378,22 @@ export const createFloatingSurface = (panel: FloatingPanel, size: () => { width:
     const open = (): void => {
         if (floats.value) {
             if (here.value) {
-                window.focus();
+                raiseOwnWindow();
             } else {
                 post({ kind: `raise`, panel });
             }
             return;
         }
         // Useful only within one browsing context group; oldest-claim is what actually caps duplicates across tabs.
+        // Inside the desktop app the same call is answered with a window of the app's own (windows.rs) and returns
+        // null, exactly like a refused popup: the panel stays here until that window announces itself.
         const win = window.open(floatingPath(panel), `intentic-${panel}`, features(rememberedFrame(panel) ?? centred(size())));
         win?.focus(); // null when the popup blocker refused; the panel stays where it is.
     };
 
     const dock = (): void => {
         if (here.value) {
-            window.close();
+            closeOwnWindow();
             return;
         }
         post({ kind: `dock`, panel });
@@ -402,7 +405,7 @@ export const createFloatingSurface = (panel: FloatingPanel, size: () => { width:
         }
         // Room to this window's right; an unmeasurable screen yields a negative offset, floored to "leave it".
         const room = Math.max(window.outerWidth, window.screen.availWidth - window.screenX);
-        window.resizeTo(Math.round(Math.min(width, room)), window.outerHeight);
+        widenOwnWindow(Math.min(width, room));
     };
 
     return { panel, floats, here, shows, open, dock, toggle: () => (floats.value ? dock() : open()), fit };

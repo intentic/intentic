@@ -16,7 +16,8 @@ import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { manageDeviceSandbox, useHostRunning } from "../../sandbox/devices/useDevices";
 import ConnectDeviceHint from "../../sandbox/devices/ConnectDeviceHint.vue";
-import { DESKTOP_DOWNLOADS, desktopRecreateLink, desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
+import { desktopRecreateLink, desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
+import { DESKTOP_DOWNLOADS } from "../../../app/environments/desktopDownloads";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
 
 // Recreating needs the host machine (the daemon has no host Docker socket for its own container), so this renders

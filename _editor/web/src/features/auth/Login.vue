@@ -6,7 +6,8 @@ import { useRoute, useRouter } from "vue-router";
 import AppBrand from "../../components/AppBrand.vue";
 import { useAuth } from "./useAuth";
 import { useGoogleIdentity } from "./useGoogleIdentity";
-import { desktopInstaller, desktopVersion, signInThroughBrowser } from "../../app/environments/desktop";
+import { desktopVersion, signInThroughBrowser } from "../../app/environments/desktop";
+import { desktopInstaller } from "../../app/environments/desktopDownloads";
 import { returnPath } from "../../router/signIn";
 
 const { signInWithGoogle, signInWithGoogleCredential } = useAuth();

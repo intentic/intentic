@@ -36,9 +36,9 @@ const desktopInstaller = vi.fn<() => { platform: string; label: string; href: st
 vi.mock(`../../app/environments/desktop`, () => ({
     DESKTOP_SIGN_IN_LINK: ``,
     desktopVersion: () => undefined,
-    desktopInstaller: () => desktopInstaller(),
     openDesktopLink: vi.fn(),
 }));
+vi.mock(`../../app/environments/desktopDownloads`, () => ({ desktopInstaller: () => desktopInstaller() }));
 
 const { default: Login } = await import("./Login.vue");
 

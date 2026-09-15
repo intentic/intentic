@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { effectScope } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { closeOwnWindow, raiseOwnWindow, widenOwnWindow } from "../../app/environments/desktop";
 import { claimFloating, createFloatingSurface, floatingWindowPanel, receiveFloatingNote } from "./floating";
 
 // Pins the note protocol windows exchange to arbitrate a floating panel, not any one window's bookkeeping:
@@ -8,6 +9,15 @@ import { claimFloating, createFloatingSurface, floatingWindowPanel, receiveFloat
 // 1. `here`: a window claims the panel; every other window collapses its place for it.
 // 2. Silence past the deadline: that window is gone, however it went.
 // 3. Two `here` claims for the same panel: the older one wins.
+
+// What the floating window does to ITSELF goes through one seam (browser: the DOM; desktop app: a link, desktop.test.ts);
+// here only that it is asked, and when.
+vi.mock(`../../app/environments/desktop`, async (importOriginal) => ({
+    ...(await importOriginal<typeof import("../../app/environments/desktop")>()),
+    closeOwnWindow: vi.fn(),
+    raiseOwnWindow: vi.fn(),
+    widenOwnWindow: vi.fn(),
+}));
 
 const size = () => ({ width: 800, height: 600 });
 
@@ -41,6 +51,7 @@ afterEach(async () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    vi.clearAllMocks();
     Reflect.deleteProperty(navigator, `locks`);
     lockedNames = undefined;
 });
@@ -134,6 +145,8 @@ describe(`a panel floating in another window`, () => {
         surface.open();
 
         expect(open).not.toHaveBeenCalled();
+        // Asked of that window, not done to this one.
+        expect(raiseOwnWindow).not.toHaveBeenCalled();
     });
 
     it(`ignores a farewell from a window that is not the one it is watching`, () => {
@@ -221,6 +234,41 @@ describe(`the floating window itself`, () => {
         receiveFloatingNote({ kind: `dock`, panel: `chat` });
 
         expect(onDock).toHaveBeenCalledTimes(1);
+        release();
+    });
+
+    // Its own presses act on its own window, through the seam that knows whether a script may (desktop.ts).
+    it(`docks its own Dock press by closing its own window, and raises itself when asked`, () => {
+        const surface = createFloatingSurface(`chat`, size);
+        const release = claim(`chat`, vi.fn());
+
+        surface.dock();
+        expect(closeOwnWindow).toHaveBeenCalledTimes(1);
+
+        surface.open();
+        receiveFloatingNote({ kind: `raise`, panel: `chat` });
+        expect(raiseOwnWindow).toHaveBeenCalledTimes(2);
+
+        release();
+    });
+
+    it(`widens its own window for a pane that would not fit, no further than the screen's edge`, () => {
+        const surface = createFloatingSurface(`chat`, size);
+        Object.defineProperty(window, `outerWidth`, { value: 900, configurable: true });
+        Object.defineProperty(window, `screenX`, { value: 100, configurable: true });
+        Object.defineProperty(window.screen, `availWidth`, { value: 2560, configurable: true });
+        const release = claim(`chat`, vi.fn());
+
+        surface.fit(1400);
+        expect(widenOwnWindow).toHaveBeenLastCalledWith(1400);
+
+        surface.fit(3000);
+        expect(widenOwnWindow).toHaveBeenLastCalledWith(2460);
+
+        // Already that wide: nothing to ask.
+        surface.fit(800);
+        expect(widenOwnWindow).toHaveBeenCalledTimes(2);
+
         release();
     });
 

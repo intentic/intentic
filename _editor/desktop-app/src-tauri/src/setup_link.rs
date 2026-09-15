@@ -4,9 +4,19 @@ use serde::{Deserialize, Serialize};
 
 /* WHO SENT THIS LINK — the whole of what this app can know about whether to believe it. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Source {
-    App,
+pub enum Source<'a> {
+    /// One of this app's own windows, by label: the sender whose links are believed, and the window a
+    /// [`WindowVerb`] works — a floating panel's bar works the floating panel's window, not the workspace.
+    App {
+        window: &'a str,
+    },
     External,
+}
+
+impl Source<'_> {
+    pub fn is_app(self) -> bool {
+        matches!(self, Source::App { .. })
+    }
 }
 
 /// `intentic://setup?code=…` — run the sandbox this setup code was minted for on this device.
@@ -95,6 +105,12 @@ pub enum WindowVerb {
     Close,
     /// A press on an empty stretch of the bar: hand the window to the platform's own move loop.
     Drag,
+    /// Bring the window in front of the reader, out of the tray or from under other windows: what a page's
+    /// `window.focus()` would do if a webview's script were allowed to raise the window it is in.
+    Raise,
+    /// Widen the window to at least this many CSS pixels; a window already that wide is left alone. The
+    /// popped-out chat's `window.resizeTo`, which a webview ignores for the same reason as `focus()`.
+    Fit(u32),
     /// The page saying which colour scheme it is drawn in, on load and whenever it changes — how the app's
     /// own faces come to be drawn in the same light as the workspace they stand in for.
     Mode(crate::state::Mode),
@@ -138,7 +154,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
     };
     match parsed.host_str()? {
         "setup" => {
-            let from_app = source == Source::App;
+            let from_app = source.is_app();
             Some(Link::Setup(Box::new(SetupArgs {
                 code: get("code")?,
                 name: get("name"),
@@ -148,11 +164,11 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             })))
         }
         "signin" => Some(Link::SignIn),
-        "update" => (source == Source::App).then_some(Link::Update),
-        "launcher" => (source == Source::App).then_some(Link::Launcher),
+        "update" => source.is_app().then_some(Link::Update),
+        "launcher" => source.is_app().then_some(Link::Launcher),
         // App-window only, like `update`, and for a sharper reason: see [`SyncArgs`]. There is nothing to
         // strip and keep — the url and the token ARE the request — so an external copy is refused whole.
-        "sync" if source == Source::App => Some(Link::Sync(SyncArgs {
+        "sync" if source.is_app() => Some(Link::Sync(SyncArgs {
             url: get("url")?,
             pair: get("pair")?,
             name: get("name"),
@@ -162,7 +178,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         "sync" => None,
         // App-window only, like `sync`: this link runs its script the moment it lands, with nothing left to
         // confirm, and the only page that emits one is the SPA's own Update/Environment card.
-        "recreate" if source == Source::App => {
+        "recreate" if source.is_app() => {
             let rollback = get("rollback").is_some();
             Some(Link::Recreate(RecreateArgs {
                 slug: get("slug")?,
@@ -180,12 +196,14 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         })),
         // The page's own title bar. App-window only, and one verb per press — an unknown verb is a page newer
         // than this app, which is the ordinary skew between the two and is answered by doing nothing.
-        "window" if source == Source::App => Some(Link::Window(match get("do")?.as_str() {
+        "window" if source.is_app() => Some(Link::Window(match get("do")?.as_str() {
             "ready" => WindowVerb::Ready,
             "minimize" => WindowVerb::Minimize,
             "maximize" => WindowVerb::Maximize,
             "close" => WindowVerb::Close,
             "drag" => WindowVerb::Drag,
+            "raise" => WindowVerb::Raise,
+            "fit" => WindowVerb::Fit(get("width")?.parse().ok()?),
             "mode" => WindowVerb::Mode(crate::state::Mode::parse(&get("mode")?)?),
             _ => return None,
         })),
@@ -198,8 +216,13 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
 mod tests {
     use super::*;
 
+    /* The app's own workspace window, which is where every in-app link in these tests comes from. */
+    const APP: Source<'static> = Source::App {
+        window: crate::windows::WORKSPACE,
+    };
+
     fn setup_of(url: &str) -> Option<SetupArgs> {
-        match parse_link(url, Source::App)? {
+        match parse_link(url, APP)? {
             Link::Setup(args) => Some(*args),
             _ => None,
         }
@@ -223,16 +246,13 @@ mod tests {
 
     #[test]
     fn parses_a_signin_request() {
-        assert_eq!(
-            parse_link("intentic://signin", Source::App),
-            Some(Link::SignIn)
-        );
+        assert_eq!(parse_link("intentic://signin", APP), Some(Link::SignIn));
     }
 
     #[test]
     fn parses_all_three_recreate_modes() {
         assert_eq!(
-            parse_link("intentic://recreate?slug=sandbox-abc", Source::App),
+            parse_link("intentic://recreate?slug=sandbox-abc", APP),
             Some(Link::Recreate(RecreateArgs {
                 slug: "sandbox-abc".into(),
                 hash: None,
@@ -240,10 +260,7 @@ mod tests {
             }))
         );
         assert_eq!(
-            parse_link(
-                "intentic://recreate?slug=sandbox-abc&hash=deadbeef",
-                Source::App
-            ),
+            parse_link("intentic://recreate?slug=sandbox-abc&hash=deadbeef", APP),
             Some(Link::Recreate(RecreateArgs {
                 slug: "sandbox-abc".into(),
                 hash: Some("deadbeef".into()),
@@ -251,10 +268,7 @@ mod tests {
             }))
         );
         assert_eq!(
-            parse_link(
-                "intentic://recreate?slug=sandbox-abc&rollback=1",
-                Source::App
-            ),
+            parse_link("intentic://recreate?slug=sandbox-abc&rollback=1", APP),
             Some(Link::Recreate(RecreateArgs {
                 slug: "sandbox-abc".into(),
                 hash: None,
@@ -284,7 +298,7 @@ mod tests {
         assert_eq!(
             parse_link(
                 "intentic://recreate?slug=sandbox-abc&hash=deadbeef&rollback=1",
-                Source::App
+                APP
             ),
             Some(Link::Recreate(RecreateArgs {
                 slug: "sandbox-abc".into(),
@@ -297,20 +311,14 @@ mod tests {
     /* THE ONE LINK THAT ENDS THE PROCESS, so it is the one link only this app's own window may send. */
     #[test]
     fn only_this_apps_own_window_can_ask_it_to_replace_itself() {
-        assert_eq!(
-            parse_link("intentic://update", Source::App),
-            Some(Link::Update)
-        );
+        assert_eq!(parse_link("intentic://update", APP), Some(Link::Update));
         assert_eq!(parse_link("intentic://update", Source::External), None);
     }
 
     /// The way back to the setup card is the app's own window's to ask for, exactly like the update.
     #[test]
     fn the_launcher_link_is_honoured_from_the_app_and_refused_from_outside() {
-        assert_eq!(
-            parse_link("intentic://launcher", Source::App),
-            Some(Link::Launcher)
-        );
+        assert_eq!(parse_link("intentic://launcher", APP), Some(Link::Launcher));
         assert_eq!(parse_link("intentic://launcher", Source::External), None);
     }
 
@@ -318,7 +326,7 @@ mod tests {
     fn parses_a_sync_enrollment_from_the_apps_own_window() {
         let Some(Link::Sync(args)) = parse_link(
             "intentic://sync?url=https%3A%2F%2Fsandbox-abc.example.dev&pair=tok123&name=My%20Sandbox&takeover=1",
-            Source::App,
+            APP,
         ) else {
             panic!("expected a sync link");
         };
@@ -330,7 +338,7 @@ mod tests {
 
         let Some(Link::Sync(mirror)) = parse_link(
             "intentic://sync?url=https%3A%2F%2Fsandbox-abc.example.dev&pair=tok123&mirror=1",
-            Source::App,
+            APP,
         ) else {
             panic!("expected a mirror sync link");
         };
@@ -352,11 +360,11 @@ mod tests {
 
     #[test]
     fn a_sync_link_missing_its_sandbox_or_token_is_not_one() {
-        assert_eq!(parse_link("intentic://sync?pair=tok123", Source::App), None);
+        assert_eq!(parse_link("intentic://sync?pair=tok123", APP), None);
         assert_eq!(
             parse_link(
                 "intentic://sync?url=https%3A%2F%2Fsandbox-abc.example.dev",
-                Source::App
+                APP
             ),
             None
         );
@@ -372,6 +380,8 @@ mod tests {
             ("intentic://window?do=maximize", WindowVerb::Maximize),
             ("intentic://window?do=close", WindowVerb::Close),
             ("intentic://window?do=drag", WindowVerb::Drag),
+            ("intentic://window?do=raise", WindowVerb::Raise),
+            ("intentic://window?do=fit&width=1280", WindowVerb::Fit(1280)),
             (
                 "intentic://window?do=mode&mode=light",
                 WindowVerb::Mode(crate::state::Mode::Light),
@@ -381,11 +391,7 @@ mod tests {
                 WindowVerb::Mode(crate::state::Mode::Dark),
             ),
         ] {
-            assert_eq!(
-                parse_link(link, Source::App),
-                Some(Link::Window(verb)),
-                "{link}"
-            );
+            assert_eq!(parse_link(link, APP), Some(Link::Window(verb)), "{link}");
         }
     }
 
@@ -396,23 +402,37 @@ mod tests {
             parse_link("intentic://window?do=close", Source::External),
             None
         );
-        assert_eq!(
-            parse_link("intentic://window?do=explode", Source::App),
-            None
-        );
-        assert_eq!(parse_link("intentic://window", Source::App), None);
+        assert_eq!(parse_link("intentic://window?do=explode", APP), None);
+        assert_eq!(parse_link("intentic://window", APP), None);
         // A scheme this app cannot draw is not one it remembers.
         assert_eq!(
-            parse_link("intentic://window?do=mode&mode=sepia", Source::App),
+            parse_link("intentic://window?do=mode&mode=sepia", APP),
             None
         );
-        assert_eq!(parse_link("intentic://window?do=mode", Source::App), None);
+        assert_eq!(parse_link("intentic://window?do=mode", APP), None);
+        // A width that is not a whole number of pixels is not a size this app can give a window.
+        assert_eq!(parse_link("intentic://window?do=fit", APP), None);
+        assert_eq!(parse_link("intentic://window?do=fit&width=wide", APP), None);
+        assert_eq!(parse_link("intentic://window?do=fit&width=-4", APP), None);
+    }
+
+    /* A LINK FROM A WINDOW NAMES THAT WINDOW, whichever of the app's own it is. */
+    #[test]
+    fn a_window_link_is_believed_from_any_of_the_apps_own_windows() {
+        let floating = Source::App {
+            window: "floating-chat",
+        };
+        assert!(floating.is_app());
+        assert!(!Source::External.is_app());
+        assert_eq!(
+            parse_link("intentic://window?do=close", floating),
+            Some(Link::Window(WindowVerb::Close))
+        );
     }
 
     #[test]
     fn parses_an_auth_handoff() {
-        let Some(Link::Auth(args)) =
-            parse_link("intentic://auth?handoff=tok&state=nonce", Source::App)
+        let Some(Link::Auth(args)) = parse_link("intentic://auth?handoff=tok&state=nonce", APP)
         else {
             panic!("expected an auth link");
         };
@@ -446,16 +466,13 @@ mod tests {
     #[test]
     fn rejects_foreign_or_incomplete_links() {
         assert_eq!(
-            parse_link("https://app.intentic.dev/setup?code=x", Source::App),
+            parse_link("https://app.intentic.dev/setup?code=x", APP),
             None
         );
-        assert_eq!(parse_link("intentic://other?code=x", Source::App), None);
-        assert_eq!(
-            parse_link("intentic://setup?name=nameless", Source::App),
-            None
-        );
+        assert_eq!(parse_link("intentic://other?code=x", APP), None);
+        assert_eq!(parse_link("intentic://setup?name=nameless", APP), None);
         // A handoff with no state cannot be matched to the request that started it, so it is not a handoff.
-        assert_eq!(parse_link("intentic://auth?handoff=tok", Source::App), None);
+        assert_eq!(parse_link("intentic://auth?handoff=tok", APP), None);
     }
 
     /* External setup links may not supply platform or Cloudflare credentials. */
@@ -472,7 +489,7 @@ mod tests {
         assert_eq!(args.sync_dir.as_deref(), Some("/home/me"));
 
         // …and the same link from the app's own window keeps both, which is the local-dev path.
-        let Some(Link::Setup(args)) = parse_link(url, Source::App) else {
+        let Some(Link::Setup(args)) = parse_link(url, APP) else {
             panic!("expected a setup link");
         };
         assert_eq!(args.platform_url.as_deref(), Some("https://evil.example"));

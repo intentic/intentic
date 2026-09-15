@@ -1,9 +1,8 @@
-import { environment } from "./environment";
-
-// The desktop app as the browser sees it: the app's workspace window loads this SPA and marks itself via
+// The desktop app as the browser sees it: the app's windows load this SPA and mark themselves via
 // `__INTENTIC_DESKTOP__` (injected by Tauri). Everything here builds an `intentic://` link, never IPC, since the
 // app intercepts those navigations in Rust; the identical link also works from an external browser via OS routing.
-// Nothing here imports Tauri or is desktop-only at runtime.
+// Nothing here imports Tauri or is desktop-only at runtime, and nothing here runs at import: this module loads
+// wherever floating.ts does, node tests included (where to DOWNLOAD the app is desktopDownloads.ts, which does not).
 
 // What the app tells the page about the webview (not about the app): whether this window skips the loopback gate
 // (loopbackPermission.ts). Optional since the SPA ships continuously and the app doesn't; undefined reads as "ask
@@ -94,7 +93,7 @@ export const readDesktopSetupReport = (detail: unknown): DesktopSetupReport | un
 export const DESKTOP_LAUNCHER_LINK = `intentic://launcher`;
 
 /* `frameless` above says the window arrived without a platform frame; these are the presses that work it. */
-export type DesktopWindowVerb = "ready" | "minimize" | "maximize" | "close" | "drag";
+export type DesktopWindowVerb = "ready" | "minimize" | "maximize" | "close" | "drag" | "raise";
 
 // The app's own screens (its setup card, its close question) are drawn in whatever light this page announced
 // last: it has no way to read this window's localStorage, so the scheme travels as a link, on load and on change.
@@ -111,6 +110,34 @@ export const workDesktopWindow = (verb: DesktopWindowVerb): void => {
         return;
     }
     openDesktopLink(`intentic://window?do=${verb}`);
+};
+
+/* WHAT A PAGE MAY DO TO ITS OWN WINDOW ONLY IF ITS SCRIPT OPENED IT: close it, raise it, resize it. A browser popup
+   qualifies; a window of the app never does (windows.rs builds it), so there each is a link answered on that window. */
+
+export const closeOwnWindow = (): void => {
+    if (desktopVersion() === undefined) {
+        window.close();
+        return;
+    }
+    workDesktopWindow(`close`);
+};
+
+export const raiseOwnWindow = (): void => {
+    if (desktopVersion() === undefined) {
+        window.focus();
+        return;
+    }
+    workDesktopWindow(`raise`);
+};
+
+// Grows the window to `width` CSS pixels at its current height; a window already that wide is left as it is.
+export const widenOwnWindow = (width: number): void => {
+    if (desktopVersion() === undefined) {
+        window.resizeTo(Math.round(width), window.outerHeight);
+        return;
+    }
+    openDesktopLink(`intentic://window?do=fit&width=${Math.round(width)}`);
 };
 
 /* The app reports window state to the page through the update-banner DOM event. */
@@ -233,45 +260,3 @@ export const openDesktopLink = (link: string): void => {
 // `useGoogleIdentity.renderButton` now refuses in this posture too, so the rule holds even if a caller forgets to
 // check.
 export const signInThroughBrowser = (): void => openDesktopLink(DESKTOP_SIGN_IN_LINK);
-
-// Download links, chosen by build (like scriptCommand.ts): deploy serves the intentic.dev vanity URLs (site worker
-// resolves to the newest release or a staged installer); dev serves the site's own dev server, staged via `pnpm
-// --filter @intentic/desktop-app stage:downloads`. File names here are the staged ones, unversioned, since a
-// working-tree build has no release version to state.
-const DESKTOP_FILES = {
-    windows: { vanity: `windows`, file: `Intentic-setup.exe` },
-    linuxAppImage: { vanity: `linux`, file: `Intentic.AppImage` },
-    linuxDeb: { vanity: `deb`, file: `Intentic.deb` },
-    linuxRpm: { vanity: `rpm`, file: `Intentic.rpm` },
-} as const;
-
-const downloadUrl = ({ vanity, file }: { vanity: string; file: string }): string =>
-    environment.production ? `https://intentic.dev/desktop/${vanity}` : `http://localhost:4321/desktop/${file}`;
-
-export const DESKTOP_DOWNLOADS = {
-    windows: downloadUrl(DESKTOP_FILES.windows),
-    linuxAppImage: downloadUrl(DESKTOP_FILES.linuxAppImage),
-    linuxDeb: downloadUrl(DESKTOP_FILES.linuxDeb),
-    linuxRpm: downloadUrl(DESKTOP_FILES.linuxRpm),
-} as const;
-
-// The one installer this machine can actually run, or undefined (macOS has no build yet, and a button to nothing
-// is worse than the command it'd replace). Reads `userAgentData.platform` or `navigator.platform` (same pair as
-// useOsPreference), `startsWith` rather than a `/win/` match since "Darwin" contains "win". Android is excluded by
-// hand: it reports "Linux armv8l" through both, and the AppImage isn't for it.
-export const desktopInstaller = (): { platform: "windows" | "linux"; label: string; href: string } | undefined => {
-    const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
-    if (/android/i.test(nav.userAgent)) {
-        return undefined;
-    }
-    const platform = (nav.userAgentData?.platform ?? nav.platform ?? ``).toLowerCase();
-    if (platform.startsWith(`win`)) {
-        return { platform: `windows`, label: `Windows`, href: DESKTOP_DOWNLOADS.windows };
-    }
-    // The AppImage runs across distributions without forcing a package-format choice here; deb/rpm stay on the
-    // downloads page.
-    if (platform.includes(`linux`)) {
-        return { platform: `linux`, label: `Linux`, href: DESKTOP_DOWNLOADS.linuxAppImage };
-    }
-    return undefined;
-};

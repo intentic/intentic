@@ -1,12 +1,20 @@
 import { expect, test, vi } from "vitest";
-import type { WebEnvironment } from "./environment";
+
+/* The page's window, as the module reads it: a browser's until a test marks it as the app's (`__INTENTIC_DESKTOP__`). */
+interface FakeWindow {
+    __INTENTIC_DESKTOP__?: unknown;
+    close?: () => void;
+    focus?: () => void;
+    resizeTo?: (width: number, height: number) => void;
+    outerHeight?: number;
+}
+
+const fakeWindow = (): FakeWindow => (globalThis as { window: FakeWindow }).window;
 
 /* The sync handoff's whole payload is two sender-chosen values the Rust side trusts only from the app's own window (setup_link.rs). */
 const load = async (): Promise<typeof import("./desktop")> => {
     vi.resetModules();
-    (globalThis as { window?: { env: WebEnvironment } }).window = {
-        env: { production: false, api: { url: `` }, auth: { googleClientId: `` }, analytics: { posthogKey: ``, posthogHost: `` }, afterSignOut: `` },
-    };
+    (globalThis as { window?: FakeWindow }).window = {};
     return import("./desktop");
 };
 
@@ -74,7 +82,54 @@ test("the scheme is announced only inside the app", async () => {
     // A browser has no app to tell.
     announceDesktopMode(`light`);
     expect(location.href).toBe(``);
-    (globalThis as { window: { __INTENTIC_DESKTOP__?: unknown } }).window.__INTENTIC_DESKTOP__ = { version: `1.0.0`, installId: `id`, update: null };
+    fakeWindow().__INTENTIC_DESKTOP__ = { version: `1.0.0`, installId: `id`, update: null };
     announceDesktopMode(`light`);
     expect(location.href).toBe(`intentic://window?do=mode&mode=light`);
+});
+
+/* A POPUP'S SCRIPT MAY CLOSE, RAISE AND RESIZE ITS OWN WINDOW; a window of the app is never a popup, so there each is a link. */
+test("a browser window is closed, raised and widened by the page itself", async () => {
+    const { closeOwnWindow, raiseOwnWindow, widenOwnWindow } = await load();
+    const location = { href: `` };
+    (globalThis as { location?: unknown }).location = location;
+    (globalThis as { document?: unknown }).document = { readyState: `complete` };
+    const own = fakeWindow();
+    own.close = vi.fn();
+    own.focus = vi.fn();
+    own.resizeTo = vi.fn();
+    own.outerHeight = 700;
+
+    closeOwnWindow();
+    raiseOwnWindow();
+    widenOwnWindow(1279.6);
+
+    expect(own.close).toHaveBeenCalledTimes(1);
+    expect(own.focus).toHaveBeenCalledTimes(1);
+    // Whole pixels at the height the window already has: only the width was asked for.
+    expect(own.resizeTo).toHaveBeenCalledWith(1280, 700);
+    expect(location.href).toBe(``);
+});
+
+test("a window of the app is closed, raised and widened by the app, one link each", async () => {
+    const { closeOwnWindow, raiseOwnWindow, widenOwnWindow } = await load();
+    const location = { href: `` };
+    (globalThis as { location?: unknown }).location = location;
+    (globalThis as { document?: unknown }).document = { readyState: `complete` };
+    const own = fakeWindow();
+    own.__INTENTIC_DESKTOP__ = { version: `1.0.0`, installId: `id`, update: null, frameless: true };
+    own.close = vi.fn();
+    own.focus = vi.fn();
+    own.resizeTo = vi.fn();
+
+    closeOwnWindow();
+    expect(location.href).toBe(`intentic://window?do=close`);
+    raiseOwnWindow();
+    expect(location.href).toBe(`intentic://window?do=raise`);
+    widenOwnWindow(1279.6);
+    expect(location.href).toBe(`intentic://window?do=fit&width=1280`);
+
+    // Nothing is asked of a window that would ignore it.
+    expect(own.close).not.toHaveBeenCalled();
+    expect(own.focus).not.toHaveBeenCalled();
+    expect(own.resizeTo).not.toHaveBeenCalled();
 });

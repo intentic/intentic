@@ -31,7 +31,8 @@ import CloudflareTokenField from "../capabilities/connect/CloudflareTokenField.v
 import { useCloudflareZones } from "../extensions/useCloudflareZones";
 import { sandboxIdFromToken } from "../sandbox/client/sandboxIdFromToken";
 import { useSandbox } from "../sandbox/client/useSandbox";
-import { desktopInstaller, desktopSetupLink, desktopVersion, openDesktopLink } from "../../app/environments/desktop";
+import { desktopSetupLink, desktopVersion, openDesktopLink } from "../../app/environments/desktop";
+import { desktopInstaller } from "../../app/environments/desktopDownloads";
 import { environment } from "../../app/environments/environment";
 import { bashCommand, psCommand, scriptSource } from "../../app/environments/scriptCommand";
 import { arrivingProfile } from "../../app/useProfile";

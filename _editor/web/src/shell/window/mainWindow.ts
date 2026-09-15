@@ -1,5 +1,6 @@
 import { getCurrentScope, onScopeDispose, watch } from "vue";
 import type { RouteLocationRaw, Router } from "vue-router";
+import { raiseOwnWindow } from "../../app/environments/desktop";
 import { floatingWindowPanel, floatsElsewhere } from "./floating";
 import { reloadOnHotUpdate } from "../../app/hotReload";
 import { uuid } from "../../lib/uuid";
@@ -191,7 +192,7 @@ export const useMainWindow = (show: (errand: MainWindowErrand) => void): void =>
             beat();
         } else if (note.kind === `errand` && note.to === id) {
             // Raised as well as filled, so the file is shown in a window the reader can see.
-            window.focus();
+            raiseOwnWindow();
             show(note.errand);
         }
     };
