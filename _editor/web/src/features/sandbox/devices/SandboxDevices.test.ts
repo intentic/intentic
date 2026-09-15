@@ -779,7 +779,7 @@ it(`names the loop, not a download, when only the running build is behind the in
         },
     ]);
     const text = el.textContent ?? ``;
-    expect(text).toContain(`serving agent 0.1.0 while 1.183.0 is installed there`);
+    expect(text).toContain(`Serving 0.1.0, 1.183.0 installed`);
     expect(text).not.toContain(`has been published`);
     expect(labels(el)).toContain(`Restart agent`);
     expect(text).not.toContain(`intentic-machine run --stop`);
@@ -796,12 +796,33 @@ it(`offers the update on a connected device whose agent needs nothing`, () => {
         report: { ...row.report!, agent: { running: true, pid: 4242, build: `1.183.0`, installed: `1.183.0` } },
     };
     const el = mount([current]);
-    expect(el.textContent ?? ``).toContain(`This is the newest agent this sandbox knows of.`);
+    expect(el.textContent ?? ``).toContain(`Newest agent this sandbox knows of.`);
     expect(labels(el)).toContain(`Update agent`);
     expect(labels(el)).toContain(`Restart agent`);
 });
 
-it(`offers the update even when this sandbox cannot say what is newest, and says why`, () => {
+// What the agent carries used to be a sentence under its name. It is three glyphs now, and the sentence is
+// the hover; the rest of what an update means lives on the button that does it.
+it(`names what the agent carries in glyphs, not in a sentence under its name`, () => {
+    const row = behind();
+    const el = mount([
+        {
+            ...row,
+            hostId: `host-1`,
+            online: true,
+            report: { ...row.report!, agent: { running: true, pid: 4242, build: `1.183.0`, installed: `1.183.0` } },
+        },
+    ]);
+    // The row's description sits next to its title, which is the one place a reader looks for what this is.
+    const title = [...el.querySelectorAll(`div`)].find((node) => node.textContent?.trim() === `Agent 1.183.0`);
+    const strip = title?.nextElementSibling;
+    expect([...(strip?.querySelectorAll(`span > span`) ?? [])].map((duty) => duty.textContent)).toEqual([`Folders`, `Ports`, `Commands`]);
+    // A word each, and a glyph each: the strip is not three bare labels.
+    expect(strip?.querySelectorAll(`svg`)).toHaveLength(3);
+    expect(el.textContent ?? ``).not.toContain(`every button below`);
+});
+
+it(`offers the update even when this sandbox cannot say what is newest, and admits it on the row`, () => {
     latest.value = undefined;
     const row = behind();
     const el = mount([
@@ -812,7 +833,7 @@ it(`offers the update even when this sandbox cannot say what is newest, and says
             report: { ...row.report!, agent: { running: true, pid: 4242, build: `1.183.0`, installed: `1.183.0` } },
         },
     ]);
-    expect(el.textContent ?? ``).toContain(`doesn't know which agent release is newest`);
+    expect(el.textContent ?? ``).toContain(`Newest release unknown.`);
     expect(labels(el)).toContain(`Update agent`);
 });
 
@@ -820,7 +841,7 @@ it(`offers the update even when this sandbox cannot say what is newest, and says
 it(`drops both verbs on a sync-only device and names the door it is missing`, () => {
     const row = behind();
     const el = mount([{ ...row, report: { ...row.report!, agent: { running: true, pid: 4242, build: `1.183.0`, installed: `1.183.0` } } }]);
-    expect(el.textContent ?? ``).toContain(`enrolled for syncing only`);
+    expect(el.textContent ?? ``).toContain(`Enrolled for syncing only.`);
     expect(labels(el)).not.toContain(`Restart agent`);
     expect(labels(el)).not.toContain(`Update agent`);
 });
@@ -1079,7 +1100,7 @@ it(`accuses a machine of nothing on a reading held since an earlier visit`, asyn
     const text = el.textContent ?? ``;
     expect(text).not.toContain(`Last heard from`);
     expect(text).not.toContain(`gone quiet`);
-    expect(text).not.toContain(`stopped making rounds`);
+    expect(text).not.toContain(`Loop stalled`);
 
     // The same reading handed over now is a machine that really has stopped answering, and says so.
     readAt.value = Date.now();

@@ -37,6 +37,10 @@ const panelOf = (overrides: Partial<Device> = {}, held: Partial<Report> = {}, la
 const said = (overrides: Partial<Device> = {}, held: Partial<Report> = {}, latest?: string): string =>
     (panelOf(overrides, held, latest)?.notes ?? []).map((note) => note.text).join(` `);
 
+// The long form the short lines were cut from: on hover, never on the page.
+const hints = (overrides: Partial<Device> = {}, held: Partial<Report> = {}, latest?: string): string =>
+    (panelOf(overrides, held, latest)?.notes ?? []).map((note) => note.hint ?? ``).join(` `);
+
 const verbs = (overrides: Partial<Device> = {}, held: Partial<Report> = {}, latest?: string): string[] =>
     (panelOf(overrides, held, latest)?.actions ?? []).map((action) => action.label);
 
@@ -71,17 +75,19 @@ test(`states the build the loop is serving, its pid, and that it is running`, ()
 
 // A settled agent still gets a line, or the two buttons beside it stand unexplained.
 test(`says the agent is the newest it knows of when it has nothing to ask for`, () => {
-    expect(said({}, {}, `1.2.0`)).toBe(`This is the newest agent this sandbox knows of.`);
+    expect(said({}, {}, `1.2.0`)).toBe(`Newest agent this sandbox knows of.`);
     expect(panelOf({}, {}, `1.2.0`)?.notes[0]?.tone).toBeUndefined();
+    expect(panelOf({}, {}, `1.2.0`)?.notes[0]?.icon).toBe(`check-circle`);
 });
 
-// The case that made the standing button necessary, said plainly rather than left as silence — and without
-// naming the button on a machine that doesn't get one.
+// The case that made the standing button necessary, said plainly rather than left as silence. The long form
+// is the hover, and its clause about the button is dropped on a machine that doesn't get one.
 test(`admits it cannot judge the build when this sandbox knows no release`, () => {
-    expect(said()).toContain(`doesn't know which agent release is newest`);
-    expect(said()).toContain(`Update fetches the newest there is`);
-    expect(said({ hostId: undefined, online: undefined })).toContain(`doesn't know which agent release is newest`);
-    expect(said({ hostId: undefined, online: undefined })).not.toContain(`Update fetches`);
+    expect(said()).toBe(`Newest release unknown.`);
+    expect(hints()).toContain(`doesn't know which agent release is newest`);
+    expect(hints()).toContain(`Update fetches the newest there is`);
+    expect(hints({ hostId: undefined, online: undefined })).toContain(`doesn't know which agent release is newest`);
+    expect(hints({ hostId: undefined, online: undefined })).not.toContain(`Update fetches`);
 });
 
 test(`names the published release, and what this device holds, when it is behind`, () => {
@@ -93,23 +99,23 @@ test(`names the published release, and what this device holds, when it is behind
 
 test(`says a stopped loop is why nothing reaches this device, and still offers the verbs`, () => {
     const stopped = { agent: { running: false, build: `1.2.0`, installed: `1.2.0` } };
-    expect(said({}, stopped, `1.2.0`)).toContain(`isn't running`);
+    expect(said({}, stopped, `1.2.0`)).toBe(`Loop stopped — nothing reaches its folders or ports.`);
     expect(panelOf({}, stopped, `1.2.0`)?.state).toEqual({ word: `stopped`, variant: `warning` });
     expect(verbs({}, stopped, `1.2.0`)).toEqual([`Update agent`, `Restart agent`]);
 });
 
 test(`distinguishes a loop that has stopped making rounds from one that has stopped`, () => {
     const stalled = { agent: { running: true, lastTickAt: NOW - 61_000, build: `1.2.0`, installed: `1.2.0` } };
-    expect(said({}, stalled, `1.2.0`)).toContain(`stopped making rounds`);
+    expect(said({}, stalled, `1.2.0`)).toBe(`Loop stalled — what is below may be out of date.`);
+    expect(hints({}, stalled, `1.2.0`)).toContain(`stopped making rounds`);
     expect(panelOf({}, stalled, `1.2.0`)?.state).toEqual({ word: `stalled`, variant: `warning` });
 });
 
 // A restart closes this one and a download would not, so it is its own sentence rather than "behind".
 test(`asks about the loop, not a download, when only the running build is behind the installed one`, () => {
     const skewed = { agent: { running: true, lastTickAt: NOW, build: `1.1.0`, installed: `1.2.0` } };
-    expect(said({}, skewed, `1.2.0`)).toBe(
-        `It is serving agent 1.1.0 while 1.2.0 is installed there: a loop keeps the build it started with until it restarts.`,
-    );
+    expect(said({}, skewed, `1.2.0`)).toBe(`Serving 1.1.0, 1.2.0 installed — a restart picks it up.`);
+    expect(hints({}, skewed, `1.2.0`)).toContain(`keeps the build it started with until it restarts`);
 });
 
 // Two different errands, both true: the file on disk was replaced and never picked up, and something newer
@@ -117,7 +123,7 @@ test(`asks about the loop, not a download, when only the running build is behind
 test(`says both when the loop is behind its own file and the file is behind the registry`, () => {
     const notes = panelOf({}, { agent: { running: true, lastTickAt: NOW, build: `1.1.0`, installed: `1.2.0` } }, `1.3.0`)?.notes ?? [];
     expect(notes.map((note) => note.tone)).toEqual([`warning`, `info`]);
-    expect(notes[0]?.text).toContain(`serving agent 1.1.0 while 1.2.0 is installed there`);
+    expect(notes[0]?.text).toBe(`Serving 1.1.0, 1.2.0 installed — a restart picks it up.`);
     expect(notes[1]?.text).toBe(`Agent 1.3.0 has been published; this device has 1.2.0.`);
 });
 
@@ -127,23 +133,25 @@ test(`says both when the loop is behind its own file and the file is behind the 
 test(`drops the verbs and names the missing door on a sync-only enrollment`, () => {
     const syncOnly = { hostId: undefined, online: undefined };
     expect(verbs(syncOnly)).toEqual([]);
-    expect(panelOf(syncOnly)?.blocked).toContain(`enrolled for syncing only`);
+    expect(panelOf(syncOnly)?.blocked?.text).toBe(`Enrolled for syncing only.`);
+    expect(panelOf(syncOnly)?.blocked?.hint).toContain(`connected as a device`);
     // The version is still worth stating: it is the fact somebody walked to the machine to check.
     expect(panelOf(syncOnly)?.version).toBe(`1.2.0`);
 });
 
 test(`drops the verbs on a connected device that is not answering`, () => {
     expect(verbs({ online: false })).toEqual([]);
-    expect(panelOf({ online: false })?.blocked).toContain(`isn't answering`);
+    expect(panelOf({ online: false })?.blocked?.text).toBe(`Not answering — nothing can run on it.`);
 });
 
-// Each shut door gets its own sentence: a switch nobody turned on is a different errand from a laptop asleep,
+// Each shut door gets its own line: a switch nobody turned on is a different errand from a laptop asleep,
 // and from a machine that has no agent to update at all.
 test(`names the shut door rather than calling every one of them silence`, () => {
     expect(verbs({ gap: `scope-off` })).toEqual([]);
-    expect(panelOf({ gap: `scope-off` })?.blocked).toContain(`"Run commands" on its capability card`);
+    expect(panelOf({ gap: `scope-off` })?.blocked?.text).toBe(`"Run commands" is off.`);
+    expect(panelOf({ gap: `scope-off` })?.blocked?.hint).toContain(`its capability card`);
     expect(verbs({ gap: `no-agent` })).toEqual([]);
-    expect(panelOf({ gap: `no-agent` })?.blocked).toContain(`no agent to update`);
+    expect(panelOf({ gap: `no-agent` })?.blocked?.text).toBe(`No agent to update.`);
 });
 
 // Nothing to state and nothing to press: a heading over an empty card.

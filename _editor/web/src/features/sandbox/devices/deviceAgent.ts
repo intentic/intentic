@@ -1,5 +1,5 @@
 import type { Device, DeviceAgentOp } from "@intentic/sandbox-contract";
-import type { StatusVariant } from "@intentic/ui";
+import type { IconName, StatusVariant } from "@intentic/ui";
 import type { NoticeTone } from "@intentic/ui/notice";
 import { agentBehind } from "./deviceFacts";
 import type { DeviceRow, RowAgent } from "./deviceRows";
@@ -23,7 +23,18 @@ export interface AgentNote {
     readonly text: string;
     /** Absent for a remark that is merely true; a tone makes it a notice with an errand behind it. */
     readonly tone?: NoticeTone;
+    /** The glyph for an untoned remark; a toned one wears its notice's own. */
+    readonly icon?: IconName;
+    /** The sentence the line was cut down from, on hover: detail nobody has to read to act. */
+    readonly hint?: string;
 }
+
+// What this one process carries, as the row's description: three glyphs, not a sentence about them.
+export const AGENT_DUTIES: readonly { readonly icon: IconName; readonly label: string }[] = [
+    { icon: `folder`, label: `Folders` },
+    { icon: `ports`, label: `Ports` },
+    { icon: `terminal`, label: `Commands` },
+];
 
 export interface AgentPanel {
     /** The build the loop serves, or the best-known version; absent when no door has named one. */
@@ -36,21 +47,22 @@ export interface AgentPanel {
     readonly notes: readonly AgentNote[];
     /** Empty on a machine no click could reach, where `blocked` says why instead. */
     readonly actions: readonly AgentAction[];
-    readonly blocked: string | undefined;
+    readonly blocked: AgentNote | undefined;
 }
 
 const RESTART: AgentAction = {
     op: `restart`,
     label: `Restart agent`,
-    hint: `Stop and start this device's agent loop. Nothing is downloaded, and the build already installed there is the one that comes up.`,
+    hint: `Stops and starts this device's agent loop. Nothing is downloaded — the build already installed there is the one that comes up.`,
 };
 
 // Worded for a current agent as much as a stale one, since it is offered on both: "the newest there is",
-// never "the newest we know of", because the device resolves that for itself when it downloads.
+// never "the newest we know of", because the device resolves that for itself when it downloads. This hint is
+// where the panel keeps what it no longer says out loud — what an update touches, and what it leaves alone.
 const UPGRADE: AgentAction = {
     op: `upgrade`,
     label: `Update agent`,
-    hint: `Fetch the newest agent onto this device, install it, and restart its loop. Safe on one that is already current, and its folders, pairings and mirrored ports are untouched either way.`,
+    hint: `Fetches the newest agent onto this device, installs it, and restarts its loop — the one process this sandbox reaches the device through. Safe on an agent that is already current; its folders, pairings and mirrored ports are untouched either way.`,
 };
 
 // Update leads: it is the errand people come to this group for, and it restarts the loop on its way past,
@@ -65,22 +77,32 @@ const ACTIONS: readonly AgentAction[] = [UPGRADE, RESTART];
 const reachable = (device: Device): boolean =>
     device.hostId !== undefined && device.online === true && (device.gap === undefined || device.gap === `unreported`);
 
-// Why this machine has no buttons, in terms of what would have to change. Each gap the concerns strip also
-// covers is named in one clause here rather than restated in full.
-const GAP_BLOCKED: Record<NonNullable<Device[`gap`]>, string> = {
-    offline: `This device isn't answering right now, so nothing can be run on it.`,
-    "scope-off": `Running anything on this device needs "Run commands" on its capability card, and that switch is off.`,
-    "no-agent": `This device has no agent to update. Its capability card hands out the command that installs one.`,
+// Why this machine has no buttons, as the shortest true clause plus the long form on hover. Each gap the
+// concerns strip also covers is named here in a few words rather than restated in full.
+const GAP_BLOCKED: Record<NonNullable<Device[`gap`]>, AgentNote> = {
+    offline: { text: `Not answering — nothing can run on it.`, icon: `moon` },
+    "scope-off": {
+        text: `"Run commands" is off.`,
+        icon: `lock`,
+        hint: `Running anything on this device needs "Run commands" on its capability card, and that switch is off.`,
+    },
+    "no-agent": { text: `No agent to update.`, icon: `lock`, hint: `Its capability card hands out the command that installs one.` },
     // Never reached: an unreported device keeps its buttons (see `reachable`). Present so the map stays total.
-    unreported: `This device hasn't reported yet, so nothing here knows what its agent is.`,
+    unreported: { text: `Hasn't reported yet.`, icon: `moon`, hint: `Nothing here knows what this device's agent is.` },
 };
 
-const blockedWhy = (device: Device): string | undefined => {
+const SYNC_ONLY: AgentNote = {
+    text: `Enrolled for syncing only.`,
+    icon: `lock`,
+    hint: `Updating its agent runs a command on it, which needs the machine connected as a device, not just syncing folders and ports.`,
+};
+
+const blockedWhy = (device: Device): AgentNote | undefined => {
     if (reachable(device)) {
         return undefined;
     }
     if (device.hostId === undefined) {
-        return `This device is enrolled for syncing only. Updating its agent runs a command on it, which needs it connected as a device.`;
+        return SYNC_ONLY;
     }
     return device.gap === undefined ? GAP_BLOCKED.offline : GAP_BLOCKED[device.gap];
 };
@@ -104,10 +126,14 @@ const loopNote = (agent: RowAgent | undefined): AgentNote | undefined => {
         return undefined;
     }
     if (!agent.running) {
-        return { text: `Its agent isn't running, so nothing is reaching this device's folders or ports.`, tone: `warning` };
+        return { text: `Loop stopped — nothing reaches its folders or ports.`, tone: `warning` };
     }
     return agent.stalled
-        ? { text: `Its agent is alive but has stopped making rounds, so the folders and ports below may be out of date.`, tone: `warning` }
+        ? {
+              text: `Loop stalled — what is below may be out of date.`,
+              tone: `warning`,
+              hint: `Its agent is alive but has stopped making rounds, so this sandbox's picture of its folders and ports is as old as the last one.`,
+          }
         : undefined;
 };
 
@@ -119,9 +145,10 @@ const skewNote = (skew: RowAgent[`staleBuild`]): AgentNote | undefined =>
         : {
               text:
                   skew.running === undefined
-                      ? `It is serving a build older than the ${skew.installed} installed there: a loop keeps the build it started with until it restarts.`
-                      : `It is serving agent ${skew.running} while ${skew.installed} is installed there: a loop keeps the build it started with until it restarts.`,
+                      ? `Serving a build older than the ${skew.installed} installed — a restart picks it up.`
+                      : `Serving ${skew.running}, ${skew.installed} installed — a restart picks it up.`,
               tone: `warning`,
+              hint: `A loop keeps the build it started with until it restarts, so replacing the file on disk changes nothing on its own.`,
           };
 
 // Judged on the installed build, since that is what an update downloads over; a device whose only problem is
@@ -131,18 +158,23 @@ const publishedNote = (row: DeviceRow, latest: string): AgentNote => {
     return {
         text: held === undefined ? `Agent ${latest} has been published.` : `Agent ${latest} has been published; this device has ${held}.`,
         tone: `info`,
+        hint: `Update agent fetches it, installs it, and restarts the loop on that device.`,
     };
 };
 
 // The quiet line that makes an always-present Update button legible: what that button is for on a device
-// asking for nothing. Never carries a tone — there is no errand in it. The clause naming the button is
-// dropped where there is no button, rather than pointing at a control this machine doesn't get.
+// asking for nothing. Never carries a tone — there is no errand in it. The hint's clause naming the button
+// is dropped where there is no button, rather than pointing at a control this machine doesn't get.
 const standingNote = (latest: string | undefined, offered: boolean): AgentNote => {
     if (latest !== undefined) {
-        return { text: `This is the newest agent this sandbox knows of.` };
+        return { text: `Newest agent this sandbox knows of.`, icon: `check-circle` };
     }
     const cannotTell = `This sandbox doesn't know which agent release is newest, so it can't tell you whether this one is behind.`;
-    return { text: offered ? `${cannotTell} Update fetches the newest there is.` : cannotTell };
+    return {
+        text: `Newest release unknown.`,
+        icon: `question-circle`,
+        hint: offered ? `${cannotTell} Update fetches the newest there is.` : cannotTell,
+    };
 };
 
 // One sentence per distinct errand, worst first; a stale loop and a published release can both be true at

@@ -1,9 +1,10 @@
 import { type HostSummary, type DeviceFlowLine, type DeviceReport, type DeviceSandboxFlow, hostRunningSandbox } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import { ORPCError } from "@orpc/server";
 import { afterEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
 import { enrolledFleet, type SyncEnrollmentRow } from "../platform/sync.js";
-import { devices, manageDeviceSandbox, mergeDevices, type PullResult, reportFrom, sandboxesFromTool } from "./device-reports.js";
+import { devices, manageDeviceSandbox, mergeDevices, type PullResult, reportFrom, runDeviceAgentFlow, sandboxesFromTool } from "./device-reports.js";
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
 // sampler (tmux, procfs) for a fact this file states in one line.
@@ -515,4 +516,63 @@ test("a removed runner loses its enrollment here, but only when the machine says
     await drain(manageDeviceSandbox(services, "rog", { op: "runner-remove", slug: "rig" }));
     expect(revoked).toEqual(["rig"]);
     expect(disconnected).toEqual(["rig"]);
+});
+
+// The agent's own two ops: both stop the process carrying the request, so the stream ending badly is the normal
+// ending, and only an answer the device's RPC layer actually sent is a failure worth printing.
+const agentServices = (said: () => AsyncGenerator<DeviceFlowLine>): Services =>
+    ({ hostHub: { client: () => ({ runAgentFlow: async () => said() }) } }) as unknown as Services;
+
+test("an update the device narrates all the way through keeps every frame it sent", async () => {
+    const lines = await drain(
+        runDeviceAgentFlow(
+            agentServices(async function* () {
+                yield { kind: "line", text: "Updating the agent on this device." };
+                yield { kind: "result", message: "The update ran on this device." };
+            }),
+            "rog",
+            { op: "upgrade" },
+        ),
+    );
+    expect(lines).toEqual([
+        { kind: "line", text: "Updating the agent on this device." },
+        { kind: "result", message: "The update ran on this device." },
+    ]);
+});
+
+// The transport dying with the loop it just stopped is this flow working. The RPC layer's own abort text
+// ("[AsyncIdQueue] Queue[..] was closed or aborted while waiting for pulling.") is nothing a reader can act on,
+// and a `result` frame would tell the view the device answered when it never did.
+test("a connection that dies with the restarted loop ends with one plain line and no result", async () => {
+    const lines = await drain(
+        runDeviceAgentFlow(
+            agentServices(async function* () {
+                yield { kind: "line", text: "90% of 82 MB" };
+                throw new Error("[AsyncIdQueue] Queue[14t] was closed or aborted while waiting for pulling.");
+            }),
+            "rog",
+            { op: "upgrade" },
+        ),
+    );
+    expect(lines).toEqual([
+        { kind: "line", text: "90% of 82 MB" },
+        { kind: "line", text: "Lost contact with rog — that is what restarting its agent does to this connection." },
+    ]);
+});
+
+// An agent too old to have this route answers through its RPC layer rather than dying, and that answer names
+// the one thing that fixes it.
+test("an answer the device's RPC layer sent comes through as the refusal it is", async () => {
+    const lines = await drain(
+        runDeviceAgentFlow(
+            agentServices(async function* () {
+                throw new ORPCError("NOT_FOUND", { message: "This device's agent has no such flow." });
+                // oxlint-disable-next-line no-unreachable -- the generator needs a yield to type as one
+                yield { kind: "line", text: "" };
+            }),
+            "rog",
+            { op: "upgrade" },
+        ),
+    );
+    expect(lines).toEqual([{ kind: "error", message: "This device's agent has no such flow. Run `intentic-machine upgrade` on that device." }]);
 });

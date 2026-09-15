@@ -21,7 +21,7 @@ import { computed, ref } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
 import DeviceRunners from "./DeviceRunners.vue";
 import { boardRoute } from "./deviceLinks";
-import { deviceAgentPanel } from "./deviceAgent";
+import { AGENT_DUTIES, deviceAgentPanel } from "./deviceAgent";
 import { type DeviceCardFix, deviceAttention } from "./deviceAttention";
 import { commandable, type DeviceRow, deviceState, deviceSwitches, deviceTone, fixable, manageable, pausable, selfGroup } from "./deviceRows";
 import { useDeviceOps } from "./deviceOps";
@@ -68,6 +68,16 @@ const concerns = computed(() => deviceAttention(row, { block: block.value, readA
 // The agent as its own object rather than a version printed under the name: what it serves, what it wants,
 // and the two verbs that change either. Undefined only on a machine with no version and no command door.
 const agent = computed(() => deviceAgentPanel(row, latest));
+
+// The panel's lines in reading order: what the agent wants, then why it has no buttons. One list, so the
+// two render as one column of short lines instead of two blocks that happen to sit together.
+const agentLines = computed(() => {
+    const panel = agent.value;
+    return panel === undefined ? [] : [...panel.notes, ...(panel.blocked === undefined ? [] : [panel.blocked])];
+});
+
+// The sentence the duty strip replaced, kept where a reader can still reach for it.
+const agentIs = computed(() => `Everything this sandbox does on ${device.value.label} goes through this one process.`);
 
 const cardRoute = (fix: DeviceCardFix): RouteLocationRaw => {
     const card = { name: `capabilities`, params: { card: fix.card } };
@@ -201,8 +211,13 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
         -->
         <RowGroup v-if="agent" label="Agent on this device">
             <Row icon="desktop" :title="agent.version === undefined ? `Agent` : `Agent ${agent.version}`">
+<!-- What the process carries, as three glyphs: the sentence it replaced is on hover, and the rest is on Update agent. -->
                 <template #description>
-                    The one process this sandbox reaches {{ device.label }} through — its folders, its ports, and every button below.
+                    <span v-tooltip.top="agentIs" class="flex w-fit flex-wrap items-center gap-x-3 gap-y-0.5">
+                        <span v-for="duty in AGENT_DUTIES" :key="duty.label" class="inline-flex items-center gap-1">
+                            <Icon :name="duty.icon" aria-hidden="true" />{{ duty.label }}
+                        </span>
+                    </span>
                 </template>
                 <template #meta>
                     <span v-for="fact in agent.facts" :key="fact" class="font-mono">{{ fact }}</span>
@@ -224,15 +239,15 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                 </template>
             </Row>
 
-            <!-- What this agent wants, or what has been published; the settled case still gets its one quiet line. -->
+<!-- What this agent wants, what has been published, and why the buttons are missing; the settled case still gets its one quiet line. -->
             <RowNote variant="block">
                 <div class="flex flex-col gap-2">
-                    <template v-for="note in agent.notes" :key="note.text">
-                        <Notice v-if="note.tone" :tone="note.tone">{{ note.text }}</Notice>
-                        <p v-else class="text-xs text-muted">{{ note.text }}</p>
+                    <template v-for="note in agentLines" :key="note.text">
+                        <Notice v-if="note.tone" v-tooltip.top="note.hint" :tone="note.tone">{{ note.text }}</Notice>
+                        <p v-else v-tooltip.top="note.hint" class="flex w-fit items-center gap-1.5 text-xs text-muted">
+                            <Icon v-if="note.icon" :name="note.icon" aria-hidden="true" class="shrink-0" />{{ note.text }}
+                        </p>
                     </template>
-                    <!-- Said where the buttons would have been, rather than leaving their absence to be guessed. -->
-                    <p v-if="agent.blocked" class="text-xs text-muted">{{ agent.blocked }}</p>
                 </div>
             </RowNote>
 
@@ -254,7 +269,7 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                         :lines="ops.agentLines.value"
                         :running="ops.agentBusy.value"
                         empty="Starting on that device…"
-                        note="Running on that device. It keeps going even if you leave this page, and it survives the connection dropping."
+                        note="Runs on that device, and keeps going if you leave this page or the connection drops."
                     />
                     <Notice v-if="ops.failure.value?.key === ops.agentKey.value" :of="ops.failure.value.notice" />
                     <p v-else-if="ops.outcome.value?.key === ops.agentKey.value" class="text-xs text-muted">{{ ops.outcome.value.message }}</p>

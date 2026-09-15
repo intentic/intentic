@@ -429,13 +429,16 @@ export async function* runDeviceAgentFlow(services: Services, id: string, input:
             yield line;
         }
     } catch (error) {
-        // Dying mid-flow reads as success here, not failure; a refusal the device answered with still passes through.
-        const message = error instanceof Error ? error.message : String(error);
-        yield { kind: "line", text: `Lost contact with ${id} while that ran, which is what restarting its agent does to this connection.` };
-        yield {
-            kind: "result",
-            message: `${message} — if the version below does not change in a few minutes, run \`intentic-machine upgrade\` on that device.`,
-        };
+        // An answer the device's own RPC layer sent — an agent too old to have this route, a call it refused — names
+        // something the reader can act on, so it travels as the refusal it is.
+        if (error instanceof ORPCError) {
+            yield { kind: "error", message: `${error.message} Run \`intentic-machine upgrade\` on that device.` };
+            return;
+        }
+        // Anything else is the transport dying with the process this flow just stopped, which is what working looks
+        // like here. No `result` frame: the view reads one as "the device answered", and the abort's own text belongs
+        // to the RPC layer, not to anyone reading this page.
+        yield { kind: "line", text: `Lost contact with ${id} — that is what restarting its agent does to this connection.` };
     } finally {
         // Clears the cache: the agent may be a different build now, and the version change is this flow's answer.
         pulled.delete(id);

@@ -56,10 +56,11 @@ const COMMAND_UNREACHED: Record<DeviceSyncSwitch, string> = {
 };
 
 // Update and restart both stop the resident process carrying the request, so the page can't claim an
-// outcome: it shows what was watched, then this, and the confirmation is the next poll's version.
+// outcome: it shows what was watched, then this, and the confirmation is the next poll's version. The
+// connection dropping isn't announced here — the log says it in the moment it happens.
 const AGENT_ASKED: Record<DeviceAgentOp, string> = {
-    upgrade: `Updating its agent. The connection to this device drops while its loop restarts — this page shows the new version when it comes back.`,
-    restart: `Restarting its agent. The connection to this device drops while that happens.`,
+    upgrade: `Updating. The new version shows here when its loop comes back.`,
+    restart: `Restarting. This page catches up when its loop comes back.`,
 };
 
 export interface ActPrompt {
