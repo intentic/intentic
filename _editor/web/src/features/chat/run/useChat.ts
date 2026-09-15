@@ -2,6 +2,7 @@ import type { AgentCommand, OauthAccount } from "@intentic/sandbox-contract";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { accountsLoaded, noTranslatorAccounts, providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "../accounts/providerAccounts";
 import {
+    acpProviders,
     type CatalogLoadState,
     endpointProviders,
     endpointsLoaded,
@@ -127,7 +128,9 @@ export const resetChat = (): void => {
     retireCommandReads();
     providerDefaultModel.value = perProvider(() => ``);
     providerModelsState.value = perProvider<CatalogLoadState>(() => `idle`);
-    // Which endpoints (the free trial included) this sandbox has is unknown until its own daemon answers.
+    // Which providers this sandbox adds (its ACP agents, its endpoints, the free trial among them) is unknown until its
+    // own daemon answers; both lists come from one read, so both wait on it.
+    acpProviders.value = [];
     endpointProviders.value = [];
     endpointsLoaded.value = false;
 /* The account card opens on the user's remembered pick, but ONLY where that pick is a provider it can connect. */

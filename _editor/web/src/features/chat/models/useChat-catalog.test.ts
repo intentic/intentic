@@ -12,11 +12,23 @@ vi.mock("../../sandbox/client/sandboxClient", () => ({
     sandboxJson: vi.fn(async () => ({})),
     sandboxRequestVia: vi.fn(),
     sandboxError: vi.fn(),
+    // Carries the status, like the real one: the provider read branches on it, and `instanceof` is only true for the
+    // class the module under test imported, which is this one.
+    SandboxHttpError: class extends Error {
+        constructor(
+            readonly status: number,
+            message: string,
+        ) {
+            super(message);
+        }
+    },
 }));
 
-const { sandboxRequest } = await import("../../sandbox/client/sandboxClient");
+const { sandboxJson, sandboxRequest, SandboxHttpError } = await import("../../sandbox/client/sandboxClient");
 const sandboxRequestMock = vi.mocked(sandboxRequest);
-const { loadProviderModels } = await import("./useChat-catalog");
+const sandboxJsonMock = vi.mocked(sandboxJson);
+const { loadRunnableProviders, loadProviderModels } = await import("./useChat-catalog");
+const { acpProviders, endpointProviders, endpointsLoaded } = await import("../accounts/providerCatalog");
 const { setConversations } = await import("../tabs/useChat-tabs");
 const { Conversation } = await import("../session/conversation");
 
@@ -39,6 +51,72 @@ const chatOn = (provider: "gemini" | "claude", model: string): InstanceType<type
 
 beforeEach(() => {
     sandboxRequestMock.mockReset();
+    sandboxJsonMock.mockReset();
+    endpointsLoaded.value = false;
+    acpProviders.value = [];
+    endpointProviders.value = [];
+});
+
+// The daemon's `/providers` answer, and the trial allowance read that rides on the same load.
+const answers = (providers: unknown): void => {
+    sandboxJsonMock.mockImplementation(async (path: string) =>
+        path === `/providers` ? providers : { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` },
+    );
+};
+
+const refuses = (status: number): void => {
+    sandboxJsonMock.mockImplementation(async (path: string) => {
+        if (path === `/providers`) {
+            throw new SandboxHttpError(status, `refused`);
+        }
+        return { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
+    });
+};
+
+test(`takes the providers this box adds from the daemon's own answer`, async () => {
+    serves([OPUS]);
+    answers({ agents: [{ id: `goose`, label: `Goose` }], endpoints: [{ id: `endpoint/trial`, label: `Free trial`, kind: `endpoint` }] });
+
+    await loadRunnableProviders();
+
+    expect(acpProviders.value).toEqual([{ id: `goose`, label: `Goose` }]);
+    expect(endpointProviders.value).toEqual([{ id: `endpoint/trial`, label: `Free trial`, kind: `endpoint` }]);
+    expect(endpointsLoaded.value).toBe(true);
+});
+
+// The bug this guards: an invited member whose tier can drive turns but not read the box's connections was left with
+// "Checking your AI accounts…" over the composer for as long as the tab stayed open, since the gate waits on this half.
+test(`a refused or unserved read is an answer, so the account gate stops waiting`, async () => {
+    for (const status of [403, 404]) {
+        endpointsLoaded.value = false;
+        refuses(status);
+
+        await loadRunnableProviders();
+
+        expect(endpointProviders.value, `${status}`).toEqual([]);
+        expect(endpointsLoaded.value, `${status}`).toBe(true);
+    }
+});
+
+test(`a daemon that may yet answer leaves the half unknown for the next reachable load`, async () => {
+    refuses(503);
+    await loadRunnableProviders();
+    expect(endpointsLoaded.value).toBe(false);
+
+    sandboxJsonMock.mockRejectedValue(new Error(`Failed to fetch`));
+    await loadRunnableProviders();
+    expect(endpointsLoaded.value).toBe(false);
+});
+
+// A build whose daemon answers a shape it cannot read is in the same position as one that was refused: retrying reads
+// the same body again, and the composer would wait on it forever.
+test(`an unreadable answer leaves the lists alone and still resolves the gate`, async () => {
+    answers({ capabilities: [{ id: `goose`, kind: `agent`, config: {} }] });
+
+    await loadRunnableProviders();
+
+    expect(acpProviders.value).toEqual([]);
+    expect(endpointsLoaded.value).toBe(true);
 });
 
 test(`moves an open chat off a model the catalog stopped offering, and puts it back when the next read lists it`, async () => {

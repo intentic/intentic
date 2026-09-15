@@ -2,11 +2,10 @@ import {
     type AgentCommand,
     type AgentProvider,
     endpointIdOf,
-    endpointProvider,
     isTrialProvider,
     type Model,
     NATIVE_PROVIDERS,
-    TRIAL_LABEL,
+    RunnableProvidersSchema,
     type TrialStatusResponse,
 } from "@intentic/sandbox-contract";
 import { watch } from "vue";
@@ -23,7 +22,7 @@ import {
 } from "../accounts/providerCatalog";
 import { active, conversations } from "../tabs/useChat-tabs";
 import { withConcurrency } from "../../../lib/concurrency";
-import { sandboxJson, sandboxRequest } from "../../sandbox/client/sandboxClient";
+import { SandboxHttpError, sandboxJson, sandboxRequest } from "../../sandbox/client/sandboxClient";
 
 // A read whose failure is not news: apply what the daemon sent, and on any failure leave the ref holding its last
 // value. Each caller is an annotation on a panel with its own reason to render; connection state is reported
@@ -173,38 +172,37 @@ watch(
     },
 );
 
-// Two capability kinds mint providers: `agent` (ACP agents; the row is the provider itself) and `endpoint` (model
-// APIs with their own catalog, loaded right after). The `endpoint/` id prefix marks the full Claude Code loop
-// (capabilitiesOf).
-export const loadCapabilityProviders = async (): Promise<void> => {
-    let entries: { id: string; kind: string; config: Record<string, unknown> }[];
+// The providers this sandbox adds to the fixed native list: ACP agents (the row is the provider itself) and model
+// endpoints (their own catalog, loaded right after). Read from /providers, not /capabilities: which providers a chat
+// may run on is every member's read, while what this box connects to is the operator's alone.
+export const loadRunnableProviders = async (): Promise<void> => {
+    let answer: unknown;
     try {
-        const body = (await sandboxJson(`/capabilities`)) as { capabilities?: { id: string; kind: string; config: Record<string, unknown> }[] };
-        entries = body.capabilities ?? [];
-    } catch {
-        // Leave the last lists; the picker simply misses new providers until the next reachable load.
+        answer = await sandboxJson(`/providers`);
+    } catch (error) {
+        // Only a read that may yet succeed is worth waiting on. 403 (this member's tier doesn't reach it) and 404 (a
+        // daemon that doesn't serve it) answer the same way every time, so they leave the half known and empty rather
+        // than holding a spinner over every gated surface for as long as the tab is open. A 5xx or an unreachable
+        // daemon leaves it unknown, and the next reachable seam asks again.
+        if (error instanceof SandboxHttpError && (error.status === 403 || error.status === 404)) {
+            await loadTrialStatus();
+            endpointsLoaded.value = true;
+        }
         return;
     }
-    acpProviders.value = entries
-        .filter((entry) => entry.kind === `agent`)
-        .map((entry) => ({ id: entry.id, label: typeof entry.config[`name`] === `string` ? (entry.config[`name`] as string) : entry.id }));
-    // Labelled by the capability's own name, except the daemon-provisioned trial, which uses TRIAL_LABEL.
-    endpointProviders.value = entries
-        .filter((entry) => entry.kind === `endpoint` || entry.kind === `localmodel`)
-        .map((entry) => {
-            const id = endpointProvider(entry.id);
-            // Kind is kept: it's the only way to tell a local model from a remote server once both are `endpoint/<id>`.
-            return {
-                id,
-                label: isTrialProvider(id) ? TRIAL_LABEL : entry.id,
-                kind: entry.kind === `localmodel` ? (`localmodel` as const) : (`endpoint` as const),
-            };
-        });
-    // Endpoint catalogs load on the same seam as native ones, not via loadAllProviderModels (fixed list).
-    await Promise.all(endpointProviders.value.map((endpoint) => loadProviderModels(endpoint.id)));
+    // Parsed, not cast: a body this build can't read is an answer too, and one more retry won't make it readable, so
+    // the lists keep what they had and the gate still stops waiting.
+    const listing = RunnableProvidersSchema.safeParse(answer);
+    if (listing.success) {
+        acpProviders.value = listing.data.agents;
+        // Ids arrive already prefixed `endpoint/`, and `kind` rides along: it's the only way to tell a local model from
+        // a remote server once both are `endpoint/<id>`.
+        endpointProviders.value = listing.data.endpoints;
+        // Endpoint catalogs load on the same seam as native ones, not via loadAllProviderModels (fixed list).
+        await Promise.all(listing.data.endpoints.map((endpoint) => loadProviderModels(endpoint.id)));
+    }
     // Read last: catalogs must land first, or a chat moved onto the trial keeps an empty model id forever.
     await loadTrialStatus();
-    // Set only once capabilities and the trial allowance are both known; skipped on failure so the seam retries.
     endpointsLoaded.value = true;
 };
 

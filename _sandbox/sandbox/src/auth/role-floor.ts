@@ -43,6 +43,10 @@ const NAME_FLOORS: Readonly<Record<string, MemberRole>> = {
     "agent.steer": "collaborator",
     "agent.stop": "collaborator",
     "agent.rewind": "collaborator",
+    // Which card a first message belongs to: a read shaped as a POST because it costs one model call, which the tier
+    // about to spend a whole turn may certainly spend. Refused, every new chat a collaborator opens reports that the
+    // reading could not be made in time, which is not what happened.
+    "personas.route": "collaborator",
     // Resuming is starting the same turn again (a spent allowance, an outage) with everything it originally carried;
     // without it a collaborator-driven automation gets stuck on the first refusal.
     // Auto-land is deliberately not here: arming it is a landing decision, and a collaborator's landings are only
@@ -76,6 +80,9 @@ const PATH_FLOORS: Readonly<Record<string, MemberRole>> = {
     "/system/ws-ticket": "collaborator",
     // Desktop pairing: below maintainer is capped to port-mirror, so collaborators can mint a preview tunnel.
     "/system/sync/pair": "collaborator",
+    // Dictating a message is writing one: the words never leave the box, and the tier that arms the model on
+    // /speech/status (a viewer read) has to be able to use it.
+    "/speech/transcribe": "collaborator",
     // Giving up one's own grant is reachable by every tier; the handler removes only the verified caller.
     "/members/self": "viewer",
     // One's own passkeys are identity, not power, like staying signed in; the policy and recovery routes keep the

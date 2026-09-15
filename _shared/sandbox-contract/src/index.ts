@@ -71,7 +71,7 @@ export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";
 export { publicContract } from "./contracts/public.contract.js";
 export { prepushContract } from "./contracts/prepush.contract.js";
-export { providersContract } from "./contracts/providers.contract.js";
+export { providersContract, type RunnableProviders, RunnableProvidersSchema } from "./contracts/providers.contract.js";
 export { pushContract } from "./contracts/push.contract.js";
 export { safetyContract } from "./contracts/safety.contract.js";
 export { secretsContract } from "./contracts/secrets.contract.js";

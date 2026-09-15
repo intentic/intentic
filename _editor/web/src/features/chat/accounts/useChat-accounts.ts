@@ -17,7 +17,7 @@ import { endpointProviders, trialStatus } from "./providerCatalog";
 import { turnDefaults } from "../run/turnDefaults";
 import { accessKnown, providerReady, providerReadyOn } from "../session/access";
 import { conversations } from "../tabs/useChat-tabs";
-import { loadAllProviderModels, loadCapabilityProviders, loadProviderCommands, readOrKeep } from "../models/useChat-catalog";
+import { loadAllProviderModels, loadRunnableProviders, loadProviderCommands, readOrKeep } from "../models/useChat-catalog";
 import { sandboxJson, sandboxRequest } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 
@@ -199,7 +199,7 @@ export const loadAccountStatus = async (): Promise<void> => {
         // Model lists are daemon-owned too, load them on the same reachable seam so the pickers are ready.
         loadAllProviderModels(),
         // Installed ACP agents and model endpoints are providers too, surface them on the same seam.
-        loadCapabilityProviders(),
+        loadRunnableProviders(),
         // Claude only, for a populated `/` popover on open; other providers load via ensureProviderCommands.
         loadProviderCommands(`claude`),
     ]);

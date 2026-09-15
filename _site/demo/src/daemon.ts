@@ -358,6 +358,9 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/translator/accounts`, () => json(DEMO_TRANSLATOR_ACCOUNTS)],
     // An unconnected provider answers empty, matching the real daemon's behavior.
     [`GET`, `/providers/{provider}/models`, ({ param }) => json(DEMO_CATALOGS[param(`provider`)] ?? { models: [], default: `` })],
+    // The recorded workspace adds no ACP agent and no endpoint of its own, but the composer's gate waits on this read
+    // as much as on the accounts above it.
+    [`GET`, `/providers`, () => json({ agents: [], endpoints: [] })],
 
     [`GET`, `/settings`, () => json(DEMO_SETTINGS)],
     [`GET`, `/settings/savings`, () => json(DEMO_SAVINGS)],

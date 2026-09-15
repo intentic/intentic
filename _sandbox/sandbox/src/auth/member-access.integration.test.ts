@@ -15,6 +15,9 @@ const appAs = (role: MemberRole): Hono<AppEnv> =>
     createApp(
         services({
             auth: { authorize: async () => proven(`member@example.com`, role), authorizeOwner: rejectForbidden },
+            // Admission is the whole question here, but a row that reaches its handler runs it: stubbed so the dictation
+            // row answers instead of reporting an unstubbed service.
+            speech: { transcribe: async () => `spoken`, status: async () => ({ provisioned: true, model: `ready` }) },
         }),
     );
 
@@ -99,11 +102,19 @@ const SURFACE: readonly { readonly does: string; readonly method: string; readon
     // Watching. All of it is reading, POST or not.
     { does: `list the conversations`, method: `GET`, url: `/agents`, needs: `viewer` },
     { does: `read a file`, method: `GET`, url: `/workspace/file?path=README.md`, needs: `viewer` },
+    // Which providers a chat can be addressed to, the read every composer waits on before it will claim anything about
+    // what this box can send with. Deliberately not the same read as "what this box can reach", below.
+    { does: `see the providers a chat can run on`, method: `GET`, url: `/providers`, needs: `viewer` },
     { does: `watch a live turn`, method: `POST`, url: `/agent/attach`, needs: `viewer` },
     { does: `appear on the roster`, method: `POST`, url: `/system/presence`, needs: `viewer` },
     { does: `give up their own access`, method: `DELETE`, url: `/members/self`, needs: `viewer` },
     // Driving agents: the collaborator's whole grant.
     { does: `start a turn`, method: `POST`, url: `/agent`, needs: `collaborator` },
+    // Part of sending the first message, and priced like one: a POST because it costs a model call, not because it
+    // changes anything.
+    { does: `have a first message read for a persona`, method: `POST`, url: `/personas/route`, needs: `collaborator` },
+    // Dictating one. The status read beside it is a viewer's, so refusing this tier would arm a model it may not use.
+    { does: `speak a message instead of typing it`, method: `POST`, url: `/speech/transcribe`, needs: `collaborator` },
     { does: `steer a running turn`, method: `POST`, url: `/agent/steer`, needs: `collaborator` },
     { does: `rename a conversation`, method: `POST`, url: `/agents/abc/rename`, needs: `collaborator` },
     { does: `ask for a landing`, method: `POST`, url: `/agents/abc/request-land`, needs: `collaborator` },
