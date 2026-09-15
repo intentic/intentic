@@ -1,5 +1,8 @@
 ---
-/* Temple figure shows subscription, fleet, and automation. */
+/* Three panels, one ground line and one stone grid: what you bring, the agents who carry it, the thing that stands.
+   Material and labour are drawn as different things on purpose — a stone is what ends up in the building, a mark on a
+   head is the model doing the lifting, and neither can be swapped for the other without the picture saying something
+   that is not true. */
 import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
 import { landingContent } from "@intentic/site-content/landing";
 import { templeScene, type TempleControl } from "@intentic/site-content/temple";
@@ -26,11 +29,24 @@ const course = (cx: number, n: number, row: number): Stone[] => {
     return Array.from({ length: n }, (_, i) => ({ x: x0 + i * PITCH.x, y }));
 };
 
-/* Quarry stones represent the plan accounts. */
+/** Two decimals: these are written into attributes verbatim. */
+const n = (v: number): number => Math.round(v * 100) / 100;
+
+/* Quarry stones are what the reader brings. Inscriptions are 24×24 and stroked, never filled: a stone is cut into. */
+const INSCRIPTIONS = {
+    prompt: "M6 8.5 11 12 6 15.5M13 15.5h5.5",
+    notes: "M4.5 7.5h15M4.5 12h15M4.5 16.5h9",
+    file: "M6.5 4h8l3.5 3.5V20h-11.5zM14.5 4v3.5h3.5",
+    code: "M10.5 5.5c-2.2 0-2.6 1.2-2.6 3.2s-.6 2.8-2.4 3.3c1.8.5 2.4 1.3 2.4 3.3s.4 3.2 2.6 3.2M13.5 5.5c2.2 0 2.6 1.2 2.6 3.2s.6 2.8 2.4 3.3c-1.8.5-2.4 1.3-2.4 3.3s-.4 3.2-2.6 3.2",
+    data: "M4.5 5.5h15v13h-15zM4.5 12h15M12 5.5v13",
+} as const;
+
 const quarryCx = PANEL.quarry / 2;
 const quarryStones = [...course(quarryCx, 4, 0), ...course(quarryCx, 3, 1), ...course(quarryCx, 1, 2)];
-/* Quarry marks follow the cost band's account order. */
-const quarried = landingContent.economics.accounts.map((account, index) => ({ ...quarryStones[index]!, logo: account.logo, name: account.name }));
+/* Read in laying order, four then three then one, so the apex is the prompt: the last thing you put on the pile is
+   the thing you actually asked for. It repeats rather than runs out, so a course resized here leaves no blank stone. */
+const PILE = ["file", "data", "notes", "file", "code", "notes", "data", "prompt"] as const satisfies readonly (keyof typeof INSCRIPTIONS)[];
+const quarried = quarryStones.map((stone, index) => ({ ...stone, cut: INSCRIPTIONS[PILE[index % PILE.length]!] }));
 
 /* Temple stones form a three-tier platform and towers. */
 const templeCx = PANEL.temple / 2;
@@ -68,15 +84,39 @@ const laid = [...templeStones]
 const FINIAL = { size: 52, foot: 44 };
 const summitY = Math.min(...laid.map((stone) => stone.y));
 
-/* Reduced motion leaves the crew spread across its resting positions. */
-const crew = [
-    { from: -30, to: 450, rest: 45, delay: 0, load: true },
-    { from: -30, to: 450, rest: 140, delay: 2.4, load: true },
-    { from: -30, to: 450, rest: 300, delay: 4.8, load: true },
-    { from: -30, to: 450, rest: 400, delay: 7.2, load: true },
-    { from: 450, to: -30, rest: 100, delay: 1.2, load: false },
-    { from: 450, to: -30, rest: 350, delay: 6, load: false },
-];
+/* Every figure at work is an agent, and the mark on its head is the model behind it. The roster IS the cost band's
+   account list, so the drawing can never wear a provider the page does not sell, and a provider added there walks onto
+   the causeway without anyone posing it. First of the list cuts, last sets, the rest carry. */
+const roster = landingContent.economics.accounts;
+const cutter = roster[0]!;
+const setter = roster[roster.length - 1]!;
+const carriers = roster.slice(1, -1);
+
+/* One walk crosses the panel; the CSS reads the duration off the figure so these delays cannot drift from it. */
+const WALK = { on: -30, off: 450, span: 9.6, from: 30, to: 396 };
+/* The stretch of causeway the terrace takes up. Resting places step over it: reduced motion freezes the crew where
+   they stand, and a walker whose resting place is the middle of the panel stands inside you. */
+const TERRACE = { from: 168, to: 252 };
+const room = WALK.to - WALK.from - (TERRACE.to - TERRACE.from);
+const crew = carriers.map((account, index) => {
+    /* Two in three walk loaded; the third is going back empty for the next stone. */
+    const load = index % 3 !== 2;
+    const place = WALK.from + (index * room) / Math.max(carriers.length - 1, 1);
+    return {
+        logo: account.logo,
+        load,
+        from: load ? WALK.on : WALK.off,
+        to: load ? WALK.off : WALK.on,
+        /* Spread by roster order rather than by direction, so no two figures share a resting place either. */
+        rest: n(place < TERRACE.from ? place : place + (TERRACE.to - TERRACE.from)),
+        delay: n((index * WALK.span) / carriers.length),
+    };
+});
+
+/* A head with a mark struck into it needs the room: 4 is a dot, and a brand path inside one is a smudge. It sits
+   higher than a plain head by the difference, so the neck below it is the length it always was. */
+const HEAD = { cy: -40.5, r: 6.5, box: 10 };
+const MARK_AT = `translate(${-HEAD.box / 2} ${HEAD.cy - HEAD.box / 2}) scale(${n(HEAD.box / 24)})`;
 
 const CONTROL_ICONS: Record<TempleControl["icon"], string> = {
     // Controls describe what gets built and in what order.
@@ -90,7 +130,7 @@ const glyph = (paths: string) =>
 ---
 
 {/* Screen readers receive the temple's summary label. */}
-<figure class="tp" role="img" aria-label={scene.label}>
+<figure class="tp" role="img" aria-label={scene.label} style={`--tp-walk:${WALK.span}s`}>
     {/* Shared paint servers keep stone surfaces consistent across panels. */}
     <svg class="tp-defs" width="0" height="0" aria-hidden="true" focusable="false">
         <defs>
@@ -118,13 +158,17 @@ const glyph = (paths: string) =>
                 <path class="tp-rock" d="M4 300V140h44v34h48v34h52v40h56v52z" />
                 <path class="tp-seam" d="M48 174v126M96 208v92M148 248v52" />
 
-                {/* The cutter is the only figure beside an uncut stone. */}
+                {/* The cutter is the only figure beside an uncut stone: it shapes what you brought before anyone carries it. */}
                 <g class="tp-fig" transform={`translate(226 ${GROUND})`}>
-                    <circle cx="0" cy="-38" r="4" />
+                    <circle class="tp-head" cx="0" cy={HEAD.cy} r={HEAD.r} />
+                    <g class="tp-brand" transform={MARK_AT}>
+                        <path d={PROVIDER_BRAND_PATHS[cutter.logo]} fill-rule={providerFillRule(cutter.logo)} />
+                    </g>
                     <path d="M0-34v14" />
                     <path d="M0-31-9-37M0-31 6-24" />
+                    {/* Clear of the head, which is wider than a plain one: a mallet resting against the face reads as a wound. */}
                     <g class="tp-mallet">
-                        <rect class="tp-load" x="-18" y="-43" width="11" height="8" rx="1" />
+                        <rect class="tp-load" x="-21" y="-43" width="11" height="8" rx="1" />
                     </g>
                     <path d="M0-20-6 0M0-20 6 0" />
                 </g>
@@ -134,9 +178,7 @@ const glyph = (paths: string) =>
                         quarried.map((stone) => (
                             <g>
                                 <rect class="tp-stone" x={stone.x} y={stone.y} width={STONE.w} height={STONE.h} rx="1.5" />
-                                <g class="tp-mark" transform={`translate(${stone.x + 12} ${stone.y + 3}) scale(0.583)`}>
-                                    <path d={PROVIDER_BRAND_PATHS[stone.logo]} fill-rule={providerFillRule(stone.logo)} />
-                                </g>
+                                <path class="tp-cut" d={stone.cut} transform={`translate(${stone.x + 12} ${stone.y + 3}) scale(0.583)`} />
                             </g>
                         ))
                     }
@@ -166,6 +208,7 @@ const glyph = (paths: string) =>
                     <path d="M336 186h48M336 214h48M336 244h48M336 272h48" />
                     <path d="M336 272 384 244M336 214 384 186" />
                     <rect class="tp-load" x="348" y="176" width="24" height="9" rx="1.5" />
+                    <path class="tp-load-rule" d="M353 179.3h14M353 182.1h9" />
                 </g>
 
                 <g class="tp-crew">
@@ -177,10 +220,21 @@ const glyph = (paths: string) =>
                             >
                                 {/* Carrier keeps the stone below the head so the silhouette reads as a person. */}
                                 <g class="tp-fig" transform={`translate(0 ${GROUND})`}>
-                                    <circle cx="0" cy="-38" r="4" />
+                                    <circle class="tp-head" cx="0" cy={HEAD.cy} r={HEAD.r} />
+                                    <g class="tp-brand" transform={MARK_AT}>
+                                        <path d={PROVIDER_BRAND_PATHS[worker.logo]} fill-rule={providerFillRule(worker.logo)} />
+                                    </g>
                                     <path d="M0-34v14" />
                                     {worker.load ? <path d="M0-31-8-25M0-31 8-25" /> : <path d="M0-31-5-22M0-31 5-22" />}
-                                    {worker.load && <rect class="tp-load" x="-10" y="-28" width="20" height="9" rx="1.5" />}
+                                    {
+                                        worker.load && (
+                                            <Fragment>
+                                                <rect class="tp-load" x="-10" y="-28" width="20" height="9" rx="1.5" />
+                                                {/* Two rules on the load: what is being carried is the inscribed stone, not a crate. */}
+                                                <path class="tp-load-rule" d="M-6-25.2h12M-6-22.4h7.5" />
+                                            </Fragment>
+                                        )
+                                    }
                                     <g class="tp-legs tp-legs-a"><path d="M0-20-6 0M0-20 6 0" /></g>
                                     <g class="tp-legs tp-legs-b"><path d="M0-20-2 0M0-20 5 0" /></g>
                                 </g>
@@ -193,8 +247,9 @@ const glyph = (paths: string) =>
                 <g class="tp-you" transform={`translate(${PANEL.site / 2} ${GROUND + 16})`}>
                     <ellipse class="tp-lantern" cx="0" cy="-30" rx="86" ry="62" fill="url(#tp-halo)" />
                     <path class="tp-dais" d="M-30 0h60v7h-60zM-38 7h76v8h-76z" />
+                    {/* Your head matches the crew's in size and stays unfilled: the one figure in the yard wearing no mark. */}
                     <g class="tp-fig tp-fig-you">
-                        <circle cx="0" cy="-48" r="5.6" />
+                        <circle cx="0" cy="-49" r={HEAD.r} />
                         <path d="M0-42v18" />
                         <path d="M0-38 15-45" />
                         <path d="M0-35-12-30" />
@@ -237,10 +292,14 @@ const glyph = (paths: string) =>
                 <g transform={`translate(44 ${GROUND})`}>
                     <g class="tp-setter">
                         <g class="tp-fig">
-                            <circle cx="0" cy="-38" r="4" />
+                            <circle class="tp-head" cx="0" cy={HEAD.cy} r={HEAD.r} />
+                            <g class="tp-brand" transform={MARK_AT}>
+                                <path d={PROVIDER_BRAND_PATHS[setter.logo]} fill-rule={providerFillRule(setter.logo)} />
+                            </g>
                             <path d="M0-34v14" />
                             <path d="M0-31-8-25M0-31 8-25" />
                             <rect class="tp-load" x="-10" y="-28" width="20" height="9" rx="1.5" />
+                            <path class="tp-load-rule" d="M-6-25.2h12M-6-22.4h7.5" />
                             <path d="M0-20-6 0M0-20 6 0" />
                         </g>
                     </g>
@@ -278,10 +337,10 @@ const glyph = (paths: string) =>
 
 <style>
     /* Canvas layout owns the figure bounds. */
+    /* `--tp-walk` is set on the element from WALK.span, not here: the crew's delays are computed against it. */
     .tp {
         container-type: inline-size;
         --tp-cycle: 11s;
-        --tp-walk: 9.6s;
         margin: 0;
     }
     .tp-defs {
@@ -362,9 +421,14 @@ const glyph = (paths: string) =>
         stroke: var(--color-line-strong);
         stroke-width: 1;
     }
-    .tp-mark {
-        fill: var(--color-gold);
-        opacity: 0.85;
+    /* An inscription is cut into the face, so it is stroked; a filled mark would sit on the stone like a sticker. */
+    .tp-cut {
+        fill: none;
+        stroke: var(--color-gold);
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        opacity: 0.72;
     }
 
     /* Figures use one rounded stroke and no fill. */
@@ -379,6 +443,23 @@ const glyph = (paths: string) =>
         fill: url(#tp-face);
         stroke: var(--color-gold);
         stroke-width: 1.4;
+    }
+    .tp-load-rule {
+        fill: none;
+        stroke: var(--color-gold);
+        stroke-width: 1;
+        stroke-linecap: round;
+        opacity: 0.6;
+    }
+    /* A head is a surface here and not an outline, because the mark of the model behind the agent is struck into it. */
+    .tp-head {
+        fill: url(#tp-face);
+    }
+    /* Under full gold a dense mark (Claude's burst) fills the head and reads as a lamp rather than a badge. */
+    .tp-brand {
+        fill: var(--color-gold);
+        stroke: none;
+        opacity: 0.88;
     }
     .tp-walker-back .tp-fig {
         opacity: 0.45;

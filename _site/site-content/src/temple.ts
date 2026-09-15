@@ -4,8 +4,12 @@
 //
 // NO MECHANISMS HERE. Branches, worktrees, terminals, sandboxes and diffs are all true and all named elsewhere on the
 // page; this band is the one telling of the shape of the deal, and a reader meeting the product for the first time
-// cannot hold a noun they have not been given. `TempleFigure.astro` holds the drawing; the provider marks on the
-// quarry stones are read from the cost band's own account list, so the two can never name different providers.
+// cannot hold a noun they have not been given. `TempleFigure.astro` holds the drawing; the provider marks the crew
+// wear are read from the cost band's own account list, so the two can never name different providers.
+//
+// The stone is the reader's OWN material and the marks are on the agents, never the other way round: a model is not
+// something a building is made of, and a band that draws the providers as the stone is making the cost band's
+// argument four bands early, in a picture that promised to make none.
 
 /** One stage of the build: the word under its part of the scene, and the single line that says what it is. */
 export interface TempleStage {
@@ -36,7 +40,7 @@ export const templeScene: TempleScene = {
     // Two beats, and the second one is the offer: you are not the one lifting stone.
     heading: "You bring the stone. The agents build.",
     sub: "Nothing is set in place without your word.",
-    stone: { label: "Stone", line: "The AI plans you already pay for." },
+    stone: { label: "Stone", line: "Your code, your documents, your words." },
     site: {
         label: "The site",
         // "Keeps the yard in order" is the whole of the machinery a first-time reader needs: work happens, and
@@ -50,6 +54,7 @@ export const templeScene: TempleScene = {
     },
     temple: { label: "The temple", line: "Your software, standing." },
     label:
-        "A building site. The AI plans you already pay for are the stone. Agents carry it and set it, on a site intentic keeps in order, " +
-        "while you watch from the terrace. What goes up is your software. You direct the work, you can see all of it, and nothing is set in place until you approve it.",
+        "A building site. The stone is what you bring: your code, your documents, your words, each block carved with what it is. " +
+        "Agents cut it, carry it and set it, each one marked with the AI model behind it, on a site intentic keeps in order, while you watch from the terrace. " +
+        "What goes up is your software. You direct the work, you can see all of it, and nothing is set in place until you approve it.",
 };

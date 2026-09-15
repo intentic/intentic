@@ -116,10 +116,20 @@ this page.
 **One picture of the deal, added above the tour 2026-09-14 (recorded decision).** The page went from the
 hero's promise straight into five verbs, and everything between those two is a thing the reader has to
 hold as words: agents, a workspace, a plan they approve. `#build` (the band list below) puts a picture
-under all of it first — your AI plans are the stone, agents do the building, the temple that goes up is
+under all of it first — what you bring is the stone, agents do the building, the temple that goes up is
 your software, and you direct, watch and approve. It costs about 930px at 1440 wide, which makes it the
 first band added back since the 2026-08-02 cut, and the reason it is allowed is that **it adds no
 argument**: it adds the model every argument below it was already assuming the reader had.
+
+**The stone is the reader's material, not their subscription (2026-09-15, recorded decision).** The quarry
+was drawn with a provider mark on every block, which put the cost band's argument four bands early inside
+the one picture that promised to make none, and said a thing that is not true besides: a model is labour,
+and nothing a building is made of. The marks moved onto the crew's heads, where they read as what they are
+— the model behind each agent, kept on the `#economics` account list so the two still cannot name different
+providers — and the stones took inscriptions for what a reader actually brings: a prompt, a note, a file,
+some code, a table. Both halves earn their place. "You bring the stone" is now literally the thing the
+visitor is about to do, and six identical stick figures became a fleet on six different models for the
+price of no copy at all. Do not put a provider mark back on a stone.
 
 **And it is a temple, not an engine, for a reason worth keeping.** The drawing was a car first — the
 plans as fuel, intentic as the engine, a throttle, a brake and a row of instruments — and it was thrown
@@ -251,11 +261,12 @@ words are in `temple.ts`.
    the whole reason every page can have this bar: there is nothing left for only this page to compute.
 2. **The build (`#build`)**: one drawing of the whole deal, and the first thing under the hero. The
    hero ends on a promise the reader has nothing to picture yet (agents work, you approve); this is the
-   shape of it, as a building site: the AI plans you already pay for are the **stone**, the **site** is
-   agents doing the work with you watching from the terrace, and the **temple** going up is your
-   software. Under the middle stage, the three things that never leave your hands: *you direct · you
-   watch · you approve*. Six short lines of copy in total (`site-content/src/temple.ts`), because the
-   picture is the argument.
+   shape of it, as a building site: what you bring — your code, your documents, your words — is the
+   **stone**, the **site** is agents doing the work with you watching from the terrace, and the
+   **temple** going up is your software. Every agent in it wears the mark of the model behind it, read
+   off the `#economics` account list. Under the middle stage, the three things that never leave your
+   hands: *you direct · you watch · you approve*. Six short lines of copy in total
+   (`site-content/src/temple.ts`), because the picture is the argument.
 
    **It is the only band on the page that is a DRAWING, and that is a rule rather than a look.**
    Everywhere else a frame means "this is a photograph of the product", and the three things this band
