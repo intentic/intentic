@@ -159,6 +159,9 @@ const bearerExemptPath = (path: string): boolean =>
 // outside boot state.
 // /system/session and /system/presence are boot-independent too (session secret on /history, roster in memory);
 // everything else waits.
+// /system/terminals lists tmux and the process supervisor, neither of which the chain builds, and it is the one read
+// behind a surface that is already on screen while the chain runs: held, the panel spent three 45s deadlines telling
+// the owner it was looking for terminals.
 // Long-lived streams exempt from the request timer: meant to stay open, so timing would bury real slow work.
 const STREAM_PATHS = new Set(["/events", "/agent/attach", "/intentic/apply/events"]);
 
@@ -170,6 +173,7 @@ const READY_EXEMPT = new Set([
     "/system/presence",
     "/system/ws-ticket",
     "/system/terminal",
+    "/system/terminals",
     "/system/browser-profile",
     "/system/browser-view",
     // Peer door sockets reconnect on their own backoff; a browser's MV3 worker dies after ~30s of silence.

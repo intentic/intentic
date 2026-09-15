@@ -19,16 +19,24 @@ describe(`daemon boot order`, () => {
         expect(executed()).toEqual(declared());
     });
 
-    it(`sweeps stale sessions before any step that starts a process of its own`, () => {
+    // A declared step is something every held data route waits on. Starting dev servers and waiting for one to answer
+    // are both work the editor has no reason to be held for, so both belong past the gate.
+    it(`opens the gate before starting the apps and watching the starter, never behind them`, () => {
+        const gate = main.indexOf("boot.finish();");
+        expect(gate, "boot.finish() is what opens the gate").toBeGreaterThan(-1);
+        expect(main.indexOf("await startWorkspaceApps();"), "the apps start past the gate").toBeGreaterThan(gate);
+        expect(main.indexOf("noteStarterReadiness(logger"), "the starter's readiness is observed, not waited on").toBeGreaterThan(gate);
+        expect(declared()).not.toContain("starterReady");
+        expect(declared()).not.toContain("autostart");
+    });
+
+    it(`sweeps stale sessions before anything that starts a process of its own`, () => {
         const order = declared();
         const sweep = order.indexOf("staleSessions");
         expect(sweep, "the sweep must still be a declared step").toBeGreaterThan(-1);
-        // Steps that can start a managed process; the sweep must run before each or it kills what they just started.
-        for (const starter of ["starterSite", "autostart"]) {
-            const index = order.indexOf(starter);
-            if (index !== -1) {
-                expect(sweep, `${starter} starts a panel session, so staleSessions must run before it`).toBeLessThan(index);
-            }
-        }
+        // A step that can start a managed process; the sweep must run before it or it kills what the step just started.
+        expect(sweep, "starterSite starts a panel session").toBeLessThan(order.indexOf("starterSite"));
+        // Same rule for the apps, which are no longer a step: the sweep runs inside the chain, they run past it.
+        expect(main.indexOf(`boot.step("staleSessions"`)).toBeLessThan(main.indexOf("await startWorkspaceApps();"));
     });
 });

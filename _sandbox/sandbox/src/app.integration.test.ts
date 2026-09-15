@@ -121,6 +121,10 @@ test("the boot gate holds data routes and lets the probe and the session exchang
     expect((await app.request("/health")).status).toBe(200);
     expect((await app.request("/system/session", { method: "POST" })).status).not.toBe(200);
 
+    // The terminal panel is on screen while the chain runs, so its list answers now rather than after it: held, the
+    // panel spends its retries on deadlines and then says the sandbox couldn't be reached.
+    expect((await app.request("/system/terminals")).status).toBe(200);
+
     boot.finish();
     expect((await held).status).toBe(200);
 });

@@ -7,6 +7,7 @@ import { type ArrivalItem, STARTER_APP, STARTER_REPO } from "@intentic/sandbox-c
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { defaultGit, observeGitCommands } from "@intentic/scaffold";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
+import type { Logger } from "pino";
 import { WebSocketServer } from "ws";
 import { createApp } from "./app.js";
 import { sweepAgedAgents } from "./agents/registry/archive.js";
@@ -107,7 +108,6 @@ const BOOT_STEPS = [
     { key: "staleSessions", label: "Sweeping stale sessions" },
     { key: "rootRepo", label: "Preparing the workspace repo" },
     { key: "starterSite", label: "Putting your starter site in place" },
-    { key: "autostart", label: "Starting your apps" },
     { key: "referenceShelf", label: "Ensuring the reference shelf" },
     { key: "staleExports", label: "Sweeping interrupted exports and arrivals" },
     { key: "repoGitDirs", label: "Healing repository git dirs" },
@@ -116,8 +116,23 @@ const BOOT_STEPS = [
     { key: "skills", label: "Converging agent skills" },
     { key: "baseline", label: "Taking the workspace baseline" },
     { key: "agentToken", label: "Writing the agent token" },
-    { key: "starterReady", label: "Opening your starter site" },
 ] as const;
+
+// The starter's dev server answering is a preview concern, not a readiness one, so it is observed after the gate opens
+// rather than declared as a step: a boot step is something every held data route waits on, and a framework binding a
+// port under a throttled CPU spent up to 30s of a hosted sandbox's first minute holding files, terminals and chat.
+const noteStarterReadiness = (logger: Logger, pending: Promise<StarterReadiness> | undefined): void => {
+    void pending
+        ?.then((readiness) => {
+            if (readiness !== "ready") {
+                logger.warn(
+                    { key: appPanelKey(STARTER_REPO, STARTER_APP), readiness },
+                    "autostart: starter did not answer before the readiness window closed",
+                );
+            }
+        })
+        .catch((error: unknown) => logger.warn({ err: error }, "autostart: the starter's readiness could not be observed"));
+};
 
 // Refuses to serve unauthenticated: an empty google.clientId is safe only when this daemon is unreachable. Reachable
 // with it empty opens every gate in app.ts silently; SANDBOX_ALLOW_UNAUTHENTICATED is the one loud exception.
@@ -520,7 +535,10 @@ const main = async (): Promise<void> => {
 
     // Restarts whatever the workspace declares should be running, since panels never survive a restart (the sweep above
     // kills them on purpose). Runs after both the seed (which writes the first entry) and the sweep; idempotent.
-    await boot.step("autostart", async () => {
+    // Called past the gate, not as a step: a dev server per declared app is a tmux spawn each, and the panels list it
+    // feeds is pushed as each one comes up, so nothing a data route reads is half-built by it. Declared here, beside
+    // the sweep whose ordering it depends on, rather than at the call site.
+    const startWorkspaceApps = async (): Promise<void> => {
         if (!role.roots || !traits.ownsWorkspaceConfig) {
             return;
         }
@@ -538,7 +556,7 @@ const main = async (): Promise<void> => {
                 { maxMs: 30_000 },
             );
         }
-    });
+    };
 
     // Reference shelf dir is furniture like .intentic: its presence on disk is the affordance, since scanners already
     // exclude it. Gated like other config writes: not the daemon's to place in a folder it doesn't own.
@@ -701,18 +719,13 @@ const main = async (): Promise<void> => {
     });
     services.dependencies.watch(subscribeWorkspaceChanges);
 
-    await boot.step("starterReady", async () => {
-        const readiness = await starterReadiness;
-        if (readiness !== undefined && readiness !== "ready") {
-            logger.warn(
-                { key: appPanelKey(STARTER_REPO, STARTER_APP), readiness },
-                "autostart: starter did not answer before the readiness window closed",
-            );
-        }
-    });
-
     // Converged state opens the gate; everything below is background machinery no queued request depends on.
     boot.finish();
+
+    // After the gate, so the editor is live while the dev servers come up; still after the sweep, which must run before
+    // anything starts a session, and now also after the baseline, so a dev server's first build can't dirty it.
+    await startWorkspaceApps();
+    noteStarterReadiness(logger, starterReadiness);
     // Logs CPU throttle alongside boot time, since on a shared-CPU host a slow chain is usually the quota, not the
     // steps.
     logger.info({ ms: Date.now() - boot.progress().startedAt, cpu: readCpuThrottle() }, "boot: chain converged");
