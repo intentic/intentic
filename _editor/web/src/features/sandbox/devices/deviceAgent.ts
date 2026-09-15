@@ -1,7 +1,7 @@
 import type { Device, DeviceAgentOp } from "@intentic/sandbox-contract";
 import type { IconName, StatusVariant } from "@intentic/ui";
 import type { NoticeTone } from "@intentic/ui/notice";
-import { agentBehind } from "./deviceFacts";
+import { agentBehind, deviceReconnecting } from "./deviceFacts";
 import type { DeviceRow, RowAgent } from "./deviceRows";
 
 // The agent running on one device, as the panel that both states it and changes it: the build its loop
@@ -97,18 +97,34 @@ const SYNC_ONLY: AgentNote = {
     hint: `Updating its agent runs a command on it, which needs the machine connected as a device, not just syncing folders and ports.`,
 };
 
-const blockedWhy = (device: Device): AgentNote | undefined => {
+// The one case with no errand in it, and the only line on screen while it holds: the concerns strip stands down
+// for a socket this young (deviceAttention.ts), so this is what explains the missing buttons.
+const RECONNECTING: AgentNote = {
+    text: `Reconnecting — its buttons come back with it.`,
+    icon: `sync`,
+    hint: `Its socket dropped a moment ago, which is what restarting an agent does. A fresh loop dials back in by itself, and nothing can be run on the machine until it has.`,
+};
+
+const blockedWhy = (device: Device, readAt: number): AgentNote | undefined => {
     if (reachable(device)) {
         return undefined;
     }
     if (device.hostId === undefined) {
         return SYNC_ONLY;
     }
+    if (deviceReconnecting(device, readAt)) {
+        return RECONNECTING;
+    }
     return device.gap === undefined ? GAP_BLOCKED.offline : GAP_BLOCKED[device.gap];
 };
 
-const stateOf = (row: DeviceRow): AgentPanel[`state`] => {
+const stateOf = (row: DeviceRow, readAt: number): AgentPanel[`state`] => {
     const agent = row.agent;
+    // A loop whose socket dropped seconds ago reported perfectly well a moment before; the reading is missing
+    // because the machine is between connections, which is the badge's own word for it rather than the absence.
+    if (deviceReconnecting(row.device, readAt)) {
+        return { word: `reconnecting`, variant: `neutral` };
+    }
     // A machine that has never reported has an agent this sandbox has only ever been dialled by; its
     // version is known from the hello frame, its loop is not.
     if (agent === undefined) {
@@ -190,7 +206,7 @@ const notesOf = (row: DeviceRow, latest: string | undefined, offered: boolean): 
 
 // Nothing to say and nothing to do: a machine with no version from either door and no command door is one
 // this group would draw an empty heading for.
-export const deviceAgentPanel = (row: DeviceRow, latest: string | undefined): AgentPanel | undefined => {
+export const deviceAgentPanel = (row: DeviceRow, latest: string | undefined, readAt: number): AgentPanel | undefined => {
     const { device } = row;
     const version = row.chip?.version;
     if (version === undefined && device.hostId === undefined) {
@@ -200,10 +216,10 @@ export const deviceAgentPanel = (row: DeviceRow, latest: string | undefined): Ag
     const pid = row.agent?.pid;
     return {
         version,
-        state: stateOf(row),
+        state: stateOf(row, readAt),
         facts: pid === undefined ? [] : [`pid ${pid}`],
         notes: notesOf(row, latest, offered),
         actions: offered ? ACTIONS : [],
-        blocked: blockedWhy(device),
+        blocked: blockedWhy(device, readAt),
     };
 };

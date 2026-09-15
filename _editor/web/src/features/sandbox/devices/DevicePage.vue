@@ -19,6 +19,7 @@ import {
 } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
+import DeviceConcern from "./DeviceConcern.vue";
 import DeviceRunners from "./DeviceRunners.vue";
 import { boardRoute } from "./deviceLinks";
 import { AGENT_DUTIES, deviceAgentPanel } from "./deviceAgent";
@@ -95,7 +96,7 @@ const concernsOf = (row: DeviceRow) =>
 
 // The agent as its own object rather than a version printed under the name: what it serves, what it wants,
 // and the two verbs that change either. Undefined only on a machine with no version and no command door.
-const agentOf = (row: DeviceRow) => deviceAgentPanel(row, latest);
+const agentOf = (row: DeviceRow) => deviceAgentPanel(row, latest, readAt);
 
 // The panel's lines in reading order: what the agent wants, then why it has no buttons. One list, so the
 // two render as one column of short lines instead of two blocks that happen to sit together.
@@ -214,40 +215,13 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
 
             <!-- Everything the machine wants, in one place and one visual language, each sentence beside its own remedy. -->
             <template v-if="lone">
-                <Notice v-for="concern in concernsOf(lone)" :key="concern.key" :tone="concern.tone">
-                    <span class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                        <span class="min-w-0">
-                            {{ concern.text }}
-                            <!-- Kept on one line: a command broken across a wrap can't be copied by eye. -->
-                            <template v-if="concern.command">
-                                Run <span class="font-mono whitespace-nowrap text-content">{{ concern.command }}</span> on that device.
-                            </template>
-                        </span>
-                        <!-- A link wearing the button's clothes, since this fix has an address: hoverable and Ctrl/⌘-clickable. -->
-                        <Button
-                            v-if="concern.fix?.kind === `card`"
-                            :as="RouterLink"
-                            :to="cardRoute(concern.fix)"
-                            size="small"
-                            severity="secondary"
-                            :text="true"
-                            :label="concern.fix.label"
-                        >
-                            <template #icon><Icon name="arrow-up-right" /></template>
-                        </Button>
-                        <!-- Connect actions request a command for the machine without running one locally. -->
-                        <Button
-                            v-else-if="concern.fix?.kind === `connect`"
-                            size="small"
-                            severity="secondary"
-                            :label="concern.fix.label"
-                            v-tooltip.top="concern.fix.hint"
-                            @click="reconnecting = lone.device.key"
-                        >
-                            <template #icon><Icon name="desktop" /></template>
-                        </Button>
-                    </span>
-                </Notice>
+                <DeviceConcern
+                    v-for="concern in concernsOf(lone)"
+                    :key="concern.key"
+                    :concern="concern"
+                    :route="concern.fix?.kind === `card` ? cardRoute(concern.fix) : undefined"
+                    @connect="reconnecting = lone.device.key"
+                />
             </template>
         </div>
 
@@ -364,37 +338,13 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                         <p v-if="syncNote(environment.device, readAt)" class="min-w-0 text-xs" :class="syncStopped(environment.device, readAt) ? `text-warning` : `text-muted`">
                             {{ syncNote(environment.device, readAt) }}
                         </p>
-                        <Notice v-for="concern in concernsOf(environment)" :key="concern.key" :tone="concern.tone">
-                            <span class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                                <span class="min-w-0">
-                                    {{ concern.text }}
-                                    <template v-if="concern.command">
-                                        Run <span class="font-mono whitespace-nowrap text-content">{{ concern.command }}</span> on that device.
-                                    </template>
-                                </span>
-                                <Button
-                                    v-if="concern.fix?.kind === `card`"
-                                    :as="RouterLink"
-                                    :to="cardRoute(concern.fix)"
-                                    size="small"
-                                    severity="secondary"
-                                    :text="true"
-                                    :label="concern.fix.label"
-                                >
-                                    <template #icon><Icon name="arrow-up-right" /></template>
-                                </Button>
-                                <Button
-                                    v-else-if="concern.fix?.kind === `connect`"
-                                    size="small"
-                                    severity="secondary"
-                                    :label="concern.fix.label"
-                                    v-tooltip.top="concern.fix.hint"
-                                    @click="reconnecting = environment.device.key"
-                                >
-                                    <template #icon><Icon name="desktop" /></template>
-                                </Button>
-                            </span>
-                        </Notice>
+                        <DeviceConcern
+                            v-for="concern in concernsOf(environment)"
+                            :key="concern.key"
+                            :concern="concern"
+                            :route="concern.fix?.kind === `card` ? cardRoute(concern.fix) : undefined"
+                            @connect="reconnecting = environment.device.key"
+                        />
                         <template v-for="note in agentLinesOf(environment)" :key="note.text">
                             <Notice v-if="note.tone" v-tooltip.top="note.hint" :tone="note.tone">{{ note.text }}</Notice>
                             <p v-else v-tooltip.top="note.hint" class="flex w-fit items-center gap-1.5 text-xs text-muted">
@@ -438,37 +388,11 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
         <RowGroup v-if="described" label="Sandboxes on this device" :count="machine.groups.length">
             <!-- On a many-sided machine the door's block is about this list, so it is said here rather than under a row. -->
             <RowNote v-if="listBlock" variant="block">
-                <Notice :tone="listBlock.tone">
-                    <span class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                        <span class="min-w-0">
-                            {{ listBlock.text }}
-                            <template v-if="listBlock.command">
-                                Run <span class="font-mono whitespace-nowrap text-content">{{ listBlock.command }}</span> on that device.
-                            </template>
-                        </span>
-                        <Button
-                            v-if="listBlock.fix?.kind === `card`"
-                            :as="RouterLink"
-                            :to="cardRoute(listBlock.fix)"
-                            size="small"
-                            severity="secondary"
-                            :text="true"
-                            :label="listBlock.fix.label"
-                        >
-                            <template #icon><Icon name="arrow-up-right" /></template>
-                        </Button>
-                        <Button
-                            v-else-if="listBlock.fix?.kind === `connect` && manager"
-                            size="small"
-                            severity="secondary"
-                            :label="listBlock.fix.label"
-                            v-tooltip.top="listBlock.fix.hint"
-                            @click="reconnecting = manager.device.key"
-                        >
-                            <template #icon><Icon name="desktop" /></template>
-                        </Button>
-                    </span>
-                </Notice>
+                <DeviceConcern
+                    :concern="listBlock"
+                    :route="listBlock.fix?.kind === `card` ? cardRoute(listBlock.fix) : undefined"
+                    @connect="reconnecting = manager === undefined ? undefined : manager.device.key"
+                />
             </RowNote>
 
             <!-- The same two commands the pairing rows carry, run bare (every sandbox this environment pairs). -->

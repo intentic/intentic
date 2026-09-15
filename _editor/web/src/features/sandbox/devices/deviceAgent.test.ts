@@ -31,8 +31,9 @@ const device = (overrides: Partial<Device> = {}): Device => ({
     ...overrides,
 });
 
+// `NOW` as the reading's own clock throughout: every verdict here that ages anything ages it against that.
 const panelOf = (overrides: Partial<Device> = {}, held: Partial<Report> = {}, latest?: string) =>
-    deviceAgentPanel(deviceRow(device({ report: report(held), ...overrides }), latest), latest);
+    deviceAgentPanel(deviceRow(device({ report: report(held), ...overrides }), latest), latest, NOW);
 
 const said = (overrides: Partial<Device> = {}, held: Partial<Report> = {}, latest?: string): string =>
     (panelOf(overrides, held, latest)?.notes ?? []).map((note) => note.text).join(` `);
@@ -144,6 +145,23 @@ test(`drops the verbs on a connected device that is not answering`, () => {
     expect(panelOf({ online: false })?.blocked?.text).toBe(`Not answering — nothing can run on it.`);
 });
 
+// Both verbs above end this machine's socket on purpose, and so does any CLI action that reloads its config: a
+// drop this young is the machine on its way back, and the reading that is missing was there a moment ago.
+test(`reads a socket dropped seconds ago as a reconnection, not as silence`, () => {
+    const dropped = { online: false, gap: `offline`, lastSeen: NOW - 3_000, report: undefined } as const;
+    expect(panelOf(dropped)?.state).toEqual({ word: `reconnecting`, variant: `neutral` });
+    expect(panelOf(dropped)?.blocked?.text).toBe(`Reconnecting — its buttons come back with it.`);
+    // Still no verbs: nothing can run on a machine holding no socket, however briefly it has held none.
+    expect(verbs(dropped)).toEqual([]);
+});
+
+// The window is what makes the quiet line honest: past it, a machine that hasn't come back is away.
+test(`goes back to naming the silence once the drop is older than the window`, () => {
+    const away = { online: false, gap: `offline`, lastSeen: NOW - 60_000, report: undefined } as const;
+    expect(panelOf(away)?.state).toEqual({ word: `not reported`, variant: `neutral` });
+    expect(panelOf(away)?.blocked?.text).toBe(`Not answering — nothing can run on it.`);
+});
+
 // Each shut door gets its own line: a switch nobody turned on is a different errand from a laptop asleep,
 // and from a machine that has no agent to update at all.
 test(`names the shut door rather than calling every one of them silence`, () => {
@@ -156,7 +174,7 @@ test(`names the shut door rather than calling every one of them silence`, () => 
 
 // Nothing to state and nothing to press: a heading over an empty card.
 test(`draws no panel for a machine with neither a version nor a command door`, () => {
-    expect(deviceAgentPanel(deviceRow({ key: `x`, label: `x` }, undefined), undefined)).toBeUndefined();
+    expect(deviceAgentPanel(deviceRow({ key: `x`, label: `x` }, undefined), undefined, NOW)).toBeUndefined();
 });
 
 // The case the old view answered with "re-run its install": a device holding a socket but sending no report
@@ -164,7 +182,7 @@ test(`draws no panel for a machine with neither a version nor a command door`, (
 // what the verbs travel over, so it keeps them, and its version is whatever its hello frame announced.
 test(`keeps the verbs for a connected device that has never reported`, () => {
     const never = { key: `x`, label: `x`, hostId: `host-x`, online: true, gap: `unreported`, agentVersion: `1.0.0` } as const;
-    const panel = deviceAgentPanel(deviceRow(never, `1.2.0`), `1.2.0`);
+    const panel = deviceAgentPanel(deviceRow(never, `1.2.0`), `1.2.0`, NOW);
     expect(panel?.version).toBe(`1.0.0`);
     expect(panel?.state).toEqual({ word: `not reported`, variant: `neutral` });
     expect(panel?.actions.map((action) => action.op)).toEqual([`upgrade`, `restart`]);

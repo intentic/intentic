@@ -8,7 +8,7 @@ import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
 import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
 import { resolveDaemonBase } from "../daemon-base.js";
 import { prepareSetup } from "../install.js";
-import { machineLauncher, readResidentPid, reconcileResidency } from "../resident.js";
+import { machineLauncher, readResidentPid, reconcileResidency, startResidentIfStopped } from "../resident.js";
 import { type Pairing, readState, removePairing, setMirrorOff, type SyncMode, type SyncState, upsertPairing } from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { retirePairingMirror, teardownAllForwards } from "./mirror.js";
@@ -433,10 +433,12 @@ export const syncUninstall = async (out: Log, sandbox?: string): Promise<void> =
     }
 
     if (remaining.length > 0) {
-        // Sync stays: regenerate the ssh fragment for pairings still live, and restart the resident loop so it stops
-        // serving what just went. Mutagen's daemon is left alone.
+        // Sync stays: regenerate the ssh fragment for pairings still live. The loop is left running — it re-reads its
+        // pairing list every tick (mirror.ts), and restarting it would drop this machine's socket to every linked
+        // sandbox, which is the connection an unpair asked for from a sandbox travels over. Mutagen's daemon is left
+        // alone too.
         await writeManagedSshConfig(pairingSshConfig(remaining));
-        await reconcileResidency(out);
+        await startResidentIfStopped(out);
         out(`Still syncing ${remaining.length} sandbox(es): ${remaining.map((pairing) => pairing.sandboxId).join(", ")}`);
         return;
     }

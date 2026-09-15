@@ -6,6 +6,7 @@ import {
     agentHalted,
     deviceDoors,
     deviceQuiet,
+    deviceReconnecting,
     hostCard,
     lastSeenNote,
     deviceHardware,
@@ -171,6 +172,19 @@ test(`ages a machine that is not here, and stays quiet about one that is`, () =>
     const lastSeen = Date.now() - 90 * 60_000;
     expect(lastSeenNote(device({ hostId: `my-pc`, online: false, lastSeen }))).toBe(`last seen 1h ago`);
     expect(lastSeenNote(device({ hostId: `my-pc`, online: true, lastSeen }))).toBeUndefined();
+});
+
+// The window that keeps an agent restart from reading as a machine that went away. Everything it exempts is a
+// machine with no socket right now; the two guards below are the cases that look alike and are not.
+test(`reads a freshly dropped socket as reconnecting, and only that`, () => {
+    const dropped = { hostId: `my-pc`, online: false, gap: `offline`, lastSeen: NOW - 3_000 } as const;
+    expect(deviceReconnecting(device(dropped), NOW)).toBe(true);
+    // Held long enough to be a machine that is away, not one mid-restart.
+    expect(deviceReconnecting(device({ ...dropped, lastSeen: NOW - 60_000 }), NOW)).toBe(false);
+    // A machine holding its socket while refusing to answer is unreachable in a way that waiting never fixes.
+    expect(deviceReconnecting(device({ ...dropped, online: true }), NOW)).toBe(false);
+    // Never connected: `lastSeen` is the stamp of a link this sandbox actually held, and there is none.
+    expect(deviceReconnecting(device({ hostId: `my-pc`, online: false, gap: `offline` }), NOW)).toBe(false);
 });
 
 // A machine that has reported: folders, ports and its agent arrived. No container list — the sync door never carries

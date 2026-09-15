@@ -20,7 +20,17 @@ import {
     sandboxGroups,
     syncSessionLive,
 } from "@intentic/ui/device";
-import { type AgentChip, agentChip, agentHalted, deviceDoors, deviceQuiet, lastSeenNote, machineWarnings, osLabel } from "./deviceFacts";
+import {
+    type AgentChip,
+    agentChip,
+    agentHalted,
+    deviceDoors,
+    deviceQuiet,
+    deviceReconnecting,
+    lastSeenNote,
+    machineWarnings,
+    osLabel,
+} from "./deviceFacts";
 
 // One device as the board and the device page both read it: its state in one word and one colour, its
 // sandboxes folded into groups, and the agent verdicts a render needs; and one MACHINE, the PC those devices are
@@ -43,6 +53,11 @@ export const deviceTone = (device: Device, readAt: number): StatusVariant => {
 // The badge's word must agree with its colour: a dead sync agent is amber, so it reads "needs attention"
 // rather than "live".
 export const deviceState = (device: Device, readAt: number): string => {
+    // Said before the gap it is a case of: a socket dropped seconds ago is a machine on its way back, and calling
+    // that offline is a verdict this row contradicts a second later.
+    if (deviceReconnecting(device, readAt)) {
+        return `reconnecting`;
+    }
     if (device.gap !== undefined) {
         return device.gap === `offline` ? `offline` : `needs attention`;
     }
@@ -55,7 +70,7 @@ export const deviceState = (device: Device, readAt: number): string => {
 // Machines worth reading first: state leads, name breaks ties, so order only changes when a machine's state
 // does. Live ranks above needs-attention, since a live card is the point of the board; a machine with several
 // environments ranks by its best one, since that is the door that works.
-const RANK: Record<string, number> = { live: 0, "needs attention": 1, "gone quiet": 2, offline: 3 };
+const RANK: Record<string, number> = { live: 0, "needs attention": 1, "gone quiet": 2, reconnecting: 3, offline: 4 };
 
 const machineRank = (machine: MachineRow, readAt: number): number =>
     Math.min(...machine.environments.map((environment) => RANK[deviceState(environment.device, readAt)] ?? 9));

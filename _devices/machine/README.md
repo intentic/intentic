@@ -77,7 +77,10 @@ socket re-resolves on every reconnect.
 halves in one process ([src/resident.ts](src/resident.ts)):
 
 - The sync half re-reads its pairing list every tick; the device half's link list is fixed at startup, which
-  is why every `setup`/`uninstall` restarts the loop (`reconcileResidency`) instead of poking it.
+  is why `setup` restarts the loop (`reconcileResidency`) instead of poking it.
+- Unpairing one sandbox of several does **not** restart it (`startResidentIfStopped`): the sync half picks the
+  drop up by itself, and this process holds the socket every sandbox reaches this machine over — bouncing it
+  makes the sandbox that asked for the unpair watch its own device go offline.
 - The process exits — and takes the login entry with it — only when **both** halves have nothing to serve.
 - On a signal it exits `128+signal`, never 0: a supervisor must restart what it did not stop, and the incident
   that bought that rule is written out in [src/sync/mirror.ts](src/sync/mirror.ts).

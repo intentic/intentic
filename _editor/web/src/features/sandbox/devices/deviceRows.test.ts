@@ -112,6 +112,16 @@ test(`keeps an asleep machine neutral: offline is a state, not a fault`, () => {
     expect(deviceTone(asleep, NOW)).toBe(`neutral`);
 });
 
+// `lastSeen` is stamped when the socket drops, so its age is the age of the silence: seconds of it is what
+// restarting an agent looks like from here, and calling that offline is a verdict the next reading undoes.
+test(`calls a machine whose socket just dropped reconnecting, not offline`, () => {
+    const dropped = device({ gap: `offline`, online: false, report: undefined, lastSeen: NOW - 3_000 });
+    expect(deviceState(dropped, NOW)).toBe(`reconnecting`);
+    // The same colour as offline: only the word is wrong while a machine is coming back, never the rank.
+    expect(deviceTone(dropped, NOW)).toBe(`neutral`);
+    expect(deviceState({ ...dropped, lastSeen: NOW - 60_000 }, NOW)).toBe(`offline`);
+});
+
 test(`puts the machines worth reading first, and breaks ties by name`, () => {
     const rows = machineRows(
         [
@@ -391,6 +401,16 @@ test(`offers a machine that stopped answering a fresh pairing, since nothing els
     // The cheaper of the two, for a machine that is awake with only its loop down.
     expect(gap?.command).toBe(`intentic-machine run`);
     expect(gap?.fix).toMatchObject({ kind: `connect`, label: `Reconnect` });
+});
+
+// The flicker this window exists for: unpairing a sandbox, updating an agent and restarting one all end the
+// socket this page is read over, and the strip would open a slab of remedies for a machine already dialling back.
+test(`says nothing at all while a machine that dropped seconds ago is coming back`, () => {
+    expect(concernsOf({ online: false, report: undefined, gap: `offline`, lastSeen: NOW - 3_000 })).toEqual([]);
+    // Past the window the machine really is away, and every remedy is offered again.
+    const away = concernsOf({ online: false, report: undefined, gap: `offline`, lastSeen: NOW - 60_000 });
+    expect(away.map((concern) => concern.key)).toEqual([`gap`]);
+    expect(away[0]?.text).toContain(`Asleep or offline.`);
 });
 
 test(`keeps the sentence and drops the pairing for a reader the daemon would refuse`, () => {

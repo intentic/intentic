@@ -133,6 +133,18 @@ export const agentBehind = (device: Device, latest?: string): boolean => isBehin
 export const deviceQuiet = (device: Device, readAt: number): boolean =>
     device.report !== undefined && reportQuiet(device.report, readAt);
 
+// How long a socket that has just dropped reads as a machine coming back rather than one that is away. Restarting
+// the agent is what Update agent, Restart agent and every CLI action that reloads its config do, and a fresh loop
+// redials on its one-second backoff floor: inside this window the alarm would be wrong nearly every time it fired.
+const RECONNECT_GRACE_MS = 15_000;
+
+// A connection dropped moments ago, which is a different state from asleep and wants no sentence of its own.
+// `lastSeen` is stamped at the drop (the daemon's peer hub), so this ages the silence rather than the reading; a
+// machine that has never connected carries none and is never covered. `online` is read too, since a machine that
+// holds its socket while refusing to describe itself is unreachable in a way no waiting fixes.
+export const deviceReconnecting = (device: Device, readAt: number): boolean =>
+    device.online !== true && device.gap === `offline` && device.lastSeen !== undefined && readAt - device.lastSeen < RECONNECT_GRACE_MS;
+
 // Same rule the terminal uses (agentStalled), so a row and `intentic-machine status` cannot disagree. Judged on the
 // machine's own clock, which stamps both the tick and the capture: an old reading of a healthy loop is old, not dead.
 export const agentHalted = (device: Device): boolean =>

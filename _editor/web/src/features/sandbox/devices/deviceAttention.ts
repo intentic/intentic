@@ -1,7 +1,8 @@
 import type { Device } from "@intentic/sandbox-contract";
+import type { IconName } from "@intentic/ui";
 import type { NoticeTone } from "@intentic/ui/notice";
 import { timeAgo } from "@intentic/ui/format";
-import { deviceQuiet, type ManageBlock } from "./deviceFacts";
+import { deviceQuiet, deviceReconnecting, type ManageBlock } from "./deviceFacts";
 import type { DeviceRow } from "./deviceRows";
 
 // Everything a device wants from the reader, as one ordered list: the gap that stops it answering, the age
@@ -33,6 +34,9 @@ export type DeviceFix = DeviceCardFix | DeviceConnectFix;
 export interface DeviceConcern {
     readonly key: string;
     readonly tone: NoticeTone;
+    // The subject in one glyph, not the tone's own exclamation mark: what a reader sorts these by is sleep from
+    // permissions from age, which the rank alone cannot tell them.
+    readonly icon: IconName;
     readonly text: string;
     /** A command to type on that device, where the fix is one rather than a click; kept unwrapped. */
     readonly command?: string;
@@ -60,6 +64,14 @@ const GAP_TONE: Record<NonNullable<Device[`gap`]>, NoticeTone> = {
     unreported: `warning`,
 };
 
+// What the gap IS, at a glance: a sleeping machine, a switch that is off, a missing install, a silence.
+const GAP_ICON: Record<NonNullable<Device[`gap`]>, IconName> = {
+    offline: `moon`,
+    "scope-off": `lock`,
+    "no-agent": `desktop`,
+    unreported: `question-circle`,
+};
+
 // Each block is a different errand, so each gets its own sentence.
 const BLOCK_TEXT: Record<ManageBlock[`kind`], string> = {
     connect: `Desktop sync carries folders and ports, never containers, so its sandboxes can't be started, updated or removed from here. Connect it as a device for the same buttons the desktop app's own window has.`,
@@ -68,6 +80,14 @@ const BLOCK_TEXT: Record<ManageBlock[`kind`], string> = {
     offline: `This device is connected but isn't reachable right now — asleep, off the network, or its agent isn't running — so its sandboxes can't be started, updated or removed from here.`,
     "sandboxes-off": `Turn on "Manage sandboxes on this device" in this device's capability card to use the buttons below.`,
     "remove-off": `Removing a sandbox needs "Remove sandboxes from this device" on this device's capability card. Everything else below already works.`,
+};
+
+// Same vocabulary as the gaps above: a machine to connect, a machine asleep, a switch that is off.
+const BLOCK_ICON: Record<ManageBlock[`kind`], IconName> = {
+    connect: `desktop`,
+    offline: `moon`,
+    "sandboxes-off": `lock`,
+    "remove-off": `lock`,
 };
 
 // What a machine that is awake with its loop down needs typed on it. One constant for the two sentences that can
@@ -126,6 +146,7 @@ const gapConcern = (device: Device, reconnectable: boolean): DeviceConcern | und
     return {
         key: `gap`,
         tone: GAP_TONE[device.gap],
+        icon: GAP_ICON[device.gap],
         text: GAP_TEXT[device.gap],
         ...(command === undefined ? {} : { command }),
         ...(device.gap === `offline` && reconnectable ? { fix: RECONNECT } : {}),
@@ -140,6 +161,7 @@ const blockConcern = (block: ManageBlock, reconnectable: boolean): DeviceConcern
     return {
         key: `block`,
         tone: `info`,
+        icon: BLOCK_ICON[block.kind],
         text: BLOCK_TEXT[block.kind],
         ...(command === undefined ? {} : { command }),
         ...(fix === undefined ? {} : { fix }),
@@ -171,8 +193,10 @@ export const deviceAttention = (
     // Offered wherever the silence is explained, since minting is the one thing that works without the machine:
     // a row with no device connection has nothing to re-pair, and a member may not mint at all.
     const reconnectable = canPair && device.hostId !== undefined;
-    // Whether the machine answers at all comes first: it decides what the rest of the page is worth.
-    const gap = gapConcern(device, reconnectable);
+    // Whether the machine answers at all comes first: it decides what the rest of the page is worth. A socket
+    // dropped seconds ago is exempt, since every agent restart drops one and the machine is dialling back as this
+    // is read; the state word carries it alone until the window is out.
+    const gap = deviceReconnecting(device, readAt) ? undefined : gapConcern(device, reconnectable);
     if (gap !== undefined) {
         concerns.push(gap);
     }
@@ -183,6 +207,7 @@ export const deviceAttention = (
         concerns.push({
             key: `stale`,
             tone: `warning`,
+            icon: `clock`,
             // `deviceQuiet` is false without a report, so the timestamp is there whenever this line is.
             text: `Last heard from ${timeAgo(device.report?.capturedAt ?? readAt, { now: readAt })}. What follows is what it looked like then.`,
         });

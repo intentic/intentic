@@ -84,6 +84,15 @@ const cleanup = async (): Promise<void> => {
     await rm(linkStatePath, { force: true });
 };
 
+// The loop after a change it absorbs by itself: started only if nothing is serving, and silent when something
+// is. This process also holds the outbound socket to every linked sandbox, so bouncing it for a change the
+// mirror watcher already re-reads each tick would drop the connection the change was asked for over.
+export const startResidentIfStopped = async (log: Log): Promise<void> => {
+    if ((await readResidentPid()) === undefined) {
+        await startResident(log);
+    }
+};
+
 // Bring the resident state in line with the config: restart when there is anything to serve, retire the login
 // entry when there is nothing. The stop comes first even when a restart follows, since the running loop fixes
 // its link list at startup and would otherwise keep serving the old config indefinitely.
