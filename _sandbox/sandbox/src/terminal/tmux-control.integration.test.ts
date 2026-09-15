@@ -29,6 +29,16 @@ interface Harness {
     readonly exits: { code: number; reason: string }[];
 }
 
+// A marker can arrive in one chunk and the prompt behind it in the next, so a mark taken the moment the marker shows
+// still has bytes on their way; this returns once nothing has been written for a whole window.
+const quiet = async (h: Harness, ms = 400): Promise<void> => {
+    let last = -1;
+    while (h.text().length !== last) {
+        last = h.text().length;
+        await new Promise((resolve) => setTimeout(resolve, ms));
+    }
+};
+
 const open = (argv: string[], cols = 80, rows = 24): Harness => {
     const chunks: Buffer[] = [];
     const exits: { code: number; reason: string }[] = [];
@@ -105,8 +115,10 @@ test("a program on the alternate screen is replayed there on a fresh attach, wit
     const h = await fresh();
     await until(() => h.text().includes("\x1bc"), "the initial replay");
     const name = sessions.at(-1) ?? "";
-    // Enters the alternate screen and asks for SGR mouse reporting by hand, then sits in `cat`.
-    h.terminal.input(Buffer.from("printf '\\033[?1049h\\033[?1000h\\033[?1006hALT-SCREEN'; cat\r", "utf8"));
+    // Enters the alternate screen and asks for SGR mouse reporting by hand, then sits in `cat`. The pane echoes the
+    // keystrokes, so `''` keeps the marker out of the typed line: whole in the echo it would be matched while the pane
+    // is still at the prompt, and the attach below would replay the normal screen.
+    h.terminal.input(Buffer.from("printf '\\033[?1049h\\033[?1000h\\033[?1006hALT''-SCREEN'; cat\r", "utf8"));
     await until(() => h.text().includes("ALT-SCREEN"), "the alternate screen");
 
     // Second attach to the same session, models a reload.
@@ -177,13 +189,16 @@ test("a replay puts the same rows and the same cursor on an empty xterm that the
 test("another session opening a window leaves this tab where it is", async () => {
     const h = await fresh(80, 6);
     await until(() => h.text().includes("\x1bc"), "the initial replay");
-    h.terminal.input(Buffer.from("echo MY-OWN-WINDOW\r", "utf8"));
+    // `''` keeps the marker out of the typed line, which the pane echoes back: matched there, the mark below would be
+    // taken before this session's own output had been written.
+    h.terminal.input(Buffer.from("echo MY-OWN''-WINDOW\r", "utf8"));
     await until(() => h.text().includes("MY-OWN-WINDOW"), "this session's output");
 
     // Second session models unrelated work happening elsewhere in the sandbox.
     const other = `cm-other-${String(process.pid)}`;
     sessions.push(other);
     await tmux("new-session", "-d", "-s", other, "-c", "/tmp", "sh");
+    await quiet(h);
     const mark = h.text().length;
     await tmux("new-window", "-t", `=${other}:`, "-n", "run", "sh", "-c", "echo STRANGERS-WINDOW; sleep 30");
     // Long enough that a stray sync would have landed by now.
