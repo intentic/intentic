@@ -2,7 +2,7 @@ import { computed } from "vue";
 import { plural } from "@intentic/base/format";
 import PushQuestionBody from "./PushQuestionBody.vue";
 import UploadProgressBody from "../../features/workspace/files/upload/UploadProgressBody.vue";
-import { useAppUpdate } from "../../app/appUpdate";
+import { useAppUpdate, type AppUpdate } from "../../app/appUpdate";
 import { hold, type NotificationTone } from "./notifications";
 import { sandboxRequiresGate } from "../../features/sandbox/overview/availability";
 import { useLocalShortcut } from "../../features/sandbox/devices/localShortcut";
@@ -200,19 +200,35 @@ export const startNotificationSources = (): void => {
 
     // Never acts on its own, no auto-reload or restart, except the desktop build's update-on-quit.
     const { offer, take, dismiss: dismissUpdate } = useAppUpdate();
+    // One card, three causes, and each says which it is: an unfetchable chunk is a repair, and calling it a new
+    // version would send the reader looking for a changelog. Each states the click's cost up front, since a restart
+    // closes the window and a reload drops anything unsent.
+    const updateWords = (update: AppUpdate): { title: string; detail: string; action: string } => {
+        if (update.kind === `app`) {
+            return { title: `Intentic ${update.version} is ready`, detail: `It is downloaded. Restarting takes a few seconds.`, action: `Restart` };
+        }
+        if (update.kind === `web`) {
+            return { title: `A new version of Intentic is out`, detail: `Reload to pick it up.`, action: `Reload` };
+        }
+        return {
+            title: `Part of Intentic did not load`,
+            detail: `Something it fetches as it goes never arrived, so a file may show without its colours or a viewer may stay blank. Reload to get it.`,
+            action: `Reload`,
+        };
+    };
     hold(`app-update`, () => {
         const update = offer.value;
         if (update === undefined) {
             return undefined;
         }
+        const said = updateWords(update);
         return {
             kind: `condition`,
             tone: `info`,
             icon: `refresh`,
-            title: update.kind === `app` ? `Intentic ${update.version} is ready` : `A new version of Intentic is out`,
-            // States the click's cost up front: a restart closes the window, a reload drops anything unsent.
-            detail: update.kind === `app` ? `It is downloaded. Restarting takes a few seconds.` : `Reload to pick it up.`,
-            actions: [{ label: update.kind === `app` ? `Restart` : `Reload`, run: take, severity: `secondary` }],
+            title: said.title,
+            detail: said.detail,
+            actions: [{ label: said.action, run: take, severity: `secondary` }],
             dismiss: dismissUpdate,
         };
     });

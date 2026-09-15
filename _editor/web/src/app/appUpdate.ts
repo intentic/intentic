@@ -19,13 +19,16 @@ export type AppUpdate =
     // it supersedes `web` rather than stacking with it.
     | { readonly kind: "app"; readonly version: string }
     /* A newer web build is deployed. Taking it is a reload of this tab. */
-    | { readonly kind: "web" };
+    | { readonly kind: "web" }
+    /* A lazy chunk of the build this page is already running never arrived. Not an update, and the reload is a repair
+       rather than a pick-up, but the same one click fixes it. */
+    | { readonly kind: "incomplete" };
 
 const available = ref<AppUpdate | undefined>(undefined);
 const dismissed = ref<string | undefined>(undefined);
 
 /** What identifies "this offer", so a dismissal covers exactly it and not the next one. */
-const offerKey = (update: AppUpdate): string => (update.kind === `app` ? `app:${update.version}` : `web`);
+const offerKey = (update: AppUpdate): string => (update.kind === `app` ? `app:${update.version}` : update.kind);
 
 // One poller per document, however many components ask; module-level so two callers can't disagree about whether
 // there's an update.
@@ -63,6 +66,17 @@ const poll = async (): Promise<void> => {
     if (isStaleBuild(buildId(), await deployedBuild())) {
         available.value = { kind: `web` };
     }
+};
+
+/**
+ * A lazily-imported piece of this page's own bundle that could not be fetched — a grammar, a viewer, a diagram. A
+ * browser remembers a module whose fetch failed for the life of the document and will not ask for it again, so
+ * whatever needed it stays blank however many times the user reopens the file: a reload is the only repair, and this
+ * is the one place that offers one.
+ */
+export const reportIncompleteBundle = (): void => {
+    // A real update already asks for the same click, for a reason the user can act on: don't talk over it.
+    available.value ??= { kind: `incomplete` };
 };
 
 /** Start watching, once per document. Idempotent, so every mount can call it without coordinating. */

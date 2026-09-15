@@ -2,6 +2,8 @@ import { useHighlighter, useTheme } from "@intentic/ui";
 import { useTextSize } from "@intentic/ui/text-size";
 import type * as Monaco from "monaco-editor-core";
 import { watch } from "vue";
+import { reportIncompleteBundle } from "../../../app/appUpdate";
+import { describeError, reportClient } from "../../../app/clientDiagnostics";
 import { toScreenPx } from "../../../shell/window/uiScale";
 import { EDITOR_ICON_CSS } from "./monacoIcons";
 
@@ -87,24 +89,47 @@ const init = async (): Promise<typeof Monaco> => {
 // Builds the shared Monaco namespace once, with workers, the Shiki bridge, and theme sync wired up.
 const ensureMonaco = (): Promise<typeof Monaco> => (ready ??= init());
 
-// Registers `lang` with Monaco, loads its grammar, and reruns the bridge for a tokens provider. An unshipped or
-// failed grammar falls through to plaintext without marking it bridged, so a later open retries.
+// The grammar's own lazy chunk. A fetch that fails leaves every file in that language plain for the rest of the
+// document's life — the browser won't ask for that module again, so reopening the file changes nothing — and on
+// screen that is indistinguishable from a language we ship no grammar for. Hence both the report and the offer of
+// the one thing that does fix it.
+const loadGrammar = async (lang: string): Promise<ShikiCore | undefined> => {
+    try {
+        return await useHighlighter().ensureLang(lang);
+    } catch (error) {
+        reportClient(`editor.grammar-unreachable`, `the ${lang} grammar did not load, so ${lang} files render plain`, {
+            level: `warn`,
+            fields: { lang, ...describeError(error).fields },
+        });
+        reportIncompleteBundle();
+        return undefined;
+    }
+};
+
+// Registers `lang` with Monaco, loads its grammar, and reruns the bridge for a tokens provider. Anything missing
+// falls through to plaintext without marking it bridged, so the next open asks again.
 const ensureLanguage = async (monaco: typeof Monaco, lang: string | undefined): Promise<string | undefined> => {
     if (lang === undefined || bridged.has(lang)) {
         return lang;
     }
+    const core = await loadGrammar(lang);
+    if (core === undefined) {
+        return undefined;
+    }
     try {
-        const core = await useHighlighter().ensureLang(lang);
-        if (core === undefined) {
-            return undefined;
-        }
         if (!monaco.languages.getLanguages().some((entry) => entry.id === lang)) {
             monaco.languages.register({ id: lang });
         }
         applyBridge(monaco, core);
         bridged.add(lang);
         return lang;
-    } catch {
+    } catch (error) {
+        // The grammar arrived but the tokenizer or theme didn't take it; the file renders plain, which is worth
+        // saying even though a reload would not help.
+        reportClient(`editor.grammar-not-bridged`, `the ${lang} grammar loaded but Monaco kept plaintext`, {
+            level: `warn`,
+            fields: { lang, ...describeError(error).fields },
+        });
         return undefined;
     }
 };

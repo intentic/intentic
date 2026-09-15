@@ -140,3 +140,45 @@ describe(`the offer`, () => {
         expect(offer.value).toEqual({ kind: `app`, version: `1.215.0` });
     });
 });
+
+// A grammar, a viewer or a diagram that failed to fetch: the module is remembered as failed for the life of the
+// document, so the file the reader has open stays plain however often they reopen it. Only a reload repairs it, and
+// this is the one place that offers one.
+describe(`an incomplete bundle`, () => {
+    it(`offers the repair even though this page is running what is deployed`, async () => {
+        const { useAppUpdate, reportIncompleteBundle } = await load({ running: `1730000000000`, deployed: { buildId: `1730000000000` } });
+        const { offer } = useAppUpdate();
+        await settled();
+        expect(offer.value).toBeUndefined();
+
+        reportIncompleteBundle();
+        await nextTick();
+        expect(offer.value).toEqual({ kind: `incomplete` });
+    });
+
+    it(`does not talk over an update, which asks for the same click with a reason behind it`, async () => {
+        const { useAppUpdate, reportIncompleteBundle } = await load({ running: `1720000000000`, deployed: { buildId: `1730000000000` } });
+        const { offer } = useAppUpdate();
+        await settled();
+
+        reportIncompleteBundle();
+        await nextTick();
+        expect(offer.value).toEqual({ kind: `web` });
+    });
+
+    // Dismissing one cause must not silence the other: they are different things to decide about.
+    it(`keeps its dismissal apart from a deployed build's`, async () => {
+        const { useAppUpdate, reportIncompleteBundle } = await load({ running: `1730000000000`, deployed: { buildId: `1730000000000` } });
+        const { offer, dismiss } = useAppUpdate();
+        await settled();
+        reportIncompleteBundle();
+        await nextTick();
+        dismiss();
+        await nextTick();
+        expect(offer.value).toBeUndefined();
+
+        window.dispatchEvent(new CustomEvent(`intentic-desktop-update`, { detail: { version: `1.214.0` } }));
+        await nextTick();
+        expect(offer.value).toEqual({ kind: `app`, version: `1.214.0` });
+    });
+});

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const highlighter = vi.hoisted(() => ({ ensureLang: vi.fn() }));
+const diagnostics = vi.hoisted(() => ({ reportClient: vi.fn(), describeError: vi.fn(() => ({ message: `boom`, fields: {} })) }));
+const appUpdate = vi.hoisted(() => ({ reportIncompleteBundle: vi.fn() }));
 
 vi.mock("@intentic/ui", () => ({
     useHighlighter: () => highlighter,
@@ -12,6 +14,10 @@ vi.mock("@intentic/ui", () => ({
 // than the barrel, so that holding a preference does not drag mermaid, shiki and vue-flow in with it.
 vi.mock("@intentic/ui/text-size", () => ({ useTextSize: () => ({ scale: { value: 1 } }) }));
 vi.mock("@intentic/ui/theme", () => ({ useTheme: vi.fn() }));
+// The two app-wide channels a failure reaches, stubbed because the real ones talk to the daemon and to the
+// notification host: what matters here is that a grammar that never arrived reaches both.
+vi.mock("../../../app/clientDiagnostics", () => diagnostics);
+vi.mock("../../../app/appUpdate", () => appUpdate);
 
 const { useMonaco } = await import("./useMonaco");
 
@@ -32,5 +38,34 @@ describe(`ensureLanguage`, () => {
 
         await expect(useMonaco().ensureLanguage(monaco as never, `markdown`)).resolves.toBeUndefined();
         expect(monaco.languages.register).not.toHaveBeenCalled();
+    });
+
+    it(`reports the failure, since plain text is also what a language we ship nothing for looks like`, async () => {
+        highlighter.ensureLang.mockRejectedValueOnce(new Error(`stale grammar chunk`));
+
+        await useMonaco().ensureLanguage(monaco as never, `markdown`);
+
+        expect(diagnostics.reportClient).toHaveBeenCalledWith(`editor.grammar-unreachable`, expect.stringContaining(`markdown`), {
+            level: `warn`,
+            fields: { lang: `markdown` },
+        });
+    });
+
+    // The browser will not fetch that module again in this document, so reopening the file cannot fix it and the
+    // reader is owed the one action that can.
+    it(`offers the reload, since nothing in this page can fetch that chunk again`, async () => {
+        highlighter.ensureLang.mockRejectedValueOnce(new Error(`stale grammar chunk`));
+
+        await useMonaco().ensureLanguage(monaco as never, `markdown`);
+
+        expect(appUpdate.reportIncompleteBundle).toHaveBeenCalledTimes(1);
+    });
+
+    it(`keeps quiet about a language it ships no grammar for, which is not a failure`, async () => {
+        highlighter.ensureLang.mockResolvedValueOnce(undefined);
+
+        await expect(useMonaco().ensureLanguage(monaco as never, `cuneiform`)).resolves.toBeUndefined();
+        expect(diagnostics.reportClient).not.toHaveBeenCalled();
+        expect(appUpdate.reportIncompleteBundle).not.toHaveBeenCalled();
     });
 });
