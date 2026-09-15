@@ -1,11 +1,10 @@
 <!-- Shared session-card shell for every rail. -->
 <script setup lang="ts">
-import type { AgentProvider, MatchSnippet, UnfinishedWork } from "@intentic/sandbox-contract";
+import type { AgentProvider, MatchSnippet } from "@intentic/sandbox-contract";
 import { type IconName, ProgressRing, SegmentRing } from "@intentic/ui";
 import { computed } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
 import { formatElapsed, type TileRim } from "../features/agents/fleet/agentStatus";
-import StatusGlyph from "../features/agents/fleet/StatusGlyph.vue";
 import { markSegments } from "../features/agents/review/markSegments";
 import IdentityTile from "../features/capabilities/connect/IdentityTile.vue";
 import MatchLine from "./MatchLine.vue";
@@ -24,9 +23,6 @@ const props = defineProps<{
     // this card and the board's cannot disagree. Undefined for a row with nothing measured (and for every row that
     // isn't a session), which wears the empty rim instead.
     rim?: TileRim;
-    // What the last turn left open, as the daemon measured it. Present only for a card at rest; it puts the amber
-    // dot on the status glyph, the one thing a resting status cannot say about itself.
-    unfinished?: UnfinishedWork;
     live?: { icon: IconName; text: string; since?: number };
     now?: number;
     // When true, the live readout trails the facts line instead of taking its own row, for narrow rails.
@@ -48,14 +44,6 @@ const props = defineProps<{
 }>();
 
 const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, props.matchCase === true));
-// StatusGlyph's shape from this card's own: the two describe the same thing in different words (`name`/`icon`,
-// `aria-label`/`label`) because `status` is spread straight onto an Icon by every caller that has no unfinished
-// work to report. Adapted here rather than at each call site, so the callers keep one prop shape.
-const statusMeta = computed(() =>
-    props.status === undefined
-        ? undefined
-        : { icon: props.status.name, spin: props.status.spin, label: props.status[`aria-label`] ?? ``, class: props.status.class },
-);
 </script>
 
 <template>
@@ -114,10 +102,9 @@ const statusMeta = computed(() =>
                     <span v-if="peek" class="sr-only">, temporary</span>
                 </span>
                 <slot name="trailing" />
-<!-- StatusGlyph only when there is unfinished work to mark: it is the same glyph either way, but it carries the amber dot and the sentence explaining it. -->
+<!-- Fixed-height box so a row's title never shifts between a spinning glyph and a resting one. -->
                 <span v-if="status !== undefined" class="flex h-4 shrink-0 items-center">
-                    <StatusGlyph v-if="unfinished !== undefined && statusMeta !== undefined" :meta="statusMeta" :unfinished="unfinished" :now="now" />
-                    <Icon v-else v-bind="status" />
+                    <Icon v-bind="status" />
                 </span>
             </span>
 

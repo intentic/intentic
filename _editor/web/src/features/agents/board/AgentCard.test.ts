@@ -110,26 +110,27 @@ const refused = (): FleetAgent => ({
 // The corner's status glyph: the one element that says how the card settled, by its accessible name.
 const corner = (el: HTMLElement): HTMLElement | null => el.querySelector(`[role="img"]`);
 
-/* ONE CORNER, BOTH FACTS. */
-it(`marks a turn that stopped short on the status glyph, not on a chip of its own`, () => {
+/* THE CORNER SAYS HOW THE CARD SETTLED, AND THAT IS ALL: how far its list got is the identity tile's rim (tileRim). */
+it(`leaves a turn that stopped short to the rim, wearing the same bare glyph as one that did not`, () => {
     const el = mount({
         ...ready(`landed`),
-        // Dated now: the card's clock is the real one for a resting card, and the hover ages the mark against it.
+        // Dated now: the card's clock is the real one for a resting card, and the rim reads the same checklist.
         unfinished: { at: Date.now(), steps: { open: 1, total: 5, next: `Restore reachability so radarsu-omen can pair` } },
+        checklist: { done: 4, total: 5 },
     });
     expect(el.textContent).not.toContain(`Unfinished`);
     const glyph = corner(el)!;
-    expect(glyph.querySelector(`[data-icon="check-circle"]`)).not.toBeNull();
-    expect(glyph.querySelector(`[data-unfinished]`)).not.toBeNull();
-    expect(glyph.getAttribute(`aria-label`)).toBe(
-        `Landed. Stopped with 1 of 5 steps unfinished, just now: Restore reachability so radarsu-omen can pair`,
-    );
+    expect(glyph.getAttribute(`data-icon`)).toBe(`check-circle`);
+    expect(glyph.getAttribute(`aria-label`)).toBe(`Landed`);
+    // A second mark here would be the rim's reading said twice, in a place with no room to say it properly.
+    expect(glyph.children).toHaveLength(0);
 });
 
-it(`wears a plain glyph once nothing was left open`, () => {
+it(`wears that same glyph when nothing was left open`, () => {
     const glyph = corner(mount(ready(`landed`)))!;
-    expect(glyph.querySelector(`[data-unfinished]`)).toBeNull();
+    expect(glyph.getAttribute(`data-icon`)).toBe(`check-circle`);
     expect(glyph.getAttribute(`aria-label`)).toBe(`Landed`);
+    expect(glyph.children).toHaveLength(0);
 });
 
 const landButton = (el: HTMLElement): HTMLButtonElement | undefined =>

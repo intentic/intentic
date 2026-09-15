@@ -650,7 +650,6 @@ const keepTab = (event: Event, id: string): void => {
                             :provider="agent?.provider ?? c.provider.value"
                             :status="statusOf({ conversation: c, agent })"
                             :rim="rimOf({ conversation: c, agent })"
-                            :unfinished="agent?.unfinished"
                             :live="liveOf({ conversation: c, agent })"
                             :now="now"
                             tight

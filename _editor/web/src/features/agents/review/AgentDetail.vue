@@ -4,7 +4,6 @@ import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import ChatPanel from "../../chat/panel/ChatPanel.vue";
 import { agentStatusMeta, unregistered, writingNow } from "../fleet/agentStatus";
-import StatusGlyph from "../fleet/StatusGlyph.vue";
 import { createInlineRename } from "../../../lib/inlineRename";
 import { requestLandAgent } from "../fleet/agentActions";
 import { boxNameOf, openInSandbox, otherFleet } from "../fleet/fleetScope";
@@ -356,11 +355,12 @@ const confirmDiscard = async (): Promise<void> => {
 <!-- Status compresses to its glyph in a narrow header; words return once the header itself has room. -->
             <span
                 v-if="status !== undefined"
+                v-tooltip.top="status.label"
                 class="inline-flex shrink-0 items-center gap-1 text-2xs"
                 :class="status.class"
                 :aria-label="status.label"
             >
-                <StatusGlyph :meta="status" :unfinished="fleetAgent?.unfinished" class="text-2xs" />
+                <Icon :name="status.icon" :spin="status.spin" class="text-2xs" />
                 <span :class="mobile ? `hidden @md:inline` : ``">{{ status.label }}</span>
             </span>
             <!-- Its place, held: the status arrives with the roster entry, and a header that grows one on arrival jumps. -->

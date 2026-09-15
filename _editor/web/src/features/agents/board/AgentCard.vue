@@ -11,7 +11,6 @@ import { useVocabulary } from "../../../core-views/vocabulary";
 import OriginMark from "../../../components/OriginMark.vue";
 import StartedByMark from "./StartedByMark.vue";
 import UnsentMark from "../../../components/UnsentMark.vue";
-import StatusGlyph from "../fleet/StatusGlyph.vue";
 import WorkflowMark from "../../../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "./laneDrop";
 import {
@@ -550,7 +549,17 @@ const grab = (event: PointerEvent): void => {
                 >{{ unread.label }}</span
             >
 <!-- The resting standing for a card with no reason or unread mark; carries meta.label as a word in its hover, not just a glyph. -->
-            <StatusGlyph v-else :meta="statusMeta" :unfinished="agent.unfinished" :now="now" class="text-sm" />
+<!-- What the last turn left open is the tile rim's to say (tileRim): the checklist it drew here twice was one fact with two marks. -->
+            <Icon
+                v-else
+                :name="statusMeta.icon"
+                :spin="statusMeta.spin"
+                v-tooltip.top="statusMeta.label"
+                :aria-label="statusMeta.label"
+                role="img"
+                class="shrink-0 text-sm"
+                :class="statusMeta.class"
+            />
         </div>
         <p v-if="edit.error !== undefined" class="text-2xs text-danger">{{ edit.error }}</p>
 
