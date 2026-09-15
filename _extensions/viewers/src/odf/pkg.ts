@@ -1,5 +1,5 @@
 import { unzipSync } from "fflate";
-import { descendants, descendant, parseXml, textOf, type XmlElement } from "./xml";
+import { descendants, descendant, parseXml, textOf, type XmlElement } from "./xml-tree";
 
 /* An OpenDocument file is a zip of XML parts plus its pictures. This opens one and hands out the parts; the viewers
    above it never touch bytes. */

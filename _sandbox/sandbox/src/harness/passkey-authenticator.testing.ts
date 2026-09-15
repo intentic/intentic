@@ -1,6 +1,6 @@
 import { createHash, generateKeyPairSync, type KeyObject, randomBytes, sign as signWith } from "node:crypto";
 import type { AuthenticationResponse, RegistrationResponse } from "@intentic/sandbox-contract";
-import { base64url } from "../auth/webauthn.js";
+import { base64url } from "../auth/passkeys/webauthn.js";
 
 // A passkey authenticator in software: builds the real attestation and assertion bytes a browser would hand the daemon
 // (CBOR, a COSE key, the flag byte, an ES256/RS256/EdDSA signature) so the verifier is tested against the wire format,

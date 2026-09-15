@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attr, child, descendant, descendants, parseXml, textOf } from "./xml";
+import { attr, child, descendant, descendants, parseXml, textOf } from "./xml-tree";
 
 /* The parse every document viewer stands on. */
 

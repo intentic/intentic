@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { CONFIG_FILE, scaffoldDeployConfig } from "@intentic/scaffold";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
-import { AGENT_GIT_AUTHOR } from "../git/git.js";
+import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 
 // Read/write + commit the intent repo's deploy.config.ts. The daemon owns this file (the browser edits it only
 // through daemon routes, never directly); a repo with no config yet reads as a fresh neutral scaffold. Shared by

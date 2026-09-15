@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { TRANSLATOR_PROVIDERS, type TranslatorProvider } from "../models/provider-specs.js";
-import { AgentHarnessSchema, AgentProviderSchema, EditorContextSchema } from "./agent.js";
+import { TRANSLATOR_PROVIDERS, type TranslatorProvider } from "../../models/provider-specs.js";
+import { AgentHarnessSchema, AgentProviderSchema, EditorContextSchema } from "../agent.js";
 // Headroom is one shape shared by every provider, not a Claude idea others imitate: a native account and a routed
 // subscription differ in who holds the credential, never in what a reading is. Every surface that draws a percentage
 // reads this one type.

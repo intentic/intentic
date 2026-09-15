@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type {
     AcpAgentConfig,
     AgentEvent,
+    AgentOrigin,
     Capability,
     HostFacts,
     HostScopes,
@@ -52,8 +53,8 @@ import { type AcpConnections, createAcpConnections } from "./runtimes/acp/acp-co
 import { createPiAgent } from "./runtimes/pi/pi-agent.js";
 import { piSpawner } from "./runtimes/pi/pi-rpc.js";
 import { type ControlTokens, fileControlTokens } from "./auth/control-tokens.js";
-import { allowedOriginsOf, originAllowedBy } from "./auth/origins.js";
-import { createPasskeyCeremonies, filePasskeys, type PasskeyCeremonies, type PasskeyStore } from "./auth/passkeys.js";
+import { allowedOriginsOf, originAllowedBy } from "./auth/browser-origins.js";
+import { createPasskeyCeremonies, filePasskeys, type PasskeyCeremonies, type PasskeyStore } from "./auth/passkeys/passkey-store.js";
 import { type DoorTokens, fileDoorTokens } from "./auth/door-tokens.js";
 import { createMediaTickets, type MediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets, type WsTickets } from "./auth/ws-tickets.js";
@@ -124,7 +125,7 @@ import type { ParentCredentials } from "./runners/runner-credentials.js";
 import { createPeerHub } from "./peers/peer-hub.js";
 import { filePeerStore } from "./peers/peer-store.js";
 import { fetchPresentation, type SandboxPresentation } from "./platform/platform-client.js";
-import { syncPairBurnPath, type SyncMode } from "./platform/sync.js";
+import { enrolledFleet, type SyncFleet, syncPairBurnPath, type SyncMode } from "./platform/sync.js";
 import { pairings, type Pairings } from "./store/enrollment.js";
 import { fileTurnJournal, type TurnJournal } from "./agent/run/turn/turn-journal.js";
 import { fileWatchJournal, type WatchJournal } from "./agent/verification/watch-journal.js";
@@ -198,7 +199,7 @@ import {
 } from "./sessions/sessions.js";
 import { readSessionLines, spokenLinesOf, transcriptSearchMetrics } from "./sessions/transcript-search.js";
 import { fileThreadSessionsStore, type ThreadSessionsStore } from "./sessions/thread-sessions.js";
-import { fileWebchatOutbox, type WebchatOutbox } from "./webchat/webchat-outbox.js";
+import { fileWebchatOutbox, type OutboxSink, outboxStreamFor, type WebchatOutbox } from "./webchat/webchat-outbox.js";
 import { openSearchIndex, type SearchIndex } from "./sessions/search-index.js";
 import { backfillSearchIndex, type BackfillSource } from "./sessions/search-backfill.js";
 import {
@@ -316,6 +317,9 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // Which of those computers a turn may act on, and which one runs this sandbox: composed here rather than reached
     // for, so a turn's prompt says "run it there" without the agent importing the hosts subsystem.
     readonly hostReach: (granted: readonly Capability[]) => Promise<HostDeviceReach | undefined>;
+    // The desktop-sync enrollments, for the same reason and in the same shape: the devices view merges them with host
+    // pulls without the hosts subsystem importing the platform's sync store.
+    readonly syncFleet: () => Promise<SyncFleet>;
     // Same pair for the user's own browsers; a separate bridge token so one leaking can't open the other's door.
     readonly webextBridgeToken: string;
     readonly webexts: WebExtStore;
@@ -409,6 +413,9 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // Front Desk replies written after the visitor's stream closed (an approved wake, a human writing as the agent);
     // the widget's poll drains them on the next page load.
     readonly webchatOutbox: WebchatOutbox;
+    // Where a wake with no live visitor writes its answer. Composed here so the scheduler can attach the queue without
+    // the automations subsystem importing webchat's code; undefined for any origin that answers through its gateway.
+    readonly outboxStreamFor: (origin: AgentOrigin | undefined) => OutboxSink | undefined;
     // Things the agent prepared and may not do unasked; /approvals is the owner's approve/reject side.
     readonly approvals: ApprovalsStore;
     // Bug reports from /intake, triaged from /issues; one instance so per-fingerprint writes don't race.
@@ -1067,6 +1074,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         hosts: filePeerStore(config.historyRoot, HOST_PEER.store),
         // Reads only readings already held (hosts/self-host.ts), so composing a turn never waits on a laptop.
         hostReach: (granted) => hostDeviceReach(services, granted),
+        syncFleet: () => enrolledFleet(config.historyRoot),
         hostHub: createPeerHub<HostClient, HostAnnounced, HostFacts, HostScopes>(HOST_PEER.hub, logger),
         webextBridgeToken: randomBytes(32).toString("hex"),
         webexts: filePeerStore(config.historyRoot, WEBEXT_PEER.store),
@@ -1122,6 +1130,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         heldWakes: fileHeldWakesStore(statePath(workspace.root, ".intentic/records/approvals/")),
         threadSessions: fileThreadSessionsStore(statePath(workspace.root, ".intentic/records/thread-sessions.json")),
         webchatOutbox: fileWebchatOutbox(statePath(workspace.root, ".intentic/records/webchat-outbox.json")),
+        outboxStreamFor: (origin) => outboxStreamFor(services, origin),
         approvals: fileApprovalsStore(statePath(workspace.root, ".intentic/config/approvals/")),
         issues: fileIssuesStore(statePath(workspace.root, ".intentic/records/issues/")),
         issueInstalls: fileInstallsStore(statePath(workspace.root, ".intentic/records/issue-installs.json")),

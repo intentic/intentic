@@ -10,7 +10,7 @@ import { resetEmptyDirsState } from "./useEmptyDirs";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { useRole } from "../../sandbox/secrets/useRole";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
-import { resetUploadQueue } from "../files/useUploadQueue";
+import { resetUploadQueue } from "../files/upload/useUploadQueue";
 import { dropProvisional, markSettled, noteArriving, noteLeaving, reconcileProvisional, resetProvisional } from "../files/provisionalEntries";
 import { renameOpenPaths } from "../tabs/useWorkspaceTabs";
 import { changedDirs } from "../changes/useWorkspaceLive";

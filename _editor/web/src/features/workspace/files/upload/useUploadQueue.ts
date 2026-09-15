@@ -3,13 +3,13 @@ import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, markRaw, reactive, ref } from "vue";
 import { detectProjects, managerFromPackageJson, type ProjectSetup } from "@intentic/workspace-setup";
-import { collectDroppedFiles, type DroppedFile, isRootGitPath } from "../explorer/transfer/dropEntries";
-import { packTar } from "../explorer/transfer/tarStream";
-import { sandboxJson, sandboxUpload } from "../../sandbox/client/sandboxClient";
-import { jsonBody } from "../../sandbox/client/jsonBody";
-import { WORKSPACE_TREE } from "../../../lib/queryKeys";
+import { collectDroppedFiles, type DroppedFile, isRootGitPath } from "../../explorer/transfer/dropEntries";
+import { packTar } from "../../explorer/transfer/tarStream";
+import { sandboxJson, sandboxUpload } from "../../../sandbox/client/sandboxClient";
+import { jsonBody } from "../../../sandbox/client/jsonBody";
+import { WORKSPACE_TREE } from "../../../../lib/queryKeys";
 import { chunkItems, dedupeByPath } from "./uploadChunking";
-import { clearUnsettledUploads, markFailed, markSettled, noteArriving } from "./provisionalEntries";
+import { clearUnsettledUploads, markFailed, markSettled, noteArriving } from "../provisionalEntries";
 
 // Workspace upload queue: drops and picks append to a shared queue rather than clobbering an in-flight upload.
 // Per-file transport is a bounded XHR pool (HTTP/1.1 and HTTP/2); large trees stream as one tar instead, falling

@@ -1,5 +1,5 @@
 import { unzipSync } from "fflate";
-import { attr, childElements, descendants, parseXml, textOf, type XmlElement } from "./xml";
+import { attr, childElements, descendants, parseXml, textOf, type XmlElement } from "./xml-tree";
 
 /* An .ods as sheets of values. Runs inside the spreadsheet worker, which has no DOM, so nothing here may reach for
    one. */

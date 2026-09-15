@@ -1,4 +1,4 @@
-import { attr, child, childElements, descendants, type XmlElement } from "./xml";
+import { attr, child, childElements, descendants, type XmlElement } from "./xml-tree";
 
 /* ODF styles as CSS declarations. ODF measures in cm/in/pt/mm, all of which CSS understands, so lengths pass through
    as written rather than being converted to pixels. */

@@ -7,11 +7,11 @@ import {
 } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import type { z } from "zod";
-import type { AppEnv } from "../app-env.js";
-import type { Services } from "../composition.js";
-import { bearerFrom, ForbiddenError, type Proof } from "./auth.js";
-import { ownershipDenied } from "./owner-gates.js";
-import { mintRecoveryCodes, PasskeyError, type StoredCredential, summaryOf } from "./passkeys.js";
+import type { AppEnv } from "../../app-env.js";
+import type { Services } from "../../composition.js";
+import { bearerFrom, ForbiddenError, type Proof } from "../auth.js";
+import { ownershipDenied } from "../owner-gates.js";
+import { mintRecoveryCodes, PasskeyError, type StoredCredential, summaryOf } from "./passkey-store.js";
 
 // The sandbox as WebAuthn relying party: each member's own passkeys, the two anonymous doors a passkey signs in
 // through, the owner's require-a-passkey switch, and the recovery codes that keep that switch from locking the owner

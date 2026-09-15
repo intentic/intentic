@@ -66,5 +66,5 @@ turns that into elements. ODF, RTF and the ODF slide viewer all produce the same
 - EPUB is the exception that proves it: a chapter IS third-party markup, so it renders in an iframe with an empty
   `sandbox` (no scripts, opaque origin) whose content carries a `default-src 'none'` policy, with every resource
   inlined as data.
-- `src/odf/xml.ts` exists because the sheet worker has no DOM and neither does a node test. It is also why tags
+- `src/odf/xml-tree.ts` exists because the sheet worker has no DOM and neither does a node test. It is also why tags
   are keyed by canonical namespace prefix: a file may bind any prefix it likes to ODF's namespaces.

@@ -2,8 +2,8 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { softwareAuthenticator } from "../harness/passkey-authenticator.testing.js";
-import { memoryPasskeyStore } from "../harness/route-stores.testing.js";
+import { softwareAuthenticator } from "../../harness/passkey-authenticator.testing.js";
+import { memoryPasskeyStore } from "../../harness/route-stores.testing.js";
 import {
     createPasskeyCeremonies,
     filePasskeys,
@@ -14,7 +14,7 @@ import {
     type PasskeyStore,
     RECOVERY_CODE_COUNT,
     type StoredCredential,
-} from "./passkeys.js";
+} from "./passkey-store.js";
 
 // The daemon as relying party, driven with a software authenticator: real attestation and assertion bytes through the
 // real verifier, then every way a response can fail to be the one the ceremony asked for.

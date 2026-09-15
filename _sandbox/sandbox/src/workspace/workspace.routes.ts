@@ -6,7 +6,7 @@ import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { AGENT_GIT_AUTHOR } from "../git/git.js";
+import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { repoGitDir, syncRootExcludes } from "../history/history.js";
 import { cachedScheme } from "../ports/port-probe.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";

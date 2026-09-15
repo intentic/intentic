@@ -1,7 +1,7 @@
 import { ACP, type AgentCapabilities, CLAUDE_CODE, PI } from "./agent-runtimes.js";
 import { type NativeProvider, PROVIDER_SPECS, type ProviderAccess, providerSpec } from "./provider-specs.js";
 import type { AgentHarness, AgentProvider, PermissionMode } from "../schemas/agent.js";
-import type { Model, ModelBadge } from "../schemas/provider-oauth.js";
+import type { Model, ModelBadge } from "../schemas/providers/provider-oauth.js";
 
 // The provider/harness/model catalog every picker shares, pure data keyed by the wire vocabulary in schemas/agent.ts.
 // Every table below is derived from PROVIDER_SPECS; what remains here is the shape each surface wants, plus rules about

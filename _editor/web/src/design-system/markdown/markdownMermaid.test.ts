@@ -11,7 +11,7 @@ import { createApp, h } from "vue";
 // mermaidTheme.ts.
 
 import { Markdown } from "@intentic/ui";
-import { ICONS } from "../../../ui/src/icons/iconSets.js";
+import { ICONS } from "../../../../ui/src/icons/iconSets.js";
 
 const identity = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
 Object.assign(SVGElement.prototype, {

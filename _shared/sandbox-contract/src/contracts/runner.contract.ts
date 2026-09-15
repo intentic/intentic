@@ -3,7 +3,7 @@ import { z } from "zod";
 import { AgentEventSchema } from "../events/agent-events.js";
 import { RunnerFactsSchema, RunnerSyncLineSchema, RunnerSyncSchema, RunnerTurnSchema } from "../protocol/runner-protocol.js";
 import { EditorContextSchema } from "../schemas/agent.js";
-import { AgentReplySchema } from "../schemas/plan-limits.js";
+import { AgentReplySchema } from "../schemas/providers/plan-limits.js";
 import { OkSchema } from "../schemas/shared.js";
 
 // What a runner can be asked, over the socket it opened; same inversion as hostContract, the runner is the oRPC server,

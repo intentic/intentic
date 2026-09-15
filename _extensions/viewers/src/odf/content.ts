@@ -1,6 +1,6 @@
-import type { Block, Cell, Inline, Row } from "./model";
+import type { Block, Cell, Inline, Row } from "./document-model";
 import type { Css, StyleBook } from "./styles";
-import { attr, child, childElements, descendant, isElement, textOf, type XmlElement, type XmlNode } from "./xml";
+import { attr, child, childElements, descendant, isElement, textOf, type XmlElement, type XmlNode } from "./xml-tree";
 
 /* content.xml's flowing text, as blocks. Shared by every ODF viewer: a paragraph reads the same inside a document,
    a spreadsheet cell and a slide's text box. */

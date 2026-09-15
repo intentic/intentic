@@ -1,5 +1,5 @@
 import type { Automation, Capability, Persona } from "@intentic/sandbox-contract";
-import type { PasskeyStore, StoredCredential, StoredRecoveryCode } from "../auth/passkeys.js";
+import type { PasskeyStore, StoredCredential, StoredRecoveryCode } from "../auth/passkeys/passkey-store.js";
 import type { AutomationRecord, AutomationsStore } from "../automations/automations-store.js";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { DismissalsStore, DismissedRecommendation } from "../capabilities/dismissals-store.js";

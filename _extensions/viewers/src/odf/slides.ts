@@ -1,8 +1,8 @@
 import { blocksOf, type Context } from "./content";
-import { textOfBlock, type Block } from "./model";
+import { textOfBlock, type Block } from "./document-model";
 import { bodyOf, toCentimetres, type OdfPackage } from "./pkg";
 import { readStyles, type Css } from "./styles";
-import { attr, child, childElements, descendant, textOf, type XmlElement } from "./xml";
+import { attr, child, childElements, descendant, textOf, type XmlElement } from "./xml-tree";
 
 /* A presentation or drawing as slides of positioned shapes. Positions are ODF's own absolute lengths, kept as
    written: the viewer scales the whole slide rather than recomputing every box. */

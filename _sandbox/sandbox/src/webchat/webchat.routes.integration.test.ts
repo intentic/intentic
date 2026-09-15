@@ -18,13 +18,13 @@ import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import type { Services } from "../composition.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
-import { fileWebchatOutbox } from "./webchat-outbox.js";
+import { fileWebchatOutbox, outboxStreamFor } from "./webchat-outbox.js";
 import { createWebchatRoutes } from "./webchat.routes.js";
 
 const ORIGIN = "https://site.example";
 
-const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
-    unstubbed<Services>("services", {
+const fakeServices = (root: string, appends: ActivityEvent[]): Services => {
+    const services: Services = unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
@@ -43,7 +43,12 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
         }),
         // Real parsed defaults keep the admission gate and spin-loop guard out of these Front Desk tests.
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
+        // The real queue over the outbox above, composed as composition.ts composes it: this suite's subject is what a
+        // held wake leaves for the visitor's next poll, so a stub here would assert the stub.
+        outboxStreamFor: (origin) => outboxStreamFor(services, origin),
     });
+    return services;
+};
 
 const fakeWake = (turns: AgentTurn[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>
     async function* (_services, input) {

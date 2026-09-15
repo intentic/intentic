@@ -23,13 +23,13 @@ sandbox**: the daemon issues the WebAuthn challenge, the daemon verifies the res
 public key, in `.intentic/identity/passkeys.json` beside `members.json` in the same trust class (`identity`
 portability, locked from the file API). An assertion mints a daemon session with no Google in the loop. The
 platform learns nothing new. The relying-party id is the editor origin's host, taken from the request's
-`Origin` header, which must already pass the daemon's CORS allowlist ([auth/origins.ts](../../_sandbox/sandbox/src/auth/origins.ts)
+`Origin` header, which must already pass the daemon's CORS allowlist ([auth/browser-origins.ts](../../_sandbox/sandbox/src/auth/browser-origins.ts)
 is now the one place that list is read); `localhost` serves the local profile. Two sandboxes reached from one
 editor origin therefore share an rpId, so the user handle is `sha256(sandboxId:email)`: without that, an
 authenticator would overwrite one sandbox's passkey with the other's.
 
 Verification is written in the daemon rather than taken from a library
-([auth/webauthn.ts](../../_sandbox/sandbox/src/auth/webauthn.ts)). The libraries' bulk is attestation-format
+([auth/passkeys/webauthn.ts](../../_sandbox/sandbox/src/auth/passkeys/webauthn.ts)). The libraries' bulk is attestation-format
 verification (packed, TPM, Android, Apple), which is a policy about *which authenticator* made a key; this
 sandbox has no such policy and asks for `attestation: "none"`. What remains is the byte layout around a
 signature: CBOR, authenticator data, a COSE key to JWK, `node:crypto` for ES256, RS256 and EdDSA, user

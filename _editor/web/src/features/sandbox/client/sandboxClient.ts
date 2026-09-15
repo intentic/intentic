@@ -1,6 +1,6 @@
 import { driftedRouteReason, staleDaemonReason } from "../overview/useDaemonRoutes";
 import { trackPerf } from "../../../app/perf";
-import { CHUNK_BYTES } from "../../workspace/files/uploadChunking";
+import { CHUNK_BYTES } from "../../workspace/files/upload/uploadChunking";
 import { sandboxAuthenticatedFetch, uploadsBody } from "./sandboxAuthFetch";
 import { useSandboxSession } from "./sandboxSession";
 import { currentSandboxTarget, type SandboxTarget, targetFor } from "./sandboxTarget";

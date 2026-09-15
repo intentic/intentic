@@ -1,6 +1,6 @@
 import { computed } from "vue";
 import PushQuestionBody from "./PushQuestionBody.vue";
-import UploadProgressBody from "../../features/workspace/files/UploadProgressBody.vue";
+import UploadProgressBody from "../../features/workspace/files/upload/UploadProgressBody.vue";
 import { useAppUpdate } from "../../app/appUpdate";
 import { hold, type NotificationTone } from "./notifications";
 import { sandboxRequiresGate } from "../../features/sandbox/overview/availability";
@@ -12,7 +12,7 @@ import { useAuth } from "../../features/auth/useAuth";
 import { useGoogleIdentity } from "../../features/auth/useGoogleIdentity";
 import { useSandboxSession } from "../../features/sandbox/client/sandboxSession";
 import { usePushFlow } from "../../features/workspace/push/usePushFlow";
-import { useUploadQueue } from "../../features/workspace/files/useUploadQueue";
+import { useUploadQueue } from "../../features/workspace/files/upload/useUploadQueue";
 import { useWorkspaceTree } from "../../features/workspace/explorer/useWorkspaceTree";
 
 // Every standing fact and open question this app floats, declared in one place as pure conditions fed to `hold`;

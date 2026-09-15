@@ -33,7 +33,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { relative, sep } from "node:path";
 import { z } from "zod";
-import { daemonMountNs, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV, type TurnPlacement } from "../../agents/worktrees/isolation.js";
+import { daemonMountNs, inWorktree, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV, type TurnPlacement } from "../../agents/worktrees/isolation.js";
 import { worktreeRedirectHooks } from "../../agents/worktrees/worktree-redirect.js";
 import type { AccountsServerFactory } from "../../browser/tools/accounts-tools.js";
 import type { ChildSupervisor } from "../subagents/children.js";
@@ -487,6 +487,7 @@ const baseOptions = (
             // Every owner rule standing at turn.ending: the proof ledger, a standing instruction, a required command.
             turnEndingHooks(request.turnEndingRules ?? [], {
                 isolation: request.isolation?.plan,
+                inWorktree: (path) => inWorktree(path, request.isolation?.plan),
                 runCommand: request.runRuleCommand,
                 installing: request.dependencyInstalling,
                 cwd: request.cwd,

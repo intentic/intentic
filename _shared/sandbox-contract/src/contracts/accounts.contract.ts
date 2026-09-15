@@ -11,7 +11,7 @@ import {
     LoginStartSchema,
     OauthAccountListSchema,
     OauthAccountSchema,
-} from "../schemas/provider-oauth.js";
+} from "../schemas/providers/provider-oauth.js";
 import { OkSchema } from "../schemas/shared.js";
 
 // One route family for the accounts this sandbox holds itself, with the provider as a parameter rather than a vertical

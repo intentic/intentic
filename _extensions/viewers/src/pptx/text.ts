@@ -1,6 +1,6 @@
-import { type Paragraph, type Run, SZ_PER_PX, emuToPx } from "./model";
+import { type Paragraph, type Run, SZ_PER_PX, emuToPx } from "./deck-model";
 import { colorOf, type Palette } from "./style";
-import { attr, flag, kid, kids, num } from "./xml";
+import { attr, flag, kid, kids, num } from "./xml-dom";
 
 /* TEXT, and the cascade behind every word of it. A run on a slide typically states nothing but its characters: its
    size, weight, colour and bullet come from the shape's list style, then the layout placeholder's, then the master's

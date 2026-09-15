@@ -3,7 +3,7 @@ import { AgentCommandsQuerySchema, AgentCommandsSchema } from "../events/cards.j
 import { AttachFrameSchema } from "../events/agent-events.js";
 import { AgentTurnSchema, AttachTurnSchema, StartedTurnSchema } from "../schemas/agent.js";
 import { RewindResultSchema, RewindTurnSchema } from "../schemas/history.js";
-import { AgentReplySchema, ProviderRefusalsSchema, ResumeTurnSchema, SteerSchema, StopTurnSchema } from "../schemas/plan-limits.js";
+import { AgentReplySchema, ProviderRefusalsSchema, ResumeTurnSchema, SteerSchema, StopTurnSchema } from "../schemas/providers/plan-limits.js";
 import { OkSchema } from "../schemas/shared.js";
 
 // A turn executes as a detached daemon-side run. `run` starts it, `attach` streams it to any number of clients

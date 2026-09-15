@@ -1,7 +1,7 @@
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 import { CapabilityIdParamSchema } from "../schemas/capabilities.js";
-import { ModelsSchema } from "../schemas/provider-oauth.js";
+import { ModelsSchema } from "../schemas/providers/provider-oauth.js";
 
 // Endpoints are user-created and unbounded (unlike every other provider, which has one fixed catalog route), so the id
 // rides in the path.

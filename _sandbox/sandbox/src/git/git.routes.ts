@@ -22,7 +22,8 @@ import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../wor
 import type { ActionResult } from "./changes/changes-commits.js";
 import { DISCARDABLE_SIDES, isWholeRepo, scopedPaths, STAGEABLE_SIDES, UNSTAGEABLE_SIDES } from "./changes/changes-target.js";
 import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./changes/code-counts.js";
-import { AGENT_GIT_AUTHOR, gitFailureReason } from "./git.js";
+import { AGENT_GIT_AUTHOR } from "../git-identity.js";
+import { gitFailureReason } from "./git.js";
 import { parsableMessage } from "./ops/commit-message.js";
 import { createPushRuns } from "./ops/push-run.js";
 

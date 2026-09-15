@@ -106,8 +106,8 @@ flowchart TB
   with the reachability key and verified offline against the public half the provisioner put in the machine's
   env, naming this sandbox's id and the owner `OWNER_EMAIL` already names, so the platform sign-in is the only
   one a hosted user makes. It adds no power the hosted exception below does not already grant. A **passkey** is
-  the other sign-in credential, and the daemon is its relying party ([auth/passkeys.ts](../../_sandbox/sandbox/src/auth/passkeys.ts),
-  the verifier in [auth/webauthn.ts](../../_sandbox/sandbox/src/auth/webauthn.ts)): a signed-in owner or member
+  the other sign-in credential, and the daemon is its relying party ([auth/passkeys/passkey-store.ts](../../_sandbox/sandbox/src/auth/passkeys/passkey-store.ts),
+  the verifier in [auth/passkeys/webauthn.ts](../../_sandbox/sandbox/src/auth/passkeys/webauthn.ts)): a signed-in owner or member
   registers one from Sandbox ▸ Access, its public key lands in `/work/.intentic/identity/passkeys.json` beside
   the roster, and an assertion from it mints a session with no Google involved. Every session carries how it
   was proven (`amr`), and the owner may switch on **require a passkey**: from then a Google proof or the owner

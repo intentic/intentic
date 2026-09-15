@@ -1,4 +1,4 @@
-import { attr, kid, kids, num } from "./xml";
+import { attr, kid, kids, num } from "./xml-dom";
 
 /* COLOR, the way a deck actually states it: almost never as a hex value, and almost always as "accent 1, 40% lighter"
    — a theme slot plus modifiers. Resolving that chain is what keeps a rendered slide the colour its author chose

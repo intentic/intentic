@@ -99,7 +99,7 @@ mismatch is a type error rather than a runtime surprise.
   - [src/contracts/accounts.contract.ts](src/contracts/accounts.contract.ts): the accounts the sandbox holds
     itself, one route family with the provider as a parameter (`/accounts/{provider}`), the lesson the
     catalog route learned applied to sign-ins: start, complete, cancel, list, rename, disconnect are the same
-    six verbs for every provider, and `LoginStart` (schemas/provider-oauth.ts) is the one sign-in shape,
+    six verbs for every provider, and `LoginStart` (schemas/providers/provider-oauth.ts) is the one sign-in shape,
     whose `flow` says how an attempt ENDS (device, redirect, paste). Nothing redeemable is on any answer.
   - [src/agent-catalog.ts](src/models/agent-catalog.ts): the shapes each surface reads that table in, plus the rules
     that are about something other than a provider (the trial, the endpoint namespace, the effort and fast-mode

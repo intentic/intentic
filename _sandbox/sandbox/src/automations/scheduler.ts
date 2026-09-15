@@ -15,7 +15,7 @@ import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { automationPending } from "../push/notifications.js";
 import { threadKey } from "../sessions/thread-sessions.js";
 import { pinnedRunModel } from "../agent/models/run-role-model.js";
-import { type OutboxSink, outboxStreamFor } from "../webchat/webchat-outbox.js";
+import type { OutboxSink } from "../webchat/webchat-outbox.js";
 import { type AutomationRecord, consecutiveFailures } from "./automations-store.js";
 
 const execFileAsync = promisify(execFile);
@@ -513,7 +513,7 @@ const heldWakeOptions = (held: AutomationApproval, sink: OutboxSink | undefined)
 export const runHeldWake = async (services: Services, automation: AutomationRecord, held: AutomationApproval, wake: WakeFn): Promise<void> => {
     // The visitor's own stream closed when the wake was held, so a Front Desk answer has nowhere live to go; queue it
     // where their next page load will collect it. Undefined for every other origin, which answers through its gateway.
-    const sink = outboxStreamFor(services, held.origin);
+    const sink = services.outboxStreamFor(held.origin);
     const settled = await fireAutomation(services, automation, wake, heldWakeOptions(held, sink));
     // Before the release is over: the approve route answers its caller here, and the visitor polling a moment later
     // must find the answer rather than an empty thread.

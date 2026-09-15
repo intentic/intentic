@@ -20,7 +20,7 @@ import {
     verifyEditsMessage,
 } from "../agent/verification/agent-verification.js";
 import { createViewLedger, isObservingCall, type ViewLedger, verifyUiEditsMessage } from "../agent/verification/agent-viewing.js";
-import { inWorktree, type IsolationPlan } from "../agents/worktrees/isolation.js";
+import type { IsolationPlan } from "../agents/worktrees/isolation.js";
 import type { RuleCommandRun } from "./rule-command.js";
 import { conditionHolds, reposOf, type RuleFacts } from "./rules.js";
 import { EDIT_TOOLS, editedPath } from "./edit-tools.js";
@@ -57,6 +57,10 @@ export type TurnRuleCommand = (command: string, timeoutMs: number, repo?: string
 
 export interface TurnEndingDeps {
     readonly isolation?: IsolationPlan | undefined;
+    // Maps a daemon-side path to the agent's own tree. Injected rather than derived from `isolation` here, because
+    // doing it in place would make this subsystem import the worktree module's code, not just its shape; absent leaves
+    // the path alone, which is what an unisolated turn needs.
+    readonly inWorktree?: ((path: string) => string) | undefined;
     readonly runCommand?: TurnRuleCommand | undefined;
     // Relativises paths to the turn's tree, so a glob matches equally here and at landing; absent leaves it as-is.
     readonly cwd?: string | undefined;
@@ -335,7 +339,7 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                                   if (input.hook_event_name === "PreToolUse") {
                                       const path = editedPath(input.tool_input);
                                       if (path !== undefined) {
-                                          removal.notePrior(path, await read(inWorktree(path, deps.isolation)));
+                                          removal.notePrior(path, await read(deps.inWorktree?.(path) ?? path));
                                       }
                                   }
                                   return {};

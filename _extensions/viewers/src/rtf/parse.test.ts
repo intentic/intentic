@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseRtf } from "./parse";
-import { textOfBlock, type Block } from "../odf/model";
+import { textOfBlock, type Block } from "../odf/document-model";
 
 /* What an .rtf says, and how it wanted to say it. */
 

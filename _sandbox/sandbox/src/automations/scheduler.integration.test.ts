@@ -11,6 +11,7 @@ import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import type { PersistedAgent } from "../agents/registry/agents-store.js";
 import type { Services } from "../composition.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
+import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
 import { automationIdle, createAutomationsScheduler, fireAutomation, type WakeFn } from "./scheduler.js";
@@ -22,8 +23,8 @@ const fakeServices = (
     settings: z.input<typeof SandboxSettingsSchema> = {},
     live: string[] = [],
     registry: readonly PersistedAgent[] = [],
-): Services =>
-    unstubbed<Services>("services", {
+): Services => {
+    const services: Services = unstubbed<Services>("services", {
         agents: unstubbed<Services["agents"]>("agents", {
             liveSessionIds: () => live,
             ids: () => registry.map((entry) => entry.id),
@@ -42,7 +43,12 @@ const fakeServices = (
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+        // The real resolver, which answers undefined for every origin that is not a Front Desk visitor's — what these
+        // fires are. Wired rather than stubbed so it stays the production answer if that rule changes.
+        outboxStreamFor: (origin) => outboxStreamFor(services, origin),
     });
+    return services;
+};
 
 // A fake wake that records complete turn identities; `events` lets a test surface an agent error.
 const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }], turns: AgentTurn[] = []): WakeFn =>

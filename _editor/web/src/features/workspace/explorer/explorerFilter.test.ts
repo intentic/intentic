@@ -1,4 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import { STATE_DIR } from "@intentic/constants";
 import { describe, expect, it } from "vitest";
 import { type ExplorerFilters, explorerShows, isTechnicalEntry, technicalHidden } from "./explorerFilter";
 
@@ -62,7 +63,7 @@ describe(`the explorer's technical-files filter`, () => {
     });
 
     it(`takes out dot entries, lockfiles, manifests, compiler output and dependency folders`, () => {
-        for (const name of [`.gitignore`, `.intentic`, `.github`, `pnpm-lock.yaml`, `tsconfig.json`, `tsconfig.app.json`, `vite.config.ts`, `index.d.ts`, `main.js.map`, `Dockerfile`, `LICENSE`]) {
+        for (const name of [`.gitignore`, STATE_DIR, `.github`, `pnpm-lock.yaml`, `tsconfig.json`, `tsconfig.app.json`, `vite.config.ts`, `index.d.ts`, `main.js.map`, `Dockerfile`, `LICENSE`]) {
             expect(isTechnicalEntry(name, `file`), name).toBe(true);
         }
         for (const name of [`.git`, `node_modules`, `dist`, `coverage`, `__pycache__`]) {

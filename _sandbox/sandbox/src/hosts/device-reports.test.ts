@@ -2,7 +2,7 @@ import { type HostSummary, type DeviceFlowLine, type DeviceReport, type DeviceSa
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { afterEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
-import type { SyncEnrollmentRow } from "../platform/sync.js";
+import { enrolledFleet, type SyncEnrollmentRow } from "../platform/sync.js";
 import { devices, manageDeviceSandbox, mergeDevices, type PullResult, reportFrom, sandboxesFromTool } from "./device-reports.js";
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
@@ -280,6 +280,8 @@ const fakeServices = (id: string, mcp: (call: FakeCall) => Promise<unknown>): { 
     const calls: FakeCall[] = [];
     const services = {
         config: { historyRoot: NO_HISTORY },
+        // The real reader over a history root that holds nothing, which is the empty fleet these cases assume.
+        syncFleet: () => enrolledFleet(NO_HISTORY),
         perf: { track: async <T>(_op: string, _fields: unknown, run: () => Promise<T>): Promise<T> => await run() },
         capabilities: { list: async () => [{ kind: "host", id, config: { platform: "linux" } }] },
         hostHub: {

@@ -18,7 +18,7 @@ import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 import type { Services } from "../composition.js";
 import { approvedPath } from "../environment/environment.js";
-import { enrolledFleet, type SyncEnrollmentRow } from "../platform/sync.js";
+import type { SyncEnrollmentRow } from "../platform/sync.js";
 import { emitDefinitionToml, settingsDefinition } from "../portability/definition.js";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { hostSummaries } from "./host-peer.js";
@@ -344,7 +344,7 @@ export const devices = async (services: Services): Promise<Device[]> =>
                 result: host.online ? await pullCached(services, host.id) : ({ gap: "offline" } as const),
             })),
         );
-        const fleet = await enrolledFleet(services.config.historyRoot);
+        const fleet = await services.syncFleet();
         return mergeDevices(fleet.machines, fleet.reports, answered);
     });
 

@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { PermissionModeSchema } from "../schemas/agent.js";
 import { LandConflictSchema } from "../schemas/agents.js";
-import { RateLimitInfoSchema } from "../schemas/claude-gate.js";
-import { FastModeStateSchema } from "../schemas/fast-mode.js";
-import { AgentReplySchema, UsageWindowSchema } from "../schemas/plan-limits.js";
+import { RateLimitInfoSchema } from "../schemas/providers/claude-gate.js";
+import { FastModeStateSchema } from "../schemas/providers/fast-mode.js";
+import { AgentReplySchema, UsageWindowSchema } from "../schemas/providers/plan-limits.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
 import { AgentCommandSchema, browserHelpCard, capabilityOfferCard, CapabilityOutcomeSchema, ContextUsageSchema, credentialOfferCard, CredentialReceiptSchema, paymentOfferCard, PaymentReceiptSchema, PermissionCardSchema, PlanCardSchema, QuestionCardSchema, terminalHelpCard, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./cards.js";
 import { TranscriptPatchSchema, TranscriptRowSchema, TurnNoteSchema } from "./transcript.js";

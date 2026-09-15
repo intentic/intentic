@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { foldUnchanged, type ProseBlock, proseDiff } from "./proseDiff";
 
@@ -47,12 +48,7 @@ const blockClass = (block: ProseBlock): string =>
                             {{ block.segments[0]?.text }}
                         </p>
                     </template>
-                    <button
-                        v-else
-                        type="button"
-                        class="self-start rounded-md px-3.5 py-1 text-2xs italic text-subtle transition-colors hover:bg-overlay hover:text-content"
-                        @click="open(run.at)"
-                    >
+                    <button v-else type="button" :class="ui.textAction(`pl-3.5 text-2xs italic text-subtle`)" @click="open(run.at)">
                         {{ run.count }} unchanged {{ run.count === 1 ? "paragraph" : "paragraphs" }}
                     </button>
                 </template>

@@ -1,7 +1,8 @@
 import { join } from "node:path";
 import { gitCommitAll, gitInit, INTENT_GITIGNORE, scaffoldDeployConfig, TARGET_GITIGNORE } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
-import { AGENT_GIT_AUTHOR, terminalGit } from "../git/git.js";
+import { AGENT_GIT_AUTHOR } from "../git-identity.js";
+import { terminalGit } from "../git/git.js";
 import { repoGitDir } from "../history/history.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { readTemplatesConfig } from "./templates-config.js";

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { textOfBlock } from "./model";
+import { textOfBlock } from "./document-model";
 import { openOdf } from "./pkg";
 import { readPresentation } from "./slides";
 import { contentXml, odfBytes, PNG_PIXEL, SLIDES_MIME, stylesXml } from "./testing";

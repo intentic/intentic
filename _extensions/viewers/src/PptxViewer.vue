@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Icon } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import type { Deck, ImageBox, Paragraph, TextBox } from "./pptx/model";
+import type { Deck, ImageBox, Paragraph, TextBox } from "./pptx/deck-model";
 
 /* PPTX preview: the deck unpacked in the tab and drawn as slides. All the reading is in src/pptx — this file only
    turns boxes into elements, so anything that looks wrong on a slide was decided by the parse, not here. */

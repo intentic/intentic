@@ -190,10 +190,15 @@ const reportsFor = (enrollments: readonly SyncEnrollment[]): { machine: string; 
 export const deviceReports = async (historyRoot: string): Promise<{ machine: string; report: DeviceReport }[]> =>
     reportsFor(await readEnrollments(historyRoot));
 
+// Named because it crosses a subsystem line: composition.ts exposes this read as `services.syncFleet` so the devices
+// view can merge enrollments without importing this module's code.
+export interface SyncFleet {
+    readonly machines: readonly SyncEnrollmentRow[];
+    readonly reports: readonly { machine: string; report: DeviceReport }[];
+}
+
 // Both enrollment lists off one read of the file, for a view that needs labels and reports together.
-export const enrolledFleet = async (
-    historyRoot: string,
-): Promise<{ machines: SyncEnrollmentRow[]; reports: { machine: string; report: DeviceReport }[] }> => {
+export const enrolledFleet = async (historyRoot: string): Promise<SyncFleet> => {
     const enrollments = await readEnrollments(historyRoot);
     return { machines: rowsOf(enrollments), reports: reportsFor(enrollments) };
 };

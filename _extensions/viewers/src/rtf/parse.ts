@@ -1,4 +1,4 @@
-import type { Block, Cell, Inline, Row } from "../odf/model";
+import type { Block, Cell, Inline, Row } from "../odf/document-model";
 import type { Css } from "../odf/styles";
 import { characterCss, initialStyle, paragraphCss, plainStyle, twips, type RtfStyle } from "./state";
 import { asLatin1, tokenize, type RtfToken } from "./tokens";

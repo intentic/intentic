@@ -1,6 +1,6 @@
 import { oc } from "@orpc/contract";
 import { NativeProviderParamSchema } from "../schemas/agent.js";
-import { ModelsSchema } from "../schemas/provider-oauth.js";
+import { ModelsSchema } from "../schemas/providers/provider-oauth.js";
 
 // The provider is a parameter, not a route per provider; adding one is a row in the catalog registry. Endpoints keep
 // their own route (endpoints.contract.ts): they are user-created and unbounded, and a missing one is NOT_FOUND, not an

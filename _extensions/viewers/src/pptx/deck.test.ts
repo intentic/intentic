@@ -6,7 +6,7 @@
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { readDeck } from "./deck";
-import type { ImageBox, TableBox, TextBox, UnsupportedBox } from "./model";
+import type { ImageBox, TableBox, TextBox, UnsupportedBox } from "./deck-model";
 
 const NS = `xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
 const REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";

@@ -1,5 +1,5 @@
 import { unzipSync } from "fflate";
-import { attr, parseXml } from "./xml";
+import { attr, parseXml } from "./xml-dom";
 
 /* A .pptx as what it is: a zip of XML parts that point at each other through per-part relationship files. Every
    cross-part link in a deck (slide → layout → master → theme, picture → image bytes) is an `r:id` resolved here. */

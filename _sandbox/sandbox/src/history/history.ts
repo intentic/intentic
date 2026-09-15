@@ -16,7 +16,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { MAX_FILE_DIFF_BYTES, partialDiff } from "../git/changes/diff-partial.js";
-import { AGENT_GIT_AUTHOR } from "../git/git.js";
+import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { discoverRepos, hasGitEntry, isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 

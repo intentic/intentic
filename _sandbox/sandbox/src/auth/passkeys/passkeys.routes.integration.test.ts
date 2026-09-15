@@ -1,13 +1,13 @@
 import type { Hono } from "hono";
 import { expect, test, vi } from "vitest";
-import { createApp } from "../app.js";
-import type { AppEnv } from "../app-env.js";
-import { softwareAuthenticator } from "../harness/passkey-authenticator.testing.js";
-import { proven, rejectAuth, rejectForbidden } from "../harness/route-client.testing.js";
-import { services } from "../harness/route-services.testing.js";
-import { memoryPasskeyStore } from "../harness/route-stores.testing.js";
-import { ForbiddenError, type Proof, type ProvenCaller } from "./auth.js";
-import type { PasskeyStore, StoredCredential } from "./passkeys.js";
+import { createApp } from "../../app.js";
+import type { AppEnv } from "../../app-env.js";
+import { softwareAuthenticator } from "../../harness/passkey-authenticator.testing.js";
+import { proven, rejectAuth, rejectForbidden } from "../../harness/route-client.testing.js";
+import { services } from "../../harness/route-services.testing.js";
+import { memoryPasskeyStore } from "../../harness/route-stores.testing.js";
+import { ForbiddenError, type Proof, type ProvenCaller } from "../auth.js";
+import type { PasskeyStore, StoredCredential } from "./passkey-store.js";
 
 // The passkey routes over the daemon's HTTP surface, as the browser drives them: registration upgrades the session that
 // asked, the two anonymous doors mint one from a passkey alone, and the owner's switch cannot lock the owner out.

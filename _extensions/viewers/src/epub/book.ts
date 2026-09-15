@@ -1,5 +1,5 @@
 import { unzipSync } from "fflate";
-import { attr, child, childElements, descendants, parseXml, textOf, type XmlElement } from "../odf/xml";
+import { attr, child, childElements, descendants, parseXml, textOf, type XmlElement } from "../odf/xml-tree";
 
 /* An EPUB's structure: what it is, what is in it, and in what order. Reading a chapter's markup is page.ts's job. */
 

@@ -158,6 +158,10 @@ const nameMismatches = packages.flatMap(({ name, pkg }) => {
 // Basename collisions within one package; exemptions are names whose job is to repeat (a barrel, invariant.ts, a
 // manifest, a route/handler file, a test).
 const COLLISION_OK = /^(index\.ts|invariant\.ts|README\.md|package\.json|tsconfig.*\.json|vitest\.config\.ts)$|\.(routes|contract|handler|test|spec)\.[cm]?tsx?$/;
+// An image is not a module: nothing resolves one by guessing a path, and a skin set (`assets/product/x.png` and
+// `assets/product-light/x.png`) JOINS its two halves on the shared name, so renaming either breaks the pairing the
+// directory exists to express. The rule is about code a wrong guess silently imports.
+const COLLISION_ASSET = /\.(png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|mp4|webm|mp3|wav)$/i;
 const collisions = new Map();
 for (const { name } of packages) {
     const seen = new Map();
@@ -166,7 +170,7 @@ for (const { name } of packages) {
             continue;
         }
         const file = basename(path);
-        if (COLLISION_OK.test(file)) {
+        if (COLLISION_OK.test(file) || COLLISION_ASSET.test(file)) {
             continue;
         }
         // Case-insensitive: two files differing only by case are one to TypeScript (TS1149) on some filesystems.

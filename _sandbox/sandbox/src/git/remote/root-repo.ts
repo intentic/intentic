@@ -8,7 +8,7 @@ import { repoGitDir, rootExcludes, syncRootExcludes } from "../../history/histor
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 import { commitIndex } from "../changes/changes-index.js";
-import { AGENT_GIT_AUTHOR } from "../git.js";
+import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 
 // The whole /work workspace under version control, not just nested repos, so root files commit/discard like any repo's.
 // Git dir lives on /history; the in-worktree `.git` is a pointer reconverged if deleted. Idempotent: init runs once;

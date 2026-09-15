@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
-import { AGENT_GIT_AUTHOR } from "../git/git.js";
+import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { gitCommitAll, gitInit } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
 import { repoGitDir, syncRootExcludes } from "../history/history.js";

@@ -1,4 +1,4 @@
-import type { Block, Cell, Inline, Row } from "./model";
+import type { Block, Cell, Inline, Row } from "./document-model";
 import type { Css } from "./styles";
 
 /* Blocks into DOM. Every node is built with createElement and textContent — no HTML is ever assembled as a string,

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { bindingWindow, gatesModel, gatingWindows, scopedWindow } from "./plan-pools.js";
-import type { AccountUsage, UsageWindow } from "../schemas/plan-limits.js";
+import type { AccountUsage, UsageWindow } from "../schemas/providers/plan-limits.js";
 
 // One rule for which pool blocks a given model, shared by the daemon and the browser: a plan can meter models
 // separately, so the account's fullest pool need not be the model's own.

@@ -18,7 +18,7 @@ import { useLayout } from "../../../shell/window/useLayout";
 import { viewersOfPath } from "../../../shell/presence/usePresence";
 import { noteUserCreatedDir, useEmptyDirs } from "./useEmptyDirs";
 import { useFileNesting } from "./useFileNesting";
-import { useUploadQueue } from "../files/useUploadQueue";
+import { useUploadQueue } from "../files/upload/useUploadQueue";
 import { isLeaving, type Provisional, provisionalAt, withProvisionalEntries } from "../files/provisionalEntries";
 import { isRecentlyChanged } from "../changes/useWorkspaceLive";
 import { lensPersonaId, reachOf } from "../directory-ui/personaReach";

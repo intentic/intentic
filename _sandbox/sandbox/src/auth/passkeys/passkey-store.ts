@@ -8,10 +8,10 @@ import type {
 } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
-import { jsonFile } from "../store/json-file.js";
-import { objectParse } from "../store/unknown-keys.js";
-import { tokenEquals, type VerifiedIdentity } from "./auth.js";
-import { rpIdOf } from "./origins.js";
+import { jsonFile } from "../../store/json-file.js";
+import { objectParse } from "../../store/unknown-keys.js";
+import { tokenEquals, type VerifiedIdentity } from "../auth.js";
+import { rpIdOf } from "../browser-origins.js";
 import { ACCEPTED_ALGORITHMS, base64url, verifyAuthentication, verifyRegistration } from "./webauthn.js";
 
 // Passkeys registered with this sandbox, on the daemon's JSON substrate beside members.json: the same trust class,

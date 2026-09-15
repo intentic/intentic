@@ -3,7 +3,8 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { gitCommitAll, INTENT_TSCONFIG, intentPackageJson } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
-import { AGENT_GIT_AUTHOR, terminalGit } from "../git/git.js";
+import { AGENT_GIT_AUTHOR } from "../git-identity.js";
+import { terminalGit } from "../git/git.js";
 import { isDevBuild, version } from "../version.js";
 
 const require = createRequire(import.meta.url);

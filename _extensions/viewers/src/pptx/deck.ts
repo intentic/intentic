@@ -1,8 +1,8 @@
-import { type Box, type Cell, type Deck, emuToPx, type Frame, type ImageBox, type Outline, type Paragraph, type Slide, type TextBox } from "./model";
+import { type Box, type Cell, type Deck, emuToPx, type Frame, type ImageBox, type Outline, type Paragraph, type Slide, type TextBox } from "./deck-model";
 import { openPackage, type Package, relatedOfType, relatedPart } from "./parts";
 import { colorOf, hasNoFill, type Palette, readPalette, solidFillOf, styleFillOf, styleLineColorOf, styleTextColorOf } from "./style";
 import { readParagraphs, readPlainText, type TextStyle } from "./text";
-import { attr, find, kid, kids, num, relAttr } from "./xml";
+import { attr, find, kid, kids, num, relAttr } from "./xml-dom";
 
 /* A .pptx TO SLIDES. Everything a shape does not say for itself is said by its layout, its master or the theme, so
    almost every read here is a walk up that chain rather than a lookup. What cannot be drawn in a browser is emitted

@@ -1,7 +1,7 @@
 import type { Rule } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { commitOnly } from "../../git/changes/changes-index.js";
-import { AGENT_GIT_AUTHOR } from "../../git/git.js";
+import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { standing } from "../../rules/rules.js";
 import { describeLanding } from "./landed-subject.js";

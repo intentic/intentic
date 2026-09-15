@@ -1,8 +1,8 @@
 import { appendBlock, isPageBreak, type Context } from "./content";
-import type { Block } from "./model";
+import type { Block } from "./document-model";
 import { bodyOf, type OdfPackage } from "./pkg";
 import { readStyles, type PageGeometry } from "./styles";
-import { attr, childElements } from "./xml";
+import { attr, childElements } from "./xml-tree";
 
 /* An .odt as pages of blocks. */
 

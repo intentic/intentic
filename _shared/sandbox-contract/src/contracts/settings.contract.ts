@@ -10,7 +10,7 @@ import {
     SavingsReportSchema,
 } from "../schemas/settings.js";
 import { OkSchema } from "../schemas/shared.js";
-import { DayWindowQuerySchema } from "../schemas/usage.js";
+import { DayWindowQuerySchema } from "../schemas/providers/usage.js";
 
 // Per-sandbox agent settings (.intentic/config/settings.json); `get` fills defaults for an absent file, `set`
 // overwrites whole. `savings` measures each token-reduction mechanism's worth over the same UTC day window the spend

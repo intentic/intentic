@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AgentSummarySchema } from "../schemas/agents.js";
-import { AccountUsageSchema, ProviderRefusalSchema } from "../schemas/plan-limits.js";
+import { AccountUsageSchema, ProviderRefusalSchema } from "../schemas/providers/plan-limits.js";
 import { MemberRoleSchema } from "../schemas/shared.js";
 import { SidecarStatusSchema } from "../schemas/workspace/workspace-tree.js";
 

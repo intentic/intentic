@@ -22,7 +22,7 @@ import { outgoingMark, outgoingSummary } from "../push/outgoingWork";
 import { useDiffStat } from "../changes/useDiffStat";
 import { useChanges } from "../changes/useChanges";
 import { useMonaco } from "../files/useMonaco";
-import { useUploadQueue } from "../files/useUploadQueue";
+import { useUploadQueue } from "../files/upload/useUploadQueue";
 import { useExplorerSearch } from "../search/useExplorerSearch";
 import { MATCH_TOGGLES } from "../search/useSearchOptions";
 import { useWorkspaceRoute } from "../health/useWorkspaceRoute";

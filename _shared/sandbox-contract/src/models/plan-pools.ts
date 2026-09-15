@@ -1,4 +1,4 @@
-import type { AccountUsage, UsageWindow, WindowGates } from "../schemas/plan-limits.js";
+import type { AccountUsage, UsageWindow, WindowGates } from "../schemas/providers/plan-limits.js";
 
 // Single reading of which account pool gates a given model (or, with none named, the account's tightest pool), shared
 // by the daemon's picker/refusal logic and the browser's rings and rail. A pool gated `none` is excluded from the

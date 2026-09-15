@@ -36,7 +36,7 @@ import { outgoingMark, outgoingSummary } from "../push/outgoingWork";
 import { useDiffStat } from "../changes/useDiffStat";
 import { useChanges } from "../changes/useChanges";
 import { useRepos } from "../explorer/useRepos";
-import { useUploadQueue } from "../files/useUploadQueue";
+import { useUploadQueue } from "../files/upload/useUploadQueue";
 import { useWorkspaceRoute } from "../health/useWorkspaceRoute";
 import { useExplorerSearch } from "../search/useExplorerSearch";
 import type { SearchScope } from "../search/useWorkspaceSearch";

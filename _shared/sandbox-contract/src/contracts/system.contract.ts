@@ -23,7 +23,7 @@ import {
     TerminalScrollbackSchema,
     TerminalsListSchema,
 } from "../schemas/terminal.js";
-import { UsageSummarySchema } from "../schemas/usage.js";
+import { UsageSummarySchema } from "../schemas/providers/usage.js";
 
 // Sandbox status/identity, the long-lived liveness stream, and the connect-token-relayed host tunnel. `events`
 // interleaves heartbeats, workspaceChanged batches and presence snapshots until the request aborts. `clientId` is this

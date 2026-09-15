@@ -17,9 +17,6 @@ export const terminalGit =
         stderr: "",
     });
 
-// Identity every daemon-authored commit carries; one source so history reads consistently across routes.
-export const AGENT_GIT_AUTHOR = { name: "intentic", email: "agent@intentic.dev" } as const;
-
 // The `-c user.*` prefix that makes `author` the committer of the commit a command creates (panel commits,
 // publish-file.ts, sequence ops).
 export const identity = (author: { readonly name: string; readonly email: string }): string[] => ["-c", `user.name=${author.name}`, "-c", `user.email=${author.email}`];

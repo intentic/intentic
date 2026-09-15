@@ -7,7 +7,7 @@ import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { unstubbed } from "@intentic/testing";
 import { createAgentsRegistry } from "../agents/registry/agents-registry.js";
 import { createAuthConnections } from "../auth/connections.js";
-import { createPasskeyCeremonies } from "../auth/passkeys.js";
+import { createPasskeyCeremonies } from "../auth/passkeys/passkey-store.js";
 import type { ControlScope } from "../auth/control-tokens.js";
 import { memoryDoorTokens } from "../auth/door-tokens.js";
 import { createMediaTickets } from "../auth/media-tickets.js";
@@ -18,7 +18,8 @@ import { createAnnouncer } from "../platform/boot/announce.js";
 import { createBootTracker } from "../platform/boot/boot.js";
 import { createPerfTracker } from "../platform/resources/perf.js";
 import { createReachReporter } from "../platform/listeners/reach-report.js";
-import { syncPairBurnPath, type SyncMode } from "../platform/sync.js";
+import { enrolledFleet, syncPairBurnPath, type SyncMode } from "../platform/sync.js";
+import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { createPortForwards } from "../ports/port-forwards.js";
 import { rejectAuth } from "./route-client.testing.js";
 import { fakeFiles, fakeHistory, fakeProcesses, fakeServiceProcesses } from "./route-fakes.testing.js";
@@ -260,6 +261,10 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // No connected device, which is what the daemon answers with no host card granted; every planned turn asks,
         // so every route running a turn needs it.
         hostReach: async () => undefined,
+        // Both composed exactly as composition.ts composes them, over this harness's own history root and stores, so a
+        // suite exercises the real reader and the real queue rather than a second description of them.
+        syncFleet: () => enrolledFleet((rest.config ?? testConfig).historyRoot),
+        outboxStreamFor: (origin) => outboxStreamFor(merged, origin),
         // Connected by default so the /agent guard doesn't short-circuit turns under test; override for disconnected.
         claudeStore: unstubbed("claudeStore", {
             read: async (id) => (id === "default" ? { id: "default", label: "Claude", connectedAt: 0, accessToken: "tok-xyz" } : undefined),

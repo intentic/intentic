@@ -3,7 +3,7 @@ import { pathExists } from "../../path-exists.js";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { headSha } from "../../git/changes/changes.js";
 import { rebaseOnto, rebaseSince } from "../../git/changes/changes-commits.js";
-import { AGENT_GIT_AUTHOR } from "../../git/git.js";
+import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 import { presenceOf } from "./agent-changes.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";

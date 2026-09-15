@@ -1,6 +1,7 @@
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { GitPublishFileResult } from "@intentic/sandbox-contract";
-import { AGENT_GIT_AUTHOR, gitFailureReason, identity } from "../git.js";
+import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
+import { gitFailureReason, identity } from "../git.js";
 import { operationInProgress } from "./operation.js";
 import { pushBranch, remoteState } from "../remote/remote.js";
 

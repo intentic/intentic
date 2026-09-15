@@ -12,8 +12,8 @@ import {
     providerSpec,
 } from "./provider-specs.js";
 import { NativeProviderParamSchema } from "../schemas/agent.js";
-import { TranslatorAccountsSchema } from "../schemas/plan-limits.js";
-import { KeyedProviderSchema } from "../schemas/provider-subscriptions.js";
+import { TranslatorAccountsSchema } from "../schemas/providers/plan-limits.js";
+import { KeyedProviderSchema } from "../schemas/providers/provider-subscriptions.js";
 
 // Walks the spec table itself rather than a list of provider names, so a provider added or removed carries its
 // assertions with it; every surface's derived list is checked against the table.

@@ -1,7 +1,7 @@
 import { oc } from "@orpc/contract";
 import { z } from "zod";
-import { LimitResetClaimSchema, LimitResetStatusSchema } from "../schemas/plan-limits.js";
-import { DayWindowQuerySchema, UsageRollupSchema } from "../schemas/usage.js";
+import { LimitResetClaimSchema, LimitResetStatusSchema } from "../schemas/providers/plan-limits.js";
+import { DayWindowQuerySchema, UsageRollupSchema } from "../schemas/providers/usage.js";
 
 // `force` ignores the daemon's freshness window and measures now instead of reusing a recent reading.
 export const RefreshPlanLimitsSchema = z.object({
