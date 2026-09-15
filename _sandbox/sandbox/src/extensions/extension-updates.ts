@@ -117,6 +117,20 @@ export const writeUpdatePolicy = async (
     await policyFile(root).update((all) => ({ ...all, [identity]: { ...all[identity], ...patch } }));
 };
 
+// Both update-lifecycle ledgers for one extension. Records survive a remove/re-add on purpose (the comment at the top
+// of this file); removal is the one act that means the identity itself is going, so they go with it.
+export const forgetUpdateState = async (root: string, identity: string): Promise<void> => {
+    await patchRecord(root, identity, () => undefined);
+    await policyFile(root).update((all) => {
+        if (!(identity in all)) {
+            // By reference, so jsonFile skips the write when there is nothing to drop.
+            return all;
+        }
+        const { [identity]: _dropped, ...rest } = all;
+        return rest;
+    });
+};
+
 // Installed side of the comparison: every extension-kind capability whose checkout still parses.
 
 interface InstalledTarget {

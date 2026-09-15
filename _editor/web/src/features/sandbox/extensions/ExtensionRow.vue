@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { ExtensionReadinessSchema } from "@intentic/sandbox-contract";
-import { BrandMark, DisclosureRow, ui, StatusBadge } from "@intentic/ui";
+import { BrandMark, Button, DisclosureRow, ui, StatusBadge } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
@@ -18,7 +18,19 @@ import ExtensionUpdateCard from "./ExtensionUpdateCard.vue";
 
 const { entry, expanded, pending } = defineProps<{ entry: ExtensionEntry; expanded: boolean; pending: boolean }>();
 
-const emit = defineEmits<{ toggle: [enabled: boolean]; "update:expanded": [expanded: boolean] }>();
+const emit = defineEmits<{ toggle: [enabled: boolean]; remove: []; "update:expanded": [expanded: boolean] }>();
+
+// Offered only where removal means something: a baked extension has no files here to delete, and an essential one is
+// the control surface for work that carries on regardless. Both refuse daemon-side too; this is what stops the button
+// being an invitation to be told no.
+const removable = computed(() => entry.extension.source !== `builtin` && entry.extension.essential !== true);
+// The one consequence worth naming beside the button, because it is the one nobody expects: connections the owner
+// configured themselves go too. The dialog spells out the rest.
+const removalHint = computed(() =>
+    entry.dependents.length === 0
+        ? `and everything configured for it`
+        : `with ${entry.dependents.length} connection${entry.dependents.length === 1 ? `` : `s`} configured from its cards`,
+);
 
 const manifest = computed(() => entry.extension.manifest);
 const settings = computed(() => manifest.value.contributes?.settings ?? []);
@@ -105,7 +117,8 @@ const consequences = computed<string[]>(() => {
     }
     const named = entry.dependents.map((capability) => capability.id).join(`, `);
     const plural = entry.dependents.length === 1 ? `` : `s`;
-    return [...deferred, `${entry.dependents.length} configured connector${plural} (${named}) keep their config but lose their Capabilities card`];
+    // Switching off only hides their card; removing takes the entries themselves, which is the dialog's job to say.
+    return [...deferred, `${entry.dependents.length} configured connection${plural} (${named}) keep their config but lose their Capabilities card`];
 });
 
 // A left-edge accent, not a full tint: a bare `border-danger` would repaint this list's row divider too, since that's a
@@ -277,6 +290,15 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                             Publish it: an agent pushes these files and reports the commit
                         </button>
                     </p>
+                </div>
+
+                <!-- Under the fold and last: uninstalling is not the errand a row is opened for, and the dialog it
+                     raises is where the consequences get spelled out. -->
+                <div v-if="removable" class="flex items-center gap-2">
+                    <Button size="small" severity="danger" :text="true" label="Remove…" @click="emit(`remove`)">
+                        <template #icon><Icon name="trash" /></template>
+                    </Button>
+                    <span class="text-2xs text-subtle">{{ removalHint }}</span>
                 </div>
 
                 <!-- The full id, version and commit a collapsed row leaves off. -->

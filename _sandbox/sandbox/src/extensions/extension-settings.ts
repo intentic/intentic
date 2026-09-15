@@ -75,6 +75,20 @@ export const writeExtensionSettings = async (
     await settingsFile(root).update((all) => ({ ...all, [extensionId]: open }));
 };
 
+// Drops one extension's values from both halves. The vault goes first for the same reason writes do: the survivable
+// failure is a tracked file still naming keys, never a credential left in the vault for an extension that is gone.
+export const forgetExtensionSettings = async (root: string, vault: SecretVault, extensionId: string): Promise<void> => {
+    await vault.remove(extensionId);
+    await settingsFile(root).update((all) => {
+        if (!(extensionId in all)) {
+            // By reference, so jsonFile skips the write when there is nothing to drop.
+            return all;
+        }
+        const { [extensionId]: _dropped, ...rest } = all;
+        return rest;
+    });
+};
+
 // Sweeps values that should be vaulted but are not yet (other tools, an import, or a newly declared secret).
 // Runs before the tracked file is committed; entries already clean are left untouched to avoid churn.
 export const vaultExtensionSettingSecrets = async (

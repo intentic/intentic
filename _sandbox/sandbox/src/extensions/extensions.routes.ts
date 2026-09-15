@@ -11,6 +11,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { writeExtensionEnablement } from "./extension-enablement.js";
 import { extensionProcessKey, reconcileListenerProcesses, startAutoStartProcesses, startExtensionProcess } from "./extension-processes.js";
+import { planExtensionRemoval, removeExtension } from "./extension-removal.js";
 import { readAllExtensionSettings, writeExtensionSettings } from "./extension-settings.js";
 import { extensionReadiness, extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "./extension-readiness.js";
 import {
@@ -141,6 +142,20 @@ export const createExtensionsRoutes = (services: Services) => {
             // Same ping a workspace file write sends: this is the owner's edit, made on their behalf.
             services.history.notifyUserWrite();
             return { id, dir: `.intentic/config/workspace-extensions/${input.name}` };
+        }),
+        // A read, ungated: knowing what a removal would cost is not itself a change, and the refusal for an extension
+        // that can't be removed is part of the answer rather than an error.
+        removalPlan: i.removalPlan.handler(async ({ input }) => planExtensionRemoval(services, await find(input.id))),
+        // Gated like install: this deletes code, connections and the credentials configured against them.
+        remove: i.remove.handler(async ({ input, context }) => {
+            await authorizeOperator(context);
+            const extension = await find(input.id);
+            const plan = await planExtensionRemoval(services, extension);
+            if (plan.blocked !== undefined) {
+                throw new ORPCError("PRECONDITION_FAILED", { message: plan.blocked });
+            }
+            const removed = await removeExtension(services, extension);
+            return { ok: true, connections: [...removed.connections], ...(removed.rebuildNeeded ? { rebuildNeeded: true } : {}) } as const;
         }),
         settings: i.settings.handler(async ({ input }) => {
             const { manifest } = await find(input.id);

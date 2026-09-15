@@ -1,6 +1,9 @@
 import type { CapabilitySummary } from "@intentic/api-contract";
+import { contributedCardOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
+import { CAPABILITIES, ENVIRONMENT, SECRETS_INVENTORY } from "../../lib/queryKeys";
 import { extensionStatuses, loadedCommits } from "../../extension-host/loader";
 import { type ExtensionFacet, facetsOf, searchTextOf } from "./extensionFacets";
 import { backendState, type ExtensionState, extensionState } from "./extensionState";
@@ -17,15 +20,30 @@ export interface ExtensionEntry {
     readonly state: ExtensionState;
     /** The host's explanation of a non-nominal state: the engines mismatch, the activate() error, the drift. */
     readonly detail: string | undefined;
-    /** Configured cli capabilities whose connector spec this extension contributes; lose their card if it goes off. */
+    /** Configured connections added from this extension's cards: they lose their card if it goes off, and go with it if it is removed. */
     readonly dependents: readonly CapabilitySummary[];
     /** Everything the filter box may match on, pre-lowercased. */
     readonly search: string;
 }
 
 export function useExtensionList() {
-    const { extensions, invalid, setEnabled, create, checkUpdates, updatesCheckedAt, isLoading, error } = useExtensions();
+    const queryClient = useQueryClient();
+    const { extensions, invalid, setEnabled, create, remove, checkUpdates, updatesCheckedAt, isLoading, error } = useExtensions();
     const { capabilities } = useCapabilities();
+
+    // Removal empties three caches beyond the extension list: the capability grid loses the entries added from its
+    // cards, the secrets inventory loses the credentials those held, and the image overlay loses whatever layer it
+    // baked. It lives here rather than in useExtensions because this is the composable that already joins the two
+    // lists — and because useExtensions is mounted in places that have no query client at all.
+    const removeExtension = async (id: string) => {
+        const removed = await remove(id);
+        await Promise.all([
+            queryClient.invalidateQueries({ queryKey: CAPABILITIES.of() }),
+            queryClient.invalidateQueries({ queryKey: SECRETS_INVENTORY.of() }),
+            queryClient.invalidateQueries({ queryKey: ENVIRONMENT.of() }),
+        ]);
+        return removed;
+    };
 
     // Rows whose loaded bundle lags the daemon's already-updated checkout; a host reload here picks it up.
     const updatedSinceLoaded = computed(() =>
@@ -41,7 +59,7 @@ export function useExtensionList() {
             .map((extension) => {
                 const status = statuses.get(extension.id);
                 const facets = facetsOf(extension.manifest);
-                const providers = new Set((extension.manifest.contributes?.capabilities ?? []).map((contribution) => contribution.id));
+                const contributions = extension.manifest.contributes?.capabilities ?? [];
                 // UI state, escalated to the backend's if the backend failed while the UI still reads fine.
                 const uiState = extensionState(status);
                 const backend = backendState(extension.backend);
@@ -69,9 +87,9 @@ export function useExtensionList() {
                     facets,
                     state: registryState ?? (escalated ? backend : uiState),
                     detail: registryDetail ?? (escalated ? extension.backend?.detail : undefined) ?? status?.detail ?? extension.backend?.detail,
-                    dependents: capabilities.value.filter(
-                        (capability) => capability.kind === `cli` && providers.has(String(capability.config[`provider`] ?? ``)),
-                    ),
+                    // Every contributed kind, not just cli: a browser account or an enrolled machine added from one of
+                    // this extension's cards depends on it exactly as much, and loses more when it goes.
+                    dependents: capabilities.value.filter((capability) => contributedCardOf(contributions, capability) !== undefined),
                     search: searchTextOf(extension.manifest, facets),
                 };
             })
@@ -84,5 +102,17 @@ export function useExtensionList() {
         return extensionStatuses.value.filter((status) => !listed.has(status.id));
     });
 
-    return { entries, invalid, unlisted, setEnabled, create, checkUpdates, updatesCheckedAt, updatedSinceLoaded, isLoading, error };
+    return {
+        entries,
+        invalid,
+        unlisted,
+        setEnabled,
+        create,
+        remove: removeExtension,
+        checkUpdates,
+        updatesCheckedAt,
+        updatedSinceLoaded,
+        isLoading,
+        error,
+    };
 }

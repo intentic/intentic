@@ -8,6 +8,7 @@ import { type ExtensionSection, sectionsOf } from "../../extensions/extensionCat
 import { useExtensionList } from "../../extensions/useExtensionList";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
+import ExtensionRemoveDialog from "./ExtensionRemoveDialog.vue";
 import ExtensionRow from "./ExtensionRow.vue";
 
 // Every extension this sandbox has (first-party, baked, git-installed, workspace), the half of the Extensions section
@@ -35,7 +36,7 @@ const emit = defineEmits<{
     clear: [];
 }>();
 
-const { entries, invalid, unlisted, setEnabled, isLoading, error } = useExtensionList();
+const { entries, invalid, unlisted, setEnabled, remove, isLoading, error } = useExtensionList();
 const outline = useSandboxOutline(isLoading);
 // The list query's own message, in the words of the view that asked for it.
 watch(
@@ -114,6 +115,42 @@ const toggle = async (extension: ExtensionSummary, enabled: boolean): Promise<vo
         pending.value = undefined;
     }
 };
+
+// Removal lives here rather than on the row: the row is torn down by the refetch that removal causes, so a component
+// that unmounts mid-call is the wrong place to hold the call's outcome.
+const removing = ref<ExtensionSummary | undefined>(undefined);
+const removingNow = ref(false);
+const confirmRemove = async (): Promise<void> => {
+    const extension = removing.value;
+    if (extension === undefined || removingNow.value) {
+        return;
+    }
+    removingNow.value = true;
+    emit(`notice`, undefined);
+    try {
+        const removed = await remove(extension.id);
+        removing.value = undefined;
+        // Retires its views and commands in this browser without a page reload, the same reconcile the switch performs.
+        await reloadExtensions();
+        // Said plainly and afterwards: the dialog stated the plan, this states what the plan turned out to be. A
+        // pending rebuild is a warning rather than a note, since until it runs the image still carries what it baked.
+        const said = [
+            ...(removed.connections.length === 0
+                ? []
+                : [`${removed.connections.length === 1 ? `Connection` : `Connections`} ${removed.connections.join(`, `)} went with it.`]),
+            ...(removed.rebuildNeeded === true ? [`What it added to the sandbox image is still there until the next environment rebuild.`] : []),
+        ];
+        emit(`notice`, {
+            tone: removed.rebuildNeeded === true ? `warning` : `info`,
+            title: `Removed ${extensionIdOf(extension.manifest)}.`,
+            ...(said.length === 0 ? {} : { detail: said.join(` `) }),
+        });
+    } catch (failure) {
+        emit(`notice`, noticeFrom(failure, `Could not remove ${extensionIdOf(extension.manifest)}.`));
+    } finally {
+        removingNow.value = false;
+    }
+};
 </script>
 
 <template>
@@ -127,6 +164,7 @@ const toggle = async (extension: ExtensionSummary, enabled: boolean): Promise<vo
                 :expanded="opened === entry.extension.id"
                 :pending="pending === entry.extension.id"
                 @toggle="(enabled) => toggle(entry.extension, enabled)"
+                @remove="removing = entry.extension"
                 @update:expanded="(open) => (opened = open ? entry.extension.id : undefined)"
             />
         </RowGroup>
@@ -180,5 +218,14 @@ const toggle = async (extension: ExtensionSummary, enabled: boolean): Promise<vo
                 </template>
             </Row>
         </RowGroup>
+
+        <!-- Removal takes state the owner configured themselves, so it is never one click: the dialog reads the plan
+             first and names every connection, credential and file that goes with it. -->
+        <ExtensionRemoveDialog
+            :extension="removing"
+            :busy="removingNow"
+            @close="removing = undefined"
+            @confirm="void confirmRemove()"
+        />
     </div>
 </template>

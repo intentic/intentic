@@ -31,3 +31,16 @@ export const readExtensionEnablement = async (root: string): Promise<EnablementF
 export const writeExtensionEnablement = async (root: string, extensionId: string, enabled: boolean): Promise<void> => {
     await enablementFile(root).update((all) => ({ ...all, [extensionId]: enabled }));
 };
+
+// Drops the key entirely, which is not the same as writing `true`: a removed extension that is installed again later
+// must come back on the default (enabled), not on whatever the last owner of that id chose.
+export const forgetExtensionEnablement = async (root: string, extensionId: string): Promise<void> => {
+    await enablementFile(root).update((all) => {
+        if (!(extensionId in all)) {
+            // By reference, so jsonFile skips the write when there is nothing to drop.
+            return all;
+        }
+        const { [extensionId]: _dropped, ...rest } = all;
+        return rest;
+    });
+};

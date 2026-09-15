@@ -4,6 +4,8 @@ import {
     ExtensionEnabledInputSchema,
     ExtensionProcessParamSchema,
     ExtensionProcessStatusSchema,
+    ExtensionRemovalPlanSchema,
+    ExtensionRemovedSchema,
     ExtensionSettingsInputSchema,
     ExtensionSettingsSchema,
     ExtensionsListSchema,
@@ -42,6 +44,28 @@ export const extensionsContract = {
         })
         .input(WorkspaceExtensionCreateSchema)
         .output(WorkspaceExtensionCreatedSchema),
+    // Read the plan first, then send the removal: the plan is the only place the owner is told what else goes, and the
+    // connections it names are not derivable from the manifest alone.
+    removalPlan: oc
+        .route({
+            method: "GET",
+            path: "/extensions/{id}/removal",
+            summary: "What removing an extension would take away",
+            description:
+                "Everything one removal destroys, before it happens: the files deleted, the connections configured from its cards, the settings and credentials forgotten, the background processes stopped, and the owner's own automations that quietly stop firing. Also answerable for an extension that cannot be removed, in which case it says why.",
+        })
+        .input(CapabilityIdParamSchema)
+        .output(ExtensionRemovalPlanSchema),
+    remove: oc
+        .route({
+            method: "POST",
+            path: "/extensions/{id}/remove",
+            summary: "Remove an extension",
+            description:
+                "Uninstalls it and everything that only existed because it was here: the connections added from its cards, with their stored credentials, its settings, its switch and its update record. What the owner made with it — automations, files in the workspace — is left alone. Owner only, for the same reason installing is. Built-in extensions cannot be removed; switch them off instead.",
+        })
+        .input(CapabilityIdParamSchema)
+        .output(ExtensionRemovedSchema),
     settings: oc
         .route({
             method: "GET",

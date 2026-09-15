@@ -3,6 +3,8 @@ import {
     type CapabilityKind,
     type ExtensionUpdatePolicy,
     type InvalidWorkspaceExtension,
+    ExtensionRemovalPlanSchema,
+    ExtensionRemovedSchema,
     ExtensionUpdateAppliedSchema,
     ExtensionUpdatePreviewSchema,
     type ExtensionSummary,
@@ -27,6 +29,11 @@ const previewUpdate = async (id: string, ref?: string) =>
         await sandboxJson(`/extensions/${encodeURIComponent(id)}/update/preview`, jsonBody(`POST`, ref !== undefined ? { ref } : {})),
     );
 
+// What removing one would destroy, read on demand rather than carried on the list: it joins the configured capability
+// entries and the stored settings, neither of which the list route knows about. Module-scoped like previewUpdate, for
+// the same reason: it never reads back into the query.
+export const removalPlan = async (id: string) => ExtensionRemovalPlanSchema.parse(await sandboxJson(`/extensions/${encodeURIComponent(id)}/removal`));
+
 export function useExtensions() {
     const { query, error } = useSandboxQuery({
         queryKey: QUERY_KEY,
@@ -49,6 +56,15 @@ export function useExtensions() {
         const created = WorkspaceExtensionCreatedSchema.parse(await sandboxJson(`/extensions/workspace`, jsonBody(`POST`, { publisher, name })));
         await query.refetch();
         return created;
+    };
+    // Uninstalls it and the connections configured from its cards. Only this list is re-read here: removal also empties
+    // caches this composable has no business knowing about, and useExtensionList, which already joins extensions and
+    // capabilities, is where that happens. Nothing in this file may reach for the query client — BackgroundProcesses
+    // mounts this composable outside the query plugin, and useQueryClient() throws there.
+    const remove = async (id: string) => {
+        const removed = ExtensionRemovedSchema.parse(await sandboxJson(`/extensions/${encodeURIComponent(id)}/remove`, jsonBody(`POST`, {})));
+        await query.refetch();
+        return removed;
     };
     // One card's contribution from the enabled extensions, keyed by kind + id since an id is only unique within its
     // kind. Undefined until /extensions loads.
@@ -84,6 +100,7 @@ export function useExtensions() {
         enabled: enabledExtensions,
         setEnabled,
         create,
+        remove,
         contributionOf,
         checkUpdates,
         previewUpdate,

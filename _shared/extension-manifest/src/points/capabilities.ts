@@ -250,6 +250,20 @@ const DISCRIMINATOR = { cli: "provider", browser: "platform", host: "platform", 
 >;
 export const contributionDiscriminator = (kind: string): string | undefined => DISCRIMINATOR[kind as keyof typeof DISCRIMINATOR];
 
+// Which contributed card a configured capability was added from, undefined when none was: the only link between a
+// stored entry and the extension that supplied its form. An `agent` card leaves no link, since it pins no
+// discriminator: the entry it produced is an ordinary core capability that outlives its preset.
+export const contributedCardOf = (
+    contributions: readonly CapabilityContribution[],
+    capability: { readonly kind: string; readonly config: Readonly<Record<string, unknown>> },
+): CapabilityContribution | undefined => {
+    const key = contributionDiscriminator(capability.kind);
+    if (key === undefined) {
+        return undefined;
+    }
+    return contributions.find((spec) => spec.kind === capability.kind && spec.id === capability.config[key]);
+};
+
 export const capabilitiesPoint = {
     name: "capabilities",
     description:

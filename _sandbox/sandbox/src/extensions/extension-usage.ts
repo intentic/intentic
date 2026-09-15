@@ -32,6 +32,19 @@ const usageFile = (root: string): JsonFile<UsageFile> => {
 
 export const readExtensionUsage = async (root: string): Promise<UsageFile> => usageFile(root).read();
 
+// Drops one extension's counts: the ledger answers "is this permission earned", and a removed extension has no
+// permissions for old counts to speak about.
+export const forgetExtensionUsage = async (root: string, extensionId: string): Promise<void> => {
+    await usageFile(root).update((all) => {
+        if (!(extensionId in all)) {
+            // By reference, so jsonFile skips the write when there is nothing to drop.
+            return all;
+        }
+        const { [extensionId]: _dropped, ...rest } = all;
+        return rest;
+    });
+};
+
 // Adds a batch of calls; `declared` (the extension's current permissions) filters both the batch and what's stored.
 // An entry the manifest no longer names is swept out, so a removed permission stops answering for old counts.
 export const recordExtensionUsage = async (

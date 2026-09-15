@@ -25,6 +25,7 @@ export const bundleProblem = m["bundleProblem"];
 export const bundleSpecifiers = m["bundleSpecifiers"];
 export const capabilitiesPoint = m["capabilitiesPoint"];
 export const commandsPoint = m["commandsPoint"];
+export const contributedCardOf = m["contributedCardOf"];
 export const contributesSchema = m["contributesSchema"];
 export const contributionDiscriminator = m["contributionDiscriminator"];
 export const diffPowers = m["diffPowers"];

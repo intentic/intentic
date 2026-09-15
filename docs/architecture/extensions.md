@@ -92,6 +92,21 @@ up iterates, so it contributes no agent plugin dir, PATH entry, listener provide
 autoStart process; the web loader retires its activation in place. `agent` and `bin` are composed per turn and
 `environment` only at image rebuild, so those three apply later: the tab states which per extension.
 
+**Removal is a different question from the switch**, and the only act that ends an extension's *identity*
+rather than its checkout: `GET /extensions/{id}/removal` then `POST /extensions/{id}/remove`
+([extension-removal.ts](../../_sandbox/sandbox/src/extensions/extension-removal.ts)). Two things make it more
+than a delete. First, the ledgers here are keyed by `publisher.name` precisely so they survive a re-clone, an
+update, even a remove-and-re-add of the capability entry: the switch, the settings and their vaulted values,
+the usage counts and the update record all have to be swept, or a later install inherits a stranger's
+configuration. Second, a card in `contributes.capabilities` is data, but the connection an owner configured
+from it is a real entry holding real credentials, and it cannot outlive the extension supplying its form, its
+skill file and its environment: those entries come down through their own handlers first, while the checkout
+is still on disk for them to read. Everything that would go is answered *before* the click, which is why the
+plan is its own route: the connections by name, the credentials by count, the files, the processes, and the
+owner's own automations that are kept and quietly stop firing. Built-in and essential extensions refuse, with
+the reason on the plan rather than as an error: the image is what removes the first, and hiding the second
+would hide work that carries on regardless.
+
 **Extensions are loaded per sandbox, not per page load.** Which extensions exist, which the owner left on and
 everything each has read are one sandbox's answers, so switching the active sandbox retires every activation,
 empties the extensions' own module state and loads again against the new box's list

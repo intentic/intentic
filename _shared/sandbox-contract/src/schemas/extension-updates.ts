@@ -258,6 +258,58 @@ export const WorkspaceExtensionCreatedSchema = z.object({
     id: z.string().describe("The id it was given."),
     dir: z.string().describe("Where its files are, so you can open them."),
 });
+// One connection the owner configured from a card this extension supplies. It goes when the extension does: its form,
+// its skill file and its environment all come out of the extension's own checkout, so leaving the entry behind would
+// leave a connection nothing can read, edit or teach an agent to use.
+export const ExtensionRemovalConnectionSchema = z.object({
+    id: z.string().describe("The name the owner gave it, which is also the agent's handle for it."),
+    kind: z.string().describe("Which core kind it is underneath: cli, browser, host or webext."),
+    card: z.string().describe("The card it was added from, named as the grid names it."),
+    secrets: z
+        .array(z.string())
+        .describe("Credential fields stored for it, by name. The values are deleted with the entry and cannot be recovered from here."),
+    effect: z.string().describe("What tearing it down actually takes away, in one sentence."),
+});
+export type ExtensionRemovalConnection = z.infer<typeof ExtensionRemovalConnectionSchema>;
+// Everything removing one extension would destroy, read before the decision rather than reported after it. A plan is
+// always answerable: `blocked` carries the refusal for an extension that cannot be removed at all, so the reason is
+// readable on the same screen as the button.
+export const ExtensionRemovalPlanSchema = z.object({
+    id: extensionId.describe("The extension's id, as the list addresses it."),
+    name: z.string().describe("Its publisher.name identity, which is the key its settings and switch are stored under."),
+    version: z.string().describe("The version being removed."),
+    source: z.enum(["builtin", "installed", "workspace"]).describe("Where its code comes from, which decides what removal means."),
+    blocked: z
+        .string()
+        .optional()
+        .describe("Why this one cannot be removed, when it cannot. Present means every other field is what would go if it could."),
+    files: z
+        .array(z.object({ path: z.string().describe("Workspace-relative."), detail: z.string().describe("What is in there.") }))
+        .describe("Directories deleted outright. For an extension written here this is the owner's own source, which nothing else keeps a copy of."),
+    connections: z.array(ExtensionRemovalConnectionSchema).describe("Connections configured from its cards, which are removed with it."),
+    settings: z
+        .array(z.object({ key: z.string().describe("Which setting."), secret: z.boolean().describe("Whether its value is a stored credential.") }))
+        .describe("Values the owner entered for this extension that are forgotten. Only keys actually holding a value are listed."),
+    processes: z.array(z.string()).describe("Background processes it declared, stopped before its files go."),
+    automations: z
+        .array(z.string())
+        .describe(
+            "Automations of the owner's own that wake on a listener this extension provides. They are NOT removed, and are listed because they stop firing, which is the sort of thing a removal is otherwise discovered by.",
+        ),
+    rebuildNeeded: z
+        .boolean()
+        .describe("It bakes a layer into the sandbox image, so what it added to the image is only gone after the next environment rebuild."),
+    keeps: z.array(z.string()).describe("What removal deliberately leaves alone, so the list of what goes can be read as complete."),
+});
+export type ExtensionRemovalPlan = z.infer<typeof ExtensionRemovalPlanSchema>;
+export const ExtensionRemovedSchema = z.object({
+    ok: z.literal(true).describe("It is gone."),
+    connections: z.array(z.string()).describe("Which configured connections went with it, by name."),
+    rebuildNeeded: z
+        .boolean()
+        .optional()
+        .describe("Its image layer is still in the running sandbox until the next environment rebuild; nothing else is pending."),
+});
 // Extension id → declared entry → count since last report; counts, not events, and declared entries, not paths, since
 // this answers whether a permission is earned, not logs activity. One request per batch across all extensions.
 export const ExtensionUsageBatchSchema = z.object({
