@@ -117,8 +117,11 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         <meta name="twitter:image" content={ogImage.href} />
         <meta name="twitter:image:alt" content={title} />
 
-        <meta name="theme-color" content={THEME_COLOR.default} />
-        {/* After the tag it rewrites, and before the body it skins. */}
+        {/* Media-scoped so browser chrome follows the reader's system on its own; the script pins both once a
+            reader has chosen a skin. */}
+        <meta name="theme-color" content={THEME_COLOR.default} media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content={THEME_COLOR.desk} media="(prefers-color-scheme: light)" />
+        {/* After the tags it rewrites, and before the body it skins. */}
         <script is:inline set:html={variantScript()} />
         {/* Preload the reading face used by every page. One variable file covers the whole 100–900 axis. */}
         <link rel="preload" as="font" type="font/woff2" href="/fonts/public-sans-100-900-latin.woff2" crossorigin />

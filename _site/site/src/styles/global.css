@@ -89,11 +89,15 @@
    Both selectors carry `html` deliberately: Tailwind emits its own defaults into `:root`, which scores the same as
    a bare attribute selector, and `html[...]` outscores it whichever order the bundler picks. */
 html:not([data-variant="desk"]) {
+    /* Scrollbars, form controls and the space past the scroll end are the browser's to paint, and it needs telling
+       which skin is on — the attribute is ours, not something it reads. */
+    color-scheme: dark;
     --font-weight-normal: 300;
     --font-weight-medium: 400;
     --font-weight-semibold: 500;
 }
 html[data-variant="desk"] {
+    color-scheme: light;
     --font-weight-normal: 400;
     --font-weight-medium: 500;
     --font-weight-semibold: 600;

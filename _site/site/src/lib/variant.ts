@@ -6,6 +6,10 @@ import { APP_URL } from "@intentic/site-content/site";
 // browser before first paint (BaseLayout's inline script), never at the edge — one HTML document per URL stays
 // cacheable, and only the `data-variant` attribute on <html> differs.
 //
+// A reader who has chosen neither gets the one their system asks for: `prefers-color-scheme: light` paints the desk
+// skin. That is a preference, not a choice — it is never written to the cookie, so it is re-read on every page and
+// follows the system when the system changes, and it hands the app nothing.
+//
 // The same script hands the choice on to the app, since the reader crosses to another origin the cookie below cannot
 // reach. A variant is which design THIS site wears; a profile is who is arriving, which the app answers in more than
 // paint (@intentic/constants profile.ts). They share their names, and this is the only place that maps one to the other.
@@ -15,6 +19,9 @@ export const VARIANT_COOKIE = "variant";
 
 /** The light skin's name, and the value of `<html data-variant>` when it is on. Any other value means the default. */
 export const DESK_VARIANT = "desk" satisfies Profile;
+
+/** Consulted only when nothing was chosen; a match paints the desk skin. */
+export const LIGHT_QUERY = "(prefers-color-scheme: light)";
 
 /** Landing anywhere under this path turns the light skin on and remembers it. */
 export const DESK_PATH = "/desk";
@@ -30,6 +37,8 @@ export const DEFAULT_VARIANT_HREF = `/?${VARIANT_PARAM}=default`;
 
 // Browser UI (Android's address bar, a PWA's title bar) is painted from this, so it has to follow the skin. The dark
 // value is the canvas; the light one is the app's light canvas, `neutral-100 94% + brand-300` resolved to sRGB.
+// BaseLayout ships both as media-scoped meta tags, which is what a reader with no script and no choice gets; the
+// script below pins both to one colour once there IS a choice, since a choice outranks the system.
 export const THEME_COLOR = { default: "#0c0907", desk: "#f5ede7" } as const;
 
 const q = (value: string): string => JSON.stringify(value);
@@ -57,16 +66,25 @@ export const variantScript = (): string => `(function () {
         url.searchParams.delete(${q(VARIANT_PARAM)});
         window.history.replaceState(null, "", url.pathname + url.search + url.hash);
     }
-    if (chosen === ${q(DESK_VARIANT)}) {
+    // Nothing chosen means the system decides the paint, and keeps deciding it: no cookie is written here, so a
+    // reader who flips their OS to dark is dark on the next page without ever having to find the footer link.
+    var light = chosen === ${q(DESK_VARIANT)} ||
+        (chosen === "" && window.matchMedia(${q(LIGHT_QUERY)}).matches);
+    if (light) {
         document.documentElement.dataset.variant = ${q(DESK_VARIANT)};
-        var themeColor = document.querySelector('meta[name="theme-color"]');
-        if (themeColor !== null) {
-            themeColor.setAttribute("content", ${q(THEME_COLOR.desk)});
+    }
+    if (chosen !== "") {
+        // Both media-scoped tags get the same colour, which is how a choice outranks the system for browser chrome.
+        var color = chosen === ${q(DESK_VARIANT)} ? ${q(THEME_COLOR.desk)} : ${q(THEME_COLOR.default)};
+        var tags = document.querySelectorAll('meta[name="theme-color"]');
+        for (var t = 0; t < tags.length; t++) {
+            tags[t].setAttribute("content", color);
         }
     }
     // An unchosen reader hands the app nothing: no cookie, no path, no link means no opinion, and the app keeps
-    // whatever it already had. Anything chosen that is not desk is the default, including the footer's way out,
-    // which is what lets that link put the app back too.
+    // whatever it already had — including a reader painted light by their system, whose system the app can read
+    // for itself and whose profile is more than paint. Anything chosen that is not desk is the default, including
+    // the footer's way out, which is what lets that link put the app back too.
     if (chosen === "") {
         return;
     }
