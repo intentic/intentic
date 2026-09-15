@@ -9,6 +9,7 @@ import {
     dockerOsType,
     installedApp,
     missingEnvNames,
+    ownedBy,
     publishedPort,
     titled,
     webView2Version,
@@ -145,12 +146,8 @@ const screen = desktop();
 
 export const windows = async (): Promise<WindowInfo[]> => await screen.windows();
 
-export const windowTitles = async (): Promise<string[]> => (await screen.windows()).map((window) => window.title);
-
-// Filtered by owning process name, never by title: title only says which screen is up, and a same-titled window
-// elsewhere (a browser tab) would pass as the app's own. Same identity appRunning uses, compared case-insensitively.
-export const appWindows = async (app: string): Promise<WindowInfo[]> =>
-    (await screen.windows()).filter((window) => window.app.toLowerCase() === app.toLowerCase());
+/** The app's own windows, by the process identity `appRunning` uses (`ownedBy`), never by title. */
+export const appWindows = async (app: string): Promise<WindowInfo[]> => ownedBy(await screen.windows(), app);
 
 /** Whether one of the app's own windows is showing the named screen. */
 export const appWindowTitled = async (app: string, fragment: string): Promise<boolean> =>

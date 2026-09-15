@@ -186,6 +186,11 @@ export const sandboxSlug = (hostname: string): string => hostname.split(`.`)[0] 
 // doesn't turn into a red build.
 export const titled = (titles: readonly string[], fragment: string): boolean => titles.some((title) => title.includes(fragment));
 
+// The windows one program owns, by the process name Windows derives from its executable — never by title, which says
+// only which screen is up. Case-insensitive, since a process name is.
+export const ownedBy = (desktop: readonly WindowInfo[], app: string): WindowInfo[] =>
+    desktop.filter((window) => window.app.toLowerCase() === app.toLowerCase());
+
 // The two programs that draw the lock screen: LockApp the picture and clock, LogonUI the credential prompt.
 // Neither has a window `windows()` returns, and either one holding the foreground means no window on this
 // desktop can be given the keyboard — `focusWindow` loses to them by design, however many times it asks.

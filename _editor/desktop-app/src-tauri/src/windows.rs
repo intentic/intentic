@@ -199,12 +199,25 @@ pub fn fit_to_content(app: &AppHandle, window: &WebviewWindow, content_height: f
 /// ever on screen. Each keeps its own frame. The workspace's is the one it was last seen at (hidden, not
 /// destroyed, so the platform remembers it), and a face's is the card its content fitted; where a face goes
 /// relative to the workspace is `over_workspace`'s decision, made before this is called.
-fn swap_in(window: &WebviewWindow, other: Option<WebviewWindow>) {
+fn swap_in(window: &WebviewWindow, other: Option<WebviewWindow>, keyboard: Keyboard) {
     let _ = window.show();
-    let _ = window.set_focus();
-    if let Some(other) = other.filter(|other| other.is_visible().unwrap_or(false)) {
+    if keyboard == Keyboard::Take {
+        let _ = window.set_focus();
+    }
+    if let Some(other) = other {
+        // Hidden whatever it answers about itself: `is_visible` is a round trip to the event loop, and an
+        // answer that fails to arrive reads as "already hidden", which is both faces on screen at once.
+        // Hiding a window that is already hidden is a no-op, so nothing is spent asking.
         let _ = other.hide();
     }
+}
+
+/// Whether the keyboard comes with the face being raised: a face taking over a window somebody is reading has
+/// to take it, one raising itself behind the user's back must not.
+#[derive(Clone, Copy, PartialEq)]
+enum Keyboard {
+    Take,
+    Leave,
 }
 
 /// Put the launcher in the middle of the workspace's frame, at the launcher's own size: a card placed against
@@ -345,7 +358,7 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         None => base,
     };
     if let Some(window) = app.get_webview_window(WORKSPACE) {
-        swap_in(&window, app.get_webview_window(LAUNCHER));
+        swap_in(&window, app.get_webview_window(LAUNCHER), Keyboard::Take);
         // The workspace coming back is the cheapest evidence this machine is awake and being used, which the
         // six-hourly timer cannot see through a night of sleep (update.rs).
         crate::update::nudge(app);
@@ -452,7 +465,7 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
             if let Some(screen) = screen {
                 place_in_work_area(&window, screen, size);
             }
-            swap_in(&window, app.get_webview_window(LAUNCHER));
+            swap_in(&window, app.get_webview_window(LAUNCHER), Keyboard::Take);
         }
         Err(error) => eprintln!("workspace window failed to open: {error}"),
     }
@@ -749,7 +762,7 @@ pub fn show_launcher(app: &AppHandle) {
     if let Some(window) = launcher(app) {
         let workspace = app.get_webview_window(WORKSPACE);
         over_workspace(&window, workspace.as_ref());
-        swap_in(&window, workspace);
+        swap_in(&window, workspace, Keyboard::Take);
     }
 }
 
@@ -759,18 +772,21 @@ pub fn alert_setup(app: &AppHandle) {
         return;
     };
     let _ = window.unminimize();
-    match app
-        .get_webview_window(WORKSPACE)
-        .filter(|workspace| workspace.is_visible().unwrap_or(false))
-    {
-        Some(workspace) => {
-            over_workspace(&window, Some(&workspace));
-            swap_in(&window, Some(workspace));
-        }
-        None => {
-            let _ = window.show();
-        }
-    }
+    // The swap the setup arrived through, run again rather than a bare `show`: a run settling while the
+    // workspace holds the frame has to end with one face up, and only the swap takes the other off screen.
+    let workspace = app.get_webview_window(WORKSPACE);
+    over_workspace(&window, workspace.as_ref());
+    // The keyboard only when the workspace is the window being read; a run that takes minutes must not pull
+    // the user out of whatever they moved on to. Wrong here costs a focus, never a second window.
+    let reading_workspace = workspace
+        .as_ref()
+        .is_some_and(|workspace| workspace.is_visible().unwrap_or(false));
+    let keyboard = if reading_workspace {
+        Keyboard::Take
+    } else {
+        Keyboard::Leave
+    };
+    swap_in(&window, workspace, keyboard);
     let _ = window.request_user_attention(Some(tauri::UserAttentionType::Critical));
 }
 

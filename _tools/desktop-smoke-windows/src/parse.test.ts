@@ -1,3 +1,4 @@
+import type { WindowInfo } from "@intentic/desktop-automation";
 import { expect, test } from "vitest";
 import {
     assistantReplied,
@@ -11,6 +12,7 @@ import {
     lockScreenHolds,
     missingEnvNames,
     nonEmpty,
+    ownedBy,
     publishedPort,
     runnerSupervision,
     sameStore,
@@ -138,6 +140,28 @@ test("a title matches on its distinctive half, so reworded copy does not go red"
     expect(titled(open, `Intentic`)).toBe(true);
     expect(titled(open, `Set up a sandbox on this device`)).toBe(false);
     expect(titled([], `Intentic`)).toBe(false);
+});
+
+test("a window belongs to the app by its process, so a browser tab wearing the same title does not", () => {
+    const mapped = (title: string, app: string): WindowInfo => ({
+        id: `1`,
+        title,
+        app,
+        bounds: { x: 0, y: 0, width: 620, height: 300 },
+        focused: false,
+    });
+    const desktop = [
+        mapped(`Intentic, Setting up your sandbox`, `Intentic-Desktop`),
+        mapped(`dev.intentic.desktop-siw`, `intentic-desktop`),
+        mapped(`Intentic — Brave`, `brave`),
+    ];
+
+    expect(ownedBy(desktop, `intentic-desktop`).map((window) => window.title)).toEqual([
+        `Intentic, Setting up your sandbox`,
+        `dev.intentic.desktop-siw`,
+    ]);
+    expect(ownedBy(desktop, `brave`)).toHaveLength(1);
+    expect(ownedBy([], `intentic-desktop`)).toEqual([]);
 });
 
 test("the WebView2 version is the first client key that carries one", () => {

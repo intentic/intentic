@@ -432,13 +432,15 @@ separate causes and all five are closed here, because any one of them alone repr
   could end with both halves false while a failed setup was on screen, handing the window back to the manager
   face and taking the failure with it. `take_pending_setup` is now take-once, and only finishing or the ×
   closes the screen.
-- **A stopped run takes the window back** (`setup_alert` → unminimise, show, `request_user_attention`). This
+- **A stopped run takes the window back** (`setup_alert` → unminimise, swap, `request_user_attention`). This
   window is deliberately not topmost and deliberately minimisable, which is right for something that runs for
-  minutes and exactly why a failure nobody was looking at changed only pixels. It *swaps* when — and only
-  when — the workspace has the frame, because walking away from a running install hands it back, and a bare
-  `show()` from there would put this face up beside the workspace: the second window again, on the one screen
-  that most needs reading carefully. That case takes focus, since the window being read is the one stepping
-  aside; every other case stays a show and a hint.
+  minutes and exactly why a failure nobody was looking at changed only pixels. It *always* swaps, because
+  walking away from a running install hands the frame back to the workspace and a bare `show()` from there
+  would put this face up beside it: the second window again, on the one screen that most needs reading
+  carefully. What the workspace says about itself decides the **keyboard** and nothing else — focus goes to
+  the face taking over a window somebody is reading, and a run settling behind the user's back stays a show
+  and a hint. The window it steps in front of is hidden either way (`swap_in`), since an answer that fails to
+  arrive must not be able to leave two faces mapped.
 - **Every run writes a transcript to `~/.intentic/logs/desktop-<id>-<stamp>.log`**, whether or not anyone
   asks, with **Show log**, **Copy log** and **Open log folder** together in the card's one action row — the
   path itself is that last button's tooltip, not a line of monospace across the card, being the longest thing

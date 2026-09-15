@@ -14,7 +14,8 @@ import { appExecutable, appRunning, installSilently, launchApp, quitApp, uninsta
 import { APP_IDENTIFIER, CONFIRM_TITLE, PRODUCT_NAME, SCHEME, SETUP_LINK, SETUP_TITLE, WORKSPACE_TITLE } from "./constants.js";
 import type { Harness } from "./harness.js";
 import { prepareHermeticDesktop } from "./hermetic.js";
-import { answerConfirm, appWindowTitled, appWindows, findInstalledApp, openLink, schemeCommand, webView2, windowTitles } from "./probe.js";
+import { ownedBy } from "./parse.js";
+import { answerConfirm, appWindowTitled, appWindows, findInstalledApp, openLink, schemeCommand, webView2, windows } from "./probe.js";
 
 export interface InstallTierOptions {
     /** The Intentic-<version>-x64-setup.exe under test. */
@@ -39,10 +40,11 @@ const SINGLE_INSTANCE_WINDOW = `${APP_IDENTIFIER}-siw`;
 /** One window's title and rectangle as a string, so a failed count can print what it counted. */
 const box = (window: WindowInfo): string => `${window.title} — ${window.bounds.x},${window.bounds.y} ${window.bounds.width}×${window.bounds.height}`;
 
-const describeWindows = async (): Promise<string> => {
-    const titles = await windowTitles();
-    return titles.length === 0 ? `(no windows)` : titles.map((title) => `- ${title}`).join(`\n`);
-};
+/** Every window on the desktop by title, from one listing, so a failure can be described from the listing it failed on. */
+const titleList = (desktop: readonly WindowInfo[]): string =>
+    desktop.length === 0 ? `(no windows)` : desktop.map((window) => `- ${window.title}`).join(`\n`);
+
+const describeWindows = async (): Promise<string> => titleList(await windows());
 
 // Recorded only on refusal: a lost keystroke would otherwise leave later assertions timing out and reading as the app's
 // fault.
@@ -213,17 +215,22 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
 
         // One window in the workspace's place, not a second one beside it: the actual regression, invisible to every
         // other assertion here. Counted, not measured (a rectangle match could still pass with an extra window mapped).
-        const visibleFaces = async (): Promise<WindowInfo[]> => (await appWindows(app)).filter((window) => window.title !== SINGLE_INSTANCE_WINDOW);
+        const visibleFaces = (desktop: readonly WindowInfo[]): WindowInfo[] =>
+            ownedBy(desktop, app).filter((window) => window.title !== SINGLE_INSTANCE_WINDOW);
+        // The listing the last poll REJECTED, kept rather than read again afterwards: a swap that lands in the
+        // seconds a fresh listing costs would leave the detail describing a desktop that passes.
+        let rejected: WindowInfo[] = [];
         const oneWindowShowingSetup = async (): Promise<boolean> => {
-            const own = await visibleFaces();
+            rejected = await windows();
+            const own = visibleFaces(rejected);
             return own.length === 1 && own[0]!.title.includes(SETUP_TITLE);
         };
         if (!(await harness.untilTrue(15, `the setup screen took the workspace's window rather than opening a second one`, oneWindowShowingSetup))) {
             // Own windows listed first: two of the app's own and one that isn't the setup screen are different
             // failures.
-            const own = await visibleFaces();
+            const own = visibleFaces(rejected);
             harness.detail(own.length === 0 ? `the app showed no window` : own.map((window) => `- ${box(window)}`).join(`\n`));
-            harness.detail(await describeWindows());
+            harness.detail(titleList(rejected));
         }
 
         if (await appRunning(executable)) {

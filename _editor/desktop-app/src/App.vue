@@ -433,7 +433,7 @@ const settleSetup = async (args: SetupArgs, failure: string | undefined, started
         return;
     }
     // This window is deliberately not topmost, so a run that stops while minimized or hidden would otherwise go
-    // unnoticed; `setupAlert` points at it without stealing focus.
+    // unnoticed; `setupAlert` brings it back to the front, in the workspace's place rather than beside it.
     await setupAlert();
 };
 
