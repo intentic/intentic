@@ -1,6 +1,6 @@
 # @intentic/fileq
 
-Agent-native file reading: any binary workspace file — docx, odt, xlsx, pptx, pdf, epub, ipynb, images, audio, archives — as clean, token-budgeted markdown, kept fresh as sidecars from the moment a file lands.
+Agent-native file reading: any binary workspace file — docx, odt, rtf, xlsx, ods, pptx, odp, pdf, epub, ipynb, images, audio, archives — as clean, token-budgeted markdown, kept fresh as sidecars from the moment a file lands.
 
 `fileq` is to workspace files what `webq` is to the web and `iq` is to code: the tool an agent reaches for
 when the answer is inside a format it cannot open as text. `fileq read` prints a capsule (name, format,
@@ -95,7 +95,7 @@ Later tiers extend the same shape, not the same commit: transcripts (whisper-cli
 feature pack for voice) and captions (a vision model, costing real money) would each be a deriver whose
 absence today is already named in the sidecars it will one day fill, the way OCR was until an image layer
 carried tesseract. An extension-contributed deriver registry (a `derivers` manifest point) is the natural
-end state; nothing here precludes it. The zip-of-XML derivers (pptx, odt, epub) share `src/lib/xml.ts` —
+end state; nothing here precludes it. The zip-of-XML derivers (pptx, odt, ods, odp, epub) share `src/lib/xml.ts` —
 entity decoding and attribute reading over machine-written markup — rather than a parser, and `src/lib/tools.ts`
 is the one place a deriver asks whether a binary is on PATH.
 

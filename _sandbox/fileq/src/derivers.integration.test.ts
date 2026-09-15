@@ -11,12 +11,15 @@ import { htmlDeriver } from "./lib/derivers/html.js";
 import { imageDeriver } from "./lib/derivers/image.js";
 import { ipynbDeriver } from "./lib/derivers/ipynb.js";
 import { mediaDeriver } from "./lib/derivers/media.js";
+import { odpDeriver } from "./lib/derivers/odp.js";
+import { odsDeriver } from "./lib/derivers/ods.js";
 import { odfToHtml, odtDeriver } from "./lib/derivers/odt.js";
 import { ocrAvailable, pdfDeriver } from "./lib/derivers/pdf.js";
 import { pptxDeriver } from "./lib/derivers/pptx.js";
+import { rtfDeriver, rtfParagraphs } from "./lib/derivers/rtf.js";
 import { xlsxDeriver } from "./lib/derivers/xlsx.js";
 import { detectFormat } from "./lib/formats.js";
-import { docxBytes, epubBytes, gzipBytes, ipynbText, odtBytes, pdfBytes, pngBytes, pptxBytes, tarBytes, wavBytes, zipBytes } from "./testing.js";
+import { docxBytes, epubBytes, gzipBytes, ipynbText, odpBytes, odsBytes, odtBytes, pdfBytes, pngBytes, pptxBytes, rtfBytes, tarBytes, wavBytes, zipBytes } from "./testing.js";
 
 let root: string;
 const fixture = (name: string, bytes: Uint8Array | string): string => {
@@ -169,6 +172,64 @@ describe("odt", () => {
             '<office:text><text:section text:name="s"><text:p>kept <text:span text:style-name="T1">inline</text:span></text:p></text:section><text:soft-page-break/><text:h text:outline-level="2">Two</text:h></office:text>',
         );
         expect(html).toBe("<p>kept <span>inline</span></p><h2>Two</h2>");
+    });
+});
+
+describe("ods", () => {
+    test("each sheet becomes a markdown table, without the padding ODF fills a sheet out with", async () => {
+        const path = fixture(
+            "budget.ods",
+            odsBytes([
+                { name: "Q1", rows: [["Item", "Cost"], ["Paper", "12"]] },
+                { name: "Q2", rows: [["Item", "Cost"]] },
+            ]),
+        );
+        expect(await detectFormat(path)).toBe("ods");
+        const doc = await odsDeriver.derive(path);
+        expect(doc.markdown).toContain("## Q1");
+        expect(doc.markdown).toMatch(/\| Item \| Cost \|/);
+        expect(doc.markdown).toMatch(/\| Paper \| 12 \|/);
+        expect(doc.markdown).toContain("## Q2");
+        // A real sheet carries a thousand repeated empty cells and a million empty rows after its data.
+        expect(doc.markdown).not.toMatch(/\|\s+\|\s+\|\s+\|/);
+        expect(doc.notes).toEqual([]);
+    });
+});
+
+describe("odp", () => {
+    test("each page becomes a slide section, with the speaker's notes quoted under it", async () => {
+        const path = fixture(
+            "pitch.odp",
+            odpBytes([
+                { name: "Title", lines: ["Our plan", "In three parts"], note: "Smile here." },
+                { name: "Detail", lines: ["Part one"] },
+            ]),
+        );
+        expect(await detectFormat(path)).toBe("odp");
+        const doc = await odpDeriver.derive(path);
+        expect(doc.markdown).toContain("## Slide 1: Title");
+        expect(doc.markdown).toContain("In three parts");
+        expect(doc.markdown).toContain("> Smile here.");
+        expect(doc.markdown).toContain("## Slide 2: Detail");
+        // The note belongs to the slide that carries it, not to the next one.
+        expect(doc.markdown.indexOf("> Smile here.")).toBeLessThan(doc.markdown.indexOf("## Slide 2"));
+    });
+});
+
+describe("rtf", () => {
+    test("paragraphs and table cells come through; the font table and an ignorable group do not", async () => {
+        const path = fixture("memo.rtf", rtfBytes(["A plain paragraph.", "Another one."]));
+        expect(await detectFormat(path)).toBe("rtf");
+        const doc = await rtfDeriver.derive(path);
+        expect(doc.markdown).toContain("A plain paragraph.");
+        expect(doc.markdown).toContain("Another one.");
+        expect(doc.markdown).toContain("left | right");
+        expect(doc.markdown).not.toContain("Times New Roman");
+        expect(doc.markdown).not.toContain("Not text");
+    });
+
+    test("reads a byte through the code page and a \\u escape without its fallback character", () => {
+        expect(rtfParagraphs(`{\\rtf1\\ansi caf\\'e9 \\u233?\\par}`)).toEqual(["café é"]);
     });
 });
 

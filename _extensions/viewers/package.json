@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-viewers",
     "version": "1.0.0",
-    "description": "File viewers (images, SVG, PDF, audio/video, docx, xlsx) — first-party intentic extension via contributes.viewers",
+    "description": "File viewers (images, SVG, PDF, audio/video, docx, odt, rtf, xlsx, ods, pptx, odp, epub) — first-party intentic extension via contributes.viewers",
     "license": "MIT",
     "private": true,
     "type": "module",

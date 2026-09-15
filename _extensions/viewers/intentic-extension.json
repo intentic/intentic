@@ -36,8 +36,12 @@
                 "fetch": "url"
             },
             { "id": "docx", "extensions": ["docx"], "fetch": "blob" },
-            { "id": "xlsx", "extensions": ["xlsx"], "fetch": "blob" },
-            { "id": "pptx", "extensions": ["pptx"], "fetch": "blob" }
+            { "id": "xlsx", "extensions": ["xlsx", "ods", "ots"], "fetch": "blob" },
+            { "id": "pptx", "extensions": ["pptx"], "fetch": "blob" },
+            { "id": "odf-text", "extensions": ["odt", "ott"], "fetch": "blob" },
+            { "id": "odf-slides", "extensions": ["odp", "otp", "odg", "otg"], "fetch": "blob" },
+            { "id": "rtf", "extensions": ["rtf"], "fetch": "blob" },
+            { "id": "epub", "extensions": ["epub"], "fetch": "blob" }
         ]
     }
 }

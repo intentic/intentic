@@ -63,10 +63,11 @@ const candidatesIn = (files: readonly string[]): string[] => {
 // Tokens that compile to a utility but are not one anybody wrote: `flex-shrink` is a real Tailwind class and a real CSS
 // property used in a `<style>` block; `antialiased` is a real utility and an ordinary English word used in prose;
 // `top-11` appears in prose arguing against ever writing it literally; `italic` names the HTML element a comment and a
-// test name describe ("a bold span with an italic one inside it"), and is also the CSS value and the field name a text
-// renderer cannot avoid (a .pptx run is bold or italic). Named here rather than worked around, since editing the prose
-// would only move the coincidence to the next person who writes the word.
-const NOT_CLASSES = new Set([`flex-shrink`, `antialiased`, `top-11`, `italic`]);
+// test name describe ("a bold span with an italic one inside it"), and is also the CSS value and the field name no text
+// renderer can avoid (a .pptx run is bold or italic, an RTF one carries the flag); `table-column` is an OpenDocument
+// style family. Each lives in the document readers as data, not as markup. Named here rather than worked around, since
+// editing the prose would only move the coincidence to the next person who writes the word.
+const NOT_CLASSES = new Set([`flex-shrink`, `antialiased`, `top-11`, `italic`, `table-column`]);
 
 const classesOf = (css: string): Set<string> =>
     new Set([...css.matchAll(/\.(-?(?:[A-Za-z_]|\\.)(?:[\w-]|\\.)*)/gu)].map((match) => (match[1] ?? ``).replaceAll(/\\(.)/gu, `$1`)));

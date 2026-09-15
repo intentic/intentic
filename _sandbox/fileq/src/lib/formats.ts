@@ -8,7 +8,7 @@ import { fileTypeFromFile } from "file-type";
 // Magic wins over a lying extension both ways: a renamed docx still derives, a fake .docx is refused rather than
 // mis-parsed.
 
-export type Format = "docx" | "xlsx" | "pptx" | "pdf" | "image" | "media" | "html" | "ipynb" | "odt" | "epub" | "archive";
+export type Format = "docx" | "xlsx" | "pptx" | "pdf" | "image" | "media" | "html" | "ipynb" | "odt" | "ods" | "odp" | "rtf" | "epub" | "archive";
 
 // file-type's ext per container to its format; preferred over sniffing zip since it names OOXML/ODF/EPUB.
 const MAGIC_FORMAT: Record<string, Format> = {
@@ -16,6 +16,9 @@ const MAGIC_FORMAT: Record<string, Format> = {
     xlsx: "xlsx",
     pptx: "pptx",
     odt: "odt",
+    ods: "ods",
+    odp: "odp",
+    rtf: "rtf",
     epub: "epub",
     pdf: "pdf",
     zip: "archive",
@@ -55,6 +58,13 @@ export const EXTENSION_FORMAT: Record<string, Format> = {
     ".xlsx": "xlsx",
     ".pptx": "pptx",
     ".odt": "odt",
+    ".ott": "odt", // a template is the same document with a different intent
+    ".ods": "ods",
+    ".ots": "ods",
+    ".odp": "odp",
+    ".otp": "odp",
+    ".odg": "odp", // a drawing is a presentation of one page
+    ".rtf": "rtf",
     ".epub": "epub",
     ".ipynb": "ipynb", // JSON: no magic bytes name it, so the extension is the whole recognition.
     ".pdf": "pdf",
@@ -100,7 +110,7 @@ export const EXTENSION_FORMAT: Record<string, Format> = {
 export const isCandidatePath = (path: string): boolean => extname(path).toLowerCase() in EXTENSION_FORMAT;
 
 // Zip-underneath formats where magic can only say "zip"; the extension names the real container instead.
-const ZIP_CONTAINERS: ReadonlySet<Format> = new Set(["docx", "xlsx", "pptx", "odt", "epub"]);
+const ZIP_CONTAINERS: ReadonlySet<Format> = new Set(["docx", "xlsx", "pptx", "odt", "ods", "odp", "epub"]);
 
 /** Magic bytes first, extension only when magic says nothing or just "zip" where the extension claims an OOXML container. */
 export const detectFormat = async (absPath: string): Promise<Format | undefined> => {

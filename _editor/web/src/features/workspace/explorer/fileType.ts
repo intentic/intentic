@@ -78,7 +78,18 @@ const BINARY_EXTS = new Set([
     "fig", // pictures no viewer claims; stay downloads
     "pdf",
     "docx",
-    "xlsx", // documents (`pdf`/`docx`/`xlsx` viewers)
+    "xlsx",
+    "pptx",
+    "odt",
+    "ott",
+    "ods",
+    "ots",
+    "odp",
+    "otp",
+    "odg",
+    "otg",
+    "rtf",
+    "epub", // documents (the `pdf`, `docx`, `xlsx`, `pptx`, `odf-*`, `rtf` and `epub` viewers)
     "mp3",
     "wav",
     "flac",

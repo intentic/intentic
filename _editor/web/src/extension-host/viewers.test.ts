@@ -26,7 +26,7 @@ describe(`ext-viewers`, () => {
         const ids = activateAndCaptureViewers()
             .map((viewer) => viewer.id)
             .toSorted();
-        expect(ids).toEqual([`docx`, `image`, `media`, `pdf`, `pptx`, `svg`, `xlsx`]);
+        expect(ids).toEqual([`docx`, `epub`, `image`, `media`, `odf-slides`, `odf-text`, `pdf`, `pptx`, `rtf`, `svg`, `xlsx`]);
     });
 
     it(`declares each viewer in the manifest with its file extensions and fetch kind`, () => {
@@ -40,8 +40,28 @@ describe(`ext-viewers`, () => {
         expect(declared.get(`svg`)).toEqual({ id: `svg`, extensions: [`svg`], fetch: `text` });
         expect(declared.get(`pdf`)).toEqual({ id: `pdf`, extensions: [`pdf`], fetch: `blob` });
         expect(declared.get(`docx`)).toEqual({ id: `docx`, extensions: [`docx`], fetch: `blob` });
-        expect(declared.get(`xlsx`)).toEqual({ id: `xlsx`, extensions: [`xlsx`], fetch: `blob` });
+        // One viewer for both spreadsheet formats: its worker decides which it is from the bytes.
+        expect(declared.get(`xlsx`)).toEqual({ id: `xlsx`, extensions: [`xlsx`, `ods`, `ots`], fetch: `blob` });
         expect(declared.get(`pptx`)).toEqual({ id: `pptx`, extensions: [`pptx`], fetch: `blob` });
+        expect(declared.get(`odf-text`)).toEqual({ id: `odf-text`, extensions: [`odt`, `ott`], fetch: `blob` });
+        expect(declared.get(`odf-slides`)).toEqual({ id: `odf-slides`, extensions: [`odp`, `otp`, `odg`, `otg`], fetch: `blob` });
+        expect(declared.get(`rtf`)).toEqual({ id: `rtf`, extensions: [`rtf`], fetch: `blob` });
+        expect(declared.get(`epub`)).toEqual({ id: `epub`, extensions: [`epub`], fetch: `blob` });
+    });
+
+    // Every office format a maker is likely to drop into a workspace, and the one thing that must never happen to
+    // one: two viewers claiming it, where the loser is decided by registration order.
+    it(`claims each document format exactly once`, () => {
+        const claims = new Map<string, string>();
+        for (const viewer of viewers.manifest.contributes?.viewers ?? []) {
+            for (const extension of viewer.extensions) {
+                expect(claims.get(extension)).toBeUndefined();
+                claims.set(extension, viewer.id);
+            }
+        }
+        for (const extension of [`docx`, `xlsx`, `pptx`, `pdf`, `odt`, `ods`, `odp`, `odg`, `rtf`, `epub`]) {
+            expect(claims.has(extension)).toBe(true);
+        }
     });
 
     // Media is the only `url` viewer: a blob fetch would download the whole file before the first frame and hit the

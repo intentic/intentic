@@ -158,6 +158,67 @@ ${paragraphs.map((text) => `<text:p text:style-name="P1">${xmlEscape(text)}</tex
         ),
     });
 
+const odfPackage = (mimetype: string, content: string): Uint8Array =>
+    zipSync({
+        mimetype: storedMimetype(mimetype),
+        "META-INF/manifest.xml": strToU8(
+            `<?xml version="1.0" encoding="UTF-8"?>
+<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">
+<manifest:file-entry manifest:full-path="/" manifest:media-type="${mimetype}"/>
+<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>
+</manifest:manifest>`,
+        ),
+        "content.xml": strToU8(
+            `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0">
+<office:body>${content}</office:body></office:document-content>`,
+        ),
+    });
+
+/** An OpenDocument spreadsheet: one sheet per entry, each row padded out the way a real .ods pads its own. */
+export const odsBytes = (sheets: readonly { readonly name: string; readonly rows: readonly (readonly string[])[] }[]): Uint8Array =>
+    odfPackage(
+        "application/vnd.oasis.opendocument.spreadsheet",
+        `<office:spreadsheet>${sheets
+            .map(
+                (sheet) =>
+                    `<table:table table:name="${xmlEscape(sheet.name)}">${sheet.rows
+                        .map(
+                            (row) =>
+                                `<table:table-row>${row
+                                    .map((cell) => `<table:table-cell office:value-type="string"><text:p>${xmlEscape(cell)}</text:p></table:table-cell>`)
+                                    .join("")}<table:table-cell table:number-columns-repeated="1013"/></table:table-row>`,
+                        )
+                        .join("")}<table:table-row table:number-rows-repeated="1048576"><table:table-cell table:number-columns-repeated="1024"/></table:table-row></table:table>`,
+            )
+            .join("")}</office:spreadsheet>`,
+    );
+
+/** An OpenDocument presentation: one page per entry, each with its lines and a speaker's note. */
+export const odpBytes = (slides: readonly { readonly name: string; readonly lines: readonly string[]; readonly note?: string }[]): Uint8Array =>
+    odfPackage(
+        "application/vnd.oasis.opendocument.presentation",
+        `<office:presentation>${slides
+            .map(
+                (slide) =>
+                    `<draw:page draw:name="${xmlEscape(slide.name)}">` +
+                    `<draw:frame><draw:text-box>${slide.lines.map((line) => `<text:p>${xmlEscape(line)}</text:p>`).join("")}</draw:text-box></draw:frame>${ 
+                    slide.note === undefined
+                        ? ""
+                        : `<presentation:notes><draw:frame><draw:text-box><text:p>${xmlEscape(slide.note)}</text:p></draw:text-box></draw:frame></presentation:notes>` 
+                    }</draw:page>`,
+            )
+            .join("")}</office:presentation>`,
+    );
+
+/** A Word-shaped RTF: a font table and an ignorable group to skip, a \\'hh escape, and one table row. */
+export const rtfBytes = (paragraphs: readonly string[]): Uint8Array =>
+    strToU8(
+        `{\\rtf1\\ansi\\ansicpg1252\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}}{\\*\\generator Not text;}${ 
+            paragraphs.map((text) => `\\pard ${text.replaceAll("\\", "\\\\").replaceAll("{", "\\{").replaceAll("}", "\\}")}\\par`).join("") 
+            }\\pard\\trowd\\cellx1440\\cellx2880 left\\cell right\\cell\\row}`,
+    );
+
 /** An EPUB 3 with one XHTML chapter per entry, spine-ordered, plus a nav document that must not read as a chapter. */
 export const epubBytes = (title: string, chapters: readonly { readonly title: string; readonly body: string }[]): Uint8Array => {
     const xhtml = (heading: string, body: string): string =>

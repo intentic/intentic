@@ -12,9 +12,12 @@ import { htmlDeriver } from "./derivers/html.js";
 import { imageDeriver } from "./derivers/image.js";
 import { ipynbDeriver } from "./derivers/ipynb.js";
 import { mediaDeriver } from "./derivers/media.js";
+import { odpDeriver } from "./derivers/odp.js";
+import { odsDeriver } from "./derivers/ods.js";
 import { odtDeriver } from "./derivers/odt.js";
 import { pdfDeriver } from "./derivers/pdf.js";
 import { pptxDeriver } from "./derivers/pptx.js";
+import { rtfDeriver } from "./derivers/rtf.js";
 import { xlsxDeriver } from "./derivers/xlsx.js";
 import { isFresh, readSidecar, removeSidecar, sidecarBody, sidecarPathFor, sha256OfFile, writeSidecar } from "./sidecar.js";
 import { tokensOf } from "./env.js";
@@ -32,6 +35,9 @@ export const DERIVERS: Record<Format, Deriver> = {
     html: htmlDeriver,
     ipynb: ipynbDeriver,
     odt: odtDeriver,
+    ods: odsDeriver,
+    odp: odpDeriver,
+    rtf: rtfDeriver,
     epub: epubDeriver,
     archive: archiveDeriver,
 };
