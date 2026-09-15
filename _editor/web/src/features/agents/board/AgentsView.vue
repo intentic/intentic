@@ -33,6 +33,7 @@ import { useChat } from "../../chat/run/useChat";
 import { chatStrip } from "../../chat/panel/useChat-strip";
 import { agentTabOf } from "../../chat/panel/useChat-reveal";
 import { publishContextKey } from "../../../shell/commands/contextKeys";
+import { AGENTS } from "../../../shell/commands/categories";
 import { commandShortcut, registerCommand } from "../../../shell/commands/useCommands";
 import MatchLine from "../../../components/MatchLine.vue";
 import { BUILD_IDEAS, buildPrompt } from "./buildIdeas";
@@ -564,6 +565,7 @@ onMounted(() => {
             owner: `builtin`,
             command: `agents.undoArchive`,
             title: `Undo Archive`,
+            category: AGENTS,
             icon: `history`,
             keybinding: `Mod+Z`,
             when: `agentsUndoable && !editableTarget`,
@@ -576,7 +578,8 @@ onMounted(() => {
         registerCommand({
             owner: `builtin`,
             command: `agents.filter`,
-            title: `Filter Agents…`,
+            title: `Filter…`,
+            category: AGENTS,
             icon: `search`,
             // Focus and select, so a chord typed over a stale query starts fresh instead of needing the old text
             // cleared first.

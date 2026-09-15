@@ -6,6 +6,7 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
 import BackgroundProcesses from "./BackgroundProcesses.vue";
 import WorkTerminals from "./WorkTerminals.vue";
+import { TERMINAL } from "../../shell/commands/categories";
 import { commandShortcut, type CommandRegistration, registerCommand, withShortcut } from "../../shell/commands/useCommands";
 import { useSandbox } from "../sandbox/client/useSandbox";
 import { showWorkTerminals } from "./useWorkTerminals";
@@ -642,7 +643,7 @@ const registerPanelCommands = (): void => {
     const entries: Omit<CommandRegistration, `owner`>[] = [
         {
             command: `terminal.rename`,
-            title: `Rename Terminal`,
+            title: `Rename`,
             icon: `pencil`,
             // F2, gated to a keystroke from inside this panel; outside it the chord stays free for other surfaces.
             keybinding: `F2`,
@@ -658,7 +659,7 @@ const registerPanelCommands = (): void => {
         },
         {
             command: `terminal.changeColor`,
-            title: `Change Terminal Color…`,
+            title: `Change Color…`,
             icon: `palette`,
             handler: (): void => {
                 if (activeName.value !== undefined) {
@@ -668,7 +669,7 @@ const registerPanelCommands = (): void => {
         },
         {
             command: `terminal.changeIcon`,
-            title: `Change Terminal Icon…`,
+            title: `Change Icon…`,
             icon: `star`,
             handler: (): void => {
                 if (activeName.value !== undefined) {
@@ -678,7 +679,7 @@ const registerPanelCommands = (): void => {
         },
         {
             command: `terminal.join`,
-            title: `Join Selected Terminals`,
+            title: `Join Selected`,
             icon: `code`,
             keybinding: `Ctrl+Shift+G`,
             handler: (): void => {
@@ -690,7 +691,7 @@ const registerPanelCommands = (): void => {
         },
         {
             command: `terminal.unsplit`,
-            title: `Unsplit Terminal`,
+            title: `Unsplit`,
             icon: `code`,
             keybinding: `Ctrl+Shift+U`,
             handler: (): void => {
@@ -702,7 +703,7 @@ const registerPanelCommands = (): void => {
         {
             // Unbound by default, like the cosmetic pickers: already has two clickable homes.
             command: `terminal.toggleWorkTerminals`,
-            title: `Toggle Work Terminals in Panel`,
+            title: `Toggle Work Terminals`,
             icon: `sparkles`,
             handler: (): void => {
                 showWorkTerminals.value = !showWorkTerminals.value;
@@ -710,7 +711,7 @@ const registerPanelCommands = (): void => {
         },
         {
             command: `terminal.find`,
-            title: `Find in Terminal`,
+            title: `Find`,
             icon: `search`,
             // Cmd+F on Mac, Ctrl+F elsewhere, gated to this panel so the page find keeps the chord elsewhere.
             keybinding: `Mod+F`,
@@ -719,14 +720,14 @@ const registerPanelCommands = (): void => {
         },
         {
             command: `terminal.nextTab`,
-            title: `Next Terminal`,
+            title: `Next`,
             keybinding: `Alt+PageDown`,
             when: `tabSurface == 'terminal'`,
             handler: () => cycleTab(1),
         },
         {
             command: `terminal.previousTab`,
-            title: `Previous Terminal`,
+            title: `Previous`,
             keybinding: `Alt+PageUp`,
             when: `tabSurface == 'terminal'`,
             handler: () => cycleTab(-1),
@@ -735,7 +736,7 @@ const registerPanelCommands = (): void => {
     if (splitTab !== undefined) {
         entries.push({
             command: `terminal.split`,
-            title: `Split Terminal`,
+            title: `Split`,
             icon: `code`,
             keybinding: `Ctrl+Shift+5`,
             handler: (): void => {
@@ -748,7 +749,7 @@ const registerPanelCommands = (): void => {
     if (killTabs !== undefined) {
         entries.push({
             command: `terminal.kill`,
-            title: `Kill Terminal`,
+            title: `Kill`,
             icon: `trash`,
             keybinding: `Ctrl+Shift+X`,
             when: `tabSurface == 'terminal'`,
@@ -765,7 +766,7 @@ const registerPanelCommands = (): void => {
         });
         entries.push({
             command: `terminal.killAll`,
-            title: `Kill All Terminals`,
+            title: `Kill All`,
             icon: `trash`,
             keybinding: `Ctrl+Shift+Backspace`,
             when: `tabSurface == 'terminal'`,
@@ -773,13 +774,14 @@ const registerPanelCommands = (): void => {
         });
         entries.push({
             command: `terminal.killInactive`,
-            title: `Kill Inactive Terminals`,
+            title: `Kill Inactive`,
             icon: `trash`,
             // Unbound: tidying is occasional, and a chord for it would sit one slip from the one that kills your shell.
             handler: sweepInactive,
         });
     }
-    commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, ...entry }));
+    // One family for the whole list, stated here rather than on every entry.
+    commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, category: TERMINAL, ...entry }));
 };
 
 // Right-click on empty bar space (not a pill or button) opens the strip-wide menu: sweep, kill all, pop out.

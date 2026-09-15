@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Button, FilterBar, Row, RowGroup, RowNote, ui } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
-import { commands } from "../../shell/commands/useCommands";
+import { commandLabel, commands } from "../../shell/commands/useCommands";
+import { rankCommands } from "../../shell/commands/commandSearch";
 import { chordFromEvent, formatChord, isApplePlatform } from "../../shell/commands/keybindings";
 import { effectiveKeybinding, keymapOverrides, useKeymap } from "../../shell/commands/useKeymap";
 
@@ -19,26 +20,29 @@ const recording = ref<string | undefined>(undefined);
 interface CommandRow {
     readonly command: string;
     readonly title: string;
+    readonly category: string | undefined;
+    /** "Category: Title", for the places that need the command's whole name in one string (tooltips, aria). */
+    readonly label: string;
     readonly owner: string;
     readonly chord: string | undefined;
     readonly overridden: boolean;
     readonly hasDefault: boolean;
 }
 
-const rows = computed<readonly CommandRow[]>(() => {
-    const q = query.value.trim().toLowerCase();
-    return commands.value
-        .map((entry): CommandRow => ({
-            command: entry.command,
-            title: entry.title,
-            owner: entry.owner,
-            chord: effectiveKeybinding(entry.command, entry.keybinding),
-            overridden: keymapOverrides.value[entry.command] !== undefined,
-            hasDefault: entry.keybinding !== undefined,
-        }))
-        .filter((row) => q.length === 0 || row.title.toLowerCase().includes(q) || row.command.toLowerCase().includes(q))
-        .toSorted((a, b) => a.title.localeCompare(b.title));
-});
+// Filtered and ordered by the palette's own matcher, so a word that finds a command there finds it here; families end
+// up in one run, since ordering falls back to the "Category: Title" the palette shows.
+const rows = computed<readonly CommandRow[]>(() =>
+    rankCommands(commands.value, query.value).map((entry): CommandRow => ({
+        command: entry.command,
+        title: entry.title,
+        category: entry.category,
+        label: commandLabel(entry),
+        owner: entry.owner,
+        chord: effectiveKeybinding(entry.command, entry.keybinding),
+        overridden: keymapOverrides.value[entry.command] !== undefined,
+        hasDefault: entry.keybinding !== undefined,
+    })),
+);
 
 // Any override at all → the "Reset all" affordance is meaningful.
 const hasAnyOverride = computed(() => Object.keys(keymapOverrides.value).length > 0);
@@ -111,10 +115,10 @@ onUnmounted(stopRecording);
 
         <!-- Compact tier: a long list of commands read by scanning. -->
         <RowGroup>
-            <Row v-for="row in rows" :key="row.command" :title="row.title" :description="row.command">
+            <Row v-for="row in rows" :key="row.command" :title="row.label" :description="row.command">
                 <template #title>
                     <span class="flex items-center gap-2">
-                        <span class="truncate">{{ row.title }}</span>
+                        <span class="truncate"><span v-if="row.category" class="text-muted">{{ row.category }}: </span>{{ row.title }}</span>
                         <span v-if="row.owner !== 'builtin'" class="shrink-0 rounded bg-overlay px-1 text-2xs font-normal text-subtle">ext</span>
                     </span>
                 </template>
@@ -143,7 +147,7 @@ onUnmounted(stopRecording);
                         type="button"
                         :class="ui.iconButton()"
                         v-tooltip.top="recording === row.command ? 'Cancel' : 'Record shortcut'"
-                        :aria-label="recording === row.command ? 'Cancel recording' : `Record shortcut for ${row.title}`"
+                        :aria-label="recording === row.command ? 'Cancel recording' : `Record shortcut for ${row.label}`"
                         @click="recording === row.command ? stopRecording() : startRecording(row.command)"
                     >
                         <Icon :name="recording === row.command ? 'times' : 'pencil'" />
@@ -153,7 +157,7 @@ onUnmounted(stopRecording);
                         type="button"
                         :class="ui.iconButton()"
                         v-tooltip.top="'Unbind'"
-                        :aria-label="`Unbind ${row.title}`"
+                        :aria-label="`Unbind ${row.label}`"
                         @click="unbindKeybinding(row.command)"
                     >
                         <Icon name="trash" />
@@ -163,7 +167,7 @@ onUnmounted(stopRecording);
                         type="button"
                         :class="ui.iconButton()"
                         v-tooltip.top="'Reset to default'"
-                        :aria-label="`Reset ${row.title} to default`"
+                        :aria-label="`Reset ${row.label} to default`"
                         @click="resetKeybinding(row.command)"
                     >
                         <Icon name="undo" />

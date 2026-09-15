@@ -1,19 +1,20 @@
 import type { Disposable } from "@intentic/extension-api";
 import { onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
+import { CHAT, GO_TO, PREVIEW, TERMINAL } from "./categories";
 import { type CommandRegistration, registerCommand } from "./useCommands";
 import { chatOnRail, toggleChatFloating, toggleChatHome } from "../../features/chat/panel/chatPanelLayout";
 import { useChatFloating } from "../../features/chat/panel/chatFloating";
-import { openPreview } from "../../features/preview/previewSurface";
 import { togglePreviewFloating, usePreviewFloating } from "../../features/preview/previewFloating";
 import { useTerminalPanel } from "../../features/terminal/useTerminalPanel";
 import { useTerminalFloating } from "../../features/terminal/terminalFloating";
 import { useQuickOpen } from "./useQuickOpen";
 import { useRole } from "../../features/sandbox/secrets/useRole";
 
-// Core shell's built-in commands, since the palette's `>` mode is empty until an extension contributes one. Each
-// handler calls the real composable directly; the command is the binding. Registered on mount and disposed on
-// unmount so a shell remount (mobile/desktop crossover, HMR) can't double-register into the registry.
+// Core shell's built-in actions: what the shell can *do*, against the panels it owns. Where these commands can take
+// you is useNavigationCommands' half, derived from the rail and the hubs rather than listed. Each handler calls the
+// real composable directly; the command is the binding. Registered on mount and disposed on unmount so a shell
+// remount (mobile/desktop crossover, HMR) can't double-register into the registry.
 export function useShellCommands(): void {
     const router = useRouter();
     const terminal = useTerminalPanel();
@@ -30,7 +31,8 @@ export function useShellCommands(): void {
         const entries: Omit<CommandRegistration, `owner`>[] = [
             {
                 command: `workspace.goToFile`,
-                title: `Go to File…`,
+                title: `File…`,
+                category: GO_TO,
                 icon: `search`,
                 keybinding: `Mod+P`,
                 handler: (): void => {
@@ -40,6 +42,7 @@ export function useShellCommands(): void {
             },
             {
                 command: `workspace.commandPalette`,
+                // The one command with no family: it is the list the others are read from.
                 title: `Command Palette…`,
                 icon: `search`,
                 keybinding: `Mod+Shift+P`,
@@ -48,20 +51,11 @@ export function useShellCommands(): void {
                     isOpen.value = true;
                 },
             },
-            // Icons match the rail's glyphs for these areas.
-            { command: `view.workspace`, title: `Go to Workspace`, icon: `file-tree`, handler: () => router.push(`/workspace`) },
-            { command: `view.agents`, title: `Go to Agents`, icon: `robot`, handler: () => router.push(`/agents`) },
-            { command: `view.secrets`, title: `Go to Sandbox Secrets`, icon: `key`, handler: () => router.push(`/sandbox/secrets`) },
-            // Logs lives on the sandbox hub, not the rail; the palette is the one-keystroke path when something breaks.
-            { command: `view.logs`, title: `Go to Sandbox Logs`, icon: `file`, handler: () => router.push(`/sandbox/logs`) },
-            // Ports lives on the hub too; the rail only shows an exposure indicator, absent when nothing is exposed.
-            { command: `view.ports`, title: `Go to Sandbox Ports`, icon: `globe`, handler: () => router.push(`/sandbox/ports`) },
-            { command: `view.capabilities`, title: `Add a Capability`, icon: `plus`, handler: () => router.push(`/capabilities`) },
-            { command: `view.keybindings`, title: `Keyboard Shortcuts`, icon: `sliders-h`, handler: () => router.push(`/settings/keybindings`) },
             // Both terminal commands no-op below maintainer, where the daemon refuses the socket.
             {
                 command: `terminal.toggle`,
-                title: `Toggle Terminal Panel`,
+                title: `Toggle Panel`,
+                category: TERMINAL,
                 icon: `code`,
                 keybinding: `Ctrl+\``,
                 handler: () => (canShip.value ? terminal.toggle() : undefined),
@@ -69,7 +63,8 @@ export function useShellCommands(): void {
             // Match the physical key globally so terminal.new works while its panel is closed.
             {
                 command: `terminal.new`,
-                title: `New Terminal`,
+                title: `New`,
+                category: TERMINAL,
                 icon: `code`,
                 keybinding: `Ctrl+Shift+\``,
                 handler: () => (canShip.value ? terminal.spawnShell() : undefined),
@@ -79,8 +74,9 @@ export function useShellCommands(): void {
             {
                 command: `chat.toggleFloating`,
                 get title(): string {
-                    return chat.floats.value ? `Dock Chat Back` : `Move Chat into New Window`;
+                    return chat.floats.value ? `Dock Back` : `Move into New Window`;
                 },
+                category: CHAT,
                 icon: `external-link`,
                 keybinding: `F9`,
                 when: `tabSurface != 'terminal'`,
@@ -91,8 +87,9 @@ export function useShellCommands(): void {
             {
                 command: `chat.toggleHome`,
                 get title(): string {
-                    return chatOnRail.value ? `Dock Chat Back to the Side` : `Dock Chat to Rail`;
+                    return chatOnRail.value ? `Dock Back to the Side` : `Dock to Rail`;
                 },
+                category: CHAT,
                 // `layout-left`, not `expand`: the rail is a left-edge dock, not something this command maximises.
                 icon: `layout-left`,
                 handler: () => toggleChatHome(router),
@@ -100,8 +97,9 @@ export function useShellCommands(): void {
             {
                 command: `terminal.toggleFloating`,
                 get title(): string {
-                    return terminalFloat.floats.value ? `Dock Terminal Back` : `Move Terminal into New Window`;
+                    return terminalFloat.floats.value ? `Dock Back` : `Move into New Window`;
                 },
+                category: TERMINAL,
                 icon: `external-link`,
                 handler: (): void => {
                     // Open first: popping out a closed panel would float an empty window.
@@ -109,13 +107,14 @@ export function useShellCommands(): void {
                     terminalFloat.toggle();
                 },
             },
-            // Preview's two doors: jump to its area, and the window toggle whose title says which way the press goes.
-            { command: `view.preview`, title: `Go to Preview`, icon: `eye`, handler: () => openPreview(router) },
+            // The window toggle whose title says which way the press goes; the jump to its area is a destination
+            // (useNavigationCommands), like every other area's.
             {
                 command: `preview.toggleFloating`,
                 get title(): string {
-                    return previewFloat.floats.value ? `Dock Preview Back` : `Move Preview into New Window`;
+                    return previewFloat.floats.value ? `Dock Back` : `Move into New Window`;
                 },
+                category: PREVIEW,
                 icon: `external-link`,
                 handler: () => togglePreviewFloating(),
             },

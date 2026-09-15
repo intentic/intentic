@@ -27,8 +27,5 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             },
             view: async () => (await import(`./ProjectsView.vue`)).default,
         }),
-        api.commands.register(`projects.open`, () => {
-            api.navigate(`/ext/projects`);
-        }),
     );
 };

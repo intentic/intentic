@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import type { Disposable } from "@intentic/extension-api";
 import { AnchoredOverlay, Avatar, browserOwnsClick, StatusBadge, vAction } from "@intentic/ui";
-import { computed, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
+import { ACCOUNT } from "./commands/categories";
+import { registerCommand } from "./commands/useCommands";
 import { useAuth } from "../features/auth/useAuth";
 import { useHostedPlan } from "../features/settings/hosted-plan/useHostedPlan";
 import { environment } from "../app/environments/environment";
@@ -44,6 +47,19 @@ const logout = async (): Promise<void> => {
     // Full navigation, not a router push: afterSignOut may point outside this SPA.
     globalThis.location.href = environment.afterSignOut;
 };
+
+// The other half of this popover is a place (Settings, a destination like any other); this half is the one thing the
+// account menu does, registered here so the palette runs the same flow rather than a second copy of it.
+let command: Disposable | undefined;
+
+onMounted(() => {
+    command = registerCommand({ owner: `builtin`, command: `account.signOut`, title: `Sign Out`, category: ACCOUNT, icon: `sign-out`, handler: logout });
+});
+
+onUnmounted(() => {
+    command?.dispose();
+    command = undefined;
+});
 </script>
 
 <template>

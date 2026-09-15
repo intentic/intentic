@@ -2,7 +2,9 @@
 import { computed, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { commands, executeCommand, type RegisteredCommand } from "./useCommands";
+import { rankCommands } from "./commandSearch";
 import { formatChord, isApplePlatform } from "./keybindings";
+import { recentCommandIds, rememberCommand } from "./recentCommands";
 import { effectiveKeybinding } from "./useKeymap";
 import { useQuickOpen } from "./useQuickOpen";
 import { sessionIdFrom } from "../../features/agents/fleet/sessionRef";
@@ -14,7 +16,9 @@ import { basename, parentDir } from "@intentic/ui/path";
 
 // Quick Open (Ctrl/Cmd+P): ranks /work files by name client-side over the cached tree (useFuzzyFiles),
 // so results land in the same frame as the keystroke; the daemon's search only backs the truncated-tree
-// fallback. Below the search floor it lists open tabs; a `>` prefix flips to command mode (useCommands).
+// fallback. Below the search floor it lists open tabs; a `>` prefix flips to command mode (useCommands),
+// which opens on what was run recently and ranks the rest by name (commandSearch.ts) — the same two-block
+// shape as the file half, for a registry now long enough that reading it top to bottom is not an answer.
 
 const { isOpen, mode } = useQuickOpen();
 const router = useRouter();
@@ -26,14 +30,23 @@ const isMac = isApplePlatform();
 const chordFor = (entry: RegisteredCommand): string | undefined => effectiveKeybinding(entry.command, entry.keybinding);
 
 const query = ref(``);
-// `>` prefix means command mode; the rest of the text filters registered commands by title or id.
+// `>` prefix means command mode; the rest of the text ranks registered commands by name, family or id.
 const commandMode = computed(() => query.value.trimStart().startsWith(`>`));
-const commandQuery = computed(() => query.value.trimStart().slice(1).trim().toLowerCase());
-const commandRows = computed<readonly RegisteredCommand[]>(() =>
-    commands.value.filter(
-        (entry) => entry.title.toLowerCase().includes(commandQuery.value) || entry.command.toLowerCase().includes(commandQuery.value),
-    ),
+const commandQuery = computed(() => query.value.trimStart().slice(1).trim());
+// Commands run recently, in that order, dropped as soon as a query is typed: ranking is a better answer than habit
+// once someone has said what they're after. A remembered command whose surface isn't mounted is simply not listed.
+const recentRows = computed<readonly RegisteredCommand[]>(() =>
+    commandQuery.value.length > 0
+        ? []
+        : recentCommandIds.value.flatMap((id) => {
+              const entry = commands.value.find((candidate) => candidate.command === id);
+              return entry === undefined ? [] : [entry];
+          }),
 );
+const commandRows = computed<readonly RegisteredCommand[]>(() => [
+    ...recentRows.value,
+    ...rankCommands(commands.value, commandQuery.value).filter((entry) => !recentRows.value.includes(entry)),
+]);
 // A pasted session id takes over the palette; any of its four spellings are accepted (sessionRef).
 const sessionRef = computed(() => (commandMode.value ? undefined : sessionIdFrom(query.value, (id) => agentById(id) !== undefined)));
 // The known agent behind it, if any; the jump still works even if the roster hasn't caught up yet.
@@ -71,6 +84,8 @@ const open = (path: string): void => {
 
 const run = (entry: RegisteredCommand): void => {
     isOpen.value = false;
+    // Remembered on the press, not on success: what the reader reached for is the same either way.
+    rememberCommand(entry.command);
     // A throwing command is its owner's bug: contain it to the console, never the palette.
     void Promise.resolve(executeCommand(entry.command)).catch((caught: unknown) => console.error(`command ${entry.command} failed`, caught));
 };
@@ -152,30 +167,40 @@ const onShow = async (): Promise<void> => {
                 />
             </div>
             <div v-if="commandMode" id="quick-open-list" class="scrollbar-thin max-h-80 overflow-auto py-1" role="listbox" aria-label="Commands">
-                <button
-                    v-for="(entry, index) in commandRows"
-                    :id="`quick-open-opt-${index}`"
-                    :key="entry.command"
-                    :ref="(el) => setRowEl(entry.command, el)"
-                    type="button"
-                    role="option"
-                    :aria-selected="index === activeIndex"
-                    class="ui-row-select flex w-full items-center gap-2 px-3 py-1.5 text-left"
-                    :class="{ 'ui-row-select-on': index === activeIndex }"
-                    @click="run(entry)"
-                    @mouseenter="activeIndex = index"
-                >
-                    <Icon :name="(entry.icon ?? `chevron-right`) as IconName" class="shrink-0 text-2xs text-muted" />
-                    <span class="min-w-0 truncate text-sm text-content">{{ entry.title }}</span>
-                    <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ entry.command }}</span>
-                    <kbd v-if="chordFor(entry)" class="shrink-0 rounded border border-line bg-overlay px-1.5 py-0.5 font-mono text-2xs text-muted">{{
-                        formatChord(chordFor(entry)!, isMac)
-                    }}</kbd>
-                </button>
-                <p v-if="commandRows.length === 0 && commands.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">
-                    No commands registered: extensions contribute them.
-                </p>
-                <p v-else-if="commandRows.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">No commands match.</p>
+                <template v-for="(entry, index) in commandRows" :key="entry.command">
+                    <!-- Two headings at most, and only over an unfiltered list: with a query typed there is one run, ranked. -->
+                    <p v-if="recentRows.length > 0 && index === 0" class="px-3 pb-1 pt-0.5 text-2xs font-medium uppercase tracking-wide text-subtle">
+                        Recently used
+                    </p>
+                    <p
+                        v-else-if="recentRows.length > 0 && index === recentRows.length"
+                        class="px-3 pb-1 pt-1.5 text-2xs font-medium uppercase tracking-wide text-subtle"
+                    >
+                        All commands
+                    </p>
+                    <button
+                        :id="`quick-open-opt-${index}`"
+                        :ref="(el) => setRowEl(entry.command, el)"
+                        type="button"
+                        role="option"
+                        :aria-selected="index === activeIndex"
+                        class="ui-row-select flex w-full items-center gap-2 px-3 py-1.5 text-left"
+                        :class="{ 'ui-row-select-on': index === activeIndex }"
+                        @click="run(entry)"
+                        @mouseenter="activeIndex = index"
+                    >
+                        <Icon :name="(entry.icon ?? `chevron-right`) as IconName" class="shrink-0 text-2xs text-muted" />
+                        <!-- Family dimmed ahead of the name, the one string both this row and Keybindings read (commandLabel). -->
+                        <span class="min-w-0 truncate text-sm text-content">
+                            <span v-if="entry.category" class="text-muted">{{ entry.category }}: </span>{{ entry.title }}
+                        </span>
+                        <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ entry.command }}</span>
+                        <kbd v-if="chordFor(entry)" class="shrink-0 rounded border border-line bg-overlay px-1.5 py-0.5 font-mono text-2xs text-muted">{{
+                            formatChord(chordFor(entry)!, isMac)
+                        }}</kbd>
+                    </button>
+                </template>
+                <p v-if="commandRows.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">No commands match.</p>
             </div>
             <!-- One offer, since a session name means one thing; the id is echoed so the reader can verify the match. -->
             <div

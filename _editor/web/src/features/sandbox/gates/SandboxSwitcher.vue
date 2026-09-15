@@ -14,8 +14,9 @@ import {
     useOsPreference,
 } from "@intentic/ui";
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch, type WatchStopHandle } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
+import { SANDBOX } from "../../../shell/commands/categories";
 import { commandShortcut, registerCommand } from "../../../shell/commands/useCommands";
 import ViewBadgeChip from "../../../core-views/ViewBadgeChip.vue";
 import { type SandboxAttentionItem, useSandboxAttention } from "../overview/sandboxAttention";
@@ -116,15 +117,27 @@ const slotChord = (at: number): string | undefined => (at < SWITCH_SLOTS ? comma
 
 let disposables: readonly Disposable[] = [];
 
-onMounted(() => {
-    if (sandbox.sandboxes.value.length === 0) {
-        void sandbox.list();
+const release = (): void => {
+    for (const disposable of disposables) {
+        disposable.dispose();
     }
-    disposables = Array.from({ length: SWITCH_SLOTS }, (_unused, at) =>
+    disposables = [];
+};
+
+// One command per box that exists, not per slot: an empty slot's command would be a palette row with nowhere to go.
+// Re-registered as the roster changes, so a box added in another window is a chord here without a reload.
+const syncSwitchCommands = (options: readonly SandboxSummary[]): void => {
+    release();
+    disposables = options.slice(0, SWITCH_SLOTS).map((_option, at) =>
         registerCommand({
             owner: `builtin`,
             command: `sandbox.switch${at + 1}`,
-            title: `Switch to Sandbox ${at + 1}`,
+            // Getter, so the row names the box this chord lands on even as the roster reorders under it.
+            get title(): string {
+                const option = switchable.value[at];
+                return option === undefined ? `Switch to Slot ${at + 1}` : `Switch to ${option.name}`;
+            },
+            category: SANDBOX,
             icon: `server`,
             keybinding: `Alt+${at + 1}`,
             handler: (): void => {
@@ -136,13 +149,22 @@ onMounted(() => {
             },
         }),
     );
+};
+
+// Held rather than left to the component's scope, so the watcher stops in the same breath the commands are released.
+let stopSync: WatchStopHandle | undefined;
+
+onMounted(() => {
+    if (sandbox.sandboxes.value.length === 0) {
+        void sandbox.list();
+    }
+    stopSync = watch(switchable, syncSwitchCommands, { immediate: true });
 });
 
 onUnmounted(() => {
-    for (const disposable of disposables) {
-        disposable.dispose();
-    }
-    disposables = [];
+    stopSync?.();
+    stopSync = undefined;
+    release();
 });
 
 // The sandbox awaiting removal confirmation; removal is non-destructive, the daemon keeps running.

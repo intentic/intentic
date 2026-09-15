@@ -10,28 +10,16 @@ import SettingsData from "./SettingsData.vue";
 import SettingsKeybindings from "./SettingsKeybindings.vue";
 import SettingsNotifications from "./SettingsNotifications.vue";
 import SettingsProfile from "./SettingsProfile.vue";
+import { SETTINGS_DEFAULT_SECTION, settingsSections } from "./settingsNav";
 
 // Personal preferences for the signed-in account, cross-sandbox; reached from the account avatar. Built on the same
-// <HubLayout> as the sandbox hub, one unlabelled group since NavRail omits the heading for a single group.
-// Sandbox-scoped settings (search past chats, import memory) live on the Sandbox ▸ Agent tab, not here.
+// <HubLayout> as the sandbox hub, one unlabelled group since NavRail omits the heading for a single group. The rows
+// themselves live in settingsNav.ts, shared with the palette's "Settings: …" destinations.
 
-// Named "Billing" for the errand, not the product; the tab is absent until offered resolves true.
 const { offered: planOffered } = useHostedPlan();
 
-const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [
-    {
-        key: `settings`,
-        items: [
-            { slug: `profile`, label: `Profile`, icon: `user` },
-            ...(planOffered.value ? ([{ slug: `billing`, label: `Billing`, icon: `credit-card` }] as const) : []),
-            { slug: `appearance`, label: `Appearance`, icon: `palette` },
-            { slug: `notifications`, label: `Notifications`, icon: `volume-up` },
-            { slug: `keybindings`, label: `Keybindings`, icon: `bolt` },
-            { slug: `data`, label: `Data`, icon: `database` },
-        ],
-    },
-]);
-const DEFAULT = `profile`;
+const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [{ key: `settings`, items: settingsSections(planOffered.value) }]);
+const DEFAULT = SETTINGS_DEFAULT_SECTION;
 </script>
 
 <template>

@@ -224,6 +224,11 @@
                                 "minLength": 1,
                                 "description": "What the command palette shows. The manifest's value wins over the one passed at registration."
                             },
+                            "category": {
+                                "description": "What the command acts on (\"Deployments\", \"Knowledge\"), drawn ahead of the title as \"Category: Title\" and searched with it. Use the extension's own name so its commands group together; omit it and the command stands alone.",
+                                "type": "string",
+                                "minLength": 1
+                            },
                             "icon": {
                                 "description": "A name from the host's icon set, drawn beside the title.",
                                 "type": "string"

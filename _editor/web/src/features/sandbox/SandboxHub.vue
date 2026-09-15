@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import type { ViewBadge } from "@intentic/extension-api";
 import type { NavGroup } from "@intentic/ui";
 import { computed } from "vue";
+import { SANDBOX_BUILT_IN_SLUGS, SANDBOX_DEFAULT_SECTION, SANDBOX_SECTION_GROUPS } from "./sandboxNav";
 import { useCapabilities } from "../capabilities/connect/useCapabilities";
 import { useExtensions } from "../extensions/useExtensions";
 import { usePanels } from "../extensions/usePanels";
@@ -24,45 +26,23 @@ import SandboxSecrets from "./secrets/SandboxSecrets.vue";
 import SandboxUsage from "./usage/SandboxUsage.vue";
 
 // One home for the active sandbox, reached from the rail's chip; the selected section lives in the URL, and only it
-// mounts (composables are module singletons, so remounting is cheap). Index is the hub's own sections, then
-// extension-contributed `sandbox`-surface views, which render a body through ExtensionView rather than their own Page.
+// mounts (composables are module singletons, so remounting is cheap). Index is the hub's own sections (sandboxNav.ts,
+// shared with the palette's "Sandbox: …" destinations), then extension-contributed `sandbox`-surface views, which
+// render a body through ExtensionView rather than their own Page.
 
-// Extensions row covers finding, installing, managing and disabling as one. Badge counts installed extensions with a
-// newer registry commit; info, not warning, since nothing here auto-updates.
-const configurationRows = (updates: number): readonly HubTab[] => [
-    { slug: `environment`, label: `Environment`, icon: `box` },
-    { slug: `secrets`, label: `Secrets`, icon: `key` },
-    { slug: `agent`, label: `Agent`, icon: `sparkles` },
-    {
-        slug: `extensions`,
-        label: `Extensions`,
-        icon: `sliders-h`,
-        badge: updates > 0 ? { count: updates, tone: `info` as const } : undefined,
-    },
-];
-const reachRows = (contendedPorts: number): readonly HubTab[] => [
-    // Who may use this box: members, invites, roles. `shield`, not `users` (Personas' glyph, one row below).
-    { slug: `access`, label: `Access`, icon: `shield` },
-    // Who this box acts as outward; not beside `agent` in Configuration, easy to conflate, opposite in stakes.
-    { slug: `personas`, label: `Personas`, icon: `user` },
-    // "Devices", not "Sync": a machine is the thing that has folders, ports and sandboxes on it, and the
-    // enrollment this tab used to be named after is one property of one of them.
-    {
-        slug: `devices`,
-        label: `Devices`,
-        icon: `desktop`,
-        badge: contendedPorts > 0 ? { count: contendedPorts, tone: `info` as const } : undefined,
-    },
-];
-// No live-status row or badge; Devices' contended-port count is the only thing here anyone looks for.
-const BOX_ROWS: readonly HubTab[] = [
-    { slug: `overview`, label: `Overview`, icon: `info-circle` },
-    // Clock, not a bank card: plan allowances and reopen time; billing itself lives in Settings ▸ Billing.
-    { slug: `usage`, label: `Usage`, icon: `clock` },
-];
-// Every built-in slug, derived from the rows themselves so adding a section cannot forget to guard its name.
-const BUILT_IN = new Set([...BOX_ROWS, ...configurationRows(0), ...reachRows(0)].map((tab) => tab.slug));
-const DEFAULT = `overview`;
+const DEFAULT = SANDBOX_DEFAULT_SECTION;
+
+// The two counts the index carries. Extensions counts installed extensions with a newer registry commit; info, not
+// warning, since nothing here auto-updates.
+const sectionBadge = (slug: string, updates: number, contendedPorts: number): ViewBadge | undefined => {
+    if (slug === `extensions`) {
+        return updates > 0 ? { count: updates, tone: `info` } : undefined;
+    }
+    if (slug === `devices`) {
+        return contendedPorts > 0 ? { count: contendedPorts, tone: `info` } : undefined;
+    }
+    return undefined;
+};
 
 const sandbox = useSandbox();
 // Operating surfaces need the top revokable grant too; the daemon enforces it, this just keeps the index honest.
@@ -79,7 +59,7 @@ const updatable = computed(() => updateCount(listedExtensions.value.map((entry) 
 // A colliding activation key is dropped, not shadowed by the v-if chain; built-ins own their names.
 const contributed = computed<readonly ActiveExtension[]>(() =>
     detectActivations(panels.value, capabilities.value).filter(
-        ({ extension, activation }) => extension.surface === `sandbox` && !BUILT_IN.has(activation.key),
+        ({ extension, activation }) => extension.surface === `sandbox` && !SANDBOX_BUILT_IN_SLUGS.has(activation.key),
     ),
 );
 const extensionFor = (slug: string): ActiveExtension | undefined => contributed.value.find(({ activation }) => activation.key === slug);
@@ -93,19 +73,15 @@ const contributedRow = (active: ActiveExtension): HubTab => ({
     badge: activationBadge(active),
 });
 
+// The table's own grouping, kept intact, with this reader's gating and the two live counts laid over it.
 const groups = computed<readonly NavGroup<HubTab>[]>(() => [
-    { key: `box`, label: `This box`, items: BOX_ROWS.filter((tab) => tab.slug !== `usage` || canShip.value) },
-    {
-        key: `configuration`,
-        label: `Configuration`,
-        items: configurationRows(updatable.value).filter((tab) => (tab.slug !== `secrets` && tab.slug !== `agent`) || canShip.value),
-    },
-    {
-        key: `reach`,
-        label: `Reach`,
-        // Personas gates like Secrets/Agent, floored at maintainer; Access stays, revoking your own grant is anyone's.
-        items: reachRows(contendedPorts.value.length).filter((tab) => (tab.slug !== `devices` && tab.slug !== `personas`) || canShip.value),
-    },
+    ...SANDBOX_SECTION_GROUPS.map((group) => ({
+        key: group.key,
+        label: group.label,
+        items: group.items
+            .filter((section) => canShip.value || section.maintainer !== true)
+            .map((section) => ({ ...section, badge: sectionBadge(section.slug, updatable.value, contendedPorts.value.length) })),
+    })).filter((group) => group.items.length > 0),
     ...(contributed.value.length === 0 ? [] : [{ key: `contributed`, label: `Added by extensions`, items: contributed.value.map(contributedRow) }]),
 ]);
 </script>

@@ -15,6 +15,7 @@ import { chatOnRail, chatWide, toggleChatFloating, toggleChatHome } from "../pan
 import { allTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, tabsInLane, toRightOf } from "./tabs";
 import { useChat } from "../run/useChat";
 import { useChatFloating } from "../panel/chatFloating";
+import { CHAT } from "../../../shell/commands/categories";
 import { commandShortcut, type CommandRegistration, registerCommand, withShortcut } from "../../../shell/commands/useCommands";
 import { viewersOfSession } from "../../../shell/presence/usePresence";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
@@ -223,7 +224,7 @@ onMounted(() => {
     const entries: Omit<CommandRegistration, `owner`>[] = [
         {
             command: `chat.rename`,
-            title: `Rename Chat…`,
+            title: `Rename…`,
             icon: `pencil`,
             keybinding: `F2`,
             when: `tabSurface == 'chat'`,
@@ -241,7 +242,7 @@ onMounted(() => {
         },
         {
             command: `chat.closeTab`,
-            title: `Close Chat`,
+            title: `Close`,
             icon: `times`,
             keybinding: `Ctrl+Shift+X`,
             when: `tabSurface == 'chat'`,
@@ -249,7 +250,7 @@ onMounted(() => {
         },
         {
             command: `chat.closeOtherTabs`,
-            title: `Close Other Chats`,
+            title: `Close Others`,
             icon: `times`,
             keybinding: `Ctrl+Shift+,`,
             when: `tabSurface == 'chat'`,
@@ -262,7 +263,7 @@ onMounted(() => {
         },
         {
             command: `chat.closeTabsToRight`,
-            title: `Close Chats to the Right`,
+            title: `Close to the Right`,
             icon: `times`,
             keybinding: `Ctrl+Shift+.`,
             when: `tabSurface == 'chat'`,
@@ -277,7 +278,7 @@ onMounted(() => {
             // Unbound by default, no file-tab equivalent for "finished"; still reachable via the palette and
             // Keybindings.
             command: `chat.closeFinishedTabs`,
-            title: `Close Finished Chats`,
+            title: `Close Finished`,
             icon: `times`,
             when: `tabSurface == 'chat'`,
             handler: (): void => {
@@ -289,18 +290,18 @@ onMounted(() => {
         },
         {
             command: `chat.closeAllTabs`,
-            title: `Close All Chats`,
+            title: `Close All`,
             icon: `times`,
             keybinding: `Ctrl+Shift+Backspace`,
             when: `tabSurface == 'chat'`,
             handler: () => emit(`close`, allTabs()),
         },
-        { command: `chat.nextTab`, title: `Next Chat`, keybinding: `Alt+PageDown`, when: `tabSurface == 'chat'`, handler: () => cycleTab(1) },
-        { command: `chat.previousTab`, title: `Previous Chat`, keybinding: `Alt+PageUp`, when: `tabSurface == 'chat'`, handler: () => cycleTab(-1) },
+        { command: `chat.nextTab`, title: `Next`, keybinding: `Alt+PageDown`, when: `tabSurface == 'chat'`, handler: () => cycleTab(1) },
+        { command: `chat.previousTab`, title: `Previous`, keybinding: `Alt+PageUp`, when: `tabSurface == 'chat'`, handler: () => cycleTab(-1) },
         {
             // VSCode's split chord for a different chat, not a second view: a chat carries its own composer.
             command: `chat.splitView`,
-            title: `Open Next Chat Beside`,
+            title: `Open Next Beside`,
             keybinding: `Mod+\\`,
             when: `tabSurface == 'chat'`,
             handler: () => splitBeside(),
@@ -315,7 +316,7 @@ onMounted(() => {
         {
             // Unbound: every free chord here is already spent, and the header is one click away regardless.
             command: `chat.switchTab`,
-            title: `Switch Chat…`,
+            title: `Switch…`,
             icon: `comments`,
             when: `tabSurface == 'chat'`,
             handler: (): void => {
@@ -326,7 +327,8 @@ onMounted(() => {
             },
         },
     ];
-    commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, ...entry }));
+    // One family for the whole list, stated here rather than on every entry.
+    commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, category: CHAT, ...entry }));
 });
 onBeforeUnmount(() => {
     for (const disposable of commandDisposables) {

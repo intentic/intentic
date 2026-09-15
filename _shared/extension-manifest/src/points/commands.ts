@@ -6,6 +6,13 @@ import type { ContributionPoint } from "../contribution-point.js";
 export const CommandContributionSchema = z.object({
     command: z.string().regex(/^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/),
     title: z.string().min(1).describe("What the command palette shows. The manifest's value wins over the one passed at registration."),
+    category: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+            'What the command acts on ("Deployments", "Knowledge"), drawn ahead of the title as "Category: Title" and searched with it. Use the extension\'s own name so its commands group together; omit it and the command stands alone.',
+        ),
     icon: z.string().optional().describe("A name from the host's icon set, drawn beside the title."),
     // Global keyboard shortcut in the host's chord notation. Declared here so it rides the install dialog's approval;
     // the host binds only what was approved.

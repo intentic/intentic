@@ -23,13 +23,6 @@
                 "surface": "rail",
                 "badge": true
             }
-        ],
-        "commands": [
-            {
-                "command": "projects.open",
-                "title": "Go to Projects",
-                "icon": "th-large"
-            }
         ]
     }
 }

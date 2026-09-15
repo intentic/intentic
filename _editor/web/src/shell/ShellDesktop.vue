@@ -12,7 +12,8 @@ import { useCapabilities } from "../features/capabilities/connect/useCapabilitie
 import { useRole } from "../features/sandbox/secrets/useRole";
 import { useTerminalPanel } from "../features/terminal/useTerminalPanel";
 import { useTerminalActivity } from "../features/terminal/useTerminalActivity";
-import { useAreaCommands } from "./commands/useAreaCommands";
+import { GO_TO } from "./commands/categories";
+import { useNavigationCommands } from "./commands/useNavigationCommands";
 import { commandShortcut, registerCommand } from "./commands/useCommands";
 import {
     type ActiveExtension,
@@ -332,6 +333,7 @@ onMounted(() => {
             owner: `builtin`,
             command: `view.previousArea`,
             title: `Previous Rail Area`,
+            category: GO_TO,
             icon: `chevron-up`,
             keybinding: `Alt+ArrowUp`,
             handler: () => cycleArea(-1),
@@ -340,6 +342,7 @@ onMounted(() => {
             owner: `builtin`,
             command: `view.nextArea`,
             title: `Next Rail Area`,
+            category: GO_TO,
             icon: `chevron-down`,
             keybinding: `Alt+ArrowDown`,
             handler: () => cycleArea(1),
@@ -472,8 +475,8 @@ const terminalBadge = computed<ViewBadge | undefined>(() =>
 );
 // Registers the shell's built-in palette commands on mount, each with its own keybinding.
 useShellCommands();
-// One "Go to <area>" per rail area, seated or not, so a More-menu area stays a keystroke away.
-useAreaCommands();
+// One destination per place the shell has: every rail area seated or not, every sandbox and settings section.
+useNavigationCommands();
 // The single global-shortcut dispatcher: matches any registered command's keybinding to the keystroke.
 useKeybindings();
 </script>

@@ -3,7 +3,7 @@
 // writes both the package copy and the site's public copy, checked against a fresh generation by
 // manifest-schema.test.ts.
 import { writeFileSync } from "node:fs";
-import { manifestJsonSchema, serializeManifestJsonSchema } from "../src/json-schema.js";
+import { manifestJsonSchema, serializeManifestJsonSchema } from "../dist/json-schema.js";
 
 const schema = manifestJsonSchema();
 const text = serializeManifestJsonSchema(schema);

@@ -5,6 +5,7 @@ import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { WORKSPACE } from "../../../shell/commands/categories";
 import { commandShortcut, type CommandRegistration, registerCommand } from "../../../shell/commands/useCommands";
 import { useAudience } from "../../../app/useAudience";
 import { useVocabulary } from "../../../core-views/vocabulary";
@@ -585,7 +586,7 @@ const cycleTab = (delta: number): void => {
     }
 };
 const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
-    { command: `workspace.search`, title: `Search Workspace…`, icon: `search`, handler: () => focusSearch() },
+    { command: `workspace.search`, title: `Search…`, icon: `search`, handler: () => focusSearch() },
     {
         command: `workspace.searchContent`,
         title: `Search in Files…`,
@@ -662,7 +663,7 @@ const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
         when: `tabSurface == 'workspace'`,
         handler: reopenClosedTab,
     },
-    { command: `workspace.refresh`, title: `Refresh Workspace Files`, icon: `refresh`, handler: () => refetch() },
+    { command: `workspace.refresh`, title: `Refresh Files`, icon: `refresh`, handler: () => refetch() },
 ];
 let workspaceCommandDisposables: readonly Disposable[] = [];
 
@@ -726,7 +727,8 @@ onMounted(() => {
     window.addEventListener(`dragend`, resetRootDrag, true);
     // Loads Monaco (+ Shiki bridge) while browsing the tree, so the first file open isn't cold.
     void useMonaco().ensureMonaco();
-    workspaceCommandDisposables = WORKSPACE_COMMANDS.map((spec) => registerCommand({ owner: `builtin`, ...spec }));
+    // One family for the whole list, stated here rather than on every entry.
+    workspaceCommandDisposables = WORKSPACE_COMMANDS.map((spec) => registerCommand({ owner: `builtin`, category: WORKSPACE, ...spec }));
 });
 onBeforeUnmount(() => {
     unwatchDragSource?.();

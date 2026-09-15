@@ -13,6 +13,9 @@ export interface CommandRegistration {
     readonly owner: string;
     readonly command: string;
     readonly title: string;
+    // What the command acts on ("Terminal", "Sandbox", "Go to"), drawn ahead of the title and searched with it, so a
+    // list this long reads as a handful of families. Omitted for a command that is its own family.
+    readonly category?: string | undefined;
     readonly icon?: string | undefined;
     // Chord in keybindings.ts notation (e.g. "Mod+Shift+P"); undefined if reachable only from the palette.
     readonly keybinding?: string | undefined;
@@ -28,6 +31,11 @@ export interface RegisteredCommand extends CommandRegistration {
 }
 
 export const commands = shallowRef<readonly RegisteredCommand[]>([]);
+
+// One spelling of a command for every surface that names it (palette row, keybindings row, search text), so a
+// category can never be drawn one way here and another there. Read live: some titles are getters.
+export const commandLabel = (entry: Pick<CommandRegistration, `category` | `title`>): string =>
+    entry.category === undefined ? entry.title : `${entry.category}: ${entry.title}`;
 
 export const registerCommand = (registration: CommandRegistration): Disposable => {
     if (commands.value.some((existing) => existing.command === registration.command)) {

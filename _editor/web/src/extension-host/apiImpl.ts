@@ -263,6 +263,7 @@ export const createExtensionApi = (
                         owner: extensionId,
                         command,
                         title: declared.title,
+                        category: declared.category,
                         icon: declared.icon,
                         keybinding: declared.keybinding,
                         when: declared.when,

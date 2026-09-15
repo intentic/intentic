@@ -44,10 +44,4 @@ describe(`the projects extension`, () => {
         // A tooltip only: the monogram already says a scope is on, so the corner carries no second mark.
         expect(view?.badge?.({ key: `projects`, title: `Projects` })).toEqual({ tooltip: `looking at shop only` });
     });
-
-    it(`opens the dashboard from the palette`, () => {
-        const { commands, navigate } = capture();
-        commands.get(`projects.open`)?.();
-        expect(navigate).toHaveBeenCalledWith(`/ext/projects`);
-    });
 });
