@@ -215,8 +215,14 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
         const creds = { baseUrl, user: adminUsername, password };
         // Confirms `findRepo` returned the repo asked for, not just some repo: the two calls differ only in `name`.
-        expect(await forgejoApi.findRepo({ ...creds, owner: adminUsername, name: "intent" })).toMatchObject({ name: "intent" });
-        expect(await forgejoApi.findRepo({ ...creds, owner: adminUsername, name: "desired-state" })).toMatchObject({ name: "desired-state" });
+        expect(await forgejoApi.findRepo({ ...creds, owner: adminUsername, name: "intent" })).toEqual({
+            cloneUrl: `https://git.${ZONE}/${adminUsername}/intent.git`,
+            sshUrl: `ssh://git@localhost/${adminUsername}/intent.git`,
+        });
+        expect(await forgejoApi.findRepo({ ...creds, owner: adminUsername, name: "desired-state" })).toEqual({
+            cloneUrl: `https://git.${ZONE}/${adminUsername}/desired-state.git`,
+            sshUrl: `ssh://git@localhost/${adminUsername}/desired-state.git`,
+        });
         const onMain = { ...creds, owner: adminUsername, branch: "main" };
         // expect.any(String) fails on a missing file's undefined and also rejects a buffer/object response.
         expect(await forgejoApi.readFile({ ...onMain, name: "intent", path: "deploy.config.ts" })).toEqual(expect.any(String));
