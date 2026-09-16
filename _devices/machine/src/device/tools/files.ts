@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { agentHome } from "@intentic/local-agent";
 import type { HostScopes } from "@intentic/sandbox-contract";
-import { baseDir } from "../../config.js";
 import { assertPath, assertScope } from "../policy.js";
 
 // Files on somebody's device. Reads are bounded by the roots; writes need the roots AND the write switch, off
@@ -63,7 +63,7 @@ export const listDirectory = async (path: string, scopes: HostScopes): Promise<D
     );
 };
 
-const trashDir = (): string => join(baseDir, "trash");
+const trashDir = (): string => join(agentHome("machine").dir, "trash");
 
 export const trashFile = async (path: string, scopes: HostScopes): Promise<string> => {
     assertScope(scopes, "write");
