@@ -100,6 +100,8 @@ test("a branch filter and a mention filter are drawn only where the source decla
                     ...ROOMS.automation,
                     mentionLabel: "Only when addressed",
                     branchField: { label: "Branch", placeholder: "every branch", hint: "Exact match." },
+                    sender: { label: "Member ID", placeholder: "a member's id" },
+                    senderGroup: { label: "Team ID", placeholder: "a team's id" },
                 },
             },
         }),
@@ -110,7 +112,12 @@ test("a branch filter and a mention filter are drawn only where the source decla
     const rooms = catalog.sources.find((source) => source.provider === "rooms");
     expect(rooms?.mentionLabel).toBe("Only when addressed");
     expect(rooms?.branchField?.hint).toBe("Exact match.");
-    expect(catalog.sources.find((source) => source.provider === "webchat")?.branchField).toBeUndefined();
+    expect(rooms?.sender?.label).toBe("Member ID");
+    expect(rooms?.senderGroup?.label).toBe("Team ID");
+    const webchat = catalog.sources.find((source) => source.provider === "webchat");
+    expect(webchat?.branchField).toBeUndefined();
+    // The daemon's own sources vouch for nobody's identity, which is what keeps sender rules off the Front Desk.
+    expect(webchat?.sender).toBeUndefined();
 });
 
 test("a disabled pack keeps its source listed and loses its templates", async () => {

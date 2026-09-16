@@ -10,16 +10,22 @@ import type { Services } from "../composition.js";
 import { CHANNEL_SESSION_TTL_MS, fileThreadSessionsStore, threadKey } from "../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
 import { fileAutomationsStore } from "./automations-store.js";
+import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { createMessageBatcher, dispatchListenerMessage, type MessageContext, reportListenerFailure } from "./listeners.js";
 import { PAYLOAD_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
+import { fileSendersStore } from "./senders-store.js";
 
-// The listener paths touch automations/capabilities/activity/workspace/logger; `unstubbed` keeps the fake small.
+// The listener paths touch automations/capabilities/activity/workspace/logger, the senders roster, and on a hold the
+// held-wakes queue and push; `unstubbed` keeps the fake small.
 const fakeServices = (root: string): Services =>
     unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
+        senders: fileSendersStore(join(root, "senders.json")),
+        heldWakes: fileHeldWakesStore(join(root, "approvals")),
+        pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
@@ -65,6 +71,7 @@ const context = (stream?: TurnStream): MessageContext => ({
     origin: { automationId: "a", provider: "discord", channelId: "c1", author: "alice" },
     title: "alice: hi",
     thread: threadKey("discord", "a", "c1"),
+    lane: { actsAs: undefined, requireApproval: false },
     ...(stream !== undefined ? { stream } : {}),
 });
 
@@ -276,4 +283,97 @@ test("a fatal source failure lands as an error run on the provider's listener au
     expect((await services.automations.get("live"))?.runs[0]?.detail).toContain("Discord");
     expect((await services.automations.get("live"))?.runs[0]?.detail).toContain("token");
     expect((await services.automations.get("cron"))?.runs).toEqual([]);
+});
+
+// Sender rules: who a listener answers, and as whom. The people in one channel are not one caller.
+
+const mark = { id: "u-mark", name: "Mark" };
+const martha = { id: "u-martha", name: "Martha" };
+
+// The owner's front line: Mark gets the unpinned agent, Martha the desk persona, nobody else gets anything.
+const frontLine = (id: string, extra: Partial<Automation> = {}): Automation =>
+    listenerAutomation(id, {
+        senders: { rules: [{ ids: [mark.id] }, { ids: [martha.id], actsAs: "customer-service" }], others: "ignore" },
+        ...extra,
+    });
+
+test("a sender no rule names wakes nothing under `others: ignore`, and is still written to the roster", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    await services.automations.upsert(frontLine("senders-ignore"));
+    const prompts: string[] = [];
+    await dispatchListenerMessage(services, message(), fakeWake(prompts), 5);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(prompts).toEqual([]);
+    expect((await services.automations.get("senders-ignore"))?.runs).toEqual([]);
+    // Who tried is what the owner needs to name them next time.
+    await eventually(async () => expect(await services.senders.list("discord")).toMatchObject([{ id: "u1", name: "alice", messages: 1 }]));
+});
+
+test("two people one channel answers as different agents get two conversations, each turn wearing its rule's persona", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    await services.automations.upsert(frontLine("senders-lanes"));
+    const turns: AgentTurn[] = [];
+    await dispatchListenerMessage(services, message({ author: mark, content: "deploy it" }), captureWithSession(turns, "sess-mark"), 5);
+    await eventually(() => expect(turns).toHaveLength(1));
+    await settledThread(services, threadKey("discord", "senders-lanes", "c1"));
+    await dispatchListenerMessage(services, message({ id: "m2", author: martha, content: "where is my order?" }), captureWithSession(turns, "sess-martha"), 5);
+    await eventually(() => expect(turns).toHaveLength(2));
+    const [first, second] = turns as [AgentTurn, AgentTurn];
+    expect(first.actsAs).toBeUndefined();
+    expect(second.actsAs).toBe("customer-service");
+    // Martha's turn neither joins Mark's conversation nor resumes the session his unpinned turn left behind.
+    expect(second.conversationId).not.toBe(first.conversationId);
+    expect(second.sessionId).toBeUndefined();
+    await settledThread(services, threadKey("discord", "senders-lanes", "c1", "customer-service"));
+});
+
+test("a burst from two lanes becomes two wakes, neither carrying the other's line", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    await services.automations.upsert(frontLine("senders-burst"));
+    const turns: AgentTurn[] = [];
+    const capture: WakeFn = async function* (_services, input) {
+        turns.push(input);
+        yield { kind: "done" };
+    };
+    // Inside one debounce window: without lanes these would coalesce into one payload under one persona.
+    await dispatchListenerMessage(services, message({ author: mark, content: "mark's line" }), capture, 5);
+    await dispatchListenerMessage(services, message({ id: "m2", author: martha, content: "martha's line" }), capture, 5);
+    await eventually(() => expect(turns).toHaveLength(2));
+    const byPersona = new Map(turns.map((turn) => [turn.actsAs, turn.prompt]));
+    expect(byPersona.get(undefined)).toContain("mark's line");
+    expect(byPersona.get(undefined)).not.toContain("martha's line");
+    expect(byPersona.get("customer-service")).toContain("martha's line");
+    expect(byPersona.get("customer-service")).not.toContain("mark's line");
+});
+
+test("a rule that holds its people parks the wake with the lane's persona and thread snapshotted, running nothing", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    await services.automations.upsert(
+        listenerAutomation("senders-hold", {
+            senders: { rules: [{ ids: ["u1"], actsAs: "desk", requireApproval: true }], others: "allow" },
+        }),
+    );
+    const prompts: string[] = [];
+    await dispatchListenerMessage(services, message(), fakeWake(prompts), 5);
+    await eventually(async () => expect(await services.heldWakes.list()).toHaveLength(1));
+    expect((await services.heldWakes.list())[0]).toMatchObject({
+        automationId: "senders-hold",
+        actsAs: "desk",
+        thread: threadKey("discord", "senders-hold", "c1", "desk"),
+        origin: { provider: "discord", channelId: "c1", author: "alice" },
+    });
+    expect(prompts).toEqual([]);
+    expect((await services.automations.get("senders-hold"))?.runs).toEqual([]);
+});
+
+test("`others: hold` parks a stranger wearing the automation's own persona", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
+    await services.automations.upsert(
+        listenerAutomation("senders-others-hold", { actsAs: "desk", senders: { rules: [{ ids: [mark.id] }], others: "hold" } }),
+    );
+    const prompts: string[] = [];
+    await dispatchListenerMessage(services, message(), fakeWake(prompts), 5);
+    await eventually(async () => expect(await services.heldWakes.list()).toHaveLength(1));
+    expect((await services.heldWakes.list())[0]).toMatchObject({ automationId: "senders-others-hold", actsAs: "desk" });
+    expect(prompts).toEqual([]);
 });

@@ -1450,6 +1450,54 @@
                                     ],
                                     "additionalProperties": false
                                 },
+                                "sender": {
+                                    "description": "How this source names a sender, and where a person finds that id. Declaring it promises that `author.id` is an identity the service vouches for, not a name the sender typed; absent ⇒ the editor offers no sender rules on this source.",
+                                    "type": "object",
+                                    "properties": {
+                                        "label": {
+                                            "type": "string",
+                                            "minLength": 1
+                                        },
+                                        "placeholder": {
+                                            "type": "string",
+                                            "minLength": 1
+                                        },
+                                        "hint": {
+                                            "description": "The sentence under the input, for a filter whose empty case is easy to get wrong.",
+                                            "type": "string",
+                                            "minLength": 1
+                                        }
+                                    },
+                                    "required": [
+                                        "label",
+                                        "placeholder"
+                                    ],
+                                    "additionalProperties": false
+                                },
+                                "senderGroup": {
+                                    "description": "How this source names a sender's group, for a source whose messages carry `author.groups` (a Discord role). Absent ⇒ rules match ids only.",
+                                    "type": "object",
+                                    "properties": {
+                                        "label": {
+                                            "type": "string",
+                                            "minLength": 1
+                                        },
+                                        "placeholder": {
+                                            "type": "string",
+                                            "minLength": 1
+                                        },
+                                        "hint": {
+                                            "description": "The sentence under the input, for a filter whose empty case is easy to get wrong.",
+                                            "type": "string",
+                                            "minLength": 1
+                                        }
+                                    },
+                                    "required": [
+                                        "label",
+                                        "placeholder"
+                                    ],
+                                    "additionalProperties": false
+                                },
                                 "starterPrompt": {
                                     "type": "string",
                                     "minLength": 1,

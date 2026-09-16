@@ -12,7 +12,9 @@ export const ListenerMessageSchema = z.object({
     type: z.string().min(1),
     id: z.string(),
     channelId: z.string(),
-    author: z.object({ id: z.string(), name: z.string() }),
+    // `id` is what the service vouches for and what sender rules match; `name` is display only. `groups` are the
+    // service's own group ids on this sender (Discord role ids), absent on a source without them.
+    author: z.object({ id: z.string(), name: z.string(), groups: z.array(z.string()).optional() }),
     content: z.string(),
     // Discord only: the message @mentions or replies to one of our bots; voice events never set it.
     mentioned: z.boolean().optional(),

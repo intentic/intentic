@@ -15,6 +15,7 @@ import type { WakeFn } from "../automations/scheduler.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
 import type { Services } from "../composition.js";
+import { fileSendersStore } from "../automations/senders-store.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
 import { fileCiStore } from "./ci-store.js";
@@ -45,6 +46,7 @@ const harness = async (automationId: string, narrow: { eventType?: string; branc
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         ciRuns: createRunsCache(60_000),
         threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json")),
+        senders: fileSendersStore(join(root, `${STATE_DIR}`, "records", "senders.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
@@ -189,6 +191,7 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         ciRuns: createRunsCache(60_000),
         threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json")),
+        senders: fileSendersStore(join(root, `${STATE_DIR}`, "records", "senders.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },

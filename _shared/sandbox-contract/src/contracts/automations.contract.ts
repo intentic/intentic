@@ -7,6 +7,8 @@ import {
     AutomationIdParamSchema,
     AutomationSchema,
     AutomationsListSchema,
+    SendersProviderParamSchema,
+    SendersRosterSchema,
 } from "../schemas/automations.js";
 import { DoorTokenSchema, OkSchema } from "../schemas/shared.js";
 
@@ -78,6 +80,16 @@ export const automationsContract = {
         })
         .input(AutomationIdParamSchema)
         .output(OkSchema),
+    senders: oc
+        .route({
+            method: "GET",
+            path: "/automations/senders/{provider}",
+            summary: "Who has written to a listener source",
+            description:
+                "Everyone whose message reached one of this source's automations, newest first, admitted or not. What the sender rules picker offers by name while storing the id the service vouches for.",
+        })
+        .input(SendersProviderParamSchema)
+        .output(SendersRosterSchema),
     pendingList: oc
         .route({
             method: "GET",

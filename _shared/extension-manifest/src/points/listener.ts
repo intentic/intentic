@@ -49,6 +49,14 @@ export const ListenerContributionSchema = z.object({
             branchField: TriggerFieldContributionSchema.optional().describe(
                 'A second narrowing axis, for a source whose events carry one: a pipeline\'s git ref, so a trigger can say "the branch that ships" rather than "every agent\'s every failure".',
             ),
+            // Declaring `sender` is the promise that `author.id` is an identity the service vouches for, which is what
+            // lets an owner say who the automation answers and as whom; absent ⇒ no sender rules offered or accepted.
+            sender: TriggerFieldContributionSchema.optional().describe(
+                "How this source names a sender, and where a person finds that id. Declaring it promises that `author.id` is an identity the service vouches for, not a name the sender typed; absent ⇒ the editor offers no sender rules on this source.",
+            ),
+            senderGroup: TriggerFieldContributionSchema.optional().describe(
+                "How this source names a sender's group, for a source whose messages carry `author.groups` (a Discord role). Absent ⇒ rules match ids only.",
+            ),
             // The provider owns the payload vocabulary, so it also owns the first prompt that explains that payload.
             starterPrompt: z
                 .string()

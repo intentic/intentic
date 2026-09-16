@@ -13,6 +13,7 @@ import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { Services } from "../composition.js";
+import { fileSendersStore } from "../automations/senders-store.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { fileCiStore } from "./ci-store.js";
 import { createCiPoller } from "./poller.js";
@@ -58,6 +59,7 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
             warnings: () => new Map(warned ? [["web", { reason: "Pipeline webhooks are off: this sandbox has no public URL." }]] : []),
         }),
         threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json")),
+        senders: fileSendersStore(join(root, `${STATE_DIR}`, "records", "senders.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },

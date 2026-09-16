@@ -16,6 +16,7 @@
                 "label": "Telegram",
                 "mentionLabel": "Only when the bot is messaged directly (private chat, @mention or reply)",
                 "channel": { "label": "Chat ID (optional)", "placeholder": "every chat the bot is in" },
+                "sender": {"label": "User ID", "placeholder": "123456789", "hint": "The numeric id, never the @username, which can be changed or handed to someone else. Easiest picked from the people who have already written."},
                 "starterPrompt": "A Telegram message just arrived, each line of the event payload is one JSON event of type `message`: `author` is who wrote it, `channelId` is the chat, `content` is the text (a `[voice note]`-style marker when they sent a file instead, with the file ids in `extra.attachments`), and `mentioned: true` means it was addressed to the bot. `history` holds the recent messages the gateway watched go by, a bot cannot read a chat's past, so that is all the context there is. Reply in plain text: your answer is streamed into the chat for you, and Telegram renders markdown literally, so no asterisks, headings or link syntax."
             }
         },

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ModelPin } from "@intentic/sandbox-contract";
+import type { ModelPin, SenderSeen } from "@intentic/sandbox-contract";
 import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import {
     ui,
@@ -18,7 +18,8 @@ import { computed, ref } from "vue";
 import { glyph } from "./catalog";
 import { host } from "./host";
 import { useCiDelivery } from "./useCiDelivery";
-import type { AutomationFormState, TriggerKind } from "./useAutomationForm";
+import { useSenders } from "./useAutomations";
+import { type AutomationFormState, type SenderRuleDraft, splitIds, type TriggerKind } from "./useAutomationForm";
 
 // Every field of an automation, rendered once by both the composer that creates one and the row that edits one; the
 // shared state lives in useAutomationForm. Three full-width steps (When, Then, Runs as) in a label rail, each sized to
@@ -50,6 +51,10 @@ const {
     promptError,
     originsError,
     modelsError,
+    sendersOffered,
+    addSenderRule,
+    removeSenderRule,
+    sendersError,
 } = props.state;
 
 // Personas this sandbox can wear, for the picker below; read here since the list is the same for every automation.
@@ -79,6 +84,51 @@ const personaOptions = computed<readonly PickerOption[]>(() => [
         ? [{ value: form.actsAs, label: form.actsAs, description: `no longer exists`, face: { id: form.actsAs }, disabled: true }]
         : []),
 ]);
+
+// A rule's blank row is a different sentence from the automation's: not "nobody", but the whole agent an owner talks to
+// themselves. A rule pinned to a card since deleted keeps its face, greyed, like the main picker.
+const rulePersonaOptions = computed<readonly PickerOption[]>(() => {
+    const known = new Set(personas.value.map((persona) => persona.value));
+    const orphans = [...new Set(form.senderRules.map((rule) => rule.actsAs).filter((id) => id !== `` && !known.has(id)))];
+    return [
+        { value: ``, label: `No persona`, description: `full toolbox, no accounts`, icon: `circle` as const },
+        ...personas.value,
+        ...orphans.map((id) => ({ value: id, label: id, description: `no longer exists`, face: { id }, disabled: true })),
+    ];
+});
+
+// Who has written to this source, by name, so a rule is filled by a click rather than a copied id; read only while the
+// block is open.
+const { senders: seen } = useSenders(
+    computed(() => form.provider),
+    computed(() => sendersOffered.value && form.senders),
+);
+// Enough to recognise the regulars; a busy server's long tail stays a typed id.
+const SEEN_SHOWN = 12;
+const unnamed = (rule: SenderRuleDraft): readonly SenderSeen[] => {
+    const named = new Set(splitIds(rule.ids));
+    return seen.value.filter((person) => !named.has(person.id)).slice(0, SEEN_SHOWN);
+};
+const nameSender = (rule: SenderRuleDraft, id: string): void => {
+    rule.ids = [...splitIds(rule.ids), id].join(`, `);
+    markTouched(`senders`);
+};
+// The names behind a rule's ids, for the ones the roster knows; an id it has never heard from stays an id.
+const knownNames = (rule: SenderRuleDraft): string[] =>
+    splitIds(rule.ids).flatMap((id) => {
+        const person = seen.value.find((candidate) => candidate.id === id);
+        return person === undefined ? [] : [person.name];
+    });
+const OTHERS_OPTIONS = [
+    { value: `ignore`, label: `Ignore` },
+    { value: `hold`, label: `Hold for me` },
+    { value: `allow`, label: `Answer` },
+] as const;
+const OTHERS_CAPTION: Record<(typeof OTHERS_OPTIONS)[number][`value`], string> = {
+    ignore: `Anyone not named gets no answer. They still show up under “seen recently”, so naming them later is a click.`,
+    hold: `Anyone not named waits in Approvals for you, and runs as the persona above once you say so.`,
+    allow: `Anyone not named is answered as the persona above, which is what this automation did before it had rules.`,
+};
 
 // CI's delivery path: instant, polled, or never; fetched only while a CI trigger is on screen.
 const isCi = computed(() => form.kind === `listener` && form.provider === `ci`);
@@ -718,6 +768,89 @@ const setProvider = (provider: string): void => {
                 <p v-if="isFrontDesk && form.actsAs === ``" class="-mt-1 text-2xs text-subtle">
                     Strangers write these prompts, so saving adds a read-only front desk to your personas.
                 </p>
+
+                <!-- WHO IT ANSWERS: drawn only where the source vouches for who is writing; the Front Desk keeps its own access above. -->
+                <div v-if="sendersOffered" class="flex flex-col gap-3 border-t border-line-subtle pt-3">
+                    <label class="flex items-center gap-2 text-xs text-content">
+                        <ToggleSwitch v-model="form.senders" aria-label="Decide per person who it answers" />
+                        Decide per person who it answers, and as whom
+                    </label>
+                    <template v-if="form.senders">
+                        <div v-for="(rule, index) in form.senderRules" :key="index" class="flex flex-col gap-2 rounded-md border border-line-subtle p-3">
+                            <div class="flex items-start gap-2">
+                                <div class="grid min-w-0 flex-1 gap-3" :class="listenerSource.senderGroup ? `@xl:grid-cols-2` : ``">
+                                    <label class="ui-field min-w-0">
+                                        <span class="ui-field-label">{{ listenerSource.sender?.label }}</span>
+                                        <input
+                                            v-model="rule.ids"
+                                            :class="ui.input(`font-mono`)"
+                                            :placeholder="listenerSource.sender?.placeholder"
+                                            :aria-label="`People rule ${index + 1} names`"
+                                            @blur="markTouched(`senders`)"
+                                        />
+                                        <!-- The roster's names for the ids typed, when it has heard from them; else where to find an id. -->
+                                        <span v-if="knownNames(rule).length > 0" class="text-2xs text-subtle">{{ knownNames(rule).join(` · `) }}</span>
+                                        <span v-else-if="listenerSource.sender?.hint" class="text-2xs text-subtle">{{ listenerSource.sender.hint }}</span>
+                                    </label>
+                                    <label v-if="listenerSource.senderGroup" class="ui-field min-w-0">
+                                        <span class="ui-field-label">{{ listenerSource.senderGroup.label }}</span>
+                                        <input
+                                            v-model="rule.groups"
+                                            :class="ui.input(`font-mono`)"
+                                            :placeholder="listenerSource.senderGroup.placeholder"
+                                            :aria-label="`Groups rule ${index + 1} names`"
+                                            @blur="markTouched(`senders`)"
+                                        />
+                                        <span v-if="listenerSource.senderGroup.hint" class="text-2xs text-subtle">{{ listenerSource.senderGroup.hint }}</span>
+                                    </label>
+                                </div>
+                                <button
+                                    type="button"
+                                    :class="ui.iconButton()"
+                                    :aria-label="`Remove rule ${index + 1}`"
+                                    v-tooltip.top="`Remove this rule`"
+                                    @click="removeSenderRule(index)"
+                                >
+                                    <Icon name="times" />
+                                </button>
+                            </div>
+                            <!-- Seen recently: whoever has written, by name; a click stores the id the service vouches for. -->
+                            <div v-if="unnamed(rule).length > 0" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle">
+                                <span>Seen recently:</span>
+                                <button
+                                    v-for="person in unnamed(rule)"
+                                    :key="person.id"
+                                    type="button"
+                                    :class="ui.textAction()"
+                                    v-tooltip.top="person.id"
+                                    @click="nameSender(rule, person.id)"
+                                >
+                                    {{ person.name }}
+                                </button>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+                                <div class="ui-field w-full min-w-0 max-w-xs">
+                                    <span class="ui-field-label">They talk to</span>
+                                    <Picker v-model="rule.actsAs" :options="rulePersonaOptions" :aria-label="`Persona rule ${index + 1} answers as`" class="w-full" />
+                                </div>
+                                <label class="flex items-center gap-2 text-xs text-content">
+                                    <ToggleSwitch v-model="rule.requireApproval" :aria-label="`Hold messages from rule ${index + 1} for approval`" />
+                                    Hold their messages for me
+                                </label>
+                            </div>
+                        </div>
+                        <button type="button" :class="ui.addTile(`self-start px-3 py-2`)" @click="addSenderRule">
+                            <Icon name="plus" />
+                            {{ form.senderRules.length === 0 ? `Name who it answers` : `Add more people` }}
+                        </button>
+                        <p v-if="sendersError !== undefined && touched.has(`senders`)" class="text-2xs text-danger">{{ sendersError }}</p>
+                        <div class="flex flex-wrap items-center gap-3 text-xs text-content">
+                            <span>Everyone else</span>
+                            <SegmentedControl v-model="form.senderOthers" :options="OTHERS_OPTIONS" />
+                        </div>
+                        <p class="-mt-1 text-2xs text-subtle">{{ OTHERS_CAPTION[form.senderOthers] }}</p>
+                    </template>
+                </div>
 
                 <!-- One line, since they compose: approval holds every fire for a click, the countdown holds it and starts by itself. -->
                 <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line-subtle pt-3">

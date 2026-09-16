@@ -10,6 +10,7 @@
         "sandbox": [
             "GET /automations",
             "GET /automations/catalog",
+            "GET /automations/senders/*",
             "GET /personas",
             "GET /ci/runs",
             "POST /automations",

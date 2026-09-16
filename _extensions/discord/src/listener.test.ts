@@ -1,6 +1,6 @@
 import type { Message } from "discord.js";
 import { expect, test } from "vitest";
-import { toHistory } from "./listener.js";
+import { authorOf, toHistory } from "./listener.js";
 
 // A fetched discord message, only the fields toHistory reads.
 const msg = (id: string, authorId: string, name: string, content: string): Message =>
@@ -17,4 +17,20 @@ test("toHistory reverses newest-first fetch into chronological order and flags o
 
     expect(history.map((h) => h.content)).toEqual(["yo", "what model?", "Hey! How can I help you?"]);
     expect(history.map((h) => h.self)).toEqual([undefined, undefined, true]);
+});
+
+// A guild message as authorOf reads it: the user, and the member's role cache (a Map, like discord.js's Collection).
+const guildMessage = (roleIds: readonly string[]): Pick<Message, "author" | "member"> =>
+    ({
+        author: { id: "u1", username: "radarsu" },
+        member: { roles: { cache: new Map(roleIds.map((id) => [id, { id }])) } },
+    }) as unknown as Pick<Message, "author" | "member">;
+
+test("authorOf names the sender by id and carries the member's role ids as groups", () => {
+    expect(authorOf(guildMessage(["guild-1", "role-staff"]))).toEqual({ id: "u1", name: "radarsu", groups: ["guild-1", "role-staff"] });
+});
+
+test("authorOf carries no groups for a DM, which has no member", () => {
+    const dm = { author: { id: "u1", username: "radarsu" }, member: null } as unknown as Pick<Message, "author" | "member">;
+    expect(authorOf(dm)).toEqual({ id: "u1", name: "radarsu" });
 });

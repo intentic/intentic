@@ -119,6 +119,12 @@ Two places, and the difference between them is the supervision above.
 
 - **A scheduled or triggered job** names its persona when it is written, on the automation's own form. It is
   the field that decides whether that job can post at all, so it is answered once and stays answered.
+  A job that listens for messages can name it **per sender** instead (`Automation.senders`,
+  `automations/senders.ts`): a rule matches the ids or groups the service vouches for and names the card those
+  people get, blank meaning the unpinned agent above. The sender's lane then keys the batcher and the thread as
+  well as the channel, so two people one channel answers as different cards never share a wake or a provider
+  session, and a held wake snapshots the lane's persona so approving it later wears what was decided, not what
+  the automation says now.
 - **A chat** names one in the composer, beside the model and the mode, and starts at *anyone*: the attended
   default the rule above describes. Pick a persona and the pill wears its name until you change it: the pick
   belongs to that chat, rides every message it sends, and can be changed mid-conversation, because the card is

@@ -60,6 +60,16 @@ disagreement waiting for whichever was edited second.
   click, while `holdForSeconds` holds it under a visible countdown and the daemon starts it itself once the
   timer passes on a quiet fleet: cancel and start-now stay one click away the whole time, on the Approvals page.
   When both are set, approval wins.
+- "Decide per person who it answers" (`senders`) is the third hand on the wheel, and the only one that knows
+  who is writing. It is offered only on a source whose pack declared `automation.sender`, the promise that
+  `author.id` is an identity the service vouches for; the Front Desk keeps its own `access` and the daemon
+  refuses rules anywhere else. Rules match ids and groups (a Discord role), never display names, which anyone
+  can change to. Each rule names the persona its people get, blank meaning no persona: the full toolbox
+  reaching no account, the same agent the owner talks to themselves. Everyone else is ignored, held, or
+  answered as configured. The daemon keys a channel's conversation by the persona a sender resolved to
+  (`sessions/thread-sessions.ts`), so two people it answers as different agents never share a wake or a
+  session; the "seen recently" chips come from `GET /automations/senders/{provider}`, a roster of everyone who
+  reached the automation's filters, admitted or not, which is how a stranger gets named after the fact.
 - Enablement is a narrow mutation, while an edit starts from the complete stored record. Switching or editing a
   row therefore preserves disabled state, provider-owned settings and security restrictions. The webhook token
   is not on the record at all: the daemon keeps it with the door (its secrets store), attaches it to the listed

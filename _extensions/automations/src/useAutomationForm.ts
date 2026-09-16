@@ -1,4 +1,13 @@
-import type { Automation, AutomationSummary, AutomationTemplate, ModelPin, WebchatConfig, WorkspaceEventKind } from "@intentic/sandbox-contract";
+import type {
+    Automation,
+    AutomationSummary,
+    AutomationTemplate,
+    ModelPin,
+    SenderRule,
+    Senders,
+    WebchatConfig,
+    WorkspaceEventKind,
+} from "@intentic/sandbox-contract";
 import { AutomationSchema, FRONT_DESK_PERSONA, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import { Cron } from "croner";
 import { computed, type ComputedRef, reactive, watch } from "vue";
@@ -11,6 +20,47 @@ import { cronOf, defaultSchedule, parseCron } from "./cronSchedule";
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 
 export type TriggerKind = `schedule` | `event` | `listener` | `workspace`;
+
+// One row of who may talk to a listener, as typed: ids and groups as comma-separated text split only at save, like
+// `allowedTools`; a blank `actsAs` is no persona, the full toolbox reaching no account, exactly as the automation's own.
+export interface SenderRuleDraft {
+    label: string;
+    ids: string;
+    groups: string;
+    actsAs: string;
+    requireApproval: boolean;
+}
+
+const emptySenderRule = (): SenderRuleDraft => ({ label: ``, ids: ``, groups: ``, actsAs: ``, requireApproval: false });
+
+// Comma- or newline-separated ids as a list; the same split `allowedTools` uses. Exported so the picker that adds a
+// person to a rule reads the row exactly as the save will.
+export const splitIds = (typed: string): string[] =>
+    typed
+        .split(/[\n,]/)
+        .map((id) => id.trim())
+        .filter((id) => id !== ``);
+
+const ruleDraftOf = (rule: SenderRule): SenderRuleDraft => ({
+    label: rule.label ?? ``,
+    ids: (rule.ids ?? []).join(`, `),
+    groups: (rule.groups ?? []).join(`, `),
+    actsAs: rule.actsAs ?? ``,
+    requireApproval: rule.requireApproval === true,
+});
+
+// The stored rule: every blank field absent rather than empty, so an unchanged edit round-trips to the same record.
+const ruleOf = (draft: SenderRuleDraft): SenderRule => {
+    const ids = splitIds(draft.ids);
+    const groups = splitIds(draft.groups);
+    return {
+        ...(draft.label.trim() !== `` ? { label: draft.label.trim() } : {}),
+        ...(ids.length > 0 ? { ids } : {}),
+        ...(groups.length > 0 ? { groups } : {}),
+        ...(draft.actsAs !== `` ? { actsAs: draft.actsAs } : {}),
+        ...(draft.requireApproval ? { requireApproval: true } : {}),
+    };
+};
 
 // What a prompt was written for: kind, plus source for a listener since payload shape differs per source (Discord's
 // mentioned+channelId vs CI's branch/sha/failedJobs). Exported for the create dialog's template comparison.
@@ -41,6 +91,12 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         // Comma-separated tool names narrowing the persona; held as typed string, not array, split only at save.
         allowedTools: ``,
         requireApproval: false,
+        // Whether the automation decides per person who it answers; off means everyone the trigger's filters admit.
+        senders: false,
+        senderRules: [] as SenderRuleDraft[],
+        // What a sender no rule names gets; `ignore` to begin with, since naming people is usually done to shut
+        // everyone else out.
+        senderOthers: `ignore` as Senders[`others`],
         // 0 = fire instantly; positive = each fire is held, visibly and cancellably, for this many seconds.
         holdForSeconds: 0,
         // Schedule's session bar: 0 fires every occurrence; positive skips until that many new sessions have run.
@@ -75,6 +131,16 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
 
     // Drives the branch input and whether `build` writes it; undefined when the source has no branch axis.
     const branchField = computed(() => (form.kind === `listener` ? listenerSource.value.branchField : undefined));
+    // Whether this source vouches for who is writing (TriggerSource.sender); without it no sender rules are drawn or
+    // written, since the daemon would refuse them and the Front Desk has its own `access`.
+    const sendersOffered = computed(() => form.kind === `listener` && listenerSource.value.sender !== undefined);
+    const addSenderRule = (): void => {
+        form.senderRules.push(emptySenderRule());
+        markTouched(`senders`);
+    };
+    const removeSenderRule = (index: number): void => {
+        form.senderRules.splice(index, 1);
+    };
     const liveSources = computed(() => sources.value.filter((source) => source.available));
     const visibleSources = computed(() =>
         listenerSource.value.available
@@ -177,6 +243,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         touched.add(`origins`);
         // Required like the other touched fields, so an empty ladder's refusal has a visible reason.
         touched.add(`models`);
+        touched.add(`senders`);
     };
 
     const nameError = computed<string | undefined>(() => {
@@ -209,12 +276,22 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         form.models.length === 0 ? `Pick at least one model: an automation runs while nobody is watching, so nothing is chosen for it.` : undefined,
     );
 
+    // A rule naming nobody would be refused by the daemon's schema; said here so the refusal points at the row.
+    const sendersError = computed<string | undefined>(() => {
+        if (!sendersOffered.value || !form.senders) {
+            return undefined;
+        }
+        const empty = form.senderRules.some((rule) => splitIds(rule.ids).length === 0 && splitIds(rule.groups).length === 0);
+        return empty ? `Every rule needs at least one person or group; remove the empty one.` : undefined;
+    });
+
     const valid = computed(
         () =>
             nameError.value === undefined &&
             promptError.value === undefined &&
             originsError.value === undefined &&
             modelsError.value === undefined &&
+            sendersError.value === undefined &&
             (form.kind !== `schedule` || (cronPreview.value !== undefined && `runs` in cronPreview.value)),
     );
 
@@ -233,6 +310,9 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
             actsAs: ``,
             allowedTools: ``,
             requireApproval: false,
+            senders: false,
+            senderRules: [],
+            senderOthers: `ignore`,
             holdForSeconds: 0,
             afterSessions: 0,
             provider: `discord`,
@@ -297,6 +377,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         form.actsAs = automation.actsAs ?? ``;
         form.allowedTools = (automation.allowedTools ?? []).join(`, `);
         form.requireApproval = automation.requireApproval === true;
+        loadSenders(automation.senders);
         form.holdForSeconds = automation.holdForSeconds ?? 0;
         form.chore = automation.chore === true;
         if (trigger.kind === `schedule`) {
@@ -364,34 +445,53 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         return webchat;
     };
 
+    // The sender block read into the form; absent leaves the block off with its defaults, which `reset` already set.
+    const loadSenders = (senders: Senders | undefined): void => {
+        if (senders === undefined) {
+            return;
+        }
+        form.senders = true;
+        form.senderRules = senders.rules.map(ruleDraftOf);
+        form.senderOthers = senders.others;
+    };
+
+    // A listener trigger with only the filters actually typed; the Front Desk's admission list lives on the trigger,
+    // beside the provider it gates.
+    const listenerTrigger = (): Automation["trigger"] => ({
+        kind: `listener`,
+        provider: form.provider,
+        ...(form.eventType !== undefined ? { eventType: form.eventType } : {}),
+        ...(form.eventType === `message` && form.mentioned ? { mentioned: true } : {}),
+        ...(form.channelId.trim() !== `` ? { channelId: form.channelId.trim() } : {}),
+        ...(branchField.value !== undefined && form.branch.trim() !== `` ? { branch: form.branch.trim() } : {}),
+        ...(isFrontDesk.value ? { allowedOrigins: originList.value } : {}),
+    });
+
+    // The trigger the form describes, one shape per kind; the inverse of what `load` read.
+    const triggerOf = (): Automation["trigger"] => {
+        switch (form.kind) {
+            case `schedule`:
+                return scheduleTrigger();
+            case `event`:
+                return {
+                    kind: `event`,
+                    ...(original?.trigger.kind === `event` && original.trigger.dailyMax !== undefined ? { dailyMax: original.trigger.dailyMax } : {}),
+                };
+            case `workspace`:
+                return { kind: `workspace`, event: form.workspaceEvent, ...(form.repo.trim() !== `` ? { repo: form.repo.trim() } : {}) };
+            case `listener`:
+                return listenerTrigger();
+        }
+    };
+
     // Record to upsert: keeps every opaque field from the loaded record, overwriting only what the editor exposes.
     // Enabled never changes as a side effect; the webhook token stays at the daemon's door, never here.
     const build = (): Automation => {
-        const trigger: Automation["trigger"] =
-            form.kind === `schedule`
-                ? scheduleTrigger()
-                : form.kind === `event`
-                  ? {
-                        kind: `event`,
-                        ...(original?.trigger.kind === `event` && original.trigger.dailyMax !== undefined ? { dailyMax: original.trigger.dailyMax } : {}),
-                    }
-                  : form.kind === `workspace`
-                    ? { kind: `workspace`, event: form.workspaceEvent, ...(form.repo.trim() !== `` ? { repo: form.repo.trim() } : {}) }
-                    : {
-                          kind: `listener`,
-                          provider: form.provider,
-                          ...(form.eventType !== undefined ? { eventType: form.eventType } : {}),
-                          ...(form.eventType === `message` && form.mentioned ? { mentioned: true } : {}),
-                          ...(form.channelId.trim() !== `` ? { channelId: form.channelId.trim() } : {}),
-                          ...(branchField.value !== undefined && form.branch.trim() !== `` ? { branch: form.branch.trim() } : {}),
-                          // The Front Desk's admission list lives on the trigger, beside the provider it gates.
-                          ...(isFrontDesk.value ? { allowedOrigins: originList.value } : {}),
-                      };
         // Starts from the stored record, so a newly added contract field survives until explicitly owned.
         const automation: Automation = {
             ...original,
             id: form.id.trim(),
-            trigger,
+            trigger: triggerOf(),
             prompt: form.prompt,
             // Copied, not aliased, so a later form edit can't reach a record already handed to the caller.
             models: form.models.map((pin) => ({ ...pin })),
@@ -430,6 +530,13 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         } else {
             delete automation.requireApproval;
         }
+        // Written only where the source vouches for a sender and the block is on; switching it off, or moving the
+        // trigger to a source that cannot identify anyone, drops the rules rather than saving a refusal.
+        if (sendersOffered.value && form.senders) {
+            automation.senders = { rules: form.senderRules.map(ruleOf), others: form.senderOthers };
+        } else {
+            delete automation.senders;
+        }
         if (form.holdForSeconds > 0) {
             automation.holdForSeconds = form.holdForSeconds;
         } else {
@@ -461,6 +568,9 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         isFrontDesk,
         listenerSource,
         branchField,
+        sendersOffered,
+        addSenderRule,
+        removeSenderRule,
         liveSources,
         visibleSources,
         originList,
@@ -480,6 +590,7 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         promptError,
         originsError,
         modelsError,
+        sendersError,
         valid,
         // directions
         reset,

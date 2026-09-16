@@ -239,6 +239,12 @@ const STATE_FILES = [
         why: "Thread bookkeeping (an inbound thread, a Front Desk visitor, a Discord or Slack channel, → sandbox conversation + provider session), written on EVERY inbound message. Nothing in the browser reads it: what a thread produces is a conversation, and the fleet board already learns about that from the agent registry's own push. Naming a key here would bill every connected browser a refetch per inbound message, the request storm this table's own note warns about, to refresh nothing it can see.",
         portability: "carry",
     },
+    {
+        path: ".intentic/records/senders.json",
+        invalidates: [],
+        why: "Who has written to each listener source, written on every inbound message that reached an automation. Read only while the automation editor's sender picker is open, which fetches it on open; a live key here would refetch every connected browser per Discord message to refresh a list nobody has on screen.",
+        portability: "carry",
+    },
     // Extension configuration only; secret keys named by `contributes.settings[].secret` are vaulted separately
     // (extensions/extension-settings.ts) and rehydrated on read, so no caller sees the split. `carry`+`versioned`:
     // reviewable now that no credential is inside. No `note`: notes are for skipped/untracked entries; this one

@@ -33,6 +33,14 @@ interface HistoryEntry {
     self?: boolean;
 }
 
+// Who wrote it, as Discord vouches for them: the user id (what a sender rule names), the username for display, and in a
+// guild the member's role ids as `groups`, @everyone included, so a rule can name a role or the whole server. A DM has
+// no member and so no groups.
+export const authorOf = (message: Pick<Message, "author" | "member">): ListenerMessage["author"] => {
+    const groups = message.member === null ? [] : [...message.member.roles.cache.values()].map((role) => role.id);
+    return { id: message.author.id, name: message.author.username, ...(groups.length > 0 ? { groups } : {}) };
+};
+
 // Newest-first fetch results to chronological history, flagging our own bots' posts so the model recognizes its prior
 // replies.
 export const toHistory = (newestFirst: readonly Message[], selfIds: ReadonlySet<string>): HistoryEntry[] =>
@@ -123,7 +131,7 @@ export const createDiscordListener = (ctx: GatewayCtx, subscribed: Map<string, C
                 type: "message",
                 id: message.id,
                 channelId: message.channelId,
-                author: { id: message.author.id, name: message.author.username },
+                author: authorOf(message),
                 content: message.content,
                 ...(mentioned ? { mentioned: true } : {}),
                 ...(history !== undefined && history.length > 0 ? { history } : {}),

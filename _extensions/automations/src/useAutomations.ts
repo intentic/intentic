@@ -1,7 +1,22 @@
-import { type Automation, type AutomationSummary, AutomationsListSchema } from "@intentic/sandbox-contract";
+import { type Automation, type AutomationSummary, AutomationsListSchema, type SenderSeen } from "@intentic/sandbox-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
+
+// Who has written to a listener source, admitted or not, for the sender rules picker: offered by name, stored by id.
+// Fetched only while a form on that source is open, and re-read on open rather than pushed: the daemon writes this on
+// every inbound message, and a live key would refetch every browser per Discord message for a list nobody has up.
+const NO_SENDERS: readonly SenderSeen[] = [];
+
+export function useSenders(provider: Ref<string>, enabled: Ref<boolean>) {
+    const api = host();
+    const query = useQuery({
+        queryKey: computed(() => api.sandbox.key(`automation-senders`, provider.value)),
+        queryFn: () => api.sandbox.rpc.automations.senders({ provider: provider.value }),
+        enabled: computed(() => enabled.value && provider.value !== `` && api.sandbox.reachable()),
+    });
+    return { senders: computed<readonly SenderSeen[]>(() => query.data.value?.senders ?? NO_SENDERS) };
+}
 
 // The sandbox's automations manifest (.intentic/config/automations.json) via the daemon's /automations routes. `save`
 // upserts by id; `setEnabled` uses its own route so toggling a row can't discard fields. requireApproval wakes belong

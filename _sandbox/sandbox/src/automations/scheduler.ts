@@ -13,10 +13,10 @@ import { sessionStart, wakeSourceOf } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { automationPending } from "../push/notifications.js";
-import { threadKey } from "../sessions/thread-sessions.js";
 import { pinnedRunModel } from "../agent/models/run-role-model.js";
 import type { OutboxSink } from "../webchat/webchat-outbox.js";
 import { type AutomationRecord, consecutiveFailures } from "./automations-store.js";
+import type { SenderLane } from "./senders.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -190,6 +190,11 @@ export interface FireOptions {
     readonly conversationId?: string;
     // Provider session the conversation last ran on; meaningful only alongside conversationId.
     readonly sessionId?: string;
+    // The thread-sessions key this fire belongs to, snapshotted on a hold so the approved run settles the same thread.
+    readonly thread?: string;
+    // What the sender's rule decided (senders.ts): present, its persona replaces the automation's and its hold adds to
+    // it. Absent for a fire nobody sent, a schedule or a webhook, which wears the automation's own.
+    readonly lane?: SenderLane;
     // Narrows the wake's toolbox to the automation's allowlist, so a stranger's message drives a smaller turn.
     readonly allowedTools?: readonly string[];
     // When set, text deltas stream here live and the agent is told (STREAM_NOTE) not to send the reply itself.
@@ -281,6 +286,27 @@ const wakeModel = async (services: Services, automation: AutomationRecord, strea
     return undefined;
 };
 
+// What a held wake keeps of the fire that was stopped, so an approved run replays it: the payload and origin, the
+// conversation and thread to continue, the persona it resolved to. Every field absent rather than undefined, so the
+// snapshot only carries what the fire itself did.
+const heldWakeSnapshot = (
+    automationId: string,
+    // Only a pure-countdown hold carries autoRunAfterS; an "ask me" hold never auto-runs.
+    autoRunAfterS: number | undefined,
+    fire: Pick<AutomationApproval, "payload" | "origin" | "title" | "conversationId" | "sessionId" | "thread" | "actsAs">,
+): Omit<AutomationApproval, "id"> => ({
+    automationId,
+    ...(autoRunAfterS !== undefined ? { autoRunAt: Date.now() + autoRunAfterS * 1_000 } : {}),
+    ...(fire.payload !== undefined ? { payload: fire.payload } : {}),
+    ...(fire.origin !== undefined ? { origin: fire.origin } : {}),
+    ...(fire.title !== undefined ? { title: fire.title } : {}),
+    ...(fire.conversationId !== undefined ? { conversationId: fire.conversationId } : {}),
+    ...(fire.sessionId !== undefined ? { sessionId: fire.sessionId } : {}),
+    ...(fire.thread !== undefined ? { thread: fire.thread } : {}),
+    ...(fire.actsAs !== undefined ? { actsAs: fire.actsAs } : {}),
+    createdAt: Date.now(),
+});
+
 // Guard, then wake, then record the run; reached only through fireAutomation, which guarantees no two runs of one
 // automation overlap here.
 const runFire = async (
@@ -293,6 +319,8 @@ const runFire = async (
         attempts = 0,
         conversationId: resumedConversationId,
         sessionId: resumedSessionId,
+        thread,
+        lane,
         allowedTools,
         stream,
         origin,
@@ -301,12 +329,17 @@ const runFire = async (
 ): Promise<FireOutcome> => {
     try {
         let capped = payload?.slice(0, PAYLOAD_MAX);
+        // The persona this fire wears: the sender's lane when someone sent it, else the automation's own. Resolved once
+        // here so the hold snapshot and the turn cannot disagree.
+        const actsAs = lane !== undefined ? lane.actsAs : automation.actsAs;
         // Admission runs on every fire, even cleared: a deny still refuses; a hold is what `cleared` already answered.
+        // A lane's hold only ever adds to the automation's, most-restrictive-wins like the floor.
         const { admission } = await services.sandboxSettings.get();
+        const requireApproval = automation.requireApproval === true || lane?.requireApproval === true;
         const verdict = guard(sessionStart, {
             source: wakeSourceOf(automation.trigger),
             admission,
-            ...(automation.requireApproval !== undefined ? { requireApproval: automation.requireApproval } : {}),
+            ...(requireApproval ? { requireApproval } : {}),
             ...(automation.holdForSeconds !== undefined ? { holdForSeconds: automation.holdForSeconds } : {}),
         });
         if (verdict.effect === "deny") {
@@ -345,21 +378,17 @@ const runFire = async (
             // Holds the wake instead of running; inFlight releases in the finally, so the lock isn't held during the
             // wait.
             if (verdict.effect === "hold" && cleared === undefined) {
-                await services.heldWakes.add({
-                    automationId: automation.id,
-                    // Only a pure-countdown hold carries autoRunAfterS; an "ask me" hold never auto-runs.
-                    ...(verdict.autoRunAfterS !== undefined ? { autoRunAt: Date.now() + verdict.autoRunAfterS * 1_000 } : {}),
-                    ...(capped !== undefined ? { payload: capped } : {}),
-                    // Snapshotted so the approved run opens the same conversation, keeping origin rather than turning
-                    // anonymous.
-                    ...(origin !== undefined ? { origin } : {}),
-                    ...(title !== undefined ? { title } : {}),
-                    // Preserve the conversation to resume instead of minting a fresh one.
-                    ...(resumedConversationId !== undefined ? { conversationId: resumedConversationId } : {}),
-                    ...(resumedSessionId !== undefined ? { sessionId: resumedSessionId } : {}),
-                    ...(automation.actsAs !== undefined ? { actsAs: automation.actsAs } : {}),
-                    createdAt: Date.now(),
-                });
+                await services.heldWakes.add(
+                    heldWakeSnapshot(automation.id, verdict.autoRunAfterS, {
+                        payload: capped,
+                        origin,
+                        title,
+                        conversationId: resumedConversationId,
+                        sessionId: resumedSessionId,
+                        thread,
+                        actsAs,
+                    }),
+                );
                 void services.activity
                     .append({
                         direction: "system",
@@ -426,7 +455,7 @@ const runFire = async (
                 ? { account: automation.account }
                 : {}),
             // Absence here is deliberate: the resolver reads no pin as no account on an unattended turn, not all.
-            ...(automation.actsAs !== undefined ? { actsAs: automation.actsAs } : {}),
+            ...(actsAs !== undefined ? { actsAs } : {}),
         };
         // Transcript folds as it streams; opens stamped with when the turn began, not when appended, minutes later.
         const fold = new TranscriptFold(openingRows(turn, services.workspace.root, Date.now()));
@@ -498,13 +527,17 @@ export interface AutomationsScheduler {
 
 // The snapshot as fire options: each field absent rather than undefined, so replaying a hold cannot set one the
 // original fire did not carry.
+// The persona rides back as a lane so the approved run wears what was decided when it was held, not what the
+// automation says now; the hold itself was answered, so the lane asks for none.
 const heldWakeOptions = (held: AutomationApproval, sink: OutboxSink | undefined): FireOptions => ({
     cleared: "both",
+    lane: { actsAs: held.actsAs, requireApproval: false },
     ...(held.payload !== undefined ? { payload: held.payload } : {}),
     ...(held.origin !== undefined ? { origin: held.origin } : {}),
     ...(held.title !== undefined ? { title: held.title } : {}),
     ...(held.conversationId !== undefined ? { conversationId: held.conversationId } : {}),
     ...(held.sessionId !== undefined ? { sessionId: held.sessionId } : {}),
+    ...(held.thread !== undefined ? { thread: held.thread } : {}),
     ...(sink !== undefined ? { stream: sink.stream } : {}),
 });
 
@@ -518,11 +551,11 @@ export const runHeldWake = async (services: Services, automation: AutomationReco
     // Before the release is over: the approve route answers its caller here, and the visitor polling a moment later
     // must find the answer rather than an empty thread.
     await sink?.settled();
-    const origin = held.origin;
-    if (origin?.channelId === undefined || settled.sessionId === undefined) {
+    // The snapshot carries the thread's own key: an origin cannot name it, since a thread is keyed by lane too.
+    if (held.thread === undefined || settled.sessionId === undefined) {
         return;
     }
-    await services.threadSessions.settle(threadKey(origin.provider, origin.automationId, origin.channelId), settled.sessionId, Date.now());
+    await services.threadSessions.settle(held.thread, settled.sessionId, Date.now());
 };
 
 // Polls the manifest and fires whatever came due since the last pass, with no resync bookkeeping; fires run detached,

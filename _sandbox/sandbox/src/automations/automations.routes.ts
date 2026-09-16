@@ -1,4 +1,4 @@
-import { type Automation, type AutomationSummary, automationsContract, FRONT_DESK_PERSONA } from "@intentic/sandbox-contract";
+import { type Automation, type AutomationCatalog, type AutomationSummary, automationsContract, FRONT_DESK_PERSONA } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { Cron } from "croner";
 import { streamAgent } from "../agent/routes/agent.routes.js";
@@ -52,6 +52,25 @@ const listed = async (services: Services, automation: AutomationRecord, operator
     return door === "automation" ? { ...summary, webhookToken: token } : { ...summary, ingestKey: token };
 };
 
+// Sender rules match `author.id`, so they are only accepted on a listener whose source promised that id is an identity
+// it vouches for (TriggerSource.sender); the Front Desk keeps its own `access` instead, and nothing else has a sender.
+const refuseMisplacedSenders = (automation: Automation, catalog: AutomationCatalog): void => {
+    if (automation.senders === undefined) {
+        return;
+    }
+    if (automation.trigger.kind !== "listener") {
+        throw new ORPCError("BAD_REQUEST", { message: "sender rules only apply to an automation that listens for messages" });
+    }
+    const { provider } = automation.trigger;
+    if (catalog.sources.find((source) => source.provider === provider)?.sender === undefined) {
+        throw new ORPCError("BAD_REQUEST", { message: `provider "${provider}" does not identify who is writing, so it cannot carry sender rules` });
+    }
+};
+
+// Whether any wake of this automation would wear the stock front-desk card: its own persona, or a sender rule's.
+const namesFrontDesk = (automation: Automation): boolean =>
+    automation.actsAs === FRONT_DESK_PERSONA || (automation.senders?.rules.some((rule) => rule.actsAs === FRONT_DESK_PERSONA) ?? false);
+
 // The automations manifest routes. `upsert` validates the cron with the scheduler's own parser, so what's accepted here
 // is exactly what will fire.
 export const createAutomationsRoutes = (services: Services) => {
@@ -62,6 +81,8 @@ export const createAutomationsRoutes = (services: Services) => {
             return { automations: await Promise.all((await services.automations.list()).map((automation) => listed(services, automation, operator))) };
         }),
         catalog: i.catalog.handler(async () => await automationCatalog(services)),
+        // Who has written to a source, admitted or not; the picker offers these by name and stores the id.
+        senders: i.senders.handler(async ({ input }) => ({ senders: await services.senders.list(input.provider) })),
         upsert: i.upsert.handler(async ({ input }) => {
             if (input.trigger.kind === "schedule") {
                 try {
@@ -86,6 +107,7 @@ export const createAutomationsRoutes = (services: Services) => {
                     throw new ORPCError("BAD_REQUEST", { message: `provider "${provider}" has no event type "${eventType}"` });
                 }
             }
+            refuseMisplacedSenders(input, await automationCatalog(services));
             const automation = input;
             await services.automations.upsert(automation);
             // The door's credential is minted with the door, never stored in the manifest; a re-post of the same record
@@ -101,7 +123,7 @@ export const createAutomationsRoutes = (services: Services) => {
             // to a named-but-missing card, which would leave a fresh public chat unable to read.
             // Written here so a Front Desk arriving through any route lands with its persona already present; awaited
             // since the wake it bounds can fire the moment this returns.
-            if (automation.actsAs === FRONT_DESK_PERSONA) {
+            if (namesFrontDesk(automation)) {
                 await ensureFrontDeskPersona(services.personas).catch((error: unknown) =>
                     services.logger.warn(
                         { err: error, automation: automation.id },

@@ -134,6 +134,8 @@ export const createPublicDoor = <Config>(
                 // Same conversation every time, so a chat or a recurring crash stays one card and one worktree.
                 conversationId: session.conversationId,
                 ...(session.sessionId !== undefined ? { sessionId: session.sessionId } : {}),
+                // Snapshotted with a held wake, so an approved run settles this thread rather than guessing its key.
+                thread: threadOf.key,
             });
             // Learn the provider session so the next arrival continues this thread rather than restating it.
             await services.threadSessions.settle(threadOf.key, settled.sessionId, Date.now());

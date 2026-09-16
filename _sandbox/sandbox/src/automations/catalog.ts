@@ -1,10 +1,10 @@
 import { CHORES, choreAutomationPrompt, FIX_DEPS_AUTOMATION } from "@intentic/sandbox-contract/chores";
 import { type AutomationCatalog, type AutomationTemplate, TriggerSchema, type TriggerSource } from "@intentic/sandbox-contract";
-import type { AutomationTemplateContribution } from "@intentic/extension-manifest";
+import type { AutomationTemplateContribution, ListenerContribution } from "@intentic/extension-manifest";
 import { CI_PROVIDER } from "../ci/events.js";
 import { ISSUES_PROVIDER } from "../issues/provider.js";
 import { installedExtensions } from "../extensions/installed-extensions.js";
-import type { ExtensionHost } from "../extensions/installed-extensions.js";
+import type { ExtensionHost, InstalledExtension } from "../extensions/installed-extensions.js";
 
 // Trigger catalogue for what can wake an agent: sources and templates the composer offers and `upsert` validates
 // against, drawn from one list.
@@ -278,6 +278,25 @@ const templateOf = (contribution: AutomationTemplateContribution): AutomationTem
     };
 };
 
+// A pack's listener declaration as the catalogue's source row. Every optional field is declared by the pack, never
+// assumed: only a source that vouches for `author.id` gets to offer sender rules.
+const sourceOf = (extension: InstalledExtension, listener: ListenerContribution): TriggerSource => ({
+    provider: listener.provider,
+    label: listener.automation.label,
+    ...(extension.manifest.logo !== undefined ? { logo: extension.manifest.logo } : {}),
+    ...(extension.manifest.icon !== undefined ? { icon: extension.manifest.icon } : {}),
+    events: listener.events.map((event) => ({ value: event.type, label: event.label })),
+    channel: listener.automation.channel,
+    ...(listener.automation.branchField !== undefined ? { branchField: listener.automation.branchField } : {}),
+    ...(listener.automation.mentionLabel !== undefined ? { mentionLabel: listener.automation.mentionLabel } : {}),
+    ...(listener.automation.sender !== undefined ? { sender: listener.automation.sender } : {}),
+    ...(listener.automation.senderGroup !== undefined ? { senderGroup: listener.automation.senderGroup } : {}),
+    starterPrompt: listener.automation.starterPrompt,
+    // `requires` comes from the pack's own capability entries; none declared means nothing to connect.
+    requires: (extension.manifest.contributes?.capabilities ?? []).map((capability) => capability.id),
+    enabled: extension.enabled,
+});
+
 // One source per provider, first wins: an extension can never shadow the daemon's own (ci, webchat, issues).
 export const automationCatalog = async (services: ExtensionHost): Promise<AutomationCatalog> => {
     const sources: TriggerSource[] = [...CORE_TRIGGER_SOURCES];
@@ -290,20 +309,7 @@ export const automationCatalog = async (services: ExtensionHost): Promise<Automa
         const listener = extension.manifest.contributes?.listener;
         if (listener !== undefined && !providers.has(listener.provider)) {
             providers.add(listener.provider);
-            sources.push({
-                provider: listener.provider,
-                label: listener.automation.label,
-                ...(extension.manifest.logo !== undefined ? { logo: extension.manifest.logo } : {}),
-                ...(extension.manifest.icon !== undefined ? { icon: extension.manifest.icon } : {}),
-                events: listener.events.map((event) => ({ value: event.type, label: event.label })),
-                channel: listener.automation.channel,
-                ...(listener.automation.branchField !== undefined ? { branchField: listener.automation.branchField } : {}),
-                ...(listener.automation.mentionLabel !== undefined ? { mentionLabel: listener.automation.mentionLabel } : {}),
-                starterPrompt: listener.automation.starterPrompt,
-                // `requires` comes from the pack's own capability entries; none declared means nothing to connect.
-                requires: (extension.manifest.contributes?.capabilities ?? []).map((capability) => capability.id),
-                enabled: extension.enabled,
-            });
+            sources.push(sourceOf(extension, listener));
         }
         // Templates drop with a disabled pack, unlike sources: creating a row that can't fire isn't offered.
         if (!extension.enabled) {

@@ -17,6 +17,9 @@ const DISCORD: AvailableSource = {
     events: [{ value: `message`, label: `Messages` }],
     mentionLabel: `Only mentions`,
     channel: { label: `Channel`, placeholder: `all channels` },
+    // Discord vouches for a user id and reports role ids, so it is the source sender rules are drawn on.
+    sender: { label: `User ID`, placeholder: `an id` },
+    senderGroup: { label: `Role ID`, placeholder: `a role` },
     starterPrompt: `Handle Discord messages.`,
 };
 const CI: AvailableSource = {
@@ -287,5 +290,68 @@ describe(`the model ladder`, () => {
         expect(build().account).toBe(`reliable-account`);
         form.models = [...LADDER];
         expect(build().account).toBeUndefined();
+    });
+});
+
+// Who a listener answers: rules by id or group, each naming a persona, drawn only where the source vouches for a sender.
+describe(`sender rules`, () => {
+    const frontLine: Automation = {
+        id: `front-line`,
+        trigger: { kind: `listener`, provider: `discord`, eventType: `message` },
+        prompt: `Answer the team.`,
+        models: LADDER,
+        actsAs: `customer-service`,
+        senders: {
+            rules: [
+                { label: `The boss`, ids: [`u-mark`] },
+                { ids: [`u-martha`, `u-annie`], groups: [`r-support`], actsAs: `customer-service`, requireApproval: true },
+            ],
+            others: `hold`,
+        },
+        enabled: true,
+    };
+
+    it(`round-trips rules, their personas and what everyone else gets`, () => {
+        const { form, load, build } = formState();
+        load(frontLine);
+        expect(form.senders).toBe(true);
+        expect(form.senderRules).toEqual([
+            { label: `The boss`, ids: `u-mark`, groups: ``, actsAs: ``, requireApproval: false },
+            { label: ``, ids: `u-martha, u-annie`, groups: `r-support`, actsAs: `customer-service`, requireApproval: true },
+        ]);
+        expect(form.senderOthers).toBe(`hold`);
+        expect(build()).toEqual(frontLine);
+    });
+
+    it(`drops the block when switched off, rather than saving an empty one`, () => {
+        const { form, load, build } = formState();
+        load(frontLine);
+        form.senders = false;
+        expect(build().senders).toBeUndefined();
+    });
+
+    it(`refuses a rule naming nobody, and says which`, () => {
+        const { form, load, addSenderRule, sendersError, valid } = formState();
+        load(frontLine);
+        expect(valid.value).toBe(true);
+        addSenderRule();
+        expect(sendersError.value).toMatch(/at least one person or group/);
+        expect(valid.value).toBe(false);
+        (form.senderRules[2] as { ids: string }).ids = `u-annie`;
+        expect(sendersError.value).toBeUndefined();
+        expect(valid.value).toBe(true);
+    });
+
+    it(`is not offered, and not written, on a source that vouches for nobody`, () => {
+        const { form, sendersOffered, build } = formState();
+        form.kind = `listener`;
+        form.provider = `ci`;
+        form.id = `red-builds`;
+        form.prompt = `Fix it.`;
+        form.models = [...LADDER];
+        form.senders = true;
+        form.senderRules.push({ label: ``, ids: `u-mark`, groups: ``, actsAs: ``, requireApproval: false });
+        expect(sendersOffered.value).toBe(false);
+        expect(build().senders).toBeUndefined();
     });
 });

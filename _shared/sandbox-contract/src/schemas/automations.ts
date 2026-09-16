@@ -212,6 +212,32 @@ export const WebchatPendingSchema = z.object({
     cursor: z.number(),
 });
 export type WebchatPending = z.infer<typeof WebchatPendingSchema>;
+// Who may talk to a listener automation, and as whom. Matched on the ids a provider vouches for (a Discord user id, a
+// Slack member id, a WhatsApp number, an e-mail address) or the groups it reports (Discord role ids), never on a display
+// name, which the sender chooses. A rule's `actsAs` means exactly what the automation's does: absent is no persona,
+// the full toolbox reaching no account, which is the whole agent an owner talks to themselves.
+export const SenderRuleSchema = z
+    .object({
+        label: z.string().max(60).optional().describe("What to call these people on screen."),
+        ids: z.array(z.string().min(1).max(200)).max(200).optional().describe("Sender ids, as the service names them, never display names."),
+        groups: z
+            .array(z.string().min(1).max(200))
+            .max(50)
+            .optional()
+            .describe("Group ids the service reports on a sender, a Discord role. Only for a source whose messages carry them."),
+        actsAs: entryId.optional().describe("Which persona their wakes speak as. Absent is no persona: the full toolbox, reaching no account."),
+        // Tightens, never loosens: the automation's own `requireApproval` still holds everyone.
+        requireApproval: z.boolean().optional().describe("Hold their wakes for a person, even when the automation itself does not."),
+    })
+    .refine((rule) => (rule.ids?.length ?? 0) + (rule.groups?.length ?? 0) > 0, { message: "a sender rule must name at least one id or group" });
+export type SenderRule = z.infer<typeof SenderRuleSchema>;
+// `others` is what a sender no rule names gets: today's behaviour (`allow`), the approvals queue (`hold`), or silence
+// (`ignore`), which is the default the form writes since naming people is usually done to shut everyone else out.
+export const SendersSchema = z.object({
+    rules: z.array(SenderRuleSchema).max(50).describe("Walked in order; the first rule naming the sender decides."),
+    others: z.enum(["allow", "hold", "ignore"]).describe("What a sender no rule names gets: the automation as configured, a hold for a person, or nothing at all."),
+});
+export type Senders = z.infer<typeof SendersSchema>;
 export const AutomationSchema = z.object({
     id: entryId.describe("The automation's id."),
     trigger: TriggerSchema.describe("What sets it off: a schedule, an event in the workspace, a message arriving from outside, or a webhook."),
@@ -256,6 +282,11 @@ export const AutomationSchema = z.object({
     // Absent means the wake reaches no logged-in account at all, the strictest default here, since nobody is at the
     // composer when it fires.
     actsAs: entryId.optional().describe("Which persona it speaks as. An unwatched turn naming none reaches no signed-in account at all."),
+    // Listener triggers on a source that identifies senders only (TriggerSource.sender); refused elsewhere at upsert.
+    // Absent means everyone the filters admit, wearing `actsAs`.
+    senders: SendersSchema.optional().describe(
+        "Who may talk to it, and as whom: rules by sender id or group, each naming the persona those people get, plus what everyone else gets. Absent admits everyone the trigger's filters do.",
+    ),
     // Held in the approvals queue rather than run; only a person releases it.
     requireApproval: z.boolean().optional().describe("Hold every fire for a person instead of running it. Only a person can release one of those."),
     // Held visibly in the approvals queue and run by the daemon itself once the hold elapses with no live turn;
@@ -296,9 +327,12 @@ export const AutomationApprovalSchema = z.object({
             "The thread this belongs to, when it has one, so approving continues that conversation rather than opening a new one. Without it, one visitor's chat becomes a card per approved message and an agent that meets them again every turn.",
         ),
     sessionId: z.string().optional().describe("The provider session that thread last ran on."),
-    // Snapshotted from the automation at hold time, so a project-scoped board can file the wake under what the persona
-    // reaches without reading the automation.
-    actsAs: entryId.optional().describe("Which persona the approved run would speak as."),
+    // The thread-sessions key the message arrived on, so the approved run settles the same thread; not derivable from
+    // `origin`, since a thread is also keyed by the persona the sender's lane resolved to.
+    thread: z.string().optional().describe("Which inbound thread this belongs to, so the approved run continues that thread's memory rather than a fresh one."),
+    // The persona the fire resolved to (a sender rule's, or the automation's), snapshotted at hold time and worn by the
+    // approved run; also what a project-scoped board files the wake under.
+    actsAs: entryId.optional().describe("Which persona the approved run speaks as, decided when it was held."),
     createdAt: z.number().describe("When it started waiting, in milliseconds."),
     // When the daemon may run this itself, for a `holdForSeconds` hold; absent for a `requireApproval` hold, which only
     // the owner releases.
@@ -362,6 +396,19 @@ export const AutomationSummarySchema = AutomationSchema.extend({
 });
 export type AutomationSummary = z.infer<typeof AutomationSummarySchema>;
 export const AutomationsListSchema = z.object({ automations: z.array(AutomationSummarySchema) });
+// One person a listener source has heard from (.intentic/records/senders.json), kept per provider so the form can offer
+// "seen recently" by name and store the id. Recorded whether or not a rule admitted them: who tried is the point.
+export const SenderSeenSchema = z.object({
+    id: z.string().describe("The sender id the service vouches for, what a rule stores."),
+    name: z.string().describe("What they were called on their last message, for display only."),
+    groups: z.array(z.string()).optional().describe("The group ids the service reported on their last message, a Discord role list."),
+    firstSeenAt: z.number().describe("When they first reached an automation here, in milliseconds."),
+    lastSeenAt: z.number().describe("When they last did, in milliseconds."),
+    messages: z.number().describe("How many of their messages reached an automation's filters, admitted or not."),
+});
+export type SenderSeen = z.infer<typeof SenderSeenSchema>;
+export const SendersRosterSchema = z.object({ senders: z.array(SenderSeenSchema).describe("Newest first.") });
+export const SendersProviderParamSchema = z.object({ provider: z.string().min(1).describe("Which listener source.") });
 export const AutomationIdParamSchema = z.object({ id: z.string() });
 export const AutomationEnabledInputSchema = z.object({ id: z.string(), enabled: z.boolean() });
 // The automation catalogue: everything that can wake an agent, and what to start from. The daemon merges what it emits
@@ -382,6 +429,10 @@ export const TriggerSourceSchema = z.object({
     channel: TriggerFieldSchema,
     // A SECOND narrowing axis, for sources whose events carry one, `ci` narrows by git ref as well as by repo.
     branchField: TriggerFieldSchema.optional(),
+    // How this source names a sender (`author.id`) and, where its messages carry them, a sender's groups; absent means
+    // the source vouches for nobody's identity, so the editor offers no sender rules and upsert refuses them.
+    sender: TriggerFieldSchema.optional(),
+    senderGroup: TriggerFieldSchema.optional(),
     // Only sources whose `message` events distinguish addressed messages set this; absent ⇒ no mention-only filter.
     mentionLabel: z.string().min(1).optional(),
     // The provider owns the payload vocabulary, so it owns the first prompt that explains that payload.

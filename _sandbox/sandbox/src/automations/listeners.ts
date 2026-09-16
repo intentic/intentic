@@ -1,15 +1,18 @@
-import type { AgentOrigin, ListenerMessage } from "@intentic/sandbox-contract";
+import type { AgentOrigin, ListenerMessage, Trigger } from "@intentic/sandbox-contract";
 import { streamAgent } from "../agent/routes/agent.routes.js";
 import type { Services } from "../composition.js";
 import { CHANNEL_SESSION_TTL_MS, threadKey } from "../sessions/thread-sessions.js";
 import { fireAutomation, mintConversationId, PAYLOAD_MAX, TITLE_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
+import { type SenderLane, senderLane } from "./senders.js";
 
 // Provider sources hold a live connection (Discord gateway) and dispatch normalized messages here; listener automations
 // fire through the same guard/wake/run-history path as schedule and event automations.
 // The daemon holds a provider connection only while an enabled listener automation and its capability both exist; the
 // reconciler connects/disconnects on a poll tick.
 // A channel is a thread (sessions/thread-sessions.ts): messages resume the same conversation and session until quiet
-// past CHANNEL_SESSION_TTL_MS, then start fresh.
+// past CHANNEL_SESSION_TTL_MS, then start fresh. Who sent the message picks its lane (senders.ts): the persona the
+// wake wears and whether a person releases it. Batches and threads are keyed by lane as well as channel, so a burst
+// from two people the automation answers as different agents becomes two wakes, never one.
 
 // Quiet gap that ends a burst; the timer restarts on every message so a burst keeps coalescing into one wake.
 export const DEBOUNCE_MS = 750;
@@ -19,8 +22,11 @@ export const DEBOUNCE_MS = 750;
 export interface MessageContext {
     readonly origin: AgentOrigin;
     readonly title: string;
-    // Thread-sessions key for this message's channel, computed at push time; a batch's key is its newest message's.
+    // Thread-sessions key for this message's channel and lane, computed at push time; a batch's key is its newest
+    // message's, which is the same key since the batcher itself is keyed by lane.
     readonly thread: string;
+    // What the sender's rule decided; every message in a batch shares one, by construction of the batcher key.
+    readonly lane: SenderLane;
     readonly stream?: TurnStream;
 }
 
@@ -87,8 +93,11 @@ const joinNewestWithin = (lines: string[], max: number): string => {
     return kept.length > 0 ? kept.join("\n") : (lines.at(-1) as string).slice(0, max);
 };
 
-// Per-automation queues, a module singleton so every dispatch path shares the same serialization.
+// Per-automation, per-lane queues, a module singleton so every dispatch path shares the same serialization.
 const batchers = new Map<string, MessageBatcher>();
+
+// One batcher per (automation, persona): a message for one persona must never ride a wake wearing another.
+const batcherKey = (automationId: string, lane: SenderLane): string => (lane.actsAs === undefined ? automationId : `${automationId}:${lane.actsAs}`);
 
 // Board/tab title for the conversation this message opens: the message's first line, since every fire of an automation
 // shares the same configured prompt.
@@ -100,6 +109,15 @@ const titleOf = (message: ListenerMessage): string => {
         ?.trim();
     return (line !== undefined ? `${message.author.name}: ${line}` : `${message.provider} ${message.type}`).slice(0, TITLE_MAX);
 };
+
+// Whether a listener trigger's filters admit this message: everything about the message itself, nothing yet about who
+// sent it. An absent filter admits.
+const triggerAdmits = (trigger: Extract<Trigger, { kind: "listener" }>, message: ListenerMessage): boolean =>
+    trigger.provider === message.provider &&
+    (trigger.channelId === undefined || trigger.channelId === message.channelId) &&
+    (trigger.eventType === undefined || trigger.eventType === message.type) &&
+    (trigger.mentioned !== true || message.mentioned === true) &&
+    (trigger.branch === undefined || trigger.branch === message.branch);
 
 // Routes one event to every matching enabled listener automation's batcher. Matching re-reads automations so an edit,
 // disable or delete is honored immediately; the fire re-reads once more at wake time.
@@ -113,24 +131,21 @@ export const dispatchListenerMessage = async (
 ): Promise<string[]> => {
     const line = JSON.stringify(message);
     const matched: string[] = [];
+    // Whether the message reached any automation's filters, admitted or not: the roster records who tried, once.
+    let reached = false;
     for (const automation of await services.automations.list()) {
-        const trigger = automation.trigger;
-        if (!automation.enabled || trigger.kind !== "listener" || trigger.provider !== message.provider) {
+        if (!automation.enabled || automation.trigger.kind !== "listener" || !triggerAdmits(automation.trigger, message)) {
             continue;
         }
-        if (trigger.channelId !== undefined && trigger.channelId !== message.channelId) {
+        reached = true;
+        // Sender rules decide last, after every filter about the message itself: a stranger in the wrong channel is
+        // still a stranger, but only the sender rules say so.
+        const lane = senderLane(automation, message.author);
+        if (lane === undefined) {
             continue;
         }
-        if (trigger.eventType !== undefined && trigger.eventType !== message.type) {
-            continue;
-        }
-        if (trigger.mentioned === true && message.mentioned !== true) {
-            continue;
-        }
-        if (trigger.branch !== undefined && trigger.branch !== message.branch) {
-            continue;
-        }
-        let batcher = batchers.get(automation.id);
+        const key = batcherKey(automation.id, lane);
+        let batcher = batchers.get(key);
         if (batcher === undefined) {
             const id = automation.id;
             batcher = createMessageBatcher(
@@ -159,6 +174,8 @@ export const dispatchListenerMessage = async (
                         conversationId: session.conversationId,
                         // Resumes the provider session the channel's last message ran on.
                         ...(session.sessionId !== undefined ? { sessionId: session.sessionId } : {}),
+                        thread: context.thread,
+                        lane: context.lane,
                         origin: context.origin,
                         title: context.title,
                         ...(context.stream !== undefined ? { stream: context.stream } : {}),
@@ -180,7 +197,7 @@ export const dispatchListenerMessage = async (
                 },
                 debounceMs,
             );
-            batchers.set(automation.id, batcher);
+            batchers.set(key, batcher);
         }
         const stream = makeStream?.(automation.id);
         batcher.push(line, {
@@ -191,10 +208,16 @@ export const dispatchListenerMessage = async (
                 author: message.author.name,
             },
             title: titleOf(message),
-            thread: threadKey(message.provider, automation.id, message.channelId),
+            thread: threadKey(message.provider, automation.id, message.channelId, lane.actsAs),
+            lane,
             ...(stream !== undefined ? { stream } : {}),
         });
         matched.push(automation.id);
+    }
+    if (reached) {
+        void services.senders
+            .record(message.provider, message.author, Date.now())
+            .catch((error: unknown) => services.logger.warn({ err: error }, "senders roster write failed"));
     }
     // Only messages that woke an automation are logged; the gateway sees every channel message, not just matches.
     if (matched.length > 0) {

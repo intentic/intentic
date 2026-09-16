@@ -19,6 +19,7 @@
                 "label": "Google Workspace",
                 "mentionLabel": "Only mail addressed directly to you (your address in To)",
                 "channel": { "label": "Gmail label or calendar id (optional)", "placeholder": "every watched inbox and calendar" },
+                "sender": {"label": "Sender address", "placeholder": "name@example.com", "hint": "The From address as Gmail delivered it; a display name is not checked."},
                 "starterPrompt": "Google Workspace events just arrived, each line of the payload is one JSON event. Type `mail` is new Gmail: the author is the sender, content holds the subject and a text excerpt, and extra carries the message id, thread id, labels and attachment names (`gw mail read <id>` for the whole thing). Type `event` is a calendar event about to start: content holds the title, time and location, and extra carries the event id, calendar, attendees and any meeting link. Triage what arrived and act on it, `gw` is on your PATH for the whole of Gmail, Calendar, Drive, Docs, Sheets and Contacts."
             }
         },

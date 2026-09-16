@@ -9,6 +9,7 @@ import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
+import { fileSendersStore } from "../automations/senders-store.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
 import type { Services } from "../composition.js";
@@ -26,6 +27,7 @@ const fakeServices = (root: string, appends: ActivityEvent[] = []): Services =>
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
+        senders: fileSendersStore(join(root, "senders.json")),
         turnJournal: fileTurnJournal(join(root, "turns")),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async (e) => void appends.push(e as ActivityEvent), list: async () => [] },

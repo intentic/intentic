@@ -173,9 +173,27 @@ const runsOn = computed<string>(() => {
     const named = `${head.provider} · ${head.model}`;
     return rest.length === 0 ? named : `${named} +${rest.length}`;
 });
+// Who it answers, in one phrase: how many people and groups the rules name, then what everyone else gets.
+const OTHERS_PHRASE: Record<NonNullable<AutomationSummary[`senders`]>[`others`], string> = {
+    ignore: `everyone else ignored`,
+    hold: `everyone else held for you`,
+    allow: `everyone else answered as configured`,
+};
+const count = (n: number, noun: string): string => `${n} ${noun}${n === 1 ? `` : `s`}`;
+const answers = computed<string | undefined>(() => {
+    const senders = props.automation.senders;
+    if (senders === undefined) {
+        return undefined;
+    }
+    const people = senders.rules.reduce((sum, rule) => sum + (rule.ids?.length ?? 0), 0);
+    const groups = senders.rules.reduce((sum, rule) => sum + (rule.groups?.length ?? 0), 0);
+    const named = [...(people > 0 ? [count(people, `person`).replace(`persons`, `people`)] : []), ...(groups > 0 ? [count(groups, `group`)] : [])];
+    return [...(named.length > 0 ? [`${named.join(` and `)} named`] : [`nobody named`]), OTHERS_PHRASE[senders.others]].join(` · `);
+});
 const settings = computed<readonly { label: string; value: string }[]>(() => [
     { label: `Runs on`, value: runsOn.value },
     ...(props.automation.actsAs !== undefined ? [{ label: `Runs as`, value: props.automation.actsAs }] : []),
+    ...(answers.value !== undefined ? [{ label: `Answers`, value: answers.value }] : []),
     ...(props.automation.requireApproval === true ? [{ label: `Approval`, value: `held for you` }] : []),
     ...(props.automation.holdForSeconds !== undefined && props.automation.holdForSeconds > 0
         ? [{ label: `Hold`, value: `${props.automation.holdForSeconds}s before each run` }]
@@ -218,6 +236,8 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
                     v-tooltip.top="`Held for your approval before it runs`"
                     class="shrink-0 text-2xs text-subtle"
                 />
+                <!-- Answers only the people its rules name. -->
+                <Icon v-if="automation.senders" name="users" v-tooltip.top="answers" class="shrink-0 text-2xs text-subtle" />
             </span>
         </template>
 

@@ -104,6 +104,14 @@ const triggers = [
         An explicit "ask me" always wins over a hold. A held fire snapshots the payload that caused it, so approving it later replays exactly what fired, and it survives a restart. The snapshot keeps its conversation too, so a visitor's chat stays one thread.
     </p>
 
+    <h3>Who may talk to it</h3>
+    <p>
+        Approval answers "should this run?" by asking you every time. On a source that knows who is writing (Discord, Slack, Telegram, WhatsApp, e-mail) an automation can answer it by <strong>who sent the message</strong> instead. Switch on <em>Decide per person who it answers</em> and name people by the id the service vouches for, never by a display name, which anyone can change to; on Discord a role id names everyone who holds it. Each rule says which persona those people get: a support desk for the customers, no persona at all for the boss, which is the full agent you talk to yourself. Everyone else is ignored, held for you, or answered as configured.
+    </p>
+    <p>
+        People it answers as different agents never share a conversation, so the boss's thread and the customers' thread in one channel are two threads with two memories. Everyone who reaches the automation, admitted or not, is listed under <em>seen recently</em>, so naming a stranger after the fact is one click rather than a copied id.
+    </p>
+
     <h3>Chores</h3>
     <p>
         An automation can be marked a <strong>chore</strong>: maintenance of this codebase rather than a reaction to the outside world. It fires like any other automation; the flag only decides which shelf it sits on, because a nightly dependency audit and a nightly Stripe poll are both "schedule" and are not the same kind of thing.
