@@ -113,8 +113,7 @@ const diffOutline = useLoadingReveal(
         <!-- Scope names a checkout that no longer exists; pre-empts every branch below rather than letting each fail separately. -->
         <WorkspaceScopeGone v-if="broken" />
         <template v-else-if="activeFile">
-            <!-- FileViewer renders its own breadcrumb (with edit actions); the directory UI gets a bare one. -->
-            <FileBreadcrumb v-if="directoryUiDir !== undefined" :path="activeFile.path" :meta="openMeta" />
+            <FileBreadcrumb v-if="directoryUiDir !== undefined" :path="activeFile.path" />
             <div class="min-h-0 flex-1">
                 <DirectoryUiHost v-if="directoryUiDir !== undefined" :dir="directoryUiDir" />
                 <FileViewer v-else :path="activeFile.path" :meta="openMeta" :line="line" @gone="emit('close', $event)" />

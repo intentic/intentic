@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceFileWindow, WorkspaceTreeEntry } from "@intentic/api-contract";
-import { Button, CopyButton, useDevice } from "@intentic/ui";
+import { Button, CopyButton, ui, useDevice } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, shallowRef, watch, type Component } from "vue";
 import { sandboxBlob, SandboxHttpError } from "../../sandbox/client/sandboxClient";
@@ -280,25 +280,25 @@ const showDerived = computed(() => derivedOnly.value || (textWanted.value && der
 // The file's own bytes are worth offering beside its text wherever they aren't already on screen as text.
 const derivedDownloadable = computed(() => open.value.kind !== `code` && open.value.kind !== `markdown` && open.value.kind !== `big-text`);
 
-// Inline editing (text only): read and edit share one Monaco surface (readOnly toggles), seeded from the live
+// Inline editing (text only): direct editing in Monaco or Markdown, seeded from the live
 // buffer or disk text. Ctrl+S/Save persists via upload; the tree refetch then refreshes size and the read view.
-const { editMode, setEditMode, hideFileComments, toggleHideFileComments } = useLayout();
+const { hideFileComments, toggleHideFileComments } = useLayout();
 const { saveText, run, canEditFiles } = useWorkspaceTree();
 // Editable CodeView instance; toolbar Save calls its exposed save(), so toolbar and Ctrl+S share one path.
 const editorView = ref<InstanceType<typeof CodeView>>();
 // Markdown surface, same reason: its Save must fold the open paragraph back in first, so only it can do that.
 const markdownView = ref<InstanceType<typeof MarkdownViewer>>();
-// Mobile is read-only: touch editing is error-prone, and chat is the edit path there; Edit hides below 768px.
+// Mobile is read-only: touch editing is error-prone, and chat is the edit path there.
 const { mobile } = useDevice();
 
 // Whether this surface can put a caret in the file, scope aside; split from `canEdit` since one decides the
-// Edit button, the other whether its absence needs explaining.
+// editable state, the other whether its absence needs explaining.
 const editableKind = computed(() => (open.value.kind === `code` || open.value.kind === `markdown`) && text.value !== null);
 // Off in a scope: the daemon can't write into a checkout at all, so a Save here would silently hit the shared
 // file of the same path, possibly racing the agent's own writes to it.
 const canEdit = computed(() => canEditFiles.value && workspaceAgent.value === undefined && editableKind.value);
-// Reason lives here, on the row where the Edit button would be, since that's where a reader would look for it.
-// Two causes for one chip: tier (checked first, outranks scope) or scope, either can disable Edit.
+// Reason lives here, where a reader would look for edit capability.
+// Two causes: tier (checked first, outranks scope) or scope, either can disable Edit.
 const scopedReadOnly = computed(() => !mobile.value && editableKind.value && (!canEditFiles.value || workspaceAgent.value !== undefined));
 const scopeTitle = useScopeTitle();
 const readOnlyReason = computed(() =>
@@ -306,22 +306,15 @@ const readOnlyReason = computed(() =>
         ? `Showing ${scopeTitle.value}'s copy of the workspace: its work hasn't landed yet, so these files can't be edited here.`
         : `Your access to this sandbox is read-only: changing files needs maintainer access.`,
 );
-// Markdown answers the same Edit switch as any file, differing only in what it opens into (MarkdownViewer
-// becomes typeable, instead of the code editor).
 const markdownHere = computed(() => open.value.kind === `markdown`);
-// Global edit mode, gated by canEdit so a viewer's file (even text-backed, like .svg) stays in its viewer,
-// never the editor.
-const editingThis = computed(() => !mobile.value && editMode.value && canEdit.value && !markdownHere.value);
-// Whether markdown may be written at all (the host's permission, `canEdit` elsewhere); whether it's being
-// edited now is `editMode`, read on the surface.
+// Text files are continuously editable on desktop whenever permissions allow.
+const editingThis = computed(() => !mobile.value && canEdit.value && !markdownHere.value);
 const markdownEditable = computed(() => !mobile.value && canEdit.value && markdownHere.value);
-// Either text surface, being edited. What the Save/Preview pair in the toolbar is about.
-const editingText = computed(() => editingThis.value || (markdownEditable.value && editMode.value));
 // Saves through whichever surface is showing, since each settles its own buffer first (markdown folds in,
 // code normalizes).
 const saveNow = (): void => (markdownHere.value ? markdownView.value?.save() : editorView.value?.save());
-// Offered only while reading code (not editing): the saved buffer must never be the stripped one.
-const canHideComments = computed(() => open.value.kind === `code` && text.value !== null && !editingThis.value);
+// Offered only while reading code with comments present.
+const canHideComments = computed(() => open.value.kind === `code` && text.value !== null);
 // In a scope the file shown is disk, not a buffer: a dirty dot here would misattribute someone else's edit to
 // this agent's copy.
 const dirtyThis = computed(() => workspaceAgent.value === undefined && edit.isDirty(path));
@@ -343,15 +336,15 @@ const onEditorSave = (value: string): void =>
             throw err;
         }
         edit.markSaved(path, value);
-        // Read view shows `text`, not the buffer: adopt it too, or Preview shows the pre-save file.
+        // Read view shows `text`, not the buffer: adopt it too.
         text.value = value;
     }, `Couldn't save your changes.`);
 </script>
 
 <template>
-    <div class="flex h-full min-h-0 flex-col">
-        <!-- Breadcrumb path + edit actions (text only); actions stay through the post-save refetch via `|| editingThis`. -->
-        <FileBreadcrumb :path="path" :meta="meta">
+    <div class="group/viewer relative flex h-full min-h-0 flex-col">
+        <!-- Top bar actions teleported into tab row header -->
+        <FileBreadcrumb :path="path">
 <!-- Same Comments toggle as the diff surface, one habit across both; starts shown here, since opening a file asks what it says. -->
             <button
                 v-if="canHideComments"
@@ -386,56 +379,47 @@ const onEditorSave = (value: string): void =>
             >
                 <Icon name="folder" class="text-[0.65rem]" /> Shared
             </span>
-            <CopyButton v-if="text !== null" :text="editorSeed" aria-label="Copy file content" v-tooltip.bottom="'Copy content'" />
-            <!-- Edit button's own seat while the scope keeps it empty; a merely-missing affordance reads as a bug otherwise. -->
+            <!-- Edit status while the scope keeps it read-only. -->
             <span
                 v-if="scopedReadOnly"
                 class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted"
                 v-tooltip.bottom="readOnlyReason"
             >
-                <Icon name="lock" class="text-[0.7rem]" />
+                <Icon name="lock" class="text-xs" />
                 <span class="max-md:hidden">Read-only</span>
             </span>
-            <template v-if="!mobile && (canEdit || editingThis)">
-                <span v-if="dirtyThis" class="inline-flex shrink-0 items-center text-warning" v-tooltip.bottom="'Unsaved changes: Ctrl+S to save'">
-                    <Icon name="circle-fill" class="text-[0.4rem]" />
-                </span>
-                <template v-if="editingText">
-                    <Button
-                        size="small"
-                        severity="secondary"
-                        :text="true"
-                        class="shrink-0"
-                        :disabled="!dirtyThis"
-                        @click="saveNow()"
-                        v-tooltip.bottom="'Save (Ctrl+S)'"
-                    >
-                        <Icon name="save" class="text-[0.7rem]" /> Save
-                    </Button>
-                    <Button
-                        size="small"
-                        severity="secondary"
-                        :text="true"
-                        class="shrink-0"
-                        @click="setEditMode(false)"
-                        v-tooltip.bottom="'Back to preview (keeps unsaved edits)'"
-                    >
-                        <Icon name="eye" class="text-[0.7rem]" /> Preview
-                    </Button>
-                </template>
-                <Button
-                    v-else
-                    size="small"
-                    severity="secondary"
-                    :text="true"
-                    class="shrink-0"
-                    @click="setEditMode(true)"
-                    v-tooltip.bottom="'Edit all files'"
-                >
-                    <Icon name="pencil" class="text-[0.7rem]" /> Edit
-                </Button>
-            </template>
+            <!-- Save icon with top-right dirty dot badge -->
+            <button
+                v-if="!mobile && canEdit"
+                type="button"
+                :class="ui.iconButton('relative text-muted hover:text-content')"
+                :disabled="!dirtyThis"
+                @click="saveNow()"
+                v-tooltip.bottom="dirtyThis ? 'Save changes (Ctrl+S)' : 'Saved (Ctrl+S)'"
+                aria-label="Save file"
+            >
+                <Icon name="save" class="text-xs" />
+                <span
+                    v-if="dirtyThis"
+                    class="pointer-events-none absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full border border-card bg-warning"
+                    aria-hidden="true"
+                ></span>
+            </button>
         </FileBreadcrumb>
+
+        <!-- Floating copy button on top-right corner of content on hover -->
+        <div
+            v-if="text !== null"
+            class="pointer-events-none absolute right-4 top-2 z-20 opacity-0 transition-opacity duration-150 group-hover/viewer:pointer-events-auto group-hover/viewer:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"
+        >
+            <CopyButton
+                :text="editorSeed"
+                label="Copy"
+                class="bg-card/90 shadow-sm backdrop-blur"
+                v-tooltip.bottom="'Copy file content'"
+                aria-label="Copy file content"
+            />
+        </div>
 
         <!-- The open file changed on disk under unsaved edits: the buffer is kept; Reload adopts disk (discards edits). -->
         <div v-if="staleOnDisk" class="flex shrink-0 items-center gap-2 border-b border-warning/40 bg-warning/10 px-3 py-1.5 text-2xs text-warning">
@@ -449,18 +433,6 @@ const onEditorSave = (value: string): void =>
         <div class="relative min-h-0 flex-1">
 <!-- Ahead of every other surface, including the editor's: this is the reader's own choice for formats that have another view. -->
             <DerivedTextView v-if="showDerived" :path="path" :downloadable="derivedDownloadable" @download="download" />
-            <CodeView
-                v-else-if="editingThis"
-                ref="editorView"
-                :key="`${path}:${reloadNonce}`"
-                editable
-                :path="path"
-                :code="editorSeed"
-                :lang="lang"
-                :scroll-to-line="line"
-                @change="onEditorChange"
-                @save="onEditorSave"
-            />
             <div v-else-if="error" class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
                 <Icon name="exclamation-triangle" class="text-3xl text-danger" />
                 <p class="text-sm text-danger">{{ error }}</p>
@@ -468,38 +440,41 @@ const onEditorSave = (value: string): void =>
             <div v-else-if="loading" class="flex h-full items-center justify-center text-muted">
                 <Icon name="spinner" class="text-xl" spin />
             </div>
-            <template v-else>
-                <CodeView
-                    v-if="open.kind === 'code' && text !== null"
-                    :path="path"
-                    :code="text"
-                    :lang="lang"
-                    :scroll-to-line="line"
-                    :hide-comments="hideFileComments"
-                />
-<!-- Seeded and re-keyed like the editable CodeView above: the surface owns its text after mount, replaced only by a reload, a clean external write. -->
-                <MarkdownViewer
-                    v-else-if="open.kind === 'markdown' && text !== null"
-                    ref="markdownView"
-                    :key="`${path}:${reloadNonce}`"
-                    :source="editorSeed"
-                    :path="path"
-                    :line="line"
-                    :editable="markdownEditable"
-                    @change="onEditorChange"
-                    @save="onEditorSave"
-                />
-                <!-- Over the editable cap: windowed, read-only, seeded with the window the read above already got. -->
-                <BigTextView v-else-if="open.kind === 'big-text' && firstWindow" :path="path" :first="firstWindow" @download="download" />
+            <CodeView
+                v-else-if="open.kind === 'code' && text !== null"
+                ref="editorView"
+                :key="`${path}:${reloadNonce}`"
+                :editable="editingThis"
+                :path="path"
+                :code="editorSeed"
+                :lang="lang"
+                :scroll-to-line="line"
+                :hide-comments="hideFileComments"
+                @change="onEditorChange"
+                @save="onEditorSave"
+            />
+<!-- Seeded and re-keyed like CodeView above: the surface owns its text after mount, replaced only by a reload, a clean external write. -->
+            <MarkdownViewer
+                v-else-if="open.kind === 'markdown' && text !== null"
+                ref="markdownView"
+                :key="`${path}:${reloadNonce}`"
+                :source="editorSeed"
+                :path="path"
+                :line="line"
+                :editable="markdownEditable"
+                @change="onEditorChange"
+                @save="onEditorSave"
+            />
+            <!-- Over the editable cap: windowed, read-only, seeded with the window the read above already got. -->
+            <BigTextView v-else-if="open.kind === 'big-text' && firstWindow" :path="path" :first="firstWindow" @download="download" />
 <!-- Extension-contributed viewer: gets the path plus exactly one content prop (the manifest's `fetch` kind, never the others as undefined). -->
-                <component :is="viewerComponent" v-else-if="viewerComponent" :path="path" v-bind="viewerContent" @download="download" />
-                <FileUnsupported v-else-if="open.kind === 'too-large'" mode="too-large" :size="meta?.size" @download="download" />
-                <FileUnsupported v-else-if="open.kind === 'empty'" mode="empty" />
-                <!-- Sandbox keeps this one to itself; resolveOpenFile knows from the path alone, no fetch needed. -->
-                <FileLocked v-else-if="open.kind === 'locked'" :path="path" />
+            <component :is="viewerComponent" v-else-if="viewerComponent" :path="path" v-bind="viewerContent" @download="download" />
+            <FileUnsupported v-else-if="open.kind === 'too-large'" mode="too-large" :size="meta?.size" @download="download" />
+            <FileUnsupported v-else-if="open.kind === 'empty'" mode="empty" />
+            <!-- Sandbox keeps this one to itself; resolveOpenFile knows from the path alone, no fetch needed. -->
+            <FileLocked v-else-if="open.kind === 'locked'" :path="path" />
 <!-- Everything left: a known binary, or the unreachable case of a viewer that resolved with no component; both just hand over bytes. -->
-                <FileUnsupported v-else mode="binary" @download="download" />
-            </template>
+            <FileUnsupported v-else mode="binary" @download="download" />
         </div>
     </div>
 </template>
