@@ -3,7 +3,7 @@ import type { Disposable } from "@intentic/extension-api";
 import { type AutomationApproval, isTrialProvider, type WorkflowRun } from "@intentic/sandbox-contract";
 import { Button, clipboardOf, ui, ContextMenu, Modal, ProjectChip, SearchBar, SegmentedControl, useDevice, useNarrow } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUpdate, onMounted, onUnmounted, onUpdated, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { composeAgent, startAgent } from "../fleet/agentActions";
 import { usePanels } from "../../extensions/usePanels";
@@ -456,9 +456,155 @@ const setCardEl = (id: string, el: unknown): void => {
     if (root instanceof HTMLElement) {
         cardEls.set(id, root);
     } else {
-        cardEls.delete(id);
+        const existing = cardEls.get(id);
+        if (existing && !existing.isConnected) {
+            cardEls.delete(id);
+        }
     }
 };
+
+interface CardSnapshot {
+    rect: DOMRect;
+    lane: FleetLane;
+}
+
+const prevCardSnapshots = new Map<string, CardSnapshot>();
+
+const laneOfAgentId = (id: string): FleetLane | undefined => {
+    if (boardLanes.value.attention.some((a) => a.id === id)) {
+        return `attention`;
+    }
+    if (boardLanes.value.active.some((a) => a.id === id)) {
+        return `active`;
+    }
+    if (boardLanes.value.finished.some((a) => a.id === id)) {
+        return `finished`;
+    }
+    return undefined;
+};
+
+// Moving between lanes bypasses CSS transition so the card flies from its previous coordinates without ghosting.
+const isMovingLane = (id: string): boolean => {
+    const el = cardEls.get(id);
+    if (!el || !el.isConnected) {
+        return false;
+    }
+    const prevLane = el.closest<HTMLElement>(`section[data-lane]`)?.dataset[`lane`] as FleetLane | undefined;
+    const nextLane = laneOfAgentId(id);
+    return prevLane !== undefined && nextLane !== undefined && prevLane !== nextLane;
+};
+
+onBeforeUpdate(() => {
+    prevCardSnapshots.clear();
+
+    for (const [id, el] of cardEls) {
+        if (!el.isConnected) {
+            cardEls.delete(id);
+            continue;
+        }
+        const laneEl = el.closest<HTMLElement>(`section[data-lane]`);
+        const currentLane = laneEl?.dataset[`lane`] as FleetLane | undefined;
+        if (!currentLane) {
+            continue;
+        }
+
+        prevCardSnapshots.set(id, {
+            rect: el.getBoundingClientRect(),
+            lane: currentLane,
+        });
+
+        const nextLane = laneOfAgentId(id);
+        if (nextLane !== undefined && nextLane !== currentLane) {
+            el.style.opacity = `0`;
+            el.style.pointerEvents = `none`;
+        }
+    }
+});
+
+// Animates cross-lane flight with elevation and a brief landing pulse.
+const animateCardFlight = (el: HTMLElement, dx: number, dy: number): void => {
+    const animation = el.animate(
+        [
+            {
+                transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.02)`,
+                boxShadow: `0 12px 28px -4px rgba(0, 0, 0, 0.28), 0 8px 10px -4px rgba(0, 0, 0, 0.2)`,
+                zIndex: 40,
+            },
+            {
+                transform: `translate3d(0, 0, 0) scale(1)`,
+                boxShadow: `none`,
+                zIndex: 40,
+            },
+        ],
+        {
+            duration: 260,
+            easing: `cubic-bezier(0.2, 0, 0, 1)`,
+        },
+    );
+    animation.onfinish = () => {
+        el.animate(
+            [
+                { outline: `2px solid color-mix(in srgb, var(--color-primary-500) 70%, transparent)`, outlineOffset: `1px` },
+                { outline: `2px solid transparent`, outlineOffset: `1px` },
+            ],
+            {
+                duration: 600,
+                easing: `cubic-bezier(0.2, 0, 0, 1)`,
+            },
+        );
+    };
+};
+
+// Sibling reflow within the same lane smoothly closes ranks.
+const animateCardReflow = (el: HTMLElement, dy: number): void => {
+    el.animate(
+        [
+            { transform: `translate3d(0, ${dy}px, 0)` },
+            { transform: `translate3d(0, 0, 0)` },
+        ],
+        {
+            duration: 220,
+            easing: `cubic-bezier(0.2, 0, 0, 1)`,
+        },
+    );
+};
+
+const canAnimateCard = (id: string, el: HTMLElement): boolean =>
+    el.isConnected && !(draggedId.value === id && dragging.value) && typeof el.animate === `function`;
+
+const applyCardAnimation = (id: string, el: HTMLElement): void => {
+    if (!canAnimateCard(id, el)) {
+        return;
+    }
+    const prev = prevCardSnapshots.get(id);
+    const lane = el.closest<HTMLElement>(`section[data-lane]`)?.dataset[`lane`] as FleetLane | undefined;
+    if (!prev || !lane) {
+        return;
+    }
+    const currentRect = el.getBoundingClientRect();
+    const dx = prev.rect.left - currentRect.left;
+    const dy = prev.rect.top - currentRect.top;
+    if (dx === 0 && dy === 0) {
+        return;
+    }
+    if (prev.lane !== lane) {
+        animateCardFlight(el, dx, dy);
+        return;
+    }
+    if (!filtering.value) {
+        animateCardReflow(el, dy);
+    }
+};
+
+onUpdated(() => {
+    const prefersReducedMotion = typeof window !== `undefined` && window.matchMedia?.(`(prefers-reduced-motion: reduce)`).matches;
+    if (!prefersReducedMotion) {
+        for (const [id, el] of cardEls) {
+            applyCardAnimation(id, el);
+        }
+    }
+    prevCardSnapshots.clear();
+});
 // Awaited, since the card may not be rendered on the tick it's asked for (the window pins it, the focus flow uncovers
 // it); `nearest` leaves an already-visible card alone.
 const revealCard = async (id: string): Promise<void> => {
@@ -1058,6 +1204,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 <section
                     v-for="lane in LANES"
                     :key="lane.key"
+                    :data-lane="lane.key"
                     :data-drop="lane.key === 'finished' && archiveOpen ? undefined : lane.key"
                     class="flex min-w-0 flex-col rounded-xl transition-colors"
                     :class="[!dragging && !narrow ? 'min-h-0' : '', laneDropClass(lane.key)]"
@@ -1190,8 +1337,10 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                 snippetOf(agent),
                                 needle,
                                 matchCase,
+                                isMovingLane(agent.id),
                             ]"
-                            name="lane"
+                            :name="isMovingLane(agent.id) ? undefined : 'lane'"
+                            :css="!isMovingLane(agent.id)"
                         >
                             <AgentCard
                                 :ref="(el) => setCardEl(agent.id, el)"
@@ -1382,11 +1531,11 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
     </div>
 </template>
 <style scoped>
-/* Scale-fade on lane entry/exit without a list-level FLIP probe; a leaving card is absolutely positioned so its lane. */
+/* Scale-fade for arrivals and removals; leaving card is absolutely positioned so siblings close ranks. */
 .lane-enter-active,
 .lane-leave-active {
     transition:
-        transform 250ms ease,
+        transform 250ms cubic-bezier(0.2, 0, 0, 1),
         opacity 200ms ease;
 }
 .lane-enter-from,
