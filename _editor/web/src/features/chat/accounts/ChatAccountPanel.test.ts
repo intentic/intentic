@@ -40,6 +40,9 @@ vi.mock(`../run/useChat`, () => ({
         accountBusy: ref(undefined),
         translatorKey: (target: string) => `translator:${target}`,
         connectLabel: ref(``),
+        // Whether the reader has been handed to the provider yet: ConnectFlow picks which of its two steps to draw
+        // from this, so an absent one is not a missing convenience, it is the panel failing to render at all.
+        connectSent: ref(false),
         completeConnect: () => {},
         completeTranslator: () => {},
     }),

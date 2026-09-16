@@ -231,10 +231,15 @@ const toggleDetail = (id: string): void => {
                 </RowGroup>
             </template>
 
-            <!-- The header names both navigation destinations without adding another button. -->
+<!-- The header names both navigation destinations without adding another button. The second sentence points at the
+                 offers section below, which is itself conditional: with nothing on offer here (a workspace whose capabilities
+                 match no template) it sent the reader to look for a list that is not on the page. -->
             <div v-else-if="automations.length === 0" :class="ui.emptyState('flex flex-col items-center gap-1 py-6')">
                 <span class="text-sm text-content">Nothing runs on its own yet.</span>
-                <span>Take one of the offers below, or build your own with <b class="font-medium text-muted">New automation</b>.</span>
+                <span v-if="availableChores.length > 0 || availableSuggestions.length > 0">
+                    Take one of the offers below, or build your own with <b class="font-medium text-muted">New automation</b>.
+                </span>
+                <span v-else>Build one with <b class="font-medium text-muted">New automation</b>.</span>
             </div>
             <div v-else-if="shown.length === 0" :class="ui.emptyState('py-5')">
                 Nothing matches this filter.

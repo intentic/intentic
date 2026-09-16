@@ -18,6 +18,7 @@ interface Flow {
 
 const nativeConnectFlow = ref<Flow | undefined>(undefined);
 const translatorConnectFlow = ref<Flow | undefined>(undefined);
+const connectSent = ref(false);
 const completeConnect = vi.fn(async () => true);
 const completeTranslator = vi.fn(async () => true);
 
@@ -26,6 +27,7 @@ vi.mock(`../../chat/run/useChat`, () => ({
     useChat: () => ({
         nativeConnectFlow,
         translatorConnectFlow,
+        connectSent,
         accountBusy: ref(undefined),
         connectLabel: ref(``),
         completeConnect,
@@ -34,7 +36,7 @@ vi.mock(`../../chat/run/useChat`, () => ({
 }));
 // Stubbed, not imported, so assertions test the panel's own markup, not <Button>'s current rendering.
 vi.mock(`@intentic/ui`, () => ({
-    ui: { inputSm: (extra: string) => extra, textAction: (extra: string) => extra },
+    ui: { inputSm: (extra: string) => extra, textAction: (extra: string) => extra, linkButton: (extra: string) => extra },
     // `as`/`href` honoured since the panel's first control is a link to the provider, and its target is asserted here.
     Button: defineComponent({
         props: { label: String, disabled: Boolean, loading: Boolean, as: String, href: String },
@@ -57,6 +59,7 @@ afterEach(() => {
     app = undefined;
     nativeConnectFlow.value = undefined;
     translatorConnectFlow.value = undefined;
+    connectSent.value = false;
     completeConnect.mockClear();
     completeTranslator.mockClear();
 });
@@ -73,7 +76,15 @@ const mount = async (flow: Flow, kind: `native` | `routed` = `native`): Promise<
     return host;
 };
 
+// The trip to the provider, which is what moves the panel from asking them to go to asking for the grant. A paste
+// flow has no field until this has happened, so every paste test goes through here rather than reaching for one.
+const goToProvider = async (): Promise<void> => {
+    connectSent.value = true;
+    await nextTick();
+};
+
 const paste = async (host: HTMLElement, text: string): Promise<void> => {
+    await goToProvider();
     const field = host.querySelector<HTMLInputElement>(`input[name="connectCode"]`)!;
     field.value = text;
     field.dispatchEvent(new Event(`input`));
@@ -95,11 +106,52 @@ it(`a minted device sign-in with no code waits rather than showing an empty code
     expect(host.querySelector(`input[name="connectCode"]`)).toBeNull();
 });
 
-it(`a minted redirect warns the page won't load, and takes the address back`, async () => {
+// The dead-end page is warned about BEFORE the trip and asked about after it: read the other way round, the
+// warning arrives once the reader is two tabs away and has already met the failure.
+it(`a minted redirect warns the page won't load before sending anyone to it`, async () => {
     const host = await mount({ provider: `zai`, url: `https://bigmodel.cn/login`, code: ``, state: `st-9`, flow: `redirect`, handshake: `h3` });
     expect(host.textContent).toContain(`won't load`);
+    expect(host.querySelector(`input[name="connectCode"]`), `asked for an address before sending anyone to fetch one`).toBeNull();
+});
+
+it(`a minted redirect takes the address back once the trip has been made`, async () => {
+    const host = await mount({ provider: `zai`, url: `https://bigmodel.cn/login`, code: ``, state: `st-9`, flow: `redirect`, handshake: `h3` });
+    await goToProvider();
     const field = host.querySelector<HTMLInputElement>(`input[name="connectCode"]`);
     expect(field?.placeholder).toContain(`address`);
+});
+
+// The panel that shipped drew the dead-end page at full size next to an 11px button, wearing the emphasis ring
+// the app uses for focus: in the recorded session the reader pressed the picture, which is inert, and got nothing.
+// Both halves are asserted, since either alone brings the decoy back.
+it(`keeps the dead-end page off the step where the only action is leaving`, async () => {
+    const host = await mount({ ...GOOGLE_FLOW }, `routed`);
+    expect(host.textContent, `drew the page to copy from before there was anything to copy`).not.toContain(`This site can't be reached`);
+    // Exactly one place to press: going. A second control here is what the picture used to be mistaken for.
+    expect(host.querySelectorAll(`a`)).toHaveLength(1);
+});
+
+it(`shows the dead-end page only when asked, and never as something to press`, async () => {
+    const host = await mount({ ...GOOGLE_FLOW }, `routed`);
+    await goToProvider();
+    expect(host.textContent).not.toContain(`This site can't be reached`);
+
+    const disclosure = [...host.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`What that page looks like`))!;
+    disclosure.click();
+    await nextTick();
+
+    const picture = host.querySelector(`[aria-hidden="true"]`)!;
+    expect(picture.textContent).toContain(`This site can't be reached`);
+    expect(picture.className, `a picture that swallows presses reads as a control`).toContain(`pointer-events-none`);
+});
+
+// Someone who already made the trip — a reopened panel, a second tab — would otherwise have only Cancel.
+it(`lets a reader who already holds the address reach the field without another trip`, async () => {
+    const host = await mount({ ...GOOGLE_FLOW }, `routed`);
+    const already = [...host.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Already have it`))!;
+    already.click();
+    await nextTick();
+    expect(host.querySelector(`input[name="connectCode"]`)).not.toBeNull();
 });
 
 it(`recognises BigModel's authCode= address on its own and finishes with it`, async () => {

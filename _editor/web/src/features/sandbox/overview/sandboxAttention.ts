@@ -1,8 +1,9 @@
 import type { IconName } from "@intentic/ui";
 import type { ViewBadge } from "@intentic/extension-api";
 import { computed } from "vue";
-import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
-import { acpProviders } from "../../chat/accounts/providerCatalog";
+import { providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
+import { acpProviders, endpointProviders } from "../../chat/accounts/providerCatalog";
+import { accessKnown, providerReady } from "../../chat/session/access";
 import { useMissingSecretCount } from "../../capabilities/connect/useSecrets";
 import { useSyncHealth } from "../devices/useDevices";
 import { useEnvironment } from "../environment/useEnvironment";
@@ -12,12 +13,16 @@ import { useSandboxVersion } from "./useSandboxVersion";
 // by the rail chip and the mobile menu so they agree. Lives as a badge on the chip, not a dismissible bar, since
 // none of these is urgent and each is a standing condition rather than an event.
 
-// Whether anything can run a turn (a stored provider account, a translator subscription, or an ACP agent); silent
-// until accounts have loaded, so a claim isn't retracted a moment later.
+// Whether anything can run a turn: a stored provider account, a translator subscription, an ACP agent, or a ready
+// endpoint — the free trial is one, and `providerReady` is what spends its allowance down to not-ready.
+// Waits on `accessKnown`, not the account half alone: that half lands first, and on its own this told a reader
+// with a working trial that the agent could not run at all, which is the same beat access.ts already names for
+// the chat's own gate.
 const noAccountConnected = computed(
     () =>
-        accountsLoaded.value &&
+        accessKnown.value &&
         acpProviders.value.length === 0 &&
+        !endpointProviders.value.some((endpoint) => providerReady(endpoint.id)) &&
         !Object.values(providerAccounts.value).some((accounts) => accounts.length > 0) &&
         !Object.values(translatorAccounts.value).some((subscriptions) => subscriptions.length > 0),
 );

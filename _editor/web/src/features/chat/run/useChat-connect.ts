@@ -32,6 +32,11 @@ export const translatorConnectFlow = ref<
     { provider: KeyedProvider; url: string; code: string; state: string; flow: "device" | "redirect" } | undefined
 >(undefined);
 
+// Whether the reader has actually been handed to the provider's page this handshake. A paste sign-in is two
+// turns — ours to send them, theirs to come back with the grant — and a live flow alone cannot tell them apart:
+// without this, a card that nobody has acted on still claims to be signing in.
+export const connectSent = ref(false);
+
 // Routed row key, namespaced away from the provider id: native and translator accounts of the same provider
 // are separate connections. `name` picks one subscription; omitted, the provider's sign-in.
 export const translatorKey = (target: AgentProvider, name?: string): string => `translator:${target}${name === undefined ? `` : `:${name}`}`;
@@ -42,6 +47,7 @@ let translatorPollTimer: ReturnType<typeof setTimeout> | undefined;
 const settleTranslator = (): void => {
     clearTimeout(translatorPollTimer);
     translatorConnectFlow.value = undefined;
+    connectSent.value = false;
 };
 
 // Provider's own account label for the sign-in-expired sentence, not a hardcoded default.
@@ -93,6 +99,7 @@ export const connectTranslator = async (target: KeyedProvider): Promise<void> =>
     }
     accountBusy.value = translatorKey(target);
     error.value = null;
+    connectSent.value = false;
     clearTimeout(translatorPollTimer);
     try {
         translatorConnectFlow.value = {
@@ -194,6 +201,7 @@ const settleConnect = (): void => {
     }
     nativeConnectFlow.value = undefined;
     connectLabel.value = ``;
+    connectSent.value = false;
 };
 
 // Abandons an in-progress handshake, safe to call repeatedly. Also tells the daemon (fire-and-forget): for
@@ -253,6 +261,7 @@ export const startConnect = async (variant?: string): Promise<void> => {
     }
     cancelConnect();
     error.value = null;
+    connectSent.value = false;
     // Held busy for the whole start so the button doesn't flash back to "Connect" before the flow lands.
     accountBusy.value = target;
     try {

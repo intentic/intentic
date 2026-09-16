@@ -246,6 +246,9 @@ const land = (id: string): Response => {
 
 const info: Info = { name: `acme-shop`, version: `demo`, latest: `demo`, updateAvailable: false };
 
+// The handshake `state` a routed sign-in issues; ConnectFlow only accepts a pasted address carrying this one.
+const DEMO_CONNECT_STATE = `demo-connect-state`;
+
 // Route table: ordered, first match wins; `{name}` matches one path segment, read back via `param`. An
 // empty-but-real area answers its contract's empty shape, not a 404.
 interface RouteContext {
@@ -369,6 +372,16 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     ],
     // Codex authenticates only through the translator, not an oauth account.
     [`GET`, `/translator/accounts`, () => json(DEMO_TRANSLATOR_ACCOUNTS)],
+    // Starts a routed sign-in so ConnectFlow is reachable here: without it the panel a new user meets first
+    // could only be seen against a real daemon. `redirect` is the shape Google uses (a loopback dead-end).
+    [
+        `POST`,
+        `/translator/{provider}/connect`,
+        ({ param }) => json({ url: `https://accounts.google.com/o/oauth2/auth?demo=${param(`provider`)}`, code: ``, state: DEMO_CONNECT_STATE, flow: `redirect` }),
+    ],
+    // Never resolves: the demo has no browser trip to complete, and "waiting" is the state worth being able to look at.
+    [`GET`, `/translator/{provider}/connect`, () => json({ status: `pending` })],
+    [`POST`, `/translator/{provider}/complete`, () => json({ ok: true })],
     // An unconnected provider answers empty, matching the real daemon's behavior.
     [`GET`, `/providers/{provider}/models`, ({ param }) => json(DEMO_CATALOGS[param(`provider`)] ?? { models: [], default: `` })],
     // The recorded workspace adds no ACP agent and no endpoint of its own, but the composer's gate waits on this read
@@ -613,14 +626,32 @@ const CODEX_MODELS: Model[] = [
     { id: `gpt-5.2`, label: `GPT-5.2`, efforts: [`low`, `medium`, `high`] },
 ];
 
-// Claude and Codex are connected; every other provider falls back to empty rather than being listed.
+// Google's routed lane serves other makers' models, so its catalog is mixed rather than Gemini-only.
+const GEMINI_MODELS: Model[] = [
+    { id: `claude-opus-4-6`, label: `Claude Opus 4.6 (Thinking)`, efforts: [`low`, `medium`, `high`], badges: [`reasoning`] },
+    { id: `gemini-3-1-pro`, label: `Gemini 3.1 Pro`, efforts: [`low`, `medium`, `high`], badges: [`reasoning`] },
+    { id: `gemini-3-5-flash`, label: `Gemini 3.5 Flash`, efforts: [`low`, `medium`, `high`], badges: [`fast`] },
+    { id: `gpt-oss-120b`, label: `GPT-OSS 120B`, efforts: [`low`, `medium`, `high`] },
+];
+
+// Claude and Codex are connected; Google is listed while still locked, which is what a new user meets first
+// and the only state where the picker's whole locked band is on screen.
 const DEMO_CATALOGS: Record<string, { models: Model[]; default: string }> = {
     claude: { models: CLAUDE_MODELS, default: `claude-sonnet-5` },
     codex: { models: CODEX_MODELS, default: `gpt-5.2-codex` },
+    gemini: { models: GEMINI_MODELS, default: `gemini-3-1-pro` },
 };
 
-// An empty rule table puts a finished agent in Ready to land, with nothing else deciding otherwise.
-const DEMO_SETTINGS = { rules: [], systemPromptMode: `intentic`, stableSystemPrompt: true, skills: [] };
+// An empty rule table puts a finished agent in Ready to land, with nothing else deciding otherwise. One role is
+// pinned to a provider with no credential here: a pin is written, not resolved, so "not connected" is a state the
+// settings page has to be able to draw, and the only way to see it is to have one.
+const DEMO_SETTINGS = {
+    rules: [],
+    systemPromptMode: `intentic`,
+    stableSystemPrompt: true,
+    skills: [],
+    modelRoles: { "commit-message": [{ provider: `gemini`, model: `gemini-3-1-pro` }] },
+};
 
 /* The checks each repository declares for itself (`<repo>/.intentic/checks.json`), one repository per state the group can be in: `web` running. */
 const DEMO_REPO_CHECKS: RepoChecksList = {

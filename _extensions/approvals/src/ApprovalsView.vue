@@ -28,10 +28,11 @@ import {
     useNow,
     vAction,
 } from "@intentic/extension-ui";
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import ActionBody from "./ActionBody.vue";
 import ApprovalMeta from "./ApprovalMeta.vue";
 import ApprovalRail, { type ApprovalScope } from "./ApprovalRail.vue";
+import { approvalsAttention } from "./extension";
 import { host } from "./host";
 import PostBody from "./PostBody.vue";
 import { countdownWords, limitOf, postsATitle } from "./postText";
@@ -185,6 +186,11 @@ const done = computed(() => ofStatus(`done`).toSorted((left, right) => (right.fi
 const holding = computed(() => approvals.value.filter((item) => item.status === `approved` && imminent(item, now.value)).toSorted(bySoonest));
 
 const isEmpty = computed(() => approvals.value.length === 0 && invalid.value.length === 0 && held.value.length === 0);
+
+// The tile's count is module state a background poll owns, so it survives with nothing mounted to correct it: a
+// reader who opens the queue and finds it empty would otherwise keep the badge that sent them here. Opening the
+// page is the one moment both readings are on screen at once, so it is where they are made to agree.
+onMounted(() => approvalsAttention.refresh());
 
 // A countdown hold runs itself when the timer passes; the row just says so and keeps cancel in reach. "starting…"
 // covers past-due, since the daemon releases on its own coarser tick.

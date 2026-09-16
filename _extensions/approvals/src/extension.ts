@@ -11,7 +11,10 @@ import { heldWakesQuery, waitingOf } from "./useHeldWakes";
 // The queue's badge, sandbox-scoped so one workspace's wait isn't read as another's. Counts proposals owing a decision
 // plus held automations, but not a countdown hold, which goes ahead on its own. Driven by file writes under the two
 // directories; the poll interval is only a backstop for whatever the watcher missed.
-const { state: badge, start: startApprovalsAttention } = sandboxPoll<ViewBadge | undefined>({
+// Exported whole rather than as its parts, because the view refreshes it on open: this value is read with nothing
+// mounted, so a count the watcher missed can otherwise stand for ten minutes over a queue the reader is looking at
+// and can see is empty.
+export const approvalsAttention = sandboxPoll<ViewBadge | undefined>({
     host,
     everyMs: 10 * 60_000,
     initial: () => undefined,
@@ -33,14 +36,14 @@ const { state: badge, start: startApprovalsAttention } = sandboxPoll<ViewBadge |
 
 export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     bindHost(api);
-    context.subscriptions.push(startApprovalsAttention());
+    context.subscriptions.push(approvalsAttention.start());
     context.subscriptions.push(
         api.views.register({
             id: `approvals`,
             label: `Approvals`,
             surface: `rail`,
             detect: () => [{ key: `approvals`, title: `Approvals`, icon: `check-square` }],
-            badge: () => badge.value,
+            badge: () => approvalsAttention.state.value,
             // The two reads the badge already made, so the page opens on the queue rather than on a spinner.
             warm: () => [approvalsQuery(), heldWakesQuery()],
             view: async () => (await import(`./ApprovalsView.vue`)).default,

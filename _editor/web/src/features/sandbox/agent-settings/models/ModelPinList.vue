@@ -41,8 +41,17 @@ const emit = defineEmits<{ promote: [number]; remove: [number]; edit: [number, H
                     entry.detail
                 }}</span>
             </button>
-            <!-- Stays listed rather than dropped: the resolver skips it at runtime, but hiding it would look like a lost setting. -->
-            <span v-if="!entry.ready" class="shrink-0 text-2xs text-warning">Not connected</span>
+<!-- Stays listed rather than dropped: the resolver skips it at runtime, but hiding it would look like a lost setting.
+                 A pin can be written for a provider with no credential (the picker's locked rows are pickable), so this
+                 is the one place that state is ever seen: it carries the way out rather than only naming the fault. -->
+            <RouterLink
+                v-if="!entry.ready && entry.choice"
+                :to="{ path: `/sandbox/agent`, query: { connect: entry.choice.provider } }"
+                class="shrink-0 text-2xs text-warning underline-offset-2 hover:underline"
+            >
+                Not connected
+            </RouterLink>
+            <span v-else-if="!entry.ready" class="shrink-0 text-2xs text-warning">Not connected</span>
             <!-- A one-shot pin reasons before answering; routed ids do not show native account controls. -->
             <span
                 v-else-if="noteThinking && entry.choice && namesThinking(entry.choice.model)"

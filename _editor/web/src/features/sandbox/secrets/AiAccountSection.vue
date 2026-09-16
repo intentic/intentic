@@ -47,6 +47,7 @@ const {
     startConnect,
     cancelConnect,
     nativeConnectFlow,
+    connectSent,
     renameAccount,
     disconnect,
     translatorAccounts,
@@ -98,6 +99,10 @@ const canConnectMore = computed(() => managedProvider.value !== `grok` || manage
 // Whether a sign-in is live for this row; switching providers mid-sign-in hides the flow, not moves it.
 const nativeFlowLive = computed(() => nativeConnectFlow.value?.provider === managedProvider.value);
 const routedFlowLive = computed(() => routedProvider.value !== undefined && translatorConnectFlow.value?.provider === routedProvider.value);
+
+// Whose turn the live handshake is on. "Signing in" is only true once the reader has actually been handed to the
+// provider; before that the panel below is asking them to go, and a spinner over it claims work nobody started.
+const flowNote = (live: boolean): string | undefined => (live ? (connectSent.value ? `signing in…` : `waiting for you`) : undefined);
 
 // The handshake is past the point of abandoning: what the user brought back is being redeemed, and cancelling
 // would take the panel down over a connection that lands anyway. Held disabled rather than swapped away, so the
@@ -383,8 +388,8 @@ onUnmounted(() => clearTimeout(ringTimer));
                     v-if="accountRows.length === 0"
                     :title="`${managedLabel} account`"
                     state="missing"
-                    :note="nativeFlowLive ? `signing in…` : `not connected`"
-                    :note-busy="nativeFlowLive"
+                    :note="flowNote(nativeFlowLive) ?? `not connected`"
+                    :note-busy="nativeFlowLive && connectSent"
                 >
                     <template #control>
                         <Button
@@ -420,8 +425,8 @@ onUnmounted(() => clearTimeout(ringTimer));
                     v-else-if="canConnectMore"
                     title="Add another account"
                     state="add"
-                    :note="nativeFlowLive ? `signing in…` : undefined"
-                    :note-busy="nativeFlowLive"
+                    :note="flowNote(nativeFlowLive)"
+                    :note-busy="nativeFlowLive && connectSent"
                     :interactive="!nativeFlowLive"
                     @click="!nativeFlowLive && connectHere()"
                 >
@@ -473,8 +478,8 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :key="`connect-${routedProvider}`"
                     :title="ROUTED_ROW[routedProvider].title"
                     state="missing"
-                    :note="routedFlowLive ? `signing in…` : `not connected`"
-                    :note-busy="routedFlowLive"
+                    :note="flowNote(routedFlowLive) ?? `not connected`"
+                    :note-busy="routedFlowLive && connectSent"
                 >
                     <template #control>
                         <Button
@@ -505,8 +510,8 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :key="`add-${routedProvider}`"
                     title="Add another account"
                     state="add"
-                    :note="routedFlowLive ? `signing in…` : undefined"
-                    :note-busy="routedFlowLive"
+                    :note="flowNote(routedFlowLive)"
+                    :note-busy="routedFlowLive && connectSent"
                     :interactive="!routedFlowLive"
                     @click="!routedFlowLive && connectTranslator(routedProvider)"
                 >
