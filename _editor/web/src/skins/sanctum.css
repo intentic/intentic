@@ -46,10 +46,6 @@
     --sanctum-lozenge: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M6 .8 11.2 6 6 11.2.8 6z' fill='none' stroke='%23c9a05c' stroke-width='1.3'/%3E%3Cpath d='M6 3.6 8.4 6 6 8.4 3.6 6z' fill='%23c9a05c' fill-opacity='.6'/%3E%3C/svg%3E");
     --sanctum-lotus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 -1.3 32 32' fill='%23c9a05c' fill-opacity='0.22'%3E%3Cpath d='M8.4 25.6c-3.2 0-5.6-1-7.2-3 3.6-1.2 6.6-.7 9 1.4z' opacity='.42'/%3E%3Cpath d='M23.6 25.6c3.2 0 5.6-1 7.2-3-3.6-1.2-6.6-.7-9 1.4z' opacity='.42'/%3E%3Cpath d='M16 9.5c2.1 3 3.2 5.7 3.2 8.1 0 2.2-1.1 4.1-3.2 5.6-2.1-1.5-3.2-3.4-3.2-5.6 0-2.4 1.1-5.1 3.2-8.1z' transform='rotate(-74 16 22.6)' opacity='.55'/%3E%3Cpath d='M16 9.5c2.1 3 3.2 5.7 3.2 8.1 0 2.2-1.1 4.1-3.2 5.6-2.1-1.5-3.2-3.4-3.2-5.6 0-2.4 1.1-5.1 3.2-8.1z' transform='rotate(74 16 22.6)' opacity='.55'/%3E%3Cpath d='M16 6.4c2.4 3.4 3.6 6.4 3.6 9.1 0 2.5-1.2 4.6-3.6 6.3-2.4-1.7-3.6-3.8-3.6-6.3 0-2.7 1.2-5.7 3.6-9.1z' transform='rotate(-39 16 21.7)' opacity='.78'/%3E%3Cpath d='M16 6.4c2.4 3.4 3.6 6.4 3.6 9.1 0 2.5-1.2 4.6-3.6 6.3-2.4-1.7-3.6-3.8-3.6-6.3 0-2.7 1.2-5.7 3.6-9.1z' transform='rotate(39 16 21.7)' opacity='.78'/%3E%3Cpath d='M16 3.4c2.8 4 4.2 7.5 4.2 10.6 0 2.9-1.4 5.4-4.2 7.3-2.8-1.9-4.2-4.4-4.2-7.3 0-3.1 1.4-6.6 4.2-10.6z'/%3E%3C/svg%3E");
 
-    /* THE FACES The site's, and its size rule with them: a titling face from 13 to 24px, a display serif only above ~28. */
-    --sanctum-titling: "Baloo 2", "Trebuchet MS", ui-rounded, var(--font-sans);
-    --sanctum-display: "Spectral", "Iowan Old Style", Georgia, serif;
-
     /* TIER 1 · THE ROLES Stated unconditionally rather than under a scheme scope: the skin IS its own scheme. */
     --role-canvas: color-mix(in oklab, var(--color-surface-950) 84%, black);
     --role-card: var(--color-surface-900);
@@ -524,47 +520,22 @@
         color: hsl(var(--tile-hue) 30% 70%);
     }
 
-    /* Chrome headings use the site's display face and carved edge. */
+    /* Chrome headings keep the app's face and take the stone's ink and carved edge. */
     [data-skin="sanctum"] h1,
     [data-skin="sanctum"] h2,
     [data-skin="sanctum"] h3,
     [data-skin="sanctum"] h4 {
-        font-family: var(--sanctum-titling);
         color: var(--sanctum-stone-ink);
         text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
     }
 
-/* THE ONE DISPLAY HEADING IN THE APP, AND IT IS CUT FROM STONE. */
-    [data-skin="sanctum"] h1.text-4xl {
-        font-family: var(--sanctum-display);
-        font-weight: var(--font-weight-semibold);
-        --display-descender: 0.2em;
-        padding-block-end: var(--display-descender);
-        margin-block-end: calc(-1 * var(--display-descender));
-        text-shadow: none;
-        background-image:
-            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480'%3E%3Cfilter id='d' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008' numOctaves='4' seed='11' stitchTiles='stitch' result='macro'/%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' seed='5' stitchTiles='stitch' result='fine'/%3E%3CfeComposite in='fine' in2='macro' operator='arithmetic' k1='0.4' k2='0.6' k3='0' k4='-0.04' result='grain'/%3E%3CfeColorMatrix in='grain' type='matrix' values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.65' intercept='0.175'/%3E%3CfeFuncG type='linear' slope='0.65' intercept='0.175'/%3E%3CfeFuncB type='linear' slope='0.65' intercept='0.175'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='480' height='480' filter='url(%23d)'/%3E%3C/svg%3E"),
-            linear-gradient(176deg, #d6c8b4 0%, #c4b49f 26%, #ab9c87 56%, #928471 80%, #7e7263 100%);
-        background-size:
-            480px 480px,
-            100% 100%;
-        background-blend-mode: soft-light, normal;
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        filter: drop-shadow(0 -1px 0 rgba(247, 240, 226, 0.7)) drop-shadow(-1px -1px 0 rgba(247, 240, 226, 0.3))
-            drop-shadow(0 2px 0 rgba(0, 0, 0, 0.9)) drop-shadow(0 4px 5px rgba(0, 0, 0, 0.55));
-    }
-
-/* EXCEPT INSIDE RENDERED MARKDOWN. */
+/* EXCEPT INSIDE RENDERED MARKDOWN, where a heading is the document's, not the chrome's. */
     [data-skin="sanctum"] .md-prose :is(h1, h2, h3, h4) {
-        font-family: var(--font-sans);
         color: inherit;
         text-shadow: none;
     }
 
     [data-skin="sanctum"] .ui-field-label {
-        font-family: var(--sanctum-titling);
         text-transform: uppercase;
         letter-spacing: 0.09em;
     }
@@ -680,7 +651,6 @@
 
 /* Section labels use the shared inscription treatment. */
 [data-skin="sanctum"] .font-semibold.uppercase.tracking-wide {
-    font-family: var(--sanctum-titling);
     letter-spacing: 0.15em;
     color: var(--sanctum-gold);
 }

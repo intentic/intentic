@@ -8,7 +8,7 @@ There is one:
 
 - **Sanctum** (`sanctum.css`): **the site's design system, worn by the app**. Same metals, same ink, same
   materials, same ornament kit as `_site/site/src/styles/global.css`: a near-colourless warm ash ground with
-  calm non-uniform stone tooth, one gold rule round everything, cream ink, and the site's two faces. The rail
+  calm non-uniform stone tooth, one gold rule round everything, and cream ink — in the app's own face. The rail
   wears a dense, warm, rough-dressed stone relief in shadow while overlays remain unlit; the two filled button
   tiers are plaques with their labels cut into them, one carved stone and one cast bronze. A distant temple
   stands on the floor of the window where the app has put nothing in front of it.
@@ -67,9 +67,16 @@ Sanctum has paid for that rule and seventeen others, and the notes are kept at t
   neutral buttons standing off too much. A shared formula is right; a shared percentage across unequal
   lightnesses is not.
 - **Ornament on an edge becomes noise at UI size.** A carved arcade that reads as stone at 40px reads as a torn,
-  dithered edge at 14px: and every panel in an app is a 14px edge. Character has to come from the material, the
-  line weights and the type, because those survive being shrunk. The site's turned corner is therefore drawn in
+  dithered edge at 14px: and every panel in an app is a 14px edge. Character has to come from the material and
+  the line weights, because those survive being shrunk. The site's turned corner is therefore drawn in
   exactly one place: the dialog, which is the only panel big enough to carry it.
+- **A skin that re-letters half the screen has two apps in one window.** Sanctum set the site's faces on
+  headings, field labels and section labels — a rounded titling face on some strings, the app's own on the rest —
+  so the same label read in one face on the stone and another in daylight, and two neighbouring lines of chrome
+  could be set in two different families at once. Reported as the dark look using different fonts from the light
+  one, which is what it was. The skin names no face now: the app's type is the app's, in either light, and the
+  skin keeps its inscriptions through the things that are paint — the stone's ink, the gold, the letter-spacing,
+  the uppercase, the lozenge cut in front of a section label.
 - **A decorative layer that scales with the viewport will eventually fill the screen.** The temple was sized as a
   share of window width; at 1900px it became a lit mountain range across the bottom third. It is capped in
   absolute pixels now.
@@ -176,8 +183,9 @@ Each stylesheet overrides three tiers and then names a handful of components:
 
 Only after those does a skin name individual selectors, and only ever to change **paint**: colour, border,
 shadow, background, outline. Never a width, a padding or a position: a skin that moves things is a skin that
-breaks screens it has never been looked at on. That is also why the skin doesn't touch the **body** face: heading
-faces are paint, but the reading face sets the metrics of every truncated label in the app, which is geometry.
+breaks screens it has never been looked at on. **A face is not paint.** Every face has its own metrics, so a
+heading set in one face and the same heading set in another wrap and truncate at different words: the skin names
+no family at all, and the app reads in one type whichever look it is wearing.
 
 Component rules sit in `@layer components`, one layer below Tailwind's utilities on purpose: a caller who wrote
 `bg-warning/10` on a card still wins, exactly as they do without the skin. The one deliberate exception in the
@@ -198,11 +206,6 @@ preset off `data-mode`) and has no daylight dress at all, so those are the only 
 own look in each light. A reader who pins sanctum outright takes the dark scheme with it, which is `setSkin`'s one
 side effect; a reader who pins `none` keeps whatever scheme they are in. What this replaced was a stored default of
 `sanctum`, which meant a browser on a light OS met the near-black app on every screen before sign-in.
-
-The skin's display webfont is fetched only while that skin is active, and the `<link>` is
-re-pointed rather than stacked when the skin changes. Sanctum asks for the site's two: Baloo 2
-for every heading and label in the chrome, Playfair Display for the one heading in the app drawn at display size
-(`h1.text-4xl`, the sign-in line): the site's own size band, where a serif with hairlines still has hairlines.
 
 ## Removing skins entirely
 
@@ -225,8 +228,8 @@ Add `<name>.css` beside the one here, scoped to `[data-skin="<name>"]`; add the 
 the name to `ThemeRow`, `THEME_ROW` and `themeRowLook` in `themeRow.ts` and an icon to `THEME_ICON` in the appearance
 page; add the `@import` to `styles.css` and the name to the anti-flash script in `index.html` (and the demo's copy of
 it). A second skin also ends the shortcut `themeRowValue` takes — it reads a resolved skin of `sanctum` as the row
-value `sanctum`, which is only sound while sanctum is the one skin there is. Faces are not a skin's to fetch: every one the app uses is served
-from this origin and declared in `src/styles/faces.css`, so a skin names a family and the file is already there.
+value `sanctum`, which is only sound while sanctum is the one skin there is. Type is not a skin's to set: the app's
+faces are declared once in `src/styles/faces.css` and served from this origin, and a skin inherits them.
 
 Three selectors are worth copying rather than re-deriving, because each was a bug first:
 
