@@ -35,7 +35,7 @@ So there is no second placement to learn, and nothing needed a new icon to carry
 | An errand's exact words | the errand's own glyph | the prompt the app sent |
 | A hidden run of tool calls | the most notable call's glyph + how many | the rows the shown mode draws |
 
-The name is on hover and on `aria-label`, because the lane is 5.75rem and "Sent with your message" is not.
+The name is on hover and on `aria-label`, because the lane is 6.5rem and "Sent with your message" is not.
 
 ## 3. One bar per row, not one per mark
 

@@ -177,15 +177,15 @@
 @container (min-width: 61rem) {
 /* A paint-contained row cannot clip the out-of-flow lane or its scaled ring. */
     .chat-pane .chat-message:has(.chat-mark-bar) {
-        margin-right: -5.75rem;
-        padding-right: 5.75rem;
+        margin-right: -6.5rem;
+        padding-right: 6.5rem;
         margin-block: -0.625rem;
         padding-block: 0.625rem;
     }
 /* The bar's whole height out here is its padding, and it is what keeps one row's marks off the next row's: the lane
    centres on the bar, so two bars a gap apart put their marks a gap apart, and a mark is taller than the gap. */
     .chat-pane .chat-mark-bar {
-        padding-block: 0.625rem;
+        padding-block: 0.875rem;
     }
 /* Left edge on the far side of the controls' gutter, right edge wherever the marks leave it: see the lane rule above. */
     .chat-pane .chat-mark-lane {
@@ -205,12 +205,12 @@
     }
 /* ...BUT ITS HAIRLINE MAY NOT FOLLOW IT OUT THERE. */
     .chat-pane .chat-prompt-pinned::after {
-        right: 5.75rem;
+        right: 6.5rem;
     }
 /* ...AND THE PINNED PROMPT HAS TO REACH THE MARGIN TOO, or the marks do not pass under it. */
     .chat-pane .chat-prompt {
-        margin-right: -5.75rem;
-        padding-right: 5.75rem;
+        margin-right: -6.5rem;
+        padding-right: 6.5rem;
     }
 }
 /* HOW WHAT A MARK STANDS FOR ARRIVES (the Transition in ChatAsideLane). */
