@@ -35,6 +35,7 @@ import FileDiffPane from "../viewers/FileDiffPane.vue";
 import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "../tabs/workspaceTabs";
 import { specialChip } from "../explorer/specialPaths";
+import { useAudience } from "../../../app/useAudience";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
@@ -43,6 +44,7 @@ import { type ExplorerFilters, explorerShows, technicalHidden } from "../explore
 import FileViewer from "../viewers/FileViewer.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
+import SavePanel from "../changes/SavePanel.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
 import { workspaceAgent } from "../health/workspaceScope";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
@@ -57,6 +59,7 @@ const route = useRoute();
 const router = useRouter();
 const layout = useLayout();
 const words = useVocabulary();
+const { maker } = useAudience();
 const changes = useChanges();
 const {
     tree,
@@ -159,7 +162,7 @@ const changesMark = computed(() => {
 const segmentOptions = computed(() => [
     // Touch has no hover; `markTitle` reaches the reader via the pill's accessible name (nameOf), not a tooltip.
     { label: `Files`, value: `files` as const },
-    { label: `Changes`, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
+    { label: words.value.changes, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
 ]);
 
 // Same search state as desktop; match switches get their own row here, since a row is a better touch target.
@@ -410,7 +413,10 @@ const onPick = (event: Event): void => {
             </div>
             <NoticeStack :of="[actionError, treeNotice]" class="shrink-0 px-3 py-1.5" />
 
-            <ReviewPanel v-if="segment === 'changes'" @open-diff="openDiffNav" @fill-diff="fillDiff" />
+            <template v-if="segment === 'changes'">
+                <SavePanel v-if="maker" @open-diff="openDiffNav" @fill-diff="fillDiff" />
+                <ReviewPanel v-else @open-diff="openDiffNav" @fill-diff="fillDiff" />
+            </template>
             <HistoryPanel v-else-if="segment === 'history'" @open-diff="openDiffNav" @fill-diff="fillDiff" />
 
             <template v-else>
@@ -539,7 +545,8 @@ const onPick = (event: Event): void => {
                             <span
                                 class="min-w-0 flex-1 truncate text-sm"
                                 :class="{
-                                    'text-subtle': node.ignored || isLockedWorkspacePath(node.path) || node.link?.state !== undefined || pending(node.path),
+                                    'text-subtle':
+                                        node.ignored || isLockedWorkspacePath(node.path) || node.link?.state !== undefined || pending(node.path),
                                 }"
                                 >{{ node.name }}</span
                             >
@@ -550,7 +557,13 @@ const onPick = (event: Event): void => {
                                 aria-hidden="true"
                                 class="shrink-0 text-xs text-danger"
                             />
-                            <Icon v-else-if="pending(node.path)" name="spinner" :spin="true" aria-hidden="true" class="shrink-0 text-xs text-subtle" />
+                            <Icon
+                                v-else-if="pending(node.path)"
+                                name="spinner"
+                                :spin="true"
+                                aria-hidden="true"
+                                class="shrink-0 text-xs text-subtle"
+                            />
                             <!-- A symlink wears its target's icon; this marker shows it's a pointer. No hover, so the sheet says where. -->
                             <Icon
                                 v-if="node.link !== undefined"
@@ -670,7 +683,7 @@ const onPick = (event: Event): void => {
                     >
                         <Icon name="download" class="text-base text-muted" /> Download
                     </button>
-                <!-- Rename and Delete stay gated; Download and Copy path remain available. -->
+                    <!-- Rename and Delete stay gated; Download and Copy path remain available. -->
                     <template v-if="canEditFiles">
                         <button
                             type="button"

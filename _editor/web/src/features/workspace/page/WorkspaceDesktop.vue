@@ -46,6 +46,7 @@ import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
 import EditorPane from "../files/EditorPane.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
+import SavePanel from "../changes/SavePanel.vue";
 import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
@@ -101,7 +102,9 @@ watch(
     { immediate: true },
 );
 const scopedRootHidden = computed(() => (workspaceDir.value === `` ? rootHidden.value : (lazyHidden.value.get(workspaceDir.value) ?? 0)));
-const scopedBarren = computed(() => (workspaceDir.value === `` ? barren.value : barren.value.filter((path) => path.startsWith(`${workspaceDir.value}/`))));
+const scopedBarren = computed(() =>
+    workspaceDir.value === `` ? barren.value : barren.value.filter((path) => path.startsWith(`${workspaceDir.value}/`)),
+);
 const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { forget, dirtyPaths } = useEditBuffers();
 const changes = useChanges();
@@ -125,20 +128,10 @@ const sidebarMode = computed<SidebarPanel>({ get: () => layout.sidebarPanel.valu
 const sidebarModeOptions = computed(() => [
     // No hint on Files/Changes, the label already says it; Changes gets one only while the mark shows.
     { label: `Files`, value: `files` as const },
-    // A maker's changes are versions on the Project page, and the index is never theirs to stage.
-    ...(maker.value ? [] : [{ label: `Changes`, value: `changes` as const, badge: changes.count.value, ...changesMark.value }]),
+    // Both audiences get the panel, since the rail badges this count at both and a badge with nowhere to press is
+    // only a nag; what differs is the panel behind it (SavePanel has no index and writes its own message).
+    { label: words.value.changes, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
 ]);
-// A stored Changes panel the audience no longer offers falls back to Files rather than rendering a hidden one; the
-// history panel stays, since the workspace's own restore points are a maker's way back.
-watch(
-    [maker, () => layout.sidebarPanel.value],
-    ([plain, panel]) => {
-        if (plain && panel === `changes`) {
-            layout.setSidebarPanel(`files`);
-        }
-    },
-    { immediate: true },
-);
 
 // State for the search box; the funnel beside it holds what the list leaves out (tree's Name, search's text).
 const { filter, scope: searchScope, contentMode, textMode, options: search, results, clear: clearFilter } = useExplorerSearch();
@@ -584,7 +577,12 @@ const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
     },
     { command: `workspace.showChanges`, title: `Show Changes`, icon: `check-square`, keybinding: `Ctrl+Shift+D`, handler: openReview },
     { command: `workspace.showFiles`, title: `Show Files`, icon: `folder`, handler: () => focusSearch() },
-    { command: `workspace.showHistory`, title: `Show ${words.value.restorePoints}`, icon: `history`, handler: () => layout.setSidebarPanel(`history`) },
+    {
+        command: `workspace.showHistory`,
+        title: `Show ${words.value.restorePoints}`,
+        icon: `history`,
+        handler: () => layout.setSidebarPanel(`history`),
+    },
     // The root repo's health report: the palette route to what a nested repo opens from its own tree row.
     { command: `workspace.codebaseHealth`, title: `Show Codebase Health`, icon: `wave-pulse`, handler: () => openHealth(`root`) },
     { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => toggleSidebar() },
@@ -808,7 +806,10 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                         </button>
                     </template>
                 </div>
-                <ReviewPanel v-if="layout.sidebarPanel.value === 'changes'" @open-diff="openDiff" @fill-diff="fillDiff" />
+                <template v-if="layout.sidebarPanel.value === 'changes'">
+                    <SavePanel v-if="maker" @open-diff="openDiff" @fill-diff="fillDiff" />
+                    <ReviewPanel v-else @open-diff="openDiff" @fill-diff="fillDiff" />
+                </template>
                 <HistoryPanel v-else-if="layout.sidebarPanel.value === 'history'" @open-diff="openDiff" @fill-diff="fillDiff" />
                 <!-- One `filter` ref across three scopes; the Aa/ab/.* switches apply only to the text scope, which has a pattern. -->
                 <div v-if="layout.sidebarPanel.value === 'files'" class="flex shrink-0 flex-col gap-1 p-1.5">

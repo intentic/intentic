@@ -74,7 +74,7 @@ six words, and each maps onto one mechanism that stays exactly as it is:
 
 Two words never reach the maker at all: the index (stage, unstage) and the remote's bookkeeping (ahead, behind,
 upstream, fetch). A maker's version is everything in the tree at that moment. That is also Docs' model, and it
-is what makes the Changes panel unnecessary for them rather than merely renamed.
+is what makes the maker's Changes panel a different panel (section 6.9) rather than the same one renamed.
 
 One word clashes. Today **Publish** means "push a branch that has no upstream" (`push/outgoingWork.ts`,
 `unpublished`). To a maker, Publish means "put it where people can see it". The maker audience reserves Publish
@@ -271,12 +271,34 @@ The `AGENTS.md` editor exists at `/sandbox/agent?section=instructions`; the `mem
 `shell/mobileTabs.ts` promotes four tabs. In the maker audience Workspace's tab becomes Projects, and the
 Review tab keeps pointing at Approvals when that pack is on, else at the workspace's own review.
 
-### 6.9 What the maker audience hides
+### 6.9 Saving, and what the maker audience hides
 
-The Changes panel, the terminal panel, the checks and persona row actions, and the management panel's Git and
-Health tabs.
-Restore points stay: they are the maker's way back. Every hidden thing is back behind "Switch to the developer
-view", and none of their state is lost by switching.
+The Changes panel was going to be hidden, on the grounds that auto-version saves for the maker and restore
+points are their way back. That was wrong in one place it mattered: the rail badges the uncommitted count for
+both audiences, so the maker got a number on the Workspace tile with nothing behind it, and no route to a
+working-tree diff at all (the tile, the tree row and the panel are the only three, and the first two never had
+one). The badge has to lead somewhere.
+
+So the Changes panel is the one surface with an audience of its own rather than a hidden one:
+`features/workspace/changes/SavePanel.vue` reads the same `useChanges()` the developer's `ReviewPanel.vue`
+does, and drops every decision git asks a developer to make.
+
+- **No index.** One press records every repository whole (`commit` with `stage: {}`), so there is nothing to
+  select and no staged/unstaged split to explain.
+- **No message.** `savedMessage.ts` picks one: the sentence the commit-message model already wrote for that
+  landing (`landed-subject.ts`), when every uncommitted file came from one assistant and nothing was
+  truncated; the constant `Your edits` otherwise, which is the subject `version-landed.ts` already writes for
+  the tree's own remainder. Nothing here asks a model — it only spends what land time produced.
+- **Grouped by who, not by where.** Headings are the assistant that landed the files and "Your own edits",
+  since one project with one repository makes repository headings say nothing.
+- **Plain marks.** Git's `M`/`A`/`D` letters become a glyph and a word (changed, new, removed).
+- **Throw away** is per file and all-at-once, each behind a sentence naming what goes back and what leaves the
+  disk. **Back up** appears only for a project that owes its remote, and goes through `usePushFlow.askSync`
+  like every other door to a push.
+
+Still hidden: the terminal panel, the checks and persona row actions, and the management panel's Git and
+Health tabs. Restore points stay: they are the maker's way back. Every hidden thing is back behind "Switch to
+the developer view", and none of their state is lost by switching.
 
 ## 7. Vocabulary
 
@@ -296,7 +318,8 @@ template.
 | discard | Discard | Throw away |
 | review | Review | Look |
 | commit | Commit | Save a version |
-| changes | Changes | (hidden) |
+| changes | Changes | What changed |
+| pendingChange(s) | uncommitted change(s) | unsaved change(s) |
 | restorePoint | Restore point | Version |
 | restore | Restore | Go back to this |
 | push | Push | Back up |

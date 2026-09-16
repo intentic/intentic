@@ -44,6 +44,11 @@ export interface Vocabulary {
     readonly publish: string;
     readonly sync: string;
     readonly diff: string;
+    // The workspace sidebar's second mode, and the noun its badge counts with, either side of the number
+    // ("3 unsaved changes"). Two rows rather than one, since English needs the singular spelled separately.
+    readonly changes: string;
+    readonly pendingChange: string;
+    readonly pendingChanges: string;
     // The file tree's own tile, and the home seat's: the same tile for a developer, two for a maker.
     readonly workspace: string;
     readonly home: string;
@@ -90,6 +95,9 @@ const DEVELOPER: Vocabulary = {
     publish: `Publish`,
     sync: `Sync`,
     diff: `Diff`,
+    changes: `Changes`,
+    pendingChange: `uncommitted change`,
+    pendingChanges: `uncommitted changes`,
     workspace: `Workspace`,
     home: `Workspace`,
     preview: `Preview`,
@@ -135,6 +143,9 @@ const MAKER: Vocabulary = {
     publish: `Back up`,
     sync: `Back up`,
     diff: `What changed`,
+    changes: `What changed`,
+    pendingChange: `unsaved change`,
+    pendingChanges: `unsaved changes`,
     workspace: `Files`,
     home: `Projects`,
     preview: `See it`,

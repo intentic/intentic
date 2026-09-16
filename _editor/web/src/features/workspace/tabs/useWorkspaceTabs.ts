@@ -19,7 +19,7 @@ import {
 } from "./workspaceTabs";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { useEditBuffers } from "../files/useEditBuffers";
-import { readTabStrip, type StoredWorkspaceTab, writeTabStrip } from "../changes/workspaceSnapshot";
+import { readTabStrip, type StoredWorkspaceTab, writeTabStrip } from "./workspaceSnapshot";
 
 // Workspace editor's open tabs, a module-level singleton (like useChat/useLayout) surviving navigation between
 // areas. The editor is two panes; `tabs`, `activeId`, `activeTab` and `previewId` are the focused pane's, so most

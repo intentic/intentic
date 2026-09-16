@@ -14,7 +14,7 @@ import { resetUploadQueue } from "../files/upload/useUploadQueue";
 import { dropProvisional, markSettled, noteArriving, noteLeaving, reconcileProvisional, resetProvisional } from "../files/provisionalEntries";
 import { renameOpenPaths } from "../tabs/useWorkspaceTabs";
 import { changedDirs } from "../changes/live/useWorkspaceLive";
-import { readExpandedDirs, writeExpandedDirs } from "../changes/workspaceSnapshot";
+import { readExpandedDirs, writeExpandedDirs } from "../tabs/workspaceSnapshot";
 import { scopeQuery, workspaceAgent } from "../health/workspaceScope";
 import { basename, parentDir } from "@intentic/ui/path";
 import { WORKSPACE_TREE } from "../../../lib/queryKeys";

@@ -142,7 +142,7 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
     if (changes.count.value > 0) {
         return {
             count: changes.count.value,
-            tooltip: `${changes.count.value} uncommitted ${changes.count.value === 1 ? `change` : `changes`}`,
+            tooltip: `${changes.count.value} ${changes.count.value === 1 ? words.value.pendingChange : words.value.pendingChanges}`,
             ...landing,
         };
     }
@@ -495,13 +495,13 @@ useKeybindings();
             <!-- `my-1`, as on the other hairline: with `mb-1` alone this one sat off-centre in its own air. -->
             <span class="my-1 icon-rail-divider h-px bg-line"></span>
 
-<!-- Bands (Work/Judge/Know) are separated by whitespace, not lines: hairlines mark only the two real boundaries — identity, work areas, live runtime. -->
+            <!-- Bands (Work/Judge/Know) are separated by whitespace, not lines: hairlines mark only the two real boundaries — identity, work areas, live runtime. -->
             <div class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
                 <template v-for="(band, at) in tileBands" :key="band.group.id">
                     <!-- Air where a hairline used to be; aria-hidden, since the tiles already carry their own labels. -->
                     <span v-if="at > 0" class="icon-rail-band" aria-hidden="true"></span>
                     <template v-for="tile in band.items" :key="tile.to">
-<!-- A held seat, not a tile yet (railMemory.ts): draws the glyph it will show, dim, so arrival doesn't shift the tiles below it. -->
+                        <!-- A held seat, not a tile yet (railMemory.ts): draws the glyph it will show, dim, so arrival doesn't shift the tiles below it. -->
                         <span
                             v-if="tile.ghost"
                             class="icon-rail-tile flex items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40"
@@ -519,26 +519,26 @@ useKeybindings();
                             @contextmenu="onTileContextMenu(tile, $event)"
                         >
                             <RailIcon :area="tile.id" :fallback="tile.icon" :label="tile.label" :monogram="tile.monogram" class="icon-rail-glyph" />
-<!-- Three corners, one scale: `.icon-rail-mark` sets the type size all three are drawn from, so the only thing
+                            <!-- Three corners, one scale: `.icon-rail-mark` sets the type size all three are drawn from, so the only thing
      that separates them is the plate — which is the distinction worth seeing, and used to be three sizes. -->
-<!-- One badge for every tile, core or extension: see AreaTile.badge. -->
+                            <!-- One badge for every tile, core or extension: see AreaTile.badge. -->
                             <ViewBadgeChip :badge="tile.badge" class="icon-rail-mark absolute right-0.5 top-0.5" />
-<!-- Work in flight behind this tile (ViewBadge.running): its own corner, never the chip. -->
+                            <!-- Work in flight behind this tile (ViewBadge.running): its own corner, never the chip. -->
                             <TileMark
                                 v-if="tile.badge?.running !== undefined"
                                 name="spinner"
                                 spin
                                 :class="[RUNNING_MARK_CLASS, `icon-rail-mark absolute bottom-0.5 right-0.5`]"
                             />
-<!-- Opposite corner from the badge so the two never overlap; muted ink, no tone — it isn't an errand. -->
+                            <!-- Opposite corner from the badge so the two never overlap; muted ink, no tone — it isn't an errand. -->
                             <TileMark v-if="tile.note" :name="tile.note.icon" class="icon-rail-mark absolute bottom-0.5 left-0.5 text-subtle" />
                         </RouterLink>
                     </template>
                 </template>
             </div>
 
-<!-- Every unseated area; kept outside the scrolling run so it's never scrolled out of sight. -->
-<!-- A door to areas, not an "add one": the same tile as the nav run above it, so the dashed rim is left to the
+            <!-- Every unseated area; kept outside the scrolling run so it's never scrolled out of sight. -->
+            <!-- A door to areas, not an "add one": the same tile as the nav run above it, so the dashed rim is left to the
                  one control on this rail that really does add something. -->
             <button
                 ref="moreTrigger"
@@ -558,7 +558,7 @@ useKeybindings();
             <AnchoredOverlay v-model="moreOpen" :anchor="moreTrigger ?? undefined" side="right" cross="start">
                 <div class="flex w-48 flex-col gap-0.5 p-1">
                     <p v-if="moreTiles.length === 0" class="px-2 py-1.5 text-xs text-subtle">Every area is on the rail</p>
-<!-- Two controls per row — go there, and pin it (keepOnRail) — as siblings, not nested. -->
+                    <!-- Two controls per row — go there, and pin it (keepOnRail) — as siblings, not nested. -->
                     <div
                         v-for="tile in moreTiles"
                         :key="tile.to"
@@ -618,7 +618,7 @@ useKeybindings();
                 <ViewBadgeChip :badge="portsBadge" class="icon-rail-mark absolute right-0.5 top-0.5" />
             </RouterLink>
 
-<!-- Live-runtime surfaces, like the terminal, so they sit in this cluster rather than the nav tiles. -->
+            <!-- Live-runtime surfaces, like the terminal, so they sit in this cluster rather than the nav tiles. -->
             <RouterLink
                 v-for="tile in runtimeTiles"
                 :key="tile.to"
@@ -640,7 +640,7 @@ useKeybindings();
                 />
             </RouterLink>
 
-<!-- Toggles the one global terminal panel, badged with live sessions (background jobs excluded, they never idle). A maker never asked for a shell. -->
+            <!-- Toggles the one global terminal panel, badged with live sessions (background jobs excluded, they never idle). A maker never asked for a shell. -->
             <button
                 v-if="canShip && !maker"
                 type="button"
@@ -656,7 +656,7 @@ useKeybindings();
                 <ViewBadgeChip :badge="terminalBadge" class="icon-rail-mark absolute right-0.5 top-0.5" />
             </button>
 
-<!-- Every "add" here writes to the sandbox's deploy.config.ts or clones into /work, never platform storage. -->
+            <!-- Every "add" here writes to the sandbox's deploy.config.ts or clones into /work, never platform storage. -->
             <RouterLink
                 to="/capabilities"
                 :class="[
@@ -673,7 +673,7 @@ useKeybindings();
             <AccountPanel />
         </nav>
 
-<!-- This slot serves the panel's docked and floating instances. -->
+        <!-- This slot serves the panel's docked and floating instances. -->
         <div ref="chatDock" class="contents"></div>
 
         <main class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">

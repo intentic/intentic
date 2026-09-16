@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { WorkspaceTab } from "../tabs/workspaceTabs";
+import type { WorkspaceTab } from "./workspaceTabs";
 import { readWindowState, writeWindowState } from "../../../shell/window/windowStore";
 
 // Per-window "where I was" state (open tree folders, open tabs); per sandbox, since a path names a file in
