@@ -167,10 +167,4 @@ const diffOutline = useLoadingReveal(
 .ws-pane-off .view-header {
     opacity: 0.75;
 }
-
-/* `:empty` (not a v-if) draws the rule only when the teleported seat is filled, since this component can't know that. */
-.ws-context:not(:empty) {
-    border-left: 1px solid var(--color-line);
-    padding-left: 0.5rem;
-}
 </style>
