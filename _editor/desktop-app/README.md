@@ -944,6 +944,50 @@ nightly suites. Whether every extension view renders is the browser tier's job
 screen is an unmodified webview onto the hosted SPA with no IPC, so that is a browser property, not a
 desktop one.
 
+## Rehearsing the download on your own PC
+
+Every tier above is unattended, and three of them are hermetic. None of them answers the question a person
+asks before publishing: **what does this actually look like?** One command does, from the checkout, in WSL:
+
+```sh
+pnpm try:onboarding                      # build, stage, point this PC at the local platform, open the door
+pnpm try:onboarding -- --check           # say what is ready and what a run would do, and change nothing
+pnpm try:onboarding -- --skip-build      # reuse what is already staged, the usual second run
+pnpm try:onboarding -- --teardown        # put the PC back
+```
+
+It builds this branch's NSIS installer and its `ic`, stages both where the local site serves them, makes sure
+`pnpm dev` is up, uninstalls whatever `Intentic` this PC has and parks its app state, points the app at the
+local api and SPA, and opens the browser on the setup screen. Then you download the installer and click
+through the flow a user clicks through. [`try-onboarding.mjs`](../../_tools/scripts/desktop/try-onboarding.mjs)
+carries the long version of everything below.
+
+| | |
+| --- | --- |
+| the installer | this branch's, cross-built here, downloaded over HTTP from the site — the shipped bytes and the shipped download |
+| the scheme registration, the app's screens, `connect.ps1`, the image pull, the sandbox, the workspace | untouched |
+| where the app looks | its settings file names `https://localhost:47145` and `https://localhost:6480`, because a setup link from an EXTERNAL browser carries no `platform` of its own (`setup_link.rs` drops it unless the link came from the app's own window) |
+| which `ic` the setup downloads | `IC_URL` names the local site: a 0.0.0 build pins no release, so without it the branch's app would drive the last release's CLI |
+| the updater | off, so a 0.0.0 build is not offered the last release halfway through |
+| signing, SmartScreen, the update path | **not rehearsed**. A local build is unsigned, and Windows says so |
+
+Needs WSL interop (`powershell.exe` on PATH), Docker Desktop, a `.env` with `INGRESS_SIGNING_KEY` and the
+Google credentials — an unsigned platform mints no setup code and the wizard falls back to the attach lane —
+and the Windows cross-build toolchain: `clang`, `lld`, `llvm`, `nsis` beside `cargo-xwin`. Each missing piece
+is reported with the line that installs it, before anything is built, and `--check` asks without building
+anything at all.
+
+**The one trap worth knowing.** An app inherits its environment from whatever launched it, at the moment that
+launcher started. A browser already open when the command set `IC_URL` hands the app the old environment, and
+the setup then downloads the last release's `ic` while everything on screen looks right. The run says which
+browsers were running when it started; close them, or quit the app from the tray and start it from the Start
+menu.
+
+`--sandbox-image intentic-sandbox:dev` rehearses the branch's daemon as well; the default is the
+`ghcr.io/intentic/sandbox:stable` a real install pulls. `--keep-app` skips the uninstall, which tests an
+upgrade rather than a first install. `--teardown` restores the environment variables, the app state and the
+app that was installed before, and is the only thing that does.
+
 ## Developing it
 
 ```sh

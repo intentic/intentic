@@ -10,9 +10,17 @@
 # upgrade.ts already read as "built from source" — and a name claiming 0.0.0 would be a version statement that
 # is false rather than absent. A fixed name is also what the dev server needs, having no worker to resolve one.
 #
-#   pnpm --filter @intentic/desktop-app stage:downloads               # Linux bundles (deb/rpm/AppImage)
-#   pnpm --filter @intentic/desktop-app stage:downloads -- --windows  # + Windows NSIS via cargo-xwin
-#   pnpm --filter @intentic/desktop-app stage:downloads -- --stage-only  # just copy what's already built
+#   pnpm --filter @intentic/desktop-app stage:downloads                   # Linux bundles (deb/rpm/AppImage)
+#   pnpm --filter @intentic/desktop-app stage:downloads -- --windows      # + Windows NSIS via cargo-xwin
+#   pnpm --filter @intentic/desktop-app stage:downloads -- --windows-only # only the Windows NSIS installer
+#   pnpm --filter @intentic/desktop-app stage:downloads -- --stage-only   # just copy what's already built
+#
+# `ic-windows-amd64.exe` is staged beside them when `_sandbox/ic/dist-bin` holds one
+# (`bash _tools/scripts/build/build-ic.sh windows-x64`), because the setup the installed app runs DOWNLOADS
+# that binary: connect.ps1 fetches `$IC_URL/ic-windows-amd64.exe`, defaulting to the latest GitHub release. A
+# working-tree installer carries the 0.0.0 sentinel and so names no release of its own, which means a local
+# install tests this branch's app driving the last release's CLI unless IC_URL points back here
+# (try-onboarding.mjs sets it to http://localhost:4321/desktop).
 #
 # Each bundle is built independently and failures don't abort the rest — whatever succeeded is
 # staged, so a missing AppImage prerequisite never blocks the .deb/.rpm downloads.
@@ -20,14 +28,20 @@
 # the Windows cross-build needs rustup target x86_64-pc-windows-msvc + cargo-xwin + clang/lld/llvm + nsis.
 set -uo pipefail
 
+LINUX=1
 WINDOWS=0
 STAGE_ONLY=0
 for arg in "$@"; do
     case "$arg" in
         --windows) WINDOWS=1 ;;
+        # Skipping the Linux bundles is minutes, not seconds: nothing downstream of a Windows rehearsal opens them.
+        --windows-only)
+            WINDOWS=1
+            LINUX=0
+            ;;
         --stage-only) STAGE_ONLY=1 ;;
         *)
-            echo "unknown flag: $arg (use --windows, --stage-only)" >&2
+            echo "unknown flag: $arg (use --windows, --windows-only, --stage-only)" >&2
             exit 1
             ;;
     esac
@@ -79,15 +93,17 @@ build_bundle() {
 
 if [ "$STAGE_ONLY" -eq 0 ]; then
     cd "$APP"
-    build_bundle deb
-    build_bundle rpm
-    # linuxdeploy's desktop integration shells into xdg-mime; without it the bundler dies late.
-    if command -v xdg-mime >/dev/null 2>&1; then
-        patch_gtk_plugin
-        build_bundle appimage
-    else
-        echo "==> skipping AppImage: xdg-mime not found — install xdg-utils (pacman -S xdg-utils / apt-get install xdg-utils)"
-        failed+=("appimage")
+    if [ "$LINUX" -eq 1 ]; then
+        build_bundle deb
+        build_bundle rpm
+        # linuxdeploy's desktop integration shells into xdg-mime; without it the bundler dies late.
+        if command -v xdg-mime >/dev/null 2>&1; then
+            patch_gtk_plugin
+            build_bundle appimage
+        else
+            echo "==> skipping AppImage: xdg-mime not found — install xdg-utils (pacman -S xdg-utils / apt-get install xdg-utils)"
+            failed+=("appimage")
+        fi
     fi
     if [ "$WINDOWS" -eq 1 ]; then
         build_bundle nsis --runner cargo-xwin --target x86_64-pc-windows-msvc
@@ -108,14 +124,25 @@ stage() {
         echo "skipped: $name (no bundle at ${pattern#"$ROOT"/})"
     fi
 }
-stage "$LINUX_BUNDLES/appimage/*.AppImage" "Intentic.AppImage"
-stage "$LINUX_BUNDLES/deb/*.deb" "Intentic.deb"
-stage "$LINUX_BUNDLES/rpm/*.rpm" "Intentic.rpm"
+if [ "$LINUX" -eq 1 ]; then
+    stage "$LINUX_BUNDLES/appimage/*.AppImage" "Intentic.AppImage"
+    stage "$LINUX_BUNDLES/deb/*.deb" "Intentic.deb"
+    stage "$LINUX_BUNDLES/rpm/*.rpm" "Intentic.rpm"
+fi
 stage "$WIN_BUNDLES/nsis/*-setup.exe" "Intentic-setup.exe"
+if [ "$WINDOWS" -eq 1 ]; then
+    stage "$ROOT/_sandbox/ic/dist-bin/ic-windows-amd64.exe" "ic-windows-amd64.exe"
+fi
 
 if [ "${#failed[@]}" -gt 0 ]; then
     echo
     echo "note: these bundles did not build this run: ${failed[*]} — the staged ones above still serve."
+fi
+# A --windows-only run has exactly one artifact to produce, so a failed build is the run failing — otherwise
+# the previous build's installer is staged, served, and rehearsed as if it were this branch's.
+if [ "$LINUX" -eq 0 ] && [ "${#failed[@]}" -gt 0 ]; then
+    echo "error: the Windows installer did not build — whatever is staged is from an earlier build." >&2
+    exit 1
 fi
 if [ "$staged" -eq 0 ]; then
     echo "error: nothing was staged — fix the build errors above and re-run." >&2
