@@ -82,12 +82,56 @@
     content: none;
 }
 
-/* A fenced block, a table, raw HTML: constructs whose markup IS their content, shown verbatim. */
+/* An indented code block, a table, raw HTML: constructs whose markup IS their content, shown verbatim. */
 .md-editing .md-src-verbatim {
     white-space: pre-wrap;
     font-family: var(--font-mono);
     font-size: 0.9em;
     tab-size: 4;
+}
+
+/* A FENCED BLOCK IS THE CODE IT HOLDS, not the source of a code block: its delimiters are markup like a heading's hashes, and its body wears the colours the rendered document gives it (sourceDom.ts). */
+.md-editing .md-code-block {
+    position: relative;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    tab-size: 4;
+    /* The fence rows below hold a line each at all times, which is this block's vertical padding. */
+    padding-block: 0.15em;
+}
+
+/* A code line keeps every space it was written with, against the blanket `white-space: normal` above — inside Shiki's token spans too, where the indentation of a nested key lives. */
+.md-editing .md-code-line,
+.md-editing .md-code-line span {
+    white-space: pre-wrap;
+}
+
+/* A blank line in the code is still a line. */
+.md-editing .md-code-line {
+    min-height: 1lh;
+}
+
+/* The fence's line is reserved whether or not the delimiter is showing, so revealing it moves no code. */
+.md-editing .md-code-fence {
+    height: 1lh;
+}
+
+/* The language, where the rendered document prints it; a block showing its own opening fence has already said so. */
+.md-editing .md-code-block[data-md-lang]:not(.md-block-active)::before {
+    content: attr(data-md-lang);
+    position: absolute;
+    top: 0.2em;
+    right: 0.5em;
+    font-size: var(--text-2xs);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.02em;
+    color: var(--color-muted);
+    pointer-events: none;
+}
+
+/* Shiki emits both themes at once, the dark one as a custom property inline styles cannot be overridden without (see code.css). */
+[data-mode="dark"] .md-editing .md-code-line span {
+    color: var(--shiki-dark) !important;
 }
 
 .md-editing .md-src-quote > div {
@@ -128,13 +172,12 @@
 }
 
 /* A SPACE AT THE END OF A LINE IS STILL A CHARACTER, and this is what stops the browser deciding otherwise. */
-.md-editing .md-block-active::after {
+.md-editing .md-block-active:not([data-md-rows])::after {
     content: "\200b";
 }
 
-/* The same protection one level in. */
-.md-editing .md-block-active li::after,
-.md-editing .md-block-active .md-src-quote > div::after {
+/* The same protection one level in, for every block drawn as rows (list, quote, fenced code) — on the block itself it would be an inline box among block-level rows, which is a whole line the block does not contain. */
+.md-editing .md-block-active[data-md-rows] > *::after {
     content: "\200b";
 }
 

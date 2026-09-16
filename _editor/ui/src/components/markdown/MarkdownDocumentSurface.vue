@@ -1,6 +1,7 @@
 <!-- The editing half of <MarkdownDocument>: one `contenteditable` whose text is the markdown source (markdownSourceDom.ts). -->
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { highlightVersion } from "../../markdown/code.js";
 import { continueList, indentLines, insertLink, onListLine, outdentLines, type TextEdit, toggleWrap } from "../../markdown/edits.js";
 import { createMarkdownHistory, type EditKind } from "../../markdown/history.js";
 import { splitMarkdownBlocks } from "../../markdown/index.js";
@@ -211,6 +212,44 @@ const sync = (): void => {
     }
     markActive();
 };
+
+// A code block's colours arrive after it is drawn (Shiki loads and highlights off the render path), and this
+// surface builds its DOM imperatively, so there is no computed for a landing highlight to invalidate. Only blocks
+// that gain something are rebuilt: a document with more code blocks than the highlighter's cache holds would
+// otherwise re-schedule itself on every batch it triggers.
+const recolour = (): void => {
+    if (host.value === undefined || composing) {
+        return;
+    }
+    const offset = caretOffset();
+    let redrawn = false;
+    syncing = true;
+    try {
+        built.forEach((part, index) => {
+            if (!part.element.classList.contains(`md-code-block`) || part.element.dataset[`mdColoured`] !== undefined) {
+                return;
+            }
+            const element = buildBlockElement(part.body);
+            if (element.dataset[`mdColoured`] === undefined) {
+                return;
+            }
+            part.element.replaceWith(element);
+            built[index] = { body: part.body, gap: part.gap, element };
+            redrawn = true;
+        });
+    } finally {
+        syncing = false;
+    }
+    if (!redrawn) {
+        return;
+    }
+    if (offset !== undefined) {
+        putCaret(offset);
+    }
+    markActive();
+};
+
+watch(highlightVersion, recolour);
 
 // Own undo stack: rebuilding a block is a DOM write, which drops the browser's native stack immediately.
 const history = createMarkdownHistory();

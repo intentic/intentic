@@ -63,8 +63,9 @@ const CACHE_LIMIT = 400;
 const cache = new Map<string, string>();
 const inFlight = new Set<string>();
 
-// Bumped when highlights land, so a render that missed the cache re-runs once colour is ready.
-const highlightVersion = ref(0);
+// Bumped when highlights land, so a render that missed the cache re-runs once colour is ready. Exported for the
+// editing surface, which builds its DOM imperatively and so has no computed to invalidate.
+export const highlightVersion = ref(0);
 // Whether any highlight in the current batch produced markup worth re-rendering for.
 let landed = false;
 
@@ -97,15 +98,18 @@ const langId = (fence: string): string | undefined => {
     return ALIASES[word] ?? word;
 };
 
-// This block's Shiki HTML if already cached, otherwise undefined while scheduling the highlight.
-const highlighted = (block: CodeBlock, index: number): string | undefined => {
+/**
+ * This code's Shiki HTML if already cached, otherwise undefined while the highlight is scheduled. `info` is a
+ * fence's info string, not a grammar id. Shared with the editing surface, which colours the same blocks.
+ */
+export const highlightedCode = (code: string, info: string): string | undefined => {
     // Read unconditionally, since a computed only re-runs on a dependency it actually read.
     void highlightVersion.value;
-    const lang = langId(block.lang);
-    if (lang === undefined || index >= MAX_HIGHLIGHT_BLOCKS || block.code.split(`\n`).length > MAX_HIGHLIGHT_LINES) {
+    const lang = langId(info);
+    if (lang === undefined || code.split(`\n`).length > MAX_HIGHLIGHT_LINES) {
         return undefined;
     }
-    const key = `${lang}\n${block.code}`;
+    const key = `${lang}\n${code}`;
     const hit = cache.get(key);
     if (hit !== undefined) {
         cache.delete(key);
@@ -115,7 +119,7 @@ const highlighted = (block: CodeBlock, index: number): string | undefined => {
     if (!inFlight.has(key)) {
         inFlight.add(key);
         void loadHighlighter()
-            .then((highlight) => highlight(block.code, lang))
+            .then((highlight) => highlight(code, lang))
             .then(
                 (html) => {
                     inFlight.delete(key);
@@ -158,7 +162,7 @@ const markCopied = (code: string | undefined): void => {
 // One code block's markup. `colour=false` skips highlighting a streaming tail (still changing every frame) to
 // avoid cache thrash; `index` bounds against MAX_HIGHLIGHT_BLOCKS.
 export const codeBlockHtml = (block: CodeBlock, index: number, colour: boolean): string => {
-    const shiki = colour ? highlighted(block, index) : undefined;
+    const shiki = colour && index < MAX_HIGHLIGHT_BLOCKS ? highlightedCode(block.code, block.lang) : undefined;
     // Fallback carries Shiki's own class, so colour landing later doesn't shift size or position.
     const body = shiki ?? `<pre class="shiki"><code>${escapeHtml(block.code)}</code></pre>`;
     const lang = escapeHtml(block.lang.trim());

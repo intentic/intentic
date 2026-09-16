@@ -1,3 +1,4 @@
+import { highlightedCode } from "./code.js";
 import { lexBlocks, lexInline, type MarkdownToken } from "./render.js";
 
 // This block's DOM text is its markdown source, byte for byte (`blockBody(element) === source`), so
@@ -183,12 +184,109 @@ const listElement = (source: string, ordered: boolean): HTMLElement => linePrefi
 
 const quoteElement = (source: string): HTMLElement => linePrefixed(source, `blockquote`, `div`, QUOTE_LINE, `md-src-quote`);
 
-// Anything not modeled as prose (fenced block, table, raw HTML, a rule): shown verbatim, since there is no way to
-// edit a rendered table or code block except as its markdown.
-const verbatimElement = (source: string, kind: string): HTMLElement => {
+// Anything not modeled as prose (an indented code block, a table, raw HTML, a rule): shown verbatim, since there
+// is no way to edit a rendered table except as its markdown.
+const verbatimElement = (source: string): HTMLElement => {
     const element = document.createElement(`pre`);
-    element.className = kind === `code` ? `md-code-block md-src-verbatim` : `md-src-verbatim`;
+    element.className = `md-src-verbatim`;
     element.appendChild(document.createTextNode(source));
+    return element;
+};
+
+// A fence line: three or more backticks or tildes, up to three spaces in. `rest` is the info string on an opener
+// and must be blank on the closer.
+const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/su;
+
+const fenceOf = (line: string): { readonly marker: string; readonly rest: string } | undefined => {
+    const match = FENCE.exec(line);
+    return match?.[1] === undefined ? undefined : { marker: match[1], rest: match[2] ?? `` };
+};
+
+// One row of the fence itself, kept in the flow so the block is the same height whether the delimiters are
+// showing or not; the CSS reserves the line and hides only the text.
+const fenceRow = (source: string): HTMLElement => {
+    const row = document.createElement(`div`);
+    row.className = `md-code-fence`;
+    row.appendChild(span(source, MARKER));
+    return row;
+};
+
+// Shiki's markup for the body, one element per line, or undefined while the highlight is still on its way. Parsed
+// rather than sanitized: this is the highlighter's own output, the same markup the rendered document takes as raw
+// HTML. A block that doesn't reassemble line for line stays plain, since the DOM's text is the file's text.
+const colouredLines = (body: readonly string[], info: string): Element[] | undefined => {
+    const html = highlightedCode(body.join(`\n`), info);
+    if (html === undefined) {
+        return undefined;
+    }
+    const holder = document.createElement(`div`);
+    holder.innerHTML = html;
+    const lines = [...holder.querySelectorAll(`.line`)];
+    return lines.length === body.length && lines.every((line, at) => line.textContent === body[at]) ? lines : undefined;
+};
+
+const codeRow = (source: string, coloured: Element | undefined): HTMLElement => {
+    const row = document.createElement(`div`);
+    row.className = `md-code-line`;
+    row.append(...(coloured === undefined ? [document.createTextNode(source)] : coloured.childNodes));
+    return row;
+};
+
+// A closer repeats the opener's character at least as many times, with nothing after it.
+const closesFence = (line: string, marker: string): boolean => {
+    const fence = fenceOf(line);
+    return fence !== undefined && fence.rest.trim() === `` && fence.marker[0] === marker[0] && fence.marker.length >= marker.length;
+};
+
+// A fenced block's parts: the delimiter lines, the info string that names the language, and the code between.
+interface FencedCode {
+    readonly open: string;
+    readonly info: string;
+    readonly body: readonly string[];
+    // Absent while the block is still being typed, which is most of the time it is edited.
+    readonly close: string | undefined;
+}
+
+const fencedCode = (source: string): FencedCode | undefined => {
+    const lines = sourceLines(source).map((line) => (line.endsWith(`\n`) ? line.slice(0, -1) : line));
+    const first = lines[0] ?? ``;
+    const open = fenceOf(first);
+    if (open === undefined) {
+        return undefined;
+    }
+    const last = lines.at(-1) ?? ``;
+    const closed = lines.length > 1 && closesFence(last, open.marker);
+    return { open: first, info: open.rest, body: lines.slice(1, closed ? -1 : undefined), close: closed ? last : undefined };
+};
+
+// A fenced block drawn as the code it holds: the fences are markup, like a heading's hashes, and the body wears
+// the colours the rendered document gives it. Undefined for an indented code block, which has no fences to draw
+// and whose indentation is part of its source.
+const codeElement = (source: string): HTMLElement | undefined => {
+    const fenced = fencedCode(source);
+    if (fenced === undefined) {
+        return undefined;
+    }
+    const coloured = colouredLines(fenced.body, fenced.info);
+    const element = document.createElement(`pre`);
+    element.className = `md-code-block`;
+    element.dataset[ROWS] = ``;
+    // Read by the stylesheet, which prints it where the rendered document prints its language chip.
+    const lang = fenced.info.trim().split(/\s/u)[0] ?? ``;
+    if (lang !== ``) {
+        element.dataset[`mdLang`] = lang;
+    }
+    // Says this block has nothing more to gain from the highlighter, so a later batch leaves it alone.
+    if (coloured !== undefined) {
+        element.dataset[`mdColoured`] = ``;
+    }
+    element.appendChild(fenceRow(fenced.open));
+    for (const [at, line] of fenced.body.entries()) {
+        element.appendChild(codeRow(line, coloured?.[at]));
+    }
+    if (fenced.close !== undefined) {
+        element.appendChild(fenceRow(fenced.close));
+    }
     return element;
 };
 
@@ -201,6 +299,9 @@ const buildProse = (token: MarkdownToken, source: string): HTMLElement | undefin
     }
     if (token.type === `list`) {
         return listElement(source, (token as MarkdownToken & { ordered?: boolean }).ordered === true);
+    }
+    if (token.type === `code`) {
+        return codeElement(source);
     }
     return token.type === `blockquote` ? quoteElement(source) : undefined;
 };
@@ -221,7 +322,7 @@ export const buildBlockElement = (source: string): HTMLElement => {
             return built;
         }
     }
-    return verbatimElement(source, token?.type ?? `text`);
+    return verbatimElement(source);
 };
 
 // Offsets within one run of text nodes, ignoring any row structure above them.
