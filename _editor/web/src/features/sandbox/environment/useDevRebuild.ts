@@ -36,6 +36,11 @@ export interface DevRebuildRun {
     quietFor: number | undefined;
     /** The machine's own sentence when it refused, or why this browser cannot read the log at the moment. */
     trouble: string | undefined;
+    // When the log was last READ, which is a fact about this browser's contact with the machine and not about the
+    // build: it is what the follow gives up on, since a read that keeps failing leaves `quietFor` frozen at whatever
+    // the last good read said. Set when a follow begins as well as on every read, so contact is dated from the moment
+    // this browser started asking rather than from a marker that may be an hour old.
+    heardAt: number | undefined;
 }
 
 const LIVE: ReadonlySet<DevRebuildPhase> = new Set(["starting", "building", "restarting"]);
@@ -45,7 +50,9 @@ export const rebuildRunning = (phase: DevRebuildPhase): boolean => LIVE.has(phas
 const POLL_MS = 4_000;
 // A clock of its own, so elapsed time keeps counting between polls.
 const TICK_MS = 1_000;
-// A log nobody has written to for this long, with no exit mark, is not a slow build any more.
+// The ceiling on silence, in both of the ways a rebuild can go silent: a log nobody has written to for this long with
+// no exit mark is not a slow build any more, and a machine this browser has not heard from for this long is not a
+// rebuild it is still following.
 const ABANDON_S = 15 * 60;
 // A log that isn't there yet is a redirect that hasn't landed; past this it is a log that never will.
 const GRACE_MS = 20_000;
@@ -65,6 +72,7 @@ const idle = (): DevRebuildRun => ({
     exitCode: undefined,
     quietFor: undefined,
     trouble: undefined,
+    heardAt: undefined,
 });
 
 const runs = new Map<string, DevRebuildRun>();
@@ -146,10 +154,17 @@ const poll = async (slug: string, hostId: string): Promise<void> => {
         const result = await runDeviceCommand(hostId, `dev-rebuild-log`);
         if (result.ok) {
             // `message`, never `output`: the latter is the raw `run_command` answer, exit line and stream fences and all.
+            run.heardAt = Date.now();
             absorb(run, slug, result.message);
+        } else if (result.refused) {
+            // The device turned the read away — a switch of its own, a path out of its reach. The build is still out
+            // there and this browser has lost its only window on it, which is exactly what `lost` says.
+            settle(run, slug, "lost", result.message);
         } else {
-            // The device answered and refused: its own switch, not a swap. Asking again changes nothing.
-            settle(run, slug, "failed", result.message);
+            // A READ THAT DIDN'T LAND IS NOT A BUILD THAT FAILED. The device took the command and killed it at its
+            // deadline, which on a machine loaded by the very build being read about is a thing that happens: the
+            // build is detached out there regardless. Say so on the card and ask again in four seconds.
+            run.trouble = result.message;
         }
     } catch (error) {
         unread(run, slug, error);
@@ -157,9 +172,15 @@ const poll = async (slug: string, hostId: string): Promise<void> => {
     if (!rebuildRunning(run.phase)) {
         return;
     }
+    // Nothing heard from the machine at all for this long — reads killed at their deadline, a device reported away, a
+    // daemon that never came back from the swap — is no longer a build being followed, whatever the last read said.
+    if (Date.now() - (run.heardAt ?? Date.now()) > ABANDON_S * 1_000) {
+        settle(run, slug, "lost", run.trouble);
+        return;
+    }
     // No wall-clock ceiling on the follow: a log still growing after two hours is a slow build, not a lost one, and
-    // this repo's own rebuild has taken that long on a laptop. What ends a follow is the log going quiet (ABANDON_S)
-    // or the exit mark arriving — both facts about the build rather than about how long a reader has been waiting.
+    // this repo's own rebuild has taken that long on a laptop. What ends a follow is the exit mark arriving, or one of
+    // the two silences above — never how long a reader has been waiting.
     timers.set(
         slug,
         setTimeout(() => void poll(slug, hostId), POLL_MS),
@@ -187,7 +208,7 @@ const probe = async (slug: string, hostId: string): Promise<void> => {
         }
         // No `startedAt`: the log's age says when this build last printed, not when it began, and the card would rather
         // show no clock than one counting from the wrong moment.
-        Object.assign(run, idle(), { phase: "building", lines: log.lines, quietFor: log.quietFor });
+        Object.assign(run, idle(), { phase: "building", lines: log.lines, quietFor: log.quietFor, heardAt: Date.now() });
         follow(slug, hostId);
     } catch {
         // Nothing to report, and nobody asked.
@@ -221,7 +242,7 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
 
     const start = async (hostId: string): Promise<void> => {
         stop(slug);
-        Object.assign(run, idle(), { phase: "starting", startedAt: Date.now() });
+        Object.assign(run, idle(), { phase: "starting", startedAt: Date.now(), heardAt: Date.now() });
         storeValue(markerKey(slug), String(run.startedAt));
         now.value = Date.now();
         try {
@@ -245,7 +266,7 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
         }
         const marker = Number(storedValue(markerKey(slug)) ?? Number.NaN);
         if (Number.isFinite(marker) && Date.now() - marker < MARKER_GOOD_FOR_MS) {
-            Object.assign(run, idle(), { phase: "building", startedAt: marker });
+            Object.assign(run, idle(), { phase: "building", startedAt: marker, heardAt: Date.now() });
             follow(slug, hostId);
             return;
         }

@@ -8,7 +8,7 @@ import {
     devRebuildLogPath,
 } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { type DeviceCommandFacts, DEVICE_COMMANDS, doorRoute, outcomeOf, streamOf, succeeded } from "./device-commands.js";
+import { COMMAND_TIMEOUT_MS, type DeviceCommandFacts, DEVICE_COMMANDS, doorRoute, outcomeOf, streamOf, succeeded } from "./device-commands.js";
 
 // What the daemon knows when it builds a line. Only `sandboxId`, `mode` and `localDir` ever arrive from a caller; the
 // rest is this sandbox's own knowledge of itself and of the door it is talking to, which is the whole reason these
@@ -107,7 +107,25 @@ test("keeps the machine's own refusal, switch and all", () => {
     const refusal = 'Refused: "Run commands" is switched off for this device.';
     const result = outcomeOf("mirror-off", { text: refusal, refused: true });
     expect(result.ok).toBe(false);
+    expect(result.refused).toBe(true);
     expect(result.message).toBe(refusal);
+});
+
+// THE DIFFERENCE A POLLING CALLER LIVES ON. Turning the command away is the device's answer to being asked at all and
+// will be its answer again; killing a command it accepted is this attempt running out of time, and says nothing about
+// the work — which for a detached build is still out there either way.
+test("separates a command the device turned away from one it killed", () => {
+    const killed = outcomeOf("dev-rebuild-log", answer("The command was killed after 60s."));
+    expect(killed.ok).toBe(false);
+    expect(killed.refused).toBe(false);
+    expect(outcomeOf("mirror-on", answer("Exit code 0 (success).")).refused).toBe(false);
+});
+
+// The read is a `stat` and a `tail`; what it has to survive is a login shell — and on a PC a `wsl.exe` session — on a
+// machine flat out running the very build being read about. Measured at load 19.5, the default was not enough, and a
+// killed read was being read as a failed rebuild.
+test("gives the rebuild log read longer than the default to reach a busy machine", () => {
+    expect(DEVICE_COMMANDS["dev-rebuild-log"].timeoutMs ?? 0).toBeGreaterThan(COMMAND_TIMEOUT_MS);
 });
 
 test("reports a failed command in the machine's words, stderr first", () => {

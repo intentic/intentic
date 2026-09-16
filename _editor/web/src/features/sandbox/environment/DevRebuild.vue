@@ -222,7 +222,7 @@ const hiccup = computed(() => (live.value ? run.trouble : undefined));
             />
 
             <p v-if="quiet" class="text-2xs text-subtle">{{ quiet }}</p>
-            <p v-if="hiccup" class="text-2xs text-subtle">Can't read the log at the moment ({{ hiccup }}) — the build itself is unaffected.</p>
+            <p v-if="hiccup" class="text-2xs text-subtle">Can't read the log at the moment — the build itself is unaffected. {{ hiccup }}</p>
 
             <Notice v-if="failure" :of="failure" />
             <p v-else-if="done" class="flex items-center gap-2 text-2xs text-muted">

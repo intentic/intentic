@@ -222,6 +222,10 @@ export const DeviceCommandResultSchema = z.object({
     ok: z.boolean(),
     message: z.string(),
     output: z.string().optional(),
+    // WHICH KIND OF `ok: false` THIS IS, because a caller that repeats itself needs to tell them apart: the device
+    // turning the command away (a switch of its own is off, the path is out of its reach) will turn it away again,
+    // whereas a command it accepted and then killed at its deadline says nothing except that this attempt was too slow.
+    refused: z.boolean(),
 });
 export type DeviceCommandResult = z.infer<typeof DeviceCommandResultSchema>;
 

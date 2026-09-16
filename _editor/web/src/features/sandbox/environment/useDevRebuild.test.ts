@@ -26,11 +26,18 @@ const { rebuildRunning, useDevRebuild } = await import("./useDevRebuild");
 const HOST = `laptop`;
 // The daemon hands back the command's stdout as `message`; `output` is the raw fenced answer, which must never be read
 // as log text.
-const log = (quiet: string, ...lines: readonly string[]): { ok: true; message: string; output: string } => {
+const log = (quiet: string, ...lines: readonly string[]): { ok: true; refused: false; message: string; output: string } => {
     const stdout = [`${DEV_REBUILD_QUIET_MARK} ${quiet}`, ...lines].join(`\n`);
-    return { ok: true, message: stdout, output: `Exit code 0 (success).\n--- stdout ---\n${stdout}` };
+    return { ok: true, refused: false, message: stdout, output: `Exit code 0 (success).\n--- stdout ---\n${stdout}` };
 };
-const started = { ok: true, message: `The rebuild is running on that device.` };
+const started = { ok: true, refused: false, message: `The rebuild is running on that device.` };
+// A read the machine took and then killed at its deadline: `refused` false, because it is this attempt running out of
+// time rather than the device turning the command away. The machine's own sentence, verbatim.
+const killed = {
+    ok: false,
+    refused: false,
+    message: `The command was killed after 60s. It either takes longer than that, or it is waiting for input that nobody can type: there is no terminal on this end.`,
+};
 
 // Each test takes a slug of its own: the run is module state on purpose, so it outlives everything a test could unmount.
 let counter = 0;
@@ -158,13 +165,69 @@ it(`ends on the build's own exit status, and says which it was`, async () => {
 // The machine's own refusal — its "Run commands" switch off, no checkout recorded — is a value, not a wait.
 it(`stops on the device's refusal and keeps its words`, async () => {
     const slug = nextSlug();
-    runDeviceCommand.mockResolvedValue({ ok: false, message: `Refused: "Run commands" is switched off for this device.` });
+    runDeviceCommand.mockResolvedValue({ ok: false, refused: true, message: `Refused: "Run commands" is switched off for this device.` });
     const { run } = useDevRebuild(slug);
     await useDevRebuild(slug).start(HOST);
 
     expect(run.phase).toBe(`failed`);
     expect(run.trouble).toContain(`Run commands`);
     expect(runDeviceCommand).toHaveBeenCalledTimes(1);
+});
+
+// A MACHINE IS BUSIEST WHILE IT IS BUILDING, so the read that follows a build is the read most likely to be killed at
+// its deadline — and the build it is reading about is detached out there, entirely unaffected by a poll that lost.
+it(`treats a read the machine killed as a hiccup, not as a rebuild that failed`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`2`, `#8 [builder 2/9] RUN pnpm install`));
+    const { run } = useDevRebuild(slug);
+    await useDevRebuild(slug).start(HOST);
+    await nextPoll(1);
+
+    runDeviceCommand.mockResolvedValue(killed);
+    await nextPoll(1);
+    expect(run.phase).toBe(`building`);
+    expect(run.trouble).toContain(`killed after 60s`);
+    // The lines the last good read brought are kept: a read that failed said nothing to replace them with.
+    expect(run.lines).toEqual([`#8 [builder 2/9] RUN pnpm install`]);
+
+    // And the follow is still going, so the build's own ending still arrives.
+    runDeviceCommand.mockResolvedValue(log(`1`, `#14 exporting layers`, `${DEV_REBUILD_EXIT_MARK} 0`));
+    await nextPoll(1);
+    expect(run.phase).toBe(`done`);
+    expect(run.exitCode).toBe(0);
+    expect(run.trouble).toBeUndefined();
+});
+
+// Reads that never land leave `quietFor` frozen at whatever the last good one said, so the log's own silence can never
+// end this follow. Going unheard-from is what does, on the same fifteen minutes a quiet log gets.
+it(`gives up once the machine has gone unheard-from for as long as a quiet log would`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(killed);
+    const { run } = useDevRebuild(slug);
+    await useDevRebuild(slug).start(HOST);
+
+    await nextPoll(60);
+    expect(run.phase).toBe(`building`);
+
+    await nextPoll(180);
+    expect(run.phase).toBe(`lost`);
+    expect(run.trouble).toContain(`killed after 60s`);
+});
+
+// Its "Run commands" switch went off mid-build, or the checkout moved out of that door's reach. The build is still out
+// there; what ended is this browser's only window on it, which is what `lost` says and `failed` does not.
+it(`calls a device that refuses the read lost, not a rebuild that failed`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`2`, `#3 [base 1/4]`));
+    const { run } = useDevRebuild(slug);
+    await useDevRebuild(slug).start(HOST);
+    await nextPoll(1);
+
+    runDeviceCommand.mockResolvedValue({ ok: false, refused: true, message: `Refused: "Run commands" is switched off for this device.` });
+    await nextPoll(1);
+    expect(run.phase).toBe(`lost`);
+    expect(run.trouble).toContain(`Run commands`);
+    expect(run.exitCode).toBeUndefined();
 });
 
 // Switching views unmounts the card. The build does not care, and neither does the run.

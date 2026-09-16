@@ -21,10 +21,16 @@ import { ownSlug } from "./self-host.js";
 // call). Not a general remote-execution surface; the machine still refuses via its own switch.
 
 // This side's timeout exceeds the machine's own budget, so an overrun surfaces as its answer, not a cutoff.
-const COMMAND_TIMEOUT_MS = 20_000;
+export const COMMAND_TIMEOUT_MS = 20_000;
 // A build (dev-reload) or an install that fetches Mutagen and cloudflared (sync-install) is minutes, not seconds; the
 // machine's own ceiling is ten minutes, and the hub's connection ceiling is above that.
 const LONG_COMMAND_TIMEOUT_MS = 8 * 60_000;
+// READING THE REBUILD LOG IS A `stat` AND A `tail` AND STILL NEEDS THIS. What costs is getting there — a login shell,
+// and on a PC a `wsl.exe` session on top of it — on the one machine guaranteed to be flat out, because the build being
+// read about is what is loading it. Unlike the launch beside it, this is the command whose answer nobody waits on: it
+// is polled every few seconds for the length of a build, so its budget buys a truthful reading rather than a wait.
+// Measured on a rebuild at load 19.5, the 20s default was killed mid-poll while the build carried on to exit 0.
+const UNDER_LOAD_TIMEOUT_MS = 60_000;
 // Slack over the machine's own budget, whichever budget the command chose.
 const CALL_SLACK_MS = 5_000;
 
@@ -79,7 +85,7 @@ interface DeviceCommandSpec {
     readonly needs?: string;
     // True when the command refuses to run fleet-wide and needs a sandbox id; only the destructive action sets it.
     readonly scoped?: boolean;
-    /** Above the 20s default for a command that downloads or builds. */
+    /** Above the 20s default for a command that downloads, builds, or has to reach a machine busy doing one. */
     readonly timeoutMs?: number;
     /** Mints a single-use desktop-sync pairing for this call; only the enrolling command asks. */
     readonly mints?: boolean;
@@ -208,6 +214,7 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
                 ? undefined
                 : `log=${shellDir(devRebuildLogPath(facts.ownSlug))}; if [ -f "$log" ]; then at=$(stat -c %Y "$log" 2>/dev/null || stat -f %m "$log" 2>/dev/null || echo); if [ -n "$at" ]; then echo "${DEV_REBUILD_QUIET_MARK} $(( $(date +%s) - at ))"; else echo "${DEV_REBUILD_QUIET_MARK} ?"; fi; tail -c 12000 "$log" | tail -n 80; else echo "${DEV_REBUILD_QUIET_MARK} -"; fi`,
         needs: "this sandbox does not know its own name, so it cannot name the log to read",
+        timeoutMs: UNDER_LOAD_TIMEOUT_MS,
         // The log, not the checkout: this is the one dev command that needs no checkout, and the log lives in the home
         // of whichever environment ran the build.
         path: (facts) => (facts.ownSlug === undefined ? undefined : devRebuildLogPath(facts.ownSlug)),
@@ -312,14 +319,21 @@ export const outcomeOf = (command: DeviceCommand, answer: { text: string; refuse
     const spec = DEVICE_COMMANDS[command];
     if (answer.refused) {
         // The host agent's refusal is a value naming the switch, not an error to dress up.
-        return { ok: false, message: answer.text.trim() === "" ? "That device refused to run commands." : answer.text.trim(), output: answer.text };
+        return {
+            ok: false,
+            refused: true,
+            message: answer.text.trim() === "" ? "That device refused to run commands." : answer.text.trim(),
+            output: answer.text,
+        };
     }
     const out = streamOf(answer.text, STDOUT_FENCE);
     if (succeeded(answer.text)) {
-        return { ok: true, message: out === "" ? spec.done : out, output: answer.text };
+        return { ok: true, refused: false, message: out === "" ? spec.done : out, output: answer.text };
     }
     const err = streamOf(answer.text, STDERR_FENCE);
-    return { ok: false, message: [err, out].find((part) => part !== "") ?? answer.text.trim(), output: answer.text };
+    // The device took the command and it ended badly — a non-zero exit, or its own deadline. Both are this attempt's
+    // outcome rather than the device's answer to being asked at all.
+    return { ok: false, refused: false, message: [err, out].find((part) => part !== "") ?? answer.text.trim(), output: answer.text };
 };
 
 // Only an unreachable machine throws. Everything the machine actually answered, a refusal or a nonzero exit, comes back
