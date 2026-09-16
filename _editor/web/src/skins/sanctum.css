@@ -685,6 +685,12 @@
     color: var(--sanctum-gold);
 }
 
+/* Labels in flex headers center their ornament and inscription as one unit. */
+[data-skin="sanctum"] :is(.flex, .inline-flex) > .font-semibold.uppercase.tracking-wide:not(.flex):not(.block) {
+    display: inline-flex;
+    align-items: center;
+}
+
 /* THE LOZENGE — the site's full stop, and the mark a mason cuts to open a line of inscription. */
 [data-skin="sanctum"] .font-semibold.uppercase.tracking-wide::before {
     content: "";
