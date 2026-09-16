@@ -692,7 +692,7 @@
     width: 0.72em;
     height: 0.72em;
     margin-right: 0.5em;
-    vertical-align: -0.04em;
+    vertical-align: middle;
     background-image: var(--sanctum-lozenge);
     background-size: 100% 100%;
     background-repeat: no-repeat;
