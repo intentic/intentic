@@ -253,7 +253,7 @@ const rungs = computed(() =>
 const accountPinnable = computed(() => new Set(form.models.map((pin) => pin.provider)).size <= 1);
 
 // A function ref, not one shared element, since the picker anchors to whichever row opened it (popover or sheet; the
-// host decides).
+// host decides). Slot `form.models.length` anchors the add button.
 const rungEls = new Map<number, HTMLElement>();
 const bindRung = (index: number, el: unknown): void => {
     if (el instanceof HTMLElement) {
@@ -751,7 +751,12 @@ const setProvider = (provider: string): void => {
                                     <Icon name="times" />
                                 </button>
                             </div>
-                            <button type="button" :class="ui.addTile(`self-start px-3 py-2`)" @click="addRung">
+                            <button
+                                :ref="(el) => bindRung(form.models.length, el)"
+                                type="button"
+                                :class="ui.addTile(`self-start px-3 py-2`)"
+                                @click="addRung"
+                            >
                                 <Icon name="plus" />
                                 {{ form.models.length === 0 ? `Pick a model` : `Add a fallback` }}
                             </button>
