@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { attachmentPeek } from "../drafts/attachmentPeeks";
+import { attachmentAudio, attachmentKind } from "../drafts/attachmentPreviews";
+import ChatAudioChip from "../transcript/ChatAudioChip.vue";
 import ChatFileChip from "../transcript/ChatFileChip.vue";
 import ChatImageThumb from "../transcript/ChatImageThumb.vue";
 
-/* What a sent prompt's attachments look like: a hover-previewable thumbnail per image, a bare tile with the file's own first lines for everything else. */
+/* What a sent prompt's attachments look like: a hover-previewable thumbnail per image, a player per sound, a bare tile with the file's own first lines for everything else. */
 
 defineProps<{ attachments: readonly { name: string; path: string; previewUrl?: string }[] }>();
 
@@ -18,13 +20,13 @@ const LEAD_LINES = 3;
     <div class="flex items-start gap-3">
         <template v-for="attachment in attachments" :key="attachment.path">
             <ChatImageThumb v-if="attachment.previewUrl" :src="attachment.previewUrl" :alt="attachment.name" size="h-14 w-14" />
-            <ChatFileChip
-                v-else
+            <ChatAudioChip
+                v-else-if="attachmentKind(attachment.path) === `audio`"
                 :name="attachment.name"
                 :path="attachment.path"
-                :peek="attachmentPeek(attachment.path)"
-                :lead="LEAD_LINES"
+                :src="attachmentAudio(attachment.path)"
             />
+            <ChatFileChip v-else :name="attachment.name" :path="attachment.path" :peek="attachmentPeek(attachment.path)" :lead="LEAD_LINES" />
         </template>
     </div>
 </template>

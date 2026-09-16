@@ -7,6 +7,7 @@ export {
     formatDate,
     formatDateTime,
     formatDayMonth,
+    formatDuration,
     formatTime,
     formatTimestamp,
     formatTokens,

@@ -1,7 +1,7 @@
 // What a peek may claim about a file it has only read the ends of. Pins the two claims that would be lies: a line
 // count derived from a clipped window, and a fragment of a line drawn as though it were a line.
 import { expect, it } from "vitest";
-import { dropPartialFirst, dropPartialLast, type FilePeek, isImagePath, peekLead, peekLines, peekOmitted } from "./filePeek";
+import { dropPartialFirst, dropPartialLast, type FilePeek, isAudioPath, isImagePath, peekLead, peekLines, peekOmitted } from "./filePeek";
 
 const peek = (over: Partial<FilePeek> = {}): FilePeek => ({
     present: true,
@@ -53,4 +53,15 @@ it("knows which attachments have a thumbnail instead", () => {
     expect(isImagePath(`shots/Screen.PNG`)).toBe(true);
     expect(isImagePath(`logs/desktop-setup.log`)).toBe(false);
     expect(isImagePath(`Makefile`)).toBe(false);
+});
+
+// The two faces are exclusive by construction — a path that answered to both would get a thumbnail AND a player,
+// and the caches behind them key one URL per path.
+it("knows which attachments have a waveform instead, and never both", () => {
+    expect(isAudioPath(`calls/Standup.M4A`)).toBe(true);
+    expect(isAudioPath(`calls/note.opus`)).toBe(true);
+    expect(isAudioPath(`shots/Screen.PNG`)).toBe(false);
+    expect(isAudioPath(`logs/desktop-setup.log`)).toBe(false);
+    // `.ogv` is video in the same family of containers; only what an <audio> element decodes belongs here.
+    expect(isAudioPath(`clips/demo.ogv`)).toBe(false);
 });

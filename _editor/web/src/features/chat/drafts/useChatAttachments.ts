@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/ui/async";
 import { reactive, type Ref, ref } from "vue";
 import { collectDroppedFiles } from "../../workspace/explorer/transfer/dropEntries";
-import { forgetPreview, rememberPreview } from "./attachmentPreviews";
+import { forgetMedia, type MediaKind, rememberMedia } from "./attachmentPreviews";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { sandboxJsonVia, sandboxUpload } from "../../sandbox/client/sandboxClient";
 import type { PendingAttachment } from "../session/conversation";
@@ -11,6 +11,14 @@ import { uuid } from "../../../lib/uuid";
 // Files staged for the next turn: the composer chips, arriving via paperclip dialog, paste, or drop. Per-tab like the
 // draft, since the upload closure keeps pointing at its own entry rather than the list. Abandoned uploads orphan files
 // under .intentic/records/artifacts/attachments, visible and deletable in the workspace tree.
+
+// An object URL for bytes an element can draw or play, and which element that is. Typed by the browser rather than by
+// the name's ending: these bytes are in this window already, so what they ARE is knowable without asking the path.
+// Undefined for everything else, which the chip names instead of showing.
+const stagedMedia = (file: File): { readonly kind: MediaKind; readonly url: string } | undefined => {
+    const kind: MediaKind | undefined = file.type.startsWith(`image/`) ? `image` : file.type.startsWith(`audio/`) ? `audio` : undefined;
+    return kind === undefined ? undefined : { kind, url: URL.createObjectURL(file) };
+};
 
 export const useChatAttachments = (composer: {
     /** This pane's conversation's staged files. */
@@ -31,8 +39,8 @@ export const useChatAttachments = (composer: {
             return;
         }
         const controller = new AbortController();
+        const media = stagedMedia(file);
         // reactive() explicitly: entries mutate through this reference (progress ticks), not the array ref's proxy.
-        const previewUrl = file.type.startsWith(`image/`) ? URL.createObjectURL(file) : undefined;
         const entry = reactive<PendingAttachment>({
             id: uuid(),
             name: file.name,
@@ -40,11 +48,11 @@ export const useChatAttachments = (composer: {
             controller,
             status: `uploading`,
             progress: 0,
-            ...(previewUrl === undefined ? {} : { previewUrl }),
+            ...(media === undefined ? {} : { previewUrl: media.url }),
         });
-        // Filed under the path too (attachmentPreviews), since a mid-turn message carries only a path, not a thumbnail.
-        if (previewUrl !== undefined) {
-            rememberPreview(entry.path, previewUrl);
+        // Filed under the path too (attachmentPreviews), since a mid-turn message carries only a path, not the bytes.
+        if (media !== undefined) {
+            rememberMedia(entry.path, media.kind, media.url);
         }
         composer.attachments.value = [...composer.attachments.value, entry];
         sandboxUpload(`/workspace/upload?path=${encodeURIComponent(entry.path)}`, file, {
@@ -71,7 +79,7 @@ export const useChatAttachments = (composer: {
             attachment.controller?.abort();
             if (attachment.previewUrl !== undefined) {
                 // Both halves; otherwise the cache keeps handing out a URL pointing at nothing.
-                forgetPreview(attachment.path);
+                forgetMedia(attachment.path);
                 URL.revokeObjectURL(attachment.previewUrl);
             }
             if (attachment.status === `done`) {

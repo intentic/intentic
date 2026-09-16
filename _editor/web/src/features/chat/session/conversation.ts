@@ -53,6 +53,8 @@ export interface PendingAttachment {
     // Workspace-relative destination: .intentic/records/artifacts/attachments/<uuid>/<name>.
     readonly path: string;
     // Object URL for image thumbnails; revoked on remove, handed to the sent message on submit.
+    // Object URL for staged bytes an element shows or plays (a thumbnail, a waveform); revoked on remove, handed to
+    // the sent message on submit.
     readonly previewUrl?: string;
     readonly controller?: AbortController;
     status: `uploading` | `done` | `failed`;

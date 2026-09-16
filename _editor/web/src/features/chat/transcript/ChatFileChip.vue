@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { AnchoredOverlay, Button, explorerColorClass, iconForEntry, type Side } from "@intentic/ui";
 import { formatBytes } from "@intentic/ui/format";
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import { type FilePeek, peekLead, peekLines, peekOmitted } from "../drafts/filePeek";
 import ChatImageThumb from "./ChatImageThumb.vue";
+import { useClippedName } from "./clippedName";
 import { useChatSurface } from "../tools/chatToolSurface";
 
 /* One attached file, at three depths: the tile says what it is (glyph, name, size, its own first lines), hovering it reads the head and the tail. */
@@ -50,35 +51,7 @@ const icon = computed(() => iconForEntry(name, `file`));
 // that tree. The vocabulary it defines — which hue means a config, a log, an archive — is worth sharing regardless.
 const iconColor = computed(() => explorerColorClass(`colorful`, name, `file`, false));
 
-// Middle ellipsis: what tells one attachment from the next is usually a timestamp or a hash at the END, which is
-// exactly what a trailing `truncate` eats. The tail rides along at fixed width while the head does the truncating.
-const TAIL_CHARS = 9;
-const split = computed(() => (name.length > TAIL_CHARS + 6 ? TAIL_CHARS : 0));
-const nameHead = computed(() => (split.value === 0 ? name : name.slice(0, -split.value)));
-const nameTail = computed(() => (split.value === 0 ? `` : name.slice(-split.value)));
-
-// Whether the head is actually cut, which only the box can answer. `text-overflow: ellipsis` is not used to answer it:
-// it keeps the space the last fitting character could not use INSIDE the clipping box, and that space lands between
-// the mark and the ending — a word-sized gap in the middle of a filename. The mark rides on the ending instead.
-const nameBox = ref<HTMLElement>();
-const clipped = ref(false);
-watch(
-    nameBox,
-    (element, _previous, onCleanup) => {
-        clipped.value = false;
-        if (element === undefined) {
-            return;
-        }
-        const sync = (): void => {
-            clipped.value = Math.round(element.scrollWidth) > Math.round(element.clientWidth);
-        };
-        const observer = new ResizeObserver(sync);
-        observer.observe(element);
-        sync();
-        onCleanup(() => observer.disconnect());
-    },
-    { immediate: true, flush: `post` },
-);
+const { nameBox, nameHead, nameTail, clipped } = useClippedName(() => name);
 
 // Scale, and length where length is knowable: the facts a filename withholds. Never the kind, which is the name's own
 // ending — the one part of it the middle-ellipsis above never gives up.

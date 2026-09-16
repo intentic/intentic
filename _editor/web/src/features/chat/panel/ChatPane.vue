@@ -46,7 +46,7 @@ import { usePersonaRoute } from "../personas/personaRoute";
 import { roleSources } from "../accounts/roleModel";
 import { useRole } from "../../sandbox/secrets/useRole";
 import { attachmentPeek } from "../drafts/attachmentPeeks";
-import { attachmentPreview } from "../drafts/attachmentPreviews";
+import { attachmentAudio, attachmentKind, attachmentPreview } from "../drafts/attachmentPreviews";
 import { useChatAttachments } from "../drafts/useChatAttachments";
 import { useComposerVoice } from "../composer/useComposerVoice";
 import { useEditorContextChip } from "../composer/useEditorContextChip";
@@ -64,6 +64,7 @@ import { providerReady } from "../session/access";
 import { otherBoxes } from "../../sandbox/live/fleetAcross";
 import ChatCommandPopover from "../composer/ChatCommandPopover.vue";
 import ChatContinueStrip from "./ChatContinueStrip.vue";
+import ChatAudioChip from "../transcript/ChatAudioChip.vue";
 import ChatFileChip from "../transcript/ChatFileChip.vue";
 import ChatMentionPopover from "../composer/ChatMentionPopover.vue";
 import ChatForkCut from "../transcript/ChatForkCut.vue";
@@ -1331,7 +1332,8 @@ watch(
                                     @pick="pickMention"
                                 />
                                 <ChatCommandPopover v-if="commandOpen" ref="commandPopover" :commands="commandMatches" @pick="pickCommand" />
-                                <div v-if="attachments.length > 0 || editorChip" class="flex flex-wrap gap-2 px-3 pt-3">
+                                <!-- `items-start`, as the sent bubble's row is: a one-line chip stretched to the height of a player or a thumbnail beside it reads as a panel someone forgot to fill. -->
+                                <div v-if="attachments.length > 0 || editorChip" class="flex flex-wrap items-start gap-2 px-3 pt-3">
                                     <!-- The editor-context chip attaches the open file or selection when enabled. -->
                                     <button
                                         v-if="editorChip"
@@ -1346,19 +1348,32 @@ watch(
                                         <span class="max-w-36 truncate">{{ editorChipLabel }}</span>
                                     </button>
                                     <!-- Keyed by path like the sent bubble, but not until the upload lands: the daemon's copy of a file still going up is a prefix, which decodes as a part-drawn picture the path's cache then keeps. -->
-                                    <ChatFileChip
-                                        v-for="a in attachments"
-                                        :key="a.id"
-                                        :name="a.name"
-                                        :path="a.path"
-                                        :peek="a.status === 'done' ? attachmentPeek(a.path) : undefined"
-                                        :preview-url="a.status === 'done' ? attachmentPreview(a.path) : a.previewUrl"
-                                        :progress="a.status === 'uploading' ? a.progress : undefined"
-                                        :error="a.status === 'failed' ? (a.error ?? 'Upload failed') : undefined"
-                                        framed
-                                        removable
-                                        @remove="staging.remove(a)"
-                                    />
+                                    <template v-for="a in attachments" :key="a.id">
+                                        <!-- A sound plays where it was attached; there is nothing about it a filename and a byte count can tell you. -->
+                                        <ChatAudioChip
+                                            v-if="attachmentKind(a.path) === `audio`"
+                                            :name="a.name"
+                                            :path="a.path"
+                                            :src="a.status === 'done' ? attachmentAudio(a.path) : a.previewUrl"
+                                            :progress="a.status === 'uploading' ? a.progress : undefined"
+                                            :error="a.status === 'failed' ? (a.error ?? 'Upload failed') : undefined"
+                                            framed
+                                            removable
+                                            @remove="staging.remove(a)"
+                                        />
+                                        <ChatFileChip
+                                            v-else
+                                            :name="a.name"
+                                            :path="a.path"
+                                            :peek="a.status === 'done' ? attachmentPeek(a.path) : undefined"
+                                            :preview-url="a.status === 'done' ? attachmentPreview(a.path) : a.previewUrl"
+                                            :progress="a.status === 'uploading' ? a.progress : undefined"
+                                            :error="a.status === 'failed' ? (a.error ?? 'Upload failed') : undefined"
+                                            framed
+                                            removable
+                                            @remove="staging.remove(a)"
+                                        />
+                                    </template>
                                 </div>
                                 <!-- The composer uses transcript body sizing on desktop. -->
                                 <textarea

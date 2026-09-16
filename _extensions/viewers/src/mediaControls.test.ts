@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { formatDuration, seekTargets, SPEEDS } from "./mediaControls";
+// Through the door the viewer imports it by: the clock itself lives in the kit, since the chat composer's audio chip
+// draws the same one and two players disagreeing about "0:59" is the bug this shares to avoid.
+import { formatDuration } from "@intentic/extension-ui/format";
+import { seekTargets, SPEEDS } from "./mediaControls";
 
 describe(`formatDuration`, () => {
     it(`drops the hours field below an hour`, () => {

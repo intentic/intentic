@@ -141,6 +141,7 @@ export const ICONS = {
     "volume-off": STATUS_GLYPHS[`volume-off`],
     "volume-up": STATUS_GLYPHS[`volume-up`],
     vpn: NAVIGATION_GLYPHS[`vpn`],
+    waveform: OBJECT_GLYPHS[`waveform`],
     "wave-pulse": NAVIGATION_GLYPHS[`wave-pulse`],
     wifi: STATUS_GLYPHS[`wifi`],
     "window-maximize": ACTION_GLYPHS[`expand`],

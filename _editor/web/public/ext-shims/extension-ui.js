@@ -68,6 +68,7 @@ export const formatBytes = m["formatBytes"];
 export const formatDate = m["formatDate"];
 export const formatDateTime = m["formatDateTime"];
 export const formatDayMonth = m["formatDayMonth"];
+export const formatDuration = m["formatDuration"];
 export const formatTime = m["formatTime"];
 export const formatTimestamp = m["formatTimestamp"];
 export const formatTokens = m["formatTokens"];

@@ -22,7 +22,9 @@ presentations and books.
 - [src/rtf/](src/rtf/): the RTF tokenizer and the reader that turns its control words into the same blocks.
 - [src/epub/](src/epub/): an EPUB's structure, and one chapter as a self-contained document for a sandboxed frame.
 - [src/DocumentPaper.vue](src/DocumentPaper.vue): the page surface and document typography .odt and .rtf share.
-- [src/mediaControls.ts](src/mediaControls.ts): the playback state the media viewers share.
+- [src/mediaControls.ts](src/mediaControls.ts): the speed ladder and the seek-key map the transport shares with its
+  shortcuts. The clock is not here: `formatDuration` is the kit's, since the chat composer's audio chip draws the
+  same one and two players disagreeing about "0:59" is worth one definition.
 - [src/extension.ts](src/extension.ts): the registration, and the floor this extension sits on.
 
 ## How it fits

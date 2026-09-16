@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Button, Icon, vAction } from "@intentic/extension-ui";
+import { formatDuration } from "@intentic/extension-ui/format";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { formatDuration, seekTargets, SPEEDS } from "./mediaControls";
+import { seekTargets, SPEEDS } from "./mediaControls";
 
 // Audio and video share one component, always a `<video>` element; layout follows `videoWidth > 0` once metadata loads.
 // `src` streams via range reads, not a blob; unplayable containers surface through the element's own `error` event.

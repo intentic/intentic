@@ -6,6 +6,7 @@
     --color-file-config:  var(--role-file-config);
     --color-file-data:    var(--role-file-data);
     --color-file-image:   var(--role-file-image);
+    --color-file-audio:   var(--role-file-audio);
     --color-file-doc:     var(--role-file-doc);
     --color-file-shell:   var(--role-file-shell);
     --color-file-archive: var(--role-file-archive);
@@ -19,6 +20,7 @@
     --role-file-config:  oklch(62% 0.14 85);   /* amber */
     --role-file-data:    oklch(52% 0.13 155);  /* green */
     --role-file-image:   oklch(55% 0.19 300);  /* violet */
+    --role-file-audio:   oklch(58% 0.16 120);  /* lime — the widest gap left in this wheel, between amber and green */
     --role-file-doc:     oklch(55% 0.11 210);  /* cyan */
     --role-file-shell:   oklch(58% 0.16 40);   /* orange */
     --role-file-archive: oklch(50% 0.06 70);   /* warm taupe */
@@ -32,6 +34,7 @@
     --role-file-config:  oklch(80% 0.15 85);
     --role-file-data:    oklch(72% 0.15 155);
     --role-file-image:   oklch(73% 0.16 300);
+    --role-file-audio:   oklch(78% 0.15 120);
     --role-file-doc:     oklch(74% 0.11 210);
     --role-file-shell:   oklch(74% 0.15 40);
     --role-file-archive: oklch(66% 0.06 70);

@@ -4,7 +4,19 @@
 import type { ExplorerStyle } from "./explorerStyle.js";
 import type { IconName } from "./iconSets.js";
 
-export type FileCategory = "code" | "style" | "config" | "data" | "image" | "doc" | "shell" | "archive" | "lock" | "binary" | "generic";
+export type FileCategory =
+    | "code"
+    | "style"
+    | "config"
+    | "data"
+    | "image"
+    | "audio"
+    | "doc"
+    | "shell"
+    | "archive"
+    | "lock"
+    | "binary"
+    | "generic";
 
 const EXT_CATEGORY: Record<string, FileCategory> = {
     // images
@@ -17,6 +29,16 @@ const EXT_CATEGORY: Record<string, FileCategory> = {
     bmp: "image",
     ico: "image",
     svg: "image",
+    // sound; the set the daemon types as audio/* on /workspace/raw, which is what a player is handed
+    mp3: "audio",
+    wav: "audio",
+    ogg: "audio",
+    oga: "audio",
+    opus: "audio",
+    weba: "audio",
+    flac: "audio",
+    m4a: "audio",
+    aac: "audio",
     // documents
     pdf: "doc",
     md: "doc",
@@ -111,6 +133,7 @@ const CATEGORY_ICON: Record<FileCategory, IconName> = {
     config: "cog",
     data: "database",
     image: "image",
+    audio: "waveform",
     doc: "file-edit",
     shell: "server",
     archive: "box",
@@ -126,6 +149,7 @@ const CATEGORY_COLOR: Record<FileCategory, string> = {
     config: "text-file-config",
     data: "text-file-data",
     image: "text-file-image",
+    audio: "text-file-audio",
     doc: "text-file-doc",
     shell: "text-file-shell",
     archive: "text-file-archive",

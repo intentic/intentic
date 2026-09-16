@@ -16,6 +16,20 @@ export const formatBytes = (bytes: number | undefined): string => {
     return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 };
 
+// A span of playable seconds as a clock, hours omitted under an hour ("0:14", "3:07:22"). Infinity or NaN render
+// `--:--` rather than "0:00": a container that hasn't reported its length yet is not a zero-length one.
+export const formatDuration = (seconds: number): string => {
+    if (!Number.isFinite(seconds) || seconds < 0) {
+        return `--:--`;
+    }
+    const whole = Math.floor(seconds);
+    const pad = (value: number): string => String(value).padStart(2, `0`);
+    const hours = Math.floor(whole / 3600);
+    return hours > 0
+        ? `${hours}:${pad(Math.floor((whole % 3600) / 60))}:${pad(whole % 60)}`
+        : `${Math.floor(whole / 60)}:${pad(whole % 60)}`;
+};
+
 // Token counts at chip width: "1.4M" past a million, "142k" past a thousand, exact below that. Used everywhere
 // tokens are quoted so two surfaces never disagree.
 export const formatTokens = (tokens: number): string =>

@@ -49,3 +49,22 @@ it("never paints an attachment with the prompt bubble's surface", () => {
     // with no cross-axis rule, and read as a panel someone forgot to fill.
     expect(element.firstElementChild?.className).toContain(`items-start`);
 });
+
+// A sound sent is the same sound staged: the bubble has to keep the player, or pressing send turns a thing you can
+// hear back into a filename and a byte count.
+it("keeps a sent sound playable instead of naming it", () => {
+    const element = mount([{ name: `voice-note.m4a`, path: `${STATE_DIR}/x/voice-note.m4a` }]);
+
+    const seek = element.querySelector(`[role="slider"]`);
+    expect(seek?.getAttribute(`aria-label`)).toBe(`Seek voice-note.m4a`);
+    expect(element.querySelector(`audio`)).not.toBeNull();
+    expect(element.querySelector(`button[aria-label="Play voice-note.m4a"]`)).not.toBeNull();
+});
+
+// Everything not a picture and not a sound keeps the text peek; the audio branch must not swallow the rest.
+it("leaves a log to the file chip's own lead lines", () => {
+    const element = mount([{ name: `desktop-setup.log`, path: `${STATE_DIR}/x/desktop-setup.log` }]);
+
+    expect(element.querySelector(`audio`)).toBeNull();
+    expect(element.textContent).toContain(`starting setup`);
+});

@@ -32,6 +32,7 @@ export const extensionUiNames = [
     "formatDate",
     "formatDateTime",
     "formatDayMonth",
+    "formatDuration",
     "formatTime",
     "formatTimestamp",
     "formatTokens",

@@ -3,10 +3,17 @@
 // the client that would. attachmentPeeks.ts is the half that fetches.
 
 // Extensions the <img> thumb can actually display; matches what the composer previews (image/* uploads). Everything
-// else is a file chip with a text peek.
+// that is neither this nor sound below is a file chip with a text peek.
 const IMAGE_EXTS = new Set([`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `avif`]);
 
-export const isImagePath = (path: string): boolean => IMAGE_EXTS.has(path.split(`.`).at(-1)?.toLowerCase() ?? ``);
+// Extensions an <audio> element decodes, which is the set the daemon types as audio/* on /workspace/raw
+// (workspace-files-download.ts). Copied rather than imported, under this module's no-imports rule above.
+const AUDIO_EXTS = new Set([`mp3`, `wav`, `ogg`, `oga`, `opus`, `weba`, `flac`, `m4a`, `aac`]);
+
+const extOf = (path: string): string => path.split(`.`).at(-1)?.toLowerCase() ?? ``;
+
+export const isImagePath = (path: string): boolean => IMAGE_EXTS.has(extOf(path));
+export const isAudioPath = (path: string): boolean => AUDIO_EXTS.has(extOf(path));
 
 export interface FilePeek {
     // False when the daemon answered that nothing is at the path: an attachment whose bytes were cleaned up.

@@ -3,6 +3,7 @@
 // comes back and a permanent `image.png` chip.
 import { beforeEach, expect, it, vi } from "vitest";
 import { nextTick, ref } from "vue";
+import { STATE_DIR } from "@intentic/constants";
 
 const blob = vi.fn<(path: string) => Promise<Blob>>();
 // The resolved daemon address, exactly as useEndpoint hands it out: undefined until sandbox.list lands.
@@ -17,11 +18,12 @@ class HttpError extends Error {
 vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxBlob: (path: string) => blob(path), SandboxHttpError: HttpError }));
 vi.mock("../../sandbox/secrets/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
 
-const { attachmentPreview, forgetPreview, rememberPreview } = await import("./attachmentPreviews");
+const { attachmentAudio, attachmentPreview, forgetMedia, rememberMedia } = await import("./attachmentPreviews");
 
 // The module caches per path for the life of the page, so each case needs a path of its own.
 let counter = 0;
-const freshPath = (): string => `.intentic/records/artifacts/attachments/u${++counter}/shot.png`;
+const freshPath = (): string => `${STATE_DIR}/records/artifacts/attachments/u${++counter}/shot.png`;
+const freshSound = (): string => `${STATE_DIR}/records/artifacts/attachments/u${++counter}/voice.m4a`;
 
 // Let the address watcher flush and the pending .then callbacks run, without advancing the retry timers.
 const settle = async (): Promise<void> => {
@@ -108,8 +110,35 @@ it("stops asking for an attachment the daemon says is gone", async () => {
     expect(attachmentPreview(path)).toBeUndefined();
 });
 
-it("leaves a non-image attachment as a name chip without touching the daemon", () => {
-    expect(attachmentPreview(`.intentic/records/artifacts/attachments/u9/notes.pdf`)).toBeUndefined();
+it("leaves an attachment that is neither picture nor sound as a name chip without touching the daemon", () => {
+    expect(attachmentPreview(`${STATE_DIR}/records/artifacts/attachments/u9/notes.pdf`)).toBeUndefined();
+    expect(attachmentAudio(`${STATE_DIR}/records/artifacts/attachments/u9/notes.pdf`)).toBeUndefined();
+    expect(blob).not.toHaveBeenCalled();
+});
+
+// One cache, two elements: the kind is what decides which of them a path answers, so a fetched sound can never be
+// handed to an `<img>` (which would draw a broken picture) and a picture is never fed to a player.
+it("hands a fetched sound to the player and nothing to the thumbnail", async () => {
+    const path = freshSound();
+    blob.mockResolvedValue(new Blob([`x`]));
+
+    expect(attachmentPreview(path)).toBeUndefined();
+    expect(attachmentAudio(path)).toBeUndefined();
+    await settle();
+
+    expect(blob).toHaveBeenCalledTimes(1);
+    expect(attachmentAudio(path)).toBe(`blob:thumb`);
+    expect(attachmentPreview(path)).toBeUndefined();
+});
+
+// The composer types staged bytes by MIME, not by name, so a `.bin` the browser called audio/* still plays — and
+// the kind travels with the URL rather than being re-guessed from the path at every render.
+it("keeps a staged file's kind, whatever the path is named", () => {
+    const path = `${STATE_DIR}/records/artifacts/attachments/u9/clip.bin`;
+    rememberMedia(path, `audio`, `blob:just-recorded`);
+
+    expect(attachmentAudio(path)).toBe(`blob:just-recorded`);
+    expect(attachmentPreview(path)).toBeUndefined();
     expect(blob).not.toHaveBeenCalled();
 });
 
@@ -129,7 +158,7 @@ it("gives up on a chain that never lands, without a chip that polls forever", as
 // makes an object URL that answers for every bubble the message goes on to produce.
 it("answers from the composer's own object URL, without asking the daemon at all", () => {
     const path = freshPath();
-    rememberPreview(path, `blob:just-pasted`);
+    rememberMedia(path, `image`, `blob:just-pasted`);
 
     expect(attachmentPreview(path)).toBe(`blob:just-pasted`);
     expect(blob).not.toHaveBeenCalled();
@@ -145,7 +174,7 @@ it("asks again for a path that was refused before it was forgotten", async () =>
     await settle();
     expect(blob).toHaveBeenCalledTimes(1);
 
-    forgetPreview(path);
+    forgetMedia(path);
     blob.mockReset();
     blob.mockResolvedValue(new Blob([`x`]));
 
@@ -159,8 +188,8 @@ it("asks again for a path that was refused before it was forgotten", async () =>
 // A staged file's URL is revoked on removal; the cache must drop it too or hand out a dead thumb.
 it("drops a staged file's URL when the chip is removed", async () => {
     const path = freshPath();
-    rememberPreview(path, `blob:staged`);
-    forgetPreview(path);
+    rememberMedia(path, `image`, `blob:staged`);
+    forgetMedia(path);
     blob.mockResolvedValue(new Blob([`x`]));
 
     expect(attachmentPreview(path)).toBeUndefined();

@@ -11,6 +11,9 @@ export const OBJECT_GLYPHS = {
     cog: { outline: `M12 2l3 4h4v4l3 2-3 2v4h-4l-3 4-3-4H5v-4l-3-2 3-2V6h4Z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z` },
     cpu: { outline: `M6 6h12v12H6Z M10 10h4v4h-4Z M9 2v4 M15 2v4 M9 18v4 M15 18v4 M2 9h4 M2 15h4 M18 9h4 M18 15h4` },
     "credit-card": { outline: `M3 4h18v16H3Z M3 9h18 M7 15h4` },
+    // Level bars rather than a speaker: what a sound file is drawn AS everywhere in the app, so the glyph and the
+    // waveform under it are the same idea at two scales.
+    waveform: { outline: `M4 10v4 M8 7v10 M12 4v16 M16 8v8 M20 11v2` },
     database: { outline: `M3 6c0-4 18-4 18 0s-18 4-18 0Z M3 6v12c0 4 18 4 18 0V6 M3 12c0 4 18 4 18 0` },
     desktop: { outline: `M2 4h15v12H2Z M9 16v4 M5 20h8 M17 9h5v12h-5Z` },
     envelope: { outline: `M3 5h18v14H3Z M3 5l9 8 9-8` },

@@ -1,4 +1,4 @@
-import { dropPartialFirst, dropPartialLast, type FilePeek, isImagePath } from "./filePeek";
+import { dropPartialFirst, dropPartialLast, type FilePeek, isAudioPath, isImagePath } from "./filePeek";
 import { lazyByPath } from "../../sandbox/client/lazyByPath";
 import { readFileWindow } from "../../workspace/files/fileWindow";
 
@@ -40,6 +40,8 @@ const peeks = lazyByPath(async (path: string): Promise<FilePeek> => {
     };
 });
 
-// The head and tail of an attachment, starting the read on first ask. Undefined for an image (which has a thumbnail
-// instead) and while the windows are in flight; the chip draws its name until they land.
-export const attachmentPeek = (path: string): FilePeek | undefined => (isImagePath(path) ? undefined : peeks.get(path));
+// The head and tail of an attachment, starting the read on first ask. Undefined while the windows are in flight, and
+// never asked for at all where the bytes draw themselves (a thumbnail, a waveform): two windows of a decoded
+// container are 16KB over the wire to render "Not text: nothing to preview here."
+export const attachmentPeek = (path: string): FilePeek | undefined =>
+    isImagePath(path) || isAudioPath(path) ? undefined : peeks.get(path);
