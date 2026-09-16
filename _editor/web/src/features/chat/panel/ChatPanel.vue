@@ -14,8 +14,8 @@ import { useChatFloating } from "./chatFloating";
 import { useWorkflowRuns } from "../../agents/fleet/useWorkflowRuns";
 import { defaultChatWidth, maxChatWidth, MIN_CHAT_WIDTH, MIN_PANE_PX, useLayout } from "../../../shell/window/useLayout";
 import { toAppPx, toScreenPx, uiLength } from "../../../shell/window/uiScale";
-import ChatCapacityRail from "./ChatCapacityRail.vue";
 import ChatPane from "./ChatPane.vue";
+import ChatSideRail from "./ChatSideRail.vue";
 import ChatRunGraph from "../transcript/ChatRunGraph.vue";
 import ChatTabs from "../tabs/ChatTabs.vue";
 import ChatTabsMobile from "../tabs/ChatTabsMobile.vue";
@@ -96,8 +96,9 @@ onBeforeUnmount(stopMeasuring);
 
 // `tabs: false` means no rail is taking width off the panes, so nothing is reserved. Only reserved with something
 // in it (hasCapacity), or the panel would hold 240px of padding for a rail rendering nothing; mid-load counts as
-// non-empty so the transcript doesn't reflow when it lands.
-const showsCapacity = computed(
+// non-empty so the transcript doesn't reflow when it lands. Keyed on capacity alone, never on the chat's checklist,
+// so picking up a first task can't reflow the panel mid-turn.
+const showsRail = computed(
     () =>
         floating.value &&
         !mobile.value &&
@@ -225,7 +226,7 @@ const seamWidth = computed<number>({
         ref="root"
         class="chat-panel lane-ground-card relative flex h-full min-h-0 overflow-hidden bg-card"
         :class="chatWide ? 'flex-row' : 'flex-col'"
-        :style="{ '--capacity-rail': showsCapacity ? uiLength(CAPACITY_RAIL_PX) : `0px` }"
+        :style="{ '--capacity-rail': showsRail ? uiLength(CAPACITY_RAIL_PX) : `0px` }"
     >
 <!-- An overlay seam (`place="edge"`), not in-flow, since docked the panel's own axis is the bar-then-panes column, not this border. -->
         <ResizeSeam
@@ -293,8 +294,8 @@ const seamWidth = computed<number>({
             </div>
         </div>
 
-<!-- What the reader can run next, in room the panes have no use for; belongs to the window, not any one chat (like the chat list on the other edge). -->
-        <ChatCapacityRail v-if="showsCapacity" />
+<!-- The focused chat's checklist and what the reader can run next, in room the panes have no use for. -->
+        <ChatSideRail v-if="showsRail" />
     </div>
 </template>
 

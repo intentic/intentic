@@ -14,7 +14,7 @@ import { effectiveAutoLand, effectiveOutageResume, formatElapsed } from "../../a
 import { useAgents } from "../../agents/fleet/useAgents";
 import { errandOf } from "../run/errands";
 import { personaRouteWait } from "../personas/personaRoute";
-import { type ChatMessage, foldsIntoTurn } from "./transcript";
+import { changedNothing, type ChatMessage, type ChecklistView, foldsIntoTurn } from "./transcript";
 import { navigateInApp } from "../../../shell/window/mainWindow";
 import { useMarkdown } from "../../../lib/markdown/useMarkdown";
 import { openFileRefFromEvent } from "../../workspace/files/openFileRef";
@@ -49,7 +49,14 @@ const props = defineProps<{
     folded?: readonly ChatMessage[];
     // Row would be discarded by the pending edit (ChatPane's `doomed`); a preview only, not an actual state change.
     doomed?: boolean;
+    // How this row's checklist snapshot draws (transcript.ts); absent draws the list in full.
+    checklistView?: ChecklistView;
 }>();
+
+// A snapshot that moved nothing is not a checklist event, so it draws no line at all — not an empty one.
+const showsTodos = computed(
+    () => (props.message.todos?.length ?? 0) > 0 && !(props.checklistView !== undefined && changedNothing(props.checklistView)),
+);
 
 const {
     conversation,
@@ -522,7 +529,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <!-- Live marks the bubble currently receiving streamed text. -->
             <ChatTurnAsides :thinking="message.thinking" :tools="message.tools" :live="streaming" />
 
-            <ChatTodoList v-if="message.todos?.length" :todos="message.todos" :live="streaming" />
+            <ChatTodoList v-if="showsTodos" :todos="message.todos!" :live="streaming" :view="checklistView" />
 
             <!-- Markdown parts preserve settled DOM while the live tail updates. -->
             <div v-if="message.text" class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5">

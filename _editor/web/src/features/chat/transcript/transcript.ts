@@ -1,4 +1,4 @@
-import { cancelledCards, holdsCard, type TranscriptRow } from "@intentic/sandbox-contract";
+import { cancelledCards, holdsCard, type TodoItem, type TranscriptRow } from "@intentic/sandbox-contract";
 import { formatDate } from "@intentic/ui/format";
 import { errandOf } from "../run/errands";
 
@@ -42,6 +42,74 @@ export const repeatedChecklistIds = (messages: readonly ChatMessage[]): Set<numb
         previous = items;
     }
     return hidden;
+};
+
+/* What one checklist snapshot draws. A list is state, not an event: repeating all of it per status flip costs N² lines
+   in an N-task turn, so only the turn's first snapshot draws the list and the rest draw what moved since. */
+export type ChecklistView = { readonly kind: "full" } | ChecklistDelta;
+
+export interface ChecklistDelta {
+    readonly kind: "delta";
+    // Items carried whole, not as text: the label depends on whether the bubble is live, which only the view knows.
+    readonly finished: readonly TodoItem[];
+    readonly started: readonly TodoItem[];
+    readonly added: number;
+    readonly dropped: number;
+    readonly done: number;
+    readonly total: number;
+}
+
+const FULL: ChecklistView = { kind: `full` };
+
+// A snapshot that moved nothing (a TaskList resync restating what is already drawn) has no line to draw at all.
+export const changedNothing = (view: ChecklistView): boolean =>
+    view.kind === `delta` && view.finished.length === 0 && view.started.length === 0 && view.added === 0 && view.dropped === 0;
+
+// Matched by subject, the only stable field a TodoItem carries; a re-subjected task reads as one dropped and one added.
+const deltaOf = (before: readonly TodoItem[], after: readonly TodoItem[]): ChecklistDelta => {
+    const was = new Map(before.map((item) => [item.content, item.status]));
+    const finished: TodoItem[] = [];
+    const started: TodoItem[] = [];
+    let added = 0;
+    let done = 0;
+    for (const item of after) {
+        const previous = was.get(item.content);
+        was.delete(item.content);
+        if (item.status === `completed`) {
+            done += 1;
+        }
+        if (previous === undefined) {
+            added += 1;
+        }
+        if (previous === item.status) {
+            continue;
+        }
+        if (item.status === `completed`) {
+            finished.push(item);
+        } else if (item.status === `in_progress`) {
+            started.push(item);
+        }
+    }
+    return { kind: `delta`, finished, started, added, dropped: was.size, done, total: after.length };
+};
+
+// Keyed by message id; a message absent from the map draws its list in full, so an unmapped snapshot degrades to the
+// unabridged rendering rather than to nothing. `repeated` messages are skipped because they are never drawn.
+export const checklistViewsOf = (turns: readonly ChatTurn[], repeated: ReadonlySet<number>): Map<number, ChecklistView> => {
+    const views = new Map<number, ChecklistView>();
+    for (const turn of turns) {
+        // Reset per turn, not per conversation: a new prompt re-states the whole list once to orient the reader.
+        let previous: readonly TodoItem[] | undefined;
+        for (const message of turn.messages) {
+            const items = message.role === `assistant` ? message.todos : undefined;
+            if (items === undefined || items.length === 0 || repeated.has(message.id)) {
+                continue;
+            }
+            views.set(message.id, previous === undefined ? FULL : deltaOf(previous, items));
+            previous = items;
+        }
+    }
+    return views;
 };
 
 /* A file the user attached to a turn, already uploaded to the workspace before send, as the COMPOSER holds it. */
@@ -157,6 +225,21 @@ export const continuationFor = (messages: readonly ChatMessage[]): string =>
 // Two different reasons to fold, both pointing at the prompt above: a bare acknowledgment is the user's own contentless
 // nudge, an errand is a prompt the app composed on their behalf (errands.ts).
 export const foldsIntoTurn = (message: ChatMessage): boolean => isAcknowledgment(message) || errandOf(message) !== undefined;
+
+// The checklist as it stands now: the last snapshot of the LAST turn only. Scoped that way so a finished turn's list
+// keeps standing while the reader looks at it, but an unrelated later prompt clears it instead of pinning a stale one.
+export const currentChecklist = (messages: readonly ChatMessage[]): readonly TodoItem[] | undefined => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const message = messages[index]!;
+        if (message.role === `user` && !foldsIntoTurn(message)) {
+            return undefined;
+        }
+        if (message.role === `assistant` && (message.todos?.length ?? 0) > 0) {
+            return message.todos;
+        }
+    }
+    return undefined;
+};
 
 // Shared by turns that fold nothing, so the renderer gets the same array each rebuild, not a fresh equal one.
 const NOTHING_FOLDED: readonly ChatMessage[] = [];

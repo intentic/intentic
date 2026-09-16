@@ -22,7 +22,16 @@ import {
 import type { Conversation } from "../session/conversation";
 import { modelLabelFor, providerDisplayLabel } from "../accounts/providerCatalog";
 import { pickUpReady } from "../run/pickUp";
-import { type ChatMessage, cutsAboveOf, dayMarksOf, forkCutsOf, liveBubbleOf, repeatedChecklistIds, turnsOf } from "../transcript/transcript";
+import {
+    type ChatMessage,
+    checklistViewsOf,
+    cutsAboveOf,
+    dayMarksOf,
+    forkCutsOf,
+    liveBubbleOf,
+    repeatedChecklistIds,
+    turnsOf,
+} from "../transcript/transcript";
 import { withShortcut } from "../../../shell/commands/useCommands";
 import { navigateInApp } from "../../../shell/window/mainWindow";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
@@ -266,6 +275,9 @@ const showTurnStatus = computed(() => streaming.value && !awaitingDecision.value
 // The transcript as prompt-headed groups, each the box its prompt stays pinned within; recomputed shallowly.
 const turns = computed(() => turnsOf(messages.value));
 const repeatedChecklists = computed(() => repeatedChecklistIds(messages.value));
+
+// How each surviving checklist snapshot draws: the list once per turn, then only what moved.
+const checklistViews = computed(() => checklistViewsOf(turns.value, repeatedChecklists.value));
 
 // The transcript's date: named above the first turn sent on a given day, and nowhere else (dayMarksOf). One
 // marker per day change lets each prompt's own stamp shrink to just the clock (ChatMessageView's sentClock).
@@ -1189,6 +1201,9 @@ watch(
                             <section class="chat-stack group/turn relative flex flex-col">
                                 <!-- v-memo keys rendered inputs so streaming updates only the active row. -->
                                 <!-- `doomed` is part of the memo key because struck rows render differently. -->
+                                <!-- The checklist view is a fresh object per rebuild, so only the few rows that carry a
+                                     checklist redraw each tick; every other row keys on a stable `undefined`. -->
+
                                 <!-- A display-contents wrapper keeps message children in the section's flex flow. -->
                                 <div
                                     v-for="message in turn.messages"
@@ -1200,6 +1215,7 @@ watch(
                                         doomed.has(message.id),
                                         cutsAbove.get(message.id),
                                         repeatedChecklists.has(message.id),
+                                        checklistViews.get(message.id),
                                     ]"
                                     class="contents"
                                 >
@@ -1211,6 +1227,7 @@ watch(
                                         :streaming="isStreaming(message)"
                                         :folded="message.id === turn.id ? turn.folded : undefined"
                                         :doomed="doomed.has(message.id)"
+                                        :checklist-view="checklistViews.get(message.id)"
                                     />
                                 </div>
                                 <!-- The fork point sits after the answer and inside its hover region. -->

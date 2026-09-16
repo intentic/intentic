@@ -2,11 +2,10 @@
 import { ui } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import { SPENT_UTILIZATION } from "@intentic/sandbox-contract";
-import { CAPACITY_RAIL_PX, type CapacityLane, type CapacityProvider, type CapacityRow, chatCapacity } from "./chatCapacity";
+import { type CapacityLane, type CapacityProvider, type CapacityRow, chatCapacity } from "./chatCapacity";
 import { accountsLoaded } from "../accounts/providerAccounts";
 import { formatAge, formatReset, formatUtilization, usageTone } from "../session/usageStatus";
 import { refreshConnections } from "../accounts/useChat-accounts";
-import { uiLength } from "../../../shell/window/uiScale";
 import ProviderLogo from "../accounts/ProviderLogo.vue";
 
 // Headroom rail in chat pop-out: displays runnable provider capacity without full Usage tab reconciliation.
@@ -95,11 +94,8 @@ const remeasureLabel = computed(() =>
 
 <template>
 <!-- No surface of its own: whitespace and the heading mark it as a region, not a panel with a border or fill. -->
-    <aside
-        class="absolute inset-y-0 z-10 flex min-h-0 flex-col"
-        :style="{ width: uiLength(CAPACITY_RAIL_PX), right: `var(--chat-scrollbar)` }"
-        aria-label="Plan headroom"
-    >
+<!-- Placed and sized by ChatSideRail, which owns the strip this shares with the chat's checklist. -->
+    <section class="flex min-h-0 flex-1 flex-col" aria-label="Plan headroom">
 <!-- The refresh control stays at the edge because the rail has no heading text. -->
         <div class="flex shrink-0 items-center justify-end gap-2 px-3 py-2">
             <button
@@ -225,5 +221,5 @@ const remeasureLabel = computed(() =>
                 </div>
             </div>
         </template>
-    </aside>
+    </section>
 </template>
