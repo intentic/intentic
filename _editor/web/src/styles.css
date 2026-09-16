@@ -122,10 +122,13 @@
     }
     .lane-ground-card {
         --lane-ground: var(--color-card);
+/* A CARD CANNOT REST AT THE COLOUR IT LIES ON: with the slab gone from under it (`.lane-flat`), this step up is the only thing separating a card from its ground. Stays below `--color-overlay`, which hover and selection still have to move to. */
+        --card-rest: color-mix(in oklab, var(--color-content) 4%, var(--color-card));
     }
-/* . */
+/* Canvas lies a full step below `--color-card`, so a card on it needs no step of its own. `initial` sends `--card-fill` back to its fallback: a canvas ground nested inside a card one (the tab list's dropdown inside the chat panel) would otherwise inherit the step. */
     .lane-ground-canvas {
         --lane-ground: var(--color-canvas);
+        --card-rest: initial;
     }
     .lane-header {
         background: var(--lane-fill);
@@ -148,6 +151,21 @@
         right: 0;
         background: radial-gradient(circle at 0 100%, transparent var(--radius-xl), var(--lane-ground) 0);
     }
+/* A LANE WITHOUT ITS SLAB — the chat rail reads as one list of cards, headers labelling them rather than roofing a recess. Declared after the skins so a skin's own slab (texture, rule) is cleared too. */
+    .lane.lane-flat {
+        background: transparent;
+        box-shadow: none;
+    }
+/* The header still has to occlude the cards that scroll under it, so it takes the ground it lies on — the same colour, so nothing reads as a fill. */
+    .lane-flat > .lane-header {
+        background: var(--lane-ground);
+        background-image: none;
+    }
+/* No recess to round off. */
+    .lane-flat > .lane-header::before,
+    .lane-flat > .lane-header::after {
+        display: none;
+    }
 
 /* Agent cards, workflow rows, and chat rail cards share one session-card surface. */
     .session-card {
@@ -156,7 +174,8 @@
         border-color: var(--card-border);
         background-color: var(--card-fill);
         --card-border: var(--color-line);
-        --card-fill: var(--color-card);
+/* The resting fill is the GROUND'S to decide, since only the ground knows whether the card would vanish into it; hover and selection override the fill outright. */
+        --card-fill: var(--card-rest, var(--color-card));
         --card-accent: inset 0 0 #0000;
         --card-ring: inset 0 0 #0000;
         --card-ledge: inset 0 0 #0000;

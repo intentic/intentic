@@ -13,9 +13,9 @@ const seamWidth = computed<number>({
 </script>
 
 <template>
-    <!-- Lane slabs provide the column structure, so no extra right divider is needed. -->
+    <!-- The rule is the column's only edge: its lanes are flat (`.lane-flat`), so nothing else marks where the rail ends and the pane begins. -->
 <!-- The width stays on the <aside>, which is the rail: hosts, and railColumn.test.ts, address it as one element at one width. -->
-    <aside class="relative flex h-full min-h-0 shrink-0" :style="{ width: uiLength(railWidth) }">
+    <aside class="relative flex h-full min-h-0 shrink-0 border-r border-line" :style="{ width: uiLength(railWidth) }">
         <div class="flex min-h-0 min-w-0 flex-1 flex-col items-stretch gap-1 p-1.5">
             <slot />
         </div>

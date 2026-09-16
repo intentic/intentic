@@ -183,8 +183,8 @@ const sessionsOf = (row: PersonaRow) =>
 </script>
 
 <template>
-    <!-- Card ground cannot match `--color-card`, or the card disappears. -->
-    <div class="flex min-h-0 min-w-0 flex-col rounded-xl bg-canvas p-2">
+    <!-- No slab: the other half of this rail (the lanes) has none either, and the cards take their step up from `--card-rest`. -->
+    <div class="flex min-h-0 min-w-0 flex-col p-2">
         <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
         <template v-if="empty">
             <!-- A real link, since the sandbox hub has an address and this is often the first place someone finds it. -->

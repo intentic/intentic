@@ -585,7 +585,7 @@ const keepTab = (event: Event, id: string): void => {
 <!-- LANE BREAKS OUTRANK CARD BREAKS, and at 12px against 10px they barely did: the eye groups by proximity. -->
         <div v-else ref="scroller" class="flex min-h-0 flex-1 flex-col items-stretch gap-4 overflow-y-auto">
 <!-- An empty lane isn't drawn at all (see occupiedLanes); one emptied only by the filter keeps its header. -->
-            <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :dot="lane.dot" :count="countIn(lane.key)">
+            <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :dot="lane.dot" :count="countIn(lane.key)" flat>
 <!-- Closing a chat is lossless in every lane. -->
                 <template #actions>
                     <Button
@@ -759,7 +759,7 @@ const keepTab = (event: Event, id: string): void => {
             </RailLane>
 
 <!-- Query hits outside this window's open chats (fleet, archive, agent-less conversations); a row opens the conversation, same as History. -->
-            <RailLane v-if="filtering && notOpenCount > 0" label="Not open" icon="search" :count="notOpenCount">
+            <RailLane v-if="filtering && notOpenCount > 0" label="Not open" icon="search" :count="notOpenCount" flat>
                 <div class="flex min-w-0 flex-col gap-2.5">
                     <!-- Same identity tile as the lanes above; the category tint still signals what kind of work this is. -->
                     <RailCard
