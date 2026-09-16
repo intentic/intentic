@@ -304,7 +304,7 @@ const confirmRemove = async (): Promise<void> => {
                 </Button>
             </div>
 
-            <RowGroup v-else label="Your personas" :count="personas.length > 0 ? personas.length : undefined">
+            <RowGroup v-else label="Your personas">
                 <template #actions>
                     <Button
                         v-if="personas.length > 0 && newName === undefined"
