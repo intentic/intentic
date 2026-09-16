@@ -36,11 +36,16 @@ publish another hand-built zip: the store requires each uploaded version to be s
 
 ## The one-time setup
 
-Steps 1 and 2 are **done**: the publisher account is registered and the item exists as
-`ipdmljdopicihjdlgiiplaiolngbinma`, public, all regions, with the listing and privacy forms filled from
-[STORE-LISTING.md](STORE-LISTING.md). They are kept here because they describe what the state means, not
-because they are still to do — and step 2 in particular must never be repeated: every store version has to be
-strictly newer, and the release pipeline owns that sequence. What is left is steps 3 to 5.
+**This is all done.** The publisher account is registered; the item exists as `ipdmljdopicihjdlgiiplaiolngbinma`,
+public, all regions, with the listing and privacy forms filled from [STORE-LISTING.md](STORE-LISTING.md); the
+Chrome Web Store API is enabled on Cloud project `intentic-500811`, whose OAuth consent screen is **In
+production**; the OAuth client is *intentic web store publisher*; and all five values below are set on the
+repository. A refresh-token exchange and a `:fetchStatus` call against the real item were both verified.
+
+What remains is the first **Submit for review** in the dashboard, which no API can do for a version that has
+never been reviewed. The steps below are kept because they describe what the state means, not because they are
+still to do — and step 2 in particular must never be repeated: every store version has to be strictly newer,
+and the release pipeline owns that sequence.
 
 ### 1. A developer account (~10 minutes, $5)
 
