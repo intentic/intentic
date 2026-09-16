@@ -1,12 +1,11 @@
 // Shared markup reading for button-tiers, input-tiers and row-tiers: one git listing, blanking pass, tag walk and
 // waiver bookkeeping, so a fix reaches all three gates at once. Works on a bare checkout, no node_modules or parser,
 // since checks run before `pnpm install`.
-import { existsSync, readFileSync } from "node:fs";
-import { git, root } from "./repo.mjs";
+import { readFileSync } from "node:fs";
+import { root, subjectFiles, subjectScope } from "./repo.mjs";
 
-/** Every tracked .vue file under `roots`, filtered to what still exists on disk (an unstaged deletion is still listed by git). */
-export const templatesUnder = (...roots) =>
-    (git("ls-files", "-z", ...roots) ?? "").split(`\0`).filter((path) => path.endsWith(`.vue`) && existsSync(`${root}/${path}`));
+/** Every tracked .vue file under `roots` that this run is asked to judge (`--paths` narrows it; see repo.mjs's scope). */
+export const templatesUnder = (...roots) => subjectFiles(...roots).filter((path) => path.endsWith(`.vue`));
 
 /** The source of one listed template. */
 export const templateSource = (path) => readFileSync(`${root}/${path}`, `utf8`);
@@ -62,12 +61,19 @@ export const waiverList = (allowed, gate) => {
             used.add(JSON.stringify([path, key]));
             return true;
         },
-        stale: () =>
-            [...allowed].flatMap(([path, entries]) =>
-                [...entries.keys()]
-                    .filter((key) => !used.has(JSON.stringify([path, key])))
-                    .map((key) => ({ at: path, why: `stale ALLOWED entry in ${gate}: nothing in this file matches \`${key}\` any more, so drop it` })),
-            ),
+        // Only for files this run actually read. "Nothing matches it any more" is a claim about a file's contents, and a
+        // scoped run never opened the rest of them — without this, `--paths one.vue` reports every OTHER waiver in the
+        // list as stale, which is the whole-tree question leaking into a per-file answer.
+        stale: () => {
+            const scope = subjectScope();
+            return [...allowed]
+                .filter(([path]) => scope === undefined || scope.has(path))
+                .flatMap(([path, entries]) =>
+                    [...entries.keys()]
+                        .filter((key) => !used.has(JSON.stringify([path, key])))
+                        .map((key) => ({ at: path, why: `stale ALLOWED entry in ${gate}: nothing in this file matches \`${key}\` any more, so drop it` })),
+                );
+        },
     };
 };
 

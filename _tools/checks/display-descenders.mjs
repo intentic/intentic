@@ -2,10 +2,10 @@
 // Clipped-background text paints only inside the padding box, so a descender below it is invisible unless
 // `padding-block-end` buys room and a matching negative `margin-block-end` removes that room from layout. Finds
 // every rule that paints letters that way — by the declaration, not by a list — and checks the pair is declared.
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { repoRoot } from "../constants/src/node.mjs";
 import { finish } from "./lib/report.mjs";
+import { subjectFiles } from "./lib/repo.mjs";
 
 const root = repoRoot(import.meta.url);
 
@@ -15,14 +15,7 @@ const CLIPPED = /(?:^|[\s;{])(?:-webkit-)?background-clip\s*:\s*text\s*(?:;|$)/;
 const PADDING = /(?:padding-block-end|padding-bottom)\s*:/;
 const TAKEBACK = /(?:margin-block-end|margin-bottom)\s*:\s*calc\(\s*-1\s*\*/;
 
-const tracked = execFileSync(`git`, [`ls-files`, `-z`, `*.css`, `*.vue`, `*.astro`, `*.html`], {
-    cwd: root,
-    encoding: `utf8`,
-    maxBuffer: 64 * 1024 * 1024,
-})
-    .split(`\0`)
-    // On disk as well as tracked: an unstaged deletion is still listed by git and has nothing to read.
-    .filter((path) => path !== `` && existsSync(`${root}/${path}`));
+const tracked = subjectFiles(`*.css`, `*.vue`, `*.astro`, `*.html`);
 
 // Comments blanked, not cut, so an index stays the real file's line number.
 const withoutComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ` `));

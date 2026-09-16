@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { REPO_CHECKS_FILE, type RepoCheck, RepoChecksFileSchema, type RepoChecksSummary, type Rule } from "@intentic/sandbox-contract";
+import { REPO_CHECKS_FILE, type RepoCheck, type RepoCheckMoment, RepoChecksFileSchema, type RepoChecksSummary, type Rule } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 
@@ -9,6 +9,14 @@ import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 
 // Same ceiling a rule's own command gets when the form leaves it unsaid.
 const DEFAULT_TIMEOUT_MS = 900_000;
+
+// The occasion a repository names, as the daemon's own moment. Exhaustive over RepoCheckMoment, so adding an occasion
+// to the contract fails here rather than defaulting a new word to the turn.
+const MOMENT: Record<RepoCheckMoment, Rule["moment"]> = {
+    edit: "file.edited",
+    turn: "turn.ending",
+    push: "push.starting",
+};
 
 /** One repository's declaration as it stands on disk, with the fingerprint adoption is measured against. */
 export interface RepoDeclaration {
@@ -90,7 +98,7 @@ export const rulesOf = (declaration: RepoDeclaration): Rule[] =>
         return {
             id: ruleId(declaration.repo, index),
             label: labelOf(check),
-            moment: check.when === "push" ? "push.starting" : "turn.ending",
+            moment: MOMENT[check.when],
             // The repo is the condition AND the working directory: rules/rule-cwd.ts runs a repo-scoped command there,
             // which is why a declared command reads exactly as it would in a terminal in that folder.
             when: { repo: declaration.repo, ...(paths === undefined ? {} : { paths }) },

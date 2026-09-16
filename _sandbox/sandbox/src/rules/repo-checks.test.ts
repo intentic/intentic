@@ -5,7 +5,7 @@ import { adoptedRules, fingerprintOf, isAdopted, type RepoDeclaration, repoCheck
 // What a repository's own declaration MEANS, with no workspace on disk: it becomes ordinary rules, and it only becomes
 // them once the owner has agreed to the exact commands in front of them.
 
-const declaring = (repo: string, ...checks: { when: "turn" | "push"; run: string; paths?: string[] }[]): RepoDeclaration => ({
+const declaring = (repo: string, ...checks: { when: "edit" | "turn" | "push"; run: string; paths?: string[] }[]): RepoDeclaration => ({
     repo,
     checks,
     fingerprint: fingerprintOf(checks),
@@ -13,7 +13,16 @@ const declaring = (repo: string, ...checks: { when: "turn" | "push"; run: string
 
 describe(`a declaration as rules`, () => {
     test(`each check becomes a rule at its own moment, aimed at the repository that declared it`, () => {
-        const [turn, push] = rulesOf(declaring(`intentic`, { when: `turn`, run: `pnpm verify:turn` }, { when: `push`, run: `pnpm verify:push` }));
+        const [edit, turn, push] = rulesOf(
+            declaring(
+                `intentic`,
+                { when: `edit`, run: `node _tools/checks/run.mjs --paths {file}` },
+                { when: `turn`, run: `pnpm verify:turn` },
+                { when: `push`, run: `pnpm verify:push` },
+            ),
+        );
+        // The cheapest of the three, and the only one that reaches the model while it still holds the line it wrote.
+        expect(edit?.moment).toBe(`file.edited`);
         expect(turn?.moment).toBe(`turn.ending`);
         expect(push?.moment).toBe(`push.starting`);
         // The repository is the condition AND the working directory (rule-cwd.ts), which is why the command needs no
@@ -39,6 +48,13 @@ describe(`a declaration as rules`, () => {
     test(`a check with no name of its own is named after its command`, () => {
         const [rule] = rulesOf(declaring(`intentic`, { when: `push`, run: `pnpm verify:push` }));
         expect(rule?.label).toBe(`pnpm verify:push`);
+    });
+
+    test(`an edit check keeps its {file} token for the moment that substitutes it`, () => {
+        const [rule] = rulesOf(declaring(`intentic`, { when: `edit`, run: `node _tools/checks/run.mjs --paths {file}` }));
+        // Untouched here on purpose: rules/file-edited.ts replaces the token with the shell-quoted path of the file it
+        // just heard about. Expanding it at declaration time would bake one file's name into every run.
+        expect(rule?.action).toEqual({ kind: `command`, command: `node _tools/checks/run.mjs --paths {file}`, timeoutMs: 900_000 });
     });
 });
 

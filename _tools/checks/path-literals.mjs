@@ -7,11 +7,10 @@
 // `join(x, "..")` where x is computed — an operation, not a position claim
 // files that cannot import (see MAY_SPELL_A_ROOT below)
 // `homedir()`-based `.intentic`, a different directory from the workspace state dir
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "../constants/src/node.mjs";
-import { writesBaselines } from "./lib/repo.mjs";
+import { subjectFiles, subjectScope, writesBaselines } from "./lib/repo.mjs";
 
 const root = repoRoot(import.meta.url);
 
@@ -93,9 +92,7 @@ const isComment = (line) => {
 // location. Per line, with a reason: `// path-literals: content, <why>`, on the line or the one above it.
 const CONTENT_PRAGMA = /path-literals: content/;
 
-const tracked = execFileSync(`git`, [`ls-files`, `-z`], { cwd: root, encoding: `utf8`, maxBuffer: 64 * 1024 * 1024 })
-    .split(`\0`)
-    .filter((path) => path !== ``);
+const tracked = subjectFiles();
 
 const findings = [];
 for (const path of tracked) {
@@ -154,7 +151,15 @@ for (const { at } of findings) {
     const path = at.slice(0, at.lastIndexOf(":"));
     perFile.set(path, (perFile.get(path) ?? 0) + 1);
 }
+// A scoped run read a handful of files, so it knows nothing about the rest: every baselined file it did not look at
+// would read as zero findings. It may still REFUSE what it found (the grown list below is per file, against that file's
+// own entry) but it may never write, which is what keeps `--paths` from erasing the baseline it never measured.
+const scoped = subjectScope() !== undefined;
 if (writeBaseline) {
+    if (scoped) {
+        console.error(`path-literals: --write-baseline adopts the whole tree's findings, so it cannot run under --paths`);
+        process.exit(2);
+    }
     const sorted = Object.fromEntries([...perFile].sort(([a], [b]) => a.localeCompare(b)));
     writeFileSync(BASELINE, `${JSON.stringify(sorted, null, 4)}\n`);
     console.log(`path-literals: baseline written, ${findings.length} standing findings in ${perFile.size} files`);
@@ -174,7 +179,7 @@ for (const [path, count] of perFile) {
 // so a shrink can't slip and can't become everyone else's merge conflict.
 const tightened = [];
 const next = { ...baseline };
-for (const [path, allowed] of Object.entries(baseline)) {
+for (const [path, allowed] of scoped ? [] : Object.entries(baseline)) {
     const now = perFile.get(path) ?? 0;
     if (now < allowed) {
         tightened.push(`${path}: ${allowed} → ${now}`);

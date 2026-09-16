@@ -3,9 +3,9 @@
 // `--color-*`/`--spacing` scale. Only inside a class attribute, in markup an oxlint plugin can't reach past a .vue's
 // <script> or an .astro's frontmatter; TypeScript class strings are covered too. Exceptions live in ALLOWED, keyed by
 // file and class.
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { repoRoot } from "../constants/src/node.mjs";
+import { subjectFiles, subjectScope } from "./lib/repo.mjs";
 
 const root = repoRoot(import.meta.url);
 
@@ -104,9 +104,7 @@ const lineSpans = (text) => {
 /** In markup, a class lives only in an attribute, so that's the unit; in TypeScript there's no attribute to anchor on, so the unit is the line. */
 const scannable = (path, text) => (MARKUP.test(path) ? classValues(text) : lineSpans(text).filter((span) => !isComment(span.value)));
 
-const tracked = execFileSync(`git`, [`ls-files`, `-z`], { cwd: root, encoding: `utf8`, maxBuffer: 64 * 1024 * 1024 })
-    .split(`\0`)
-    .filter((path) => path !== `` && (MARKUP.test(path) || SCRIPT.test(path)));
+const tracked = subjectFiles().filter((path) => MARKUP.test(path) || SCRIPT.test(path));
 
 const findings = [];
 const seen = new Map();
@@ -131,8 +129,14 @@ for (const path of tracked) {
     }
 }
 
+// Only for files this run read: "no longer appears in the file" is a claim about a file's contents, and a `--paths` run
+// never opened the others. Without the scope filter, scanning one template reports every other waiver as stale.
+const scope = subjectScope();
 const stale = [];
 for (const [path, classes] of ALLOWED) {
+    if (scope !== undefined && !scope.has(path)) {
+        continue;
+    }
     for (const value of classes.keys()) {
         if (!seen.has(`${path}\0${value}`)) {
             stale.push(`${path}  ${value}`);

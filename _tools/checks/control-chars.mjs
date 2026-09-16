@@ -4,9 +4,9 @@
 // `bytes-edit` write rule, both reading @intentic/constants/control-bytes.
 import { readFileSync, statSync } from "node:fs";
 import { byteName, escapeFor, firstForbiddenByte, isBinaryPath } from "../constants/src/control-bytes.mjs";
-import { trackedFiles } from "./lib/repo.mjs";
+import { subjectFiles } from "./lib/repo.mjs";
 
-const tracked = trackedFiles();
+const tracked = subjectFiles();
 
 const findings = [];
 for (const path of tracked) {

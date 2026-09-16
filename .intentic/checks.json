@@ -1,5 +1,6 @@
 {
     "checks": [
+        { "when": "edit", "run": "node _tools/checks/run.mjs --paths {file}", "label": "checks that can read one file" },
         { "when": "turn", "run": "pnpm verify:turn" },
         { "when": "push", "run": "pnpm verify:push" }
     ]

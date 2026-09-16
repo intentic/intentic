@@ -7,7 +7,7 @@
 // unless the job installs it, and a missing binary reads nothing like a moved output shape, so the two are told apart
 // below rather than reported as one puzzle.
 import { execFileSync } from "node:child_process";
-import { finish } from "./lib/report.mjs";
+import { cannotMeasure, finish } from "./lib/report.mjs";
 import { root } from "./lib/repo.mjs";
 
 // `intersections` is pnpm reporting where it narrowed overlapping peer ranges — an outcome, not a problem. The three
@@ -39,26 +39,27 @@ const read = () => {
 };
 
 const report = read();
-const unmet = [];
+// Neither of these is a finding about the tree, so neither is reported as one: this check did not look. Saying so in
+// its own voice is what keeps a broken tool from reading as an untidy repository — the shape that reddened
+// `nightly.yml`'s tidy job on a tree with nothing wrong in it.
 if (report === "no-pnpm") {
-    unmet.push("pnpm is not on PATH, so the lockfile's peers went unread: the job running this check has to install pnpm before it");
-} else if (report === undefined) {
-    unmet.push(
-        "`pnpm peers check --json --lockfile-only` produced no readable report: the command or its output shape moved and this check needs rewriting",
-    );
-} else {
-    for (const [importer, issues] of Object.entries(report)) {
-        for (const fault of FAULTS) {
-            const found = issues?.[fault];
-            const names = Array.isArray(found) ? found : Object.keys(found ?? {});
-            for (const name of names) {
-                unmet.push(`${importer}: ${typeof name === "string" ? name : JSON.stringify(name)} (${fault})`);
-            }
+    cannotMeasure("pnpm is not on PATH, so the lockfile's peers went unread: the job running this check has to install pnpm before it");
+}
+if (report === undefined) {
+    cannotMeasure("`pnpm peers check --json --lockfile-only` produced no readable report: the command or its output shape moved and this check needs rewriting");
+}
+const unmet = [];
+for (const [importer, issues] of Object.entries(report)) {
+    for (const fault of FAULTS) {
+        const found = issues?.[fault];
+        const names = Array.isArray(found) ? found : Object.keys(found ?? {});
+        for (const name of names) {
+            unmet.push(`${importer}: ${typeof name === "string" ? name : JSON.stringify(name)} (${fault})`);
         }
     }
 }
 
 finish(
     [["Peer dependencies the lockfile does not satisfy, so an import resolves to the wrong copy", unmet]],
-    [`peer dependencies: ${Object.keys(typeof report === "object" ? (report ?? {}) : {}).length} importers, none with an unmet, missing or conflicting peer`],
+    [`peer dependencies: ${Object.keys(report).length} importers, none with an unmet, missing or conflicting peer`],
 );

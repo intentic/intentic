@@ -17,15 +17,16 @@ Every check that reads the checkout and nothing else, listed once and run everyw
 
 ## Key files
 
-- [manifest.mjs](manifest.mjs): the list, and each check's `gate`. A check that is not on it runs nowhere, which
-  is the failure this directory exists to end: five gates were red for weeks inside a `pnpm check` chain no hook
-  and no job ran.
+- [manifest.mjs](manifest.mjs): the list, each check's `gate`, and whether it is `scoped`. A check that is not on
+  it runs nowhere, which is the failure this directory exists to end: five gates were red for weeks inside a
+  `pnpm check` chain no hook and no job ran.
 - [run.mjs](run.mjs): the runner. `--list`, `--only a,b`, `--skip a`, `--gate=code|tidy`, `--tidy=warn`,
-  `--json`; exit 1 if any check that may refuse here failed.
-- [lib/report.mjs](lib/report.mjs): the one contract every check keeps: problems to stderr and exit 1, or what
-  it vouched for to stdout and exit 0.
+  `--paths a,b`, `--json`; exit 1 if any check that may refuse here failed.
+- [lib/report.mjs](lib/report.mjs): the one contract every check keeps: problems to stderr and exit 1, what it
+  vouched for to stdout and exit 0, or `cannotMeasure` and exit 2.
 - [lib/repo.mjs](lib/repo.mjs): the workspace packages, the test files, the export maps a workspace import
-  resolves through, read once and without `node_modules`.
+  resolves through, read once and without `node_modules`; and `subjectFiles`, the files a run is asked to JUDGE,
+  which `--paths` narrows and nothing else does.
 - [lib/workspace-graph.mjs](lib/workspace-graph.mjs): the `workspace:` dependency graph and "which packages do
   these changed paths reach", shared by CI's `changes` job and the turn-ending check. It reads
   `pnpm-workspace.yaml`'s globs first, because a `package.json` is not the same thing as a workspace member: a seed
@@ -36,12 +37,15 @@ Every check that reads the checkout and nothing else, listed once and run everyw
 
 Who reads the list: CI's `preflight` job (before any install) and `nightly.yml`'s `tidy` job, the pre-push
 hook's first tier (`_tools/scripts/verify/verify-push.mjs`), the turn-ending check
-(`_tools/scripts/verify/verify-turn.mjs`), `pnpm prepass` (the checks, then
+(`_tools/scripts/verify/verify-turn.mjs`), the per-edit moment this repository declares for itself
+(`.intentic/checks.json`, `run.mjs --paths {file}`), `pnpm prepass` (the checks, then
 `_tools/scripts/build/emit-declarations.mjs`), and `pnpm checks` by hand.
 
 The turn-ending check reads it twice on a red run: once on the working tree, and once on a throwaway worktree
-at `HEAD`, so that a check already failing before the turn started is reported and not held against it. That
-snapshot is on the red path only, so a green turn pays nothing for it.
+at `HEAD`, so that a problem already standing before the turn started is reported and not held against it. That
+snapshot is on the red path only (~1.2s: the `git worktree add` is most of it), so a green turn pays nothing
+for it, and only the checks that failed are re-run inside it. A `node_modules` check is never asked — the
+snapshot has none, so every line it printed would read as newly introduced.
 
 Every check works on a bare checkout, which decides how they are written: a relative import of
 `@intentic/constants`' hand-written JavaScript rather than a bare specifier, a line scanner over
@@ -60,14 +64,46 @@ Each check declares a `gate`, and that is what decides its blast radius:
 - **`tidy`** — the tree costs its readers more than it should: a directory of 35 files, a dead link in a README,
   a hand-spelled root, a UI element off the design system, a subsystem with no invariant. Every one is a real
   cost with a measurement behind it in `docs/audits/`, and none of them is a reason to stop somebody's push. A
-  tidy failure is a **warning** at the push, at the turn and in CI's preflight, and a **refusal** in
-  `nightly.yml`'s `tidy` job, which reads one commit on a GitHub-hosted runner and gates nothing at all.
+  tidy failure is a **warning** at the push and in CI's preflight, a **refusal** for the lines one turn added
+  (see below), and a **refusal** in `nightly.yml`'s `tidy` job, which reads one commit on a GitHub-hosted runner
+  and gates nothing at all.
 
 The split was made after a day in which 18 pushes were attempted, 11 were refused, and 9 of those were refused
 in under five seconds by a tidy check — for state (a ghost directory a landed rename left, a baseline one count
 too high after somebody else's deletion, a link another conversation had broken) that no single actor had
 produced, that the commits being pushed could not fix, and that the agent then sent after the failure could not
 even see from its worktree.
+
+### The question is who wrote the line, not how bad the rule is
+
+A tidy rule cannot refuse a push, and for the first three weeks of the split that left it refusing in exactly
+one place: the nightly, at 03:00, against a commit that is the sum of everyone's day, in a job holding
+`contents: read` and no actor at all. It was red on 7 of its first 10 scheduled runs. Every anchor it printed
+came from a single feature commit one or two days old — one line, in one file, that one turn wrote and nobody
+was ever told about, because the turn's whole report of it was `layout, paths: tidy rules, worth fixing and not
+what holds a turn`, and the push said the same.
+
+So the refusal moved to the two moments that can name an author, and the shared cost stayed where it was:
+
+- **The edit** (`.intentic/checks.json`'s `edit` moment → `run.mjs --paths {file}`): every `scoped` check, on
+  the one file just written, in about 100ms, folded into that edit's own response. Silent when the file is
+  clean. This is the only moment at which the model that wrote the line is still holding it.
+- **The turn** (`verify-turn.mjs`): every check, diffed against a `HEAD` worktree **line by line**. A problem
+  line that was already there is named and not held against the turn; one that was not is refused, whatever the
+  check's gate. Line numbers are flattened for the comparison, so inserting a line above a standing finding
+  moves it and does not accuse anyone.
+- **The nightly**: unchanged, and still the only place a standing cost nobody caused is refused.
+
+That is what the `gate` split was always reaching for and could not express: the difference between a directory
+another conversation filled and a line this one wrote.
+
+### A check that could not measure is not a finding
+
+`lib/report.mjs`'s `cannotMeasure` exits 2, and the runner counts that as neither a pass nor a tidy failure. The
+distinction is not pedantic — `pnpm peers check`'s output shape moved, and the nightly went red with nothing
+wrong in the tree and nothing anybody could commit to fix it. An unmeasured check refuses where a tidy one does
+(so somebody finds out), is dropped at the edit moment (one edit is the wrong occasion to learn a tool broke),
+and never holds a turn (no diff can answer for it).
 
 ### A new check enters as `tidy`
 
@@ -96,6 +132,17 @@ commits anything at all (`lib/repo.mjs`'s `writesBaselines` is the one place tha
 what turned every deletion into everybody else's red: one conversation removed a component, and every other
 conversation's turn and the owner's next push were refused over a number in a shared file none of them had
 touched — and two of them editing that file to unblock themselves was a merge conflict.
+
+Growth in the other direction needs a way to be *deliberate*, or the ratchet only ever produces reshuffling.
+`layout.mjs --allow <dir|package>` records one entry at what the tree now has and writes nothing else; the
+failure message names it beside the answer it still prefers (split the directory). The instrument that existed
+before it was `--write-baseline`, which adopts every finding in the tree — run from a worktree, that launders
+every other conversation's drift into your commit, so growing one directory on purpose meant hand-editing a
+shared JSON file and usually meant a reshuffle instead.
+
+A scoped run (`--paths`) may **never** write a baseline, and no check may report a waiver as stale under one: it
+read a handful of files, so every entry it did not look at would read as beaten. `subjectScope()` is what each
+of those rules asks.
 
 Ghost directories follow the same principle one step further: `layout.mjs` **sweeps** them rather than naming
 them. Nothing in git can remove a directory git does not track, so a rule that only reported one refused the

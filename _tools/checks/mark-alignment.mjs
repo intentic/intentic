@@ -2,9 +2,9 @@
 // A mark beside text is placed by `.mark` (_site/site/src/styles/global.css), sized to `1lh` and centered on the line's
 // own leading; no flexbox alignment gets this right at every wrap. Refuses a vertical offset on a mark written anywhere
 // else. Rendered geometry is checked separately, in a browser (check-alignment.mjs).
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { repoRoot } from "../constants/src/node.mjs";
+import { subjectFiles } from "./lib/repo.mjs";
 
 const root = repoRoot(import.meta.url);
 
@@ -30,10 +30,7 @@ const ALLOWED = new Set([`.mark`, `.point`, `.lockup .lotus`]);
 // Values that place nothing: a reset, or the zero a shorthand carries.
 const INERT = /^(0|0px|0rem|auto|none|inherit|initial|unset|revert|baseline)$/;
 
-const tracked = execFileSync(`git`, [`ls-files`, `-z`, ...ROOTS], { cwd: root, encoding: `utf8`, maxBuffer: 64 * 1024 * 1024 })
-    .split(`\0`)
-    // On disk as well as tracked: an unstaged deletion is still listed by git and has nothing to read.
-    .filter((path) => path !== `` && existsSync(`${root}/${path}`));
+const tracked = subjectFiles(...ROOTS);
 
 const findings = [];
 const lineAt = (source, index) => source.slice(0, index).split(`\n`).length;

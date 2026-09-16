@@ -716,7 +716,7 @@ jobs:
     if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'mobile' }}
     uses: ./.github/workflows/mobile.yml
 
-  # THE TIDY GATE: THE ONE PLACE A TIDY CHECK REFUSES.
+  # THE TIDY GATE: WHAT IS LEFT ONCE EVERY PROBLEM WITH AN AUTHOR HAS BEEN CAUGHT EARLIER.
   #
   # _tools/checks/manifest.mjs splits the checks by what a failure MEANS. A `code` failure is refused everywhere
   # — the push, CI's preflight, the turn — because the tree does not work. A `tidy` failure (a directory of 35
@@ -729,6 +729,20 @@ jobs:
   # no `needs` in either direction. Nothing in this file waits on it, no push waits on it, and a red here is a
   # message about the tree on main rather than a refusal of whoever pushed last. `--gate=tidy` runs exactly the
   # checks the other runs downgrade to warnings, so the pair cannot drift: one manifest, two exit codes.
+  #
+  # THAT USED TO BE THE ONLY PLACE A TIDY RULE REFUSED, and it made this job red on 7 of its first 10 scheduled
+  # runs. Every anchor it printed traced to one feature commit a day or two old — a `/work` spelled in a test
+  # (a533ac08d), a `bg-[#4c4c58]` in a new component (58458710b), a bare `<button>` (821d0951b) — one line, in
+  # one file, written by one turn that was never told. What that turn saw of it was a single line naming the
+  # check ids and saying they were "not what holds a turn", and the push said the same. A gate that only refuses
+  # where nobody can act teaches everyone reading it that red means nothing, which is this repository's own
+  # finding about a different gate (docs/audits/ci-failure-audit.md).
+  #
+  # Two moments upstream now refuse the part that HAS an author, so what reaches this job is the part that does
+  # not: the edit moment runs every scoped check on the one file just written (.intentic/checks.json), and the
+  # turn refuses the problem lines its own diff added, measured against a HEAD worktree. A red here should now
+  # mean a standing cost nobody caused — a directory the tree grew into, a link a rename broke — which is what
+  # this job was always for and could not be while it was also the only net under every new line.
   #
   # A FRESH CHECKOUT IS THE POINT. Half of what these rules measure is invisible on a persistent workspace (the
   # layout check's ghost directories are build output a rename left on a runner that never cleans) and half is

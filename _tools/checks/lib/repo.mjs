@@ -119,6 +119,37 @@ export const trackedFiles = () =>
         .split("\0")
         .filter((path) => path !== "" && existsSync(path));
 
+/* SCOPE: the files this run is asked to judge, which is not the same question as what it may read. */
+
+// `--paths a,b,c` on a check's own argv, repo-relative. Undefined means the whole tree, which is every caller but the
+// per-edit one. A check declares `scoped` in the manifest only if narrowing its SUBJECTS cannot change its verdict on
+// them — a rule that counts a directory or resolves a link across the tree is not scopable and says so by omission.
+export const subjectScope = () => {
+    const at = process.argv.indexOf("--paths");
+    if (at === -1) {
+        return undefined;
+    }
+    const paths = (process.argv[at + 1] ?? "").split(",").filter((path) => path !== "");
+    // An explicit `--paths` naming nothing judges nothing; widening it to the tree would make a per-edit run measure
+    // the whole repository and report somebody else's line as this edit's.
+    //
+    // Absolute in, repo-relative out, because the caller that matters does not know this root: the per-edit moment
+    // substitutes `{file}` with the absolute path of the file just written (rules/file-edited.ts), and git lists
+    // repo-relative ones. Comparing those two spellings matches nothing and reports a clean file, which is the failure
+    // mode that looks exactly like success.
+    return new Set(paths.map((path) => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path)));
+};
+
+// Tracked files this run may judge: every one git lists under `patterns`, narrowed to the scope when there is one. The
+// scope filters rather than replaces the listing, so a path that is untracked, ignored or deleted is still not a
+// subject just because a caller named it.
+export const subjectFiles = (...patterns) => {
+    const scope = subjectScope();
+    return (git("ls-files", "-z", ...patterns) ?? "")
+        .split("\0")
+        .filter((path) => path !== "" && (scope === undefined || scope.has(path)) && existsSync(join(root, path)));
+};
+
 // Every path git sees, untracked and not ignored: a land's brand-new package before `git add`. Lets a ghost
 // (all-ignored or empty) be told apart from a directory merely not yet committed.
 export const untrackedFiles = () =>

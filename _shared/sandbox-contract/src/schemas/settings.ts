@@ -577,14 +577,20 @@ export type SavingsReport = z.infer<typeof SavingsReportSchema>;
 // spelling for the daemon that reads it, the screen that names it and the demo that mimics it.
 export const REPO_CHECKS_FILE = `${STATE_DIR}/checks.json`;
 
-// Named for the occasion as a repository would say it, not for the daemon's wire moment: `turn` is `turn.ending` and
-// `push` is `push.starting` (rules/repo-checks.ts maps them). Two, because these are the two occasions whose command a
-// repository actually owns; a verdict moment has nothing here to express.
-export const RepoCheckMomentSchema = z.enum(["turn", "push"]);
+// Named for the occasion as a repository would say it, not for the daemon's wire moment: `edit` is `file.edited`,
+// `turn` is `turn.ending` and `push` is `push.starting` (rules/repo-checks.ts maps them). Three, because these are the
+// occasions whose command a repository actually owns; a verdict moment has nothing here to express.
+//
+// `edit` is the cheapest of the three and the only one that reaches the model while it still holds the line it wrote:
+// the command runs on that one file (`{file}`), and its output rides back in the edit's own response. A repository
+// that declares a whole-tree command here pays it per edit, so the command has to take the file.
+export const RepoCheckMomentSchema = z.enum(["edit", "turn", "push"]);
 export type RepoCheckMoment = z.infer<typeof RepoCheckMomentSchema>;
 
 export const RepoCheckSchema = z.object({
-    when: RepoCheckMomentSchema.describe("When to run it: `turn` before the assistant finishes, `push` before code leaves the machine."),
+    when: RepoCheckMomentSchema.describe(
+        "When to run it: `edit` on each file as it is written (`{file}` is its path), `turn` before the assistant finishes, `push` before code leaves the machine.",
+    ),
     run: z.string().min(1).max(500).describe("The command, run in this repository's own directory, so it reads as it would in a terminal there."),
     label: z.string().min(1).max(80).optional().describe("What to call it on screen. Absent names it after the command."),
     // Same ceiling as a rule's own command; past it the process group is killed and the run is a failure, never a

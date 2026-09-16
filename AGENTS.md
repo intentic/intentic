@@ -53,18 +53,25 @@ Four moments, each the cheapest one that can see the defect it is for. Every one
 **After every file you write** (`file.edited` rules, every runtime, edit tools and shell commands alike: the
 daemon reads the edit off the tree, so `sed`, a heredoc and a script count like Edit): the linter with
 `.oxlintrc.agent.json` (`.intentic/config/hooks/lint-edit.mjs`, autofixes silently and reports only what the
-edit introduced) and the byte scan (`bytes-edit.mjs`). On Claude Code turns the same moment also type-checks
-the file. What a failing one prints rides back with the edit's own result. Fix it there: that is one edit,
-and nothing has been built on it yet.
+edit introduced), the byte scan (`bytes-edit.mjs`), and every checkout gate that can judge a file on its own
+(`node _tools/checks/run.mjs --paths {file}`, declared at `.intentic/checks.json`'s `edit` moment, ~100ms) —
+a hand-spelled `/work`, a `bg-[#4c4c58]` where a token belongs, a bare `<button>`, a script tag in an
+`.astro` frontmatter. On Claude Code turns the same moment also type-checks the file. What a failing one
+prints rides back with the edit's own result, and says nothing at all when the file is clean. Fix it there:
+that is one edit, and nothing has been built on it yet.
 
 **When the turn tries to end** (`Verify before you finish`, `cd intentic && pnpm verify:turn`, after edits
 under `intentic/**`): the checkout gates (`_tools/checks/run.mjs`, ~1s), the linter over YOUR CHANGED FILES,
 the declarations emit, and `turbo run typecheck test --only` over the AFFECTED CLOSURE, the packages holding a
 changed file plus every package that depends on one. That is exactly the set whose fixtures can name a shape
 you just changed; nothing outside it can have been broken by this turn, and nothing inside it is somebody
-else's red. The gates are judged the same way: a check that fails here is re-run against a throwaway worktree
-at `HEAD`, and one that was already failing there is named and not held against you — you inherited that tree,
-and the land will measure it. Every one
+else's red. The gates are judged the same way, and LINE BY LINE: a check that fails here is re-run against a
+throwaway worktree at `HEAD`, and every problem line it printed there is named and not held against you — you
+inherited that tree, and the land will measure it. What IS held against you is a line that was not there
+before, whatever the check's gate: a `tidy` rule cannot refuse a push because a directory somebody else filled
+is nobody's push to stop, but a line this turn wrote is this turn's, and this is the only gate that can tell
+the two apart. A check that could not measure at all (its own tool moved) accuses nobody and holds nothing.
+Every one
 of those readers runs even when an earlier one failed, and the run ends with a digest naming each step that
 did (`_tools/scripts/lib/steps.mjs`), so one report is the whole list rather than the first item on it: you
 get two follow-ups, and a gate that named one problem per run could not spend them. Do not
@@ -106,7 +113,9 @@ only with a `test!:` subject or a `Test-Note:` trailer saying why), the manifest
 linter; then `cargo fmt --check` on any Rust crate the push touches. Only the checks whose `gate` is `code` can refuse any of that: a `tidy` failure (`_tools/checks/manifest.mjs`
 says which is which — layout, doc links, path literals, the UI tiers) prints as a warning here and is refused
 by `nightly.yml`'s `tidy` job instead, because a directory another conversation made one file too full is
-nobody's push to stop and no commit in that push can fix it. The two cheap tiers collect — a push wrong in four readable ways is told about four — and they stop the run:
+nobody's push to stop and no commit in that push can fix it. The two moments above it are where a tidy rule
+DOES refuse, because both can name the author: the edit moment reads the one file just written, and the turn
+holds you to the problem lines your diff added and to nothing else. The two cheap tiers collect — a push wrong in four readable ways is told about four — and they stop the run:
 a tree already refused by a reader that costs a second is not measured further.
 
 The three steps CI's verify groups run (typecheck, build, test) are not run at the push. A verdict the land's

@@ -1,5 +1,5 @@
 import type { Rule } from "@intentic/api-contract";
-import type { RepoChecksSummary } from "@intentic/sandbox-contract";
+import type { RepoCheckMoment, RepoChecksSummary } from "@intentic/sandbox-contract";
 
 // Pure functions over a rule list, no browser imports. Split from useRules.ts so the agent menu, chat notice and push
 // dialog can read rules without pulling in a composable's queries. What the repositories themselves declare
@@ -55,7 +55,7 @@ export const pushChecksOf = (rules: readonly Rule[], repos: readonly string[]): 
     );
 
 /** Every repository whose own declared checks are running at this moment, narrowed to the repositories named. */
-export const adoptedChecksFor = (declared: readonly RepoChecksSummary[], moment: "turn" | "push", inRepos?: readonly string[]): RepoChecksSummary[] =>
+export const adoptedChecksFor = (declared: readonly RepoChecksSummary[], moment: RepoCheckMoment, inRepos?: readonly string[]): RepoChecksSummary[] =>
     declared.filter(
         (entry) => entry.adopted && (inRepos === undefined || inRepos.includes(entry.repo)) && entry.checks.some((check) => check.when === moment),
     );

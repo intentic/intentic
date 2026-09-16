@@ -7,9 +7,9 @@
 // scripts and are what the scanner is for.
 import { readFileSync } from "node:fs";
 import { finish } from "./lib/report.mjs";
-import { trackedFiles } from "./lib/repo.mjs";
+import { subjectFiles } from "./lib/repo.mjs";
 
-const astroFiles = trackedFiles().filter((path) => path.endsWith(".astro"));
+const astroFiles = subjectFiles("*.astro");
 
 const findings = [];
 for (const path of astroFiles) {

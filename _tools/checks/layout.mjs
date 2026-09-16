@@ -9,16 +9,30 @@ import { EXCLUDED, packages, root, SKIP_DIRS, trackedFiles, untrackedFiles, writ
 
 const BASELINE = join(root, "_tools/checks/baselines/layout.json");
 const writeBaseline = process.argv.includes("--write-baseline");
+// One entry recorded at what the tree now has, for a directory a change grew ON PURPOSE. The blunt instrument beside it
+// is `--write-baseline`, which adopts EVERY finding — run from an agent's worktree that silently launders every other
+// conversation's drift into the commit, which is why growing one directory needed a hand-edit of a shared file and
+// therefore usually did not happen at all.
+// `` when the flag is there with nothing after it, which is a mistake to report rather than a run to do quietly.
+const allow = process.argv.includes("--allow") ? (process.argv[process.argv.indexOf("--allow") + 1] ?? "") : undefined;
 const prune = process.argv.includes("--prune");
 const MAX_FILES_PER_DIR = 30;
 
+// A file nobody reads to find their way around: an image, a font, a media clip. Both rules below exempt these, for one
+// reason stated once — the cost they are about is a READING cost. Thirty modules in a directory is a page an agent
+// scrolls before it can act; thirty PNGs is a directory nobody opens, that no search returns, and whose names are often
+// a set joined ACROSS directories (`assets/product/x.png` beside `assets/product-light/x.png`), so renaming one to
+// thin the count breaks the pairing the directory exists to express.
+const ASSET = /\.(png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|mp4|webm|mp3|wav)$/i;
+
 const tracked = trackedFiles();
-// Direct file count and child directory set per directory; every rule below reads one of these two maps.
+// Direct file count and child directory set per directory; every rule below reads one of these two maps. `filesIn`
+// counts only what a reader reads — it feeds the fan-out rule and nothing else.
 const filesIn = new Map();
 const dirsIn = new Map();
 for (const path of tracked) {
     for (let dir = dirname(path); dir !== "."; dir = dirname(dir)) {
-        if (dir === dirname(path)) {
+        if (dir === dirname(path) && !ASSET.test(path)) {
             filesIn.set(dir, (filesIn.get(dir) ?? 0) + 1);
         }
         const parent = dirname(dir);
@@ -158,10 +172,6 @@ const nameMismatches = packages.flatMap(({ name, pkg }) => {
 // Basename collisions within one package; exemptions are names whose job is to repeat (a barrel, invariant.ts, a
 // manifest, a route/handler file, a test).
 const COLLISION_OK = /^(index\.ts|invariant\.ts|README\.md|package\.json|tsconfig.*\.json|vitest\.config\.ts)$|\.(routes|contract|handler|test|spec)\.[cm]?tsx?$/;
-// An image is not a module: nothing resolves one by guessing a path, and a skin set (`assets/product/x.png` and
-// `assets/product-light/x.png`) JOINS its two halves on the shared name, so renaming either breaks the pairing the
-// directory exists to express. The rule is about code a wrong guess silently imports.
-const COLLISION_ASSET = /\.(png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|mp4|webm|mp3|wav)$/i;
 const collisions = new Map();
 for (const { name } of packages) {
     const seen = new Map();
@@ -170,7 +180,7 @@ for (const { name } of packages) {
             continue;
         }
         const file = basename(path);
-        if (COLLISION_OK.test(file) || COLLISION_ASSET.test(file)) {
+        if (COLLISION_OK.test(file) || ASSET.test(file)) {
             continue;
         }
         // Case-insensitive: two files differing only by case are one to TypeScript (TS1149) on some filesystems.
@@ -236,6 +246,29 @@ if (writeBaseline) {
 }
 const baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, "utf8")) : { fanOut: {}, collisions: {} };
 
+// ONE deliberate growth, recorded by name. The rule it relaxes is the one rule here that nobody's turn causes on its
+// own: a directory reaches 31 files because thirty other files were already in it, and the turn that adds the thirty-
+// first is the one told about it. Splitting the directory is the better answer and stays the default the failure
+// prints; when it is not the right answer, this is the way to say so in a line a reviewer can see, rather than by
+// hand-editing a file every other conversation is also holding.
+if (allow !== undefined) {
+    const found = fanOut.has(allow) ? "fanOut" : collisions.has(allow) ? "collisions" : undefined;
+    if (found === undefined) {
+        console.error(
+            allow === "" || allow.startsWith("--")
+                ? `layout: --allow needs the directory or package to record, e.g. --allow ${[...fanOut.keys(), ...collisions.keys()][0] ?? "_part/package/src/dir"}`
+                : `layout: ${allow} is not over any limit, so there is nothing to record`,
+        );
+        process.exit(2);
+    }
+    const count = (found === "fanOut" ? fanOut : collisions).get(allow);
+    const next = { fanOut: { ...baseline.fanOut }, collisions: { ...baseline.collisions } };
+    next[found][allow] = count;
+    writeFileSync(BASELINE, `${JSON.stringify({ fanOut: asObject(new Map(Object.entries(next.fanOut))), collisions: asObject(new Map(Object.entries(next.collisions))) }, null, 4)}\n`);
+    console.log(`layout: recorded ${allow} at ${count}; the entry rides your next commit, and the ratchet lowers it again on its own once the tree beats it`);
+    process.exit(0);
+}
+
 // A ratcheted rule fails only on growth; an entry the tree has beaten is tightened to what it now has (or dropped, at
 // zero) instead of failing.
 const ratchet = (found, allowed, describe) => {
@@ -276,8 +309,9 @@ if (twinsRetired.length > 0) {
 finish(
     [
         [
-            `these directories hold more than ${MAX_FILES_PER_DIR} files, so listing one costs an agent a page it has to read before it can act\n` +
-                "  split by what the files DO (see docs/audits/directory-structure-audit.md), or lower the entry in _tools/checks/baselines/layout.json",
+            `these directories hold more than ${MAX_FILES_PER_DIR} files a reader reads, so listing one costs an agent a page before it can act\n` +
+                "  split by what the files DO (see docs/audits/directory-structure-audit.md), or, if splitting is the wrong answer here,\n" +
+                "  record it: node _tools/checks/layout.mjs --allow <dir>",
             fanOutGrown,
         ],
         [
@@ -288,7 +322,7 @@ finish(
         ["a package's directory name must be its npm name without the scope (ARCHITECTURE.md, Conventions)", nameMismatches],
         [
             "these packages hold two files with the same name, so a guessed path lands on the wrong one\n" +
-                "  rename by what each one does, or lower the entry in _tools/checks/baselines/layout.json",
+                "  rename by what each one does, or, if both names are right, record it: node _tools/checks/layout.mjs --allow <package>",
             collisionsGrown,
         ],
         [
