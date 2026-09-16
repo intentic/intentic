@@ -33,9 +33,10 @@ const errorMsg = ref<NoticeModel>();
 const viewW = ref(1280);
 const viewH = ref(880);
 const surface = ref<HTMLElement>();
-const canvasEl = ref<HTMLCanvasElement>();
+// Null, not undefined, once the dialog's content has unmounted: that is what Vue writes to a template ref.
+const canvasEl = ref<HTMLCanvasElement | null>(null);
 // Canvas mounts with the dialog; the decoder outlives it, so the two are wired together here.
-watch(canvasEl, (canvas) => video.attach(canvas));
+watch(canvasEl, (canvas) => video.attach(canvas ?? undefined));
 let socket: WebSocket | undefined;
 let lastMove = 0;
 // Ctrl+C in flight, waiting on the page's answer; one at a time.
@@ -131,9 +132,12 @@ const connect = async (): Promise<void> => {
     });
 };
 
+// Immediate, since an instance can mount already visible (a remount under it, an HMR replacement): waiting for a flip
+// that already happened leaves a dialog open on no socket, with no picture and no way to drive it.
 watch(
     () => props.visible,
     (open) => (open ? void connect() : close()),
+    { immediate: true },
 );
 onBeforeUnmount(() => {
     close();
@@ -143,10 +147,14 @@ onBeforeUnmount(() => {
 
 // Every pointer event, built by the shared rule (pointerFrame) so this window and the agent's browser view describe
 // drags and clicks the same way.
+// The canvas is checked, not assumed: a surface whose canvas has unmounted still carries these listeners, and a null
+// ref reaches viewportCoords as a dereference inside a native event handler.
 const sendPointer = (action: PointerAction, event: MouseEvent): void => {
-    if (canvasEl.value !== undefined) {
-        sendMsg(pointerFrame(action, event, canvasEl.value, viewW.value, viewH.value));
+    const canvas = canvasEl.value;
+    if (canvas === null) {
+        return;
     }
+    sendMsg(pointerFrame(action, event, canvas, viewW.value, viewH.value));
 };
 
 const onMouseMove = (event: MouseEvent): void => {
