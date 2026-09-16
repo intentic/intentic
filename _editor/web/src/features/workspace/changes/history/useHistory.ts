@@ -2,12 +2,12 @@ import type { FileDiffResponse, SnapshotDiffResponse, SnapshotsResponse } from "
 import { useAsyncAction } from "@intentic/ui/async";
 import { type QueryClient, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { jsonBody } from "../../sandbox/client/jsonBody";
-import { useChat } from "../../chat/run/useChat";
-import { resetEditBuffers } from "../files/useEditBuffers";
-import { GIT_CHANGES, HISTORY_SNAPSHOTS, WORKSPACE_TREE } from "../../../lib/queryKeys";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { sandboxJson } from "../../../sandbox/client/sandboxClient";
+import { jsonBody } from "../../../sandbox/client/jsonBody";
+import { useChat } from "../../../chat/run/useChat";
+import { resetEditBuffers } from "../../files/useEditBuffers";
+import { GIT_CHANGES, HISTORY_SNAPSHOTS, WORKSPACE_TREE } from "../../../../lib/queryKeys";
+import { useSandboxQuery } from "../../../sandbox/client/useSandboxQuery";
 
 // Workspace history: the daemon's checkpoints of /work (turns, user changes, restores; hidden interval captures
 // aren't listed). The snapshot list is vue-query cached; diff and fileDiff stay imperative, loaded on demand.

@@ -15,7 +15,7 @@ vi.mock(`../../workspace/files/useEditBuffers`, () => ({ resetEditBuffers: recor
 vi.mock(`../../../shell/presence/usePresence`, () => ({ resetPresence: record(`resetPresence`) }));
 vi.mock(`../../workspace/push/usePushFlow`, () => ({ resetPushFlow: record(`resetPushFlow`) }));
 vi.mock(`../../../shell/window/useLayout`, () => ({ resetTerminalOpen: record(`resetTerminalOpen`) }));
-vi.mock(`../../workspace/changes/useWorkspaceLive`, () => ({ resetWorkspaceLive: record(`resetWorkspaceLive`) }));
+vi.mock(`../../workspace/changes/live/useWorkspaceLive`, () => ({ resetWorkspaceLive: record(`resetWorkspaceLive`) }));
 vi.mock(`../../workspace/tabs/useWorkspaceTabs`, () => ({ resetWorkspaceTabs: record(`resetWorkspaceTabs`) }));
 vi.mock(`../../workspace/explorer/useWorkspaceTree`, () => ({ resetWorkspaceTreeState: record(`resetWorkspaceTreeState`) }));
 

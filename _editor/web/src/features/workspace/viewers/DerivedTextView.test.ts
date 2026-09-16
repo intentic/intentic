@@ -35,7 +35,7 @@ vi.mock("../files/derivedText", () => ({
 // `derivedEpoch` is a real ref, since a plain field would not re-trigger the watch and the test would pass on a
 // component that never re-reads — which is the bug being covered.
 const derivedEpoch = ref(0);
-vi.mock("../changes/useWorkspaceLive", () => ({
+vi.mock("../changes/live/useWorkspaceLive", () => ({
     changeEpochOf: () => 0,
     derivedEpochOf: () => derivedEpoch.value,
     sidecarQueue: { value: undefined },

@@ -32,7 +32,7 @@ import { useRepoChecks } from "../../sandbox/environment/useRepoChecks";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
 import { checkFixPrompt, checkNudgePrompt, checkOutcome, fixSignature, outcomeSummary, pushFixPrompt, pushNudgePrompt } from "../health/fixProposal";
 import { type SyncTarget, useChanges } from "../changes/useChanges";
-import { workspaceChangedSince } from "../changes/useWorkspaceLive";
+import { workspaceChangedSince } from "../changes/live/useWorkspaceLive";
 import { usePrepush } from "./usePrepush";
 import { resetPushRuns, usePushRun } from "./usePushRun";
 

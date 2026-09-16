@@ -44,7 +44,7 @@ import { filesToEntries } from "../explorer/transfer/dropEntries";
 import DirectoryChecks from "../directory-ui/DirectoryChecks.vue";
 import DirectoryPersonas from "../directory-ui/DirectoryPersonas.vue";
 import EditorPane from "../files/EditorPane.vue";
-import HistoryPanel from "../changes/HistoryPanel.vue";
+import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
 import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";

@@ -51,7 +51,7 @@ vi.mock(`./usePrepush`, async () => {
 });
 
 /* The watcher's stamp, which decides whether a verdict is still about the tree in front of the user. */
-vi.mock(`../changes/useWorkspaceLive`, () => {
+vi.mock(`../changes/live/useWorkspaceLive`, () => {
     let lastAt = 1;
     return {
         workspaceChangedSince: (at: number) => lastAt === 0 || lastAt > at,
@@ -175,7 +175,7 @@ const load = async () => {
     };
     pushRuns.resetPushRuns();
     const suggestion = await import(`../../agents/fleet/sessionSuggestion`);
-    const live = (await import(`../changes/useWorkspaceLive`)) as unknown as { writeToTree: () => void; quietTree: () => void };
+    const live = (await import(`../changes/live/useWorkspaceLive`)) as unknown as { writeToTree: () => void; quietTree: () => void };
     // As with the seams above: the stamp survives `resetModules`, so each case opens on a tree nobody has written to.
     live.quietTree();
     const fleet = await import(`../../agents/fleet/useAgents-registry`);

@@ -121,7 +121,7 @@ vi.mock("../../../lib/markdown/useMarkdown", async () => {
     return { useMarkdown: () => computed(() => markdown.parts) };
 });
 vi.mock("../../workspace/files/openFileRef", () => ({ openFileRefFromEvent: vi.fn() }));
-vi.mock("../../workspace/changes/useHistory", () => ({ restoreSnapshot: vi.fn() }));
+vi.mock("../../workspace/changes/history/useHistory", () => ({ restoreSnapshot: vi.fn() }));
 vi.mock("../tools/toolGrouping", () => ({ groupConsecutiveTools: () => [] }));
 vi.mock("../composer/ChatAttachmentStrip.vue", () => ({ default: { render: () => undefined } }));
 vi.mock("./ChatTodoList.vue", () => ({ default: { render: () => undefined } }));

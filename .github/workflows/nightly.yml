@@ -750,7 +750,13 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: package.json
-      # Checkout only: no install, no network, under two seconds. Same runner as ci-audit for the same reason —
+      # THE BINARY, NOT AN INSTALL. A hosted image ships node, npm and yarn and no pnpm, and one check in this
+      # gate (`peer-deps`) asks pnpm to read the lockfile — `pnpm peers check --lockfile-only`, no resolution and
+      # no node_modules. Without this step that check cannot run at all and reports the shape it expected as
+      # missing, which is what reddened this job with nothing wrong in the tree. `packageManager` in package.json
+      # pins the version, so this is the same pnpm every other job runs.
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      # Checkout only: no repository install, seconds of work. Same runner as ci-audit for the same reason —
       # the self-hosted fleet is six processes on one box, and a check that needs nothing from it should want
       # nothing from it.
       - run: node _tools/checks/run.mjs --gate=tidy

@@ -3,6 +3,9 @@
 // of the wrong major. `pnpm peers check` reads the issues out of the lockfile, so this costs no install and no
 // re-resolution — `--lockfile-only` is what keeps it a checkout-only check. It replaces `install --resolution-only`,
 // the flag pnpm 12 removed.
+// The one tool this check needs beyond node: pnpm itself, on PATH at the pinned version. A hosted runner has none
+// unless the job installs it, and a missing binary reads nothing like a moved output shape, so the two are told apart
+// below rather than reported as one puzzle.
 import { execFileSync } from "node:child_process";
 import { finish } from "./lib/report.mjs";
 import { root } from "./lib/repo.mjs";
@@ -31,13 +34,15 @@ const read = () => {
                 /* fall through to the unreadable case */
             }
         }
-        return undefined;
+        return error.code === "ENOENT" ? "no-pnpm" : undefined;
     }
 };
 
 const report = read();
 const unmet = [];
-if (report === undefined) {
+if (report === "no-pnpm") {
+    unmet.push("pnpm is not on PATH, so the lockfile's peers went unread: the job running this check has to install pnpm before it");
+} else if (report === undefined) {
     unmet.push(
         "`pnpm peers check --json --lockfile-only` produced no readable report: the command or its output shape moved and this check needs rewriting",
     );
@@ -55,5 +60,5 @@ if (report === undefined) {
 
 finish(
     [["Peer dependencies the lockfile does not satisfy, so an import resolves to the wrong copy", unmet]],
-    [`peer dependencies: ${Object.keys(report ?? {}).length} importers, none with an unmet, missing or conflicting peer`],
+    [`peer dependencies: ${Object.keys(typeof report === "object" ? (report ?? {}) : {}).length} importers, none with an unmet, missing or conflicting peer`],
 );

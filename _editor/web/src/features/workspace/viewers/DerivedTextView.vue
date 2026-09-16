@@ -3,7 +3,7 @@ import { Button, CopyButton, formatTokens, Markdown, timeAgo } from "@intentic/u
 import { errorMessage } from "@intentic/ui/async";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { formatElapsed } from "../../agents/fleet/agentStatus";
-import { changeEpochOf, derivedEpochOf, sidecarQueue } from "../changes/useWorkspaceLive";
+import { changeEpochOf, derivedEpochOf, sidecarQueue } from "../changes/live/useWorkspaceLive";
 import { firstDeriveAttempt, rememberedDerivedText } from "../files/derivedCache";
 import { deriveText, readDerivedText, type WorkspaceDerived } from "../files/derivedText";
 

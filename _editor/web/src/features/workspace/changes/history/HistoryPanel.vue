@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { SnapshotChange, SnapshotTrigger, WorkspaceSnapshot } from "@intentic/api-contract";
 import { computed, ref } from "vue";
-import { useVocabulary } from "../../../core-views/vocabulary";
-import { diffRawUrls } from "./diffRaw";
+import { useVocabulary } from "../../../../core-views/vocabulary";
+import { diffRawUrls } from "../diffRaw";
 import { useHistory } from "./useHistory";
 import { Button, ChangeStatusMark, ui, type IconName, Notice, timeAgo } from "@intentic/ui";
 import type { DiffPayload } from "@intentic/extension-api";
-import type { OpenMode } from "../tabs/workspaceTabs";
+import type { OpenMode } from "../../tabs/workspaceTabs";
 
 // Restore-point timeline: daemon checkpoints of /work (not git), from agent turns, user changes, and restore markers.
 // Selecting one lazy-loads what changed since the previous checkpoint; a file opens a diff tab. Restore rewrites /work

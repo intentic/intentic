@@ -12,7 +12,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
 import { setPresenceUsers } from "../../../shell/presence/usePresence";
 import { landingNow } from "../../workspace/changes/landing";
-import { markDerivedChanged, markWorkspaceChanged, worktreeMovedRecently } from "../../workspace/changes/useWorkspaceLive";
+import { markDerivedChanged, markWorkspaceChanged, worktreeMovedRecently } from "../../workspace/changes/live/useWorkspaceLive";
 import { emitRuntimeChanged } from "./runtimeEvents";
 import { resetWorkspaceScopedState } from "../client/sandboxScope";
 import { daemonRebuilt, dropSandboxLocalState, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";

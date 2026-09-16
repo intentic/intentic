@@ -41,7 +41,7 @@ import { filesToEntries } from "../explorer/transfer/dropEntries";
 import { type Provisional, provisionalAt, withProvisionalEntries } from "../files/provisionalEntries";
 import { type ExplorerFilters, explorerShows, technicalHidden } from "../explorer/explorerFilter";
 import FileViewer from "../viewers/FileViewer.vue";
-import HistoryPanel from "../changes/HistoryPanel.vue";
+import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
 import { workspaceAgent } from "../health/workspaceScope";

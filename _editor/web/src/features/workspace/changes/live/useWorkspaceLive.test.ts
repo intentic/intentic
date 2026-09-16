@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { queryClient } from "../../../lib/queryPersistence";
+import { queryClient } from "../../../../lib/queryPersistence";
 import { changeEpochOf, isRecentlyChanged, markWorkspaceChanged } from "./useWorkspaceLive";
 
 // Regression guard: the live-refresh invalidation must work with NO component mounted. It used to ride a

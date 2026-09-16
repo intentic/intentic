@@ -1,10 +1,10 @@
 import type { SidecarStatus } from "@intentic/sandbox-contract";
 import { parentDir } from "@intentic/ui/path";
 import { reactive, ref } from "vue";
-import { queryClient } from "../../../lib/queryPersistence";
-import { throttleTrailing } from "../../../lib/throttleTrailing";
-import { WORKSPACE_MODULES, WORKSPACE_TREE } from "../../../lib/queryKeys";
-import { forgetDerivedText } from "../files/derivedCache";
+import { queryClient } from "../../../../lib/queryPersistence";
+import { throttleTrailing } from "../../../../lib/throttleTrailing";
+import { WORKSPACE_MODULES, WORKSPACE_TREE } from "../../../../lib/queryKeys";
+import { forgetDerivedText } from "../../files/derivedCache";
 
 // Live workspace-change state fed from the daemon's SSE stream; consumed by the tree, the review lists' module
 // grouping, the file viewer, and the tree's row flash — the only thing that keeps the view fresh since an

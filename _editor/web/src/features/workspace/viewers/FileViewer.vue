@@ -10,7 +10,7 @@ import { mediaUrl } from "../files/mediaUrl";
 import { useEditBuffers } from "../files/useEditBuffers";
 import { useLayout } from "../../../shell/window/useLayout";
 import { useMonaco } from "../files/useMonaco";
-import { changeEpochOf } from "../changes/useWorkspaceLive";
+import { changeEpochOf } from "../changes/live/useWorkspaceLive";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { scopeQuery, workspaceAgent } from "../health/workspaceScope";
 import { useScopeTitle } from "../health/scopeTitle";

@@ -4,7 +4,7 @@ import { desyncAgents } from "../../agents/fleet/useAgents";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { queryClient } from "../../../lib/queryPersistence";
 import { presenceStreamOpened, resetPresence } from "../../../shell/presence/usePresence";
-import { markWorkspaceChanged } from "../../workspace/changes/useWorkspaceLive";
+import { markWorkspaceChanged } from "../../workspace/changes/live/useWorkspaceLive";
 import { classifyFailure, type ConnectionFailure, watchdogRecoveryDelay } from "../live/connection";
 import { forgetEdgeVerdict, lastEdgeVerdict } from "../client/edgeVerdict";
 import { daemonErrorMessage, daemonErrorStatus, sandboxRpc, SandboxUnaddressedError } from "../client/sandboxRpc";

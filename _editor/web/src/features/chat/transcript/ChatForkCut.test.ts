@@ -49,7 +49,7 @@ vi.mock("@intentic/ui", async () => {
         }),
     };
 });
-vi.mock("../../workspace/changes/useHistory", () => ({ invalidateWorkspace: vi.fn() }));
+vi.mock("../../workspace/changes/history/useHistory", () => ({ invalidateWorkspace: vi.fn() }));
 // Built fresh per mount: a computed over the plain `state` object would otherwise cache its first reading.
 vi.mock("../panel/useChat-view", async () => {
     const { computed, shallowRef } = await import("vue");

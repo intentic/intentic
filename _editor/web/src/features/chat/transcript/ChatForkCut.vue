@@ -3,7 +3,7 @@ import { ContextMenu, useDevice } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
-import { invalidateWorkspace } from "../../workspace/changes/useHistory";
+import { invalidateWorkspace } from "../../workspace/changes/history/useHistory";
 import { useChat } from "../run/useChat";
 import { usePaneView } from "../panel/useChat-view";
 import { openAgentConversation } from "../panel/useChat-reveal";

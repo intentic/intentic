@@ -4,7 +4,7 @@ import { Button, formatBytes, vAction } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { FILE_WINDOW_BYTES, readFileWindow } from "../files/fileWindow";
-import { changeEpochOf } from "../changes/useWorkspaceLive";
+import { changeEpochOf } from "../changes/live/useWorkspaceLive";
 import { RAW_MAX_BYTES } from "../explorer/fileType";
 import CodeView from "./CodeView.vue";
 

@@ -36,7 +36,7 @@ maker both are chores with unfamiliar names, and the second one is a trap (secti
 
 The good news is that most of what a maker needs already exists under a developer's name:
 
-- **Restore points** (`features/workspace/changes/HistoryPanel.vue`, daemon `history/history.ts`) are a
+- **Restore points** (`features/workspace/changes/history/HistoryPanel.vue`, daemon `history/history.ts`) are a
   Drive style version history over `/work`, deliberately not git, labelled "Agent turn", "Your changes",
   "Files restored", with a Restore that rewrites the tree after saving a safety checkpoint.
 - **Auto-land** is a rule at the `agent.finished` moment (`sandbox-contract/src/schemas/settings.ts`

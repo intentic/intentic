@@ -20,7 +20,7 @@ import { noteUserCreatedDir, useEmptyDirs } from "./useEmptyDirs";
 import { useFileNesting } from "./useFileNesting";
 import { useUploadQueue } from "../files/upload/useUploadQueue";
 import { isLeaving, type Provisional, provisionalAt, withProvisionalEntries } from "../files/provisionalEntries";
-import { isRecentlyChanged } from "../changes/useWorkspaceLive";
+import { isRecentlyChanged } from "../changes/live/useWorkspaceLive";
 import { lensPersonaId, reachOf } from "../directory-ui/personaReach";
 import { useWorkspaceTree } from "./useWorkspaceTree";
 import { usePersonas } from "../../sandbox/personas/usePersonas";

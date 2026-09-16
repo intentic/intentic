@@ -18,7 +18,7 @@ import { changedNothing, type ChatMessage, type ChecklistView, foldsIntoTurn } f
 import { navigateInApp } from "../../../shell/window/mainWindow";
 import { useMarkdown } from "../../../lib/markdown/useMarkdown";
 import { openFileRefFromEvent } from "../../workspace/files/openFileRef";
-import { invalidateWorkspace } from "../../workspace/changes/useHistory";
+import { invalidateWorkspace } from "../../workspace/changes/history/useHistory";
 import { usePaneView } from "../panel/useChat-view";
 import { landsByDefault } from "../../sandbox/environment/rules";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";

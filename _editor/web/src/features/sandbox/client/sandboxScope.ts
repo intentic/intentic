@@ -9,7 +9,7 @@ import { resetPresence } from "../../../shell/presence/usePresence";
 import { resetPushFlow } from "../../workspace/push/usePushFlow";
 import { useSandbox } from "./useSandbox";
 import { resetTerminalOpen } from "../../../shell/window/useLayout";
-import { resetWorkspaceLive } from "../../workspace/changes/useWorkspaceLive";
+import { resetWorkspaceLive } from "../../workspace/changes/live/useWorkspaceLive";
 import { resetWorkspaceTabs } from "../../workspace/tabs/useWorkspaceTabs";
 import { resetWorkspaceTreeState } from "../../workspace/explorer/useWorkspaceTree";
 
