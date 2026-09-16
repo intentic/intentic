@@ -1,6 +1,6 @@
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { createWriteStream, type WriteStream } from "node:fs";
+import { createWriteStream, existsSync, type WriteStream } from "node:fs";
 import { chmod, mkdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
@@ -541,7 +541,7 @@ const replaceBinary = async (binary: string, write: () => Promise<void> | void):
     await rm(displaced, { force: true }).catch(() => {});
 };
 
-// Extract a gzipped tarball into ~/.intentic/sync/bin using the system `tar` (bsdtar on macOS/Windows 10+).
+// Extract a gzipped tarball into this agent's own bin using the system `tar` (bsdtar on macOS/Windows 10+).
 const extractTarball = (tarball: string): void => {
     const extract = spawnSync("tar", ["-xzf", tarball, "-C", binDir], { stdio: "inherit", windowsHide: true });
     if (extract.status !== 0) {
@@ -549,11 +549,25 @@ const extractTarball = (tarball: string): void => {
     }
 };
 
-// Resolves mutagen: the user's own install if present, else the pinned copy, downloaded and extracted only when
-// ~/.intentic/sync/bin isn't already at that version.
+// Where PATH's copy of a command is at this moment. A bare name is resolved again every time it is run, against a
+// PATH this agent does not control, which is how an autostart entry keeps starting a binary from a retired install.
+const resolveOnPath = (command: string): string | undefined => {
+    const whereExe = join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "where.exe");
+    const found =
+        process.platform === "win32"
+            ? spawnSync(whereExe, [command], { encoding: "utf8", windowsHide: true })
+            : spawnSync("sh", ["-c", `command -v ${command}`], { encoding: "utf8" });
+    // `where` lists every match, best first; `command -v` prints the single one it would run.
+    const first = found.status === 0 ? found.stdout.split("\n")[0]?.trim() : undefined;
+    return first === undefined || first === "" || !existsSync(first) ? undefined : first;
+};
+
+// Resolves mutagen to an absolute path and never a bare name (see resolveOnPath): the user's own install if
+// present, else the pinned copy, downloaded and extracted only when our bin isn't already at that version.
 export const ensureMutagen = async (): Promise<string> => {
-    if (installedVersion("mutagen", ["version"]) !== undefined) {
-        return "mutagen";
+    const own = resolveOnPath("mutagen");
+    if (own !== undefined && installedVersion(own, ["version"]) !== undefined) {
+        return own;
     }
     const dest = join(binDir, `mutagen${exe}`);
     if (installedVersion(dest, ["version"]) === MUTAGEN_VERSION) {

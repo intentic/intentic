@@ -34,7 +34,7 @@ fails loudly, which is the behaviour worth having.
 **Not the user's own.** A browser only speaks CDP if it was started with `--remote-debugging-port`, and nobody's
 everyday browser was; restarting theirs to add the flag would close every tab they had open. So: if a debugging
 endpoint is already there, it is used; otherwise a separate instance starts with its own profile directory under
-`~/.intentic/host/browser`.
+`~/.intentic/browser`.
 
 That separate profile is a feature rather than a compromise. It is empty the first time, so the user signs into
 whatever is needed once, in a window they can watch, and it persists afterwards. Their own session is never

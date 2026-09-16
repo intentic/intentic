@@ -6,13 +6,14 @@ import { probe, waitForPort } from "./cdp.js";
 import { BrowserError } from "./types.js";
 
 // Gets a browser that speaks CDP; only one started with --remote-debugging-port qualifies, so an existing endpoint
-// is reused if present, else a separate instance launches with its own profile at ~/.intentic/host/browser. The
+// is reused if present, else a separate instance launches with its own profile at ~/.intentic/browser. The
 // user's own browser, cookies and session are never opened or automated.
 
 // Fixed rather than random, so a user can find it and a restart can reconnect to the browser it left running.
 export const DEFAULT_PORT = 9222;
 
-export const profileDir = (): string => join(homedir(), ".intentic", "host", "browser");
+// Beside the agents' homes, never inside one: this package is standalone, and the profile outlives any agent.
+export const profileDir = (): string => join(homedir(), ".intentic", "browser");
 
 // Where a Chromium-family browser lives, per platform, most-preferred first; Chrome/Edge/Chromium all speak the
 // same protocol.

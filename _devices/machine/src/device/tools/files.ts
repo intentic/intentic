@@ -1,11 +1,11 @@
 import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { HostScopes } from "@intentic/sandbox-contract";
+import { baseDir } from "../../config.js";
 import { assertPath, assertScope } from "../policy.js";
 
 // Files on somebody's device. Reads are bounded by the roots; writes need the roots AND the write switch, off
-// by default. There is no delete tool: `trash_file` moves the file under ~/.intentic/host/trash instead. A
+// by default. There is no delete tool: `trash_file` moves the file under this agent's own trash instead. A
 // rename, not a copy: the cross-filesystem fallback is deliberately absent, since it would silently turn
 // "moved" into "duplicated and then really deleted".
 
@@ -63,7 +63,7 @@ export const listDirectory = async (path: string, scopes: HostScopes): Promise<D
     );
 };
 
-const trashDir = (): string => join(homedir(), ".intentic", "host", "trash");
+const trashDir = (): string => join(baseDir, "trash");
 
 export const trashFile = async (path: string, scopes: HostScopes): Promise<string> => {
     assertScope(scopes, "write");
