@@ -317,7 +317,7 @@ watch(
                 <div class="flex min-h-0 flex-1 flex-col items-stretch gap-3 overflow-y-auto">
                     <template v-for="lane in lanes" :key="lane.label">
                         <!-- Cards go in bare; the lane insets and spaces its own contents. -->
-                        <RailLane v-if="lane.rows.length > 0" :label="lane.label" :dot="lane.dot" :count="lane.rows.length" flat>
+                        <RailLane v-if="lane.rows.length > 0" :label="lane.label" :dot="lane.dot" :count="lane.rows.length">
                             <RailCard
                                 v-for="session in lane.rows"
                                 :key="session.id"

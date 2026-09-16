@@ -560,12 +560,13 @@ const keepTab = (event: Event, id: string): void => {
 <!-- Reading order top to bottom: narrow with the filter, pick a lane, and when the query reaches past what's open, the "Not open" group at the foot. -->
 <!-- The `Aa` case toggle mirrors the board's: a mode only one of the two search boxes could see or undo would be confusing. -->
 <!-- Tabs, not a pill track: this switch decides what the column IS, so it reads as the column's own header — and a bordered track here stacked a second box directly above the filter field's, which made the header two grey boxes rather than a heading over a control. -->
+<!-- Centred over the column: with no track to give them an edge to sit on, flush left read as the first row of the list rather than its title. -->
         <SegmentedControl
             :model-value="grouping"
             :options="GROUPINGS"
             size="xs"
             variant="underline"
-            class="shrink-0"
+            class="shrink-0 justify-center"
             @update:model-value="(next: ChatGrouping) => setGrouping(next)"
         />
         <!-- Shown only for the chats grouping: the filter searches messages, which personas don't have. -->
@@ -585,7 +586,7 @@ const keepTab = (event: Event, id: string): void => {
 <!-- LANE BREAKS OUTRANK CARD BREAKS, and at 12px against 10px they barely did: the eye groups by proximity. -->
         <div v-else ref="scroller" class="flex min-h-0 flex-1 flex-col items-stretch gap-4 overflow-y-auto">
 <!-- An empty lane isn't drawn at all (see occupiedLanes); one emptied only by the filter keeps its header. -->
-            <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :dot="lane.dot" :count="countIn(lane.key)" flat>
+            <RailLane v-for="lane in occupiedLanes" :key="lane.key" :label="lane.label" :dot="lane.dot" :count="countIn(lane.key)">
 <!-- Closing a chat is lossless in every lane. -->
                 <template #actions>
                     <Button
@@ -759,7 +760,7 @@ const keepTab = (event: Event, id: string): void => {
             </RailLane>
 
 <!-- Query hits outside this window's open chats (fleet, archive, agent-less conversations); a row opens the conversation, same as History. -->
-            <RailLane v-if="filtering && notOpenCount > 0" label="Not open" icon="search" :count="notOpenCount" flat>
+            <RailLane v-if="filtering && notOpenCount > 0" label="Not open" icon="search" :count="notOpenCount">
                 <div class="flex min-w-0 flex-col gap-2.5">
                     <!-- Same identity tile as the lanes above; the category tint still signals what kind of work this is. -->
                     <RailCard

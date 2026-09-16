@@ -202,16 +202,6 @@
         background-image: var(--sanctum-tooth);
     }
 
-    /* Lanes are darker recesses behind their cards. */
-    [data-skin="sanctum"] .lane,
-    [data-skin="sanctum"] .lane-header {
-        --lane-fill: var(--sanctum-cut);
-    }
-    [data-skin="sanctum"] .lane {
-        background-image: var(--sanctum-tooth);
-        box-shadow: inset 0 0 0 1px var(--sanctum-rule);
-    }
-
     /* The seam aligns column headers across the desktop shell. */
     [data-skin="sanctum"] .view-header:not(.view-header-wrap) {
         border-bottom-color: var(--sanctum-rule-strong);

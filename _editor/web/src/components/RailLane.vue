@@ -1,4 +1,4 @@
-<!-- One lane of a rail (a kanban-style column), used by the fleet board and every session list. -->
+<!-- One lane of a rail: a header labelling the cards under it, with no slab of its own. Used by the chat rail and the subagent list; the fleet board draws its columns itself. -->
 <script setup lang="ts">
 import type { IconName } from "@intentic/ui";
 
@@ -9,15 +9,13 @@ defineProps<{
     dot?: string;
     icon?: IconName;
     count: string | number;
-    // No slab behind the cards: the header only labels them, and the surface below shows through (see `.lane-flat`).
-    flat?: boolean;
 }>();
 </script>
 
 <template>
-    <section class="lane flex min-w-0 flex-col rounded-xl" :class="{ 'lane-flat': flat }">
-<!-- THE BOARD'S OWN LANE MEASUREMENTS, to the pixel: header `h-8 px-3`. -->
-        <header class="lane-header sticky top-0 z-10 flex h-8 shrink-0 items-center gap-2 rounded-t-xl px-3">
+    <section class="lane flex min-w-0 flex-col">
+<!-- THE BOARD'S OWN LANE MEASUREMENTS, to the pixel: header `h-8 px-3`. No radius: nothing is painted here to round off. -->
+        <header class="lane-header sticky top-0 z-10 flex h-8 shrink-0 items-center gap-2 px-3">
             <span v-if="dot !== undefined" class="h-2 w-2 shrink-0 rounded-full" :class="dot"></span>
             <Icon v-else-if="icon !== undefined" :name="icon" class="shrink-0 text-2xs text-subtle" />
             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ label }}</span>

@@ -111,18 +111,13 @@
         color: hsl(var(--tile-hue) 70% 72%);
     }
 
-/* A LANE — the kanban column the fleet board is read as, and the same slab in the chat rail's one-card width. */
-    .lane {
-        --lane-fill: color-mix(in srgb, var(--color-content) 3%, var(--color-canvas));
-        background: var(--lane-fill);
-    }
-/* WHAT THE SLAB LIES ON, declared by whoever paints it rather than guessed at by the lane. */
+/* WHAT A LANE LIES ON, declared by whoever paints it rather than guessed at by the lane. */
     :root {
         --lane-ground: var(--color-canvas);
     }
     .lane-ground-card {
         --lane-ground: var(--color-card);
-/* A CARD CANNOT REST AT THE COLOUR IT LIES ON: with the slab gone from under it (`.lane-flat`), this step up is the only thing separating a card from its ground. Stays below `--color-overlay`, which hover and selection still have to move to. */
+/* A CARD CANNOT REST AT THE COLOUR IT LIES ON: with no slab under it, this step up is the only thing separating a card from its ground. Stays below `--color-overlay`, which hover and selection still have to move to. */
         --card-rest: color-mix(in oklab, var(--color-content) 4%, var(--color-card));
     }
 /* Canvas lies a full step below `--color-card`, so a card on it needs no step of its own. `initial` sends `--card-fill` back to its fallback: a canvas ground nested inside a card one (the tab list's dropdown inside the chat panel) would otherwise inherit the step. */
@@ -130,41 +125,9 @@
         --lane-ground: var(--color-canvas);
         --card-rest: initial;
     }
+/* A LANE HAS NO FILL OF ITS OWN — it is a header labelling the cards under it. The one paint left is the header's, and it is not a background: sticky, it has to occlude the cards scrolling beneath it, so it takes the ground it lies on and reads as nothing. */
     .lane-header {
-        background: var(--lane-fill);
-    }
-/* THE PINNED CAP KEEPS ITS ROUNDED CORNERS. */
-    .lane-header::before,
-    .lane-header::after {
-        content: "";
-        position: absolute;
-        top: 0;
-        height: var(--radius-xl);
-        width: var(--radius-xl);
-        pointer-events: none;
-    }
-    .lane-header::before {
-        left: 0;
-        background: radial-gradient(circle at 100% 100%, transparent var(--radius-xl), var(--lane-ground) 0);
-    }
-    .lane-header::after {
-        right: 0;
-        background: radial-gradient(circle at 0 100%, transparent var(--radius-xl), var(--lane-ground) 0);
-    }
-/* A LANE WITHOUT ITS SLAB — the chat rail reads as one list of cards, headers labelling them rather than roofing a recess. Declared after the skins so a skin's own slab (texture, rule) is cleared too. */
-    .lane.lane-flat {
-        background: transparent;
-        box-shadow: none;
-    }
-/* The header still has to occlude the cards that scroll under it, so it takes the ground it lies on — the same colour, so nothing reads as a fill. */
-    .lane-flat > .lane-header {
         background: var(--lane-ground);
-        background-image: none;
-    }
-/* No recess to round off. */
-    .lane-flat > .lane-header::before,
-    .lane-flat > .lane-header::after {
-        display: none;
     }
 
 /* Agent cards, workflow rows, and chat rail cards share one session-card surface. */
