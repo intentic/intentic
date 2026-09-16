@@ -112,11 +112,11 @@ fn complete_path(handoff: &str, verifier: &str, profile: Option<&str>) -> String
 }
 
 /// What each profile paints in — `@intentic/constants` profile.ts, `PROFILES`, whose scheme is the half of
-/// a profile this app can draw itself.
+/// a profile this app can draw itself. `default` names no scheme of its own: it hands the browser back to the
+/// OS's, which the page reads for itself and announces a moment later, so there is nothing to apply early.
 fn mode_of_profile(profile: Option<&str>) -> Option<crate::state::Mode> {
     match profile? {
         "desk" => Some(crate::state::Mode::Light),
-        "default" => Some(crate::state::Mode::Dark),
         _ => None,
     }
 }
@@ -167,10 +167,8 @@ mod tests {
             mode_of_profile(Some("desk")),
             Some(crate::state::Mode::Light)
         );
-        assert_eq!(
-            mode_of_profile(Some("default")),
-            Some(crate::state::Mode::Dark)
-        );
+        // `default` follows the OS, which only the page can read: nothing for the binary to paint early.
+        assert_eq!(mode_of_profile(Some("default")), None);
         assert_eq!(mode_of_profile(None), None);
     }
 

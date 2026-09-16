@@ -44,13 +44,15 @@ describe(`the pre-paint profile script`, () => {
         expect(html).toContain(`localStorage.setItem("${PROFILE_STORAGE_KEY}", asked)`);
     });
 
-    // The tag must already be what the `default` profile asks for, or a fresh browser paints one look and the script
-    // corrects it a frame later. Both attributes spell their off state by being absent, which is why these compare a
-    // presence rather than a value.
-    it(`ships the default profile's own look in the tag, so a fresh browser needs no script at all`, () => {
+    // The tag cannot spell the default look any more: it is the reader's OS's answer, and markup served from a CDN
+    // does not know it. So the tag must carry NEITHER attribute — both spell their off state by being absent, which
+    // makes a bare tag the fallback the script only has to correct upward.
+    it(`ships no look in the tag, since the default one is the OS's to name`, () => {
         const tag = /<html[^>]*>/u.exec(html)?.[0] ?? ``;
-        expect(tag.includes(`data-mode="dark"`)).toBe(PROFILES.default.scheme === `dark`);
-        expect(tag.includes(`data-skin="${PROFILES.default.skin}"`)).toBe(PROFILES.default.skin !== `none`);
+        expect(PROFILES.default.scheme).toBe(`system`);
+        expect(PROFILES.default.skin).toBe(`system`);
+        expect(tag).not.toContain(`data-mode`);
+        expect(tag).not.toContain(`data-skin`);
     });
 });
 
@@ -71,7 +73,10 @@ interface BootResult {
     readonly url: string | undefined;
 }
 
-const boot = (href: string, stored: Record<string, string> = {}): BootResult => {
+/** What the reader's OS says. `silent` is a browser with no `matchMedia` at all, the far end of "will not say". */
+type Os = "light" | "dark" | "silent";
+
+const boot = (href: string, stored: Record<string, string> = {}, os: Os = `light`): BootResult => {
     const store = { ...stored };
     const attributes = tagAttributes();
     let url: string | undefined;
@@ -85,8 +90,15 @@ const boot = (href: string, stored: Record<string, string> = {}): BootResult => 
             setAttribute: (name: string, value: string): void => void attributes.set(name, value),
             removeAttribute: (name: string): void => void attributes.delete(name),
         },
+        // The theme-color tag the script repoints; nothing here reads it back, so a miss is the whole stub.
+        querySelector: (): null => null,
     };
-    const window = { location: { href }, history: { replaceState: (_state: null, _title: string, next: string): void => void (url = next) } };
+    const window = {
+        location: { href },
+        history: { replaceState: (_state: null, _title: string, next: string): void => void (url = next) },
+        // `no-preference` matches neither query, which is what `light` models here: the dark one simply misses.
+        ...(os === `silent` ? {} : { matchMedia: (query: string): { matches: boolean } => ({ matches: os === `dark` && query.includes(`dark`) }) }),
+    };
     // oxlint-disable-next-line no-new-func -- running our own checked-in script, with its globals shadowed by arguments
     new Function(`localStorage`, `document`, `window`, SCRIPT)(localStorage, document, window);
     return { stored: store, attributes, url };
@@ -112,11 +124,9 @@ describe(`arriving with a profile`, () => {
         expect(boot(`https://app.intentic.dev/setup?machine=hosted&profile=desk`).url).toBe(`/setup?machine=hosted`);
     });
 
-    it(`does nothing at all without one, so the served markup is what paints`, () => {
-        const { stored, attributes, url } = boot(`https://app.intentic.dev/login`);
+    it(`stores nothing without one, and leaves the URL alone`, () => {
+        const { stored, url } = boot(`https://app.intentic.dev/login`);
         expect(stored).toEqual({});
-        expect(attributes.get(`data-mode`)).toBe(`dark`);
-        expect(attributes.get(`data-skin`)).toBe(`sanctum`);
         expect(url).toBeUndefined();
     });
 
@@ -127,11 +137,12 @@ describe(`arriving with a profile`, () => {
     });
 
     // The way back. Every key desk set is still desk's, so default may take them all — including releasing the one it
-    // does not answer, which is what puts the audience question back on the table.
+    // does not answer, which is what puts the audience question back on the table. What it hands them back TO is the
+    // OS, not a look of its own, so the attributes here are the reader's system setting rather than the profile's.
     it(`hands an untouched browser back to the app's own look`, () => {
         const desk = boot(`https://app.intentic.dev/login?profile=desk`).stored;
-        const { stored, attributes } = boot(`https://app.intentic.dev/login?profile=default`, desk);
-        expect(stored).toEqual({ [PROFILE_KEYS.scheme]: `dark`, [PROFILE_KEYS.skin]: `sanctum`, [PROFILE_STORAGE_KEY]: `default` });
+        const { stored, attributes } = boot(`https://app.intentic.dev/login?profile=default`, desk, `dark`);
+        expect(stored).toEqual({ [PROFILE_KEYS.scheme]: `system`, [PROFILE_KEYS.skin]: `system`, [PROFILE_STORAGE_KEY]: `default` });
         expect(attributes.get(`data-mode`)).toBe(`dark`);
         expect(attributes.get(`data-skin`)).toBe(`sanctum`);
     });
@@ -143,5 +154,39 @@ describe(`arriving with a profile`, () => {
         expect(stored[PROFILE_KEYS.skin]).toBe(`sanctum`);
         expect(stored[PROFILE_KEYS.scheme]).toBe(`dark`);
         expect(attributes.get(`data-skin`)).toBe(`sanctum`);
+    });
+});
+
+// The half of the script that runs on EVERY load, profile or no profile: which light the first frame is drawn in.
+// useTheme and useSkin run the same rule a module later, so a disagreement here is a repaint on the second frame.
+describe(`the light the first frame is painted in`, () => {
+    const looks = (result: BootResult): { mode: string | undefined; skin: string | undefined } => ({
+        mode: result.attributes.get(`data-mode`),
+        skin: result.attributes.get(`data-skin`),
+    });
+
+    it(`follows a reader whose system is dark, skin and all`, () => {
+        expect(looks(boot(`https://app.intentic.dev/login`, {}, `dark`))).toEqual({ mode: `dark`, skin: `sanctum` });
+    });
+
+    it(`leaves a reader whose system is light in daylight, with no skin over it`, () => {
+        expect(looks(boot(`https://app.intentic.dev/login`, {}, `light`))).toEqual({ mode: undefined, skin: undefined });
+    });
+
+    // The whole of the default: light is what a browser that cannot be asked gets, never dark.
+    it(`falls to daylight when the browser cannot be asked at all`, () => {
+        expect(looks(boot(`https://app.intentic.dev/login`, {}, `silent`))).toEqual({ mode: undefined, skin: undefined });
+    });
+
+    it(`obeys a pinned scheme over the system's`, () => {
+        expect(looks(boot(`https://app.intentic.dev/login`, { [PROFILE_KEYS.scheme]: `light` }, `dark`))).toEqual({ mode: undefined, skin: undefined });
+        expect(looks(boot(`https://app.intentic.dev/login`, { [PROFILE_KEYS.scheme]: `dark` }, `light`))).toEqual({ mode: `dark`, skin: `sanctum` });
+    });
+
+    // Sanctum is the app's DARK look and has no daylight dress, so a pinned skin and a pinned scheme are one choice
+    // made twice; a pinned `none` is the way to have the dark scheme without the stone.
+    it(`obeys a pinned skin over what the scheme would have asked for`, () => {
+        expect(looks(boot(`https://app.intentic.dev/login`, { [PROFILE_KEYS.skin]: `none` }, `dark`))).toEqual({ mode: `dark`, skin: undefined });
+        expect(looks(boot(`https://app.intentic.dev/login`, { [PROFILE_KEYS.skin]: `sanctum` }, `light`))).toEqual({ mode: undefined, skin: `sanctum` });
     });
 });

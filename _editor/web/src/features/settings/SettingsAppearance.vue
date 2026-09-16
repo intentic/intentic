@@ -19,14 +19,15 @@ import { useChangeGrouping } from "../workspace/changes/useChangeGrouping";
 import { useChangeWeight } from "../workspace/changes/changeWeight";
 import { useFileNesting } from "../workspace/explorer/useFileNesting";
 import { useIconRailSize } from "../../shell/rail/useIconRailSize";
-import { type Skin, useSkin } from "../../skins/useSkin";
+import { useSkin } from "../../skins/useSkin";
+import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "./themeRow";
 import { type Audience, useAudience } from "../../app/useAudience";
 
 // How the workspace looks: color scheme, accent color, file-tree treatment, and which tabs the terminal strip carries.
 // Each setting re-renders the whole UI live, so most of the app is its own preview; the Explorer gets an inline sample
 // since its tree isn't on this page.
 
-const { scheme, set: setScheme, accent, setAccent } = useTheme();
+const { choice: schemeChoice, set: setScheme, accent, setAccent } = useTheme();
 const { textSize, setTextSize } = useTextSize();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
 const { iconRailSize } = useIconRailSize();
@@ -58,30 +59,22 @@ const DIFF_OPEN_OPTIONS = [
 const cap = (value: string): string => value.charAt(0).toUpperCase() + value.slice(1);
 
 // A skin rides the Theme row instead of its own control, since two controls could show a light scheme under a dark skin
-// with no way back; picking a scheme drops the skin. To remove skins: delete this block and the useSkin import, keep
-// light/dark, and wire the row back to scheme/setScheme.
-const { skin, setSkin } = useSkin();
-type ThemeChoice = "light" | "dark" | Skin;
-const themeOptions = [
-    { label: `Light`, value: `light` as const },
-    { label: `Dark`, value: `dark` as const },
-    {
-        label: `Sanctum`,
-        value: `sanctum` as const,
-        title: `The look of intentic.dev: ash stone, a gold rule round every panel, carved and cast plaques, and the site's own type.`,
-    },
-];
+// with no way back; the mapping between the row and the two preferences is themeRow.ts. To remove skins: delete this
+// block and the useSkin import, keep system/light/dark, and wire the row back to schemeChoice/setScheme.
+const { skin, choice: skinChoice, setSkin } = useSkin();
+const THEME_TITLE: Partial<Record<ThemeRow, string>> = {
+    system: `Follows your operating system: Sanctum when it is dark, the light look when it is not.`,
+    sanctum: `The look of intentic.dev: ash stone, a gold rule round every panel, carved and cast plaques, and the site's own type.`,
+};
+const themeOptions = THEME_ROW.map((value) => ({ label: cap(value), value, ...(THEME_TITLE[value] === undefined ? {} : { title: THEME_TITLE[value] }) }));
 // Icon names the look, not the light level: what the row now chooses.
-const THEME_ICON: Record<ThemeChoice, IconName> = { light: `sun`, dark: `moon`, sanctum: `star-fill`, none: `moon` };
-const themeChoice = computed<ThemeChoice>(() => (skin.value === `none` ? scheme.value : skin.value));
-const setThemeChoice = (value: ThemeChoice): void => {
-    // useSkin also flips the color scheme, since the skin assumes a near-black canvas PrimeVue keys off.
-    if (value !== `light` && value !== `dark`) {
-        setSkin(value);
-        return;
-    }
-    setSkin(`none`);
-    setScheme(value);
+const THEME_ICON: Record<ThemeRow, IconName> = { system: `desktop`, light: `sun`, dark: `moon`, sanctum: `star-fill` };
+const themeChoice = computed<ThemeRow>(() => themeRowValue(schemeChoice.value, skinChoice.value, skin.value));
+const setThemeChoice = (value: ThemeRow): void => {
+    const look = themeRowLook(value);
+    // The skin goes first: pinning sanctum drags the scheme dark with it, and the line below then says so outright.
+    setSkin(look.skin);
+    setScheme(look.scheme);
 };
 const explorerOptions = computed(() => explorerStyles.map((value) => ({ label: cap(value), value })));
 const iconRailOptions = [

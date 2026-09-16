@@ -191,8 +191,15 @@ attributes onto it, and `data-skin` was missing from that list for as long as sk
 rendered in the app's default look with every stylesheet present and every rule inert. There is no list to keep
 in step now.
 
-The skin implies a dark scheme (PrimeVue keys its own dark preset off `data-mode`), so `useSkin` flips the scheme
-when a skin goes on. The skin's display webfont is fetched only while that skin is active, and the `<link>` is
+**The skin is DERIVED until somebody pins it, and that is the rule worth reading.** `ui-skin` holds `system` by
+default — every fresh browser, and every reader who has not opened Appearance — and `system` resolves to sanctum
+under the dark scheme and to nothing under the light one. Sanctum implies a dark scheme (PrimeVue keys its own dark
+preset off `data-mode`) and has no daylight dress at all, so those are the only two answers it can give: the app's
+own look in each light. A reader who pins sanctum outright takes the dark scheme with it, which is `setSkin`'s one
+side effect; a reader who pins `none` keeps whatever scheme they are in. What this replaced was a stored default of
+`sanctum`, which meant a browser on a light OS met the near-black app on every screen before sign-in.
+
+The skin's display webfont is fetched only while that skin is active, and the `<link>` is
 re-pointed rather than stacked when the skin changes. Sanctum asks for the site's two: Baloo 2
 for every heading and label in the chrome, Playfair Display for the one heading in the app drawn at display size
 (`h1.text-4xl`, the sign-in line): the site's own size band, where a serif with hairlines still has hairlines.
@@ -202,21 +209,23 @@ for every heading and label in the chrome, Playfair Display for the one heading 
 Delete this directory, then remove three one-line call sites:
 
 1. `web/src/styles.css`: the `@import "./skins/…"` line
-2. `web/src/pages/settings/SettingsAppearance.vue`: the `useSkin` import and the `── SKINS ──` block. The Theme
-   row then wants its two-option control back: `themeOptions` loses the `sanctum` entry and becomes
-   the plain light/dark pair bound to `:model-value="scheme"` / `@update:model-value="setScheme"`, and the row's
-   icon goes back to ``scheme === `dark` ? `moon` : `sun` ``
-3. `web/index.html`: the `ui-skin` clause in the anti-flash script
+2. `web/src/features/settings/themeRow.ts` and its test: the row collapses to `system`/`light`/`dark` and
+   `ThemeLook` loses its `skin` half
+3. `web/src/features/settings/SettingsAppearance.vue`: the `useSkin` import, and `themeChoice`/`setThemeChoice`
+   bound to `schemeChoice` / `setScheme` alone
+4. `web/index.html` and `_site/demo/index.html`: the `ui-skin` clause in each anti-flash script
 
 The tests travel with this directory; nothing outside it references a skin, and no design-system file is touched
-by the feature at all. A workspace someone had left on a skin comes back on the app's own dark scheme, because
-that is what selecting the skin set: the leftover `ui-skin` key in their browser storage is then read by nothing.
+by the feature at all. A workspace someone had left on a skin comes back on whatever scheme they were in, since
+the skin no longer decides one: the leftover `ui-skin` key in their browser storage is then read by nothing.
 
 ## Adding another skin
 
-Add `<name>.css` beside the one here, scoped to `[data-skin="<name>"]`; add the value to `Skin` in `useSkin.ts`; add an
-option to `themeOptions` and an icon to `THEME_ICON` in the appearance page; add the `@import` to `styles.css` and
-the name to the anti-flash list in `index.html`. Faces are not a skin's to fetch: every one the app uses is served
+Add `<name>.css` beside the one here, scoped to `[data-skin="<name>"]`; add the value to `Skin` in `useSkin.ts`; add
+the name to `ThemeRow`, `THEME_ROW` and `themeRowLook` in `themeRow.ts` and an icon to `THEME_ICON` in the appearance
+page; add the `@import` to `styles.css` and the name to the anti-flash script in `index.html` (and the demo's copy of
+it). A second skin also ends the shortcut `themeRowValue` takes — it reads a resolved skin of `sanctum` as the row
+value `sanctum`, which is only sound while sanctum is the one skin there is. Faces are not a skin's to fetch: every one the app uses is served
 from this origin and declared in `src/styles/faces.css`, so a skin names a family and the file is already there.
 
 Three selectors are worth copying rather than re-deriving, because each was a bug first:

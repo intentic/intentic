@@ -295,14 +295,26 @@ fn face_init_script(mode: Option<Mode>) -> String {
 }
 
 /// The frame between "window mapped" and the page's first paint, in the same light the page will paint in.
-/// Mirrors `--color-canvas` (@intentic/ui semantic-colors.css) in each scheme; the light value is the one
-/// the OS is likelier to be in when nothing has been announced, and the dark value is what every face has
-/// always opened on.
+/// Mirrors `--color-canvas` (@intentic/ui semantic-colors.css) in each scheme. Nothing announced means light,
+/// the same answer the pages themselves reach when the OS will not say — and [`settle_background`] corrects it
+/// to the OS's own before the window is ever shown.
 fn face_background(mode: Option<Mode>) -> tauri::window::Color {
     match mode {
-        Some(Mode::Light) => tauri::window::Color(244, 241, 236, 255),
-        _ => tauri::window::Color(15, 13, 10, 255),
+        Some(Mode::Dark) => tauri::window::Color(15, 13, 10, 255),
+        _ => tauri::window::Color(244, 241, 236, 255),
     }
+}
+
+/// The OS's light, which Tauri answers only per WINDOW — there is no system-wide getter, so the true answer
+/// does not exist until a window has been built. Both local faces are built hidden and placed before they are
+/// shown, so re-pointing the pre-paint frame here still lands before anything is on screen. Only consulted
+/// when the workspace has announced no scheme of its own: what it announced outranks the OS, since the card
+/// stands in the middle of that workspace.
+fn settle_background(window: &WebviewWindow, mode: Option<Mode>) {
+    if mode.is_some() || !matches!(window.theme(), Ok(tauri::Theme::Dark)) {
+        return;
+    }
+    let _ = window.set_background_color(Some(face_background(Some(Mode::Dark))));
 }
 
 /// The page announced its scheme, or the sign-in handoff implied one: remember it, and repaint the local
@@ -405,6 +417,8 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         .visible(false);
     match builder.build() {
         Ok(window) => {
+            // Hidden until `swap_in`, so the OS's own light still lands before this window is on screen.
+            settle_background(&window, app.state::<AppState>().ui_mode());
             let handle = app.clone();
             window.on_window_event(move |event| match event {
                 // The × is a question, not an exit — see `request_close`. Whichever way it is answered, the
@@ -469,8 +483,9 @@ fn page_window<'a>(
         .shadow(true)
         // The frame between "window mapped" and the REMOTE page's first paint, which is white by default and is
         // longest on the launch that has no HTTP cache to open from. The two local faces have always had this;
-        // the windows that wait on a network were the ones without it.
-        .background_color(tauri::window::Color(15, 13, 10, 255))
+        // the windows that wait on a network were the ones without it. In the scheme the page was last seen in,
+        // never a fixed one: this window used to open on near-black under a reader who had chosen daylight.
+        .background_color(face_background(state.ui_mode()))
 /* Windows uses either Tauri drag-drop or HTML5 drag-drop, never both. */
         .disable_drag_drop_handler()
         // The windows this is actually for — see BROWSER_ARGS, and `loopbackUngated` in the init script, which
@@ -822,6 +837,7 @@ fn ask_before_closing(app: &AppHandle) {
     }
     match builder.build() {
         Ok(window) => {
+            settle_background(&window, mode);
             center_over(
                 &window,
                 parent.as_ref(),
@@ -928,6 +944,7 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
         .build();
     match result {
         Ok(window) => {
+            settle_background(&window, mode);
             // Closing this face means "I am done here", not "quit" — so the workspace comes back. Ending the
             // app here instead would take it away from a user one gesture after the setup they just ran, and
             // the screen that setup was for is the one behind this window.
@@ -1177,12 +1194,19 @@ mod mode_tests {
 
     #[test]
     fn the_frame_behind_a_face_is_the_canvas_it_will_paint() {
-        assert_eq!(face_background(None), tauri::window::Color(15, 13, 10, 255));
         assert_eq!(
             face_background(Some(Mode::Dark)),
             tauri::window::Color(15, 13, 10, 255)
         );
-        assert_ne!(face_background(Some(Mode::Light)), face_background(None));
+        assert_eq!(
+            face_background(Some(Mode::Light)),
+            tauri::window::Color(244, 241, 236, 255)
+        );
+        assert_eq!(
+            face_background(None),
+            face_background(Some(Mode::Light)),
+            "nothing said means light, the same answer the page reaches when the OS will not say"
+        );
     }
 }
 

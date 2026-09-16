@@ -1,12 +1,29 @@
 <!doctype html>
-<html lang="en" data-mode="dark">
+<!-- No look in the tag, for the reason _editor/web/index.html carries none: this IS that app, and it opens in
+     the reader's own light. Both attributes spell their off state by being absent. -->
+<html lang="en">
     <head>
         <meta charset="utf-8" />
         <title>intentic — interactive demo</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
         <meta name="robots" content="noindex" />
-        <!-- ponytail: approximates the dark canvas token oklch(16% 0.007 65); regenerate if themes.css changes. -->
-        <meta name="theme-color" content="#141210" />
+        <!-- Approximates the canvas token in each scheme (oklch(16% 0.007 65) dark, paper-tinted surface-100 light);
+             repointed by the script below, since this page can hold a scheme that parts from the reader's OS. -->
+        <meta name="theme-color" content="#f4f1ec" />
+<!-- The app's own pre-paint rule, minus the profile half no demo link carries: a stored choice, else the OS,
+             else daylight — and sanctum is the dark look, so an unpinned skin follows the scheme. Keeping this in
+             step with _editor/web/index.html is what stops the demo painting one look and useTheme correcting it. -->
+        <script>
+            try {
+                var uiScheme = localStorage.getItem("ui-color-scheme");
+                var dark = uiScheme === "dark" || (uiScheme !== "light" && !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+                if (dark) document.documentElement.setAttribute("data-mode", "dark");
+                var uiSkin = localStorage.getItem("ui-skin");
+                if (uiSkin === "sanctum" || (uiSkin !== "none" && dark)) document.documentElement.setAttribute("data-skin", "sanctum");
+                var themeMeta = document.querySelector('meta[name="theme-color"]');
+                if (themeMeta) themeMeta.setAttribute("content", dark ? "#141210" : "#f4f1ec");
+            } catch (e) {}
+        </script>
 <!-- The runtime config the app reads synchronously at module-eval time (src/environments/environment.ts). -->
         <script>
             window.env = {

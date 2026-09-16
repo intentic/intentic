@@ -322,7 +322,7 @@ onMounted(() => void hand());
     max-width: 44ch;
     font-size: 1.0625rem;
     line-height: 1.6;
-    color: #c2a077;
+    color: var(--ink-lede);
     text-wrap: balance;
 }
 

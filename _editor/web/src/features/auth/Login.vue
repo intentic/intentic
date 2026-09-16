@@ -212,7 +212,7 @@ watch(
     max-width: 36ch;
     font-size: 1.15rem;
     line-height: 1.6;
-    color: #c2a077;
+    color: var(--ink-lede);
     text-wrap: balance;
 }
 
@@ -228,7 +228,7 @@ watch(
     margin-bottom: 1.25rem;
     padding: 0.7rem 0.9rem;
     border-left: 2px solid var(--ember);
-    background: rgba(224, 123, 39, 0.08);
+    background: color-mix(in srgb, var(--ember) 8%, transparent);
     font-size: 0.8125rem;
     line-height: 1.5;
     text-align: left;

@@ -266,7 +266,7 @@ export { errorMessage, noticeFrom, noticeOf, useAsyncAction, useConcurrentAction
 // Declares an account preference: read, write, apply and cross-window change notification in one definition, so
 // a setting can't be live in one window and stale in another.
 export { definePreference, type PreferenceOptions, receivePreferenceChange, storedPreference } from "./composables/preference.js";
-export { type ColorScheme, useTheme } from "./composables/useTheme.js";
+export { type ColorScheme, type SchemeChoice, useTheme } from "./composables/useTheme.js";
 // Accent-colour control; the ramp maths stays in themeColor.ts, callers just use the picker and
 // `useTheme().accent`.
 export { default as ColorPicker } from "./components/forms/ColorPicker.vue";

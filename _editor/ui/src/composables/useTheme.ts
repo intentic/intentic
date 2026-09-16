@@ -1,8 +1,10 @@
-import type { Ref } from "vue";
+import { computed, ref, watch, type ComputedRef, type Ref } from "vue";
 import { DEFAULT_ACCENT, normalizeAccent, themeCss, themeVars } from "../lib/themeColor.js";
 import { definePreference } from "./preference.js";
 
 export type ColorScheme = "light" | "dark";
+/** What the setting holds. `system` is the default, and the only value that can change without anyone choosing. */
+export type SchemeChoice = "system" | ColorScheme;
 
 const STORAGE_KEY = `ui-color-scheme`;
 const DARK_ATTRIBUTE = `data-mode`;
@@ -22,20 +24,41 @@ const apply = (value: ColorScheme): void => {
     }
 };
 
-// Read once from `data-mode` at boot; afterward the attribute reflects live state, not storage.
-const BOOT_SCHEME: ColorScheme = document.documentElement.getAttribute(DARK_ATTRIBUTE) ? `dark` : `light`;
-
-const scheme: Ref<ColorScheme> = definePreference<ColorScheme>({
-    key: STORAGE_KEY,
-    read: (raw) => (raw === `light` || raw === `dark` ? raw : BOOT_SCHEME),
-    write: (value) => value,
-    apply,
+// THE OS'S ANSWER, LIVE. `no-preference` matches neither query, so a browser that will not say reads as light —
+// which is the whole of "light unless we are told otherwise". index.html's pre-paint script runs the same rule a
+// module earlier, so the first frame and this module never disagree.
+const darkQuery = typeof window === `undefined` || window.matchMedia === undefined ? undefined : window.matchMedia(`(prefers-color-scheme: dark)`);
+const system = ref<ColorScheme>(darkQuery?.matches === true ? `dark` : `light`);
+darkQuery?.addEventListener(`change`, (event) => {
+    system.value = event.matches ? `dark` : `light`;
 });
 
-const set = (value: ColorScheme): void => {
-    scheme.value = value;
+// The desktop app's own faces (its setup card, its close question) are handed the workspace's scheme by the
+// binary before they paint (`face_init_script` in windows.rs). That is a fact about the window they stand in, not
+// a preference this page may hold, so it wins over both the setting and the OS. The app leaves it unset when it
+// has nothing to announce, and the page falls back to the rule above. Read as a KEY rather than a property: the
+// name belongs to the binary that writes it, not to this file.
+const announced = (globalThis as unknown as Record<string, unknown>)[`__INTENTIC_MODE__`];
+const PINNED: ColorScheme | undefined = announced === `light` || announced === `dark` ? announced : undefined;
+
+const choice: Ref<SchemeChoice> = definePreference<SchemeChoice>({
+    key: STORAGE_KEY,
+    read: (raw) => (raw === `light` || raw === `dark` ? raw : `system`),
+    write: (value) => value,
+});
+
+/** The scheme actually on screen; `system` resolved, and read-only because the way to change it is `set`. */
+const scheme: ComputedRef<ColorScheme> = computed(() => PINNED ?? (choice.value === `system` ? system.value : choice.value));
+
+// The DOM side hangs off the RESOLVED scheme, not off the setting, or an OS flip under `system` would repaint
+// nothing. `sync` for the reason definePreference applies synchronously: a frame in the old look is the bug.
+watch(scheme, apply, { immediate: true, flush: `sync` });
+
+const set = (value: SchemeChoice): void => {
+    choice.value = value;
 };
 
+/** Pins the scheme opposite to what is on screen: a toggle is a choice, so it never leaves the setting on `system`. */
 const toggle = (): void => {
     set(scheme.value === `dark` ? `light` : `dark`);
 };
@@ -68,5 +91,5 @@ const setAccent = (hex: string): void => {
 };
 
 export function useTheme() {
-    return { scheme, set, toggle, accent, setAccent };
+    return { scheme, choice, set, toggle, accent, setAccent };
 }

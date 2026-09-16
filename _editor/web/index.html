@@ -1,13 +1,20 @@
 <!doctype html>
-<html lang="en" data-mode="dark" data-skin="sanctum">
+<!-- NO LOOK IN THE TAG. Which light this app opens in is the reader's OS's answer until they choose for
+     themselves, and markup served from a CDN cannot know it; the script below writes both attributes before
+     anything paints. Light and no skin are spelled by absence, so a bare tag is already the fallback. -->
+<html lang="en">
     <head>
         <meta charset="utf-8" />
         <title>intentic</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
-<!-- Installable PWA: standalone display, dark canvas chrome. -->
+<!-- Installable PWA: standalone display. Its colours are the LIGHT canvas and cannot be anything else — a
+             manifest is one static file with no media queries, and the splash it paints is up before any script has
+             run, so it is exactly the place the rule "light unless we are told otherwise" is for. -->
         <link rel="manifest" href="/manifest.webmanifest" />
-<!-- ponytail: approximates the dark canvas token oklch(16% 0.007 65) at the default accent; the picked colour retints it. -->
-        <meta name="theme-color" content="#141210" />
+<!-- Approximates the canvas token in each scheme at the default accent (oklch(16% 0.007 65) dark, the paper-tinted
+             surface-100 light); the picked colour retints it. Repointed by the script below at the scheme it resolves,
+             since this app's scheme is the reader's choice and only follows the OS until they make one. -->
+        <meta name="theme-color" content="#f4f1ec" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <!-- THE LOTUS, AND THE SAME FILES THE SITE SERVES. -->
@@ -33,7 +40,7 @@
                 // below are @intentic/constants profile.ts, and src/bootProfile.test.ts fails if they part.
                 var PROFILE_KEYS = ["ui-color-scheme", "ui-skin", "ui-audience"];
                 var PROFILES = {
-                    default: { "ui-color-scheme": "dark", "ui-skin": "sanctum" },
+                    default: { "ui-color-scheme": "system", "ui-skin": "system" },
                     desk: { "ui-color-scheme": "light", "ui-skin": "none", "ui-audience": "maker" },
                 };
                 var owns = Object.prototype.hasOwnProperty;
@@ -64,16 +71,24 @@
                 var uiTextSize = localStorage.getItem("ui-text-size");
                 if (uiTextSize === "default" || uiTextSize === "large")
                     document.documentElement.setAttribute("data-text-size", uiTextSize);
-                // The tag ships dark, so light is the one scheme that has to be undone here; without it useTheme
-                // arrives after the stylesheet has already painted a dark canvas under a light reader.
+                // THE LIGHT THIS PAGE PAINTS IN, decided before it paints. Anything but a pinned "light"/"dark"
+                // means nobody has chosen, so the OS answers — and `no-preference` matches neither query, so a
+                // browser that will not say reads as light. useTheme runs this same rule a module later, which is
+                // why the two can never disagree; without it here, useTheme arrives after the stylesheet has
+                // already painted one canvas under a reader who is owed the other.
                 var uiScheme = localStorage.getItem("ui-color-scheme");
-                if (uiScheme === "light") document.documentElement.removeAttribute("data-mode");
-                else if (uiScheme === "dark") document.documentElement.setAttribute("data-mode", "dark");
+                var dark = uiScheme === "dark" || (uiScheme !== "light" && !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+                if (dark) document.documentElement.setAttribute("data-mode", "dark");
+                else document.documentElement.removeAttribute("data-mode");
                 // A skin repaints every surface in the app, so arriving late means a white flash of the normal
-                // look before the deep one lands — the worst flash of the three. See src/skins/README.md.
+                // look before the deep one lands — the worst flash of the three. Sanctum is the app's DARK look
+                // and has no daylight dress, so an unpinned skin follows the scheme. See src/skins/README.md.
                 var uiSkin = localStorage.getItem("ui-skin");
-                if (uiSkin === "none") document.documentElement.removeAttribute("data-skin");
-                else if (uiSkin === "sanctum") document.documentElement.setAttribute("data-skin", uiSkin);
+                if (uiSkin === "sanctum" || (uiSkin !== "none" && dark)) document.documentElement.setAttribute("data-skin", "sanctum");
+                else document.documentElement.removeAttribute("data-skin");
+                // Browser chrome, last because it is the only line here that reads the document it writes to.
+                var themeMeta = document.querySelector('meta[name="theme-color"]');
+                if (themeMeta) themeMeta.setAttribute("content", dark ? "#141210" : "#f4f1ec");
             } catch (e) {}
         </script>
 <!-- Google Identity Services — browser-side sign-in for the direct-to-sandbox ID token. -->

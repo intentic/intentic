@@ -1,12 +1,24 @@
 <!doctype html>
-<html lang="en" data-mode="dark">
+<!-- A stranger's browser, with nothing of this app stored in it: the only light it can be read in is the OS's,
+     and `light` is spelled by the attribute being absent. -->
+<html lang="en">
     <head>
         <meta charset="utf-8" />
         <title>Shared conversation</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <!-- A shared link is handed to a person, not to a crawler. -->
         <meta name="robots" content="noindex, nofollow" />
-        <meta name="theme-color" content="#141210" />
+<!-- Media-scoped, unlike the app's: this page holds no preference that could part from the reader's OS. -->
+        <meta name="theme-color" content="#f4f1ec" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)" />
+<!-- Before the stylesheet paints a canvas the reader did not ask for. `no-preference` matches neither query. -->
+        <script>
+            try {
+                if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+                    document.documentElement.setAttribute("data-mode", "dark");
+                }
+            } catch (e) {}
+        </script>
 <!-- THE CONVERSATION ITSELF. -->
         <script id="intentic-conversation" type="application/json">
             null

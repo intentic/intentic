@@ -14,6 +14,8 @@
     --ink: #efe3cd;
     --ink-muted: #b7a68d;
     --ink-subtle: #9c8b73;
+/* The lede under a headline, a step goldier than muted ink: the site's own `--role-hero-sub`, to the digit. */
+    --ink-lede: #c2a077;
     --face-display: "Spectral", Georgia, "Times New Roman", serif;
     --face-mark: "Baloo 2", "Trebuchet MS", ui-rounded, sans-serif;
     --face-read: "Public Sans", ui-sans-serif, system-ui, sans-serif;
@@ -541,6 +543,8 @@ html:not([data-mode="dark"]) .entry {
     --ink: var(--role-content);
     --ink-muted: var(--role-muted);
     --ink-subtle: var(--role-subtle);
+    /* The gold the dark lede carries is 2.4:1 on paper; daylight spends no metal on a paragraph, as on /desk. */
+    --ink-lede: var(--role-muted);
     --color-overlay: var(--role-overlay);
     --color-line-subtle: var(--role-line-subtle);
     --color-link: var(--role-link);

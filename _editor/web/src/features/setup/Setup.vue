@@ -2184,7 +2184,7 @@ const warmSandboxCredential = async (): Promise<void> => {
     max-width: 56ch;
     font-size: 1.0625rem;
     line-height: 1.6;
-    color: #c2a077;
+    color: var(--ink-lede);
     text-wrap: pretty;
 }
 
@@ -2241,9 +2241,10 @@ const warmSandboxCredential = async (): Promise<void> => {
         box-shadow 0.22s ease,
         transform 0.22s ease;
 }
+/* The plate with a little of the page's own metal worked into it, so the step is the same size in both dresses. */
 .rung:hover:not(:disabled) {
     border-color: var(--rule-strong);
-    background: #191309;
+    background: color-mix(in oklab, var(--gold) 5%, var(--plate));
 }
 .rung:disabled {
     cursor: not-allowed;
@@ -2259,11 +2260,11 @@ const warmSandboxCredential = async (): Promise<void> => {
 }
 .rung-on {
     border-color: var(--gold);
-    background: #1c150c;
+    background: color-mix(in oklab, var(--gold) 8%, var(--plate));
     /* A hairline outside the first adds weight without resizing; the shadow lifts it off the others' shelf. */
     box-shadow:
-        0 0 0 1px rgba(201, 160, 92, 0.22),
-        0 18px 40px -24px rgba(0, 0, 0, 0.9);
+        0 0 0 1px color-mix(in srgb, var(--gold) 22%, transparent),
+        var(--ui-shadow-2);
     transform: translateY(-1px);
 }
 .rung-name {

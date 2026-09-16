@@ -62,12 +62,14 @@ describe(`installDocumentAppearance`, () => {
         expect(root().hasAttribute(`data-skin`)).toBe(false);
     });
 
-    it(`falls back to the default skin when storage is cleared`, async () => {
-        localStorage.setItem(`ui-skin`, `sanctum`);
+    // Cleared is not "off": the skin goes back to following the scheme, and sanctum is what the dark one wears.
+    it(`hands a cleared skin back to the scheme rather than switching it off`, async () => {
+        localStorage.setItem(`ui-skin`, `none`);
         const { installDocumentAppearance } = await boot();
         const { receivePreferenceChange } = await seam();
 
         installDocumentAppearance();
+        receivePreferenceChange({ key: `ui-color-scheme`, raw: `dark` });
         receivePreferenceChange({ key: `ui-skin`, raw: null });
 
         expect(root().getAttribute(`data-skin`)).toBe(`sanctum`);

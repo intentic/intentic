@@ -18,8 +18,10 @@ export const PROFILE_IDS = ["default", "desk"] as const;
 
 export type Profile = (typeof PROFILE_IDS)[number];
 
-export type ProfileScheme = "light" | "dark";
-export type ProfileSkin = "none" | "sanctum";
+// `system` is the stored spelling of "nobody has chosen": the scheme follows `prefers-color-scheme` and the skin
+// follows the scheme. It is a value rather than an absence so a profile can hand a browser back to it.
+export type ProfileScheme = "system" | "light" | "dark";
+export type ProfileSkin = "system" | "none" | "sanctum";
 export type ProfileAudience = "developer" | "maker";
 
 /** The localStorage keys a profile seeds, each owned by the composable named beside it. */
@@ -42,7 +44,7 @@ export interface ProfileLook {
 // `default` is listed, not implied, because it is also the way back: a profile may overwrite what the last profile
 // wrote, so `?profile=default` undoes a desk link for anyone who has not since chosen for themselves.
 export const PROFILES: Record<Profile, ProfileLook> = {
-    default: { scheme: "dark", skin: "sanctum" },
+    default: { scheme: "system", skin: "system" },
     desk: { scheme: "light", skin: "none", audience: "maker" },
 };
 
