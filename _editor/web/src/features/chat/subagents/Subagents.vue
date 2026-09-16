@@ -280,7 +280,7 @@ watch(
 <template>
 <!-- On the card ground (ChatPanel's), not the route's default canvas, since the rail list is copied from the floating chat and must read the same way. -->
     <!-- Clips to this surface; an overgrown block used to paint past the card ground and over the shell. -->
-    <div class="lane-ground-card flex h-full min-h-0 overflow-hidden bg-card">
+    <div class="ground-card flex h-full min-h-0 overflow-hidden bg-card">
 <!-- Not an error: most turns start no agent. -->
         <div v-if="visible.length === 0" class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
             <Icon name="users" class="text-2xl text-muted" />

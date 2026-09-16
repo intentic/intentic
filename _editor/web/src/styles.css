@@ -111,23 +111,14 @@
         color: hsl(var(--tile-hue) 70% 72%);
     }
 
-/* WHAT A LANE LIES ON, declared by whoever paints it rather than guessed at by the lane. */
-    :root {
-        --lane-ground: var(--color-canvas);
-    }
-    .lane-ground-card {
-        --lane-ground: var(--color-card);
+/* WHICH SURFACE A REGION'S CARDS LIE ON, declared by whoever paints it rather than guessed at by the card. Nothing in a rail paints anything else: a lane is a header over cards, and a skin's own texture belongs to the panel, so any fill of ours would sit on it as a flat patch. */
+    .ground-card {
 /* A CARD CANNOT REST AT THE COLOUR IT LIES ON: with no slab under it, this step up is the only thing separating a card from its ground. Stays below `--color-overlay`, which hover and selection still have to move to. */
         --card-rest: color-mix(in oklab, var(--color-content) 4%, var(--color-card));
     }
 /* Canvas lies a full step below `--color-card`, so a card on it needs no step of its own. `initial` sends `--card-fill` back to its fallback: a canvas ground nested inside a card one (the tab list's dropdown inside the chat panel) would otherwise inherit the step. */
-    .lane-ground-canvas {
-        --lane-ground: var(--color-canvas);
+    .ground-canvas {
         --card-rest: initial;
-    }
-/* A LANE HAS NO FILL OF ITS OWN — it is a header labelling the cards under it. The one paint left is the header's, and it is not a background: sticky, it has to occlude the cards scrolling beneath it, so it takes the ground it lies on and reads as nothing. */
-    .lane-header {
-        background: var(--lane-ground);
     }
 
 /* Agent cards, workflow rows, and chat rail cards share one session-card surface. */

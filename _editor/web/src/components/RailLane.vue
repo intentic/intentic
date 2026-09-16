@@ -14,8 +14,8 @@ defineProps<{
 
 <template>
     <section class="lane flex min-w-0 flex-col">
-<!-- THE BOARD'S OWN LANE MEASUREMENTS, to the pixel: header `h-8 px-3`. No radius: nothing is painted here to round off. -->
-        <header class="lane-header sticky top-0 z-10 flex h-8 shrink-0 items-center gap-2 px-3">
+<!-- THE BOARD'S OWN LANE MEASUREMENTS, to the pixel: header `h-8 px-3`. Paints nothing, and cannot: pinning it would need a fill to occlude the cards passing under it, and a fill here is a flat patch over whatever the panel's skin has drawn. -->
+        <header class="flex h-8 shrink-0 items-center gap-2 px-3">
             <span v-if="dot !== undefined" class="h-2 w-2 shrink-0 rounded-full" :class="dot"></span>
             <Icon v-else-if="icon !== undefined" :name="icon" class="shrink-0 text-2xs text-subtle" />
             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ label }}</span>

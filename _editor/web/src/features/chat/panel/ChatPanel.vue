@@ -224,7 +224,7 @@ const seamWidth = computed<number>({
 <!-- `--capacity-rail` reserves the out-of-flow rail width without widening the transcript. -->
     <div
         ref="root"
-        class="chat-panel lane-ground-card relative flex h-full min-h-0 overflow-hidden bg-card"
+        class="chat-panel ground-card relative flex h-full min-h-0 overflow-hidden bg-card"
         :class="chatWide ? 'flex-row' : 'flex-col'"
         :style="{ '--capacity-rail': showsRail ? uiLength(CAPACITY_RAIL_PX) : `0px` }"
     >
