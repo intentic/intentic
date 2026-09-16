@@ -67,10 +67,7 @@ const custom = {
         toggleswitch: {
             colorScheme: {
                 // Aura's dark disabled state fades a track/handle pair that already blends with the surrounding card,
-                // reading as
-                // missing rather than disabled. Track stays at the OFF-state shade and the handle lifts to surface-500,
-                // so the
-                // shape survives the fade.
+                // reading as missing rather than disabled.
                 dark: {
                     root: { disabledBackground: `var(--color-surface-700)` },
                     handle: { disabledBackground: `var(--color-surface-500)` },

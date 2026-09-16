@@ -191,6 +191,17 @@
         --p-toggleswitch-gap: 0.125rem;
     }
 
+    /* A checked-and-disabled toggle remains unmistakably ON while dimmed for un-editability. */
+    .p-toggleswitch.p-disabled.p-toggleswitch-checked .p-toggleswitch-slider {
+        background: color-mix(in srgb, var(--color-primary-fill) 45%, var(--color-surface-700));
+        border-color: transparent;
+    }
+
+    .p-toggleswitch.p-disabled.p-toggleswitch-checked .p-toggleswitch-handle {
+        background: color-mix(in srgb, var(--color-fill-content) 75%, var(--color-surface-400));
+        color: var(--color-primary-fill);
+    }
+
     /* Fields share one frame contract across variants and sizes. */
     .ui-field-box,
     .p-inputtext {
