@@ -127,8 +127,10 @@ it(`says so, and disables adding, in a browser without WebAuthn`, async () => {
 
 it(`the owner's require switch needs a passkey of their own, then hands out the codes once`, async () => {
     await mount();
+    // cea5b261a ("fix: redundant texts") deleted the sentence that spelled this out, so the disabled switch — still
+    // labelled as the affordance to turn requiring ON, beside an `optional` state — is the whole refusal now.
     expect(buttonLabelled(`Require a passkey`)?.disabled).toBe(true);
-    expect(shown()).toContain(`Add a passkey of your own first`);
+    expect(shown()).toContain(`Off. A Google sign-in opens the sandbox`);
     app?.unmount();
     document.body.innerHTML = ``;
 

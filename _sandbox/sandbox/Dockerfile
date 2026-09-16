@@ -213,13 +213,19 @@ RUN printf '%s\n' \
         "set-hook -g after-new-window 'pipe-pane -o \"mkdir -p /history/logs/terminals; exec pane-log-clean /history/logs/terminals/#{s|[^a-zA-Z0-9_.-]|_|:session_name}-#{pane_id}.log #{pane_width} #{pane_height}\"'" \
         "set-hook -g after-split-window 'pipe-pane -o \"mkdir -p /history/logs/terminals; exec pane-log-clean /history/logs/terminals/#{s|[^a-zA-Z0-9_.-]|_|:session_name}-#{pane_id}.log #{pane_width} #{pane_height}\"'" \
         > /root/.tmux.conf
-# The daemon runs the app's `pnpm dev` (dev-server.ts) — the build stage's corepack doesn't carry over, so
-# enable it here too and bake in the repo's pinned pnpm so the sandbox needs no first-run download or prompt.
-ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-# chmod as in the build stage: in-sandbox `pnpm install` (dev in /work, scaffold inject) compiles node-pty
-# from source, and corepack strips the exec bit off its bundled node-gyp gyp_main.py (else Error 126).
-RUN corepack enable && corepack prepare pnpm@12.4.1 --activate \
-    && find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} +
+# The daemon runs the app's `pnpm dev` (dev-server.ts) and turns run `pnpm install` in /work, so this stage
+# needs its own pnpm — the build stage's does not carry over. Installed natively rather than through corepack,
+# the same way and for the same reasons as _tools/ci-base/Dockerfile: pnpm 12 is a Rust binary that needs no
+# Node, it honours the `packageManager` pin itself (`pmOnFail` defaults to `download`), and corepack's version
+# directories brought a half-written-cache failure mode and an exec bit it stripped off its own bundled
+# node-gyp. The node-gyp that the rebuild below and an agent's own native builds use is the pinned global one
+# installed underneath this, never a bundled copy, so nothing here needs that repair.
+# ponytail: bump together with package.json's packageManager field.
+ENV PNPM_HOME=/usr/local/share/pnpm
+ENV PATH=$PNPM_HOME/bin:$PATH
+RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.4.1 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
+    && rm -f /tmp/pnpm-env.sh \
+    && pnpm --version
 # node-gyp on PATH, for the native rebuild that runs after the tree COPYs below (node-pty) and
 # for an agent compiling a native dep by hand. Installed HERE, above those COPYs, because it used to share the
 # rebuild's RUN — where every source change re-downloaded it, unpinned, before any compiling started. Pinned

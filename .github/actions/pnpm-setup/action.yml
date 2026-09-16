@@ -1,33 +1,16 @@
 # The install every job opens with.
 #
-# corepack, pnpm and the node-gyp exec-bit fix are all baked into ci-base. The step before the install exists
-# only to cover DRIFT: when package.json's packageManager moves ahead of the pnpm pinned in the image,
-# corepack fetches the new version here, and that freshly-fetched copy needs the same fix — corepack strips the
-# exec bit off its bundled gyp_main.py, and node-pty (no linux prebuild) compiles from source and invokes it
-# directly. When the versions match, both are no-ops.
+# pnpm is baked into ci-base as a native binary. No step here covers a version DRIFT between the image and
+# package.json's `packageManager`, because pnpm 12 covers it itself: `pmOnFail` defaults to `download`, so a
+# pin the image is behind is fetched by the pnpm in the image, on the spot. The corepack step that used to sit
+# at the top of this file — a half-written-cache sweep and a node-gyp exec-bit repair, both corepack-specific —
+# went with corepack.
 name: pnpm setup
 description: Install the workspace against the shared pnpm store and prune the turbo cache.
 
 runs:
   using: composite
   steps:
-    - name: Cover a corepack drift
-      shell: bash
-      run: |
-        # Corepack reads a version directory as "installed" and execs the pnpm.mjs inside it without looking
-        # first, so a HALF-WRITTEN cache — the 207 directories extracted, not one of the files — is fatal and
-        # sticky: every job that lands on that runner dies right here, on a MODULE_NOT_FOUND for a path that
-        # exists three levels up, until someone clears it by hand. It cost a runner for 15 minutes. Dropping
-        # the directory costs one fetch, and the line below is the fetch.
-        for dir in "$HOME/.cache/node/corepack/v1/pnpm"/*; do
-          if [ -d "$dir" ] && [ ! -f "$dir/bin/pnpm.mjs" ]; then
-            echo "half-written corepack cache at $dir — dropping it so the fetch below redoes it"
-            rm -rf "$dir"
-          fi
-        done
-        pnpm --version
-        find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} + 2>/dev/null || true
-
     - name: Drop a stray Playwright browser cache
       shell: bash
       run: |
@@ -38,7 +21,7 @@ runs:
         # dies on `libglib-2.0.so.0: cannot open shared object file`, reporting a browser bug that is really a
         # poisoned cache.
         #
-        # It got poisoned the same way the corepack cache above does: $HOME is /github/home, which the runner
+        # It got poisoned the way any cache under $HOME does here: $HOME is /github/home, which the runner
         # process keeps between jobs, so `images-platform` installing a browser for the sign-in smoke handed one
         # to every job that landed on that runner afterwards. That job now installs into
         # PLAYWRIGHT_BROWSERS_PATH; this line is what clears the strays already on the fleet, which nobody is
@@ -57,7 +40,7 @@ runs:
         # AND NO COMMIT COULD FIX IT. The check ran green on a fresh clone and red on the fleet, naming
         # directories that do not exist in git; `pnpm prepass` runs it in preflight, in verify-core and in
         # verify-platform, so one stale runner reddened three jobs at once and a re-run reproduced it exactly
-        # (run 34046947138). The prune belongs HERE, beside the corepack, Playwright and pnpm-state cleanups
+        # (run 34046947138). The prune belongs HERE, beside the Playwright and pnpm-state cleanups
         # above, for the same reason they are here: it is the persistent workspace being repaired, so it has to
         # happen in the step every job on that workspace shares rather than in whichever job noticed last.
         #

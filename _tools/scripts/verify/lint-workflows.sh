@@ -46,7 +46,8 @@ mkdir -p "$CACHE_ROOT"
 
 # Fetch, verify, unpack, publish — in that order, and the publish is a rename so six runner processes racing
 # on one cache directory cannot see a half-extracted tool. (That is not a hypothetical failure mode here: a
-# half-written corepack cache is exactly what cost a runner 15 minutes, per .github/actions/pnpm-setup.)
+# half-written corepack cache is exactly what cost a runner 15 minutes, per _tools/ci-base/Dockerfile, which
+# is why pnpm is no longer fetched that way at all.)
 install_tool() {
     local name="$1" version="$2" sha256="$3" url="$4" member="$5"
     local dest="$CACHE_ROOT/$name-$version"

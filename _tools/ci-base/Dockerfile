@@ -30,7 +30,7 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 #   ca-certificates + curl  fetch the docker apt key below; curl also backs assorted script steps
 #   git                     turbo hashes inputs through `git ls-files`, and semantic-release drives git directly
 #   python3 make g++        the node-gyp toolchain: node-pty ships no linux prebuild, so `pnpm install` ALWAYS
-#                           compiles it from source (this is also why .pnpm-setup carries the gyp_main.py chmod)
+#                           compiles it from source
 #   ripgrep                 the iq engine's lexical tier shells into `rg --json`, so the iq suites need it
 #   openssh-client          sandbox git access generates its ed25519 key with ssh-keygen, so that suite needs it
 #   tmux                    the agent's shell-busy probe reads one tmux behaviour and nothing else (a window
@@ -69,15 +69,21 @@ RUN git config --system --add safe.directory '*'
 # ship bun 1.4.1 via the same digest-pinned canary-slim until 1.4.1-slim exists on Docker Hub.
 COPY --from=oven/bun:canary-slim@sha256:6285dc2ad21f26e6b57f6887905cccccc62f151a6e4b4334faa009a500594b71 /usr/local/bin/bun /usr/local/bin/bun
 
-# pnpm pre-activated at the version package.json pins, so no job pays a corepack fetch on first use. The chmod
-# is the node-gyp fix the jobs applied by hand: corepack strips the exec bit off its bundled gyp_main.py, and
-# node-pty compiles from source and invokes it directly, otherwise dying with "Permission denied". .pnpm-setup
-# keeps its own copy of this — that one covers a packageManager bump landing before this image is rebuilt.
+# pnpm INSTALLED NATIVELY, not through corepack, because pnpm 12 already does corepack's job: it is a Rust
+# binary that needs no Node, and `pmOnFail` defaults to `download`, so it fetches whatever version the
+# `packageManager` field names. Running corepack in front of that pinned the same version twice.
+# What the second copy cost: corepack reads a version directory as "installed" and execs the pnpm.mjs inside it
+# without looking first, so a HALF-WRITTEN cache was fatal and sticky — every job landing on that runner died
+# on a MODULE_NOT_FOUND until someone cleared it by hand, once for 15 minutes. The chmod beside it repaired an
+# exec bit corepack itself stripped off its bundled node-gyp, which node-pty (no linux prebuild) invokes
+# directly. Neither failure mode has a path to reach any more, and .pnpm-setup's copies of both are gone with
+# them.
 # ponytail: bump together with package.json's packageManager field.
-ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN corepack enable \
-    && corepack prepare pnpm@12.4.1 --activate \
-    && find "$HOME/.cache/node/corepack" -path '*node-gyp/gyp/gyp_main.py' -exec chmod +x {} +
+ENV PNPM_HOME=/usr/local/share/pnpm
+ENV PATH=$PNPM_HOME/bin:$PATH
+RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.4.1 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
+    && rm -f /tmp/pnpm-env.sh \
+    && pnpm --version
 
 # Fail the image build, not some pipeline three days later, if any of the baked tooling is missing.
 RUN node --version && pnpm --version && git --version && docker --version && docker buildx version \

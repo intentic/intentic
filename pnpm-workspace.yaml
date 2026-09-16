@@ -39,6 +39,22 @@ verifyDepsBeforeRun: false
 
 nodeVersion: 24.21.0
 
+# Exact pins, everywhere, for the same reason the catalog holds exact versions: a range in a manifest is a
+# second resolution that the lockfile records and nobody chose. This cannot live in .npmrc — pnpm 12 reads only
+# auth and registry settings from there, so the `save-prefix=` that sat in it was inert and `pnpm add` wrote
+# carets into a repo with none.
+savePrefix: ""
+
+# WHERE A TOLERATED ADVISORY GOES. The overrides below carry a paragraph each explaining why a CVE is
+# unreachable here; prose is the wrong home for that, because nothing re-reads it when the dependency leaves.
+# An advisory accepted rather than fixed belongs in `ignore` by its GHSA, and `ignorePrune` drops entries
+# whose GHSA no longer appears in the report, so the list cannot outlive the tree it describes.
+# `level: moderate` because low-severity noise is not worth a chore's attention and moderate is where the
+# live findings sit.
+audit:
+  level: moderate
+  ignorePrune: true
+
 overrides:
   # The versioned UI patches route control icons to Icon and render diagram SVGs natively.
   "primevue>@primevue/icons": "-"
@@ -75,9 +91,11 @@ overrides:
   # postgresql — so this is a tree hygiene bump, not a live exposure; same major, no code of ours touches it.
   mysql2: 3.24.3
   # onnxruntime-node's `adm-zip: ^0.5.16` is used only by its postinstall unpacker, which `allowBuilds` disables
-  # here — so GHSA-xcpc-8h2w-3j85 is unreachable in this workspace. Pinned to the patched 0.6.0 anyway so the
-  # tree does not carry a known-bad copy for whoever enables that build later.
-  "onnxruntime-node>adm-zip": 0.6.0
+  # here — so the extraction advisories are unreachable in this workspace. Pinned past them anyway so the tree
+  # does not carry a known-bad copy for whoever enables that build later. 0.6.0 no longer clears that bar: the
+  # symlink-following advisory covers `>=0.5.9 <=0.6.0`, so the pin that was meant to be the fix became a
+  # vulnerable version pinned on purpose. 0.6.1 is the first release outside the range.
+  "onnxruntime-node>adm-zip": 0.6.1
   # monaco-editor-core bundles its own dompurify 3.2.7 — eighteen sanitiser-bypass advisories, and unlike the
   # entries above this one is reachable: it is the sanitiser the editor runs over rendered markdown. Same major
   # as the catalog entry, so this dedupes the tree onto one copy rather than adding a second.
@@ -111,17 +129,23 @@ overrides:
   # ponytail: bump together with oxlint.
   "@oxlint/plugins": 1.76.0
 
+# 1440 IS ALSO PNPM'S OWN DEFAULT, and stating it is not redundant: `minimumReleaseAgeStrict` defaults to true
+# only when the age is set explicitly, false when it is inherited. So the pair below is today's behaviour
+# written down rather than left to a default that flips on the act of naming it. Lenient on purpose — strict
+# mode refuses to resolve when nothing in range is old enough, and every version in the catalog below is an
+# exact pin, so each bump would fail its own install until someone added it to the exclusions.
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: false
+
+# Drop the exemptions below that the freshly written lockfile no longer resolves, so the list stays the set of
+# versions actually in the tree rather than a growing record of every bump ever waved through. Entries that
+# survive keep their comments; name patterns are never pruned.
+minimumReleaseAgeExcludePrune: true
+
 minimumReleaseAgeExclude:
-  - knip@6.29.0
-  - '@vue/language-core@3.3.8'
-  - vite@8.1.5
-  - vue-tsc@3.3.8
   - '@posthog/core@1.40.2'
-  - '@posthog/browser-common@0.2.5'
-  - '@posthog/types@1.399.0'
   - imapflow@1.6.5
   - jose@6.2.5
-  - posthog-js@1.408.2
   - astro-opengraph-images@1.17.4
   - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.257'
   - '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.257'
@@ -134,7 +158,6 @@ minimumReleaseAgeExclude:
   - '@anthropic-ai/claude-agent-sdk@0.3.257'
   - mammoth@1.12.2
   - '@oxlint/plugins@1.76.0'
-  - oxc-parser@0.147.0
   - oxlint-plugin-complexity@2.1.8
   - '@oven/bun-darwin-aarch64@1.4.0-canary.20260903.1'
   - '@oven/bun-darwin-x64@1.4.0-canary.20260903.1'
@@ -182,10 +205,19 @@ allowBuilds:
   # runs it, so its binary-download build script is skipped.
   workerd: false
 
-# One catalog across all products. Version conflicts resolved to newest compatible:
-# turbo 2.10.5, hono 4.12.27, @types/node 24.13.2 (aligned to Node 24 runtime),
-# tailwindcss/@tailwindcss/vite 4.3.1. The former @intentic/graph + @intentic/sandbox-contract
-# npm pins are gone — they are workspace packages now.
+# ONE CATALOG ACROSS ALL PRODUCTS, enforced rather than reviewed: `pnpm add` refuses a version the catalog
+# does not carry, so a second pin for a package cannot enter by hand. Without this the drift is invisible —
+# _platform/ingress carried a literal `bun: 1.4.0-canary.20260903.1` beside the catalog entry naming the same
+# version, two places to bump and nothing to notice when only one moved.
+catalogMode: strict
+
+# Remove catalog entries no manifest references any more. `@modelcontextprotocol/sdk` sat here unreferenced,
+# its comment citing a directory (_platform/api/src/mcp) that no longer exists, pinning a version only ever
+# reached transitively — a pin with no effect that still read like policy.
+catalogPrune: true
+
+# Version conflicts are resolved to the newest compatible release. Held to a single copy per package, which is
+# what lets the overrides above dedupe rather than add.
 catalog:
   "@agentclientprotocol/sdk": 1.3.0
   "@anthropic-ai/claude-agent-sdk": 0.3.257
@@ -214,10 +246,6 @@ catalog:
   "@hono/otel": 1.1.2
   "@huggingface/hub": 2.14.4
   "@huggingface/transformers": 4.2.0
-  # The MCP server the platform speaks to Claude Code with (_platform/api/src/mcp). Its web-standard
-  # streamable-HTTP transport takes a Request and answers a Response, which is exactly Hono's currency —
-  # the api mounts it without an adapter.
-  "@modelcontextprotocol/sdk": 1.30.0
   "@openai/codex-sdk": 0.147.0
   "@opencode-ai/sdk": 1.18.29
   "@opentelemetry/api": 1.9.1
