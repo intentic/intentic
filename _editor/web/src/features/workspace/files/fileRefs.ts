@@ -8,7 +8,9 @@ import { workspaceAgent } from "../health/workspaceScope";
 // router and tab singleton, so markdown rendering stays decoupled.
 
 // Needs a dir segment plus extension (bare words never match), optional line[:col] tail; avoids mid-URL match.
-export const FILE_REF = /(?<![\w./:@-])(?:[~.]{0,2}\/)?(?:[\w.@+-]+\/)+[\w.@+-]+\.[A-Za-z0-9]+(?::\d+(?::\d+)?|\(\d+,\d+\))?/;
+// The extension must hold a letter: without that, `ratio 3/4.5` and `v1.2/3.4` are references, and prose carrying a
+// fraction or a version range renders as a link that opens nothing. `.7z` still is one.
+export const FILE_REF = /(?<![\w./:@-])(?:[~.]{0,2}\/)?(?:[\w.@+-]+\/)+[\w.@+-]+\.[A-Za-z0-9]*[A-Za-z][A-Za-z0-9]*(?::\d+(?::\d+)?|\(\d+,\d+\))?/;
 
 // Workspace tree already fetched by the explorer, read by containerRoot and resolveInTree; undefined until the first
 // fetch lands. Filters by scope, since more than one tree can be cached at once (workspaceScope).

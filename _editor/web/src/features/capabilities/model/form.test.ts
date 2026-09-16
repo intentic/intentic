@@ -37,11 +37,21 @@ test(`repairs a typed name instead of refusing it`, () => {
     expect(cleanName(`ops-box_2`)).toBe(`ops-box_2`);
     expect(cleanName(`…`)).toBe(``);
 
+    // Accents fold to their base letter: dropping the é would leave `Caf`, a different word.
+    expect(cleanName(`Café DB`)).toBe(`Cafe-DB`);
+    expect(cleanName(`Ölçü`)).toBe(`Olcu`);
+    expect(cleanName(`naïve`)).toBe(`naive`);
+
     expect(nameError(`  `)).toBe(`Name is required.`);
-    expect(nameError(`…`)).toBe(`Name is required.`);
+    // Present but unusable is not "required": the box has text in it, and saying otherwise sends the reader
+    // looking for an empty field.
+    expect(nameError(`…`)).toBe(`This name has no Latin letters or digits to use. Try a romanised name.`);
+    expect(nameError(`сервер`)).toBe(`This name has no Latin letters or digits to use. Try a romanised name.`);
+    expect(nameError(`日本語サーバー`)).toBe(`This name has no Latin letters or digits to use. Try a romanised name.`);
     // Anything the repair can save is not an error any more.
     expect(nameError(`My GitHub`)).toBeUndefined();
     expect(nameError(`ops-box_2`)).toBeUndefined();
+    expect(nameError(`Café DB`)).toBeUndefined();
 });
 
 // An empty required field is missing; a present but invalid value is malformed, and the two get
@@ -59,6 +69,11 @@ test(`tells an unanswered question from a wrong answer`, () => {
 test(`vouches only for what a rule can check`, () => {
     expect(fieldVerified({ key: `url`, label: `URL` }, `https://github.com/o/r`)).toBe(true);
     expect(fieldVerified({ key: `url`, label: `URL` }, `github.com/o/r`)).toBe(false);
+    // A paste that brought a second line with it: the rule is end-anchored, so this cannot earn the tick.
+    expect(fieldVerified({ key: `url`, label: `URL` }, `https://github.com/o/r\nrm -rf /`)).toBe(false);
+    expect(fieldVerified({ key: `url`, label: `URL` }, `https://github.com/o/r and then some`)).toBe(false);
+    // Matches the shape but is not a URL: vouched for only once it parses.
+    expect(fieldVerified({ key: `url`, label: `URL` }, `https://`)).toBe(false);
     expect(fieldVerified({ key: `port`, label: `Port` }, `10443`)).toBe(true);
     expect(fieldVerified({ key: `ref`, label: `Commit sha` }, `a`.repeat(40))).toBe(true);
     expect(fieldVerified({ key: `ref`, label: `Commit sha` }, `main`)).toBe(false);

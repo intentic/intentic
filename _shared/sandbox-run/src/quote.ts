@@ -23,12 +23,23 @@ export const sqlIdentifier = (name: string): string => `"${name.replaceAll(`"`, 
 // - dockerEnvLine, for `docker run --env-file`: takes the line literally, quotes included, so it must not be quoted.
 // Using the wrong one silently corrupts the value; it is not an error.
 
+// Thrown when no delimiter is available; typed so a route can answer it as a refusal about the value rather than as a
+// server fault.
+export class UnquotableValueError extends Error {
+    constructor(readonly key: string) {
+        super(
+            `${key} can't be stored: its value contains a single quote, a double quote and a backtick, and a .env value has to be wrapped in one of the three. Remove one of them.`,
+        );
+        this.name = "UnquotableValueError";
+    }
+}
+
 // One `KEY=value` line for a .env; picks a delimiter the value doesn't contain, since neither parser escapes inside a
 // quoted value. Single quotes come first: compose interpolates `$` inside double quotes, corrupting a bcrypt hash.
 export const envLine = (key: string, value: string): string => {
     const delimiter = [`'`, `"`, "`"].find((candidate) => !value.includes(candidate));
     if (delimiter === undefined) {
-        throw new Error(`cannot write ${key} to a .env: the value contains all three quote characters, which its parser cannot express`);
+        throw new UnquotableValueError(key);
     }
     return `${key}=${delimiter}${value}${delimiter}\n`;
 };

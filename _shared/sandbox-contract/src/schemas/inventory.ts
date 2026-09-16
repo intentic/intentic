@@ -10,11 +10,25 @@ export type ServiceKind = z.infer<typeof ServiceKindSchema>;
 // the wire.
 export const InventoryValuesSchema = z.record(z.string(), z.union([z.string(), z.number()]));
 // `const <name>` binding in deploy.config.ts, so it must be a valid identifier.
-const inventoryName = z
-    .string()
-    .min(1)
-    .max(60)
-    .regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/);
+export const INVENTORY_NAME_MAX = 60;
+export const INVENTORY_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+const inventoryName = z.string().min(1).max(INVENTORY_NAME_MAX).regex(INVENTORY_NAME_RE);
+
+// Repairs a name into the identifier the rule above demands, so a form can offer one rather than refuse what it
+// pre-filled: app directories are `web-app`, and `const web-app` is not a binding. Empty means nothing was salvageable.
+export const inventoryIdentifier = (raw: string): string => {
+    const cleaned = raw
+        .trim()
+        .replace(/[^a-zA-Z0-9_]+/gu, "_")
+        .replace(/_{2,}/g, "_")
+        .replace(/_+$/, "")
+        .slice(0, INVENTORY_NAME_MAX);
+    if (cleaned === "" || cleaned === "_") {
+        return "";
+    }
+    // A leading digit is the one repair that has to add rather than remove.
+    return /^[0-9]/.test(cleaned) ? `_${cleaned}`.slice(0, INVENTORY_NAME_MAX) : cleaned;
+};
 export const BackendEntrySchema = z.object({
     kind: z.literal("backend").describe("Something you already have: a machine, an account with a hosting provider."),
     provider: InventoryProviderSchema.describe("Which provider it is with."),

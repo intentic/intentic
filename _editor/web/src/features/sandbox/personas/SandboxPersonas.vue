@@ -157,13 +157,16 @@ const runsOn = (state: PersonaDraft): Pick<Persona, "brief" | "context" | "model
 
 // Writes the card with just its name and an empty account list; every other field is a default the schema already
 // means. Then opens the new card, since "made a persona" and "now set it up" are one errand.
+const submitting = ref(false);
 const submit = async (): Promise<void> => {
-    if (!newValid.value) {
+    // `taken` only sees personas already fetched, so without this the id being written right now still reads as free.
+    if (!newValid.value || submitting.value) {
         return;
     }
     const id = newId.value;
     const label = (newName.value ?? ``).trim();
     saveError.value = undefined;
+    submitting.value = true;
     try {
         await save.mutateAsync({ id, capabilities: [], ...(label !== id ? { label } : {}) });
         newName.value = undefined;
@@ -173,6 +176,8 @@ const submit = async (): Promise<void> => {
         });
     } catch (err) {
         saveError.value = noticeFrom(err, `Could not save this persona.`);
+    } finally {
+        submitting.value = false;
     }
 };
 
@@ -409,7 +414,7 @@ const confirmRemove = async (): Promise<void> => {
                                 placeholder="Name it: Work, Studio, Reddit Writer…"
                                 aria-label="Name this persona"
                                 autofocus
-                                @keydown.enter="submit"
+                                @keyup.enter="submit"
                             />
                             <Button label="Create" size="small" :loading="save.isPending.value" :disabled="!newValid" @click="submit" />
                             <button type="button" :class="ui.linkButton('text-xs text-muted hover:text-content')" @click="cancelAdd">Cancel</button>

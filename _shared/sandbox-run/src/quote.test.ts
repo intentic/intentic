@@ -1,6 +1,6 @@
 import { parseEnv } from "node:util";
 import { expect, test } from "vitest";
-import { envLine, shellQuote, sqlLiteral } from "./quote.js";
+import { envLine, shellQuote, sqlLiteral, UnquotableValueError } from "./quote.js";
 
 // Each case is a value that broke a real call site, asserted through the parser it broke (parseEnv, a shell), not the
 // emitted text: text alone would pass a wrong escaping scheme.
@@ -62,7 +62,15 @@ test("a value cannot add a second key to the file", () => {
 });
 
 test("a value holding all three delimiters is refused, not silently truncated", () => {
-    expect(() => envLine("SECRET", `a"b'c\`d`)).toThrow(/all three quote characters/);
+    // Typed, so a route can answer it as a refusal about the value rather than letting it surface as a server fault;
+    // the message names the key and what to change, since the person reading it is holding the password.
+    expect(() => envLine("SECRET", `a"b'c\`d`)).toThrow(UnquotableValueError);
+    expect(() => envLine("SECRET", `a"b'c\`d`)).toThrow(/SECRET can't be stored/);
+    try {
+        envLine("SECRET", `a"b'c\`d`);
+    } catch (error) {
+        expect((error as UnquotableValueError).key).toBe("SECRET");
+    }
 });
 
 // Single quotes are preferred since `docker compose --env-file` interpolates `$` inside a double-quoted value (a bcrypt

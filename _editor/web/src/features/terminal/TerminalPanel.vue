@@ -76,15 +76,22 @@ watch(useSandbox().reachable, (isReachable) => {
 const help = computed(() => listed.sessions.value.find((session) => session.name === activeName.value)?.help);
 const helpNote = ref(``);
 watch(activeName, () => (helpNote.value = ``));
+const replying = ref(false);
 const resolveHelp = async (helped: boolean): Promise<void> => {
     const open = help.value;
-    if (open === undefined) {
+    // The ask is cleared by the daemon, not locally, so until the reply lands `help` still reads as open.
+    if (open === undefined || replying.value) {
         return;
     }
+    replying.value = true;
     const note = helpNote.value.trim();
     // `undefined`: replies go to this sandbox's own daemon, which is the one that raised the ask.
-    await postTurnControl(undefined, `/agent/reply`, { kind: `terminal_help`, requestId: open.requestId, helped, ...(note === `` ? {} : { note }) });
-    helpNote.value = ``;
+    try {
+        await postTurnControl(undefined, `/agent/reply`, { kind: `terminal_help`, requestId: open.requestId, helped, ...(note === `` ? {} : { note }) });
+        helpNote.value = ``;
+    } finally {
+        replying.value = false;
+    }
 };
 
 // Tab strip: segments, numbering, cosmetics.

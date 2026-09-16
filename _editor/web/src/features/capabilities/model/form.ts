@@ -13,13 +13,28 @@ import {
 // edit: on edit, a blank secret box for a `stored` key means keep it, not unanswered.
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
-const URL_RE = /^https?:\/\/.+/i;
+// End-anchored and whitespace-free: unanchored, a two-line paste passed and `fieldVerified` then put a green tick on
+// it, which is worse than no tick. Parsed as well as matched, so the check stands behind what it vouches for.
+const URL_RE = /^https?:\/\/\S+$/i;
+const parsesAsUrl = (value: string): boolean => {
+    if (!URL_RE.test(value)) {
+        return false;
+    }
+    try {
+        return new URL(value).hostname.length > 0;
+    } catch {
+        return false;
+    }
+};
 
 // Repairs a typed name into a valid one instead of refusing it (case kept); only a name with nothing
-// salvageable left is refused.
+// salvageable left is refused. Accents are folded to their base letter rather than dropped: deleting the
+// é from `Café` leaves `Caf`, a different word, where folding leaves `Cafe`.
 export const cleanName = (raw: string): string =>
     raw
         .trim()
+        .normalize(`NFKD`)
+        .replace(/\p{M}+/gu, ``)
         .replace(/[^a-zA-Z0-9_-]+/gu, `-`)
         .replace(/[-_]{2,}/g, `-`)
         .replace(/^[-_]+/, ``)
@@ -38,15 +53,22 @@ export const keepsSecret = (field: CapabilityField, value: string | undefined, s
     field.secret === true && (value ?? ``).trim().length === 0 && stored.has(field.key);
 
 // undefined means valid, here and in every rule below; the only unanswerable name is one with
-// nothing left after cleanName repairs it.
-export const nameError = (name: string): string | undefined => (cleanName(name).length === 0 ? `Name is required.` : undefined);
+// nothing left after cleanName repairs it. A name that is present but unusable says so as itself:
+// "required" would be false in front of a box the user can see text in.
+export const nameError = (name: string): string | undefined => {
+    if (cleanName(name).length > 0) {
+        return undefined;
+    }
+    return name.trim().length === 0 ? `Name is required.` : `This name has no Latin letters or digits to use. Try a romanised name.`;
+};
 
 // Each rule refuses a value that is actually present; emptiness is handled separately by
 // fieldMissing. The first rule to object is what the field shows.
 type FieldRule = (field: CapabilityField, value: string) => string | undefined;
 
 const RULES: readonly FieldRule[] = [
-    (field, value) => (!field.secret && field.key.toLowerCase().includes(`url`) && !URL_RE.test(value) ? `Enter a valid URL (e.g. https://…).` : undefined),
+    (field, value) =>
+        !field.secret && field.key.toLowerCase().includes(`url`) && !parsesAsUrl(value) ? `Enter a valid URL (e.g. https://…).` : undefined,
     // Ciphertext lifted straight from a FortiClient config; the daemon rejects it, so refuse it before
     // the round trip.
     (_field, value) =>

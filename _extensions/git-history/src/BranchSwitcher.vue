@@ -49,7 +49,9 @@ const toggle = (event: Event): void => {
 
 const submitCreate = async (): Promise<void> => {
     const name = newName.value.trim();
-    if (name === ``) {
+    // `create` drops its own re-entry, so a second Enter would otherwise fall straight through to the success branch
+    // and dismiss the popover while the first create is still running.
+    if (name === `` || busy.value) {
         return;
     }
     // From HEAD, and switch to it: "new branch from here", the gesture people actually mean.
@@ -183,7 +185,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                             placeholder="branch-name"
                             autofocus
                             class="ui-field-box ui-field-sm min-w-0 flex-1"
-                            @keydown.enter="submitCreate"
+                            @keyup.enter="submitCreate"
                             @keydown.escape="creating = false"
                         />
                         <Button size="small" severity="secondary" :disabled="busy || newName.trim() === ''" @click="submitCreate"> Create </Button>

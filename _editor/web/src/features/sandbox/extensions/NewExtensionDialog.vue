@@ -30,13 +30,26 @@ watch(open, (shown) => {
     }
 });
 
-const ready = computed(() => SLUG.test(publisher.value) && SLUG.test(name.value));
+// Trimmed before testing, and the trimmed value is what gets created: pasting a name is how a trailing space arrives,
+// and refusing it without saying so reads as a broken button.
+const cleanPublisher = computed(() => publisher.value.trim());
+const cleanSlug = computed(() => name.value.trim());
+const ready = computed(() => SLUG.test(cleanPublisher.value) && SLUG.test(cleanSlug.value));
+// Which of the two boxes is wrong, said only once the box has something in it to be wrong about.
+const slugProblem = (value: string): string | undefined =>
+    value.length === 0 || SLUG.test(value) ? undefined : `Lower case letters, digits and hyphens, starting with a letter or digit.`;
+const publisherProblem = computed(() => slugProblem(cleanPublisher.value));
+const nameProblem = computed(() => slugProblem(cleanSlug.value));
 
 const submit = async (): Promise<void> => {
+    // Re-entry drops: the keyboard path reaches this directly, and each call writes a directory.
+    if (busy.value || !ready.value) {
+        return;
+    }
     busy.value = true;
     failure.value = undefined;
     try {
-        const created = await create(publisher.value, name.value);
+        const created = await create(cleanPublisher.value, cleanSlug.value);
         open.value = false;
         emit(`created`, { ...created, wish: wish.value.trim() });
     } catch (error) {
@@ -69,15 +82,19 @@ const submit = async (): Promise<void> => {
                         placeholder="release-notes"
                         spellcheck="false"
                         autofocus
-                        @keyup.enter="ready && submit()"
+                        @keyup.enter="submit()"
                     />
                 </label>
             </div>
-            <!-- States the rule once for both fields: lower case, digits and hyphens, starting with a letter or digit. -->
-            <span class="text-2xs text-subtle">
+            <!-- The rule at rest; once a box holds something that breaks it, the same line names which box and turns
+                 to a warning, rather than leaving Create greyed out with nothing pointing at the cause. -->
+            <span v-if="publisherProblem || nameProblem" class="text-2xs text-warning">
+                {{ publisherProblem ? `Publisher` : `Name` }}: {{ publisherProblem ?? nameProblem }}
+            </span>
+            <span v-else class="text-2xs text-subtle">
                 Lower case, digits and hyphens.
                 <template v-if="ready"
-                    >It will be listed as <code class="ui-code">{{ publisher }}.{{ name }}</code
+                    >It will be listed as <code class="ui-code">{{ cleanPublisher }}.{{ cleanSlug }}</code
                     >.</template
                 >
             </span>

@@ -146,19 +146,26 @@ watch(selected, () => {
     queueOpen.value = false;
 });
 
+const replying = ref(false);
 const resolveHelp = async (helped: boolean): Promise<void> => {
     const help = current.value?.help;
-    if (help === undefined) {
+    // The ask is cleared by the daemon, not locally, so until the reply lands `help` still reads as open.
+    if (help === undefined || replying.value) {
         return;
     }
+    replying.value = true;
     const note = helpNote.value.trim();
     // undefined targets this box: a browser session belongs to the machine it runs on, and this view only lists the
     // active sandbox's (see postTurnControl).
-    await postTurnControl(undefined, `/agent/reply`, { kind: `browser_help`, requestId: help.requestId, helped, ...(note === `` ? {} : { note }) });
-    helpNote.value = ``;
-    // Handing back while still driving would race the owner's keystrokes against the agent's next move.
-    if (helped) {
-        view.driving.value = false;
+    try {
+        await postTurnControl(undefined, `/agent/reply`, { kind: `browser_help`, requestId: help.requestId, helped, ...(note === `` ? {} : { note }) });
+        helpNote.value = ``;
+        // Handing back while still driving would race the owner's keystrokes against the agent's next move.
+        if (helped) {
+            view.driving.value = false;
+        }
+    } finally {
+        replying.value = false;
     }
 };
 

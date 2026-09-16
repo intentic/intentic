@@ -115,6 +115,11 @@ const rows = computed<DialRow[]>(() =>
 );
 
 const run = async (id: string, action: () => Promise<void>): Promise<void> => {
+    // Per connection, not globally: dialling one gateway while another is mid-connect is fine, dialling the same one
+    // twice is not.
+    if (busy.has(id)) {
+        return;
+    }
     busy.add(id);
     delete failures[id];
     try {

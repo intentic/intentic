@@ -11,7 +11,7 @@ import { normalizeHostName } from "./hostName";
 // Shared connect-a-server flow, shown as InfraDeclare's requirement card and behind its Add-server button.
 // One command sets up the host and self-registers via /enroll; no sandbox recreate, no keys pasted here.
 // Always carries the user's own Cloudflare token: intentic's tunnels carry web traffic only.
-const { refetch } = useInventory();
+const { entries, refetch } = useInventory();
 const { active, daemonUrl } = useSandbox();
 
 // SANDBOX_URL, CONNECT_TOKEN, CF_TOKEN and ZONE when known; url/token come from the active sandbox.
@@ -23,6 +23,11 @@ const cfTokenTouched = ref(false);
 const hostNameTouched = ref(false);
 const rawHostName = computed(() => hostName.value.trim());
 const canonicalHostName = computed(() => normalizeHostName(hostName.value));
+// `home-server`, `home server` and `home.server` all normalize to one id, so a second machine can land on a name
+// already taken; said while the box is still open rather than discovered in the config afterwards.
+const hostNameTaken = computed(
+    () => canonicalHostName.value !== `` && entries.value.some((entry) => entry.kind === `backend` && entry.name === canonicalHostName.value),
+);
 const hostNameReady = computed(() => rawHostName.value === `` || canonicalHostName.value !== ``);
 // Derived from the daemon URL, only on the user's own domain; else the host resolves its own zone.
 const zone = computed(() => (active.value?.providedAddress === true ? undefined : zoneFromUrl(daemonUrl.value)));
@@ -133,6 +138,10 @@ onUnmounted(() => clearInterval(timer));
                     <span v-if="hostNameTouched && rawHostName !== '' && canonicalHostName === ''" class="ui-field-error">
                         <Icon name="exclamation-triangle" class="text-2xs" />
                         Use lowercase letters, digits and hyphens only.
+                    </span>
+                    <span v-else-if="hostNameTaken" class="text-2xs text-warning">
+                        <Icon name="exclamation-triangle" class="text-2xs" />
+                        <span class="font-mono">{{ canonicalHostName }}</span> is already a machine in your intent. Connecting replaces it.
                     </span>
                     <span v-else-if="canonicalHostName !== ``" class="text-2xs text-success">
                         ✓ Saved in intent as <span class="font-mono">{{ canonicalHostName }}</span>

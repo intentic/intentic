@@ -163,3 +163,32 @@ test("secrets.set / remove rewrite .env and fire a best-effort `secrets push` fo
         SETTLES,
     );
 });
+
+// The lost-update regression: `set` is read-modify-write, so before its writes were serialized two overlapping calls
+// both read the pre-write file and the second erased the first one's key, while both answered ok.
+test("concurrent secrets.set calls all land, none clobbering a write still in flight", async () => {
+    const client = clientFor(createApp(services({ workspace: secretsWorkspace() })));
+    await Promise.all([
+        client.secrets.set({ key: "STRIPE_KEY", value: "sk_live_1" }),
+        client.secrets.set({ key: "OPENAI_KEY", value: "sk-oai-2" }),
+        client.secrets.set({ key: "SENTRY_DSN", value: "https://sentry" }),
+    ]);
+    expect((await client.secrets.list()).keys.toSorted()).toEqual(["EXTRA_TOKEN", "HOST_SSH_KEY", "OPENAI_KEY", "SENTRY_DSN", "STRIPE_KEY"]);
+});
+
+// The same race across verbs, and the one that matters most: a `set` overlapping a `remove` used to restore the removed
+// key from its stale snapshot, leaving a credential the owner was told had been revoked.
+test("a secrets.set overlapping a secrets.remove does not resurrect the removed key", async () => {
+    const client = clientFor(createApp(services({ workspace: secretsWorkspace() })));
+    await Promise.all([client.secrets.set({ key: "NEW_TOKEN", value: "added" }), client.secrets.remove({ key: "EXTRA_TOKEN" })]);
+    expect((await client.secrets.list()).keys.toSorted()).toEqual(["HOST_SSH_KEY", "NEW_TOKEN"]);
+});
+
+// A .env value is wrapped in one of three quote characters, so a value holding all three cannot be written; the user
+// gets a refusal naming what to change rather than a 500 about parsers.
+test("secrets.set refuses a value holding all three quote characters, as a bad request", async () => {
+    const client = clientFor(createApp(services({ workspace: secretsWorkspace() })));
+    expect(await errorCode(client.secrets.set({ key: "PW", value: "p'a\"s`s" }))).toBe("BAD_REQUEST");
+    // Refused before the write: the store is untouched, not half-rewritten.
+    expect((await client.secrets.list()).keys.toSorted()).toEqual(["EXTRA_TOKEN", "HOST_SSH_KEY"]);
+});

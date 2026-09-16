@@ -166,18 +166,23 @@ const draftCard = (folder: string): Persona | undefined => {
     };
 };
 
+const submitting = ref(false);
 const submit = async (): Promise<void> => {
     const folder = dir.value;
     const card = folder === undefined ? undefined : draftCard(folder);
-    if (card === undefined) {
+    // `dir` is cleared only once the write lands, so without the flag every Enter until then starts another save.
+    if (card === undefined || submitting.value || !valid.value) {
         return;
     }
     saveError.value = undefined;
+    submitting.value = true;
     try {
         await save.mutateAsync(card);
         dir.value = undefined;
     } catch (err) {
         saveError.value = noticeFrom(err, `Could not save this persona.`);
+    } finally {
+        submitting.value = false;
     }
 };
 </script>
@@ -271,7 +276,7 @@ const submit = async (): Promise<void> => {
                             :placeholder="`Name this persona: ${folderName}, Docs bot, Refactor crew…`"
                             aria-label="Name"
                             autofocus
-                            @keyup.enter="valid && submit()"
+                            @keyup.enter="submit()"
                         />
                         <span v-if="nameHint !== undefined" class="text-xs text-warning">{{ nameHint }}</span>
                     </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Button, ui, FilterBar, type NoticeModel, NoticeStack, Row, RowGroup, RowNote, SegmentedControl, SkeletonRows } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
+import { SECRET_KEY_MAX, SECRET_KEY_RE } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import SecretEntryRow from "../../capabilities/connect/SecretEntryRow.vue";
@@ -19,7 +20,7 @@ import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./s
 // toggle past a threshold. Unfinished rows rise into one "Needs attention" group instead of a banner; the filter
 // appears only once there's enough to search; nothing here reveals a value except the owner's own action.
 
-const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+// The daemon's own rule, imported rather than restated, so the box cannot accept a name the write will refuse.
 // Below this many rows the list is its own overview; a display choice, kept out of the row model.
 const FILTERABLE_FROM = 8;
 // Same truncation as AiAccountSection, applied to capability credentials alone.
@@ -94,7 +95,21 @@ const emptyNote = computed<string | undefined>(() => {
 // Add-a-secret (any env key the user wants available at apply time); collapsed until invoked.
 const adding = ref(false);
 const newKey = ref(``);
-const newKeyValid = computed(() => KEY_RE.test(newKey.value));
+const newKeyValid = computed(() => SECRET_KEY_RE.test(newKey.value) && newKey.value.length <= SECRET_KEY_MAX);
+// A name already here would be overwritten by Save with no warning; said before the box can be used, not after.
+const newKeyTaken = computed(() => newKeyValid.value && inventory.value.some((entry) => entry.key === newKey.value));
+const newKeyProblem = computed<string | undefined>(() => {
+    if (newKey.value.length === 0) {
+        return undefined;
+    }
+    if (newKey.value.length > SECRET_KEY_MAX) {
+        return `A name stops at ${SECRET_KEY_MAX} characters; this one is ${newKey.value.length}.`;
+    }
+    if (!newKeyValid.value) {
+        return `Letters, digits and underscores; must not start with a digit.`;
+    }
+    return newKeyTaken.value ? `${newKey.value} already exists here. Saving replaces its value.` : undefined;
+});
 const cancelAdd = (): void => {
     adding.value = false;
     newKey.value = ``;
@@ -229,8 +244,8 @@ const pushToCi = async (): Promise<void> => {
                                 />
                                 <SecretField class="flex-1" :secret-key="newKey" :disabled="!newKeyValid" no-hint @saved="newKey = ``" />
                             </div>
-                            <span v-if="newKey.length > 0 && !newKeyValid" class="text-2xs text-warning">
-                                Letters, digits and underscores; must not start with a digit.
+                            <span v-if="newKeyProblem" :class="newKeyTaken ? `text-2xs text-subtle` : `text-2xs text-warning`">
+                                {{ newKeyProblem }}
                             </span>
                             <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="cancelAdd">Cancel</button>
                         </div>

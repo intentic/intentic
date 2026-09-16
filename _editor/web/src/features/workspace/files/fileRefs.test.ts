@@ -135,6 +135,14 @@ describe(`FILE_REF`, () => {
         expect(matchOf(`run package.json through it`)).toBeUndefined();
         expect(matchOf(`import from @intentic/ui`)).toBeUndefined();
         expect(matchOf(`the and/or case`)).toBeUndefined();
+        // A fraction or a version range is prose, not a path: the extension has to hold a letter.
+        expect(matchOf(`ratio 3/4.5`)).toBeUndefined();
+        expect(matchOf(`see v1.2/3.4 for details`)).toBeUndefined();
+        expect(matchOf(`scores 10/9.5 overall`)).toBeUndefined();
+    });
+
+    it(`still matches an extension that merely starts with a digit`, () => {
+        expect(matchOf(`dist/archive.7z`)).toBe(`dist/archive.7z`);
     });
 
     it(`does not start mid-token inside a URL: the URL linker owns that`, () => {

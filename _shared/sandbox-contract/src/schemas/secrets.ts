@@ -2,18 +2,21 @@
 import { z } from "zod";
 // Straight to the sandbox daemon, never through the platform; `apply` reloads .env with no restart. `list` returns keys
 // only; `reveal` is the one owner-only exception that returns a value.
+// An env var name, as a shell exports it. Exported so the browser validates against this rather than restating it:
+// stated twice, the two drifted, and a box with no limit fed a rejection the user could not have predicted.
+export const SECRET_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+export const SECRET_KEY_MAX = 128;
+const secretKey = z.string().regex(SECRET_KEY_RE).max(SECRET_KEY_MAX);
+
 export const SecretSetSchema = z.object({
-    key: z
-        .string()
-        .regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
-        .max(128)
-        .describe("The name to store it under, which is the name a process will find it by."),
+    key: secretKey.describe("The name to store it under, which is the name a process will find it by."),
     value: z.string().min(1).describe("The value. It goes straight to your sandbox and never through the platform."),
 });
 export const SecretKeysSchema = z.object({
     keys: z.array(z.string()).describe("The names that exist here. Only the names: the values never leave the sandbox."),
 });
-export const SecretKeyParamSchema = z.object({ key: z.string().describe("Which secret, by name.") });
+// Same rule as `set`: one name rule for a secret, whichever verb is asking about it.
+export const SecretKeyParamSchema = z.object({ key: secretKey.describe("Which secret, by name.") });
 export const SecretRevealSchema = z.object({ value: z.string().describe("The value itself. The only place in this API one is ever returned.") });
 
 // A wall against the agent's own judgment, not a compromised container: a shell here can read the policy same as the

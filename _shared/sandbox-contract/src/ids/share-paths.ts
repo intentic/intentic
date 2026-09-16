@@ -24,7 +24,10 @@ export const shareStem = (title: string): string => {
     const stem = title
         .toLowerCase()
         .normalize("NFKD")
-        // Anything not a plain letter or digit becomes a separator, dropping accents, punctuation, emoji.
+        // NFKD splits an accent off its letter; the mark has to go before the separator pass, or `café` decomposes to
+        // `cafe` + a mark and comes out `cafe-`, i.e. a word boundary where the accent was.
+        .replace(/\p{M}+/gu, "")
+        // Anything not a plain letter or digit becomes a separator, dropping punctuation and emoji.
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "")
         .slice(0, STEM_MAX)

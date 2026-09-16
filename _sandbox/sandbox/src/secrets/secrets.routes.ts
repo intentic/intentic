@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { parseEnv } from "node:util";
-import { envLine } from "@intentic/sandbox-run/quote";
+import { envLine, UnquotableValueError } from "@intentic/sandbox-run/quote";
 import { collectSecretInventory, ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { secretField } from "../capabilities/summary.js";
 import { lastUseByName, type SecretUse } from "./secret-uses.js";
@@ -15,6 +15,7 @@ import { providerSecretEntries } from "../agent/providers/provider-registry.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { stateRelPath } from "../workspace/layout/state-paths.js";
+import { type TextFile, textFile } from "../store/text-file.js";
 
 // One connected provider account as an inventory entry; provider tokens are never revealable.
 // Upserts by parsing and re-serializing via `envLine`, not string interpolation, so a value containing a quote or
@@ -68,16 +69,24 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
     const i = implement(secretsContract).$context<OrpcContext>();
     const desiredState = (): string => services.workspace.repos["desired-state"];
     const envPath = (): string => join(desiredState(), ENV_FILE);
+    // Resolved per call rather than once: the desired-state repo isn't scaffolded when these routes are built.
+    const envFile = (): TextFile => textFile(envPath(), 0o600);
     const ensureActive = (): void => {
         if (!existsSync(desiredState())) {
             throw new ORPCError("PRECONDITION_FAILED", { message: "DevOps is not active, activate it before adding secrets." });
         }
     };
-    const read = async (): Promise<string> => {
+    const read = async (): Promise<string> => await envFile().read();
+    // `envLine` cannot express a value holding all three quote characters; refused as a bad request naming the value,
+    // since a raw throw here reads as a server fault the user cannot act on.
+    const writeEnv = async (change: (current: string) => string): Promise<void> => {
         try {
-            return await readFile(envPath(), "utf8");
-        } catch {
-            return "";
+            await envFile().update(change);
+        } catch (error) {
+            if (error instanceof UnquotableValueError) {
+                throw new ORPCError("BAD_REQUEST", { message: error.message });
+            }
+            throw error;
         }
     };
     const ensureMaintainer = async (headers: Headers): Promise<void> => {
@@ -135,9 +144,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
     return {
         set: i.set.handler(async ({ input }) => {
             ensureActive();
-            const path = envPath();
-            await mkdir(dirname(path), { recursive: true });
-            await writeFile(path, upsertEnv(await read(), input.key, input.value), { mode: 0o600 });
+            await writeEnv((current) => upsertEnv(current, input.key, input.value));
             pushToCi();
             return { ok: true } as const;
         }),
@@ -147,7 +154,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
         }),
         remove: i.remove.handler(async ({ input }) => {
             ensureActive();
-            await writeFile(envPath(), removeEnv(await read(), input.key), { mode: 0o600 });
+            await writeEnv((current) => removeEnv(current, input.key));
             pushToCi();
             return { ok: true } as const;
         }),

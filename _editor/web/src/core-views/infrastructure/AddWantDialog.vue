@@ -2,6 +2,7 @@
 import { BrandMark, Button, ui, Modal, Notice, type NoticeModel, Picker, type PickerOption, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic/capability-catalog";
+import { INVENTORY_NAME_MAX, INVENTORY_NAME_RE, inventoryIdentifier } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { useInventory } from "../../features/extensions/useInventory";
 import { useWorkspaceApps } from "../../features/extensions/useWorkspaceApps";
@@ -12,8 +13,20 @@ import ConnectHost from "./ConnectHost.vue";
 // Step 2: name plus zone-aware domain; host/Cloudflare bindings are derived, asked only when more than one
 // is declared. Submits to deploy.config.ts via /inventory and emits `added`.
 
-const NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+// A DNS label: the 63 is the protocol's, not a preference, and without it an over-long name fails at Cloudflare
+// instead of here.
 const SUBDOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i;
+const SUBDOMAIN_MAX = 63;
+// Repairs a name into a DNS label the same way `inventoryIdentifier` repairs one into a binding.
+const subdomainLabel = (raw: string): string =>
+    raw
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/gu, `-`)
+        .replace(/-{2,}/g, `-`)
+        .replace(/^-+|-+$/g, ``)
+        .slice(0, SUBDOMAIN_MAX)
+        .replace(/-+$/, ``);
 
 const visible = defineModel<boolean>(`visible`, { default: false });
 const emit = defineEmits<{ added: [] }>();
@@ -31,7 +44,32 @@ const name = ref(``);
 const values = ref<Record<string, string>>({});
 const on = ref(``);
 const subdomain = ref(``);
-const subdomainValid = computed(() => SUBDOMAIN_RE.test(subdomain.value.trim()));
+const subdomainValid = computed(() => {
+    const label = subdomain.value.trim();
+    return SUBDOMAIN_RE.test(label) && label.length <= SUBDOMAIN_MAX;
+});
+// Why the button is off, in the field's own words; a rule the user cannot see is a dead button with no reason.
+const subdomainError = computed<string | undefined>(() => {
+    const label = subdomain.value.trim();
+    if (label.length === 0 || subdomainValid.value) {
+        return undefined;
+    }
+    return label.length > SUBDOMAIN_MAX ? `A domain label stops at ${SUBDOMAIN_MAX} characters; this one is ${label.length}.` : undefined;
+});
+const nameError = computed<string | undefined>(() => {
+    const typed = name.value.trim();
+    if (typed.length === 0 || (INVENTORY_NAME_RE.test(typed) && typed.length <= INVENTORY_NAME_MAX)) {
+        return undefined;
+    }
+    return typed.length > INVENTORY_NAME_MAX
+        ? `A name stops at ${INVENTORY_NAME_MAX} characters; this one is ${typed.length}.`
+        : `This becomes a name in your deploy config: Latin letters, digits and underscores, not starting with a digit.`;
+});
+// Offered rather than applied: the box is the user's, and a name silently rewritten under the cursor is worse than one
+// refused out loud.
+const useRepairedName = (): void => {
+    name.value = inventoryIdentifier(name.value);
+};
 
 // Apps in workspace monorepos; fetched only while the dialog is open, live against the repo list.
 const { apps: workspaceApps, error: appsError } = useWorkspaceApps(visible);
@@ -61,7 +99,8 @@ const serviceFields = computed(() => (selected.value?.kind === `service` ? selec
 
 const canSubmit = computed(
     () =>
-        NAME_RE.test(name.value.trim()) &&
+        INVENTORY_NAME_RE.test(name.value.trim()) &&
+        name.value.trim().length <= INVENTORY_NAME_MAX &&
         (selected.value?.kind === `app`
             ? domainValid.value
             : serviceFields.value.every((field) =>
@@ -88,8 +127,10 @@ const close = (): void => {
 const pick = async (picked: Picked): Promise<void> => {
     selected.value = picked;
     error.value = null;
-    name.value = picked.kind === `service` ? picked.service.service : picked.app;
-    subdomain.value = picked.kind === `app` ? picked.app : ``;
+    // Repaired on the way in: app directories are `web-app`, and offering one the form then refuses is the worst way
+    // to start.
+    name.value = inventoryIdentifier(picked.kind === `service` ? picked.service.service : picked.app);
+    subdomain.value = picked.kind === `app` ? subdomainLabel(picked.app) : ``;
     // Need the declared host/cloudflare bindings to wire the want's on/expose.
     await refetch();
     on.value = hostOptions.value.includes(`self`) ? `self` : (hostOptions.value[0] ?? ``);
@@ -174,6 +215,13 @@ const submit = async (): Promise<void> => {
                 <label class="ui-field">
                     <span class="ui-field-label">Name</span>
                     <input v-model="name" :placeholder="selected.kind === `service` ? selected.service.service : selected.app" :class="ui.input()" />
+                    <!-- Names the rule and offers the repair, rather than leaving Add greyed out with nothing said. -->
+                    <span v-if="nameError" class="text-xs text-warning">
+                        {{ nameError }}
+                        <button v-if="inventoryIdentifier(name)" type="button" :class="ui.textAction(`text-xs`)" @click="useRepairedName">
+                            Use {{ inventoryIdentifier(name) }}
+                        </button>
+                    </span>
                 </label>
                 <!-- Domain is zone-aware whenever the cloudflare entry recorded its zone: a subdomain under it. -->
                 <label v-if="zone !== undefined" class="ui-field">
@@ -182,9 +230,9 @@ const submit = async (): Promise<void> => {
                         <input v-model="subdomain" :placeholder="name" :class="ui.input('flex-1')" />
                         <span class="whitespace-nowrap font-mono text-sm text-subtle">.{{ zone }}</span>
                     </div>
-                    <span v-if="subdomain.trim().length > 0 && !subdomainValid" class="text-xs text-warning"
-                        >Use letters, numbers and hyphens only.</span
-                    >
+                    <span v-if="subdomain.trim().length > 0 && !subdomainValid" class="text-xs text-warning">{{
+                        subdomainError ?? `Use letters, numbers and hyphens only.`
+                    }}</span>
                     <span v-else-if="subdomainValid" class="text-xs text-success"
                         >✓ Reachable at <span class="font-mono">{{ subdomain.trim() }}.{{ zone }}</span></span
                     >

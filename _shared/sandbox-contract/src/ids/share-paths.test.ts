@@ -31,6 +31,12 @@ describe("the safe half", () => {
         ["  spaces  everywhere  ", "spaces-everywhere"],
         ["Emoji 🎉 title", "emoji-title"],
         ["UPPER Case", "upper-case"],
+        // An accent folds into its letter rather than becoming a word boundary: NFKD splits it off, and left in place
+        // the mark reads as punctuation and cuts the word in half (`cafe-re-sume`).
+        ["Café résumé", "cafe-resume"],
+        ["Äpfel für alle", "apfel-fur-alle"],
+        ["Ölçü", "olcu"],
+        ["naïve Zoë", "naive-zoe"],
     ])("reduces %j to a name that can only be a name", (title, stem) => {
         expect(shareStem(title)).toBe(stem);
         expect(SHARE_ID.test(shareId(title, "3f9c"))).toBe(true);
