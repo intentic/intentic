@@ -289,6 +289,36 @@ describe("the free trial", () => {
         vi.unstubAllGlobals();
     });
 
+    // The body the sandbox's translator sends for a screenshot the agent read: Google refuses an image part outside a
+    // `user` message with a 400 the user can do nothing about, so the route moves it before spending anything.
+    it("moves an image out of a tool result before forwarding the turn", async () => {
+        const { prisma, spent } = fakePrisma();
+        const fetchFn = upstream([`gemini-flash-latest`]);
+        vi.stubGlobal(`fetch`, fetchFn);
+        const image = { type: `image_url`, image_url: { url: `data:image/png;base64,AAAA` } };
+        const body = JSON.stringify({
+            model: `auto`,
+            messages: [
+                { role: `user`, content: [{ type: `text`, text: `read /tmp/shot.png` }] },
+                { role: `assistant`, content: ``, tool_calls: [{ id: `call_1`, type: `function`, function: { name: `Read`, arguments: `{}` } }] },
+                { role: `tool`, tool_call_id: `call_1`, content: [image] },
+            ],
+        });
+
+        const response = await call(baseConfig, prisma, `/trial/v1/chat/completions`, { method: `POST`, body });
+
+        expect(response.status).toBe(200);
+        expect(spent()).toBe(1);
+        const sent = JSON.parse(String(fetchFn.mock.calls.find(([, init]) => init?.method === `POST`)?.[1]?.body)) as {
+            messages: { role: string; content: unknown }[];
+        };
+        const withImages = sent.messages.filter((message) => Array.isArray(message.content) && message.content.some((part) => part.type === `image_url`));
+        // The image still reaches the model, and only from the one role that may carry it.
+        expect(withImages).toHaveLength(1);
+        expect(withImages.every((message) => message.role === `user`)).toBe(true);
+        vi.unstubAllGlobals();
+    });
+
     // Quotas are per model, so Flash's window closing says nothing about Lite.
     it("falls to the next model when the first is out of quota on every key", async () => {
         const { prisma, spent } = fakePrisma();

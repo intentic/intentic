@@ -4,6 +4,7 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { Hono } from "hono";
 import type { Logger } from "pino";
 import type { Config } from "../config.js";
+import { withImagesInUserMessages } from "./trial-images.js";
 import { createTrialLadder } from "./trial-ladder.js";
 import { createTrialPool, type Fetcher, poolRefused, trialEnabled } from "./trial-pool.js";
 import { recordServedModel, refundTrialMessage, spendTrialMessage, trialStatus } from "./trial-usage.js";
@@ -98,7 +99,9 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         if (ownerId === undefined) {
             return c.json({ error: `unknown sandbox` }, 404);
         }
-        const body = await c.req.text();
+        // Images are moved into a user message before anything upstream reads the body: the harness's translator hands
+        // a tool result's image to a `tool` message, which Google refuses outright.
+        const body = withImagesInUserMessages(await c.req.text());
         const at = now();
         const spend = await spendTrialMessage(prisma, config, ownerId, at);
         if (!spend.allowed) {
