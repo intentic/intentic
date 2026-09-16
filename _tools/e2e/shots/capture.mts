@@ -24,14 +24,20 @@ const MOBILE = { width: 430, height: 932 };
 const DENSE_DPR = 3;
 const DEFAULT_DPR = 2;
 
-/* Hide demo-only chrome and tooltips from screenshots. */
+// Hide demo-only chrome and tooltips from screenshots. Installed on the CONTEXT rather than the page, because the
+// popped-out chat is a window the app opens for itself and a style tag added to the opener never reaches it: both
+// hero-chat shots shipped with the demo's mode switcher sitting across the bottom of the frame.
 const HIDE_DEMO_CHROME = `#demo-switcher, .ui-tooltip { display: none !important; }`;
 
 // WHERE THE WORKSPACE ENDS AND THE CHAT BEGINS. Every desktop surface shares the shell, so one landmark decides it
-// for all of them. It used to be the composer's textarea, and that selector has since stopped matching anything the
-// demo renders — the pane and its controls mount, the textarea does not. A stale landmark here is expensive and
-// quiet: `composerLeft` fell back to the whole viewport and every clipped shot came out ~400px too wide, with
-// nothing in the log to say so. Hence two of them, the panel first, and a loud failure when neither is found.
+// for all of them. A stale landmark here is expensive and quiet: when the composer's textarea stopped matching, the
+// split fell back to the whole viewport and every clipped shot came out ~400px too wide, with nothing in the log to
+// say so. Hence two of them and a loud failure when neither is found.
+//
+// The PANEL is the landmark and the composer is only the fallback, because the panel's left edge IS the boundary
+// while the textarea sits 20px inside it. Asking the textarea first put the split 20px into the chat, which let the
+// chat's own boxes into the workspace band: shots that should have trimmed to a 314px-tall diff measured the
+// composer at the foot of the window instead and came out full-height, most of them empty canvas.
 const CHAT_PANEL = ".chat-panel";
 const COMPOSER = 'textarea[name="draft"]';
 
@@ -120,6 +126,9 @@ const SHOTS: Shot[] = [
         settleMs: 3200,
         viewport: SHOWCASE,
         dpr: SHOWCASE_DPR,
+        // The 16:9 frame is fixed, so an under-filled board cannot be trimmed back to its content — it is simply a
+        // screenshot that is half empty canvas. The full fixture is what fills a lane to the depth of the frame.
+        mode: "full",
     },
     {
         /* Use the full fixture so this catalogue includes the connected capability tiles. */
@@ -165,12 +174,17 @@ const SHOTS: Shot[] = [
         clip: "area",
         viewport: HERO_WINDOW,
         fullHeight: true,
+        /* Same reason as stage-run: `fullHeight` keeps the window, so only the fixture can fill it. */
+        mode: "full",
     },
     /* Capture the hero review in the same window and crop as the hero board. */
     {
         name: "hero-review",
         path: "/agents/cnv_soft_deletes",
         waitFor: "text=Ready to land",
+        // Opens on schema.ts and stays there. It is the tallest diff this branch has: the demo records a real before
+        // and after for only two of its four files (fixture/workspace.ts, DIFFS), and the other is five lines. The
+        // frame is left part empty rather than pointed at a file whose diff the recording does not carry.
         settleMs: 1600,
         clip: "area",
         viewport: HERO_WINDOW,
@@ -194,8 +208,15 @@ const SHOTS: Shot[] = [
         settleMs: 2600,
         popout: {
             ...POPOUT_WINDOW,
-            /* Select Personas, Maya, and her run inside the popped-out chat. */
-            press: ['button[role="tab"]:has-text("Personas")', "text=Maya · Customer Care", '.chat-mark-bar button[aria-label^="Show "]'],
+            // Select Personas, Maya, and her run inside the popped-out chat. Her name only expands the rail row;
+            // without the run's own title after it the transcript stays on whatever the opener had open, which is
+            // how this shot came to show the Stripe plan while its alt text described an overnight support sweep.
+            press: [
+                'button[role="tab"]:has-text("Personas")',
+                "text=Maya · Customer Care",
+                "text=Morning support sweep & VIP save",
+                '.chat-mark-bar button[aria-label^="Show "]',
+            ],
             settleMs: 1_800,
         },
         dpr: DENSE_DPR,
@@ -209,6 +230,9 @@ const SHOTS: Shot[] = [
         settleMs: 3200,
         clip: "chat",
         dpr: DENSE_DPR,
+        // Stops below the plan's Approve row. The composer is pinned to the foot of the pane, so trimming to the
+        // last inked pixel always reaches it and hands back 350px of empty column between the two.
+        stopAt: 640,
     },
     // The workspace
     { name: "workspace-editor", path: "/workspace/api/src/db/schema.ts", waitFor: "text=deletedAt", settleMs: 1800, clip: "area" },
@@ -245,14 +269,17 @@ const SHOTS: Shot[] = [
     {
         name: "sandbox-environment",
         path: "/sandbox/environment",
-        waitFor: "text=Dockerfile",
+        /* The tab this shot opens: waiting on it is waiting for the surface, and it cannot go stale separately. */
+        waitFor: 'button:text-is("Recipe")',
         click: ['button:text-is("Recipe")'],
         settleMs: 1600,
         clip: "area",
         stopAt: 620,
     },
     // Stops after the account picker: below it sit the recording's savings figures, which are not ours to quote.
-    { name: "sandbox-agent", path: "/sandbox/agent", waitFor: "text=AI ACCOUNT", settleMs: 1400, clip: "area", stopAt: 480 },
+    // Waits on the account itself, not on the section's heading: the heading is painted immediately and the rows
+    // under it are two skeleton bars until the daemon read lands, which is what the last run shipped.
+    { name: "sandbox-agent", path: "/sandbox/agent", waitFor: "text=Claude Max", settleMs: 1400, clip: "area", stopAt: 480 },
     // Mobile — the same app, its own shell
     // Same reason the desktop board opens a conversation first: without it the Active lane leads with an empty
     // "New agent" draft card, which is a truthful screen and a confusing screenshot.
@@ -264,6 +291,8 @@ const SHOTS: Shot[] = [
         waitFor: "text=ATTENTION",
         settleMs: 1400,
         dpr: DENSE_DPR,
+        /* The phone frame is the whole viewport and cannot be trimmed, so the fixture has to reach the tab bar. */
+        mode: "full",
     },
     /* Reopen the running fixture conversation so mobile chat shows its plan card. */
     {
@@ -284,7 +313,7 @@ const SHOTS: Shot[] = [
         /* Capture automations from the full fixture so the extension is enabled. */
         name: "menu-automate",
         path: "/ext/automations",
-        waitFor: "text=Wake your agent on a schedule",
+        waitFor: "text=CODE CHORES",
         settleMs: 1600,
         clip: "area",
         mode: "full",
@@ -443,7 +472,7 @@ const serveDemo = (): Server => {
 
 /** Where the docked chat starts — the split every desktop clip is taken on. */
 const composerLeft = async (page: Page, fallback: number): Promise<number> => {
-    for (const selector of [COMPOSER, CHAT_PANEL]) {
+    for (const selector of [CHAT_PANEL, COMPOSER]) {
         const box = await page
             .locator(selector)
             .first()
@@ -458,14 +487,39 @@ const composerLeft = async (page: Page, fallback: number): Promise<number> => {
     return fallback;
 };
 
-/* Trim screenshots to the last visible content pixel plus padding. */
-const contentBottom = async (page: Page, from: number, to: number): Promise<number> =>
+/** The gutter left under the content, so a trimmed shot ends on breathing room rather than on a card's edge. */
+const TRIM_PAD = 24;
+
+// How far a cut may be pulled back to clear the element it crossed. Past this the shot keeps the cut it asked for:
+// a snap that travels further is no longer tidying a frame, it is deleting a section of one.
+const SNAP_LIMIT = 340;
+
+// A box this much of the frame or more is a panel, a lane or a toolbar — scenery every cut is necessarily inside,
+// so it cannot veto one. Cards, rows, tiles and buttons all sit well under it, and those are what may not be sliced.
+const SCENERY = 0.45;
+
+/* The strip at the foot of a frame checked for a widowed heading, and the height under which a box is a label. */
+const WIDOW_BAND = 52;
+const LABEL_HEIGHT = 30;
+
+/**
+ * Where to cut a shot's bottom and right edges: at the end of the content, or — when the frame stops short of it —
+ * on a line that crosses no element.
+ *
+ * Trimming to the last inked pixel is not enough on its own. A `stopAt` floor, or a clip that stops at the docked
+ * chat, lands wherever the layout happens to put it, and the shots that shipped show what that costs: a row of
+ * capability tiles cut through their middles, a diff cut mid-line, the "New agent" button cut down its shaft. So a
+ * cut that lands inside the content walks back to the nearest line that crosses nothing, and the frame ends on a
+ * gap between cards instead of through one.
+ */
+const contentFrame = async (page: Page, band: { left: number; floorY: number; floorX: number }): Promise<{ bottom: number; right: number }> =>
     page.evaluate(
-        ({ from: leftEdge, to: rightEdge }) => {
+        ({ left: leftEdge, floorY, floorX, pad, limit, scenery, widow, label }) => {
+            const rightEdge = floorX;
             const height = window.innerHeight;
             const rail = document.querySelector(`.icon-rail`)?.getBoundingClientRect();
             const left = rail === undefined ? leftEdge : Math.max(leftEdge, rail.right);
-            let bottom = 0;
+            const boxes: DOMRect[] = [];
             for (const element of document.querySelectorAll("body *")) {
                 const style = getComputedStyle(element);
                 if (style.position === "fixed" || style.visibility === "hidden" || style.display === "none" || Number(style.opacity) === 0) {
@@ -482,17 +536,55 @@ const contentBottom = async (page: Page, from: number, to: number): Promise<numb
                     element.childElementCount === 0
                         ? (element.textContent ?? "").trim().length > 0 || ["IMG", "SVG", "CANVAS", "VIDEO"].includes(element.tagName)
                         : style.backgroundColor !== "rgba(0, 0, 0, 0)" || style.borderBottomWidth !== "0px";
-                if (ink && box.bottom > bottom) {
-                    bottom = box.bottom;
+                if (ink) {
+                    boxes.push(box);
                 }
             }
-            return Math.ceil(bottom);
+            // 1px of slack either side: a cut that grazes a box's own edge is landing in the gap, not through it.
+            // Only boxes short enough to sit wholly inside the frame get a say; a panel or a lane is scenery the cut
+            // is necessarily within, and letting those vote means no line is ever clear.
+            const crossed = (y: number): boolean =>
+                boxes.some((box) => box.height < height * scenery && box.top < y - 1 && box.bottom > y + 1);
+            // Walks up from the asked-for cut to the first line that crosses nothing, giving up — and keeping the
+            // asked-for cut — once it has travelled further than tidying a frame could justify.
+            const walkBack = (asked: number): number => {
+                for (let line = Math.round(asked); line > asked - limit; line -= 1) {
+                    if (!crossed(line)) {
+                        return line;
+                    }
+                }
+                return Math.round(asked);
+            };
+            // Never end on a widowed section heading. A clear line often falls in the gap a heading opens ABOVE its
+            // own rows, which leaves the shot ending on a label with nothing under it — "PLAN LIMITS", "AGENT
+            // ENGINES" — and that reads as a cut through the section rather than as a list that carries on. So when
+            // the last band of the frame holds nothing but label-height boxes, the cut goes above them instead.
+            const unwidow = (line: number): number => {
+                // Boxes wholly inside the last band. Ones that merely reach into it from above are the card the
+                // heading follows; ones that run out through the cut are the section it heads, which is exactly the
+                // thing being widowed. Counting either made the guard decline every time.
+                const tail = boxes.filter((box) => box.top > line - widow && box.bottom <= line);
+                if (tail.length === 0 || Math.max(...tail.map((box) => box.height)) > label) {
+                    return line;
+                }
+                const above = Math.floor(Math.min(...tail.map((box) => box.top))) - 8;
+                return above > 0 && !crossed(above) ? above : line;
+            };
+            const inked = (pick: (box: DOMRect) => number): number => Math.ceil(Math.max(0, ...boxes.map(pick)));
+            const bottomInk = inked((box) => box.bottom);
+            return {
+                // A floor past the end of the content is already in empty canvas, so it needs no snapping, only the
+                // pad — and no widow guard either, since a short last row there is the end of the list, not a
+                // heading over rows the frame cut off.
+                bottom: bottomInk + pad <= floorY ? bottomInk + pad : unwidow(walkBack(floorY)),
+                // The right edge is never snapped, only trimmed. Its floor is a real layout boundary that content is
+                // entitled to reach, and the only lines clear of a lane grid are the gaps BETWEEN lanes — so a snap
+                // here does not tidy an edge, it deletes a column.
+                right: Math.min(floorX, inked((box) => box.right) + pad),
+            };
         },
-        { from, to },
+        { left: band.left, floorY: band.floorY, floorX: band.floorX, pad: TRIM_PAD, limit: SNAP_LIMIT, scenery: SCENERY, widow: WIDOW_BAND, label: LABEL_HEIGHT },
     );
-
-/** The gutter left under the content, so a trimmed shot ends on breathing room rather than on a card's edge. */
-const TRIM_PAD = 24;
 
 /**
  * The dark twin's box, in CSS pixels, read from its PNG header.
@@ -523,29 +615,47 @@ const twinBox = (shot: Shot): { width: number; height: number } | undefined => {
     return { width: header.readUInt32BE(16) / dpr, height: header.readUInt32BE(20) / dpr };
 };
 
-const clipFor = async (page: Page, shot: Shot): Promise<{ x: number; y: number; width: number; height: number } | undefined> => {
+interface Clip {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
+/** A light shot's frame, copied from its dark twin. `full` is a twin that filled its window, i.e. was not clipped. */
+const twinClip = (shot: Shot): Clip | "full" | undefined => {
     const twin = twinBox(shot);
-    if (twin !== undefined) {
-        const paired = shot.viewport ?? (shot.mobile === true ? MOBILE : DESKTOP);
-        // A twin that fills the window was shot unclipped; keep it that way rather than inventing a box.
-        if (twin.width >= paired.width - 1 && twin.height >= paired.height - 1) {
-            return undefined;
-        }
-        // The chat is flush right, the workspace flush left: that is the whole of where a clip can start.
-        return { x: shot.clip === "chat" ? paired.width - twin.width : 0, y: 0, width: twin.width, height: twin.height };
+    if (twin === undefined) {
+        return undefined;
+    }
+    const paired = shot.viewport ?? (shot.mobile === true ? MOBILE : DESKTOP);
+    if (twin.width >= paired.width - 1 && twin.height >= paired.height - 1) {
+        return "full";
+    }
+    // The chat is flush right, the workspace flush left: that is the whole of where a clip can start.
+    return { x: shot.clip === "chat" ? paired.width - twin.width : 0, y: 0, width: twin.width, height: twin.height };
+};
+
+const clipFor = async (page: Page, shot: Shot): Promise<Clip | undefined> => {
+    const paired = twinClip(shot);
+    if (paired !== undefined) {
+        return paired === "full" ? undefined : paired;
     }
     if (shot.clip === undefined) {
         return undefined;
     }
     const window = shot.viewport ?? DESKTOP;
+    // The two panes are flush: the workspace runs from the icon rail to exactly where the chat panel starts. An
+    // earlier version cut 26px back from that line as "gutter belonging to neither panel", and it belongs to both
+    // — every `area` shot lost the right end of its own header (the New agent button, sliced mid-word) and every
+    // `chat` shot opened on a 26px strip of the workspace behind it.
     const split = await composerLeft(page, window.width);
-    // 26px of gutter on the chat side of the split belongs to neither panel.
-    const [x, width] = shot.clip === "area" ? [0, split - 26] : [split - 26, window.width - split + 26];
-    if (shot.fullHeight === true) {
-        return { x, y: 0, width, height: window.height };
-    }
-    const measured = await contentBottom(page, x, x + width);
-    const height = Math.min(measured + TRIM_PAD, shot.stopAt ?? window.height, window.height);
+    const x = shot.clip === "area" ? 0 : split;
+    const frame = await contentFrame(page, { left: x, floorX: shot.clip === "area" ? split : window.width, floorY: shot.stopAt ?? window.height });
+    // Only the right edge of an `area` clip may come in off the split, and only to drop dead canvas: a surface whose
+    // content genuinely reaches the chat has nothing to trim, and pulling that cut back would delete a whole column.
+    const width = shot.clip === "area" ? frame.right : window.width - x;
+    const height = shot.fullHeight === true ? window.height : Math.min(frame.bottom, window.height);
     return { x, y: 0, width, height };
 };
 
@@ -557,6 +667,9 @@ const shootPopout = async (page: Page, shot: Shot, popout: NonNullable<Shot["pop
         await window.setViewportSize({ width: popout.width, height: popout.height });
         // The popped-out window is the chat and nothing else, so the panel itself is what "it has rendered" means.
         await window.waitForSelector(CHAT_PANEL, { timeout: 20_000 });
+        // Belt and braces over the context's init script, which demonstrably does not reach this window: both
+        // hero-chat shots came back with the demo's mode switcher across the bottom even with the script installed.
+        await window.addStyleTag({ content: HIDE_DEMO_CHROME });
         for (const target of popout.press ?? []) {
             await window.click(target, { timeout: 20_000 });
             await window.waitForTimeout(600);
@@ -572,7 +685,7 @@ const shootPopout = async (page: Page, shot: Shot, popout: NonNullable<Shot["pop
 const scrollPane = async (page: Page, shot: Shot, by: number): Promise<void> => {
     const width = (shot.viewport ?? DESKTOP).width;
     const split = shot.clip === undefined ? width : await composerLeft(page, width);
-    const [from, to] = shot.clip === "chat" ? [split - 26, width] : [0, shot.clip === "area" ? split - 26 : width];
+    const [from, to] = shot.clip === "chat" ? [split, width] : [0, shot.clip === "area" ? split : width];
     // Named apart from the outer three on purpose: the page's copy of them lives in another realm, and one
     // spelling for both is the kind of shadowing that reads as the same variable when it never can be.
     await page.evaluate(
@@ -622,6 +735,18 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
         },
         LIGHT ? { scheme: `light`, skin: `none` } : { scheme: `dark`, skin: `sanctum` },
     );
+    // Before first paint, and in every window the context opens. `raw` shots get it too: the visitor page carries
+    // neither selector, so the rule is inert there rather than conditional here.
+    await context.addInitScript((css: string) => {
+        const style = document.createElement(`style`);
+        style.textContent = css;
+        const attach = (): void => (document.head ?? document.documentElement).append(style);
+        if (document.head === null) {
+            document.addEventListener(`DOMContentLoaded`, attach, { once: true });
+        } else {
+            attach();
+        }
+    }, HIDE_DEMO_CHROME);
     /* Set fixture mode before app boot so every navigation keeps it. */
     if (shot.mode !== undefined) {
         await context.addInitScript((mode) => window.sessionStorage.setItem(`intentic.demo.mode`, mode), shot.mode);
@@ -634,9 +759,6 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
             await page.waitForTimeout(2_400);
         }
         await page.goto(shot.raw === true ? `${ORIGIN}${shot.path}` : demoUrl(shot.path), { waitUntil: "domcontentloaded" });
-        if (shot.raw !== true) {
-            await page.addStyleTag({ content: HIDE_DEMO_CHROME });
-        }
         if (shot.waitFor !== undefined) {
             await page.waitForSelector(shot.waitFor, { timeout: 20_000 }).catch(() => console.warn(`  [no waitFor ${shot.name}] ${shot.waitFor}`));
         }

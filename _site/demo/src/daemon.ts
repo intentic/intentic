@@ -352,9 +352,16 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     // Refused like commit and push: there is no remote to publish to.
     [`POST`, `/git/{repo}/publish-file`, () => json(PUBLISH_REFUSAL)],
 
-    // One connected Claude subscription; the composer's account gate needs at least one to stop waiting.
-    [`GET`, `/claude/accounts`, () => json({ accounts: [DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND] } satisfies OauthAccountList)],
-    [`GET`, `/grok/accounts`, () => json({ accounts: [] } satisfies OauthAccountList)],
+    // One connected Claude subscription; the composer's account gate needs at least one to stop waiting. The path is
+    // the daemon's own `/accounts/{provider}` (provider-module.ts). It used to be `/{provider}/accounts` here, and
+    // when the app moved, every read 404'd: `accountsLoaded` never flipped, so the Agent tab drew skeleton rows and
+    // the chat said "Checking your AI accounts…" for as long as you left it open — including in the marketing shots.
+    [
+        `GET`,
+        `/accounts/{provider}`,
+        ({ param }) =>
+            json({ accounts: param(`provider`) === `claude` ? [DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND] : [] } satisfies OauthAccountList),
+    ],
     // Codex authenticates only through the translator, not an oauth account.
     [`GET`, `/translator/accounts`, () => json(DEMO_TRANSLATOR_ACCOUNTS)],
     // An unconnected provider answers empty, matching the real daemon's behavior.
