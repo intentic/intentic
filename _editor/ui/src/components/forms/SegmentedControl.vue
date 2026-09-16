@@ -2,11 +2,13 @@
 <script setup lang="ts" generic="T extends string">
 import type { IconName } from "../../icons/iconSets.js";
 import { useDevice } from "../../composables/useDevice.js";
+import { ui } from "../../lib/ui.js";
 import { countBadgePlate, countBadgeText } from "../feedback/countBadge.js";
 
 const {
     options,
     size = `sm`,
+    variant = `pills`,
     stretch = false,
     wrap = false,
 } = defineProps<{
@@ -28,6 +30,11 @@ const {
     }[];
     // sm: viewer toggles; xs: cramped rows (e.g. the workspace filter bar).
     size?: `sm` | `xs`;
+    // - pills: a track of toggles, for switching a view INSIDE a panel that keeps its own frame.
+    // - underline: tabs with no track at all, for the switch that says what a whole column or pane IS. Reach for it
+    //   where the control would otherwise stack a second bordered box on a surface that already has one.
+    // `stretch` is a pills-only shape; underline sizes itself to its labels, since a tab reads as a heading.
+    variant?: `pills` | `underline`;
     // Full-width, thumb-height track for a task step on a narrow screen; compact is a mouse control elsewhere.
     stretch?: boolean;
     // Lets the row, not a pill, break when options overflow; off by default since a toolbar row is fixed-height.
@@ -36,7 +43,8 @@ const {
 
 const model = defineModel<T>({ required: true });
 
-// Derived from the device, not a prop, so `touch-target` applies automatically to a coarse pointer everywhere.
+// Derived from the device, not a prop, so a coarse pointer is served everywhere without a call site opting in. The
+// pill leaves it to `touch-target`'s CSS overlay; the underline tab reads this and grows for real (see below).
 const { coarse } = useDevice();
 
 // Accessible name folds the hover hint in, since a phone never sees the tooltip; always prefixed with the visible
@@ -51,6 +59,17 @@ const nameOf = (option: { label: string; title?: string; markTitle?: string; mar
 // the pill's 16px line box: at the label's own size it filled that box edge to edge and read as a second control
 // rather than a count on one. The rail's is bigger because it floats in a tile's corner, owing no line its height.
 const CHIP = `ml-1 inline-flex h-[1.35em] min-w-[1.35em] items-center justify-center rounded-full px-[0.3em] text-3xs font-semibold leading-none tabular-nums`;
+
+// One step up the type scale from the pill of the same `size`, deliberately: a pill labels a control, where a tab
+// names what the reader is looking at, and at the pill's size it read as a control that had lost its box. The
+// padding is under the label only — the rule has to clear the descenders without floating away from the word.
+//
+// Real height on a coarse pointer, NOT `touch-target`: that overlay is centred on its element, so on a 24px tab it
+// reaches 10px past the strip and takes presses meant for whatever sits under it (in the chat rail, the filter
+// field 6px below). `items-end` spends the extra height upward, so the label keeps its rule and the target grows
+// into the header's own margin instead.
+const underlineTab = (active: boolean): string =>
+    ui.tab(active, coarse.value ? `flex min-h-11 items-end` : ``, size === `xs` ? `pb-1.5 text-xs` : `pb-2 text-sm`);
 </script>
 
 <template>
@@ -58,7 +77,14 @@ const CHIP = `ml-1 inline-flex h-[1.35em] min-w-[1.35em] items-center justify-ce
         role="tablist"
         class="flex items-center"
         :class="[
-            stretch ? [`w-full gap-1 rounded-lg border border-line bg-canvas`, size === `xs` ? `p-0.5` : `p-1`] : `gap-0.5`,
+            variant === `underline`
+                ? // No track, no fill, no radius, and no inset: the tabs sit on whatever surface hosts them, flush
+                  // with its edge, so a tab's label lines up with the left edge of whatever is stacked under it.
+                  // `gap-4`, because with nothing boxing a tab, the space beside it is all that separates the two.
+                  `gap-4`
+                : stretch
+                  ? [`w-full gap-1 rounded-lg border border-line bg-canvas`, size === `xs` ? `p-0.5` : `p-1`]
+                  : `gap-0.5`,
             wrap ? `flex-wrap gap-y-1` : ``,
         ]"
     >
@@ -70,8 +96,9 @@ const CHIP = `ml-1 inline-flex h-[1.35em] min-w-[1.35em] items-center justify-ce
             :aria-selected="model === option.value"
             :aria-label="nameOf(option)"
             v-tooltip.bottom="option.markTitle ?? option.title"
-            class="cursor-pointer rounded-md font-medium transition-colors"
-            :class="[
+            class="cursor-pointer transition-colors"
+            :class="variant === `underline` ? underlineTab(model === option.value) : [
+                `rounded-md font-medium`,
                 model === option.value ? `ui-pill-on` : `text-muted hover:text-content`,
                 // Only the compact pill needs it. The stretch track is already ≥36px and its pills sit edge to
                 // edge inside a bordered box, so an overlay reaching 44px would spill past that border and

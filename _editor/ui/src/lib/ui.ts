@@ -93,6 +93,19 @@ const overlayChip = (...twClasses: string[]) =>
 /** Uppercase section heading label (e.g. "CONNECTIONS", "YOUR APPS"). */
 const sectionLabel = (...twClasses: string[]) => twMerge(`text-xs font-semibold uppercase tracking-wide text-subtle`, ...twClasses);
 
+// One tab in a row that says which view a column or a pane is showing (the workspace's file strip,
+// `SegmentedControl variant="underline"`). The state argument is not a convenience: the inactive tab carries a
+// TRANSPARENT rule of the same weight, so moving the selection shifts nothing, and a definition that gave only the
+// active one its border would let that fact drift. Ink and rule carry the state, never WEIGHT: a bolder label is a
+// wider label, so the tabs beside it move by a pixel every time the selection does. Fill and separators belong to
+// the strip, not here.
+const tab = (active: boolean, ...twClasses: string[]) =>
+    twMerge(
+        `cursor-pointer border-b-2 transition-colors`,
+        active ? `border-b-primary-500 text-content` : `border-b-transparent text-muted hover:text-content`,
+        ...twClasses,
+    );
+
 export const ui = {
     iconButton,
     linkButton,
@@ -104,4 +117,5 @@ export const ui = {
     addTile,
     overlayChip,
     sectionLabel,
+    tab,
 };

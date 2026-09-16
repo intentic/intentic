@@ -234,7 +234,7 @@ const open = (): void => surface.openFile?.(path);
         <div class="flex items-center gap-2" :class="framed ? `` : `rounded-md border border-line bg-canvas/40 px-2 py-1`">
             <button
                 type="button"
-                class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-500 text-2xs text-white transition-[background-color,transform] hover:bg-primary-400 active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+                class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-fill text-2xs text-fill-content transition-[background-color,transform] hover:bg-primary-fill-hover active:scale-95 disabled:pointer-events-none disabled:bg-[var(--ui-button-off-fill)] disabled:text-[var(--ui-button-off-content)]"
                 :disabled="src === undefined || undecodable"
                 :aria-label="playing ? `Pause ${name}` : `Play ${name}`"
                 @click="toggle"
@@ -277,7 +277,7 @@ const open = (): void => surface.openFile?.(path);
                     <span
                         v-for="(height, index) in bars"
                         :key="index"
-                        class="min-w-px flex-1 rounded-full bg-primary-500 transition-[height] duration-500"
+                        class="min-w-px flex-1 rounded-full bg-primary-fill transition-[height] duration-500"
                         :style="{ height: `${BAR_FLOOR + height * (100 - BAR_FLOOR)}%` }"
                     ></span>
                 </div>
@@ -285,7 +285,7 @@ const open = (): void => surface.openFile?.(path);
                      a drag is happening: at rest the playhead is the position, and a standing label is noise. -->
                 <span
                     v-if="scrubTime !== undefined"
-                    class="pointer-events-none absolute -top-1 -translate-x-1/2 -translate-y-full rounded bg-primary-500 px-1.5 py-0.5 text-2xs tabular-nums text-white shadow"
+                    class="pointer-events-none absolute -top-1 -translate-x-1/2 -translate-y-full rounded bg-primary-fill px-1.5 py-0.5 text-2xs tabular-nums text-fill-content shadow"
                     :style="{ left: `clamp(1.25rem, ${progressed * 100}%, calc(100% - 1.25rem))` }"
                     >{{ formatDuration(displayTime) }}</span
                 >
@@ -308,7 +308,7 @@ const open = (): void => surface.openFile?.(path);
         <!-- Upload progress: the one thing drawn here that is about the transfer rather than the sound. -->
         <div
             v-if="progress !== undefined"
-            class="absolute inset-x-0 bottom-0 h-0.5 bg-primary-500"
+            class="absolute inset-x-0 bottom-0 h-0.5 bg-primary-fill"
             :style="{ width: `${Math.round(progress * 100)}%` }"
         ></div>
     </div>

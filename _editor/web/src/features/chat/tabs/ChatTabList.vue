@@ -559,12 +559,12 @@ const keepTab = (event: Event, id: string): void => {
     <div class="flex min-h-0 flex-col gap-1.5">
 <!-- Reading order top to bottom: narrow with the filter, pick a lane, and when the query reaches past what's open, the "Not open" group at the foot. -->
 <!-- The `Aa` case toggle mirrors the board's: a mode only one of the two search boxes could see or undo would be confusing. -->
-<!-- Full-width because this switch decides what the column IS, not a filter on it — it reads as the column's own header. -->
+<!-- Tabs, not a pill track: this switch decides what the column IS, so it reads as the column's own header — and a bordered track here stacked a second box directly above the filter field's, which made the header two grey boxes rather than a heading over a control. -->
         <SegmentedControl
             :model-value="grouping"
             :options="GROUPINGS"
             size="xs"
-            stretch
+            variant="underline"
             class="shrink-0"
             @update:model-value="(next: ChatGrouping) => setGrouping(next)"
         />
