@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { classifyFailure, type ConnectionFailure } from "../live/connection";
 import { DETACHED_AFTER_MS } from "../overview/availability";
+import { RESTART_PATIENCE_MS } from "../live/sandboxRestart";
 import { connectionNotice, type ConnectionNoticeInput, HOSTED_STUCK_AFTER_MS, OWN_STUCK_AFTER_MS } from "./connectionNotice";
 
 // The ordinary case every test below varies one fact of: somebody's own computer, freshly unreachable.
@@ -128,6 +129,38 @@ describe(`a sandbox the edge says is not dialled in`, () => {
         for (const hostedMachine of [true, false]) {
             expect(notice(detached, { hostedMachine, outageMs: DETACHED_AFTER_MS }).title).toBe(`"laptop" isn't connected`);
         }
+    });
+});
+
+// A restart this browser asked for, minutes ago, on a screen the reader has since left. Everything below is true of
+// a sandbox mid-swap as well — the edge really does hold no tunnel for a container being replaced — so what decides
+// this is not accuracy but which true sentence the reader can act on.
+describe(`a silence this browser asked for`, () => {
+    const detached = classifyFailure({ edge: `no-tunnel`, message: `not connected` });
+    const restart = { title: `Restarting onto the image you built`, detail: `About half a minute, then this page reconnects on its own.` };
+
+    it(`names the reader's own press instead of calling the container absent`, () => {
+        const shown = notice(detached, { outageMs: DETACHED_AFTER_MS, restart });
+        expect(shown.title).toBe(restart.title);
+        expect(shown.body).toBe(restart.detail);
+        expect(shown.waiting).toBe(true);
+        expect(shown.action).toBeUndefined();
+    });
+
+    it(`explains an ordinary silence too, rather than leaving it to the generic wait`, () => {
+        expect(notice(classifyFailure({ closed: true, message: `closed` }), { restart }).title).toBe(restart.title);
+    });
+
+    it(`hands back to the established cause once the restart has taken too long to be one`, () => {
+        const shown = notice(detached, { outageMs: RESTART_PATIENCE_MS, restart });
+        expect(shown.title).toBe(`"laptop" isn't connected`);
+        expect(shown.action).toEqual({ kind: `setup`, label: `Check setup` });
+    });
+
+    it(`never talks over a refusal the platform has already made`, () => {
+        const shown = notice(classifyFailure({ message: `failed to fetch` }), { restart, hostedMachine: true, hoursSpent: true, owner: true });
+        expect(shown.title).toContain(`free hours`);
+        expect(shown.waiting).toBe(false);
     });
 });
 

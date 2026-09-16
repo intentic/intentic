@@ -85,29 +85,28 @@ export const hold = (id: string, source: () => NotificationInput | undefined): (
 };
 
 export const useNotifications = () => {
-    // Confirms success without asking for anything back. Raising one replaces whatever is showing; the host watches
-    // this ref, so a new receipt restarts the dwell.
-    const say = (message: string, undo?: () => void | Promise<void>, undoHint?: string): void => {
+    // The whole receipt channel, for an outcome that wants more than one line: a second sentence, or somewhere to go.
+    // Raising one replaces whatever is showing; the host watches this ref, so a new receipt restarts the dwell.
+    // Anything the user owes an answer to is a `question` instead — this retires itself.
+    const report = (input: Omit<NotificationInput, "kind">): void => {
         raised += 1;
-        receipt.value = {
-            id: `${RECEIPT_ID}:${raised}`,
-            kind: `receipt`,
-            tone: `done`,
-            title: message,
-            actions: undo === undefined ? undefined : [{ label: `Undo`, run: undo, hint: undoHint }],
-        };
+        receipt.value = { ...input, id: `${RECEIPT_ID}:${raised}`, kind: `receipt`, tone: input.tone ?? `done` };
+    };
+
+    // Confirms success without asking for anything back.
+    const say = (message: string, undo?: () => void | Promise<void>, undoHint?: string): void => {
+        report({ tone: `done`, title: message, ...(undo === undefined ? {} : { actions: [{ label: `Undo`, run: undo, hint: undoHint }] }) });
     };
 
     // A calm failure: nothing broke, nothing to fix but wait, so it shares the receipt's self-retiring channel with a
     // different tone. A failure the user must act on is a `question` instead.
     const warn = (message: string): void => {
-        raised += 1;
-        receipt.value = { id: `${RECEIPT_ID}:${raised}`, kind: `receipt`, tone: `problem`, title: message };
+        report({ tone: `problem`, title: message });
     };
 
     const dismissReceipt = (): void => {
         receipt.value = undefined;
     };
 
-    return { notifications, receipt, say, warn, dismissReceipt, hold };
+    return { notifications, receipt, say, warn, report, dismissReceipt, hold };
 };

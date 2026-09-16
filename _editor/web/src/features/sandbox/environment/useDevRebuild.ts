@@ -2,6 +2,8 @@ import { readDevRebuildLog } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, onScopeDispose, reactive, ref } from "vue";
 import { runDeviceCommand } from "../devices/useDevices";
 import { SandboxHttpError } from "../client/sandboxClient";
+import { useSandbox } from "../client/useSandbox";
+import { expectRestart, type RestartQuiet } from "../live/sandboxRestart";
 import { removeStoredValue, storedValue, storeValue } from "../../../lib/browserStorage";
 import { beginHubWork, hubWorkKey } from "../../../shell/hub/hubWork";
 
@@ -47,6 +49,22 @@ export interface DevRebuildRun {
 const LIVE: ReadonlySet<DevRebuildPhase> = new Set(["starting", "building", "restarting"]);
 export const rebuildRunning = (phase: DevRebuildPhase): boolean => LIVE.has(phase);
 
+/**
+ * How long a run took, in words. Minutes first, because every rebuild worth watching is minutes; seconds padded so
+ * the number stops jittering. Shared, so the card and the receipt raised for a reader who left it never disagree.
+ */
+export const rebuildElapsedLabel = (seconds: number | undefined): string | undefined => {
+    if (seconds === undefined) {
+        return undefined;
+    }
+    const minutes = Math.floor(seconds / 60);
+    return minutes === 0 ? `${seconds}s` : `${minutes}m ${String(seconds % 60).padStart(2, `0`)}s`;
+};
+
+/** Seconds a settled run took; undefined for one adopted mid-flight, whose start nothing here ever saw. */
+export const rebuildSeconds = (run: DevRebuildRun): number | undefined =>
+    run.startedAt === undefined ? undefined : Math.max(0, Math.round(((run.endedAt ?? Date.now()) - run.startedAt) / 1000));
+
 // Slow enough not to tax a laptop over its own tunnel, fast enough that the pane moves while you watch it.
 const POLL_MS = 4_000;
 // A clock of its own, so elapsed time keeps counting between polls.
@@ -80,16 +98,37 @@ const runs = new Map<string, DevRebuildRun>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 const probedAt = new Map<string, number>();
 
-// The Environment row's mark, held for as long as this browser is following a build. It is kept here rather than by
-// the card for the same reason the run is: the reader leaves the section precisely because the build doesn't need
-// them, and the row is the only thing left saying it is still going.
+// WHAT IS LEFT ON SCREEN OF A BUILD THE READER WALKED AWAY FROM, held for as long as this browser is following one.
+// Both are kept here rather than by the card for the same reason the run is: the reader leaves the section precisely
+// because the build doesn't need them. The hub row carries it while they are still in the hub; the restart
+// expectation carries it everywhere else, and through the swap that ends it — which is the part that reaches them
+// wherever they are, as a workspace that stops answering.
 const ENVIRONMENT_ROW = hubWorkKey(`sandbox`, `environment`);
+const WHAT = `Rebuilding from your checkout`;
+// The card's own `restarting` line, said to a reader who is no longer on the card. Hedged on WHEN, not on what: a
+// poll four seconds stale can't tell the swap from a machine the build has buried, and both are this rebuild's doing.
+const QUIET: RestartQuiet = {
+    title: `Restarting onto the image you built`,
+    detail: `Your rebuild swaps this sandbox onto its new image when it's done: about half a minute of quiet, then this page reconnects on its own. Your files in /work are kept.`,
+};
 const marks = new Map<string, () => void>();
 
 const mark = (slug: string): void => {
-    if (!marks.has(slug)) {
-        marks.set(slug, beginHubWork(ENVIRONMENT_ROW, `Rebuilding from your checkout`));
+    if (marks.has(slug)) {
+        return;
     }
+    // No sandbox selected means nothing is reading the ledger either: the hub row still marks, and the expectation
+    // would have no surface to appear on.
+    const sandbox = useSandbox().activeSandboxId.value;
+    const ends = [
+        beginHubWork(ENVIRONMENT_ROW, WHAT),
+        ...(sandbox === undefined ? [] : [expectRestart({ sandbox, id: `dev-rebuild`, what: WHAT, quiet: QUIET })]),
+    ];
+    marks.set(slug, () => {
+        for (const end of ends) {
+            end();
+        }
+    });
 };
 
 const unmark = (slug: string): void => {

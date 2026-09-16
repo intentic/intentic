@@ -1,10 +1,12 @@
 import { computed } from "vue";
 import { plural } from "@intentic/base/format";
+import { useNow } from "@intentic/ui/async";
 import PushQuestionBody from "./PushQuestionBody.vue";
 import UploadProgressBody from "../../features/workspace/files/upload/UploadProgressBody.vue";
 import { useAppUpdate, type AppUpdate } from "../../app/appUpdate";
-import { hold, type NotificationTone } from "./notifications";
-import { sandboxRequiresGate } from "../../features/sandbox/overview/availability";
+import { hold, type NotificationInput, type NotificationTone } from "./notifications";
+import { type SandboxAvailability, sandboxRequiresGate } from "../../features/sandbox/overview/availability";
+import { RESTART_PATIENCE_MS, restartExpected, type RestartWork } from "../../features/sandbox/live/sandboxRestart";
 import { useLocalShortcut } from "../../features/sandbox/devices/loopback/localShortcut";
 import { useEndpoint } from "../../features/sandbox/secrets/useEndpoint";
 import { useSandbox } from "../../features/sandbox/client/useSandbox";
@@ -101,17 +103,45 @@ const uploadHeadline = (phase: UploadPhase, state: UploadState): UploadHeadline 
     }
 };
 
+// Every way a sandbox mid-swap looks from here, which is all three of them: the first half minute nobody bothers a
+// reader about, the outage past it, and the edge's own verdict that no tunnel is dialled in — true of a container
+// being replaced, and the one that used to make this card vanish twenty seconds into a restart.
+const QUIET: ReadonlySet<SandboxAvailability> = new Set([`stale`, `busy`, `detached`]);
+
+// THE SILENCE THIS BROWSER ASKED FOR, said as soon as it starts rather than after the busy threshold. `stale` is
+// invisible by design — a reconnect shorter than 30s isn't worth a card — but that rule is about silence nobody can
+// account for. This is its opposite: the workspace is being interrupted by something the reader pressed, possibly
+// minutes ago, on a screen they have since left. No action, because there is nothing to press: the swap is already
+// under way and the page reconnects itself. Past the patience window it says nothing rather than keep promising half
+// a minute, and the causes that were always here speak again.
+export const restartCard = (
+    restart: RestartWork | undefined,
+    availability: SandboxAvailability,
+    outageMs: number,
+): NotificationInput | undefined =>
+    restart !== undefined && QUIET.has(availability) && outageMs < RESTART_PATIENCE_MS
+        ? { kind: `condition`, tone: `info`, icon: `refresh`, spin: true, title: restart.quiet.title, detail: restart.quiet.detail }
+        : undefined;
+
 // Call order is stack order, growing up from the corner: most transient first (upload, seconds) to most permanent
 // last (a new build), so frequent changes never shove a fixed one.
 export const startNotificationSources = (): void => {
     // useSandboxAvailability binds to the caller's Vue scope, so this must run from a component's setup.
     const { user } = useAuth();
-    const { reachable, connection } = useSandbox();
+    const { activeSandboxId, reachable, connection } = useSandbox();
     const { presentedEmail, invalidateSession, getSessionToken } = useSandboxSession();
     const { clearCredential } = useGoogleIdentity();
     const { hasSnapshot } = useWorkspaceTree();
     const availability = useSandboxAvailability(hasSnapshot);
     const gated = computed(() => sandboxRequiresGate(reachable.value, hasSnapshot.value, availability.value));
+    // How long this outage has run, on a clock that only ticks while one is running and a restart is what it might
+    // be: the restart card is the only thing here that stops being true with time rather than with state.
+    const timing = computed(() => !reachable.value && restartExpected(activeSandboxId.value) !== undefined);
+    const now = useNow(timing);
+    const outageMs = computed(() => {
+        const since = connection.value.unavailableSince;
+        return since === undefined ? 0 : now.value - since;
+    });
 
     // Drops the Google credential and mints a fresh session token; two cards share this for two different reasons
     // (wrong identity, expired session). Awaited so the button stays busy until the token arrives.
@@ -182,10 +212,19 @@ export const startNotificationSources = (): void => {
 
     // Floats over the live DOM rather than replacing it; a never-painted workspace gets a gate instead.
     hold(`sandbox-busy`, () => {
-        if (gated.value || availability.value !== `busy`) {
+        if (gated.value) {
             return undefined;
         }
+        // An expired session outranks a restart: it is the one cause here that waiting cannot repair, and it stays on
+        // the threshold it has always had rather than borrowing the restart's earlier one.
         const needsSignin = connection.value.failure?.kind === `unauthenticated`;
+        const restart = needsSignin ? undefined : restartCard(restartExpected(activeSandboxId.value), availability.value, outageMs.value);
+        if (restart !== undefined) {
+            return restart;
+        }
+        if (availability.value !== `busy`) {
+            return undefined;
+        }
         return {
             kind: `condition`,
             tone: `info`,

@@ -19,6 +19,9 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import { SANDBOX } from "../../../shell/commands/categories";
 import { commandShortcut, registerCommand } from "../../../shell/commands/useCommands";
 import ViewBadgeChip from "../../../core-views/ViewBadgeChip.vue";
+import { RUNNING_MARK_CLASS } from "../../../core-views/viewBadge";
+import TileMark from "../../../shell/rail/TileMark.vue";
+import { restartRunning } from "../live/sandboxRestart";
 import { type SandboxAttentionItem, useSandboxAttention } from "../overview/sandboxAttention";
 import { sandboxIdFromToken } from "../client/sandboxIdFromToken";
 import { sandboxAvailabilityVisual } from "../overview/availability";
@@ -43,13 +46,19 @@ const route = useRoute();
 // Everything the sandbox needs from its owner: a badge from `needs`, plus rows for `needs` and `notes`.
 const { needs: attention, notes: attentionNotes, badge: attentionBadge } = useSandboxAttention();
 const { cmdOs } = useOsPreference();
+// WORK THAT ENDS BY REPLACING THIS SANDBOX, while it is still running. Not on the attention badge, which counts what
+// the sandbox needs from its owner: this needs nothing, interrupts nothing yet, and is over in minutes — a standing
+// badge for it would teach the reader to stop reading the badge. A mark of its own, on its own corner, saying only
+// that something is moving. What it will do is said when it does it, by the lane.
+const restarting = computed(() => restartRunning(sandbox.activeSandboxId.value));
+
 // One label for the whole control, badge included, since a tooltip on the badge would nest inside this one.
 const switcherLabel = computed(() => {
     const name = sandbox.active.value?.name ?? `Sandboxes`;
     const tooltip = attentionBadge.value?.tooltip;
     const status =
         availability.value === `live` || availability.value === `stale` ? undefined : `Sandbox ${availabilityVisual.value.label.toLowerCase()}`;
-    return [name, status, tooltip].filter((part) => part !== undefined).join(` · `);
+    return [name, status, restarting.value, tooltip].filter((part) => part !== undefined).join(` · `);
 });
 
 // A short retry keeps the healthy dot; changing colour is itself the alarm being avoided.
@@ -265,6 +274,15 @@ const confirmRemove = async (): Promise<void> => {
         <!-- Inside the tile, on the same corner and at the same size as every badge on the rail below it: this is
              the same object saying the same kind of thing, and hanging it outside made it look like a different one. -->
         <ViewBadgeChip :badge="attentionBadge" class="sandbox-switcher-mark pointer-events-none absolute right-0.5 top-0.5" aria-hidden="true" />
+<!-- The rail's running mark, in the one corner this tile has spare: its bottom right is the connection dot, which is
+     a different kind of thing and the one thing here that must never be crowded. The sentence rides the control's own
+     label, since a tooltip on a mark inside a tooltipped button nests inside it. -->
+        <TileMark
+            v-if="restarting !== undefined"
+            name="spinner"
+            spin
+            :class="[RUNNING_MARK_CLASS, `sandbox-switcher-mark pointer-events-none absolute bottom-0.5 left-0.5`]"
+        />
         <span
             class="pointer-events-none absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[color:var(--ui-tile-ground)]"
             :class="connectionDotClass"

@@ -9,6 +9,7 @@ import { startBackgroundLoader, stopBackgroundLoader } from "../router/prefetch/
 import { startDraftingReceipts } from "../features/workspace/changes/draftingReceipts";
 import { reportIdle, reportSessionId, reportView } from "./presence/usePresence";
 import { useSandboxLiveness } from "../features/sandbox/overview/useSandboxLiveness";
+import { startRestartWatch } from "../features/sandbox/live/restartWatch";
 import PoppablePanels from "./window/PoppablePanels.vue";
 
 // The signed-in session's live daemon connection and the panels it feeds, mounted above every route
@@ -47,6 +48,10 @@ onUnmounted(() => stopBackgroundLoader());
 
 // Reports a landing's commit message being drafted; the walk-away happens off the Changes panel itself.
 startDraftingReceipts();
+
+// Follows the runs that end in this sandbox being replaced, for the same reason: the restart reaches the reader
+// wherever they are, so what explains it cannot live on the card that started it.
+startRestartWatch();
 </script>
 
 <template>

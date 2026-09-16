@@ -1,5 +1,6 @@
 import { DETACHED_AFTER_MS } from "../overview/availability";
 import type { ConnectionFailure } from "../live/connection";
+import { RESTART_PATIENCE_MS, type RestartQuiet } from "../live/sandboxRestart";
 
 // What the connecting gate says, as a pure function of the classified failure and what the platform knows, so setup,
 // reconnect, sign-in, removal and blocked causes each get their own words and action instead of one generic screen.
@@ -50,6 +51,9 @@ export interface ConnectionNoticeInput {
     // fact no amount of waiting can produce, and the only one that licenses the word "removed".
     readonly removed?: boolean;
     readonly removedBy?: string | null;
+    // A restart this browser asked for (sandboxRestart.ts), still young enough to be what the silence is. The only
+    // input here that explains a wait instead of ending one.
+    readonly restart?: RestartQuiet | undefined;
 }
 
 // The patient wait, in the three shapes the browser can observe; split out since the caller now has a decision to
@@ -181,11 +185,20 @@ const stuckNotice = (input: ConnectionNoticeInput, name: string): ConnectionNoti
         : undefined;
 };
 
+// THE WAIT WITH A KNOWN CAUSE. Ahead of `detached`, which is the one that would otherwise speak: the edge's verdict
+// is true during a swap — the container really isn't dialled in, because it is being replaced — and true is not the
+// same as useful. "Its container isn't running" reads as a fault to somebody whose own press stopped it.
+const restartNotice = (input: ConnectionNoticeInput): ConnectionNotice | undefined =>
+    input.restart === undefined || input.outageMs >= RESTART_PATIENCE_MS
+        ? undefined
+        : { title: input.restart.title, body: input.restart.detail, action: undefined, waiting: true };
+
 // The network-shaped causes read as one thing (a wait) while waiting can still fix them, then as the most specific
 // thing established about them. A refused wake outranks everything, at any age.
 const networkNotice = (input: ConnectionNoticeInput, kind: "timeout" | "closed" | "network" | "detached", name: string): ConnectionNotice =>
     suspendedNotice(input, name) ??
     hoursSpentNotice(input, name) ??
+    restartNotice(input) ??
     detachedNotice(input, name) ??
     stuckNotice(input, name) ??
     waitingNotice(kind, name);

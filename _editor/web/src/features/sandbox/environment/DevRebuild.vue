@@ -3,8 +3,11 @@ import { devRebuildLogPath } from "@intentic/sandbox-contract";
 import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, DeviceRunLog, Notice, type NoticeModel, ui } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import ConnectDeviceHint from "../devices/ConnectDeviceHint.vue";
+import { turnInFlight } from "../../agents/fleet/agentStatus";
+import { useAgents } from "../../agents/fleet/useAgents";
+import { useSandboxSettings } from "../overview/useSandboxSettings";
 import { useHostHolding } from "../devices/useDevices";
-import { type DevRebuildPhase, rebuildRunning, useDevRebuild } from "./useDevRebuild";
+import { type DevRebuildPhase, rebuildElapsedLabel, rebuildRunning, useDevRebuild } from "./useDevRebuild";
 
 // Rebuilding a sandbox whose base was compiled from a checkout, from that checkout. Not HostRecreate's flow: that one
 // swaps between images that already exist, and the image this asks for — the working tree as it is now — is not one of
@@ -108,15 +111,7 @@ const execute = async (): Promise<void> => {
     }
 };
 
-// Minutes first, because every rebuild worth watching is minutes; seconds padded so the number stops jittering.
-const elapsedLabel = computed(() => {
-    const seconds = elapsed.value;
-    if (seconds === undefined) {
-        return undefined;
-    }
-    const minutes = Math.floor(seconds / 60);
-    return minutes === 0 ? `${seconds}s` : `${minutes}m ${String(seconds % 60).padStart(2, `0`)}s`;
-});
+const elapsedLabel = computed(() => rebuildElapsedLabel(elapsed.value));
 
 // Each phase says what is happening to the SANDBOX, since that is what the reader is waiting on — not what the device
 // is doing, and not what this page is doing about it.
@@ -158,6 +153,14 @@ const quiet = computed(() => {
 
 // A read that failed while the build carries on regardless: the machine's own words, not a verdict on the rebuild.
 const hiccup = computed(() => (live.value ? run.trouble : undefined));
+
+// WHAT THE RESTART WILL COST, COUNTED AT THE MOMENT OF ASKING. The build itself interrupts nothing, so the number
+// that matters is read now rather than when the swap lands — by then it is a surprise instead of a decision, and
+// waiting for the fleet to settle is free while nothing has started.
+const { fleet } = useAgents();
+const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
+const { settings } = useSandboxSettings();
+const autoResume = computed(() => settings.value?.autoResumeOnRestart === true);
 </script>
 
 <template>
@@ -251,6 +254,19 @@ const hiccup = computed(() => (live.value ? run.trouble : undefined));
                 </p>
                 <p class="mt-3 text-xs text-muted">
                     Only the sandbox restarts — nothing else on that device is touched. Your files (in /work) are kept.
+                </p>
+<!-- The cost nobody can see from here: what is running now, and whether the restart hands it back. -->
+                <p v-if="midTurn > 0" class="mt-3 text-xs text-warning">
+                    {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now, and the restart interrupts
+                    {{ midTurn === 1 ? `its` : `their` }} work.
+                    <template v-if="autoResume">
+                        {{ midTurn === 1 ? `It is` : `They are` }} picked up again once the sandbox is back, since this sandbox resumes turns after a
+                        restart.
+                    </template>
+                    <template v-else>
+                        This sandbox doesn't resume turns after a restart, so {{ midTurn === 1 ? `it` : `they` }} would have to be sent again. The
+                        build takes minutes — the fleet may well settle before it lands.
+                    </template>
                 </p>
             </ConfirmDialog>
         </template>

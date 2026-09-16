@@ -15,6 +15,8 @@ import {
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { manageDeviceSandbox, useHostRunning } from "../../sandbox/devices/useDevices";
+import { useSandbox } from "../../sandbox/client/useSandbox";
+import { expectRestart, type RestartQuiet } from "../../sandbox/live/sandboxRestart";
 import { useHubWork } from "../../../shell/hub/hubWork";
 import ConnectDeviceHint from "../../sandbox/devices/ConnectDeviceHint.vue";
 import { desktopRecreateLink, desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
@@ -41,6 +43,7 @@ const props = defineProps<{
 }>();
 
 const { cmdOs } = useOsPreference();
+const { activeSandboxId, reachable } = useSandbox();
 const desktop = computed(() => desktopVersion() !== undefined);
 
 // The machine, when it is one this sandbox can ask directly.
@@ -103,6 +106,23 @@ const confirmBody = computed(() => {
     return `${work} — your sandbox keeps working through that — and then your sandbox restarts for about half a minute, after which this page reconnects on its own.`;
 });
 
+// What the sandbox going quiet means while this runs, for every surface that isn't this card. `Download` is absent
+// on purpose: it never touches the container, so a silence during one is not this button's doing.
+const QUIET: Partial<Record<Action, RestartQuiet>> = {
+    Update: {
+        title: `Restarting onto the update`,
+        detail: `The update you applied replaces this sandbox's container — about half a minute, then this page reconnects on its own. Your files in /work are kept.`,
+    },
+    Rebuild: {
+        title: `Restarting onto your rebuilt environment`,
+        detail: `The environment you approved is being swapped in — about half a minute, then this page reconnects on its own. Your files in /work are kept.`,
+    },
+    "Roll back": {
+        title: `Rolling this sandbox back`,
+        detail: `It is restarting onto the image it ran before its last update — about half a minute, then this page reconnects on its own. Your files in /work are kept.`,
+    },
+};
+
 const execute = async (): Promise<void> => {
     confirming.value = false;
     const id = hostId.value;
@@ -113,6 +133,13 @@ const execute = async (): Promise<void> => {
     failure.value = undefined;
     done.value = undefined;
     lines.value = [];
+    // Armed for the whole op, not just its restart: the machine gives no sign of which minute the swap falls in, and
+    // an expectation costs nothing while the sandbox is still answering.
+    const quiet = QUIET[props.action];
+    const sandbox = activeSandboxId.value;
+    const expecting = quiet !== undefined && sandbox !== undefined;
+    const working = expecting ? expectRestart({ sandbox, id: `recreate`, what: WORKING[props.action], quiet }) : undefined;
+    let swapping = false;
     try {
         done.value = await hubWork.track(WORKING[props.action], () =>
             manageDeviceSandbox(id, props.slug, OP[props.action], {
@@ -120,10 +147,21 @@ const execute = async (): Promise<void> => {
                 onLine: (line) => lines.value.push(line),
             }),
         );
+        swapping = true;
     } catch (error) {
+        // THIS REQUEST DIES WITH THE CONTAINER IT REPLACES: it is relayed by the daemon that the recreate throws
+        // away, so a failure here is as likely to BE the restart as to be a refusal of one. A sandbox that is still
+        // answering is what tells the two apart — nothing was replaced, so nothing is coming back.
+        swapping = !reachable.value;
         failure.value = noticeFrom(error, `Couldn't rebuild this host.`);
     } finally {
         running.value = false;
+        working?.();
+        // Handed to the sandbox's own return: this page cannot see the container come up, and the ledger's record is
+        // what every other surface reads the silence by until it does.
+        if (swapping && expecting) {
+            expectRestart({ sandbox, id: `recreate`, what: WORKING[props.action], quiet, untilAnswered: true });
+        }
     }
 };
 

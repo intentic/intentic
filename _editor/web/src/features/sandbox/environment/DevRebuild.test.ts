@@ -24,6 +24,13 @@ vi.mock(`../devices/useDevices`, () => ({
     runDeviceCommand,
 }));
 vi.mock(`../client/sandboxClient`, () => ({ SandboxHttpError: class extends Error {} }));
+vi.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sbx-1`) }) }));
+// What the restart will interrupt, and whether it hands it back: both are read at the moment of asking, so both are
+// driven from here. `turnInFlight` stays real — what counts as mid-turn is not this card's opinion.
+const fleet = ref<{ status: string }[]>([]);
+vi.mock(`../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet }) }));
+const settings = ref<{ autoResumeOnRestart: boolean } | undefined>(undefined);
+vi.mock(`../overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
 
 const { default: DevRebuild } = await import("./DevRebuild.vue");
 // The same module instance the card uses, so a test can put a run in flight without driving the confirm dialog first.
@@ -83,6 +90,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    fleet.value = [];
+    settings.value = undefined;
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
     // A run this test left in flight is module state like the run itself, and would be counted by the next test's
@@ -141,6 +150,41 @@ it(`confirms first, then starts the build and stops offering to start another`, 
     expect(runDeviceCommand).toHaveBeenCalledWith(`host-1`, `dev-rebuild`);
     expect(el.textContent).toContain(`Rebuilding…`);
     expect(buttonSaying(`Rebuilding…`)?.disabled).toBe(true);
+});
+
+// THE COST NOBODY CAN SEE FROM HERE. The build interrupts nothing, so the only moment this is worth saying is the
+// one where it can still be avoided for free: before it starts, when waiting for the fleet to settle costs nothing.
+it(`counts the turns the restart will interrupt before it is agreed to`, async () => {
+    fleet.value = [{ status: `running` }, { status: `idle` }, { status: `starting` }];
+    mount({ slug: nextSlug(), base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
+
+    buttonSaying(`Rebuild from checkout`)?.click();
+    await nextTick();
+
+    expect(document.body.textContent).toContain(`2 agents are mid-turn right now`);
+    expect(document.body.textContent).toContain(`would have to be sent again`);
+});
+
+it(`says the turns come back when this sandbox resumes them after a restart`, async () => {
+    fleet.value = [{ status: `running` }];
+    settings.value = { autoResumeOnRestart: true };
+    mount({ slug: nextSlug(), base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
+
+    buttonSaying(`Rebuild from checkout`)?.click();
+    await nextTick();
+
+    expect(document.body.textContent).toContain(`An agent is mid-turn right now`);
+    expect(document.body.textContent).toContain(`picked up again once the sandbox is back`);
+});
+
+it(`says nothing about interrupted work when there is none to interrupt`, async () => {
+    mount({ slug: nextSlug(), base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
+
+    buttonSaying(`Rebuild from checkout`)?.click();
+    await nextTick();
+
+    expect(document.body.textContent).toContain(`Rebuild this sandbox from your checkout?`);
+    expect(document.body.textContent).not.toContain(`mid-turn`);
 });
 
 // The complaint this card is answering: a message, and nothing else, for minutes.

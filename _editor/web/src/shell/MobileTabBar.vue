@@ -16,6 +16,8 @@ import { pushBadge } from "../features/workspace/push/pushBadge";
 import { useChanges } from "../features/workspace/changes/useChanges";
 import { usePushFlow } from "../features/workspace/push/usePushFlow";
 import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttention";
+import { useSandbox } from "../features/sandbox/client/useSandbox";
+import { restartRunning } from "../features/sandbox/live/sandboxRestart";
 
 // Four fixed tabs: Agents (fleet, "needs you" badge), Review (drafts plus uncommitted changes owed),
 // Menu (what the sandbox needs, standing in for the desktop rail's chip); everything else lives on
@@ -39,6 +41,17 @@ interface Tab {
 const changes = useChanges();
 const pushFlow = usePushFlow();
 const { badge: sandboxBadge } = useSandboxAttention();
+// The Menu tab stands for the sandbox on a phone, so it carries both kinds of news about it: what it needs from its
+// owner (the badge) and work under way that ends by replacing it (the turning mark).
+const { activeSandboxId } = useSandbox();
+const menuBadge = computed<ViewBadge | undefined>(() => {
+    const running = restartRunning(activeSandboxId.value);
+    const badge = sandboxBadge.value;
+    if (badge === undefined && running === undefined) {
+        return undefined;
+    }
+    return { ...badge, ...(running === undefined ? {} : { running }) };
+});
 // The home tab is the maker's Project page when that extension is on, else the file tree; same rule as the rail's
 // seat (registry.ts), so the phone and the desktop agree on where home is.
 const words = useVocabulary();
@@ -97,11 +110,12 @@ const tabs = computed<readonly Tab[]>(() => [
         ...(reviewBadge.value === undefined ? {} : { badge: reviewBadge.value }),
         ...(approvalsTile.value === undefined ? { panel: `changes` as const } : {}),
     },
-    { id: `menu`, to: `/menu`, label: `Menu`, ...(sandboxBadge.value === undefined ? {} : { badge: sandboxBadge.value }) },
+    { id: `menu`, to: `/menu`, label: `Menu`, ...(menuBadge.value === undefined ? {} : { badge: menuBadge.value }) },
 ]);
 
-// Same order as the rail's tileLabel; the only spot badge and note are spelled out for a screen reader.
-const tabLabel = (tab: Tab): string => [tab.label, tab.badge?.tooltip, tab.note?.text].filter((part) => part !== undefined).join(` · `);
+// Same order as the rail's tileLabel; the only spot badge, running work and note are spelled out for a screen reader.
+const tabLabel = (tab: Tab): string =>
+    [tab.label, tab.badge?.tooltip, tab.badge?.running, tab.note?.text].filter((part) => part !== undefined).join(` · `);
 
 const route = useRoute();
 // Matches by path prefix, not active-class (it drops on a splat param). When a tab declares `panel`,

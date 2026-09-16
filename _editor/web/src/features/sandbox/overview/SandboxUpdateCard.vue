@@ -7,6 +7,7 @@ import HostRecreate from "../../capabilities/connect/HostRecreate.vue";
 import { turnInFlight } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { useSandbox } from "../client/useSandbox";
+import { expectRestart, type RestartQuiet } from "../live/sandboxRestart";
 import { useSandboxVersion } from "./useSandboxVersion";
 import { apiClient } from "../../../lib/useApi";
 import { useHubWork } from "../../../shell/hub/hubWork";
@@ -37,14 +38,36 @@ const { active } = useSandbox();
 const hosted = computed(() => (active.value?.hosted ? active.value.id : undefined));
 const { busy: restarting, notice: restartNotice, run: runRestart } = useAsyncAction();
 const hubWork = useHubWork();
+// What the sandbox going quiet means, for every surface that isn't this card.
+const RESTART_QUIET: RestartQuiet = {
+    title: `Restarting onto the new image`,
+    detail: `The update you applied replaces this sandbox's container — about half a minute, then this page reconnects on its own. Your files in /work are kept.`,
+};
+
 const restartHosted = (): Promise<void> =>
     runRestart(
         () =>
             // The row keeps the mark through the half minute the sandbox is down, which is also the half minute
             // this page spends reconnecting.
             hubWork.track(`Restarting this sandbox`, async () => {
-                if (hosted.value !== undefined) {
-                    await apiClient.sandbox.hostedRestart({ sandboxId: hosted.value });
+                const sandbox = hosted.value;
+                if (sandbox === undefined) {
+                    return;
+                }
+                // Armed before the ask: the platform can take the sandbox down before this promise settles, and
+                // nothing here is told when. A refused ask ends it; otherwise the sandbox's own return does.
+                const settled = expectRestart({
+                    sandbox,
+                    id: `update`,
+                    what: `Restarting this sandbox`,
+                    quiet: RESTART_QUIET,
+                    untilAnswered: true,
+                });
+                try {
+                    await apiClient.sandbox.hostedRestart({ sandboxId: sandbox });
+                } catch (error) {
+                    settled();
+                    throw error;
                 }
             }),
         `Could not restart the sandbox.`,

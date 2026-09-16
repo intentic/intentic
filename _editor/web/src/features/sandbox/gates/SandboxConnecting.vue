@@ -7,6 +7,7 @@ import { RouterLink } from "vue-router";
 import { useSandboxSession } from "../client/sandboxSession";
 import { useSandbox } from "../client/useSandbox";
 import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
+import { restartExpected } from "../live/sandboxRestart";
 import { connectionNotice } from "./connectionNotice";
 
 // Shown whenever the active sandbox's daemon isn't reachable. What it says is a pure function of the classified
@@ -23,19 +24,33 @@ const now = useNow(timing);
 // Why the platform refused the last wake, if it did: spent hours (the owner can buy the plan) or the owner's hosted
 // lane switched off (nothing here can lift it).
 const refusal = computed(() => activeWakeRefused.value?.kind);
+// What is ESTABLISHED about this sandbox, apart from its connection: each of these is why the notice is allowed to
+// name a cause rather than describe a silence.
+const known = computed(() => {
+    const box = active.value;
+    return {
+        sandboxName: box?.name,
+        // A machine the platform started for this sandbox, which earns the gate the right to name a cause.
+        hostedMachine: (box?.hosted ?? null) !== null,
+        owner: box?.role === `owner`,
+        // The machine that deleted this sandbox's container reported it on the way out; nothing else can establish this.
+        removed: (box?.removedAt ?? null) !== null,
+        removedBy: box?.removedBy ?? null,
+    };
+});
+
+// Survives the reload as well as the swap (sandboxRestart.ts keeps it in storage), which is what lets a tab opened
+// mid-restart say why this sandbox is quiet instead of asking its reader to guess.
+const restart = computed(() => restartExpected(active.value?.id)?.quiet);
+
 const notice = computed(() =>
     connectionNotice({
+        ...known.value,
+        restart: restart.value,
         failure: connection.value.failure,
-        sandboxName: active.value?.name,
-        // A machine the platform started for this sandbox, which earns the gate the right to name a cause.
-        hostedMachine: (active.value?.hosted ?? null) !== null,
         outageMs: connection.value.unavailableSince === undefined ? 0 : now.value - connection.value.unavailableSince,
         hoursSpent: refusal.value === `hours`,
         suspended: refusal.value === `suspended`,
-        owner: active.value?.role === `owner`,
-        // The machine that deleted this sandbox's container reported it on the way out; nothing else can establish this.
-        removed: (active.value?.removedAt ?? null) !== null,
-        removedBy: active.value?.removedBy ?? null,
     }),
 );
 
