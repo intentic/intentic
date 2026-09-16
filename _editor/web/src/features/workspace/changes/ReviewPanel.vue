@@ -1222,9 +1222,21 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
 
         <div class="min-h-0 flex-1 overflow-auto py-1">
             <!-- Loading appears only before the first answer. -->
+            <!-- Where the incoming rows will appear, so it reads as "on their way here" rather than as a notice about
+                 somewhere else. Above the list, not only in its place: a second land arrives while the first's rows are
+                 already listed. -->
+            <p v-if="changes.landing.value" class="flex items-center gap-1.5 px-3 py-2 text-2xs text-link">
+                <Icon name="spinner" spin class="shrink-0 text-3xs" />
+                <!-- A title long enough to truncate is the common case in a 270px sidebar, so the whole line is owed
+                     on hover; the verb leads so what survives the cut is the part that answers "where is my work". -->
+                <span class="min-w-0 truncate" v-tooltip.right.overflow="`${changes.landing.value}…`">{{ changes.landing.value }}…</span>
+            </p>
             <p v-if="!changes.loaded.value && !changes.error.value" class="px-3 py-2 text-2xs text-subtle">Loading changes…</p>
-            <!-- An explicitly clean tree distinguishes empty results from missing data. -->
-            <p v-else-if="changes.loaded.value && changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">No uncommitted changes.</p>
+            <!-- An explicitly clean tree distinguishes empty results from missing data — but only once it is a claim
+                 anyone can make: mid-land the tree is being written, and the line above already says so. -->
+            <p v-else-if="changes.loaded.value && changes.count.value === 0 && !changes.landing.value" class="px-3 py-2 text-2xs text-subtle">
+                No uncommitted changes.
+            </p>
             <!-- A lit chip over an empty list says so too — otherwise a filtered-to-nothing tree reads as having lost its files. -->
             <p v-else-if="dirty.length === 0 && filterLabel" class="px-3 py-2 text-2xs text-subtle">
                 Nothing from {{ filterLabel }} is left in the tree.

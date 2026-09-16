@@ -132,21 +132,25 @@ const isNavActive = (to: string): boolean => route.path === to || route.path.sta
 // Mirrors the panel's own priority: uncommitted count (size matters) before an outgoing push (a glyph,
 // since size doesn't); a push in flight comes first, being this tile's only sign of it.
 const workspaceBadge = computed<ViewBadge | undefined>(() => {
+    // Orthogonal to whatever the badge SAYS: a running mark is drawn beside the tile, so a land rides whichever badge
+    // wins below and stands alone when none does — the count is still 0 until the patch is in the tree.
+    const landing: Pick<ViewBadge, `running`> = changes.landing.value === undefined ? {} : { running: changes.landing.value };
     const push = pushBadge(pushFlow.stage.value, pushFlow.question.value, pushFlow.held.value);
     if (push !== undefined) {
-        return push;
+        return { ...push, ...landing };
     }
     if (changes.count.value > 0) {
         return {
             count: changes.count.value,
             tooltip: `${changes.count.value} uncommitted ${changes.count.value === 1 ? `change` : `changes`}`,
+            ...landing,
         };
     }
     const work = changes.outgoing.value;
     if (work === undefined) {
-        return undefined;
+        return changes.landing.value === undefined ? undefined : landing;
     }
-    return { mark: outgoingMark(work), tooltip: outgoingSummary(work) };
+    return { mark: outgoingMark(work), tooltip: outgoingSummary(work), ...landing };
 });
 
 // Seated only while chat is docked and not floated, except briefly after popping out from /chat itself.

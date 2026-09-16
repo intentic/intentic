@@ -22,6 +22,7 @@ import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { useRole } from "../../sandbox/secrets/useRole";
 import { refusalSummary } from "../health/fixProposal";
 import { outgoingWork } from "../push/outgoingWork";
+import { landingLine, landingNow } from "./landing";
 import { spliceRepoChanges } from "./spliceRepoChanges";
 import { truncatedTotal } from "./truncation";
 import { resetEditBuffers } from "../files/useEditBuffers";
@@ -43,7 +44,10 @@ const turnsRunning = computed(() => conversations.value.filter((conversation) =>
 // Same window as the file-watcher's own refresh (systemEvents).
 const TURN_END_REFRESH_MS = 1000;
 const refreshReviewable = throttleTrailing(() => {
-    void queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every });
+    // The timeline is cheap and a land's own commits belong on it; the review is neither, so it waits (see below).
+    if (!landingNow.value) {
+        void queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every });
+    }
     void queryClient.invalidateQueries({ queryKey: HISTORY_SNAPSHOTS.every });
 }, TURN_END_REFRESH_MS);
 watch(turnsRunning, (now, was) => {
@@ -180,6 +184,15 @@ const invalidateChanges = (): Promise<void> =>
         queryClient.invalidateQueries({ queryKey: changesKey() }),
         queryClient.invalidateQueries({ predicate: (query) => AGENT_DIFF.matches(query.queryKey) }),
     ]).then(() => undefined);
+
+// A land applying to the tree is the one moment a rescan is both wrong and expensive: the patch is half in, and the
+// scan it would run fights the land for git subprocesses. Both refresh paths park on `landingNow`, and this is what
+// ends the pause — for a land nobody in this browser asked for as much as for one somebody pressed.
+watch(landingNow, (now, was) => {
+    if (was && !now) {
+        void invalidateChanges();
+    }
+});
 
 const post = <T>(repo: string, action: string, body: Record<string, unknown>): Promise<T> =>
     sandboxJson<T>(`/git/${encodeURIComponent(repo)}/${action}`, jsonBody(`POST`, body));
@@ -347,6 +360,10 @@ export function useChanges() {
     const { query, error } = useSandboxQuery({
         queryKey: changesKey(),
         queryFn: fetchChanges,
+        // The gate, not just the invalidations above: with staleTime at 0, opening the panel mid-land would scan on
+        // mount alone — the very case this is about. Held data stays on screen under the strip that explains it, and
+        // re-enabling is itself a refetch, since stale data fetches the moment a query is allowed to run again.
+        enabled: computed(() => !landingNow.value),
         // Reads the cached response rather than closing over the query it configures.
         refetchInterval: (cached) =>
             committingHere.value.length === 0 && (cached.state.data?.committing?.length ?? 0) > 0 ? COMMIT_WATCH_MS : false,
@@ -388,6 +405,11 @@ export function useChanges() {
         // this query about once a second (systemEvents' CHANGES_REFRESH_MS), which would otherwise blink the settled
         // answer back to the waiting line at that cadence.
         loaded: computed(() => query.data.value !== undefined),
+        // Already-phrased line for a land in flight, or undefined. Everything below it in the panel is a claim about
+        // the tree, and while this is set the tree is being written, so the claims yield to it rather than sit beside
+        // it: what is listed is the tree BEFORE the land, by design, since the review deliberately doesn't rescan
+        // mid-land.
+        landing: landingLine,
         error,
         refresh: query.refetch,
         fileDiff,

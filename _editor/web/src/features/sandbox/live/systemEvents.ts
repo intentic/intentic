@@ -11,6 +11,7 @@ import { AGENT_DIFF, GIT_CHANGES, HISTORY_SNAPSHOTS, PANELS } from "../../../lib
 import { queryClient } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
 import { setPresenceUsers } from "../../../shell/presence/usePresence";
+import { landingNow } from "../../workspace/changes/landing";
 import { markDerivedChanged, markWorkspaceChanged, worktreeMovedRecently } from "../../workspace/changes/useWorkspaceLive";
 import { emitRuntimeChanged } from "./runtimeEvents";
 import { resetWorkspaceScopedState } from "../client/sandboxScope";
@@ -24,9 +25,14 @@ import { useSandbox } from "../client/useSandbox";
 // compile error.
 
 // Throttle for review refetches; each one walks every repo and runs `git status` per repo.
-const CHANGES_REFRESH_MS = 1000;
+export const CHANGES_REFRESH_MS = 1000;
 
 const refreshChanges = throttleTrailing(() => {
+    // Nothing worth reading while a land is applying: the patch is half in the tree, and the scan would take the git
+    // subprocesses the land is waiting on. useChanges refetches once the lease clears.
+    if (landingNow.value) {
+        return;
+    }
     void queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every });
     // A review compares the agent's branch against this tree, not just its own commits, so tree changes invalidate it
     // too.

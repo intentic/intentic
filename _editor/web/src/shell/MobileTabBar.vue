@@ -59,17 +59,23 @@ const approvalsTile = useApprovalsTile();
 
 // Falls back to the same push-owed glyph as the desktop rail when nothing else needs review.
 const reviewBadge = computed<ViewBadge | undefined>(() => {
+    // Rides whatever the badge says rather than competing with it: the turning mark has its own corner, and the count
+    // is still 0 until the land's patch is in the tree.
+    const landing: Pick<ViewBadge, `running`> = changes.landing.value === undefined ? {} : { running: changes.landing.value };
     // A push in flight or unsent comes first: it's happening now, and its panel is two taps away.
     const push = pushBadge(pushFlow.stage.value, pushFlow.question.value, pushFlow.held.value);
     if (push !== undefined) {
-        return push;
+        return { ...push, ...landing };
     }
     const count = (approvalsTile.value?.badge?.count ?? 0) + changes.count.value;
     if (count > 0) {
-        return { count, tooltip: `${count} to review` };
+        return { count, tooltip: `${count} to review`, ...landing };
     }
     const work = changes.outgoing.value;
-    return work === undefined ? undefined : { mark: outgoingMark(work), tooltip: outgoingSummary(work) };
+    if (work === undefined) {
+        return changes.landing.value === undefined ? undefined : landing;
+    }
+    return { mark: outgoingMark(work), tooltip: outgoingSummary(work), ...landing };
 });
 
 const tabs = computed<readonly Tab[]>(() => [

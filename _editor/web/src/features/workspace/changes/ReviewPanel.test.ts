@@ -4,6 +4,7 @@
 // second — so a clean tree blinked between its answer and its waiting line for as long as the writes lasted. Only a
 // render can tell those two sentences apart.
 import type { GitChangesResponse } from "@intentic/api-contract";
+import type { AgentSummary } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { afterEach, expect, it, vi } from "vitest";
@@ -11,6 +12,7 @@ import { type App, createApp, h, nextTick } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
 import { signalConnection } from "../../sandbox/client/useSandbox";
+import { registry } from "../../agents/fleet/useAgents-registry";
 import { changesKey } from "./useChanges";
 
 // Every daemon read in the panel's graph goes through this one function. `/git/changes` is handed out a request at a
@@ -60,6 +62,18 @@ afterEach(() => {
     document.body.innerHTML = ``;
     queryClient.clear();
     held.length = 0;
+    registry.value = [];
+});
+
+// One roster entry, cut to what the landing line reads: a conversation's status and what to call it.
+const landing = (title: string): AgentSummary => ({
+    id: `a1`,
+    status: `landing`,
+    title,
+    provider: `claude`,
+    harness: `native`,
+    updatedAt: 0,
+    attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
 });
 
 it(`waits only for the first answer, then keeps it while the daemon is asked again`, async () => {
@@ -81,4 +95,40 @@ it(`waits only for the first answer, then keeps it while the daemon is asked aga
 
     await answer({ repos: [] });
     expect(el.textContent).toContain(`No uncommitted changes.`);
+});
+
+// The complaint this answers: press Land on the board, switch here, and read a flat denial that anything is happening
+// for as long as the patch takes. The list is deliberately the tree from before the land — the review doesn't rescan
+// mid-land — so the one thing it may not do is keep claiming the tree is clean.
+it(`says what is being carried in instead of denying there is anything`, async () => {
+    const el = await mount();
+    await answer({ repos: [] });
+    expect(el.textContent).toContain(`No uncommitted changes.`);
+
+    registry.value = [landing(`Rewrite the parser`)];
+    await nextTick();
+    expect(el.textContent).toContain(`Landing Rewrite the parser…`);
+    expect(el.textContent).not.toContain(`No uncommitted changes.`);
+
+    // And gets out of the way the moment the tree can speak for itself.
+    registry.value = [];
+    await nextTick();
+    expect(el.textContent).not.toContain(`Landing Rewrite the parser…`);
+    expect(el.textContent).toContain(`No uncommitted changes.`);
+});
+
+// The expensive half of the same thing. Opening this panel is itself a read (nothing is ever fresh here), so pressing
+// Land and switching straight to the workspace used to scan every repo against a tree the patch was still being
+// written into — an answer thrown away, taking the git subprocesses the land was queued on with it.
+it(`asks the daemon nothing while a land is applying, and asks once it settles`, async () => {
+    registry.value = [landing(`Rewrite the parser`)];
+    const el = await mount();
+    await settle();
+
+    expect(held).toHaveLength(0);
+    expect(el.textContent).toContain(`Landing Rewrite the parser…`);
+
+    registry.value = [];
+    await settle();
+    expect(held).toHaveLength(1);
 });

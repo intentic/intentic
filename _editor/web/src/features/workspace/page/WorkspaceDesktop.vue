@@ -800,9 +800,9 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                             type="button"
                             :class="ui.iconButton()"
                             @click="changes.refresh()"
-                            v-tooltip.bottom="'Refresh'"
+                            v-tooltip.bottom="changes.landing.value === undefined ? 'Refresh' : `${changes.landing.value}: the tree is being written`"
                             aria-label="Refresh changes"
-                            :disabled="changes.actionBusy.value || changes.fetching.value"
+                            :disabled="changes.actionBusy.value || changes.fetching.value || changes.landing.value !== undefined"
                         >
                             <Icon name="refresh" class="text-xs" :spin="changes.fetching.value || changes.actionBusy.value" />
                         </button>
