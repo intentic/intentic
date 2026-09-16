@@ -25,20 +25,17 @@ import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
 import { openWorkTerminal, useWorkTerminals } from "../../terminal/useWorkTerminals";
 import { useTerminalPanel } from "../../terminal/useTerminalPanel";
 import { useSandboxSession } from "../../sandbox/client/sandboxSession";
-import { useToolCalls } from "../tools/useToolCalls";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
 import ChatCard from "./cards/ChatCard.vue";
 import ChatCommandBlock from "../tools/ChatCommandBlock.vue";
 import ChatDecisionButton from "./cards/ChatDecisionButton.vue";
 import ChatDocumentBody from "./cards/ChatDocumentBody.vue";
 import { capabilityStatus, credentialLane, helpStatus, offerStatus, permissionStatus, planStatus } from "./cards/cardStatus";
-import ChatAside from "./ChatAside.vue";
+import ChatAsideLane from "./ChatAsideLane.vue";
 import ChatNotes from "./ChatNotes.vue";
 import ChatQuestionCard from "./cards/ChatQuestionCard.vue";
-import ChatThinking from "./ChatThinking.vue";
 import ChatTodoList from "./ChatTodoList.vue";
-import ChatToolRows from "../tools/ChatToolRows.vue";
-import ChatToolRun from "../tools/ChatToolRun.vue";
+import ChatTurnAsides from "./ChatTurnAsides.vue";
 import ChatTurnStatus from "./ChatTurnStatus.vue";
 import { present } from "../tools/toolPresentation";
 
@@ -248,8 +245,12 @@ watch(
 // Folded messages never pin, since sticking one would cover the prompt it defers to.
 const defers = computed(() => foldsIntoTurn(props.message));
 
-// An errand is a prompt the app sent on the user's behalf (errands.ts); shown as a label, exact text one click away.
+// An errand is a prompt the app sent on the user's behalf (errands.ts): named in one quiet line, since a turn nobody
+// typed still has to appear as a turn, with the words it actually sent out on the mark beside it.
 const errand = computed(() => errandOf(props.message));
+const errandMarks = computed(() =>
+    errand.value === undefined ? [] : [{ key: `errand`, icon: errand.value.icon, label: errand.value.label }],
+);
 
 // Trailer naming the latest thing keeping this turn going, and how many said the same; shown in-flow so it can't shift
 // the pinned row's height.
@@ -263,9 +264,6 @@ const trailer = computed(() => {
     const label = foldedLabel(last);
     return { label, count: folded.filter((message) => foldedLabel(message) === label).length };
 });
-
-// Whether this transcript draws its tool calls or hides each turn's run behind one mark (see useToolCalls.ts).
-const { showToolCalls } = useToolCalls();
 
 // Pinned state (.chat-prompt-pinned).
 // Whether the prompt is actually stuck (CSS can't ask): compares the row's top to the scroller's edge on scroll and on
@@ -422,10 +420,14 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         @click="onMarkdownClick"
         @pointerdown="copyCodeFromEvent"
     >
-        <!-- The errand pill: what the app asked for and why, opening to the exact words it sent. -->
-        <ChatAside v-if="errand" :icon="errand.icon" :label="errand.label" :detail="errand.detail" end>
-            <pre class="max-h-64 overflow-auto rounded border border-line bg-canvas px-2 py-1 whitespace-pre-wrap">{{ message.text }}</pre>
-        </ChatAside>
+        <!-- One line on the mark's own bar, worded as the trailer a FOLDED errand leaves on the prompt above it, so a
+             turn nobody typed reads the same whichever way it landed. -->
+        <ChatAsideLane v-if="errand" :marks="errandMarks">
+            <span class="min-w-0 truncate text-2xs text-subtle">↳ {{ errand.label }} · {{ errand.detail }}</span>
+            <template #errand>
+                <pre class="chat-inset max-h-64 overflow-auto px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap">{{ message.text }}</pre>
+            </template>
+        </ChatAsideLane>
         <div v-else-if="message.role === 'user'" class="group relative flex max-w-[85%] flex-col items-end gap-1.5">
             <!-- Attachments stack above the prompt when they cannot fit beside it. -->
             <ChatAttachmentStrip
@@ -516,14 +518,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             </template>
         </div>
         <template v-else>
-            <!-- Shared with the Subagents area: a delegated agent's reasoning reads the same as this turn's own. -->
-            <ChatThinking v-if="message.thinking" :thinking="message.thinking" :streaming="streaming" />
-
+            <!-- Shared with the Subagents area: a delegated agent's reasoning and run read as this turn's own do. -->
             <!-- Live marks the bubble currently receiving streamed text. -->
-            <div v-if="message.tools?.length" class="flex w-full flex-col gap-1">
-                <ChatToolRows v-if="showToolCalls" :tools="message.tools" :live="streaming" />
-                <ChatToolRun v-else :tools="message.tools" :live="streaming" />
-            </div>
+            <ChatTurnAsides :thinking="message.thinking" :tools="message.tools" :live="streaming" />
 
             <ChatTodoList v-if="message.todos?.length" :todos="message.todos" :live="streaming" />
 

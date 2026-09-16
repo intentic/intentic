@@ -55,7 +55,7 @@ const hide = (): void => {
         :src="src"
         :alt="alt"
         :class="size"
-        class="shrink-0 cursor-zoom-in rounded border border-line object-cover"
+        class="shrink-0 cursor-zoom-in rounded-md border border-line object-cover"
         @mouseenter="show"
         @mouseleave="hide"
     />

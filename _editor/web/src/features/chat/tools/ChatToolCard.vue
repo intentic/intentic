@@ -209,7 +209,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
 <!-- What the child concluded (its own last words, or the tail of what it printed). -->
             <p
                 v-if="subagent?.summary"
-                class="ml-4 whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs leading-relaxed"
+                class="chat-inset ml-4 px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap"
                 :class="subagent.error ? 'text-danger' : 'text-muted'"
             >
                 {{ subagent.summary }}
@@ -217,7 +217,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             <!-- A sub-agent's own thinking, grouped on its card rather than merged into the parent turn's. -->
             <pre
                 v-if="tool.thinking"
-                class="ml-4 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs italic leading-relaxed text-subtle"
+                class="chat-inset ml-4 max-h-40 overflow-auto px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap italic"
                 >{{ tool.thinking }}</pre>
 <!-- A sub-agent's nested transcript, indented under the delegation so the whole run reads as one unit; recursive. -->
             <div v-if="tool.children?.length" class="ml-4 flex flex-col gap-1">
@@ -229,7 +229,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 v-for="image in view.images"
                 :key="image.path"
                 :type="openFile ? 'button' : undefined"
-                class="ml-4 overflow-hidden rounded border border-line bg-canvas text-left"
+                class="chat-inset ml-4 overflow-hidden text-left"
                 v-tooltip.top="openFile ? 'Open in workspace' : undefined"
                 @click="openFile?.(image.path)"
             >
@@ -254,27 +254,27 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 @open="openFile?.(diff.path)"
             />
 <!-- Body shape chosen by the registry: `command` shows the invocation above its output like a terminal; `files` turns a path listing into navigable rows. -->
-            <div v-if="view.body?.kind === 'command'" class="ml-4 overflow-hidden rounded border border-line bg-canvas">
-                <div v-if="view.body.command" class="flex gap-1.5 border-b border-line px-2 py-1 font-mono text-2xs text-muted">
+            <div v-if="view.body?.kind === 'command'" class="chat-inset ml-4 overflow-hidden">
+                <div v-if="view.body.command" class="chat-inset-rule flex gap-1.5 px-2.5 py-1.5 font-mono text-2xs text-muted">
                     <span class="shrink-0 select-none text-subtle">$</span>
                     <span class="whitespace-pre-wrap">{{ view.body.command }}</span>
                 </div>
                 <pre
                     v-if="view.body.output"
-                    class="max-h-40 overflow-auto whitespace-pre-wrap px-2 py-1 text-2xs leading-relaxed"
+                    class="max-h-40 overflow-auto px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap"
                     :class="failed ? 'text-danger' : 'text-muted'"
                     >{{ view.body.output }}</pre>
             </div>
             <div
                 v-else-if="view.body?.kind === 'files'"
-                class="ml-4 flex max-h-40 flex-col overflow-auto rounded border border-line bg-canvas px-1 py-1"
+                class="chat-inset ml-4 flex max-h-40 flex-col overflow-auto p-1.5"
             >
                 <component
                     :is="openFile ? 'button' : 'div'"
                     v-for="(entry, index) in view.body.entries"
                     :key="`${entry.path}:${entry.line ?? ''}:${index}`"
                     :type="openFile ? 'button' : undefined"
-                    class="flex items-baseline gap-1.5 rounded px-1 py-0.5 text-left font-mono text-2xs text-muted transition-colors"
+                    class="flex items-baseline gap-1.5 rounded-md px-1.5 py-0.5 text-left font-mono text-2xs text-muted transition-colors"
                     :class="openFile && 'hover:bg-overlay hover:text-content'"
                     v-tooltip.top="openFile ? 'Open in workspace' : undefined"
                     @click="openFile?.(entry.path, entry.line)"
@@ -288,7 +288,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             <ChatCodeBody v-else-if="view.body?.kind === 'code'" :code="view.body.code" :lang="view.body.lang" :first-line="view.body.firstLine" />
             <pre
                 v-else-if="view.body"
-                class="ml-4 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-line bg-canvas px-2 py-1 text-2xs leading-relaxed"
+                class="chat-inset ml-4 max-h-40 overflow-auto px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap"
                 :class="failed ? 'text-danger' : 'text-muted'"
                 >{{ view.body.text }}</pre>
         </template>

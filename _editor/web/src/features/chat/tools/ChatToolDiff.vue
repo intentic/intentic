@@ -37,11 +37,11 @@ const rowClass = (row: DiffRow): string => {
 </script>
 
 <template>
-    <div class="ml-4 overflow-hidden rounded border border-line bg-canvas">
+    <div class="chat-inset ml-4 overflow-hidden">
         <component
             :is="openable ? 'button' : 'div'"
             :type="openable ? 'button' : undefined"
-            class="flex w-full items-center gap-1.5 border-b border-line px-2 py-1 text-2xs text-muted transition-colors"
+            class="chat-inset-rule flex w-full items-center gap-1.5 px-2.5 py-1.5 text-2xs text-muted transition-colors"
             :class="openable && 'hover:bg-overlay hover:text-content'"
             v-tooltip.top="openable ? 'Open in workspace' : undefined"
             @click="openable && emit('open')"

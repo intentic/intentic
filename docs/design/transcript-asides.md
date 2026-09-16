@@ -1,77 +1,96 @@
-# Rows and pills: what a transcript says without saying it
+# Marks in the lane: what a transcript says without saying it
 
-Why the turn's thinking, the context the sandbox prepends to a prompt and an app-sent errand are pills on
-an edge rather than bars across the column, and which edge each one takes. The subject is
-`_editor/web/src/features/chat/transcript/ChatAside.vue` and its two callers, `ChatNotes.vue` and
-`ChatThinking.vue`.
+Why the turn's thinking, the context the sandbox prepends to a prompt and an app-sent errand stand in the
+margin as a glyph and a count rather than as bars across the column, and what everything they open is drawn
+on. The subject is `_editor/web/src/features/chat/transcript/ChatAsideLane.vue`, its three callers, and the
+`.chat-mark-*` and `.chat-inset` blocks in `_editor/web/src/features/chat/panel/chat.css`.
 
 ## 1. What was wrong
 
-All three rode on one component, `ChatFold`: a `w-full` button — icon, label, the first words of whatever
-it hid, chevron pinned to the far right edge — opening to a `max-h-64` scroller.
+All of it rode on one component, `ChatFold`: a `w-full` button — icon, label, the first words of whatever it
+hid, chevron pinned to the far right edge — opening to a `max-h-64` scroller.
 
 Two of them landed between the prompt and the answer, which is the highest-attention slot the column has,
-and the material they carried was the least interesting in it. "Sent with your message" is the sandbox's
-own preamble: the project map, the skill catalogue, how to read a message beginning with a slash. Five
-notes, whose titles ran together into a truncated line the width of the pane, and whose text opened
-concatenated into a 16rem porthole — so finding the one note worth reading meant scrolling past four that
-weren't, inside a scroller, inside the transcript's scroller.
+and the material they carried was the least interesting in it. "Sent with your message" is the sandbox's own
+preamble: the project map, the skill catalogue, how to read a message beginning with a slash. Five notes,
+whose titles ran together into a truncated line the width of the pane, and whose text opened concatenated
+into a 16rem porthole — so finding the one note worth reading meant scrolling past four that weren't, inside
+a scroller, inside the transcript's scroller.
 
 The hit target was the whole pane width for something nobody presses.
 
 ## 2. The claim
 
-**Rows are what a turn did. Pills are what it was given or thought.**
+**Everything an agent was GIVEN or THOUGHT stands in the lane past the column.** A hidden run of tool calls
+already did (`ChatToolRun`, since folded into `ChatAsideLane`): a glyph, a count, a hairline ring, out past
+the reading measure where it takes no width from the conversation and costs half a line of height. That mark
+was the answer; it just had one caller.
 
-A tool call is a row: chevron, glyph, name, target in mono, result at the right end. That grammar is
-already the transcript's record of doing, and an aside must not read as one more thing the agent ran. So an
-aside is a pill — `.ui-chip`, the kit's own — which differs from a row in shape, in width and in the fact
-that it is obviously pressable at the size it actually is.
+So there is no second placement to learn, and nothing needed a new icon to carry a distinction:
 
-The plate a pill carries is not the surface the flat pass took off decision cards
-(`flat-decision-cards.md`). A bar spanning the column reads as pressable because it spans the column; a
-100px run of text in the middle of one does not, and the 6% wash is what buys that back at a quarter of
-the width. `ChatToolRun`'s hidden-run mark already made this trade and kept its plate through the same
-pass.
-
-## 3. Which edge
-
-The other half of the answer is placement, and it is not a second vocabulary to learn:
-
-**A pill sits on the edge of the message whose material it is.**
-
-| Aside | Edge | Why |
+| Aside | Mark | Opens to |
 | --- | --- | --- |
-| Notes the sandbox prepended | the prompt's right | they went out *with the user's message*; they are not something the agent did |
-| An errand the app sent | the prompt's right | it is a user turn, written by the app on the user's behalf |
-| The turn's thinking | the answer's left | it is the agent's own, and belongs in the agent's column beside its tool rows |
+| Notes the sandbox prepended | `paperclip` + how many | the list of titles, each opening to its own words |
+| The turn's thinking | `sparkles` | the thought |
+| An errand's exact words | the errand's own glyph | the prompt the app sent |
+| A hidden run of tool calls | the most notable call's glyph + how many | the rows the shown mode draws |
 
-The alternative — one lane for everything quiet — was mocked and rejected: a pill about the *user's*
-message, hanging under the agent's column, reads as something the agent produced. The margin lane past the
-column (where the hidden-run mark lives) was rejected too: it only exists above a 61rem container, it has
-room for a glyph and a count but no label, and the edit pencil and the fork mark are already out there.
+The name is on hover and on `aria-label`, because the lane is 5.75rem and "Sent with your message" is not.
 
-Nothing needed a new icon to carry the distinction. `paperclip` for the notes says attached-to-this-message
-and is claimed by no tool; `sparkles` is the mark the think tool already carries.
+## 3. One bar per row, not one per mark
 
-## 4. Opened, a list before a wall
+A mark is positioned against its bar (`top: 50%`), and a bar's whole height is its padding — 0.5rem. Two
+bars stacked in one message put their marks 0.5rem apart while each is 1.4rem tall, which is two marks drawn
+on top of each other in the margin.
 
-The pill states how much was added. Opening it names each note. Opening a note gives that note's words, one
-at a time, with the leading markdown heading stripped because the row above it already says the title.
+So the bar belongs to the **row**, not to the aside: `ChatAsideLane` takes a list of marks, lays them out in
+one `.chat-mark-lane`, and opens one body at a time under them. That is why `ChatTurnAsides` exists at all —
+an assistant turn's thinking and its hidden run are one row's worth of marks, and something has to own the
+bar they share. It also means a reader never has two things open under one bar arguing about which the bar
+is for.
 
-That is three presses to the project map and one to the list, against one press to a scroller holding all
-five notes at once. It is the right way round: the question a reader has is almost always *what* went with
-the message, not *what every one of them said*.
+## 4. What is NOT a mark
 
-Boxed output — `rounded border border-line bg-canvas` — is the tool card's own body treatment, so reasoning,
-an errand's exact words and a command's output all read as one vocabulary once they are open.
+**An errand is a turn**, not an aside on one. A mark with nothing in flow beside it would make a turn the
+app sent on the user's behalf look like a turn that came from nowhere. So it says one quiet line *on the
+mark's own bar* — worded exactly as the trailer a *folded* errand already leaves on the prompt above it,
+`↳ label · reason` — and the words it actually sent go on the mark like everything else. A bar with
+something to say keeps its height when opened; an empty one folds to nothing and lets the material have the
+row.
 
-## 5. Consequences
+**Tool calls a reader asked to see** are rows, not a mark. That preference is the whole of the question the
+mark otherwise asks.
 
-- `ChatFold.vue` is gone. `ChatAside.vue` replaces it: same three callers, `detail` now meaning a reason the
-  reader is owed (the errand's "Sent by the app, landing this work refused") rather than a preview of the
-  hidden text. The preview moved to the pill's tooltip, where it costs no width.
+## 5. `bg-canvas` is a hole, not a surface
+
+Everything opened in the transcript used to be `rounded border border-line bg-canvas`. Canvas sits *below*
+the panel, so a box drawn on it reads as a hole cut through the turn rather than a part of it, and the
+`text-subtle` ink inside dims by the same step — grey text on near-black, inside a rim, at 11px.
+
+`.chat-inset` is the one surface all of it is drawn on now: a wash of the column's own ink, no rim, the
+column's own radius. It is opaque rather than an alpha wash so a sticky gutter inside one (the Read card's
+line numbers) can reuse the fill and still hide what scrolls under it. This is the card option preview's
+answer (`flat-decision-cards.md` §4) spent everywhere else in the transcript.
+
+## 6. Two radii
+
+The column had four — `rounded` (0.25rem) on tool output, `rounded-md` on the prompt toggle and a code body,
+`rounded-lg` on the bubbles, and the mark's pill — mixed rather than laddered, which is what made an opened
+tool call look like a different app from the message above it.
+
+**`--radius-lg` for every surface standing on the transcript's ground; a pill for a mark.** One step down
+(`--radius-md`) is kept for the two things that sit *inside* another surface — a held command inside a
+permission card, a hover row inside an inset — where a curve equal to its parent's reads as a mistake.
+
+## 7. Consequences
+
+- `ChatFold.vue`, `ChatThinking.vue` and `ChatToolRun.vue` are gone. `ChatAsideLane.vue` is the bar and the
+  marks; `ChatTurnAsides.vue` is an assistant turn's two of them, shared by the chat and the Subagents page
+  so a delegated agent's record reads as the conversation does.
+- Subagents draws a child's tool calls after its prose rather than before it, which is the order the chat
+  has always used; sharing the component is what settled it.
 - The notes row stays a sibling of the prompt rather than moving inside the bubble's own stack. A pinned
-  prompt charges its whole height against the room its answer is read in, and the preamble is the last
-  thing that should be paying that.
-- `ChatNotes.vue` owns the list and the heading strip, which `ChatMessageView` used to carry.
+  prompt charges its whole height against the room its answer is read in, and the preamble is the last thing
+  that should be paying that.
+- `.chat-run-*` is `.chat-mark-*`: the lane is no longer the tool run's, and the e2e shot that presses it
+  names the run by its label rather than by the bar's class.

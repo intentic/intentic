@@ -582,29 +582,36 @@ describe(`ChatMessageView errand row`, () => {
         expect(element.textContent).not.toContain(`src/auth/session.ts`);
         expect(element.querySelector(`.chat-prompt`)).toBeNull();
 
-        element.querySelector(`button`)?.click();
+        const mark = element.querySelector<HTMLButtonElement>(`button[aria-expanded]`)!;
+        // A turn nobody typed still appears as a turn: the line says what it was, the mark holds what it sent.
+        expect(mark.textContent).not.toContain(errand.label);
+        expect(mark.getAttribute(`aria-label`)).toBe(errand.label);
+
+        mark.click();
         await nextTick();
         expect(element.textContent).toContain(`src/auth/session.ts`);
     });
 });
 
-// Notes pill: same bargain as the errand row, for sandbox-prepended context, in two steps — the pill says how much was
-// added, opening it names each note, opening a note gives its verbatim words.
-describe(`ChatMessageView added-notes pill`, () => {
+// Notes mark: same bargain as the errand row, for sandbox-prepended context, in two steps — the mark says how much was
+// added and takes no width from the column, opening it names each note, opening a note gives its verbatim words.
+describe(`ChatMessageView added-notes mark`, () => {
     const notes = [
         { title: `How to read this message`, text: `## Reading the message below\n\nIt opens with a slash but names no command.` },
         { title: `Dependencies are behind`, text: `Some dependencies declared under /work are not installed.` },
     ];
 
-    it(`stands for the whole preamble as one pill, and names the notes on press`, async () => {
+    it(`stands for the whole preamble as one mark, and names the notes on press`, async () => {
         const element = mount({ id: 3, role: `user`, text: `fix the bug`, notes });
 
-        const pill = element.querySelector(`[aria-expanded]`)!;
-        expect(pill.textContent).toContain(`Sent with your message`);
-        expect(pill.textContent).toContain(String(notes.length));
+        const mark = element.querySelector(`[aria-expanded]`)!;
+        // A count and a glyph is the whole of it: the name is on hover, so the lane stays out of the reading column.
+        expect(mark.textContent?.trim()).toBe(String(notes.length));
+        expect(mark.getAttribute(`aria-label`)).toBe(`Sent with your message`);
+        expect(mark.querySelector(`[data-icon="paperclip"]`)).not.toBeNull();
         expect(element.textContent).not.toContain(notes[0]!.title);
 
-        pill.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
+        mark.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
         await nextTick();
         expect(element.textContent).toContain(notes[0]!.title);
         expect(element.textContent).toContain(notes[1]!.title);
@@ -636,14 +643,16 @@ describe(`ChatMessageView added-notes pill`, () => {
     it(`sits outside the prompt, so it never rides in the pinned band`, () => {
         const element = mount({ id: 6, role: `user`, text: `fix the bug`, notes });
 
-        const pill = element.querySelector(`[aria-expanded]`);
-        expect(pill).not.toBeNull();
-        expect(pill!.closest(`.chat-prompt`)).toBeNull();
+        const mark = element.querySelector(`[aria-expanded]`);
+        expect(mark).not.toBeNull();
+        expect(mark!.closest(`.chat-prompt`)).toBeNull();
         expect(element.querySelector(`.chat-prompt`)).not.toBeNull();
     });
 
     it(`stays out of the way of an ordinary message`, () => {
-        expect(mount({ id: 5, role: `user`, text: `fix the bug` }).textContent).not.toContain(`Sent with your message`);
+        const element = mount({ id: 5, role: `user`, text: `fix the bug` });
+        expect(element.querySelector(`[aria-label="Sent with your message"]`)).toBeNull();
+        expect(element.querySelector(`.chat-mark-bar`)).toBeNull();
     });
 });
 

@@ -14,11 +14,8 @@ import { SUBAGENT_TRANSCRIPT } from "../../../lib/queryKeys";
 import { subagentLive, useSubagentsQuery } from "./subagentsQuery";
 import { CHAT_SURFACE } from "../tools/chatToolSurface";
 import { workspaceSurface } from "../panel/workspaceSurface";
-import { useToolCalls } from "../tools/useToolCalls";
-import ChatThinking from "../transcript/ChatThinking.vue";
+import ChatTurnAsides from "../transcript/ChatTurnAsides.vue";
 import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";
-import ChatToolRows from "../tools/ChatToolRows.vue";
-import ChatToolRun from "../tools/ChatToolRun.vue";
 import ActionLink from "../../../components/ActionLink.vue";
 import RailCard from "../../../components/RailCard.vue";
 import RailColumn from "../../../components/RailColumn.vue";
@@ -37,9 +34,6 @@ const router = useRouter();
 const { mobile } = useDevice();
 const { sessions } = useSubagentsQuery();
 const { agentById, open: openAgent } = useAgents();
-// The chat's own tool-call preference, read here so a child's transcript honors the same setting.
-const { showToolCalls } = useToolCalls();
-
 // Which agent's card was clicked, if any; carried as a query, not a route, so 'show all' just drops it.
 const focus = computed<string | undefined>(() => (typeof route.query[`agent`] === `string` ? route.query[`agent`] : undefined));
 const focusTitle = computed(() => (focus.value === undefined ? undefined : (agentById(focus.value)?.title ?? `this agent`)));
@@ -403,7 +397,7 @@ watch(
                                 </button>
                             </section>
 
-<!-- The child's turns in the chat's own components (ChatThinking, ChatToolRows/Run), including nested children. -->
+<!-- The child's turns in the chat's own components (ChatTurnAsides, ChatToolRows), including nested children. -->
                             <section class="flex min-w-0 flex-col gap-1.5">
                                 <span v-if="report !== undefined" class="text-2xs font-semibold uppercase tracking-wide text-muted">Work</span>
                                 <div class="chat-stack flex min-w-0 flex-col">
@@ -416,10 +410,10 @@ watch(
                                             {{ message.text }}
                                         </p>
                                         <template v-else>
-                                            <ChatThinking
-                                                v-if="message.thinking"
+                                            <ChatTurnAsides
                                                 :thinking="message.thinking"
-                                                :streaming="current !== undefined && subagentLive(current)"
+                                                :tools="message.tools"
+                                                :live="current !== undefined && subagentLive(current)"
                                             />
 <!-- `md-prose` carries prose.css's rules; without it headings, lists and code render as plain body text. -->
                                             <Markdown
@@ -428,14 +422,6 @@ watch(
                                                 :decorate="decorate"
                                                 class="chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5"
                                             />
-                                            <div v-if="message.tools?.length" class="flex w-full flex-col gap-1">
-                                                <ChatToolRows
-                                                    v-if="showToolCalls"
-                                                    :tools="message.tools"
-                                                    :live="current !== undefined && subagentLive(current)"
-                                                />
-                                                <ChatToolRun v-else :tools="message.tools" :live="current !== undefined && subagentLive(current)" />
-                                            </div>
                                         </template>
                                     </div>
 <!-- A running child streams from its parent's turn, so empty here means "nothing yet", not "nothing coming". -->

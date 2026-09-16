@@ -195,7 +195,7 @@ const SHOTS: Shot[] = [
         popout: {
             ...POPOUT_WINDOW,
             /* Select Personas, Maya, and her run inside the popped-out chat. */
-            press: ['button[role="tab"]:has-text("Personas")', "text=Maya · Customer Care", "button.chat-run-bar"],
+            press: ['button[role="tab"]:has-text("Personas")', "text=Maya · Customer Care", '.chat-mark-bar button[aria-label^="Show "]'],
             settleMs: 1_800,
         },
         dpr: DENSE_DPR,

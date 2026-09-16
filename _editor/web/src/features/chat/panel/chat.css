@@ -168,35 +168,39 @@
 .chat-panel .chat-panes > .chat-pane:last-child .chat-scroller {
     padding-right: var(--capacity-rail, 0px);
 }
-/* THE MARK A HIDDEN RUN OF TOOL CALLS LEAVES BEHIND (ChatToolRun) — and where it stands. */
-.chat-run-bar {
+/* THE LANE PAST THE READING COLUMN, and every mark that stands in it (ChatAsideLane): a turn's thinking, the notes the
+   sandbox prepended, an errand's own words, a hidden run of tool calls. One bar per row carrying all of that row's
+   marks, so two of them can never stack on each other out there. */
+.chat-mark-bar {
     padding-block: 0.125rem;
 }
 @container (min-width: 61rem) {
-/* A paint-contained row cannot clip the out-of-flow mark or its scaled ring. */
-    .chat-pane .chat-message:has(.chat-run-bar) {
+/* A paint-contained row cannot clip the out-of-flow lane or its scaled ring. */
+    .chat-pane .chat-message:has(.chat-mark-bar) {
         margin-right: -5.75rem;
         padding-right: 5.75rem;
         margin-block: -0.625rem;
         padding-block: 0.625rem;
     }
-    .chat-pane .chat-run-bar {
-        padding-block: 0.25rem;
+/* The bar's whole height out here is its padding, and it is what keeps one row's marks off the next row's: the lane
+   centres on the bar, so two bars a gap apart put their marks a gap apart, and a mark is taller than the gap. */
+    .chat-pane .chat-mark-bar {
+        padding-block: 0.625rem;
     }
-/* Left edge on the far side of the controls' gutter, right edge wherever the count leaves it: see the lane rule above. */
-    .chat-pane .chat-run-mark {
+/* Left edge on the far side of the controls' gutter, right edge wherever the marks leave it: see the lane rule above. */
+    .chat-pane .chat-mark-lane {
         position: absolute;
         top: 50%;
         left: calc(100% + var(--chat-gutter));
         width: max-content;
         translate: 0 -50%;
     }
-    .chat-pane .chat-run-bar-open {
+    .chat-pane .chat-mark-bar-open {
         height: 0;
         padding-block: 0;
     }
-    /* The control centers on the first call's row. */
-    .chat-pane .chat-run-bar-open .chat-run-mark {
+    /* The marks centre on the first row of what they opened. */
+    .chat-pane .chat-mark-bar-open .chat-mark-lane {
         top: 0.55rem;
     }
 /* ...BUT ITS HAIRLINE MAY NOT FOLLOW IT OUT THERE. */
@@ -209,28 +213,45 @@
         padding-right: 5.75rem;
     }
 }
-/* HOW A RUN'S CALLS ARRIVE (the Transition in ChatToolRun). */
-.chat-run-reveal-enter-active,
-.chat-run-reveal-leave-active {
+/* HOW WHAT A MARK STANDS FOR ARRIVES (the Transition in ChatAsideLane). */
+.chat-mark-reveal-enter-active,
+.chat-mark-reveal-leave-active {
     transition:
         grid-template-rows 160ms ease-out,
         opacity 160ms ease-out;
 }
-.chat-run-reveal-enter-from,
-.chat-run-reveal-leave-to {
+.chat-mark-reveal-enter-from,
+.chat-mark-reveal-leave-to {
     grid-template-rows: 0fr;
     opacity: 0;
 }
-.chat-run-reveal-enter-to,
-.chat-run-reveal-leave-from {
+.chat-mark-reveal-enter-to,
+.chat-mark-reveal-leave-from {
     grid-template-rows: 1fr;
     opacity: 1;
 }
 @media (prefers-reduced-motion: reduce) {
-    .chat-run-reveal-enter-active,
-    .chat-run-reveal-leave-active {
+    .chat-mark-reveal-enter-active,
+    .chat-mark-reveal-leave-active {
         transition-property: opacity;
     }
+}
+/* THE ONE SURFACE ANYTHING OPENED IN THE TRANSCRIPT IS DRAWN ON — a tool's output, a diff, a written document, a
+   thought, the sandbox's preamble. `bg-canvas` sits BELOW the panel, so a box drawn on it reads as a hole cut through
+   the turn instead of a part of it, and dims its own text by the same step; this is the card option preview's answer
+   (flat-decision-cards.md) spent everywhere else. Opaque rather than an alpha wash, so a sticky gutter inside one can
+   reuse the fill and still hide what scrolls under it. */
+.chat-turns {
+    --chat-inset: color-mix(in srgb, var(--color-content) 6%, var(--color-card));
+}
+.chat-inset {
+    border-radius: var(--radius-lg);
+    background-color: var(--chat-inset);
+    color: var(--color-muted);
+}
+/* A rule INSIDE an inset (a diff's file row, a document's name row) separates its bands; it is not a rim. */
+.chat-inset-rule {
+    border-bottom: 1px solid var(--color-line);
 }
 
 /* An assistant body is a run of parts (useMarkdown): prose in .md-part wrappers — at least two while the turn streams. */
@@ -258,14 +279,14 @@
     border-bottom: 0;
 }
 
-/* A Read tool card's highlighted file body (ChatCodeBody.vue). */
+/* A Read tool card's highlighted file body (ChatCodeBody.vue): the inset surface, with the gutter reusing its fill so
+   what scrolls under the numbers stays hidden. */
 .chat-code {
     display: flex;
     max-height: 12rem;
     overflow: auto;
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius-md);
-    background-color: var(--color-canvas);
+    border-radius: var(--radius-lg);
+    background-color: var(--chat-inset);
     font-family: var(--font-mono);
     font-feature-settings: var(--font-mono--font-feature-settings);
     font-size: var(--text-2xs);
@@ -281,7 +302,7 @@
     white-space: pre;
     user-select: none;
     color: var(--color-subtle);
-    background-color: var(--color-canvas);
+    background-color: var(--chat-inset);
     border-right: 1px solid var(--color-line);
     font-variant-numeric: tabular-nums;
 }
@@ -293,8 +314,8 @@
 .chat-code .shiki {
     margin: 0;
     padding: 0.375rem 0.75rem;
-    /* The app canvas overrides Shiki's inline light-theme background. */
-    background-color: var(--color-canvas) !important;
+    /* The inset overrides Shiki's inline light-theme background. */
+    background-color: transparent !important;
     color: var(--color-content);
     font-size: inherit;
     line-height: inherit;

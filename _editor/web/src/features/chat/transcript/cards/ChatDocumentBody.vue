@@ -44,9 +44,9 @@ const parts = computed(() => {
 const fileName = computed(() => props.document.path.split(`/`).pop() ?? props.document.path);
 
 // In a card the shell draws nothing: the rows below read the card's own inset, so the document sits on its margins.
-const shellClass = computed(() => (props.inCard ? `` : `overflow-hidden rounded border border-line bg-canvas`));
+const shellClass = computed(() => (props.inCard ? `` : `chat-inset overflow-hidden`));
 const headClass = computed(() =>
-    props.inCard ? `chat-card-doc-head` : [`border-b px-2 py-1`, shown.value ? `border-line` : `border-transparent`],
+    props.inCard ? `chat-card-doc-head` : [`border-b px-2.5 py-1.5`, shown.value ? `border-line` : `border-transparent`],
 );
 const bodyClass = computed(() => (props.inCard ? `chat-card-doc-body` : `px-3 py-2`));
 
