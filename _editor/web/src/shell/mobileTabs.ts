@@ -2,11 +2,12 @@ import type { ViewBadge } from "@intentic/extension-api";
 import { computed, type ComputedRef } from "vue";
 import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
 import { usePanels } from "../features/extensions/usePanels";
-import { activationBadge, APPROVALS_VIEW_ID, detectActivations, extensionPath, homeViewId, PROJECTS_VIEW_ID } from "../core-views/registry";
+import { activationBadge, APPROVALS_VIEW_ID, detectActivations, extensionPath } from "../core-views/registry";
+import { parseRoot, type TabRoot } from "./tabRoots";
 
-// The four tab destinations MobileTabBar and ShellMobile both need. Three are constants; Review is the approvals
-// extension's tile when that pack is on, else the workspace's own Changes panel, so it can't be a literal list.
-// Resolved once here so the bar and shell can't drift on where Review lives.
+// The four tab destinations MobileTabBar and ShellMobile both need. Agents and Menu are constants; Chat is the active
+// conversation's own screen (tabRoots.ts); Review is the approvals extension's tile when that pack is on, else the
+// workspace's own Changes panel, so it can't be a literal list. Resolved once here so the bar and shell can't drift.
 
 export interface ApprovalsTile {
     readonly to: string;
@@ -23,25 +24,9 @@ export function useApprovalsTile(): ComputedRef<ApprovalsTile | undefined> {
     });
 }
 
-/** What the Projects tile wears while a project is open (Activation.monogram), so the phone's home tab matches the rail. */
-export function useProjectsMonogram(): ComputedRef<string | undefined> {
-    const { panels } = usePanels();
-    const { capabilities } = useCapabilities();
-    return computed(
-        () => detectActivations(panels.value, capabilities.value).find(({ extension }) => extension.id === PROJECTS_VIEW_ID)?.activation.monogram,
-    );
-}
-
-// The four tab destinations as paths, no query: this answers whether the reader is on a tab's own screen, and
-// both workspace tabs collapse to `/workspace`. The home tab is the Project page for a maker who has it.
-export function useTabRootPaths(): ComputedRef<readonly string[]> {
+// The tab destinations as roots: Agents covers the conversation screens under it (the Chat tab's), so neither draws
+// the shell's back arrow — they carry their own.
+export function useTabRoots(): ComputedRef<readonly TabRoot[]> {
     const approvalsTile = useApprovalsTile();
-    return computed(() => {
-        const review = approvalsTile.value?.to ?? `/workspace`;
-        const home = homeViewId() === PROJECTS_VIEW_ID ? `/ext/${PROJECTS_VIEW_ID}` : `/workspace`;
-        return [`/agents`, home, `/menu`, review.split(`?`)[0] ?? review];
-    });
+    return computed(() => [{ path: `/agents` }, { path: `/menu` }, parseRoot(approvalsTile.value?.to ?? `/workspace?panel=changes`)]);
 }
-
-/** Is `path` a tab's own screen, or a drill-down inside one (a file, an agent) that owns its own way back. */
-export const onTabRoot = (path: string, roots: readonly string[]): boolean => roots.some((root) => path === root || path.startsWith(`${root}/`));

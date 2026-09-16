@@ -9,19 +9,24 @@ import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
 
 // Session-level actions (refresh, land, hold, archive, discard), as opposed to diff actions; once-per-session decisions
 // live behind one glyph rather than permanently cluttering the toolbar.
-// Land stays a labelled header button on desktop; on mobile, where it has no room beside Chat|Changes, it's this menu's
-// first item instead.
+// Land, Rename and the session name stay in the header on desktop; on a phone, where the row holds the title and
+// little else, they are this menu's first items instead.
 
-const { changes, agentId, landInMenu } = defineProps<{
+const { changes, agentId, phone, renameable, sessionName } = defineProps<{
     agentId: string;
     // AgentDetail's one useAgentChanges instance; a second one here would desync the panel's busy/error state.
     changes: ReturnType<typeof useAgentChanges>;
-    // Mobile, where Land has no room in the header row: it becomes this menu's first item.
-    landInMenu: boolean;
+    // The phone, whose header row dropped Land, Rename and the session chip: they lead this menu.
+    phone: boolean;
+    // Whether the header would have offered Rename (a local, named agent).
+    renameable: boolean;
+    // The agent's branch, the session's pasteable name; absent for a draft.
+    sessionName?: string | undefined;
     streaming: boolean;
 }>();
-// Goes up like `discard`: the warning is a modal, and modals live on the page, not inside a closing menu.
-const emit = defineEmits<{ selected: []; discard: []; forceLand: [] }>();
+// Goes up like `discard`: the warning is a modal, and modals live on the page, not inside a closing menu. `rename`
+// and `identity` are the header's own presses, handed back to it.
+const emit = defineEmits<{ selected: []; discard: []; forceLand: []; rename: []; identity: [] }>();
 
 const { agentById, restore, busyIds, setResumeAfterLimit, setMoveAfterLimit } = useAgents();
 const archived = computed(() => agentById(agentId)?.archivedAt !== undefined);
@@ -108,7 +113,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
 <template>
     <div class="flex flex-col p-1">
         <button
-            v-if="landInMenu && away === undefined && canShip"
+            v-if="phone && away === undefined && canShip"
             type="button"
             :class="ITEM"
             :disabled="changes.actionBusy.value || changes.pending.value.length === 0"
@@ -136,6 +141,17 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">Land again</span>
                 <span class="text-2xs text-subtle">{{ writing ? `The agent is still writing, you'll be asked to confirm` : away.text }}</span>
+            </span>
+        </button>
+        <button v-if="phone && renameable" type="button" :class="ITEM" @click="run(() => emit(`rename`))">
+            <Icon name="pencil" class="mt-0.5 text-xs text-subtle" />
+            <span class="text-sm text-content md:text-xs">Rename</span>
+        </button>
+        <button v-if="phone && sessionName !== undefined" type="button" :class="ITEM" @click="run(() => emit(`identity`))">
+            <Icon name="code" class="mt-0.5 text-xs text-subtle" />
+            <span class="flex min-w-0 flex-col">
+                <span class="text-sm text-content md:text-xs">Session name</span>
+                <span class="truncate font-mono text-2xs text-subtle">{{ sessionName }}</span>
             </span>
         </button>
         <button type="button" :class="ITEM" @click="run(() => changes.refresh())">

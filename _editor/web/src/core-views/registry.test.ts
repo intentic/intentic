@@ -462,7 +462,9 @@ describe(`the maker's rail`, () => {
             expect(railRank(`chat`)).toBe(railRank(`projects`) + 1);
             expect(railRank(`agents`)).toBe(railRank(`chat`) + 1);
             expect(railRank(`workspace`)).toBe(railRank(`agents`) + 1);
-            expect(tabBarIds()).toContain(`projects`);
+            // The phone's bar seats Chat, never the home view: the Project page is the Menu's to list.
+            expect(tabBarIds()).not.toContain(`projects`);
+            expect(tabBarIds()).toContain(`chat`);
         } finally {
             registered.dispose();
             useAudience().setAudience(`developer`);
@@ -475,7 +477,7 @@ describe(`the maker's rail`, () => {
             expect(seatPolicy(`projects`)).toBe(`always`);
             expect(seatPolicy(`workspace`)).toBe(`always`);
             expect(homeViewId()).toBe(`workspace`);
-            expect(tabBarIds()).toContain(`workspace`);
+            expect(tabBarIds()).not.toContain(`workspace`);
         } finally {
             useAudience().setAudience(`developer`);
         }

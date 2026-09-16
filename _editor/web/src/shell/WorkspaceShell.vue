@@ -7,6 +7,8 @@ import { useExtensionHost } from "../extension-host/useExtensionHost";
 import { useMainWindow } from "./window/mainWindow";
 import { openWorkspaceRef } from "../features/workspace/files/openFileRef";
 import { prefetchViewsAtIdle } from "../router/prefetch";
+import { useChat } from "../features/chat/run/useChat";
+import { mobileChatPath } from "./tabRoots";
 
 // Persistent post-login chrome, split by form factor: ShellDesktop (rail, chat, terminal) under a
 // pointer, ShellMobile (tab bar, full-screen views) below 768px. State lives in module composables, so
@@ -36,13 +38,14 @@ useMainWindow((errand) => {
 });
 
 // Route guards only fire on navigation, not a live resize, so growing past the breakpoint on a
-// mobile-only page (menu, terminal) bounces to the workspace; shrinking off full-screen chat lands on agents.
+// mobile-only page (menu, terminal) bounces to the workspace; shrinking off full-screen chat lands on the same
+// conversation's phone screen, as the /chat guard would have.
 watch(mobile, (isMobile) => {
     if (!isMobile && [`menu`, `terminal`].includes(String(route.name))) {
         void router.push(`/workspace`);
     }
     if (isMobile && route.name === `chat`) {
-        void router.push(`/agents`);
+        void router.replace(mobileChatPath(useChat().active.value.conversationId));
     }
 });
 

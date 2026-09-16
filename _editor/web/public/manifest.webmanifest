@@ -2,8 +2,12 @@
     "name": "intentic",
     "short_name": "intentic",
     "description": "AI-agent workspace: chat with your agent, review changes, and manage your sandbox.",
-    "start_url": "/chat",
+    "start_url": "/",
     "display": "standalone",
+    "shortcuts": [
+        { "name": "Chat", "url": "/chat", "description": "The conversation you were last in" },
+        { "name": "Agents", "url": "/agents", "description": "Every agent and what needs you" }
+    ],
     "background_color": "#f4f1ec",
     "theme_color": "#f4f1ec",
     "icons": [

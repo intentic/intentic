@@ -665,7 +665,7 @@ const grab = (event: PointerEvent): void => {
                     <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{ landAsk }}</span>
                 </p>
                 <!-- Disabled while the land runs: the daemon refuses a second one outright (agents.routes CONFLICT). -->
-                <Button size="small" severity="success" :disabled="landing" class="self-start whitespace-nowrap" @click.stop="emit('land')">
+                <Button size="small" severity="success" :disabled="landing" class="ui-button-thumb self-start whitespace-nowrap" @click.stop="emit('land')">
                     <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? words.landing : words.land }}
                 </Button>
             </div>

@@ -3,7 +3,8 @@ import { type PageBack, providePageBack, useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import MobileTabBar from "./MobileTabBar.vue";
-import { onTabRoot, useTabRootPaths } from "./mobileTabs";
+import { useTabRoots } from "./mobileTabs";
+import { onTabRoot } from "./tabRoots";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 
 // Mobile chrome: full-screen views over a bottom tab bar. h-dvh tracks the browser's UI chrome; the
@@ -16,10 +17,11 @@ const { keyboardInset } = useDevice();
 // Otherwise steps back when history.state.back shows one exists, else falls back to Menu.
 const route = useRoute();
 const router = useRouter();
-const tabRoots = useTabRootPaths();
+const tabRoots = useTabRoots();
 
 const back = computed<PageBack | undefined>(() => {
-    if (onTabRoot(route.path, tabRoots.value)) {
+    const panel = route.query[`panel`];
+    if (onTabRoot({ path: route.path, panel: typeof panel === `string` ? panel : undefined }, tabRoots.value)) {
         return undefined;
     }
     const stepped = typeof router.options.history.state[`back`] === `string`;

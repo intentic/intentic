@@ -42,6 +42,8 @@ vi.mock("./AgentReviewPanel.vue", () => ({ default: { render: () => null } }));
 vi.mock("../board/AgentSessionMenu.vue", () => ({ default: { render: () => null } }));
 vi.mock("../board/SessionChip.vue", () => ({ default: { render: () => null } }));
 vi.mock("../board/SessionIdentity.vue", () => ({ default: { render: () => null } }));
+// The phone's chats sheet hangs off the title; a header test only cares that the title is its handle.
+vi.mock("../../chat/tabs/ChatSwitcherSheet.vue", () => ({ default: { render: () => null } }));
 
 vi.mock("../fleet/agentStatus", () => ({
     agentStatusMeta: () => ({ icon: `spinner`, spin: true, label: `Running`, class: `text-link` }),
@@ -89,6 +91,8 @@ vi.mock("../../chat/run/useChat", async () => {
             ),
             setActive: vi.fn(),
             closeTabs: vi.fn(),
+            openConversation: vi.fn(),
+            active: ref({ conversationId: `agent-1` }),
         }),
     };
 });
@@ -127,7 +131,7 @@ vi.mock("./useAgentChanges", async () => {
     };
 });
 
-vi.mock("../fleet/agentActions", () => ({ requestLandAgent: vi.fn(async () => {}) }));
+vi.mock("../fleet/agentActions", () => ({ requestLandAgent: vi.fn(async () => {}), startAgent: vi.fn() }));
 vi.mock("../../sandbox/secrets/useRole", () => ({ useRole: () => ({ canDrive: true, canShip: true }) }));
 
 const { default: AgentDetail } = await import("./AgentDetail.vue");
@@ -154,15 +158,19 @@ it(`keeps a mobile running agent's title slot: the view switch is not in the hea
     await nextTick();
 
     const header = el.querySelector<HTMLElement>(`.view-header`)!;
-    const title = header.querySelector<HTMLElement>(`span.flex-1.truncate`)!;
+    // On a phone the title is the chats sheet's handle: a button taking the row's leftover width, the name truncating inside it.
+    const title = header.querySelector<HTMLElement>(`button[aria-expanded]`)!;
+    const name = title.querySelector<HTMLElement>(`span.truncate`)!;
     const status = header.querySelector<HTMLElement>(`[aria-label="Running"]`)!;
     const words = [...status.querySelectorAll(`span`)].find((node) => node.textContent === `Running`)!;
 
     // The switch renders, and outside the header: it has no width to spare for it.
     expect(el.querySelector(`[data-mode-switch]`)).not.toBeNull();
     expect(header.querySelector(`[data-mode-switch]`)).toBeNull();
-    expect(title.textContent).toBe(`Readable mobile title`);
+    expect(name.textContent).toBe(`Readable mobile title`);
     expect(title.classList).toContain(`flex-1`);
+    // Rename and the session chip left the row for the session menu; nothing but the title, its status and the menu remain.
+    expect(header.querySelector(`[aria-label="Rename agent"]`)).toBeNull();
     expect(words.classList).toContain(`hidden`);
     expect(words.classList).toContain(`@md:inline`);
     expect(status.getAttribute(`aria-label`)).toBe(`Running`);

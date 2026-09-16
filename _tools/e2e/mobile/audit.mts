@@ -48,7 +48,11 @@ const SURFACES: readonly Surface[] = [
     // The accessory key row, which is the whole reason this route is gated: it is `coarse`-only, so a run that
     // is not in a touch context finds nothing here and says so instead of passing quietly.
     { path: "/terminal", waitFor: "text=Esc", primary: "text=Ctrl", settleMs: 1_600 },
-    { path: "/agents/cnv_checkout_stripe", waitFor: 'textarea[name="draft"]', settleMs: 2_600 },
+    // The paperclip is the phone's one road for a photo, so the surface waits on it rather than on the box alone.
+    // `primary` is visible transcript text: the paperclip has only an aria-label, which the height rule never reads.
+    { path: "/agents/cnv_checkout_stripe", waitFor: 'button[aria-label="Attach files"]', primary: "text=The pricing page already has a CTA", settleMs: 2_600 },
+    // The Chat tab: lands on the active conversation's screen, never on the desktop's full-screen chat.
+    { path: "/chat", waitFor: 'textarea[name="draft"]', primary: "text=Add Stripe checkout", settleMs: 2_600 },
     { path: "/ext/pipelines", waitFor: "text=pass rate", primary: "text=Draft the release note", settleMs: 1_600 },
     { path: "/ext/acceptance", waitFor: "text=criteria", primary: "text=Sign up for an account", settleMs: 1_400 },
     /* Primary selectors match raw textContent, so they must use text unaffected by CSS transforms. */

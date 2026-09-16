@@ -11,6 +11,7 @@ import {
     PullToRefresh,
     SegmentedControl,
     useLoadingReveal,
+    usePageBack,
     iconForEntry,
     ui,
 } from "@intentic/ui";
@@ -58,6 +59,8 @@ import { parentDir } from "@intentic/ui/path";
 const route = useRoute();
 const router = useRouter();
 const layout = useLayout();
+// Published by the shell off the Menu (Files is not a tab); undefined on Review's own Changes panel.
+const back = usePageBack();
 const words = useVocabulary();
 const { maker } = useAudience();
 const changes = useChanges();
@@ -368,6 +371,15 @@ const onPick = (event: Event): void => {
 
         <template v-else>
             <div class="flex shrink-0 items-center gap-2 border-b border-line bg-card px-2 py-1.5">
+                <button
+                    v-if="back"
+                    type="button"
+                    :class="ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`)"
+                    :aria-label="back.label"
+                    @click="back.go()"
+                >
+                    <Icon name="arrow-left" class="text-lg" />
+                </button>
                 <SegmentedControl v-model="segment" size="sm" :options="segmentOptions" />
                 <span class="flex-1"></span>
                 <WorkspaceScopeChip />

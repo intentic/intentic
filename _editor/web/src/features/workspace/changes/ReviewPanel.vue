@@ -986,7 +986,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <Button
                     size="small"
                     severity="success"
-                    class="shrink-0 whitespace-nowrap"
+                    class="ui-button-thumb shrink-0 whitespace-nowrap"
                     :disabled="!commitReady"
                     @click="doCommit"
                     v-tooltip.right="

@@ -159,9 +159,10 @@ export const seatedOnlyByVisit = (
 ): boolean => context.active && !railSeated(tile, { pinned: context.pinned, active: false });
 
 // What the mobile tab bar already promotes, so the mobile menu doesn't list it again. View ids, the same
-// key RAIL_GROUPS and detectActivations use, not package ids.
+// key RAIL_GROUPS and detectActivations use, not package ids. The home seat is not among them: on a phone the file
+// tree and the Project page live on the Menu, and Chat takes the seat.
 export const APPROVALS_VIEW_ID = `approvals`;
-export const tabBarIds = (): readonly string[] => [APPROVALS_VIEW_ID, homeViewId(), `chat`, `agents`];
+export const tabBarIds = (): readonly string[] => [APPROVALS_VIEW_ID, `chat`, `agents`];
 
 const railOrder = (): readonly string[] => activeGroups().flatMap((group) => group.items.map((item) => item.id));
 

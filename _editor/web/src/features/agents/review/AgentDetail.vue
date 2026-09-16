@@ -5,7 +5,9 @@ import { RouterLink, useRoute, useRouter } from "vue-router";
 import ChatPanel from "../../chat/panel/ChatPanel.vue";
 import { agentStatusMeta, unregistered, writingNow } from "../fleet/agentStatus";
 import { createInlineRename } from "../../../lib/inlineRename";
-import { requestLandAgent } from "../fleet/agentActions";
+import { requestLandAgent, startAgent } from "../fleet/agentActions";
+import { mobileChatPath } from "../../../shell/tabRoots";
+import ChatSwitcherSheet from "../../chat/tabs/ChatSwitcherSheet.vue";
 import { boxNameOf, openInSandbox, otherFleet } from "../fleet/fleetScope";
 import { otherBoxes, refreshAcross, subscribe as watchOtherBoxes } from "../../sandbox/live/fleetAcross";
 import { useAgentChanges } from "./useAgentChanges";
@@ -30,7 +32,20 @@ const route = useRoute();
 const router = useRouter();
 const { mobile } = useDevice();
 const { fleet, refresh, open, agentById, archived, loadArchived, rename } = useAgents();
-const { conversations, setActive, closeTabs } = useChat();
+const { conversations, setActive, closeTabs, openConversation, active: activeChat } = useChat();
+
+// The phone's chat switcher hangs off this screen's title: this is the only chat surface a phone has, so the open
+// chats and the stored sessions have to be reachable from it. A pick is a navigation, since here a chat is a route.
+const switcherOpen = ref(false);
+const switchTo = (id: string): void => {
+    setActive(id);
+    void router.push(mobileChatPath(id));
+};
+// openConversation mints the tab and focuses it; the route follows whatever it made active.
+const openPast = (sessionId: string): void => {
+    openConversation(sessionId);
+    void router.push(mobileChatPath(activeChat.value.conversationId));
+};
 const { activeSandboxId } = useSandbox();
 
 const agentId = computed(() => (typeof route.params[`id`] === `string` ? route.params[`id`] : ``));
@@ -300,7 +315,7 @@ const confirmDiscard = async (): Promise<void> => {
             <!-- The board is a place, so the way back is a link: hoverable, copyable, openable in its own tab. -->
             <RouterLink
                 to="/agents"
-                class="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                class="touch-target flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
                 aria-label="Back to agents"
             >
                 <Icon name="arrow-left" class="text-sm" />
@@ -322,9 +337,22 @@ const confirmDiscard = async (): Promise<void> => {
                 <span v-if="unnamed" class="flex min-w-0 flex-1 items-center" aria-hidden="true">
                     <span class="skeleton block h-3 w-40 max-w-full"></span>
                 </span>
-                <span v-else class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title }}</span>
+<!-- On a phone the title is the switcher's handle: the chats sheet opens from it, chevron and all. -->
                 <button
-                    v-if="localOnly && !unnamed"
+                    v-else-if="mobile"
+                    type="button"
+                    class="flex h-9 min-w-0 flex-1 items-center gap-1 rounded-md text-left active:bg-overlay"
+                    :aria-expanded="switcherOpen"
+                    @click="switcherOpen = true"
+                >
+                    <span class="min-w-0 truncate text-xs font-medium text-content">{{ title }}</span>
+                    <span class="sr-only">, switch chat</span>
+                    <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" aria-hidden="true" />
+                </button>
+                <span v-else class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title }}</span>
+<!-- Desktop only: on a phone the row has no room, and Rename is the session menu's. -->
+                <button
+                    v-if="localOnly && !unnamed && !mobile"
                     type="button"
                     aria-label="Rename agent"
                     v-tooltip.bottom="'Rename'"
@@ -351,7 +379,6 @@ const confirmDiscard = async (): Promise<void> => {
             >
                 <SessionChip :branch="fleetAgent.branch" reveal @reveal="identityOpen = !identityOpen" />
             </span>
-            <SessionChip v-if="fleetAgent?.branch !== undefined && mobile" :branch="fleetAgent.branch" reveal compact @reveal="identityOpen = true" />
 <!-- Status compresses to its glyph in a narrow header; words return once the header itself has room. -->
             <span
                 v-if="status !== undefined"
@@ -450,14 +477,21 @@ const confirmDiscard = async (): Promise<void> => {
             @chat="view = 'chat'"
         />
 
+<!-- The phone's switcher, from the title above; desktop switches chats on the docked panel's own strip. -->
+        <ChatSwitcherSheet v-if="mobile" v-model="switcherOpen" @select="switchTo" @close="closeTabs" @open="openPast" @new="startAgent()" />
+
 <!-- Session menu: one body, anchored on desktop or a thumb sheet on a phone. -->
         <ResponsiveOverlay v-model="menuOpen" :anchor="menuAnchor ?? undefined" header="Session" side="bottom" cross="end" panel-class="w-72">
             <AgentSessionMenu
                 :agent-id="agentId"
                 :changes="changes"
                 :streaming="streaming"
-                :land-in-menu="mobile"
+                :phone="mobile"
+                :renameable="localOnly && !unnamed"
+                :session-name="fleetAgent?.branch"
                 @selected="closeMenu"
+                @rename="edit.begin()"
+                @identity="identityOpen = true"
                 @discard="pendingDiscard = true"
                 @force-land="pendingForceLand = true"
             />

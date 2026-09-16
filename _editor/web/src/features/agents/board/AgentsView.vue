@@ -1145,7 +1145,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 >
                     <Icon :name="synthesizing ? `spinner` : `sparkles`" :spin="synthesizing" />Synthesize {{ chatStrip.panes.length }}
                 </Button>
-                <Button size="small" class="shrink-0" @click="startAgent()"> <Icon name="plus" />New agent </Button>
+                <Button size="small" class="ui-button-thumb shrink-0" @click="startAgent()"> <Icon name="plus" />New agent </Button>
             </div>
         </div>
 <!-- Failures only: the layout shift and dismissal this costs suit something the user must read, not a routine action's receipt (which floats instead). -->
@@ -1252,7 +1252,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                 size="small"
                                 severity="secondary"
                                 :text="true"
-                                class="shrink-0"
+                                class="ui-button-thumb shrink-0"
                                 aria-label="Archive every finished agent"
                                 v-tooltip.bottom="`Archive all ${clearable}: you can undo it`"
                                 @click="archive()"

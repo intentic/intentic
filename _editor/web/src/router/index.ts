@@ -4,6 +4,8 @@ import { type FunctionalComponent, h } from "vue";
 import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteLocationRaw, type RouteRecordRaw } from "vue-router";
 import { asyncView } from "../components/asyncView";
 import { homeViewId, PROJECTS_VIEW_ID } from "../core-views/registry";
+import { conversationRedirect } from "./conversationLink";
+import { mobileChatPath } from "../shell/tabRoots";
 import SplitViewOutline from "../components/SplitViewOutline.vue";
 import { restorePersistedQueries } from "../lib/queryPersistence";
 import { useAuth } from "../features/auth/useAuth";
@@ -70,6 +72,16 @@ const mobileOnly = (): boolean | RouteLocationRaw => (useDevice().mobile.value ?
 // Full-screen chat is the desktop's alone: the mobile shell's chat is the agent route (a conversation is its chat
 // surface there), so a mobile hit lands on the fleet those live behind.
 const desktopOnly = (): boolean | RouteLocationRaw => (useDevice().mobile.value ? `/agents` : true);
+
+// /chat on a phone is the Chat tab: the active conversation's own screen. The store is imported at the press, not
+// at module load, so the router does not pull the chat's whole graph into every first paint.
+const chatEntry = async (): Promise<boolean | RouteLocationRaw> => {
+    if (!useDevice().mobile.value) {
+        return true;
+    }
+    const { useChat } = await import(`../features/chat/run/useChat`);
+    return mobileChatPath(useChat().active.value.conversationId);
+};
 
 // In-shell routes wrap in asyncView so a click never blocks on a chunk download; only first-paint entry routes (login,
 // setup, invite, the shell) stay bare lazy imports.
@@ -140,12 +152,12 @@ const routes: RouteRecordRaw[] = [
                 redirect: () => (useDevice().mobile.value ? `/agents` : homeViewId() === PROJECTS_VIEW_ID ? `/ext/${PROJECTS_VIEW_ID}` : `/workspace`),
             },
             // Full-screen chat: the rail-docked chat's own surface, expanded. A route rather than a layout switch, so
-            // the rail, back button and reload already know how to enter and leave it.
+            // the rail, back button and reload already know how to enter and leave it. On a phone, the Chat tab.
             {
                 path: `chat`,
                 name: `chat`,
                 meta: { title: `Chat` },
-                beforeEnter: [desktopOnly],
+                beforeEnter: [chatEntry],
                 component: asyncView(() => import(`../features/chat/panel/ChatArea.vue`)),
             },
             // The live app preview's full-window home, same arrangement as the chat route. Desktop only: the mobile
@@ -252,6 +264,12 @@ export const router = createRouter({
     // pushState navigations. `{ el }` finds whichever pane owns the scrollbar; no hash means no opinion.
     scrollBehavior: (to) => (to.hash === `` ? false : { el: to.hash, behavior: `smooth` }),
 });
+
+// A link naming a conversation opens it wherever it lands: the daemon's push notifications point at
+// `/?conversation=<id>`, and a shell that rewrites its entry path before the router runs (the demo does) must not
+// drop the tap on the way in. Global, not the home redirect's, for that reason; the target carries no such query,
+// so it cannot loop.
+router.beforeEach((to) => conversationRedirect(to.query, useDevice().mobile.value) ?? true);
 
 // Router half of stale-chunk recovery (asyncView owns the in-shell half). Covers route-level loads (login, handoffs,
 // invite, the shell); a dead chunk here reloads onto the route asked for.

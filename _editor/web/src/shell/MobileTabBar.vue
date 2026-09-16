@@ -2,12 +2,12 @@
 import type { IconName } from "@intentic/ui";
 import type { ViewBadge } from "@intentic/extension-api";
 import { computed } from "vue";
-import { RouterLink, useRoute } from "vue-router";
+import { type RouteLocationNormalizedLoaded, RouterLink, useRoute } from "vue-router";
 import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
 import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTile";
-import { useApprovalsTile, useProjectsMonogram } from "./mobileTabs";
-import { homeViewId, PROJECTS_VIEW_ID } from "../core-views/registry";
-import { useVocabulary } from "../core-views/vocabulary";
+import { useApprovalsTile } from "./mobileTabs";
+import { mobileChatPath } from "./tabRoots";
+import { useChat } from "../features/chat/run/useChat";
 import RailIcon from "./rail/RailIcon.vue";
 import TileMark from "./rail/TileMark.vue";
 import { RUNNING_MARK_CLASS } from "../core-views/viewBadge";
@@ -19,9 +19,10 @@ import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttenti
 import { useSandbox } from "../features/sandbox/client/useSandbox";
 import { restartRunning } from "../features/sandbox/live/sandboxRestart";
 
-// Four fixed tabs: Agents (fleet, "needs you" badge), Review (drafts plus uncommitted changes owed),
-// Menu (what the sandbox needs, standing in for the desktop rail's chip); everything else lives on
-// the Menu page. Review's tab reads the approvals extension's registry entry by id, for placement only.
+// Four fixed tabs: Agents (fleet, "needs you" badge), Chat (the conversation you were last in), Review (drafts plus
+// uncommitted changes owed), Menu (what the sandbox needs, standing in for the desktop rail's chip); everything else,
+// the file tree included, lives on the Menu page. Review's tab reads the approvals extension's registry entry by id,
+// for placement only.
 
 interface Tab {
     readonly id: string;
@@ -30,12 +31,13 @@ interface Tab {
     // What the tab says without being opened: the same shape the desktop rail badges with, so one renderer
     // serves all four instead of a hand-rolled span per tab.
     readonly badge?: ViewBadge;
-    // Which workspace panel this tab owns, for Files and Review sharing the workspace path; absent otherwise.
-    readonly panel?: "files" | "changes";
+    // Which workspace panel this tab owns, for Review sharing the workspace path with the Menu's Files; absent otherwise.
+    readonly panel?: "changes";
     // A standing fact drawn as a corner glyph and spelled out in the label, like AreaTile.note.
     readonly note?: { readonly icon: IconName; readonly text: string };
-    // Letters in place of the glyph: the open project's, on the Projects tab, same as the desktop rail.
-    readonly monogram?: string;
+    // Which routes light this tab, where a path prefix would light two: Agents owns the board alone and Chat every
+    // conversation screen under it.
+    readonly match?: (route: RouteLocationNormalizedLoaded) => boolean;
 }
 
 const changes = useChanges();
@@ -52,20 +54,26 @@ const menuBadge = computed<ViewBadge | undefined>(() => {
     }
     return { ...badge, ...(running === undefined ? {} : { running }) };
 });
-// The home tab is the maker's Project page when that extension is on, else the file tree; same rule as the rail's
-// seat (registry.ts), so the phone and the desktop agree on where home is.
-const words = useVocabulary();
-const projectsMonogram = useProjectsMonogram();
-const homeTab = computed<Tab>(() =>
-    homeViewId() === PROJECTS_VIEW_ID
-        ? {
-              id: PROJECTS_VIEW_ID,
-              to: `/ext/${PROJECTS_VIEW_ID}`,
-              label: words.value.home,
-              ...(projectsMonogram.value === undefined ? {} : { monogram: projectsMonogram.value }),
-          }
-        : { id: `workspace`, to: `/workspace`, label: `Files`, panel: `files` },
-);
+// The Chat tab is whichever conversation was last in front: its screen is the agent route (mobileChatPath), and the
+// tab wears what that chat is doing, so a turn running or an answer owed shows without opening it.
+const { active } = useChat();
+const chatBadge = computed<ViewBadge | undefined>(() => {
+    switch (active.value.status.value) {
+        case `streaming`:
+            return { running: `Working on your last message` };
+        case `awaiting`:
+            return { count: 1, tooltip: `Waiting for your answer` };
+        default:
+            return undefined;
+    }
+});
+const chatTab = computed<Tab>(() => ({
+    id: `chat`,
+    to: mobileChatPath(active.value.conversationId),
+    label: `Chat`,
+    match: (route) => route.path.startsWith(`/agents/`),
+    ...(chatBadge.value === undefined ? {} : { badge: chatBadge.value }),
+}));
 
 // Matched by view id (detectActivations); tabBarIds() is the shared promotion list ShellMobile also reads.
 const approvalsTile = useApprovalsTile();
@@ -100,8 +108,9 @@ const tabs = computed<readonly Tab[]>(() => [
         // the board's scope cannot follow it in one shell and not the other.
         ...(agentsBadge.value === undefined ? {} : { badge: agentsBadge.value }),
         ...(agentsScopeNote.value === undefined ? {} : { note: { icon: `boxes` as IconName, text: agentsScopeNote.value } }),
+        match: (route) => route.path === `/agents`,
     },
-    homeTab.value,
+    chatTab.value,
     {
         /* The queue when the pack is on; the workspace's OWN review: its Changes panel, when it is off. */
         id: `approvals`,
@@ -118,9 +127,12 @@ const tabLabel = (tab: Tab): string =>
     [tab.label, tab.badge?.tooltip, tab.badge?.running, tab.note?.text].filter((part) => part !== undefined).join(` · `);
 
 const route = useRoute();
-// Matches by path prefix, not active-class (it drops on a splat param). When a tab declares `panel`,
-// that must also match the query (absent means files), or both Files and Review would light up together.
+// Matches by path prefix, not active-class (it drops on a splat param), or by the tab's own `match`. When a tab
+// declares `panel`, that must also match the query (absent means files), or Review would light up over the Files page.
 const isNavActive = (tab: Tab): boolean => {
+    if (tab.match !== undefined) {
+        return tab.match(route);
+    }
     const path = tab.to.split(`?`)[0] ?? tab.to;
     if (!(route.path === path || route.path.startsWith(`${path}/`))) {
         return false;
@@ -147,7 +159,7 @@ const isNavActive = (tab: Tab): boolean => {
 <!-- One type size for all three corner marks, the same one the desktop rail sets: each states its own size as a
                  multiple of it, so the badge, the turning mark and the note weigh the same instead of landing on three numbers. -->
             <span class="relative text-[0.625rem]">
-                <RailIcon :area="tab.id" :monogram="tab.monogram" class="text-xl" />
+                <RailIcon :area="tab.id" class="text-xl" />
                 <ViewBadgeChip :badge="tab.badge" class="absolute -right-2.5 -top-1" aria-hidden="true" />
                 <!-- Work in flight, in the corner the badge and note both leave free; same mark as the desktop rail. -->
                 <TileMark v-if="tab.badge?.running !== undefined" name="spinner" spin :class="[RUNNING_MARK_CLASS, `absolute -bottom-1 -right-2`]" />

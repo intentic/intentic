@@ -6,7 +6,8 @@ import { RouterLink } from "vue-router";
 import { useAudience } from "../app/useAudience";
 import { useAuth } from "../features/auth/useAuth";
 import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
-import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, tabBarIds } from "../core-views/registry";
+import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, tabBarIds, WORKSPACE_VIEW_ID } from "../core-views/registry";
+import { useVocabulary } from "../core-views/vocabulary";
 import { badgeChip, badgeClass, badgeToneClass, RUNNING_MARK_CLASS } from "../core-views/viewBadge";
 import { usePanels } from "../features/extensions/usePanels";
 import { useRole } from "../features/sandbox/secrets/useRole";
@@ -19,6 +20,8 @@ import { sandboxAvailabilityVisual } from "../features/sandbox/overview/availabi
 import { useSandboxAvailability } from "../features/sandbox/overview/useSandboxAvailability";
 import { useWorkspaceTree } from "../features/workspace/explorer/useWorkspaceTree";
 import { environment } from "../app/environments/environment";
+import { usePushNotifications } from "../push/usePushNotifications";
+import { pushMenuRow } from "./pushMenuRow";
 import RailIcon from "./rail/RailIcon.vue";
 
 // The mobile Menu tab: everything the desktop rail and its popovers hold, as one page — sandbox
@@ -64,12 +67,22 @@ onMounted(() => {
     }
 });
 
-// Same detection and bands as ShellDesktop, but unfiltered by railSeated — no seat scarcity here.
+// Whether THIS phone can be reached when an agent needs its owner; the settings page does the enabling.
+const { state: pushState } = usePushNotifications();
+const pushRow = computed(() => pushMenuRow(pushState.value));
+
+// Same detection and bands as ShellDesktop, but unfiltered by railSeated — no seat scarcity here. The file tree is
+// not an extension, so it is stated here: Chat holds the seat it has on the desktop rail's tab bar counterpart.
+const words = useVocabulary();
+const filesRow = computed<AreaRow>(() => ({ id: WORKSPACE_VIEW_ID, to: `/workspace`, label: words.value.workspace, icon: `folder` }));
 const areaBands = computed(() =>
     railBands(
-        detectActivations(panels.value, capabilities.value)
-            .filter(({ extension }) => extension.surface === `rail` && !tabBarIds().includes(extension.id))
-            .map(extensionRow),
+        [
+            filesRow.value,
+            ...detectActivations(panels.value, capabilities.value)
+                .filter(({ extension }) => extension.surface === `rail` && !tabBarIds().includes(extension.id))
+                .map(extensionRow),
+        ],
         (area) => area.id,
     ),
 );
@@ -129,6 +142,24 @@ const logout = async (): Promise<void> => {
                     <Icon :name="item.icon" class="text-base" />
                 </span>
                 <span class="min-w-0 flex-1 text-xs">{{ item.message }}</span>
+                <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
+            </RouterLink>
+        </section>
+
+        <!-- This device, not the sandbox: push is registered per phone, so the ask belongs on the phone's own page. -->
+        <section v-if="pushRow !== undefined" class="flex flex-col gap-1">
+            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">This phone</h2>
+            <RouterLink
+                to="/settings/notifications"
+                class="flex min-h-12 items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-content transition-colors active:bg-overlay"
+            >
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center" :class="pushRow.tone === 'warning' ? 'text-warning' : 'text-link'">
+                    <Icon name="bolt" class="text-base" />
+                </span>
+                <span class="min-w-0 flex-1">
+                    <span class="block text-xs">{{ pushRow.message }}</span>
+                    <span class="mt-0.5 block text-xs text-muted">{{ pushRow.detail }}</span>
+                </span>
                 <Icon name="chevron-right" class="shrink-0 text-xs text-subtle" />
             </RouterLink>
         </section>

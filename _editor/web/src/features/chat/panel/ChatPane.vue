@@ -386,6 +386,16 @@ const remoteName = computed(() =>
 
 // Files staged for the next turn (useChatAttachments); bytes go to the conversation's own box and path.
 const staging = useChatAttachments({ attachments, reachable, connected, at: conversationBox });
+// The picker behind the paperclip: on a phone there is nothing to drop or paste, so this is the only road for a photo.
+const filePicker = ref<HTMLInputElement>();
+const pickFiles = (event: Event): void => {
+    const picker = event.target as HTMLInputElement;
+    for (const file of picker.files ?? []) {
+        staging.attach(file);
+    }
+    // Cleared so picking the same file twice fires `change` twice.
+    picker.value = ``;
+};
 const { dragDepth } = staging;
 
 // The chip offering the file the user is looking at (useEditorContextChip).
@@ -1404,7 +1414,7 @@ watch(
                                             :disabled="pickedWorkflow !== undefined"
                                             :expanded="modelOpen"
                                             :aria-label="`Provider and model: ${providerName} · ${modelLabelText}`"
-                                            label-class="@max-xs:hidden"
+                                            label-class="@max-md:hidden"
                                             @click="modelOpen = !modelOpen"
                                         />
 
@@ -1434,7 +1444,7 @@ watch(
                                             aria-label="Agent mode"
                                         >
                                             <Icon :name="modeIcon" class="text-2xs text-link" />
-                                            <span>{{ modeLabel }}</span>
+                                            <span class="@max-md:hidden">{{ modeLabel }}</span>
                                             <Icon name="chevron-down" class="text-2xs text-subtle" />
                                         </button>
 
@@ -1521,6 +1531,20 @@ watch(
                                             <Icon name="robot" class="text-2xs text-link" />
                                             <span>As agent</span>
                                         </button>
+
+                                        <!-- Files from this device; the same chips as a drop or a paste, since one `attach` serves all three. -->
+                                        <button
+                                            v-if="canDrive"
+                                            type="button"
+                                            class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
+                                            :disabled="!reachable || !connected"
+                                            @click="filePicker?.click()"
+                                            v-tooltip.top="'Attach files from this device'"
+                                            aria-label="Attach files"
+                                        >
+                                            <Icon name="paperclip" class="text-xs max-md:text-base" />
+                                        </button>
+                                        <input ref="filePicker" type="file" multiple class="hidden" tabindex="-1" aria-hidden="true" @change="pickFiles" />
 
                                         <!-- The overflow lists shaping controls that remain at their defaults. -->
                                         <button

@@ -69,7 +69,7 @@ const autoRunLabel = computed(() => {
                 size="small"
                 severity="danger"
                 :text="true"
-                class="shrink-0"
+                class="ui-button-thumb shrink-0"
                 aria-label="Reject this held wake"
                 v-tooltip.top="`Drop it: the wake never runs, the automation stays as it is`"
                 @click.stop="emit(`reject`)"
@@ -78,7 +78,7 @@ const autoRunLabel = computed(() => {
             </Button>
             <Button
                 size="small"
-                class="shrink-0"
+                class="ui-button-thumb shrink-0"
                 aria-label="Approve this held wake"
                 v-tooltip.top="`Run it now, with exactly what fired: the session lands on this board`"
                 @click.stop="emit(`approve`)"
