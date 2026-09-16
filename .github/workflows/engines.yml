@@ -97,10 +97,11 @@ jobs:
       # A REAL resolution, never `--lockfile-only`: resolving without linking rewrites only some of the importers on a
       # shared peer set, forking that set in two and stranding the snapshots for the half nothing reaches — which the
       # `lockfile` code gate refuses, so such a lockfile can never pass the pull request's own CI. `--ignore-scripts`
-      # is what keeps a token that can write to the repository away from every package's build script.
+      # is what keeps a token that can write to the repository away from every package's build script. `--fix-lockfile`
+      # repairs any drifted importer entries across the workspace.
       - name: Move the lockfile
         if: steps.plan.outputs.changed == 'true'
-        run: pnpm install --no-frozen-lockfile --ignore-scripts
+        run: pnpm install --fix-lockfile --ignore-scripts
 
       # The two checkout gates this job's own output is judged by, run where the lockfile is still fixable. Both need
       # node and git alone, so they cost seconds. A bump that cannot produce a lockfile CI would accept fails here
