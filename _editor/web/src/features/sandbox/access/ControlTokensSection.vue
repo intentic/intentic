@@ -158,7 +158,6 @@ const describe = (token: ControlToken): string =>
                 <Button label="Revoke" size="small" severity="danger" :text="true" @click="revoke(token.id)" />
             </template>
         </Row>
-        <RowNote v-if="tokens.length === 0">No program holds a token to this sandbox yet.</RowNote>
 
         <RowNote variant="block">
             <div class="flex flex-col gap-3">

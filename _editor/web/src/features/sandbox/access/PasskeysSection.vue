@@ -94,9 +94,6 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
                         @click="setRequired(!list.required)"
                     />
                 </template>
-                <template v-if="!canRequire" #below>
-                    <span class="text-2xs text-subtle">Add a passkey of your own first: the rule needs something to open the door with.</span>
-                </template>
             </Row>
             <Row
                 v-if="list.required"
