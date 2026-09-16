@@ -3,80 +3,228 @@
 The non-GitHub half of the listing surface. [awesome-lists.md](awesome-lists.md) covers curated GitHub lists,
 [article-mentions.md](article-mentions.md) covers the editorial articles answer engines quote; this page
 covers product directories, launch platforms, company profiles and the one-shot community posts.
-Researched and executed 2026-08-10 against the live sites.
+First researched 2026-08-10. Every target below re-verified against the live sites on **2026-09-16**.
 
-**The fact that orders everything below.** As of 2026-08-10 the domain has **no third-party presence at all**:
-a search for the product returns intentic.dev and the GitHub repo, and nothing else. Meanwhile a differently
-named product ("Intent", intentapp.dev) already sits in AI-tool directories and answers to the same shape of
-query. Every listing here is therefore doing two jobs: earning a link, and making the name resolvable.
+**The fact that orders everything below.** As of 2026-08-10 the domain had no third-party presence at all,
+and a differently named product ("Intent", intentapp.dev) already answered to the same shape of query. That
+is half fixed: SaaSHub and LibHunt both carry a page now. Every listing here is still doing two jobs, earning
+a link and making the name resolvable.
+
+## The URL we submit
+
+**`https://intentic.dev/`. Not `/desk`.** Decided 2026-09-16, and worth writing down because `/desk` is the
+link we hand out everywhere else and the instinct is to reuse it.
+
+`/desk` is the light skin's front door and is deliberately `noindex` (`_site/site/src/pages/desk.astro`).
+Verified live on 2026-09-16: `/desk` serves a 307 to `/desk/`, which returns `robots: noindex,follow` and a
+canonical pointing at itself. A page carrying that pair is the worst available target for an inbound link.
+It cannot rank, and because Google settles on `noindex,nofollow` for a page that stays `noindex`, the equity
+does not reach `/` either. Directory links to it would buy referral traffic and a brand mention, and nothing
+that compounds.
+
+Leave `desk.astro` alone. If a listing audience ever justifies the light skin, the URL that costs nothing is
+`https://intentic.dev/?variant=desk`: the pre-paint script honours `?variant=`, and `/` is indexable with a
+canonical of `https://intentic.dev/`, so the link still lands on the page we want to rank. Verified live.
 
 ## Canonical listing copy
 
-Reuse verbatim; do not re-invent per site. Voice rules are in [messaging.md](messaging.md).
+Reuse verbatim; do not re-invent per site. Voice rules are in [messaging.md](messaging.md): lowercase
+`intentic` always, no em-dashes, no adjective a screenshot cannot back.
 
 | Field | Value |
 | --- | --- |
-| Name | `intentic` (always lowercase) |
-| Tagline, 39 chars | You delegate. Agents work. You approve. |
-| Short | A workspace for coding agents. They keep running when you close the browser. Reopen anywhere and review every change before it is merged. Free. |
-| Website | https://intentic.dev |
+| Name | `intentic` (always lowercase, including at the start of a sentence) |
+| Website | https://intentic.dev/ |
 | Source | https://github.com/intentic/intentic (MIT) |
 | Demo | https://intentic.dev/demo/ |
 | Docs | https://intentic.dev/docs |
-| Contact | radarsuspam@gmail.com (the listing identity) |
-| Logo | `_site/site/public/assets/intentic-logo-sized.png` (326×326) |
-| Screenshots | `_site/site/src/assets/product/`: `fleet-board.png`, `workspace-editor.png`, `workspace-changes.png`, `mobile-fleet.png` |
+| Discord | https://discord.gg/3veuzYp32T |
+| Founder | Artur Kurowski ([GitHub](https://github.com/radarsu), [LinkedIn](https://www.linkedin.com/in/radarsu/)) |
+| Pricing field | Free. MIT. No paid tier, no card, no trial. |
+| License | MIT |
+| Platforms | Web (any browser), self-hosted via Docker on Linux/Windows/macOS, desktop app for Windows and Linux |
 
-Long description, for the sites that give you a paragraph:
+### The length ladder
 
-> intentic gives every coding agent a machine of its own: a persistent container sandbox on
-> laptop, desktop or VPS, with a git worktree of its own. Runs continue after you close the browser and reopen
-> from any device, phone included, sorted by which agent needs you. Plan mode by default, per-hunk diff review,
+Directories ask for the same sentence at a dozen different caps. Pick the longest one that fits; never write
+a new one. Character counts are exact.
+
+| Cap | Copy | Len |
+| --- | --- | --- |
+| Brand line / 40 | You delegate. Agents work. You approve. | 39 |
+| 30 | A workspace for coding agents. | 30 |
+| 50 | A workspace for coding agents. Free, MIT. | 41 |
+| 60 | A workspace for coding agents. Free and open source. | 52 |
+| 80 | A workspace for coding agents. They keep running when you close the browser. | 76 |
+| 100 | A workspace for coding agents. They keep running when you close the browser. Free. | 82 |
+| 140 | A workspace for coding agents. Each one works in a sandbox, in its own git worktree, and keeps running when you close the browser. Free. | 136 |
+| 160 (meta) | A workspace for coding agents. They keep running when you close the browser. Reopen anywhere and review every change. Free. | 123 |
+| 200 | A workspace for coding agents. Each works in a sandbox on your machine, in its own git worktree. Runs continue when you close the browser. Reopen from any device and read every diff before it lands. | 198 |
+| 300 | A workspace for coding agents. Each agent works in a sandbox on your laptop, desktop or VPS, in a git worktree of its own. Runs continue after you close the browser, and you reopen from any device to steer the same fleet. Every change waits on its branch until you have read the diff. MIT and free. | 298 |
+| 10 words | A workspace for coding agents that keeps running without you. | 10w |
+
+Long description, for the sites that give you a paragraph (675 chars):
+
+> intentic gives every coding agent a machine of its own: a sandbox on your laptop, desktop or VPS, with a
+> git worktree of its own. Runs continue after you close the browser, and you reopen from any device, phone
+> included, onto the same fleet, sorted by which agent needs you. Plan mode by default, per-hunk diff review,
 > an environment Dockerfile the agent proposes for your approval, credentials held inside the sandbox and
 > injected per turn, and automations that wake an agent on a schedule, a webhook or a live event. Works with
 > Claude Code, Codex, Grok, Kimi Code and Gemini on your own subscriptions. MIT licensed and free: no
 > per-token metering, no markup on model usage.
 
-Categories to pick, in order of preference where a site offers them: **AI developer tools**, **AI coding**,
-**self-hosted**, **developer tools**, **AI agents**. Never "productivity", never "code autocomplete": both
+### Categories, tags, competitors
+
+Categories, in order of preference where a site offers them: **AI developer tools**, **AI coding**,
+**AI agents**, **developer tools**, **self-hosted**. Never "productivity", never "code autocomplete": both
 misdescribe the product and land it beside things it is not.
 
-Competitors to name where a site asks (these are the alternative-pages worth appearing on, and each one has a
-matching `/compare/` page on the site): **Cursor**, **Claude Code**, **Codex**, **Conductor**, **Superset**,
-**Vibe Kanban**, **Devin**.
+Tags, where a site takes a free list: `coding agent`, `AI agents`, `developer tools`, `self-hosted`,
+`open source`, `git`, `Docker`, `code review`, `Claude Code`, `Codex`, `agent orchestration`.
+
+Competitors to name where a site asks, each with a matching `/compare/` page on the site: **Cursor**,
+**Claude Code**, **Codex**, **Conductor**, **Superset**, **Vibe Kanban**, **Devin**.
+
+## Assets
+
+Pre-sized for upload forms, in [`press-kit/`](press-kit/). Built 2026-09-16 from the site's own shots, every
+file under 1 MB so nothing trips an upload cap.
+
+| File | Size | For |
+| --- | --- | --- |
+| `logo-512.png` | 512×512 | the square logo/icon field every directory has |
+| `cover-1200x630.png` | 1200×628 | OG card, cover image, "featured image" |
+| `screenshot-1-fleet-board.png` | 1600w | the fleet board: lead with this one |
+| `screenshot-2-review-a-diff.png` | 1600w | the Changes panel, side-by-side diff |
+| `screenshot-3-capabilities.png` | 1600w | the capability catalogue |
+| `screenshot-4-workspace.png` | 1600w | the editor and file tree |
+| `screenshot-5-phone.png` | 1200h | the fleet board on a phone |
+
+Originals live in `_site/site/src/assets/product/` at 2604px and up; regenerate from there rather than
+upscaling these.
 
 ## Ranked targets
 
-Ordered by what a listing is worth, not by how easy it is. "Gate" is what stops a submission going in today.
+Ordered by what a listing is worth, not by how easy it is. Every row re-checked 2026-09-16. The budget for
+this round is **free tiers only**, so Dev Hunt ($49/launch), OpenSourceAlternative.to's $29 expedited review
+and Microlaunch (its `/submit` now redirects straight to `/premium#pricing`) are out of scope rather than
+blocked.
 
-| Target | Why it ranks here | Gate | Status |
+### Tier A: authority and entity
+
+| Target | Why it ranks here | What it needs | State 2026-09-16 |
 | --- | --- | --- | --- |
-| [SaaSHub](https://www.saashub.com) | Ranks for "X alternatives" queries and cross-links from every competitor's page | Domain-email verification | **Live by 2026-08-29**; appears on AI Developer Tools, AI Coding and Devin alternatives pages |
-| [GitHub Marketplace](https://github.com/marketplace?type=actions) | Not a listing but a working piece of the product where CI users browse: the `intentic/gate-action` action (built in `_sandbox/gate-action`, synced by `action-publish.yml`), every workflow that adopts it carries the name in a public repo | Public `intentic/gate-action` repo + `GATE_ACTION_TOKEN` secret + first release; then the one-time Marketplace publish in the UI (developer agreement, categories: Continuous integration / Code review) | Built, awaiting owner setup |
-| [AlternativeTo](https://alternativeto.net) | The highest-authority alternatives site; owns the "alternative to Cursor / Claude Code" result | Account **and** a browser that clears its Cloudflare check: automation is blocked outright | Blocked |
-| [OpenAlternative](https://openalternative.co) | Open-source-only directory that already has "AI Agent Platforms", plus Claude Code, Codex and Cursor alternative pages: exact-fit taxonomy | Account (email magic link, Google or GitHub) | Blocked |
-| [Hacker News](https://news.ycombinator.com) (Show HN) | The largest single traffic event available, and a permanently indexed page | Account; one shot, so timing matters | **Held by owner 2026-08-12**: draft below, do not post |
-| [OpenSourceAlternative.to](https://opensourcealternative.to) | Open-source alternatives directory with a Claude Code alternatives page | Free review queue is 6+ months; expedited review is $29 | **Submitted 2026-08-29**, under review as a Claude Code alternative |
-| [Dev Hunt](https://devhunt.org) | Dev-tools-only launchpad, weekly leaderboard | Account and $49 for every launch week | Owner decision |
-| [StackShare](https://stackshare.io) | Tool profile that developers cite in stack decisions | Account; rate-limits automation | Blocked |
-| [Crunchbase](https://www.crunchbase.com) | Entity record: what disambiguates the name from "Intent" | Account | Blocked |
-| [Uneed](https://www.uneed.best) · [Peerlist](https://peerlist.io) | Small launch platforms, quick, cumulative | Account | Blocked |
-| [Fazier](https://fazier.com) | Launch platform | Free tier **requires a reciprocal link in intentic's own footer**; paid tiers $29–$149 | Owner decision, not a blocker |
-| [G2](https://www.g2.com) | High authority, but it is a reviews platform: a profile with no reviews does nothing | Account, and reviews to make it worth having | Deferred |
-| Product Hunt | One-shot launch; thin at 7 stars |: | **Skipped** by owner decision, 2026-08-10 |
-| [console.dev](https://console.dev) | Curated dev-tool newsletter, editorial link | Blocks automation; submit by hand | Blocked |
+| [SaaSHub](https://www.saashub.com/intentic) | Already live and already ranking, and claiming it unlocks a free console that posts to 110 more directories | `hello@intentic.dev` for domain verification, then an account | **Live, unclaimed.** See the two notes below: this is the highest-value row on the page |
+| [AlternativeTo](https://alternativeto.net) | DS 86. Owns the "alternative to Cursor / Claude Code" result outright | Account, and a real browser: returns 403 to anything automated | Blocked on sign-in |
+| [SourceForge](https://sourceforge.net/create/) | DS 92, and a free open-source project listing that mirrors from GitHub. Feeds Slashdot's software section too | Account, real browser (403 to automation) | Blocked on sign-in |
+| [OpenAlternative](https://openalternative.co/submit) | Exact-fit taxonomy: it already has an "AI Agent Platforms" category and Claude Code, Codex and Cursor alternative pages | Sign in with Google or GitHub | Blocked on sign-in |
+| [Crunchbase](https://www.crunchbase.com) | The entity record that disambiguates the name from "Intent"/intentapp.dev, and a source answer engines quote | Account, real browser (403) | Blocked on sign-in |
+| [LinkedIn company page](https://www.linkedin.com/company/setup/new/) | Free entity record. Not in the old list, and the one profile every "is this real" check looks for | LinkedIn account | Blocked on sign-in |
+
+### Tier B: developer-relevant, free
+
+| Target | Why | What it needs | State |
+| --- | --- | --- | --- |
+| [LibHunt](https://www.libhunt.com/r/intentic/intentic) | **Already exists**, auto-indexed from GitHub, and SaaSHub links to it | Claim it to control the copy | Live, unclaimed |
+| [StackShare](https://stackshare.io) | Tool profile developers cite in stack decisions | Account; rate-limits automation (429 on a plain fetch) | Blocked on sign-in |
+| [Indie Hackers](https://www.indiehackers.com/products/new) | Product page plus a community that reads it | Account | Blocked on sign-in |
+| [Peerlist](https://peerlist.io/launchpad) | Launch platform with real developer traffic | Account, real browser (Cloudflare challenge) | Blocked on sign-in |
+| [Uneed](https://www.uneed.best/submit-a-tool) | Free tier; scrapes the page for you, then asks for an account to save | Account | Blocked on sign-in |
+| [opensource.builders](https://github.com/junaid33/opensource.builders) | Open-source alternatives directory that takes GitHub issues, not a form: the only target here needing no sign-in | A GitHub issue in `CONTRIBUTING_TO_OSB.md`'s template | **Drafted below**, awaiting a go-ahead to post as `radarsu` |
+| [Fazier](https://fazier.com/submit) | Launch platform, DR 82 on the paid tier | Free tier buys the link with a link: a Fazier badge in intentic's footer | **Approved 2026-09-16.** Needs the listing first, then the footer change |
+| [TinyLaunch](https://www.tinylaunch.com) | Same trade as Fazier: dofollow backlink granted when you embed their badge with a dofollow link | Account, plus the badge in the footer | Same decision as Fazier, not yet taken |
+| [OpenHunts](https://openhunts.com) · [BetaList](https://betalist.com) · [Launching Next](https://www.launchingnext.com/submit/) | Small, cumulative, free | Account each | Blocked on sign-in |
+
+### Tier C: the AI-tool long tail
+
+SaaSHub publishes a free, actively maintained [list of 110 directories](https://www.saashub.com/submit/list)
+with Domain Strength and traffic for each, and a console that posts to them from the product's management
+page. Most of that list is DS under 25 with four-figure traffic: hand-filing them one at a time is not worth
+an afternoon, and a burst of identical listings on DS-10 sites is the shape of link building Google discounts
+on purpose. Do them in one pass from the SaaSHub console once the listing is claimed, pick the rows that are
+actually about developer tools or AI agents, and skip the rest.
+
+### Out of scope, and why
+
+| Target | Why not |
+| --- | --- |
+| Product Hunt | Owner decision, 2026-08-10 and again 2026-09-16. Not yet. |
+| Hacker News (Show HN) | Held by owner 2026-08-12. Draft below, do not post. |
+| Dev Hunt | $49 per launch week; free tiers only this round |
+| OpenSourceAlternative.to (expedited) | $29; the free submission is already in the queue, see 2026-08-29 below |
+| Microlaunch | `/submit` now redirects to `/premium#pricing`: paid |
+| G2 · Capterra · GetApp · TrustRadius | Reviews platforms. A profile with no reviews is an empty shelf; worth doing once there are users who would write one |
+| Wikidata | Needs serious, independent, published sources. A repo this young does not clear the notability bar, and a rejected item is worse than none |
+| AppSumo | A deals marketplace for paid software. Wrong shape for a free MIT product |
+| console.dev | Editorial, refuses automation, and its `/tools/submit/` path is now a 404. Re-find the current path before spending a sign-in on it |
+
+## What the owner has to do
+
+**Nothing on this page can be filed without a sign-in.** That is not a scoping choice: every open form in the
+list redirects to a login (Uneed, BetaList, OpenHunts, Indie Hackers, TinyLaunch), and the higher-authority
+half returns 403 to anything that is not a real browser (AlternativeTo, SourceForge, Crunchbase, SaaSHub's
+own login, G2). Verified one by one on 2026-09-16.
+
+Two things unlock the whole page:
+
+1. **Create `hello@intentic.dev`.** Cloudflare Email Routing is already enabled on the zone (the
+   `route1/2/3.mx.cloudflare.net` MX records are live), so this is Email → Email Routing → Routing rules →
+   Create address, forwarding to the owner's mailbox. Under a minute, free. It is what turns the existing
+   SaaSHub entry into a *verified* alternative on every competitor page it was filed against, moves that
+   queue from 32 days to fast, and opens the 110-directory console. The sandbox's Cloudflare token carries
+   DNS but not the Email Routing grant, so this one has to happen in the dashboard.
+2. **Sign in once per site**, in the sandbox's own browser, so the session persists for the filing. Order by
+   value: SaaSHub → AlternativeTo → SourceForge → OpenAlternative → Crunchbase → LinkedIn → StackShare →
+   the Tier B launch platforms. Google sign-in covers OpenAlternative, Crunchbase and Peerlist; AlternativeTo,
+   SourceForge and SaaSHub each want their own account.
 
 ### Notes that decide whether a submission survives
 
-- **SaaSHub verification needs an address on the product's own domain** (e.g. `hello@intentic.dev`), not the
-  listing identity's gmail. Verifying is what turns the entry into a *verified alternative* on the competitor
-  pages it was filed against, and it moves the queue from 32 days to fast. This is the single highest-value
-  follow-up on this page.
-- **AlternativeTo and console.dev both refuse a headless browser.** They need the identity's own browser
-  profile, not a fresh automated one.
-- **Fazier's free tier buys a link with a link.** Adding a directory badge to intentic's footer is a site
-  change and a taste call: it is not worth it for a DR-40-ish listing, so it stays a decision rather than a task.
-- **G2 before reviews is an empty shelf.** Worth doing after there are users who would write one.
+- **The live SaaSHub listing currently publishes a model's refusal as intentic's feature list.** Its
+  "Features & Specs" section reads *"Unable to verify. I do not have access to real-time browsing or verified
+  information about intentic.dev, so I cannot confirm specific pros of this product or service."* That is on
+  a page that already ranks for the product's own name. Claiming the listing and replacing it is the single
+  cheapest quality win available, ahead of any new submission.
+- **AlternativeTo, SourceForge, Crunchbase and console.dev all refuse a headless browser.** They need a real
+  signed-in browser profile, not a fresh automated one.
+- **Fazier and TinyLaunch both buy a link with a link.** The footer badge is a site change and a taste call.
+  Fazier is approved as of 2026-09-16; TinyLaunch is the same trade and has not been decided.
+- **One identity per listing, and keep it straight.** The 2026-08 submissions went in under
+  radarsuspam@gmail.com. Anything filed from a different account from here on cannot claim them, so record
+  which account filed what, in this file, at the time.
+
+## opensource.builders: prepared, awaiting a go-ahead
+
+The one target on this page that needs no sign-in, because it takes GitHub issues rather than a form. The
+maintainer closes anything that ignores the template (issues #573, #574, #578 are all "read the format"), and
+issue #572 shows the exact shape a competitor used. The connected GitHub token is the owner's own account,
+`radarsu`, so filing this posts publicly as the owner: it has not been filed.
+
+Title:
+
+> Add intentic as an open-source alternative to Cursor, Claude Code and Devin
+
+Body, in the repo's template #2 format:
+
+> Add open source alternative to Cursor:
+> - Name: intentic
+> - Repository: https://github.com/intentic/intentic
+> - Description: A workspace for coding agents. Each agent works in a sandbox on your own machine, in a git
+>   worktree of its own, and keeps running when you close the browser.
+> - Similarity Score: 70
+> - Notes: Where Cursor puts you at the keyboard with AI assistance, intentic puts the agent there and gives
+>   you the surfaces to supervise it: a fleet board, plan-mode approvals, per-hunk diff review and the same
+>   terminal the agent types into. Runs survive the browser closing and resume from any device. MIT, free, and
+>   it drives Claude Code, Codex, Grok, Kimi Code and Gemini on your own subscriptions.
+>
+> Add open source alternative to Devin:
+> - Name: intentic
+> - Repository: https://github.com/intentic/intentic
+> - Description: Self-hosted workspace for autonomous coding agents, running on your own hardware.
+> - Similarity Score: 65
+> - Notes: Same autonomous-agent job, opposite trust model. Agents run in a Docker sandbox on your laptop,
+>   desktop or VPS rather than a vendor's cloud, credentials stay inside that sandbox, and every change waits
+>   on its branch until you have read the diff. No per-token metering.
 
 ## Show HN: prepared, held by owner decision 2026-08-12
 
@@ -128,9 +276,19 @@ First comment, posted immediately after submitting:
   Claude Code. The public submission page is [under review](https://opensourcealternative.to/project/intentic);
   the site quotes 6+ months for free review, and no paid expedited review was purchased.
 
-## What unblocks the rest
+## Done 2026-09-16
 
-Every remaining target needs one thing: a signed-in browser belonging to the listing identity
-(radarsuspam@gmail.com). Sites that offer "Continue with Google": OpenAlternative, StackShare, Crunchbase,
-Peerlist: fall in one pass once that browser exists; AlternativeTo, Dev Hunt and Hacker News each need their
-own account created in it. Dev Hunt additionally needs an explicit decision to spend $49 on a launch week.
+Preparation only. Nothing was filed: see "What the owner has to do" for why.
+
+- **Decided the submission URL is `https://intentic.dev/`**, not `/desk`, and recorded the reasoning above so
+  the question does not get re-opened. `desk.astro` was not touched.
+- **Re-verified every target** against the live sites, dropped the ones that have since gone paid or 404, and
+  added Tier A's LinkedIn and SourceForge rows and Tier B's LibHunt, Indie Hackers, opensource.builders and
+  TinyLaunch rows.
+- **Found the SaaSHub listing is live but publishes a model refusal as its feature list**, and found the free
+  110-directory console that claiming it unlocks.
+- **Found LibHunt already carries a page** for the repo, unclaimed.
+- **Built [`press-kit/`](press-kit/)**: logo, cover and five screenshots, all sized for upload forms.
+- **Wrote the length ladder** above, so no submission needs new copy written at the form.
+- **Drafted the opensource.builders issue** in the maintainer's required template, unposted.
+- Budget for the round set to free tiers only, with Fazier's badge-for-listing trade approved.
