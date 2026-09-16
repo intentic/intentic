@@ -47,8 +47,10 @@ const nameOf = (option: { label: string; title?: string; markTitle?: string; mar
 };
 
 // Square-ish at one digit and a lozenge past that, like the rail's; `tabular-nums` so a ticking count doesn't
-// shuffle the pill's width under the pointer.
-const CHIP = `ml-1 inline-flex h-[1.5em] min-w-[1.5em] items-center justify-center rounded-full px-[0.35em] text-2xs font-semibold leading-none tabular-nums`;
+// shuffle the pill's width under the pointer. Sized a step below the label (3xs, 1.35em ⇒ 13.5px) so it sits INSIDE
+// the pill's 16px line box: at the label's own size it filled that box edge to edge and read as a second control
+// rather than a count on one. The rail's is bigger because it floats in a tile's corner, owing no line its height.
+const CHIP = `ml-1 inline-flex h-[1.35em] min-w-[1.35em] items-center justify-center rounded-full px-[0.3em] text-3xs font-semibold leading-none tabular-nums`;
 </script>
 
 <template>

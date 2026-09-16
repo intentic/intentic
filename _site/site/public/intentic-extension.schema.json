@@ -1161,9 +1161,9 @@
                                         "const": "webext"
                                     },
                                     "install": {
+                                        "description": "Where this browser's extension is installed from: its store listing, or a page offering the build.",
                                         "type": "string",
-                                        "format": "uri",
-                                        "description": "Where this browser's extension is installed from: its store listing, or a page offering the build."
+                                        "format": "uri"
                                     },
                                     "skill": {
                                         "type": "string",
@@ -1176,7 +1176,6 @@
                                     "catalog",
                                     "fields",
                                     "kind",
-                                    "install",
                                     "skill"
                                 ],
                                 "additionalProperties": false

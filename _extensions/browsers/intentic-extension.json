@@ -33,6 +33,7 @@
             {
                 "id": "edge",
                 "kind": "webext",
+                "install": "https://microsoftedge.microsoft.com/addons/detail/intentic",
                 "catalog": {
                     "name": "Your Edge",
                     "icon": "globe",
