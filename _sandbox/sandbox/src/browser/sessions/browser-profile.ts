@@ -208,8 +208,13 @@ export const createBrowserProfileRoute = (services: Services) =>
                         );
                     ctx.on("page", arm);
                     arm(page);
+                    // Told to the owner, not just the log: a picture that stops without a word is a window that looks
+                    // alive and answers nothing, since this route has no frames path to fall back to.
                     view = await startLiveView(ctx, profile, { send: (data) => ws.send(data) }, (reason) => {
                         services.logger.warn({ reason }, "browser-profile stream failed");
+                        if (!closed) {
+                            ws.send(JSON.stringify({ type: "error", message: `The browser's picture stopped: ${reason}` }));
+                        }
                     });
                     // Doesn't fail on a slow page; the owner can interact once it paints.
                     await page.goto(startUrl, { waitUntil: "domcontentloaded" }).catch((err: unknown) => {

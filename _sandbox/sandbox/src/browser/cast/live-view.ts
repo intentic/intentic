@@ -124,8 +124,15 @@ const startVideoView = (context: BrowserContext, display: Display, sink: Sink, o
     };
 };
 
+// Both coordinates finite, or the event names no point on the display: a client that cannot measure its picture
+// sends null, and `Math.round(null)` is 0, which replays as a real click in the top-left corner.
+const aimed = (message: MouseMessage): boolean => Number.isFinite(message.x) && Number.isFinite(message.y);
+
 // A pointer event, in the display's own coordinates, which is the space both the picture and XTEST are in.
 const pointer = (input: XInput, message: MouseMessage): void => {
+    if (!aimed(message)) {
+        return;
+    }
     if (message.action === "wheel") {
         input.wheel(message.x, message.y, message.deltaX ?? 0, message.deltaY ?? 0);
         return;

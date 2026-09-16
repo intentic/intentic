@@ -148,13 +148,18 @@ onBeforeUnmount(() => {
 // Every pointer event, built by the shared rule (pointerFrame) so this window and the agent's browser view describe
 // drags and clicks the same way.
 // The canvas is checked, not assumed: a surface whose canvas has unmounted still carries these listeners, and a null
-// ref reaches viewportCoords as a dereference inside a native event handler.
+// ref reaches viewportCoords as a dereference inside a native event handler. A canvas still hidden by `v-show` has no
+// box either, and pointerFrame answers undefined rather than the origin; nothing is sent until there is a picture to
+// aim at.
 const sendPointer = (action: PointerAction, event: MouseEvent): void => {
     const canvas = canvasEl.value;
     if (canvas === null) {
         return;
     }
-    sendMsg(pointerFrame(action, event, canvas, viewW.value, viewH.value));
+    const frame = pointerFrame(action, event, canvas, viewW.value, viewH.value);
+    if (frame !== undefined) {
+        sendMsg(frame);
+    }
 };
 
 const onMouseMove = (event: MouseEvent): void => {

@@ -344,8 +344,14 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     // Every pointer event routes through here, so `driving` is checked once and a frame built in one place
     // (pointerFrame); nothing reaches the page while only watching.
     const sendPointer = (action: PointerAction, event: MouseEvent, element: HTMLElement): void => {
-        if (driving.value) {
-            send(pointerFrame(action, event, element, viewWidth.value, viewHeight.value));
+        if (!driving.value) {
+            return;
+        }
+        // Undefined while the picture has no box (a frames <img> before its first src): sending would aim at the
+        // remote origin instead of where the user pointed.
+        const pointer = pointerFrame(action, event, element, viewWidth.value, viewHeight.value);
+        if (pointer !== undefined) {
+            send(pointer);
         }
     };
     return {

@@ -50,8 +50,15 @@ test("a click in the letterbox belongs to the nearest edge, not to a coordinate 
     expect(at(box, 2560, HEIGHT)).toEqual({ x: WIDTH, y: HEIGHT });
 });
 
-test("a pane with no area yet maps to the origin rather than dividing by zero", () => {
-    expect(at({ left: 0, top: 0, width: 0, height: 0 }, 10, 10)).toEqual({ x: 0, y: 0 });
+// A hidden canvas (`v-show` before the first frame) reports an all-zero rect. Answering the origin would have been a
+// coordinate, and every event carrying it drove the remote pointer into the display's top-left corner.
+test("a pane with no area yet yields no coordinate at all", () => {
+    expect(at({ left: 0, top: 0, width: 0, height: 0 }, 10, 10)).toBeUndefined();
+});
+
+test("a viewport with no size yields no coordinate either", () => {
+    const element = { getBoundingClientRect: () => ({ left: 0, top: 0, width: WIDTH, height: HEIGHT, right: WIDTH, bottom: HEIGHT }) } as HTMLElement;
+    expect(viewportCoords({ clientX: 10, clientY: 10 } as MouseEvent, element, 0, 0)).toBeUndefined();
 });
 
 // The same pane, asked the reverse question: where does something the remote page reported get painted?

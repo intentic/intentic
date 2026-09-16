@@ -1,11 +1,20 @@
 // Both surfaces (useBrowserView, BrowserProfileDialog) render the frame `object-contain`, so it letterboxes inside
 // the element's own box; measuring the element instead of the painted rect misses small targets by half the
 // letterbox. Clamped at both ends, so a click in the letterbox lands on the nearest page edge.
-export const viewportCoords = (event: MouseEvent, element: HTMLElement, viewWidth: number, viewHeight: number): { x: number; y: number } => {
+// Undefined when there is no box to measure against: an element still hidden by `v-show` reports an all-zero rect,
+// and answering the origin instead would aim every event at the remote display's top-left corner.
+export const viewportCoords = (
+    event: MouseEvent,
+    element: HTMLElement,
+    viewWidth: number,
+    viewHeight: number,
+): { x: number; y: number } | undefined => {
     const rect = element.getBoundingClientRect();
     const scale = Math.min(rect.width / viewWidth, rect.height / viewHeight);
-    if (scale <= 0) {
-        return { x: 0, y: 0 };
+    // Finite and positive, both: a zero-area element scales to 0, and a zero-sized viewport scales to Infinity, whose
+    // letterbox term is `0 * Infinity` — NaN, which crosses JSON as null and lands as 0 at the far end.
+    if (!Number.isFinite(scale) || scale <= 0) {
+        return undefined;
     }
     const clamp = (value: number, max: number): number => Math.min(max, Math.max(0, Math.round(value / scale)));
     return {

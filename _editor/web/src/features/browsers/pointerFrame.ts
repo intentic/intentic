@@ -30,18 +30,24 @@ export interface PointerFrame {
 // Set only when true, so the common case (no modifier) keeps the frame small.
 const flag = (on: boolean): { readonly ctrl?: true } => (on ? { ctrl: true } : {});
 
+// Undefined when the picture has no box yet (viewportCoords' rule): there is no frame to describe an event with, and
+// a caller that sent one anyway would drive the remote pointer to its origin.
 export const pointerFrame = (
     action: PointerAction,
     event: MouseEvent,
     element: HTMLElement,
     viewWidth: number,
     viewHeight: number,
-): PointerFrame => {
+): PointerFrame | undefined => {
+    const at = viewportCoords(event, element, viewWidth, viewHeight);
+    if (at === undefined) {
+        return undefined;
+    }
     const wheel = action === `wheel`;
     return {
         type: `mouse`,
         action,
-        ...viewportCoords(event, element, viewWidth, viewHeight),
+        ...at,
         buttons: event.buttons,
         // A move or wheel names no button, or Chromium would read the event as a button event.
         ...(action === `move` || wheel ? {} : { button: event.button }),
