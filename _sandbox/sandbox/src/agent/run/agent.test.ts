@@ -3,7 +3,8 @@ import type { Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMe
 import { homedir } from "node:os";
 import { type AgentEvent, type AgentReply, type PermissionMode, PermissionModeSchema } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
-import { mergeHooks, type OauthRecoveryOptions, runAgent } from "./agent.js";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { mcpConfigOffArgv, mergeHooks, type OauthRecoveryOptions, runAgent } from "./agent.js";
 import type { AgentQuery, QueryFn } from "./sdk-stream.js";
 import { resolveRequest } from "../tools/agent-requests.js";
 import { SteeringQueue } from "../anchors/agent-steering.js";
@@ -2117,4 +2118,47 @@ test("a plan that IS the plan carries nothing: the card already holds it", async
     const frames = await planAfterWriting("# Notes", "# The plan\n\nStep one, at length, with the reasoning behind it, in the card itself.");
 
     expect(frames.find((frame) => frame.kind === "plan")?.document).toBeUndefined();
+});
+
+// The CLI's argv is world-readable via /proc and is what `pkill -f` matches, so the MCP document must not sit in it.
+const MCP_DOCUMENT = JSON.stringify({
+    mcpServers: { rog: { type: "http", url: "https://example.test", headers: { Authorization: "Bearer s3cret" } } },
+});
+
+test("the inline MCP document moves off argv into a file the CLI is pointed at", () => {
+    const moved = mcpConfigOffArgv(["--model", "opus", "--mcp-config", MCP_DOCUMENT, "--verbose"]);
+
+    const path = moved.args[3] ?? "";
+    expect(moved.args).toEqual(["--model", "opus", "--mcp-config", path, "--verbose"]);
+    expect(path.startsWith("{")).toBe(false);
+    expect(readFileSync(path, "utf8")).toBe(MCP_DOCUMENT);
+    // 0600: every agent's Bash tool runs as this same user, so the group/other bits are the whole point.
+    expect(statSync(path).mode & 0o077).toBe(0);
+
+    moved.dispose();
+    expect(existsSync(path)).toBe(false);
+});
+
+test("no secret survives in the argv the CLI is spawned with", () => {
+    const moved = mcpConfigOffArgv(["--mcp-config", MCP_DOCUMENT]);
+
+    expect(moved.args.join(" ")).not.toContain("s3cret");
+    moved.dispose();
+});
+
+test("argv with no MCP document is handed through untouched, and disposing it is safe", () => {
+    const moved = mcpConfigOffArgv(["--model", "opus"]);
+
+    expect(moved.args).toEqual(["--model", "opus"]);
+    expect(() => moved.dispose()).not.toThrow();
+});
+
+test("a value that is already a path stays one, and the flag's values end at the next flag", () => {
+    const moved = mcpConfigOffArgv(["--mcp-config", "/etc/servers.json", MCP_DOCUMENT, "--strict-mcp-config", "{not-a-value}"]);
+
+    expect(moved.args[1]).toBe("/etc/servers.json");
+    expect(moved.args[2]).not.toBe(MCP_DOCUMENT);
+    // Past the next flag nothing is rewritten, whatever it looks like.
+    expect(moved.args[4]).toBe("{not-a-value}");
+    moved.dispose();
 });

@@ -13,6 +13,8 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import { claudeCliPath, refreshClaudeSdk, sdk } from "../../runtimes/claude/claude-sdk.js";
 import { spawn } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import {
     type AdmissionRule,
     type AgentCapabilities,
@@ -31,7 +33,7 @@ import {
     type TurnNote,
     type UsageWindow,
 } from "@intentic/sandbox-contract";
-import { relative, sep } from "node:path";
+import { join, relative, sep } from "node:path";
 import { z } from "zod";
 import { daemonMountNs, inWorktree, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV, type TurnPlacement } from "../../agents/worktrees/isolation.js";
 import { worktreeRedirectHooks } from "../../agents/worktrees/worktree-redirect.js";
@@ -334,21 +336,60 @@ const disallowedToolsOf = (request: AgentRequest): string[] => [
     ...(request.unattended === true ? PLAN_TOOLS : []),
 ];
 
-// On a 401 the CLI asks this callback for a refreshed token and resumes on what comes back; the same token ends the
-// turn. Untyped in sdk.d.ts (present in sdk.mjs), hence the OauthRecoveryOptions extension.
+// The SDK writes every MCP server onto the CLI's argv as one inline JSON document. `/proc/<pid>/cmdline` is readable by
+// anything running as this user, the agent's own Bash tool included, so that argv is both a credential leak (bearer
+// headers, pair tokens) and a kill surface: `pkill -f` on any string inside it matches EVERY live agent's CLI at once.
+// The flag equally accepts files, so the document moves into one, 0600, removed when the CLI exits.
+const MCP_CONFIG_FLAG = "--mcp-config";
+
+export const mcpConfigOffArgv = (args: readonly string[]): { readonly args: string[]; readonly dispose: () => void } => {
+    const at = args.indexOf(MCP_CONFIG_FLAG);
+    if (at === -1) {
+        return { args: [...args], dispose: () => {} };
+    }
+    const rewritten = [...args];
+    let dir: string | undefined;
+    // The flag is variadic: its values run to the next flag, and only an inline document (not an existing path) moves.
+    for (let index = at + 1; index < rewritten.length; index += 1) {
+        const value = rewritten[index];
+        if (value === undefined || value.startsWith("-")) {
+            break;
+        }
+        if (!value.startsWith("{")) {
+            continue;
+        }
+        dir ??= mkdtempSync(join(tmpdir(), "intentic-run-mcp-"));
+        const path = join(dir, `${index - at}.json`);
+        writeFileSync(path, value, { mode: 0o600 });
+        rewritten[index] = path;
+    }
+    if (dir === undefined) {
+        return { args: rewritten, dispose: () => {} };
+    }
+    const scratch = dir;
+    return { args: rewritten, dispose: () => rmSync(scratch, { recursive: true, force: true }) };
+};
+
 // Execs the CLI into the turn's isolation anchor via nsenter instead of spawning plainly; the SDK still owns the
 // child's stdio, exit and SIGTERM. A failure here fails the turn rather than silently using the shared tree.
 const namespacedSpawn =
     (anchor: IsolationAnchor) =>
     (options: SpawnOptions): SpawnedProcess => {
-        const { command, args } = nsenterArgv(anchor.pid, anchor.cwd, options.command, options.args);
-        return spawn(command, args, {
+        const config = mcpConfigOffArgv(options.args);
+        const { command, args } = nsenterArgv(anchor.pid, anchor.cwd, options.command, config.args);
+        const child = spawn(command, args, {
             env: options.env,
             ...opt("signal", options.signal),
             stdio: ["pipe", "pipe", "pipe"],
         });
+        // The CLI reads the file at startup; outliving the process would leave the document on disk for the tmp sweep.
+        child.once("exit", config.dispose);
+        child.once("error", config.dispose);
+        return child;
     };
 
+// On a 401 the CLI asks this callback for a refreshed token and resumes on what comes back; the same token ends the
+// turn. Untyped in sdk.d.ts (present in sdk.mjs), hence the OauthRecoveryOptions extension.
 export type OauthRecoveryOptions = Options & {
     getOAuthToken?: (context: { readonly signal: AbortSignal }) => Promise<string | undefined>;
 };
