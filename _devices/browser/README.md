@@ -31,14 +31,24 @@ fails loudly, which is the behaviour worth having.
 
 ## Which browser it drives
 
-**Not the user's own.** A browser only speaks CDP if it was started with `--remote-debugging-port`, and nobody's
-everyday browser was; restarting theirs to add the flag would close every tab they had open. So: if a debugging
-endpoint is already there, it is used; otherwise a separate instance starts with its own profile directory under
-`~/.intentic/browser`.
+**Their browser, not their profile.** A browser only speaks CDP if it was started with `--remote-debugging-port`,
+and nobody's everyday browser was; restarting theirs to add the flag would close every tab they had open. So: if a
+debugging endpoint is already there, it is used; otherwise a separate instance starts with its own profile
+directory under `~/.intentic/browser`.
 
 That separate profile is a feature rather than a compromise. It is empty the first time, so the user signs into
 whatever is needed once, in a window they can watch, and it persists afterwards. Their own session is never
 automated and never at risk from a misfired click.
+
+Which *binary* gets started is asked of the OS, not guessed: the browser registered for `https` (Windows'
+`UserChoice` ProgId, `xdg-settings get default-web-browser` on Linux), used whenever it is Chromium-family. A
+default that cannot speak CDP — Firefox, Safari — falls through to the guesses in `browserCandidates`, and those
+are ordered so a browser installed on purpose outranks one the OS shipped: Brave, then Chrome, then Edge. Edge
+exists on every Windows whether its owner wanted one or not, so finding it says nothing about what they use.
+
+A Windows caveat worth knowing before someone reports it as a bug: the registered default is frequently Edge on a
+machine whose owner lives in another browser, because setting a default in Windows takes a deliberate trip through
+Settings and a fresh install does not always win one. The browser that opens is then correct and still surprising.
 
 ## Why hand-rolled CDP rather than Puppeteer or Playwright
 
@@ -62,8 +72,9 @@ If a later pair connects, Playwright's accessibility snapshot is a better instru
 
 ## What is testable without a browser
 
-`snapshot.ts`'s renderer and ref parsing, and the per-platform browser search: all pure. The CDP calls end in a
-real Chrome painting a real page; those need a machine, not a test.
+`snapshot.ts`'s renderer and ref parsing, the per-platform candidate list, and the parsing of what the OS answers
+about its default browser (a registry open command, a `.desktop` Exec line): all pure. Asking the OS shells out,
+and the CDP calls end in a real browser painting a real page; those need a machine, not a test.
 
 ## Key files
 

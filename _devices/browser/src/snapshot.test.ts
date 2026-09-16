@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { browserCandidates } from "./launch.js";
+import { browserCandidates, executableFromCommand, executableFromDesktopEntry, isChromiumFamily, registryValue } from "./launch.js";
 import { refIndex, renderPage, toPageState } from "./page.js";
 import { SNAPSHOT_SCRIPT } from "./snapshot.js";
 
@@ -68,9 +68,62 @@ test("the injected script avoids the template literals it is embedded in", () =>
 
 test("a Chromium-family browser is looked for where each platform keeps one", () => {
     const windows = browserCandidates("win32");
+    expect(windows.some((path) => path.includes("brave.exe"))).toBe(true);
     expect(windows.some((path) => path.includes("chrome.exe"))).toBe(true);
     expect(windows.some((path) => path.includes("msedge.exe"))).toBe(true);
     const linux = browserCandidates("linux");
+    expect(linux).toContain("/usr/bin/brave-browser");
     expect(linux).toContain("/usr/bin/google-chrome");
     expect(linux.some((path) => path.includes("chromium"))).toBe(true);
+});
+
+// The fallback order is the guess made when the OS won't name a default, and the guess is "whichever browser was
+// installed on purpose": Edge ships with Windows, so finding it proves nothing about what its owner wants.
+test("a browser installed on purpose is guessed before the one the OS shipped", () => {
+    const rank = (paths: string[], name: string): number => paths.findIndex((path) => path.toLowerCase().includes(name));
+    const windows = browserCandidates("win32");
+    expect(rank(windows, "brave")).toBeLessThan(rank(windows, "chrome"));
+    expect(rank(windows, "chrome")).toBeLessThan(rank(windows, "msedge"));
+    const linux = browserCandidates("linux");
+    expect(rank(linux, "brave")).toBeLessThan(rank(linux, "google-chrome"));
+    expect(rank(linux, "google-chrome")).toBeLessThan(rank(linux, "microsoft-edge"));
+});
+
+// Verbatim reg.exe output, captured from a Windows 11 machine: four spaces between columns, CRLF line endings,
+// and a value that contains spaces of its own. Transcribing it loosely is how a parser passes its test and fails
+// on the only input it will ever see.
+test("a reg.exe answer yields its value, spaces and all", () => {
+    const query = [
+        "",
+        "HKEY_CLASSES_ROOT\\MSEdgeHTM\\shell\\open\\command",
+        `    (Default)    REG_SZ    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" --single-argument %1`,
+        "",
+    ].join("\r\n");
+    expect(registryValue(query)).toBe(`"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" --single-argument %1`);
+    expect(registryValue(["", "HKEY_CURRENT_USER\\…\\UserChoice", "    ProgId    REG_SZ    MSEdgeHTM", ""].join("\r\n"))).toBe("MSEdgeHTM");
+    expect(registryValue("ERROR: The system was unable to find the specified registry key or value.")).toBeUndefined();
+});
+
+test("the registered open command yields the executable without its arguments", () => {
+    expect(executableFromCommand(`"C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe" --single-argument %1`)).toBe(
+        "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
+    );
+    expect(executableFromCommand(`C:\\Windows\\System32\\notepad.exe %1`)).toBe("C:\\Windows\\System32\\notepad.exe");
+    expect(executableFromCommand("   ")).toBeUndefined();
+});
+
+test("a desktop entry yields its Exec without the field codes the launcher substitutes", () => {
+    const entry = ["[Desktop Entry]", "Name=Brave Web Browser", "Exec=/usr/bin/brave-browser-stable %U", "Type=Application"].join("\n");
+    expect(executableFromDesktopEntry(entry)).toBe("/usr/bin/brave-browser-stable");
+    expect(executableFromDesktopEntry("[Desktop Entry]\nName=No Exec Here")).toBeUndefined();
+});
+
+// A default that cannot be driven over CDP is a reason to fall back to the guesses, not to refuse to start.
+test("only a Chromium-family binary counts as drivable", () => {
+    for (const path of ["/usr/bin/brave-browser", "/usr/bin/microsoft-edge", "C:\\…\\msedge.exe", "/usr/bin/chromium", "/opt/vivaldi/vivaldi"]) {
+        expect(isChromiumFamily(path)).toBe(true);
+    }
+    for (const path of ["/usr/bin/firefox", "/Applications/Safari.app/Contents/MacOS/Safari", "/usr/bin/flatpak"]) {
+        expect(isChromiumFamily(path)).toBe(false);
+    }
 });
