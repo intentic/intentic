@@ -83,6 +83,8 @@ export interface ProbeRunnerDeps {
     readonly workspace: { readonly root: string };
     readonly chores: ChoresStore;
     readonly agents: { readonly liveSessionIds: () => readonly string[] };
+    // Whether anything reads the measurements: the sweep spends machine time only while the maintenance extension is on.
+    readonly wanted: () => Promise<boolean>;
     readonly logger: Logger;
 }
 
@@ -163,6 +165,10 @@ export const createProbeRunner = (deps: ProbeRunnerDeps): ProbeRunner => {
     const sweep = async (): Promise<void> => {
         // The owner's own work always comes first; this sweep is background-only and defers to any live turn.
         if (draining !== undefined || deps.agents.liveSessionIds().length > 0) {
+            return;
+        }
+        // No panel to read them means no sweep; a requested probe (`refresh`) still runs, since someone asked.
+        if (!(await deps.wanted())) {
             return;
         }
         const due = await expired(deps, Date.now());

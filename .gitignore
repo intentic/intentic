@@ -41,6 +41,9 @@ _devices/win-launcher/target
 # copies into its dist — a build artifact living inside a tracked directory, so it is named rather than covered
 # by the dist globs above.
 _site/site/public/demo
+# The listed extensions' bundles the demo runs, fetched at the pinned commits by _site/demo/scripts/sync-extensions.mjs
+# before every build; the pins (vendor/extensions.json) and the knowledge engine copy beside them are tracked.
+_site/demo/vendor/extensions
 
 # Benchmark output — every iq-bench run writes a timestamped dir here; the datasets are the input worth keeping.
 _search/iq-bench/results

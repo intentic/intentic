@@ -90,14 +90,14 @@ own imports and refuses module-level `ref`/`shallowRef`/`reactive`, any reassign
 repeating clock in what it reaches. Six packs here had the same omission at once, which is how a Maintenance
 tile came to read `21` over a workspace that had two.
 
-## The three layouts, and which of the 27 wears each
+## The three layouts, and which of the 22 wears each
 
 A first-party extension is one of three shapes. Nothing enforces the choice — the manifest does — but knowing
 which shape a directory is saves opening it:
 
 | layout | what is in `src/` | who wears it |
 | --- | --- | --- |
-| **UI extension** | `manifest.ts`, `host.ts` (the singleton the views and the API impl share), `extension.ts` and the `.vue` views | `acceptance`, `activity`, `approvals`, `automations`, `deployments`, `documentation`, `git-history`, `issues`, `knowledge`, `maintenance`, `pipelines`, `preview`, `projects`, `repo-apps`, `workflows` |
+| **UI extension** | `manifest.ts`, `host.ts` (the singleton the views and the API impl share), `extension.ts` and the `.vue` views | `activity`, `approvals`, `automations`, `git-history`, `pipelines`, `preview`, `projects`, `repo-apps`, `workflows` |
 | **gateway pack** | `gateway.ts`, `client.ts`, `listener.ts` — a connector to somebody else's service, no `host.ts` because there is no view | `discord`, `google-workspace`, `imap`, `slack`, `telegram`, `whatsapp` |
 | **manifest-only pack** | nothing but the manifest: capabilities, skills, agent definitions or bin entries the daemon reads directly | `acp-agents`, `browsers`, `connectors`, `devices`, `pi-agent`, `social` |
 
@@ -124,17 +124,11 @@ confusion that this paragraph fixes.
 
 | Extension | Kind | What it contributes |
 | --- | --- | --- |
-| `acceptance` | UI view | Every repo's `docs/user-stories` + their acceptance criteria, authored here and walked through the running app by agents driving real browsers (one isolated fleet session per story, screenshots + report, live watchable). |
 | `activity` | UI view | The agent activity feed. |
 | `repo-apps` | UI view | Per-repo apps: preview URLs, add/start/stop, vitest. |
 | `automations` | UI view | Cron / webhook / listener automations. The SURFACE only: what can wake an agent and what is worth starting from are served together by the daemon's trigger catalogue (`GET /automations/catalog`), its own sources merged with every pack's `contributes.listener` and `contributes.automationTemplates`, and this page names no integration of its own. |
-| `deployments` | UI view + backend | Container health, incidents and one-click redeploys over a connected Komodo. Its whole Komodo side (client, board translation, repo→stack links, fix turns) is its backend: the daemon core carries no Komodo feature; the credential is read through the daemon's connection route, declared in `permissions.daemon`. |
 | `approvals` | UI view | The inbox of things the agent prepared and may not do unasked, posts to publish and actions to carry out: approve/edit/reschedule/reject, with the engine (store, executor, routes) staying in the daemon. Was an in-app page; the move minted `api.sandbox.role()` and the kit's `BrandMark`/`NoticeStack`/`useNow`/`useAsyncAction`. |
-| `documentation` | UI view + agent CLI + plugin | Plain-language architecture docs for every repo and package: a map-first agent run writes them as a reviewable draft, the owner publishes them into the repo. Ships the `intentic-docs` CLI (`contributes.bin`) and the `documenting` skill (`contributes.agent`). |
 | `git-history` | UI view + document | Every repository's commit graph, as the Git tab of its management panel (and a document for the workspace root, which has no panel): lanes and merges, a commit's changed files, and the write actions on one (branch, tag, checkout, cherry-pick, revert, drop, merge, rebase, reset), plus the branch switcher. The uncommitted half of the same story stays in the app's Changes panel. |
-| `knowledge` | UI view + backend + agent CLI + plugin | The owner's knowledge base: a workspace folder of markdown notes that is also a typed graph, `type:` makes a note a thing, a `[[link]]` in a header field is a named relationship. Search, the note, what links to it, and the map around it; its own vocabulary keeps the words consistent without ever refusing a capture. Ships the `kb` CLI (`contributes.bin`, built from the same engine its backend serves) and the `knowledge` skill (`contributes.agent`). |
-| `logs` | UI view | Workspace log tail. |
-| `maintenance` | UI view | The chore book against this workspace: what routine upkeep each repository is owed (outdated deps, advisories, dead code, duplication, undocumented packages, tangled files, periodic surveys), the daemon-measured evidence behind each verdict, and an isolated fleet turn per chore. |
 | `pipelines` | UI view | CI runs: status, rerun/cancel, agent-driven fixes. |
 | `preview` | UI view | Per-repo dev-server preview panels. |
 | `projects` | UI view | The workspace's repositories as a dashboard of tiles. A tile makes its repository the shell's project scope (`api.workspace.setProject`), which narrows the workspace, the agents board and every repository-keyed view to it; New project makes a fresh one in a press (`POST /workspace/repos/new`). Seated for everyone, and the one tile that says which project is open. |
@@ -152,6 +146,37 @@ confusion that this paragraph fixes.
 | `google-workspace` | daemon gateway + agent CLI | One connected Google account as Gmail, Calendar, Drive, Docs, Sheets and Contacts: the `gw` CLI (`contributes.bin`), a card that authenticates either as one person (OAuth) or as a whole company (a Workspace service account impersonating a named user), and a `process` + `listener` polling for new mail and imminent events. The read-only setting on the card is enforced twice, narrower scopes at Google, and a per-command refusal here. |
 | `rtk` | environment fragment | Ships the rtk binary into the sandbox image overlay (output-filter benchmarking); git-install opt-in. |
 
+## Listed, not baked: the six that live in their own repositories
+
+A first-party extension ships in the image when **a sandbox is not itself without it**: the work loop
+(`projects`, `activity`, `preview`, `repo-apps`, `viewers`, `git-history`), the only window onto an engine the
+daemon runs regardless (`automations`, `workflows`, `approvals`, `pipelines`), and the data that makes the
+Capabilities grid exist (the manifest-only packs and the gateway cards). Everything else is a practice you adopt
+or an integration you own, noticed only when reached for, and the place to reach is Extensions → Browse.
+
+| Extension | Repository | Why it is listed |
+| --- | --- | --- |
+| `intentic.acceptance` | [intentic/extension-acceptance](https://github.com/intentic/extension-acceptance) | A QA practice: user stories walked through the running app by agents driving browsers. |
+| `intentic.documentation` | [intentic/extension-documentation](https://github.com/intentic/extension-documentation) | A documentation practice: the `intentic-docs` CLI, the `documenting` skill, the architecture pages. |
+| `intentic.maintenance` | [intentic/extension-maintenance](https://github.com/intentic/extension-maintenance) | A chore practice, and the one optional extension that spends machine time: the probe sweep (knip, jscpd, pnpm outdated) runs only while it is installed and on. |
+| `intentic.knowledge` | [intentic/extension-knowledge](https://github.com/intentic/extension-knowledge) | A knowledge-base practice: the notes graph, its backend, the `kb`/`obsidian` CLIs, the `knowledge` skill. |
+| `intentic.deployments` | [intentic/extension-deployments](https://github.com/intentic/extension-deployments) | A Komodo integration: container health, incidents and redeploys, with its whole Komodo side in its backend. |
+| `intentic.issues` | [intentic/extension-issues](https://github.com/intentic/extension-issues) | Bug intake via the reporter SDK embedded in the owner's apps; the daemon's `/intake` stays core, the inbox does not. |
+
+Each is a standalone repository built against the npm-published SDK, with `dist/` committed, and a row in
+[intentic/registry](https://github.com/intentic/registry). The daemon treats them like any install: a sha-pinned
+clone under `.intentic/local/extensions/<id>`, the same on/off switch, `contributes.bin` and `contributes.agent`
+composed per turn from the checkout. Their enablement keys are `publisher.name`, so a sandbox that had one baked
+and later installs it gets its old switch back. `logs` left the same way before them
+([intentic/extension-logs](https://github.com/intentic/extension-logs)); the workspace-level `extensions/README.md`
+holds the publishing steps.
+
+Two things in the core still know these names: the rail table (`core-views/registry.ts`) keeps the seats
+`acceptance`, `deployments`, `maintenance` and `documentation` take when installed, so an install lands them in
+the band a product decision put them in; and the daemon's probe runner and automation catalogue offer chore
+sweeps and chore templates only while `intentic.maintenance` is enabled, since their results land in a ledger only
+that panel reads.
+
 ## How they load: four paths, one list
 
 Every extension below is enumerated by
@@ -168,15 +193,16 @@ renders and what the on/off switch acts on. The paths differ only in where the *
   miss the middle one and it shows as `missing`. (Note the three *core* view contributions in
   `_editor/web/src/core-views/coreViews.ts` are **not** extensions: they're privileged in-app views coupled to
   platform internals; see that file and ARCHITECTURE.md.)
-- **Baked into the sandbox image** (`connectors`, `social`, `devices`, `acp-agents`, `discord`, `slack`,
-  `telegram`, `whatsapp`, `imap`, `google-workspace`): the whole checkout copied to `/opt/extensions` by the sandbox
+- **Baked into the sandbox image** (`connectors`, `social`, `devices`, `browsers`, `acp-agents`, `pi-agent`,
+  `discord`, `slack`, `telegram`, `whatsapp`, `imap`, `google-workspace`): the whole checkout copied to `/opt/extensions` by the sandbox
   [Dockerfile](../_sandbox/sandbox/Dockerfile) and read via `EXTENSIONS_DIR`: present in every sandbox,
   `builtin: true` on `GET /extensions`, not removable, no capability entry. This is how the `/capabilities`
   grid's derived cards exist out of the box: and why switching one of these packs off removes exactly its
   cards and nothing else.
 - **Git-installed** (the `extension` capability): an owner-only, full-sha-pinned clone into
-  `.intentic/local/extensions/<id>`: the path for third-party extensions and for opt-in first-party ones like
-  `rtk` (its environment fragment composes per capability entry, so baking it would be inert).
+  `.intentic/local/extensions/<id>`: the path for third-party extensions and for the listed first-party ones
+  (the six above, `logs`, and `rtk`, whose environment fragment composes per capability entry, so baking it
+  would be inert).
 - **Workspace** (none in this directory, they are not first-party by definition): a directory per extension
   under `.intentic/config/workspace-extensions/`, consumed in place with no clone and no install moment: the path
   for extensions authored *inside* the sandbox, typically by an agent with its own file tools. `.intentic` is
@@ -197,15 +223,16 @@ up iterates: no agent plugin dir, no PATH entry, no listener provider, no connec
 var, no autoStart process. In the browser the loader retires its activation, so its views, viewers, commands
 and file bindings unwind without a reload.
 
-**Three switches are fixed on**: `automations`, `workflows`, `maintenance` (`ESSENTIAL_EXTENSIONS` in the
-daemon). Each is the sole control surface for an engine the daemon runs regardless: the scheduler fires turns
-on its own, a running workflow advances daemon-side, the probe runner spends machine time on its tick. "Off"
-would not stop any of that: it would only remove the owner's ability to see, stop or approve it, which is how
-disabling the automations page once left every cron and approval firing invisibly. The daemon refuses the flip
-and the tab draws the switch as fixed with the reason. Declared by the core, never by a manifest: a field an
-extension could set on itself would be a pack making itself un-removable. Drafts is deliberately NOT in the
-set: its publisher acts only on drafts the owner already approved, so a hidden surface starves that engine
-rather than blinding anyone.
+**Two switches are fixed on**: `automations`, `workflows` (`ESSENTIAL_EXTENSIONS` in the daemon). Each is the
+sole control surface for an engine the daemon runs regardless: the scheduler fires turns on its own, a running
+workflow advances daemon-side. "Off" would not stop any of that: it would only remove the owner's ability to
+see, stop or approve it, which is how disabling the automations page once left every cron and approval firing
+invisibly. The daemon refuses the flip and the tab draws the switch as fixed with the reason. Declared by the
+core, never by a manifest: a field an extension could set on itself would be a pack making itself
+un-removable. Drafts is deliberately NOT in the set: its publisher acts only on drafts the owner already
+approved, so a hidden surface starves that engine rather than blinding anyone. Maintenance used to be the third:
+its probe sweep now runs only while that extension is installed and on, so the switch is the engine's switch and
+nothing spends machine time unseen.
 
 Not everything converges at the same moment, and the tab says which per extension: `views`, `viewers`,
 `commands`, `files`, `processes`, `capabilities`, `listener` and `settings` are immediate; `agent` and `bin` are
@@ -213,9 +240,9 @@ composed per agent turn, so they apply from the next one; an `environment` fragm
 image rebuild.
 
 The split is no longer a UI veneer: the backend host gives an extension a server half of its own, and
-`deployments` and `knowledge` are the features whose backends live entirely in their packages: own contract,
-own routes, no daemon-core feature code. The rest (activity, logs, drafts…) migrate the same way, each
-migration deleting its core routes.
+`deployments` and `knowledge` (both listed, in their own repositories) are the features whose backends live
+entirely in their packages: own contract, own routes, no daemon-core feature code. The rest (activity, drafts…)
+migrate the same way, each migration deleting its core routes.
 
 ## Which way a feature moves: substrate or feature
 

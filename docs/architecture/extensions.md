@@ -59,8 +59,8 @@ First-party extensions live in `_extensions/` and reach the product by one of **
 ([installed-extensions.ts](../../_sandbox/sandbox/src/extensions/installed-extensions.ts)) and served by
 `GET /extensions`, which is what the Sandbox hub's Extensions tab renders and what the on/off switch acts on.
 
-- **Compiled into the web bundle**: the UI extensions (`acceptance`, `activity`, `automations`, `logs`,
-  `pipelines`, `preview`, `repo-apps`, `viewers`), statically imported and keyed by manifest id
+- **Compiled into the web bundle**: the included UI extensions (`activity`, `approvals`, `automations`,
+  `git-history`, `pipelines`, `preview`, `projects`, `repo-apps`, `viewers`, `workflows`), statically imported and keyed by manifest id
   ([extension-host/builtins.ts](../../_editor/web/src/extension-host/builtins.ts)). They ship no `entry` over the
   wire (the bundle IS the SPA) but their manifest is baked into the image beside the daemon-side ones, so
   the daemon lists them and the loader's only question per extension is where its code comes from. The two
@@ -73,8 +73,11 @@ First-party extensions live in `_extensions/` and reach the product by one of **
   `slack`, `imap`). This is how those cards exist out of the box, and why switching one of those packs off
   removes exactly its cards.
 - **Git-installed**, the `extension` capability: an owner-only, full-sha-pinned clone into
-  `.intentic/local/extensions/<id>`, validated before swap. Third-party extensions arrive this way; of the
-  first-party ones only `rtk` does, because its environment fragment composes per capability entry.
+  `.intentic/local/extensions/<id>`, validated before swap. Third-party extensions arrive this way, and so do the
+  LISTED first-party ones: `acceptance`, `documentation`, `maintenance`, `knowledge`, `deployments`, `issues` and
+  `logs` each live in their own repository (`intentic/extension-<name>`) with a row in the registry, because a
+  sandbox is itself without them (`_extensions/README.md` has the rule and the table); `rtk` too, since its
+  environment fragment composes per capability entry.
 - **Workspace**, a directory per extension under `.intentic/config/workspace-extensions/`, consumed in place: no
   clone, no capability entry, no install moment. The path for extensions authored *inside* the sandbox,
   typically by an agent with its own file tools: `.intentic/config` is tracked, so one written from an
@@ -148,7 +151,7 @@ exactly as in the web loader, and the row rides `GET /extensions` (`backend` on 
 Each backend owns a **route namespace**: the daemon proxies `/x/<id>/*` to the host, through its ordinary
 auth and role floors, minus the caller's credentials: and the host dispatches with the prefix stripped, so
 an extension's handler sees the same paths its own contract declares. Both halves of an extension import that
-contract from the extension's own package (ext-knowledge's [contract.ts](../../_extensions/knowledge/src/contract.ts)),
+contract from the extension's own package (`src/contract.ts` in [intentic/extension-knowledge](https://github.com/intentic/extension-knowledge)),
 which keeps the compiled-together guarantee at the right grain while the CORE contract shrinks by every
 feature that moves out. An extension's UI calls its own namespace with **no `permissions.sandbox` entry**
 (its backend is its own code from the same approved checkout); any other namespace conforms like a core
@@ -158,8 +161,8 @@ deliberately NOT the all-routes panel token. Workspace files it touches directly
 `api.workspaceRoot`: full trust means no file service in between.
 
 The extracted features are **deployments** and **knowledge**: each one's routes, translation layer and
-schemas live entirely in its `_extensions/` package (UI halves compiled into the web bundle as before;
-backends baked as `dist/server.js`), and the daemon core carries neither feature at all. Deployments also
+schemas live entirely in its own repository (a listed extension: UI bundle and `dist/server.js` both committed
+there and cloned at install), and the daemon core carries neither feature at all. Deployments also
 exercises the two kernel calls a real feature backend needs: `GET /capabilities/{id}/connection`, a
 capability's stored config, secrets included, refused to every signed-in caller so only a declared extension
 grant can read it: and `POST /agent` for its one-click fix turns.

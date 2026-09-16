@@ -28,7 +28,6 @@ const MAY_SPELL_A_ROOT = new Set([
     `_tools/scripts/lib/repo-root.sh`, // the shell walker
     `_site/site/public/scripts/connect.sh`, // downloaded and run standalone
     `_site/site/public/scripts/recreate.sh`, // downloaded and run standalone
-    `_extensions/documentation/bin/intentic-docs`, // ships as a raw dir on the agent's PATH, no node_modules
     // Copied into a user's project; must stay installable from npm with only its declared dependency.
     `_tools/extension-example/seed/src/notes.ts`,
 ]);

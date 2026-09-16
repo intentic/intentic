@@ -292,10 +292,11 @@ from breaking the demo outright. `DEMO_PATH` is a relative `/demo/`, so a previe
 
 - **Demo bundle weight** (PrimeVue, monaco, xterm, shiki) is real but lands behind a click, in a separate build,
   never on the marketing page's critical path.
-- **The demo build shares the app build's worktree limitation**: both fail to resolve `@intentic/extension-ui`
-  from `_extensions/maintenance` under an agent worktree's overlaid `node_modules` (see the workspace README).
-  The demo's build is no worse off than the app's, and the dev server is unaffected: but neither the demo's
-  production bundle nor the site's `/demo/` has been built in an environment where the app's own build passes.
+- **The listed extensions the demo shows (acceptance, documentation, and the rest of the six) are not compiled
+  in**: `_site/demo/scripts/sync-extensions.mjs` fetches each one's manifest and built bundle at the commit
+  `_site/demo/vendor/extensions.json` pins, and the fixture serves them as installed extensions. A demo build
+  therefore reaches GitHub once, before Vite runs; an unpinned extension is left out of the recording with a
+  warning rather than failing the build.
 - **`optimizeDeps.include` is anchored at the consuming config's root**, so `_site/demo` declares the five
   packages that list names (`shiki`, `@shikijs/langs`, `@shikijs/themes`, `@vue-flow/core`, `@dagrejs/dagre`)
   even though it imports none of them directly: pnpm does not hoist. If that list in `vite.shared.ts` grows,

@@ -458,6 +458,10 @@
         "**/tmp",
         "**/assets/js/env.js",
         "_editor/web/public/ext-shims",
+        // The listed extensions at the registry's pinned commits, copied in by the demo's sync (vendor/README.md):
+        // built bundles that must stay byte-identical to an install, and an engine copy diffable against its origin.
+        "_site/demo/vendor/extensions",
+        "_site/demo/vendor/knowledge",
         "_sandbox/sandbox/operator-templates",
         // Vendored upstream source — kept byte-identical so it stays diffable against dmmulroy/anti-slop.
         "_tools/oxlint/anti-slop"

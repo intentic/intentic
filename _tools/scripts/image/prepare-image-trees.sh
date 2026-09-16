@@ -37,10 +37,10 @@ TREES="
 @intentic/ext-whatsapp:$out/extensions/whatsapp
 @intentic/ext-google-workspace:$out/extensions/google-workspace
 "
-# The extensions whose dist the image needs: the feature backend the daemon's backend host loads (manifest
-# `server`), and knowledge, which ships both a backend and the `kb` CLI built from the same TypeScript so the
-# agent and the panel cannot disagree about what the vault says.
-BUNDLES="deployments knowledge"
+# The extensions whose dist the image needs. Empty since the feature backends (deployments, knowledge) moved to
+# their own repositories and install from the registry; a first-party extension that bakes a compiled bundle again
+# joins this list, and the copy loop below is what carries it.
+BUNDLES=""
 
 filters=()
 for entry in $TREES; do filters+=(--filter="${entry%%:*}"); done

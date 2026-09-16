@@ -203,7 +203,6 @@ const DEAD_NAMES = [
 const DEAD_NAME_OK = new Map([
     // Fixtures whose stand-in repo is also named intentic, indistinguishable by the qualified pattern.
     ["_sandbox/sandbox/src/panels/panel-upstream.test.ts", "fixture: a workspace repo named intentic with an _apps/ instance"],
-    ["_extensions/documentation/src/brief.test.ts", "fixture: a workspace repo named intentic with a _libs/ package"],
     ["_tools/nav/baselines/", "recorded measurements of a tree that had those names"],
     ["_tools/checks/layout.mjs", "this file: the patterns above are the rule"],
     ["docs/audits/", "an audit describes the tree as it was"],

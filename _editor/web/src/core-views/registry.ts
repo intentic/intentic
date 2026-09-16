@@ -74,7 +74,9 @@ export const PROJECTS_VIEW_ID = `projects`;
 export const WORKSPACE_VIEW_ID = `workspace`;
 
 // Every tile here badges when it needs the owner, and lights while a run of its own is in flight; being
-// seated by lighting up costs them nothing.
+// seated by lighting up costs them nothing. acceptance, deployments, maintenance and documentation (below) are LISTED
+// first-party extensions, installed from the registry: their seats are declared here so an install lands them in the
+// band a product decision put them in, not at the end of the column like an unlisted stranger.
 const JUDGE: RailGroup = {
     id: `judge`,
     label: `Judge`,

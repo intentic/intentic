@@ -1,6 +1,4 @@
 import type { CapabilityFacts, Disposable, IntenticApi, ViewBadge, ViewRegistration } from "@intentic/extension-api";
-import * as acceptance from "@intentic/ext-acceptance";
-import * as documentation from "@intentic/ext-documentation";
 import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
 import type { PanelSummary } from "@intentic/api-contract";
@@ -32,9 +30,32 @@ const registerApi = {
 } as unknown as IntenticApi;
 apps.activate(registerApi, { extensionId: `intentic.repo-apps`, subscriptions: [] });
 preview.activate(registerApi, { extensionId: `intentic.preview`, subscriptions: [] });
-acceptance.activate(registerApi, { extensionId: `intentic.acceptance`, subscriptions: [] });
-// The rail-order cases need a listed rail view whose position wasn't accidental; the badge poll is harmless.
-documentation.activate(registerApi, { extensionId: `intentic.documentation`, subscriptions: [] });
+
+// Two LISTED first-party extensions (installed from the registry, not compiled in), registered here in the shape their
+// own repositories declare, since the rail rules below are about what happens when they are present: Acceptance is one
+// workspace-rooted tile that badges; Documentation is one tile plus an auxiliary per-repo directory panel.
+registerView(`intentic.acceptance`, {
+    id: `acceptance`,
+    label: `Acceptance`,
+    surface: `rail`,
+    detect: (repos) => (repos.some((repo) => repo.userStories || repo.hasPanel) ? [{ key: `acceptance`, title: `Acceptance`, icon: `list-check` }] : []),
+    view: async () => ({}),
+});
+registerView(`intentic.documentation`, {
+    id: `documentation`,
+    label: `Documentation`,
+    surface: `rail`,
+    detect: (repos) => (repos.length > 0 ? [{ key: `documentation`, title: `Documentation`, icon: `question-circle` }] : []),
+    view: async () => ({}),
+});
+registerView(`intentic.documentation`, {
+    id: `documentation-repo`,
+    label: `Docs`,
+    surface: `directory`,
+    auxiliary: true,
+    detect: (repos) => repos.map((repo) => ({ key: repo.repo, title: `Docs`, repo: repo.repo })),
+    view: async () => ({}),
+});
 
 // A PanelSummary with everything false; override only the facts a case exercises.
 const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => ({
@@ -141,9 +162,9 @@ describe(`auxiliary views`, () => {
     });
 });
 
-// Acceptance is workspace-scoped: one rail tile for the whole workspace, rooted at no repo, since a user
-// story is a promise about the product, not one repository. Its detect asks about the workspace, not each repo in turn.
-describe(`acceptance extension`, () => {
+// A workspace-rooted rail tile (Acceptance's shape: one tile for the whole workspace, rooted at no repo) is the
+// registry's other claiming rule: rooted at no repo means it claims none.
+describe(`workspace-rooted tiles`, () => {
     const tiles = (panels: PanelSummary[]) => detectActivations(panels, []).filter(({ extension }) => extension.id === `acceptance`);
 
     it(`contributes ONE tile for the workspace, rooted at no repo`, () => {
@@ -153,17 +174,7 @@ describe(`acceptance extension`, () => {
         expect(found[0]?.activation.repo).toBeUndefined();
     });
 
-    // The view is where stories are written, so "a repo runs an app" is enough evidence to offer it: gating on
-    // stories alone would strand a workspace with none.
-    it(`activates on a repo that only runs an app, so the first story can be authored`, () => {
-        expect(tiles([panel({ repo: `site`, hasPanel: true })])).toHaveLength(1);
-    });
-
-    it(`stays away from a workspace with neither stories nor a runnable app`, () => {
-        expect(tiles([panel({ repo: `docs` })])).toHaveLength(0);
-    });
-
-    // Rooted at no repo means it claims none: a fallback view for a repo with stories still stands.
+    // A fallback view for a repo with stories still stands.
     it(`costs no repo its own surface`, () => {
         const fallback = registerView(`test`, {
             id: `stand-in`,

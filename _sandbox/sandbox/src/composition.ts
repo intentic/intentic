@@ -241,7 +241,7 @@ import { type UsageStore, fileUsageStore } from "./usage/usage-store.js";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { createExtensionBackend, type ExtensionBackend } from "./extensions/backend/backend-supervisor.js";
 import { type SecretKeyResolver, vaultExtensionSettingSecrets } from "./extensions/extension-settings.js";
-import { installedExtensions } from "./extensions/installed-extensions.js";
+import { enabledExtensions, installedExtensions } from "./extensions/installed-extensions.js";
 import { workspaceArrivedEmpty } from "./scaffold/starter-site.js";
 import { type WorkspacePaths, workspacePaths } from "./workspace/workspace.js";
 import { writeWorkspaceFileStream } from "./workspace/files/workspace-files-upload.js";
@@ -1129,7 +1129,13 @@ export const createServices = (config: Config, logger: Logger): Services => {
         workflows: fileWorkflowsStore(statePath(workspace.root, ".intentic/config/workflows.json")),
         workflowRuns: fileWorkflowRunsStore(statePath(workspace.root, ".intentic/records/workflow-runs.json")),
         chores,
-        probeRunner: createProbeRunner({ workspace, chores, agents, logger }),
+        probeRunner: createProbeRunner({
+            workspace,
+            chores,
+            agents,
+            wanted: async () => (await enabledExtensions(extensionHostAdapter)).some((extension) => extension.id === "intentic.maintenance"),
+            logger,
+        }),
         heldWakes: fileHeldWakesStore(statePath(workspace.root, ".intentic/records/approvals/")),
         threadSessions: fileThreadSessionsStore(statePath(workspace.root, ".intentic/records/thread-sessions.json")),
         senders: fileSendersStore(statePath(workspace.root, ".intentic/records/senders.json")),

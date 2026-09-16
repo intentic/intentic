@@ -1,6 +1,6 @@
 import { CHORES, choreAutomationPrompt, FIX_DEPS_AUTOMATION } from "@intentic/sandbox-contract/chores";
 import { type AutomationCatalog, type AutomationTemplate, TriggerSchema, type TriggerSource } from "@intentic/sandbox-contract";
-import type { AutomationTemplateContribution, ListenerContribution } from "@intentic/extension-manifest";
+import { type AutomationTemplateContribution, extensionIdOf, type ListenerContribution } from "@intentic/extension-manifest";
 import { CI_PROVIDER } from "../ci/events.js";
 import { ISSUES_PROVIDER } from "../issues/provider.js";
 import { installedExtensions } from "../extensions/installed-extensions.js";
@@ -299,13 +299,16 @@ const sourceOf = (extension: InstalledExtension, listener: ListenerContribution)
 
 // One source per provider, first wins: an extension can never shadow the daemon's own (ci, webchat, issues).
 export const automationCatalog = async (services: ExtensionHost): Promise<AutomationCatalog> => {
+    const installed = await installedExtensions(services);
+    // A chore run writes to the maintenance ledger, which only that extension's panel reads: offered only while it is on.
+    const maintenance = installed.some((extension) => extension.enabled && extensionIdOf(extension.manifest) === "intentic.maintenance");
     const sources: TriggerSource[] = [...CORE_TRIGGER_SOURCES];
-    const templates: AutomationTemplate[] = [...CORE_AUTOMATION_TEMPLATES];
+    const templates: AutomationTemplate[] = CORE_AUTOMATION_TEMPLATES.filter((template) => maintenance || template.chore !== true);
     const providers = new Set(sources.map((source) => source.provider));
     const ids = new Set(templates.map((template) => template.id));
 
     // Lists installed packs regardless of enabled: a stored automation outlives a disabled pack's source.
-    for (const extension of await installedExtensions(services)) {
+    for (const extension of installed) {
         const listener = extension.manifest.contributes?.listener;
         if (listener !== undefined && !providers.has(listener.provider)) {
             providers.add(listener.provider);

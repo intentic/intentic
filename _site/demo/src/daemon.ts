@@ -23,7 +23,7 @@ import {
     type TranslatorAccounts,
     type WorkflowRun,
 } from "@intentic/sandbox-contract";
-import { KNOWLEDGE_BASE } from "@intentic/ext-knowledge";
+import { KNOWLEDGE_BASE } from "../vendor/knowledge/wire-types";
 import { BROWSER_SESSIONS } from "./browser";
 import { automationApprovals, automationCatalog, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
 import { demoLoops } from "./fixture/loops";
@@ -49,6 +49,7 @@ import {
     demoPanels,
     demoUsageRollup,
     setExtensionEnabled,
+    vendoredBundle,
 } from "./fixture/sandbox";
 import { transcriptFor } from "./fixture/transcripts";
 import {
@@ -456,6 +457,9 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/panels/{repo}/stop`, () => refuse(`This is the demo workspace: nothing is running to stop.`)],
     // `invalid` is required by the contract; omitting it fails the whole list to parse.
     [`GET`, `/extensions`, () => json({ extensions: demoExtensions(), invalid: [] })],
+    // The listed extensions' bundles, served as a daemon serves an installed checkout's `entry`; the loader blob-imports
+    // them, so the demo runs the published bytes rather than a compiled-in copy.
+    [`GET`, `/extensions/{id}/bundle`, ({ param }) => vendoredBundle(param(`id`))],
     [`POST`, `/extensions/{id}/enabled`, setEnabled],
     // Loaded before an extension's activate(), so `api.settings.get` is synchronous; missing here means the
     // extension never activates.

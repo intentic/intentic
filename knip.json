@@ -28,7 +28,8 @@
             "ignore": ["public/**"]
         },
         "_site/demo": {
-            "entry": ["src/main.ts", "index.html", "vite.config.ts"]
+            "entry": ["src/main.ts", "index.html", "vite.config.ts", "scripts/*.mjs"],
+            "ignore": ["vendor/**"]
         },
         "_editor/desktop-app": {
             "entry": ["src/main.ts", "index.html", "vite.config.ts", "scripts/*.sh"]

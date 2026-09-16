@@ -1,0 +1,26 @@
+{
+    "intentic.acceptance": {
+        "repo": "intentic/extension-acceptance",
+        "sha": "17ca672a68284a080c85ed390ac2de84b99ff49a"
+    },
+    "intentic.documentation": {
+        "repo": "intentic/extension-documentation",
+        "sha": "b4927b65287f724e0891f3e2fa4e13383a5a4913"
+    },
+    "intentic.maintenance": {
+        "repo": "intentic/extension-maintenance",
+        "sha": "c1f65656f145297dad7b822bafa585850c5011ee"
+    },
+    "intentic.knowledge": {
+        "repo": "intentic/extension-knowledge",
+        "sha": "bb32220cbb8f5eca7bd478017b05fe49de7d9e7f"
+    },
+    "intentic.deployments": {
+        "repo": "intentic/extension-deployments",
+        "sha": "b99a0543c3958164fa308257e17fa2fa2b2b90f6"
+    },
+    "intentic.issues": {
+        "repo": "intentic/extension-issues",
+        "sha": "8a535124ca14c18d620300818bf3e4482d95a9ba"
+    }
+}

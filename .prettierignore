@@ -18,6 +18,10 @@ pnpm-lock.yaml
 _shared/sandbox-contract/contract.lock.json
 **/assets/js/env.js
 _sandbox/sandbox/operator-templates
+# The demo's copies of the listed extensions at their pinned commits (_site/demo/vendor/README.md): the built
+# bundles must stay byte-identical to what an install clones, and the engine copy diffable against its origin.
+_site/demo/vendor/extensions
+_site/demo/vendor/knowledge
 # Derived files whose generator owns their shape — `**/generated` matches directories, and neither of these
 # lives in one. Formatting them writes a diff the next generator run reverts, and puts generated output in
 # scope of a repo-wide `pnpm format` — which is how 12 MB of minified bundles once got pretty-printed into a

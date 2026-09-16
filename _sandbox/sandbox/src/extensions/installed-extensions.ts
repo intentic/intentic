@@ -95,12 +95,12 @@ const workspaceExtensions = async (
 };
 
 // Baked first (a safety net; install already rejects the collision), then git-installed, then workspace.
-// Switch is fixed on for these three: each is the sole control surface for an engine the daemon runs regardless.
+// Switch is fixed on for these two: each is the sole control surface for an engine the daemon runs regardless.
 // - automations: the scheduler, listeners and approval queue fire on their own.
 // - workflows: advances daemon-side; the page is its only stop button.
-// - maintenance: probes run on their own tick; the panel is the only visibility.
-// A core list, not a manifest field, so an extension cannot grant itself this. Approvals is fail-safe, not listed.
-export const ESSENTIAL_EXTENSIONS: ReadonlySet<string> = new Set(["intentic.automations", "intentic.workflows", "intentic.maintenance"]);
+// A core list, not a manifest field, so an extension cannot grant itself this. Approvals is fail-safe, not listed;
+// maintenance is not here because its probe sweep runs only while that extension is installed and on.
+export const ESSENTIAL_EXTENSIONS: ReadonlySet<string> = new Set(["intentic.automations", "intentic.workflows"]);
 
 export const extensionInventory = async (
     services: ExtensionHost,

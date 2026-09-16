@@ -1,9 +1,10 @@
-import type { Graph, Note, NoteSummary, Overview, SearchHit } from "@intentic/ext-knowledge";
-import { buildIndex, graphOf, hitsOf, neighbourhood, noteOf, type NoteFile, overviewFor, search, summaryOf } from "@intentic/ext-knowledge/notes";
+import { buildIndex, graphOf, hitsOf, neighbourhood, noteOf, type NoteFile, overviewFor, search, summaryOf } from "../../vendor/knowledge/notes/index";
+import type { Graph, Note, NoteSummary, Overview, SearchHit } from "../../vendor/knowledge/wire-types";
 
 // Knowledge base for acme-shop: people, projects and decisions no file in the repo records. Notes are interconnected,
-// including one link to a note that doesn't exist yet, and indexed by the extension's own engine so backlinks and the
-// graph are real. Mutable: saves and deletes persist until reload.
+// including one link to a note that doesn't exist yet, and indexed by the extension's own engine (vendor/knowledge, a
+// generated copy at the pinned commit) so backlinks and the graph are real. Mutable: saves and deletes persist until
+// reload.
 
 const md = (path: string, content: string, minutesAgo: number, now: number): NoteFile => ({
     path,

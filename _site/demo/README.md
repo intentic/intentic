@@ -26,6 +26,14 @@ The dependency runs one way and only one way: this package depends on `@intentic
 through the `./main` export, its compiled-in extension registry through `./builtins`, and shares its Vite setup
 through `./vite-shared`. Web knows nothing about this.
 
+The extensions the landing page's claims rest on (acceptance, documentation) are no longer compiled into the app:
+they are LISTED first-party extensions, installed from the registry. The demo runs them the same way. `pnpm sync`
+fetches each one's manifest and built bundle at the commit `vendor/extensions.json` pins, the fixture lists them as
+installed extensions, and `GET /extensions/{id}/bundle` serves the bytes for the app's loader to blob-import, so the
+recording exercises the real install path. Knowledge's backend is stood in for by the fixture, which runs the
+extension's own indexing engine over the demo notes: `vendor/knowledge/` is that engine's fs-free half, copied at the
+same pin and committed so the fixture type-checks with nothing fetched.
+
 The registry fixture carries the same source-bound deterministic and agent evidence as the real official browse
 shape, so Discover demonstrates both automated checks separately from the human `verified` tier; its deliberately
 blocked and unpinned rows remain non-admitted.
@@ -44,6 +52,8 @@ blocked and unpinned rows remain non-admitted.
 | `src/browser.ts` | the recorded stream of the agent's Chromium, drawn pages played down the real picture wire |
 | `src/mode.ts` | how full the recording is: the three states, and which one this page load serves |
 | `src/switcher.ts` | the bar at the bottom of the screen that switches between them; the demo's only chrome |
+| `scripts/sync-extensions.mjs` | fetches the listed first-party extensions (manifest + built bundle) at the commits `vendor/extensions.json` pins, before every build |
+| `vendor/` | those pins, the fetched bundles (gitignored) and a generated copy of the knowledge engine's fs-free half (see `vendor/README.md`) |
 | `src/fixture/` | the data: `fleet.ts` (the roster), `transcripts.ts` (what a finished agent's chat holds), `openChats.ts` (the chats this window opens holding, the featured run, plus one per persona), `workspace.ts` (the filesystem, diffs, landing), `chores.ts`, `acceptance.ts`, `docs.ts`, `storefront.ts`, `ci.ts`, `memory.ts`, `automations.ts`, `sandbox.ts` |
 
 `fixture/workspace.ts` holds one flat path → content table that the tree, every directory listing, every read,

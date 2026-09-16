@@ -58,7 +58,8 @@ test("an essential extension cannot be switched off, reads enabled over a stale 
     await client.extensions.setEnabled({ id: "intentic.automations", enabled: true });
 
     const essentials = rows.filter((extension) => extension.essential === true).map((extension) => extension.id);
-    expect(essentials.toSorted()).toEqual(["intentic.automations", "intentic.maintenance", "intentic.workflows"]);
+    // Maintenance is not here: its probe sweep follows its own switch, and the extension is listed rather than baked.
+    expect(essentials.toSorted()).toEqual(["intentic.automations", "intentic.workflows"]);
 });
 
 test("a workspace extension lists like any other and serves its bundle by content hash", async () => {
@@ -94,26 +95,20 @@ test("a workspace extension lists like any other and serves its bundle by conten
 test("the extension list carries every first-party extension, compiled-in UI ones included", async () => {
     const client = clientFor(createApp(services({ workspace: workspacePaths(mkdtempSync(join(tmpdir(), "ext-list-"))) })));
     const ids = (await client.extensions.list()).extensions.map((extension) => extension.id).toSorted();
+    // The INCLUDED set only. acceptance, deployments, documentation, issues, knowledge, maintenance and logs are
+    // first-party extensions in their own repositories, listed in the registry: a sandbox is itself without them.
     expect(ids).toEqual([
-        "intentic.acceptance",
         "intentic.acp-agents",
         "intentic.activity",
         "intentic.approvals",
         "intentic.automations",
         "intentic.browsers",
         "intentic.connectors",
-        "intentic.deployments",
         "intentic.devices",
         "intentic.discord",
-        "intentic.documentation",
         "intentic.git-history",
         "intentic.google-workspace",
         "intentic.imap",
-        "intentic.issues",
-        "intentic.knowledge",
-        // No `intentic.logs`: moved to its own extension since it isn't a control surface for an always-running engine.
-        // Baked stays only automations/workflows/maintenance and viewers (each the only window onto something running).
-        "intentic.maintenance",
         "intentic.pi-agent",
         "intentic.pipelines",
         "intentic.preview",

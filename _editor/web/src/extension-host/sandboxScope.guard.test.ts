@@ -14,13 +14,8 @@ const ROOT = repoRoot(import.meta.url);
 const EXTENSIONS = join(ROOT, `_extensions`);
 
 // Exemptions are per finding, not per file, keyed by the exact string a failing test prints.
-const EXEMPT = new Map<string, string>([
-    [
-        `maintenance/src/runs.ts: let sequence`,
-        `A per-tab counter that makes two run ids minted in the same millisecond differ. It holds nothing about a
-         workspace, and emptying it on a switch would make collisions likelier rather than less.`,
-    ],
-]);
+// Empty since maintenance (a per-tab run-id counter) moved to its own repository; the shape stays for the next case.
+const EXEMPT = new Map<string, string>([]);
 
 const allowed = (offenders: readonly string[]): string[] => offenders.filter((offender) => !EXEMPT.has(offender));
 

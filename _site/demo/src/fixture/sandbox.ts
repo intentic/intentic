@@ -2,6 +2,7 @@ import type { CapabilitySummary } from "@intentic/api-contract";
 import { builtinModules } from "@intentic/web/builtins";
 import type { Environment, EnvironmentContents, ExtensionSummary, PanelSummary, UsageRollupRow } from "@intentic/sandbox-contract";
 import { demoMode } from "../mode";
+import pins from "../../vendor/extensions.json";
 
 // acme-shop's workspace furniture: what it's made of, what it's wired to, the extensions supplying that wiring, and the
 // Usage tab's spend ledger. Connector entries copy the real `_extensions/connectors` and `_extensions/discord`
@@ -222,13 +223,39 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
 const compiledExtensions = (): Omit<ExtensionSummary, "enabled">[] =>
     [...builtinModules].map(([id, module]) => ({ id, manifest: module.manifest, commit: `demo`, source: `builtin` }));
 
+// The LISTED first-party extensions (acceptance, documentation, maintenance, knowledge, deployments, issues), vendored
+// at the registry's pinned commits by scripts/sync-extensions.mjs and read here exactly as an installed checkout: the
+// manifest is the row, the bundle is what `GET /extensions/{id}/bundle` serves. A pin the sync has not fetched yet is
+// simply not installed in this recording.
+// Plain string literals throughout: Vite reads a glob call statically and a template literal in its options is not a
+// string to it, which turned `?raw` into a module import of a minified bundle.
+const VENDORED_MANIFESTS = import.meta.glob<ExtensionSummary["manifest"]>("../../vendor/extensions/*/intentic-extension.json", {
+    eager: true,
+    import: "default",
+});
+const VENDORED_BUNDLES = import.meta.glob<string>("../../vendor/extensions/*/extension.js", { eager: true, query: "?raw", import: "default" });
+const vendoredIdOf = (path: string): string => path.split(`/`).at(-2) ?? ``;
+const vendoredExtensions = (): Omit<ExtensionSummary, "enabled">[] =>
+    Object.entries(VENDORED_MANIFESTS).map(([path, manifest]) => {
+        const id = vendoredIdOf(path);
+        return { id, manifest, commit: (pins as Record<string, { sha: string }>)[id]?.sha ?? `pending`, source: `installed` };
+    });
+
+// The bundle bytes for one vendored id, or a 404 in the daemon's own words.
+export const vendoredBundle = (id: string): Response => {
+    const entry = Object.entries(VENDORED_BUNDLES).find(([path]) => vendoredIdOf(path) === id);
+    return entry === undefined
+        ? new Response(JSON.stringify({ error: `no bundle vendored for ${id}` }), { status: 404, headers: { "content-type": `application/json` } })
+        : new Response(entry[1], { headers: { "content-type": `text/javascript` } });
+};
+
 // Built once, then live: toggling here persists across reads, like the real daemon.
 let extensions: ExtensionSummary[] | undefined;
 
 // Which extensions start on is demo mode's opening position only; every extension stays listed, most switched off, as
 // an unset-up workspace really looks.
 export const demoExtensions = (): ExtensionSummary[] =>
-    (extensions ??= [...compiledExtensions(), ...CONNECTOR_EXTENSIONS].map((extension) =>
+    (extensions ??= [...compiledExtensions(), ...vendoredExtensions(), ...CONNECTOR_EXTENSIONS].map((extension) =>
         // Mutates in place: `setExtensionEnabled` below writes `enabled` straight onto these objects.
         Object.assign(extension, { enabled: demoMode.extensions?.includes(extension.id) ?? true }),
     ));

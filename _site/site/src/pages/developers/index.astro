@@ -279,8 +279,8 @@ const agentPoints = [
 
     <h2>Everything first-party is an extension too</h2>
     <p>
-        Most of the product you already use is extensions: over twenty-five. Activity, Automations, Memory, Knowledge, Deployments, Pipelines, the file viewers, the commit graph, the Discord, Slack, Telegram, WhatsApp and IMAP gateways, Google Workspace, the connector catalog. They ship through the same <code>@intentic/extension-api</code> a third-party bundle
-        compiles against, and a lint rule fails the build if one of them reaches into app internals instead.
+        Most of the product you already use is extensions: over twenty. Activity, Automations, Approvals, Pipelines, the file viewers, the commit graph, the Discord, Slack, Telegram, WhatsApp and IMAP gateways, Google Workspace, the connector catalog. They ship through the same <code>@intentic/extension-api</code> a third-party bundle
+        compiles against, and a lint rule fails the build if one of them reaches into app internals instead. Six more first-party ones (Acceptance, Documentation, Maintenance, Knowledge, Deployments, Issues) are listed in the registry rather than baked in, each in its own repository, installed exactly the way yours would be.
     </p>
     <p>
         That's a deliberate constraint rather than a boast: it means the public API is the API the product is built on, so it can't quietly
@@ -289,7 +289,7 @@ const agentPoints = [
 
     <h2>How extensions reach a sandbox</h2>
     <ul>
-        <li><strong>Baked into the image</strong>: first-party ones are present in every sandbox and can be switched off, not removed.</li>
+        <li><strong>Baked into the image</strong>: the first-party ones a sandbox is not itself without are present in every sandbox and can be switched off, not removed.</li>
         <li><strong>Git-installed</strong>: everything else, as a sha-pinned clone into <code>.intentic/local/extensions/</code>, added from a repo URL or picked from a registry.</li>
         <li>
             <strong>Written in the workspace</strong>: a directory under <code>.intentic/config/workspace-extensions/</code>, run straight from

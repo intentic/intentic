@@ -436,21 +436,6 @@ COPY _extensions/slack/intentic-extension.json /opt/extensions/slack/
 COPY _extensions/telegram/intentic-extension.json /opt/extensions/telegram/
 COPY _extensions/whatsapp/intentic-extension.json /opt/extensions/whatsapp/
 COPY _extensions/google-workspace/intentic-extension.json /opt/extensions/google-workspace/
-# documentation is a UI extension with daemon-side contributions, so it sits between the two groups: its views are
-# compiled into the web bundle like the manifest-only ones below, but `contributes.bin` (the intentic-docs CLI the
-# agent runs) and `contributes.agent` (the documenting skill) are read from the image, so those two directories have
-# to be here or the CLI never reaches the agent's PATH and the skill never loads. Straight from context rather than
-# the trees stage: both are dependency-free — plain ESM and markdown — so there is no node_modules to deploy. `src/`
-# is deliberately not copied; that is the web bundle's half.
-#
-# --chmod=755 ON EVERY `contributes.bin` DIRECTORY, and it is not cosmetic. The daemon prepends these directories
-# to the agent's PATH each turn, and PATH resolution skips a file without the execute bit — so `intentic-docs`
-# shipped as mode 644, sat on PATH in every sandbox, and could not be run by the skill that announces it. The
-# same was true of `discord-voice` and `whatsapp` (see image-packs/messaging.Dockerfile). A tool the agent is told it
-# has and cannot invoke is worse than one it was never given.
-COPY _extensions/documentation/intentic-extension.json /opt/extensions/documentation/
-COPY --chmod=755 _extensions/documentation/bin /opt/extensions/documentation/bin
-COPY _extensions/documentation/plugin /opt/extensions/documentation/plugin
 # The web-builtin UI extensions bake their MANIFEST ONLY — their code is compiled into the web bundle
 # (extension-host/builtins.ts), so there is nothing daemon-side to ship. The manifest is what makes them exist
 # for the daemon: `GET /extensions` then enumerates EVERY first-party extension through one enumerator (a count
@@ -459,34 +444,16 @@ COPY _extensions/documentation/plugin /opt/extensions/documentation/plugin
 # so the Extensions tab is a complete list with a working on/off switch instead of a view of one load path.
 # The pairing is checked both ways — a manifest here with no compiled-in module shows as "missing" in the tab
 # (image and web bundle built from different commits), and a module with no manifest shows as "unlisted".
-COPY _extensions/acceptance/intentic-extension.json /opt/extensions/acceptance/
+#
+# Only the INCLUDED set is here: the work loop, the windows onto engines the daemon runs regardless, and the
+# data packs above. acceptance, documentation, maintenance, knowledge, deployments and issues are first-party
+# too, but a sandbox is itself without them, so they are listed in the registry and installed from Extensions →
+# Browse (each is its own repository, intentic/extension-<name>); nothing of theirs is baked.
 COPY _extensions/activity/intentic-extension.json /opt/extensions/activity/
 COPY _extensions/approvals/intentic-extension.json /opt/extensions/approvals/
 COPY _extensions/automations/intentic-extension.json /opt/extensions/automations/
-COPY _extensions/deployments/intentic-extension.json /opt/extensions/deployments/
-COPY _extensions/issues/intentic-extension.json /opt/extensions/issues/
-# …deployments ships a BACKEND bundle too (manifest `server`, run by the daemon's backend host), like memory below.
-# From the trees context, like every other compiled artifact: the root context excludes **/dist, so the bundle is
-# invisible to a COPY that reads the repo tree — however plainly it sits beside the manifest in the checkout.
-COPY --from=trees extensions/deployments/dist /opt/extensions/deployments/dist
 COPY _extensions/git-history/intentic-extension.json /opt/extensions/git-history/
 COPY _extensions/projects/intentic-extension.json /opt/extensions/projects/
-COPY _extensions/knowledge/intentic-extension.json /opt/extensions/knowledge/
-# …knowledge is the documentation shape plus a backend: its views compile into the web bundle, its `knowledge`
-# skill (contributes.agent) is read from the image, and BOTH its compiled halves come from the trees context —
-# the backend the host loads (manifest `server`) and the `kb` CLI the agent runs (contributes.bin). The CLI is
-# built rather than hand-written because it drives the same vault engine the backend does, so the agent and the
-# panel cannot disagree about what a note says; that is also why it is here and not a straight COPY like
-# documentation's. The bin directory carries the exec bit — see the note above.
-COPY _extensions/knowledge/plugin /opt/extensions/knowledge/plugin
-# …and its Obsidian card's cheatsheet, which is NOT under plugin/ on purpose: everything in that directory is
-# loaded every turn, and a skill teaching a vault nobody connected is context spent on a tool that isn't there.
-# A `contributes.capabilities` skill is read from the checkout at connect time and written into the workspace
-# for that instance instead, so it exists exactly while the card does.
-COPY _extensions/knowledge/skills /opt/extensions/knowledge/skills
-COPY --from=trees extensions/knowledge/dist/server.js /opt/extensions/knowledge/dist/
-COPY --from=trees --chmod=755 extensions/knowledge/dist/bin /opt/extensions/knowledge/dist/bin
-COPY _extensions/maintenance/intentic-extension.json /opt/extensions/maintenance/
 COPY _extensions/pipelines/intentic-extension.json /opt/extensions/pipelines/
 COPY _extensions/preview/intentic-extension.json /opt/extensions/preview/
 COPY _extensions/repo-apps/intentic-extension.json /opt/extensions/repo-apps/

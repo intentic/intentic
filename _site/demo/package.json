@@ -4,14 +4,14 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "vite",
-        "build": "vite build",
+        "dev": "node scripts/sync-extensions.mjs && vite",
+        "build": "node scripts/sync-extensions.mjs && vite build",
+        "sync": "node scripts/sync-extensions.mjs",
         "typecheck": "vue-tsc --noEmit -p tsconfig.json"
     },
     "dependencies": {
         "@intentic/api-contract": "workspace:*",
         "@intentic/web": "workspace:*",
-        "@intentic/ext-knowledge": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*"
     },
     "devDependencies": {
