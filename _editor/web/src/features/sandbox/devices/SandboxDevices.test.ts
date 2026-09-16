@@ -1353,7 +1353,15 @@ const bothDoors = (): void => {
 
 it(`draws a Windows PC and its distro as one card, with the container once and each side's own state`, async () => {
     bothDoors();
-    const el = mount([distroSide(), windowsSide(), managed(true)]);
+    const loneMachine: Device = {
+        key: `radarsu-omen`,
+        label: `radarsu-omen`,
+        platform: `windows`,
+        facts: { os: `Microsoft Windows 11 Pro`, shell: `PowerShell 7`, arch: `x64` },
+        agentVersion: `1.279.0`,
+        online: true,
+    };
+    const el = mount([distroSide(), windowsSide(), loneMachine]);
     await showBoard();
     const text = el.textContent ?? ``;
     expect(text).toContain(`2 environments`);
@@ -1364,6 +1372,10 @@ it(`draws a Windows PC and its distro as one card, with the container once and e
     expect(cards).toHaveLength(2);
     const pc = cards.find((card) => card.textContent?.includes(`2 environments`));
     expect(pc?.textContent?.match(/work/g)).toHaveLength(1);
+    // A machine with no sub-items has no #below block, leaving no stray padding.
+    const lone = cards.find((card) => card.textContent?.includes(`radarsu-omen`));
+    expect(lone?.querySelector(`.mt-3`)).toBeNull();
+    expect(pc?.querySelector(`.mt-3`)).not.toBeNull();
 });
 
 it(`opens the PC as one page: an environment row per side, the sandbox once, and the distros the Windows side lists`, async () => {

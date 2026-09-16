@@ -22,6 +22,7 @@ const { machine, needle, ownSlug, readAt } = defineProps<{
 }>();
 
 const body = computed(() => boardBody(machine, needle, ownSlug, readAt));
+const hasBelow = computed(() => body.value.environments.length > 0 || body.value.warnings.length > 0 || body.value.lines.length > 0 || body.value.more > 0);
 // The one device of a one-environment machine, whose facts and state ride the card itself.
 const lone = computed(() => (manySided(machine) ? undefined : machine.environments[0]?.device));
 </script>
@@ -29,7 +30,7 @@ const lone = computed(() => (manySided(machine) ? undefined : machine.environmen
 <template>
     <RouterLink :to="deviceRoute(machine.key)" class="block">
         <!-- `spine` hangs the sandbox lines off the machine's own mark, so a card reads as one machine's worth. -->
-        <Row :interactive="true" :chevron="true" :spine="body.lines.length > 0 || body.warnings.length > 0 || body.environments.length > 0">
+        <Row :interactive="true" :chevron="true" :spine="hasBelow">
             <template #lead="{ mark }">
                 <span
                     class="flex shrink-0 items-center justify-center rounded-md bg-content/10 text-content"
@@ -66,7 +67,7 @@ const lone = computed(() => (manySided(machine) ? undefined : machine.environmen
                 <StatusBadge :variant="deviceTone(lone, readAt)" size="xs" :dot="true" :label="deviceState(lone, readAt)" class="shrink-0" />
             </template>
 
-            <template #below>
+            <template v-if="hasBelow" #below>
                 <div class="flex min-w-0 flex-col gap-1">
                     <!-- One line per environment: what it is, how it is reached, and its own state. -->
                     <div v-for="environment in body.environments" :key="environment.key" class="flex min-w-0 items-center gap-x-2">
