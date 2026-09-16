@@ -83,6 +83,7 @@ import { resolveHarnessCredentials } from "../../providers/harness-credentials.j
 import { turnPromptPlacement } from "../../prompt/system-prompt.js";
 import { type TurnBriefing, briefingOf } from "../../prompt/turn-briefing.js";
 import { composeWirePrompt, LITERAL_SLASH_NOTE, worktreeNote, worktreeReminder } from "../../prompt/turn-preamble.js";
+import { retrieveTurnContext, TURN_CONTEXT_NOTE_TITLE, type TurnContextOutcome, type TurnContextSkip } from "./turn-context.js";
 import { WORKSPACE_MAP_NOTE_TITLE, workspaceMapNote } from "../../prompt/workspace-map.js";
 import { workspaceMemoryNote } from "../../prompt/workspace-memory.js";
 import { createDepsServer } from "../../../workspace/deps/deps-tools.js";
@@ -135,6 +136,10 @@ export type TurnPlan =
           // The map note's cost in characters, present only on the turn that actually sent one; read off the composed
           // request, not predicted.
           readonly mapChars?: number;
+          // What pre-turn retrieval came to, and what the attempt cost in wall time. Absent means the flag was off and
+          // nothing was tried: a reader has to be able to tell that from a lookup that ran and found nothing.
+          readonly turnContext?: TurnContextSkip | "delivered";
+          readonly turnContextMs?: number;
           // Which preamble notes this turn's card still wants. Carried out of planning because two of them (the repo
           // sync advisory, the hand-off state) only exist after it, in the route.
           readonly briefing: TurnBriefing;
@@ -167,6 +172,9 @@ export interface TurnContext {
     readonly contextNote?: TurnNote;
     // The `agents` CLI teaching for shell-only runtimes, on a conversation's opening turn where the spawn door is open.
     readonly spawnNote?: string;
+    // This message's own anchors, looked up before the turn (turn-context.ts). Every turn, not once per conversation:
+    // it answers the message rather than describing the workspace.
+    readonly turnContextNote?: string;
     readonly iqSearchCohort?: string;
     // Who the turn is and what it may do, resolved once by planTurn; absent on the context the route builds before a
     // card is read.
@@ -211,13 +219,26 @@ const experimentStamps = (
     turnIndex: number | undefined,
     search: { readonly arm: boolean | undefined; readonly cohort: string | undefined },
     map: { readonly arm: boolean | undefined; readonly notes: readonly TurnNote[] | undefined },
-): { turnIndex?: number; searchArm?: boolean; searchCohort?: string; mapArm?: boolean; mapChars?: number } => {
+    retrieval: TurnContextOutcome | undefined,
+): {
+    turnIndex?: number;
+    searchArm?: boolean;
+    searchCohort?: string;
+    mapArm?: boolean;
+    mapChars?: number;
+    turnContext?: TurnContextSkip | "delivered";
+    turnContextMs?: number;
+} => {
     const chars = map.notes?.find((note) => note.title === WORKSPACE_MAP_NOTE_TITLE)?.text.length;
     return {
         ...(turnIndex !== undefined ? { turnIndex } : {}),
         ...(search.arm !== undefined ? { searchArm: search.arm, ...(search.cohort !== undefined ? { searchCohort: search.cohort } : {}) } : {}),
         ...(map.arm !== undefined ? { mapArm: map.arm } : {}),
         ...(chars !== undefined ? { mapChars: chars } : {}),
+        // Delivery, not assignment: the reading that tells a mechanism with no effect from one that never arrived.
+        ...(retrieval === undefined
+            ? {}
+            : { turnContext: "note" in retrieval ? ("delivered" as const) : retrieval.skipped, turnContextMs: retrieval.durationMs }),
     };
 };
 
@@ -261,7 +282,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     const conversationTurns = entry?.turns ?? 0;
     // Resolved before dispatch since the composition of this turn's instructions reads it (see `honoured` below).
     const settings = context.settings ?? (await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()));
-    const [installed, setup, cast, skillCatalogNote, contextNote, declaredChecks] = await Promise.all([
+    const [installed, setup, cast, skillCatalogNote, contextNote, declaredChecks, turnContext] = await Promise.all([
         // cli/mcp/plugin/browser/agent-kind capabilities the owner installed; not the persona-filtered record, which
         // answers what the runtime can do instead.
         services.perf.track("turn.plan.capabilities", {}, () => services.capabilities.list()),
@@ -288,6 +309,17 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         // every turn rather than cached: the file belongs to the repository, and a check the owner switched off this
         // morning must not keep running out of a cache.
         services.perf.track("turn.plan.repo-checks", {}, () => repoCheckRules(services)),
+        // The user's own message, looked up before the turn so the model opens on anchors instead of spending its first
+        // calls finding them. Runs beside the rest of the plan rather than ahead of it: its deadline is its own, and a
+        // turn that would have been assembled anyway must not wait on an optimisation. OFF by default — this shipped
+        // once and an A/B removed it (env.config.ts iqTurnContext), so it stays behind the flag until re-measured.
+        services.config.iqTurnContext && (context.settings ?? settings).iqSearch
+            ? services.perf.track("turn.plan.turn-context", {}, () =>
+                  retrieveTurnContext({ iq: services.iq, logger: services.logger }, input.prompt),
+              )
+            : // Undefined, not a skip: "the flag was off so nothing was attempted" and "the message had nothing to
+              // look up" are different facts, and a ledger that spells both `ineligible` cannot tell them apart.
+              Promise.resolve(undefined),
     ]);
     const effective = underRepoChecks(settings, declaredChecks);
     // Resolved above the provider split so every runtime, not just the Claude Code plan, inherits the same account and
@@ -363,6 +395,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         ...(contextNote !== undefined ? { contextNote } : {}),
         ...(teaching !== undefined ? { iqSearchCohort: teaching.cohort } : {}),
         ...(spawnNoteText !== undefined ? { spawnNote: spawnNoteText } : {}),
+        ...(turnContext !== undefined && "note" in turnContext ? { turnContextNote: turnContext.note } : {}),
     };
     // Unattended wakes still get the map; a holdout control conversation never does, stamped per conversation since the
     // map stays in the transcript once sent. A card that dropped it takes its conversation out of the experiment rather
@@ -428,6 +461,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
             input.conversationId === undefined ? undefined : conversationTurns,
             { arm: searchArm, cohort: teaching?.cohort },
             { arm: mapArm, notes: planned.base.notes },
+            turnContext,
         ),
     };
 };
@@ -524,6 +558,9 @@ const honoured = (
         // need. Runtimes with neither still get the paragraph, unchanged.
         ...(setupNotice !== undefined && capabilities.mcp !== "full" ? [{ title: setupNoticeTitle(setupNotice), text: setupNotice }] : []),
         ...(context.iqSearchNote !== undefined ? [{ title: IQ_SEARCH_INSTRUCTION_TITLE, text: context.iqSearchNote }] : []),
+        // Last of the standing notes and nearest the message, because it is about THIS message rather than about the
+        // workspace: the anchors read as an answer to what was just asked, not as more background.
+        ...(context.turnContextNote === undefined ? [] : [{ title: TURN_CONTEXT_NOTE_TITLE, text: context.turnContextNote }]),
         ...(context.spawnNote !== undefined ? [{ title: SPAWN_NOTE_TITLE, text: context.spawnNote }] : []),
         // What a named approver must release before this turn can use it, over both filters at once. Sent on every turn
         // missing something, not once per conversation like the teaching notes above, since the condition changes the

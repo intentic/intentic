@@ -42,6 +42,12 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),
         // A measurement seam, not a behavioural one: runs the work, times nothing.
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
+        // Pre-turn retrieval asks this on every turn whose prompt carries search intent. Answers "nothing found", so a
+        // plan test sees the same notes it did before the lookup existed; the retrieval's own behaviour is pinned in
+        // turn-context.integration.test.ts against a real index.
+        iq: unstubbed<Services["iq"]>("iq", { run: async () => ({ exitCode: 1, text: "", result: unstubbed("iq.result", {}) }) }),
+        // Retrieval names every refusal at debug; a plan test asserting notes has no opinion about the log line.
+        logger: unstubbed<Services["logger"]>("logger", { debug: () => {}, warn: () => {} }),
         // Schema defaults, what an unconfigured workspace reads; settings compose above the provider split, so even a
         // soon-to-refuse turn reaches this first.
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),

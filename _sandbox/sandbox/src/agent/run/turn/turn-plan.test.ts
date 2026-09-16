@@ -617,3 +617,87 @@ test("a rule naming a repository enters the namespace inside that repository", (
     // "root" is the workspace's own repository, which is where an unaimed command already runs.
     expect(ruleCommandIn(`pnpm verify:push`, anchor, `root`)).toContain(`--wdns=/work`);
 });
+
+// Pre-turn retrieval was fully built and never called; these pin that it is wired, and that the kill-switch really
+// kills it rather than merely hiding the note.
+const RETRIEVED = "## Retrieved workspace context";
+
+const iqAnswering = (): Services["iq"] =>
+    unstubbed<Services["iq"]>("iq", {
+        run: async () => ({
+            exitCode: 0 as const,
+            text: "answer: src/widget.ts:6 · confident\n  6: export const createWidget = (",
+            result: unstubbed<Awaited<ReturnType<Services["iq"]["run"]>>["result"]>("iq.result", {
+                groups: [{ path: "src/widget.ts", score: 1, hits: [] }],
+                freshness: { state: "fresh" as const },
+            }),
+        }),
+    });
+
+const searchOn = (): Services["sandboxSettings"] =>
+    unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ iqSearch: true }) });
+
+test("with the flag on, the daemon looks the message up before the turn and hands the model the anchors", async () => {
+    const plan = await planTurn(
+        servicesWith({
+            iq: iqAnswering(),
+            config: { ...testConfig, iqTurnContext: true },
+            sandboxSettings: searchOn(),
+            agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+        }),
+        turn({ prompt: "why does createWidget drop the name?" }),
+        context,
+    );
+    expect(wire(plan)).toContain(RETRIEVED);
+    expect(wire(plan)).toContain("src/widget.ts:6");
+    // The note says whose words it is not, so the model never reads the anchors as something the user typed.
+    expect(wire(plan)).toContain("Not the user's words");
+    // Delivery on the ledger row, not just assignment: the first A/B could not tell a mechanism with no effect from
+    // one that never arrived, and that is what killed the reading rather than the mechanism.
+    expect(plan).toMatchObject({ turnContext: "delivered", turnContextMs: expect.any(Number) });
+});
+
+// The mechanism shipped once as `iqContext` and an A/B removed it, so the default has to be OFF: a workspace that
+// never set the flag must not pay the lookup.
+test("off by default: no flag, no lookup, no note", async () => {
+    let asked = 0;
+    const plan = await planTurn(
+        servicesWith({
+            iq: unstubbed<Services["iq"]>("iq", {
+                run: async () => {
+                    asked += 1;
+                    throw new Error("retrieval must not run with the flag unset");
+                },
+            }),
+            sandboxSettings: searchOn(),
+            agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+        }),
+        turn({ prompt: "why does createWidget drop the name?" }),
+        context,
+    );
+    expect(asked).toBe(0);
+    expect(wire(plan)).not.toContain(RETRIEVED);
+    // Absent, not a skip reason: nothing was attempted, which a reader must be able to tell from a lookup that ran.
+    expect(plan).not.toHaveProperty("turnContext");
+});
+
+// A workspace that turned search off has no index worth asking, and pays nothing for the feature either.
+test("the flag alone is not enough: a workspace with iq search off still pays nothing", async () => {
+    let asked = 0;
+    const plan = await planTurn(
+        servicesWith({
+            iq: unstubbed<Services["iq"]>("iq", {
+                run: async () => {
+                    asked += 1;
+                    throw new Error("retrieval must not run with search off");
+                },
+            }),
+            config: { ...testConfig, iqTurnContext: true },
+            agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+        }),
+        turn({ prompt: "why does createWidget drop the name?" }),
+        context,
+    );
+    expect(asked).toBe(0);
+    expect(wire(plan)).not.toContain(RETRIEVED);
+});

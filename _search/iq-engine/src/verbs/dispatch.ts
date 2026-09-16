@@ -23,7 +23,7 @@ import { renderText, type Rendered } from "../render/text.js";
 import type { IndexDb } from "../store/db.js";
 import type { EngineHit, EngineResult, FileEntry, QueryOutcome, QueryRequest, RankedGroup, RankedHit, Verb } from "../types.js";
 import { classOf, filterScope, langOf, sweep } from "../workspace/scan.js";
-import { contextOf, outlineOf, parseAnchor } from "./context.js";
+import { contextOf, outlineOf, parseAnchor, readOf } from "./context.js";
 
 export interface DispatchContext {
     readonly root: string;
@@ -293,7 +293,7 @@ const packGroups = async (db: IndexDb, root: string, groups: readonly RankedGrou
     );
 };
 
-const ANCHOR_VERBS = new Set<Verb>(["outline", "context", "recent", "log", "who", "hotspots", "map", "impact"]);
+const ANCHOR_VERBS = new Set<Verb>(["outline", "context", "read", "recent", "log", "who", "hotspots", "map", "impact"]);
 
 // How many paths an `impact` header note names before it switches to counting instead.
 const NOTE_PATHS = 5;
@@ -647,6 +647,18 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
     if (request.verb === "context") {
         const { groups, label } = await contextOf(context.db, context.root, request.query, request.render.contextLines ?? 0);
         return { groups, unit: "lines", style: "hits", showTags: false, headerNote: label };
+    }
+
+    if (request.verb === "read") {
+        const { groups, label, hint } = await readOf(context.db, context.root, request.query, request.render.contextLines ?? 0, allowed);
+        return {
+            groups,
+            unit: "lines",
+            style: "hits",
+            showTags: false,
+            headerNote: label,
+            ...(hint !== undefined ? { hint } : {}),
+        };
     }
 
     if (request.verb === "recent") {

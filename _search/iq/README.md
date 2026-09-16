@@ -24,7 +24,8 @@ The index self-manages: it builds on first query and revalidates against disk on
 
 ## Quickstart: pick the verb by what you already know
 
-- **You know the file** (a stack trace or failing test names it) → open it directly; `iq context path:line` / `iq who path:line` for the surroundings. Searching is overhead here.
+- **You know which symbol you want to read** → `iq read X`, or `iq read path::X` / `iq read path::Class::method` when the name is not unique. One call returns the body, where `def` then `context path:line` took two and needed a line number in between. Open the file itself when you want the whole file: a `Read` with no offset hands back up to 2000 lines whether you wanted them or not.
+- **You know the file** (a stack trace or failing test names it) → `iq outline <path>` for its shape, then `iq read <path>::<symbol>`; `iq context path:line` / `iq who path:line` when a line is all you have.
 - **You know the exact identifier** → `iq def X` / `iq refs X`: one call replaces a grep-then-filter chain.
 - **You don't know where it lives**, or your words may not match the code's vocabulary → bare `iq "…"`, phrased as a question. Natural language has no verb of its own. This is where `iq` decisively beats grep.
 - **You have error-message text** → `iq find 'literal text'`, then `iq context` on the hit.
@@ -43,6 +44,7 @@ The index self-manages: it builds on first query and revalidates against disk on
 | structural AST pattern | `iq ast 'await $FN($$$)' --lang ts` |
 | a natural-language answer | `iq "how does the daemon expose tools?"` |
 | a file's skeleton | `iq outline src/workspace/workspace-ignore.ts` |
+| a symbol's body | `iq read createIgnoreScope`, `iq read src/app.ts::Server::start` |
 | code around a hit | `iq context src/workspace/workspace-tree.ts:48` |
 | recent changes | `iq recent --since 2d` |
 | history of a string | `iq log "MAX_TOTAL_MATCHES" --path src/workspace` |

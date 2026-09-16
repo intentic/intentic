@@ -210,6 +210,25 @@ indistinguishable (+18% ± 41.8pp on searches per turn), and the one reading tha
 turns, months away at any sane holdout. The `searchCalls`/`openingSearches` ledger fields it introduced remain:
 they are what the iq search teaching is judged on.
 
+**It is back behind a flag (`INTENTIC_IQ_TURN_CONTEXT`), off, as a hypothesis rather than a decision.** Two
+things happened after the removal. The module itself was restored ten minutes later by a commit that re-added
+`turn-context.ts` and its test and nothing else (`738004971a`), so for months the workspace carried a fully
+tested mechanism that nothing called. And the rebuild answers the two findings that killed it, which is the only
+honest reason to re-measure rather than re-delete:
+
+- **Delivery.** The median attempt outran its 3s deadline because every eligible turn paid one fused `q` — the
+  semantic scan plus the cross-encoder. Now the evidence classes are typed and ordered by cost: a file the
+  message names resolves through `outline` (SQLite), text it quotes through `find --literal` (rg), and the fused
+  query runs only when neither fired. The expensive call is now the last resort instead of the only path.
+- **Effect.** The old gate skipped retrieval entirely when the message named a file or path, which spent the
+  strongest evidence a message can carry — the user had already localized the work. That case now resolves
+  instead of bailing, and is the cheapest class to serve.
+
+Neither argument is a result. It stays off until the same `iqSearchArm` coin flip and the same
+`searchCalls`/`openingSearches` readings say something the first A/B did not, and "no effect again" is the
+expected outcome worth planning for: the note costs a lookup and some of the turn's budget, so an indistinguishable
+second reading is a reason to delete the module rather than to keep it flagged.
+
 ## What the report says: `/settings/savings`
 
 `SavingsReport` is two families, deliberately never one ranking:

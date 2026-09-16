@@ -63,6 +63,12 @@ export const UsageTurnSchema = z.object({
     // Arm of the project-map experiment, stable per conversation; mapChars is the note's length when sent.
     mapArm: z.boolean().optional(),
     mapChars: z.number().optional(),
+    // What became of pre-turn retrieval on this turn, and how long it took. Assignment and DELIVERY are different
+    // facts: the first version of this mechanism was assigned to every eligible turn and reached four in five of them,
+    // which is the difference between a null result and a mechanism that never ran. Absent means the flag was off, so
+    // nothing was attempted; `ineligible` means the message carried nothing to look up.
+    turnContext: z.enum(["delivered", "ineligible", "deadline", "indexing", "no-hits", "failed"]).optional(),
+    turnContextMs: z.number().optional(),
     // Zero-based turn count in its conversation; 0 marks the opening turn. Absent means unmeasured.
     turnIndex: z.number().optional(),
     // outcome alone can't tell a turn that finished from one that stopped talking; these fields carry the difference

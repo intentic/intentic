@@ -4,7 +4,17 @@ import { errorMessage } from "@intentic/base/errors";
 import type { CommandContext } from "@stricli/core";
 import { createEngine, parseFeatures, type QueryOutcome, type Verb, type VerbOptions } from "@intentic/iq-engine";
 import { loadConfig } from "../env.config.js";
-import { echoOf, parseLangs, rootRelativeAnchor, rootRelativePaths, type ScopeFlags, type SearchFlags, toRender, toScope } from "./flags.js";
+import {
+    echoOf,
+    parseLangs,
+    rootRelativeAnchor,
+    rootRelativePaths,
+    rootRelativeSymbolRef,
+    type ScopeFlags,
+    type SearchFlags,
+    toRender,
+    toScope,
+} from "./flags.js";
 
 export type OutputMode = "text" | "json" | "ndjson";
 
@@ -62,6 +72,9 @@ const resolveQuery = (verb: Verb, query: string, root: string): string => {
                 .filter((path) => path !== ""),
             root,
         ).join(",");
+    }
+    if (verb === "read") {
+        return rootRelativeSymbolRef(query, root);
     }
     return PATH_QUERY_VERBS.has(verb) ? rootRelativeAnchor(query, root) : query;
 };

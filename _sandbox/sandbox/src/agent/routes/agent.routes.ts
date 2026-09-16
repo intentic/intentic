@@ -1453,6 +1453,7 @@ async function* runTurn(
                 // Which project-map arm this conversation drew; rides every turn once sent.
                 ...(plan.mapArm !== undefined ? { mapArm: plan.mapArm } : {}),
                 ...(plan.mapChars !== undefined ? { mapChars: plan.mapChars } : {}),
+                ...(plan.turnContext !== undefined ? { turnContext: plan.turnContext, turnContextMs: plan.turnContextMs } : {}),
                 // What the tier judge said, if it ran; absent, not zero, when it didn't.
                 ...(tier !== undefined
                     ? {

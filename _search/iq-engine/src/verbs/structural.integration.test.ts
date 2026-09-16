@@ -84,3 +84,43 @@ test("context: returns the enclosing region of an anchor and grows with -C", asy
     // No security floor: a former-secret file resolves and reads through like any other contained file.
     await expect(engine.run(request({ verb: "context", query: ".env:1" }))).resolves.toMatchObject({ exitCode: 0 });
 });
+
+test("read: a bare name returns the body, no line number and no def round trip", async () => {
+    const outcome = await engine.run(request({ verb: "read", query: "createWidget" }));
+    expect(outcome.exitCode).toBe(0);
+    expect(outcome.result.groups[0]?.path).toBe("alpha/src/widget.ts");
+    expect(outcome.text).toContain("export const createWidget");
+    // The whole span, not just the declaration line context would have needed an anchor to find.
+    expect(outcome.text).toContain("createWidget (fn) alpha/src/widget.ts:6-6");
+});
+
+test("read: path::name narrows to one file, and -C grows the body", async () => {
+    const outcome = await engine.run(request({ verb: "read", query: "alpha/src/widget.ts::createWidget" }));
+    expect(outcome.exitCode).toBe(0);
+    expect(outcome.result.groups.map((group) => group.path)).toEqual(["alpha/src/widget.ts"]);
+
+    const grown = await engine.run(
+        request({ verb: "read", query: "alpha/src/widget.ts::createWidget", render: { budget: 1500, contextLines: 2 } }),
+    );
+    expect(grown.result.groups[0]!.hits.length).toBeGreaterThan(outcome.result.groups[0]!.hits.length);
+});
+
+test("read: a scope chain picks the method over the module-level function of the same name", async () => {
+    const scoped = await engine.run(request({ verb: "read", query: "beta/app.py::WidgetBox::pack" }));
+    expect(scoped.exitCode).toBe(0);
+    expect(scoped.text).toContain("boxed");
+    expect(scoped.text).not.toContain("module-level pack");
+
+    // Without the chain both definitions match, so the answer is not the method alone.
+    const bare = await engine.run(request({ verb: "read", query: "beta/app.py::pack" }));
+    expect(bare.result.groups.flatMap((group) => group.hits).length).toBeGreaterThan(scoped.result.groups[0]!.hits.length);
+});
+
+test("read: a miss names where it looked and points at sym; a bare path routes to outline", async () => {
+    const miss = await engine.run(request({ verb: "read", query: "noSuchSymbolAnywhere" }));
+    expect(miss.exitCode).toBe(1);
+    expect(miss.text).toContain("no symbol by that name in the workspace");
+    expect(miss.text).toContain("iq sym 'noSuchSymbolAnywhere*'");
+
+    await expect(engine.run(request({ verb: "read", query: "alpha/src/widget.ts" }))).rejects.toThrow("names a file, not a symbol");
+});

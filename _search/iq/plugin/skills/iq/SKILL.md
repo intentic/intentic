@@ -7,8 +7,9 @@ description: Workspace code search — one call from a question to ranked path:l
 
 Pick by what you already know:
 
-- **You know the file** (stack trace, failing test) → Read it; `iq context path:line` only for surroundings.
-- **You know the symbol** → `iq def X` / `iq refs X` — one call, not grep-then-filter.
+- **You know the symbol you want to read** → `iq read X` — the body, one call. Read the file only when you need the whole file; a `Read` with no offset returns up to 2000 lines whether you wanted them or not.
+- **You know the file** (stack trace, failing test) → `iq outline <path>` for its shape, then `iq read <path>::<symbol>`; `iq context path:line` when all you have is a line.
+- **You know the symbol, but want its anchor or callers** → `iq def X` / `iq refs X` — one call, not grep-then-filter.
 - **You don't know where it lives** → bare `iq "…"`. No separate verb for questions.
 - **Checking your own edit** → `grep`/`rg`. Verification is not discovery.
 
@@ -24,6 +25,7 @@ iq "where do we enforce the secrets floor?"
 | who uses it | `iq refs createIgnoreScope --kind call` |
 | file by name | `iq files wkignore` |
 | file skeleton | `iq outline src/app.ts` |
+| a symbol's body | `iq read createIgnoreScope`, `iq read src/app.ts::Server::start` |
 | code around a hit | `iq context src/app.ts:48` |
 | recent changes | `iq recent --since 2d` |
 | git history | `iq log "MAX_MATCHES" --path src` |

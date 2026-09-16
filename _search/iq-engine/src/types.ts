@@ -3,7 +3,23 @@ import type { Feature } from "./features.js";
 
 // A bare `q` whose words are not a symbol, path or regex is the semantic pipeline; an exact query that finds nothing
 // escalates into it.
-export type Verb = "q" | "find" | "files" | "def" | "refs" | "sym" | "ast" | "outline" | "context" | "recent" | "log" | "who" | "hotspots" | "map" | "impact";
+export type Verb =
+    | "q"
+    | "find"
+    | "files"
+    | "def"
+    | "refs"
+    | "sym"
+    | "ast"
+    | "outline"
+    | "context"
+    | "read"
+    | "recent"
+    | "log"
+    | "who"
+    | "hotspots"
+    | "map"
+    | "impact";
 
 export type FileClass = "tests" | "src" | "docs" | "config";
 

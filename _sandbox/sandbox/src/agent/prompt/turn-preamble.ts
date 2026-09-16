@@ -5,7 +5,7 @@ import { PERSONA_NOTE_HEADER } from "../../personas/personas.js";
 import { SPAWN_NOTE_HEADER } from "../subagents/spawn-note.js";
 import { TURN_ENDING_NOTE_HEADER, TURN_ENDING_NOTE_TITLE } from "../../rules/turn-ending-note.js";
 import { IQ_SEARCH_INSTRUCTION_HEADER } from "./iq-search-instruction.js";
-import { TURN_CONTEXT_NOTE_HEADER } from "../run/turn/turn-context.js";
+import { TURN_CONTEXT_NOTE_HEADER, TURN_CONTEXT_NOTE_TITLE } from "../run/turn/turn-context.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
 import { MEMORY_NOTE_HEADER, MEMORY_NOTE_TITLE } from "./workspace-memory.js";
 import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../settings/loaded-skills.js";
@@ -73,7 +73,7 @@ const INJECTED: readonly { readonly header: string; readonly title: string }[] =
     // Which repos the conversation's tree holds and lacks; without it a missing directory looks deleted.
     { header: CONTEXT_NOTE_HEADER, title: CONTEXT_NOTE_TITLE },
     { header: SKILL_CATALOG_NOTE_HEADER, title: SKILL_CATALOG_NOTE_TITLE },
-    { header: TURN_CONTEXT_NOTE_HEADER, title: "Workspace context found for this message" },
+    { header: TURN_CONTEXT_NOTE_HEADER, title: TURN_CONTEXT_NOTE_TITLE },
     { header: LITERAL_SLASH_NOTE_HEADER, title: "How to read this message" },
     { header: WORKTREE_NOTE_HEADER, title: "Where this turn's files live" },
     { header: REPO_SYNC_NOTE_HEADER, title: "Repos synced with their remotes" },

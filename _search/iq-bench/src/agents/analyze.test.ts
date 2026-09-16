@@ -66,6 +66,54 @@ describe("toolEvents", () => {
         expect(events.map((entry) => entry.iqCall)).toEqual([undefined, "find needle", "files widget"]);
     });
 
+    it("counts the numbered lines a Read RESULT returned, not what it asked for", () => {
+        const use = JSON.stringify({
+            type: "assistant",
+            message: { content: [{ type: "tool_use", id: "r1", name: "Read", input: { file_path: "src/app.ts" } }] },
+        });
+        const body = ["     1\timport x from 'x';", "     2\t", "     3\texport const go = () => x();"].join("\n");
+        const result = JSON.stringify({
+            type: "user",
+            message: { content: [{ type: "tool_result", tool_use_id: "r1", content: [{ type: "text", text: body }] }] },
+        });
+        const events = toolEvents(`${use}\n${result}`);
+        expect(events[0]?.sourceLines).toBe(3);
+        const analytics = analyzeEvents(events);
+        expect(analytics).toMatchObject({ readLines: 3, readCalls: 1, iqLines: 0 });
+    });
+
+    it("counts iq's own code lines apart from Read, so a win cannot come from moving the cost", () => {
+        const use = JSON.stringify({
+            type: "assistant",
+            message: { content: [{ type: "tool_use", id: "q1", name: "Bash", input: { command: "iq def go" } }] },
+        });
+        // The capsule and the `… more` footer are not code and must not count.
+        const answer = [
+            "iq: def go, 1 definitions in 1 files",
+            "answer: src/app.ts:3 · [def]",
+            "════ src/app.ts (1) ════",
+            "  3: export const go = () => x();",
+            "  4:     return x;",
+            "     … 4 more: iq context src/app.ts:5",
+        ].join("\n");
+        const result = JSON.stringify({
+            type: "user",
+            message: { content: [{ type: "tool_result", tool_use_id: "q1", content: [{ type: "text", text: answer }] }] },
+        });
+        const analytics = analyzeEvents(toolEvents(`${use}\n${result}`));
+        expect(analytics).toMatchObject({ iqLines: 2, readLines: 0, readCalls: 0 });
+    });
+
+    it("leaves lines unmeasured when a call never returned", () => {
+        const use = JSON.stringify({
+            type: "assistant",
+            message: { content: [{ type: "tool_use", id: "cut", name: "Read", input: { file_path: "src/app.ts" } }] },
+        });
+        const events = toolEvents(use);
+        expect(events[0]?.sourceLines).toBeUndefined();
+        expect(analyzeEvents(events).readCalls).toBe(0);
+    });
+
     it.each([
         "No flag registered for --top",
         'Too many arguments starting with "--max"',

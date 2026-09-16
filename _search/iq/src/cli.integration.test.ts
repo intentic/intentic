@@ -131,6 +131,21 @@ test("normalizeArgv recovers former engine names, path-shaped repos, and glob-on
     expect(normalizeArgv(["files", "--glob", "*.ts", "--limit", "5"]).argv).toEqual(["files", "--glob", "*.ts", "--limit", "5", "*.ts", "--exact"]);
 });
 
+test("normalizeArgv routes read and context to whichever one the argument actually addresses", () => {
+    // Synonyms for "give me the source", all one verb.
+    expect(normalizeArgv(["body", "createWidget"]).argv).toEqual(["read", "createWidget"]);
+    expect(normalizeArgv(["source", "createWidget"]).argv).toEqual(["read", "createWidget"]);
+    expect(normalizeArgv(["show", "createWidget"]).argv).toEqual(["read", "createWidget"]);
+    // A symbol ref typed at context, and an anchor typed at read, each want the other verb.
+    expect(normalizeArgv(["context", "src/app.ts::createWidget"]).argv).toEqual(["read", "src/app.ts::createWidget"]);
+    expect(normalizeArgv(["read", "src/app.ts:48"]).argv).toEqual(["context", "src/app.ts:48"]);
+    // A whole file has no body to read; its shape is outline's answer.
+    expect(normalizeArgv(["read", "src/app.ts"]).argv).toEqual(["outline", "src/app.ts"]);
+    // A bare symbol is read's own form and must survive untouched.
+    expect(normalizeArgv(["read", "createWidget"]).notes).toEqual([]);
+    expect(normalizeArgv(["read", "src/app.ts::createWidget"]).notes).toEqual([]);
+});
+
 test("normalizeArgv absorbs router-verb dialect: a bare sessions query, and a subcommand typed as a flag", () => {
     expect(normalizeArgv(["sessions", "limit-reset handling UI"])).toEqual({
         argv: ["sessions", "grab", "limit-reset handling UI"],

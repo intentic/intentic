@@ -7,6 +7,10 @@ const VERB_REWRITES: Record<string, string> = {
     skeleton: "outline",
     // `ask` predates the natural-language pipeline query does now; absorbed so the old habit isn't an exit-2.
     ask: "q",
+    // What agents type when they want a symbol's source rather than its anchor; `read` is the canonical name.
+    body: "read",
+    source: "read",
+    show: "read",
 };
 
 const FLAG_REWRITES: Record<string, string> = {
@@ -174,9 +178,39 @@ const absorbBareContextPath = (out: string[], notes: string[]): void => {
         return;
     }
     const anchor = positionalArgs(out)[0];
-    if (anchor !== undefined && !/:\d+(?:-\d+)?$/.test(anchor)) {
+    if (anchor === undefined) {
+        return;
+    }
+    // A `path::symbol` typed at `context` is the thing `read` takes; the caller wants a body either way.
+    if (anchor.includes("::")) {
+        out[0] = "read";
+        notes.push("context <path::symbol> → read");
+        return;
+    }
+    if (!/:\d+(?:-\d+)?$/.test(anchor)) {
         out[0] = "outline";
         notes.push("context <path> (no :line) → outline");
+    }
+};
+
+// The mirror of the above: `read <path>` with no symbol names a file, and that file's shape is what `outline` gives.
+// An anchor typed at `read` is `context`'s form, so it routes there rather than failing on a missing symbol.
+const absorbBareReadPath = (out: string[], notes: string[]): void => {
+    if (out[0] !== "read") {
+        return;
+    }
+    const target = positionalArgs(out)[0];
+    if (target === undefined || target.includes("::")) {
+        return;
+    }
+    if (/:\d+(?:-\d+)?$/.test(target)) {
+        out[0] = "context";
+        notes.push("read <path:line> → context");
+        return;
+    }
+    if (/[/\\]|\.[a-z0-9]+$/i.test(target)) {
+        out[0] = "outline";
+        notes.push("read <path> (no ::symbol) → outline");
     }
 };
 
@@ -191,6 +225,7 @@ export const normalizeArgv = (argv: readonly string[]): NormalizedArgv => {
     absorbRepoPath(out, notes);
     absorbFilesGlob(out, notes);
     absorbBareContextPath(out, notes);
+    absorbBareReadPath(out, notes);
 
     const hint = filenameHint(
         out[0],

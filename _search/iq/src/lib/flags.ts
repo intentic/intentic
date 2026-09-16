@@ -94,6 +94,17 @@ export const rootRelativeAnchor = (raw: string, root: string): string => {
     return `${rootRelativePath(match[1]!, root)}${match[2] ?? ""}`;
 };
 
+// `read` addresses `name`, `path::name` or `path::Outer::method`. Only the path half is a path, and only when one is
+// given: a bare symbol passes through untouched, since resolving it as a path would reject every valid call.
+export const rootRelativeSymbolRef = (raw: string, root: string): string => {
+    const cut = raw.indexOf("::");
+    if (cut < 0) {
+        return raw;
+    }
+    const head = raw.slice(0, cut);
+    return /[/\\]|\.[a-z0-9]+$/i.test(head) ? `${rootRelativePath(head, root)}${raw.slice(cut)}` : raw;
+};
+
 export const toScope = (flags: ScopeFlags): Scope => ({
     ...(flags.in !== undefined ? { paths: flags.in } : {}),
     ...(flags.repo !== undefined ? { repo: flags.repo } : {}),

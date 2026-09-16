@@ -52,6 +52,7 @@ node dist/cli.js agents --task hono-etag-match --vendor claude --model claude-ha
 - Vendors: `claude` (Claude Code headless, default model `claude-opus-4-8`), `codex` (`codex exec`, uses your configured default model unless `--model`), `grok` (stub, fill in `src/agents/grok.ts` once its headless flags are verified). Unavailable vendors are skipped with a warning.
 - Caps: per-task `maxTurns` (claude) + wall-clock timeout (all vendors, default 10 min) + `--max-spend <usd>` (default 40) that aborts the sweep on vendor-reported cost.
 - Results: `results/<ts>/agents/runs.jsonl` + full transcripts + `summary.md` with per-task paired table, exact sign test, bootstrap CI (descriptive). Deltas are within-model only, cross-model absolute comparisons are intentionally not reported.
+- **Source lines in context** (`analytics.md`, from `analyze`): the cost side of adoption. Counted off tool *results*, never requests — a `Read` with no offset hands back up to 2000 lines whether the model wanted them or not, and that difference is the whole question. Three figures: `read-lines` (the `Read` tool, the one number measured identically in an arm with iq and an arm without), `iq-lines` (code iq pasted itself, since the pack stage returns whole enclosing bodies), and `ctx-lines`, their sum. **`ctx-lines` is the number that decides the feature.** Reporting `read-lines` alone would score an arm that halved Read while doubling iq output as a win, when it only moved the cost. grep/rg/cat output is uncounted on both sides: that is search, not reading.
 
 ### Prerequisites
 

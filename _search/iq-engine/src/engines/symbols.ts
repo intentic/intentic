@@ -9,7 +9,7 @@ export interface StoredSymbol extends SymbolRow {
     readonly path: string;
 }
 
-const symbolRows = (db: IndexDb, where: string, ...params: string[]): StoredSymbol[] =>
+export const symbolRows = (db: IndexDb, where: string, ...params: string[]): StoredSymbol[] =>
     db
         .all(
             `SELECT f.path, s.name, s.kind, s.line, s.end_line, s.signature, s.exported, s.heuristic

@@ -14,6 +14,7 @@ import { map } from "./commands/map.command.js";
 import { multi } from "./commands/multi.command.js";
 import { outline } from "./commands/outline.command.js";
 import { q } from "./commands/q.command.js";
+import { read } from "./commands/read.command.js";
 import { recent } from "./commands/recent.command.js";
 import { refs } from "./commands/refs.command.js";
 import { sessionsCommand } from "./commands/sessions/sessions.routes.js";
@@ -41,6 +42,7 @@ natural language semantically: there is no second verb for questions:
   iq ast 'await $FN($$$)' --lang ts       structural AST pattern
   iq outline src/app.ts                   file skeleton without reading it
   iq context src/app.ts:48                enclosing function of an anchor
+  iq read refusalFor                      a symbol's body by name (path::name, path::Cls::method)
   iq map --budget 4000                    repo skeleton: top files + their exports
   iq hotspots --in src                    churn × complexity, where risk sits
   iq impact                               what your uncommitted change reaches, and its tests
@@ -77,6 +79,7 @@ export const app = buildApplication(
             ast,
             outline,
             context,
+            read,
             map,
             hotspots,
             impact,

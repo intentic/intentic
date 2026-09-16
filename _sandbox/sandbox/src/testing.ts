@@ -79,6 +79,8 @@ export const testConfig: Config = {
     iqModelDir: "",
     iqRgPath: "",
     iqPluginDir: "",
+    // Off, which is the shipped default: a plan test must not pay a pre-turn lookup it never asked for.
+    iqTurnContext: false,
     webqPluginDir: "",
     local: { port: 8788 },
 };

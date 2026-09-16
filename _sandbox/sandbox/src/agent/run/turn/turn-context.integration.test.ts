@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createResidentEngine, type QueryOutcome, type ResidentEngine } from "@intentic/iq-engine";
 import type { Logger } from "pino";
 import { expect, test, vi } from "vitest";
-import { retrievalQueryOf, retrieveTurnContext, TURN_CONTEXT_NOTE_HEADER, type TurnContextDeps } from "./turn-context.js";
+import { retrievalEvidenceOf, retrieveTurnContext, TURN_CONTEXT_NOTE_HEADER, type TurnContextDeps } from "./turn-context.js";
 import { stripTurnPreamble, withTurnPreamble } from "../../prompt/turn-preamble.js";
 
 // Pins pre-injection's refusals and its two guarantees: a bad retrieval never delays a turn past its deadline and never
@@ -42,53 +42,85 @@ const noteOf = async (deps: TurnContextDeps, prompt: string): Promise<string | u
     return "note" in result ? result.note : undefined;
 };
 
+const queryOf = (prompt: string): string | undefined => retrievalEvidenceOf(prompt)?.query;
+
 test("a question about the workspace is what gets retrieved for", () => {
-    expect(retrievalQueryOf("how does the daemon decide which runtime serves a turn?")).toBe(
-        "how does the daemon decide which runtime serves a turn?",
-    );
+    expect(queryOf("how does the daemon decide which runtime serves a turn?")).toBe("how does the daemon decide which runtime serves a turn?");
 });
 
-test("a prompt that already names its file is left alone: the model will just open it", () => {
-    // An anchor the user already typed needs no retrieval pointing back at it.
-    expect(retrievalQueryOf("why does turn-plan.ts drop the model?")).toBeUndefined();
-    expect(retrievalQueryOf("look at _sandbox/sandbox/src/agent and tell me what runs a turn")).toBeUndefined();
-    expect(retrievalQueryOf("read ./src/index.ts first")).toBeUndefined();
+// A named file used to make the whole turn ineligible. It is the strongest evidence a message can carry — the user
+// already localized the work — so it is resolved instead of spent, and the expensive fused query is dropped.
+test("a prompt that names its file resolves that file and skips the fused query", () => {
+    expect(retrievalEvidenceOf("why does turn-plan.ts drop the model?")).toEqual({
+        paths: ["turn-plan.ts"],
+        literals: [],
+        query: undefined,
+    });
+    expect(retrievalEvidenceOf("read ./src/index.ts first")).toMatchObject({ paths: ["./src/index.ts"], query: undefined });
+    // A `path:line` keeps its line: that is the tightest anchor the message has.
+    expect(retrievalEvidenceOf("src/agent/turn-plan.ts:74 looks wrong")).toMatchObject({ paths: ["src/agent/turn-plan.ts:74"] });
+    // The bare filename inside a fuller path is the same evidence twice, and does not become a second lookup.
+    expect(retrievalEvidenceOf("check src/agent/turn-plan.ts please")).toMatchObject({ paths: ["src/agent/turn-plan.ts"] });
+});
+
+// A directory is not a file with a shape to outline, so it stays a question for the fused pipeline.
+test("a directory reference is not a path lookup", () => {
+    expect(retrievalEvidenceOf("look at _sandbox/sandbox/src/agent and tell me what runs a turn")).toMatchObject({
+        paths: [],
+        query: expect.any(String),
+    });
+});
+
+// A stack trace is the same class as a named file: the frame says where the failure came through.
+test("a traceback frame resolves to the file and line it names", () => {
+    expect(retrievalEvidenceOf(`Traceback:\n  File "app/models.py", line 42, in save`)).toMatchObject({ paths: ["app/models.py:42"] });
+    expect(retrievalEvidenceOf("TypeError\n    at save (src/models.ts:42:7)")).toMatchObject({ paths: ["src/models.ts:42"] });
+});
+
+// Quoted code is grepped verbatim: an error string either occurs in the source or it does not, and the fused pipeline
+// dilutes it against the prose around it.
+test("quoted code becomes an exact match, quoted English does not", () => {
+    expect(retrievalEvidenceOf("where does `createIgnoreScope` get called?")).toMatchObject({ literals: ["createIgnoreScope"] });
+    expect(retrievalEvidenceOf('the log says "Cannot read properties of undefined" somewhere')).toMatchObject({
+        literals: ["Cannot read properties of undefined"],
+    });
+    // A quoted ordinary word is a phrase, not a symbol; grepping it costs a call and returns noise.
+    expect(retrievalEvidenceOf(`Go for the "levers".`)).toBeUndefined();
 });
 
 test("conversational turns are not questions about the code", () => {
     // The index can't resolve 'that'; retrieving here would search on stopwords alone.
-    expect(retrievalQueryOf("yes please do that")).toBeUndefined();
-    expect(retrievalQueryOf("go for it")).toBeUndefined();
-    expect(retrievalQueryOf("thanks, looks good")).toBeUndefined();
-    expect(retrievalQueryOf("keep going")).toBeUndefined();
-    expect(retrievalQueryOf("")).toBeUndefined();
+    expect(retrievalEvidenceOf("yes please do that")).toBeUndefined();
+    expect(retrievalEvidenceOf("go for it")).toBeUndefined();
+    expect(retrievalEvidenceOf("thanks, looks good")).toBeUndefined();
+    expect(retrievalEvidenceOf("keep going")).toBeUndefined();
+    expect(retrievalEvidenceOf("")).toBeUndefined();
 });
 
 // The old gate skipped only when every word was conversational; one off-list word (often a bare number) defeated it and
 // still triggered a full-index search.
 test("a follow-up that points back at the last turn is not a query, however it is spelled", () => {
-    expect(retrievalQueryOf("Go for these 2.")).toBeUndefined();
-    expect(retrievalQueryOf("Go for 1.")).toBeUndefined();
-    expect(retrievalQueryOf(`Go for the "levers".`)).toBeUndefined();
-    expect(retrievalQueryOf("Got for all of it.")).toBeUndefined();
+    expect(retrievalEvidenceOf("Go for these 2.")).toBeUndefined();
+    expect(retrievalEvidenceOf("Go for 1.")).toBeUndefined();
+    expect(retrievalEvidenceOf("Got for all of it.")).toBeUndefined();
 });
 
 // A resumptive opening only bars retrieval if nothing else follows; long pure anaphora can still slip through since
 // nothing lexical tells the two apart.
 test("a resumptive opener still retrieves once the message carries its own question", () => {
-    expect(retrievalQueryOf("Also, how does the scheduler decide which pending automation wakes a sandbox first?")).toEqual(expect.any(String));
-    expect(retrievalQueryOf("how are branch points counted when the hotspots verb ranks a file?")).toEqual(expect.any(String));
+    expect(queryOf("Also, how does the scheduler decide which pending automation wakes a sandbox first?")).toEqual(expect.any(String));
+    expect(queryOf("how are branch points counted when the hotspots verb ranks a file?")).toEqual(expect.any(String));
     // An interrogative frame is nearly all stopwords: two content words is a real question and must survive.
-    expect(retrievalQueryOf("how do we rotate credentials?")).toEqual(expect.any(String));
+    expect(queryOf("how do we rotate credentials?")).toEqual(expect.any(String));
 });
 
 test("a slash command is a command, not a question", () => {
-    expect(retrievalQueryOf("/review the diff")).toBeUndefined();
+    expect(retrievalEvidenceOf("/review the diff")).toBeUndefined();
 });
 
 test("a long prompt is searched by its opening, cut at a word boundary", () => {
     const prompt = `${"why does the retry backoff double ".repeat(20)}end`;
-    const query = retrievalQueryOf(prompt);
+    const query = queryOf(prompt);
     expect(query!.length).toBeLessThanOrEqual(400);
     // Cuts on a space in the original, never mid-identifier.
     expect(prompt.startsWith(query!)).toBe(true);
@@ -200,6 +232,37 @@ test("against a real index: the note answers the question, and restore still giv
         expect(note).toContain("auth.ts:1");
         expect(note).toContain("refreshSessionToken");
         expect(stripTurnPreamble(withTurnPreamble([note!], prompt))).toBe(prompt);
+    } finally {
+        await iq.close();
+    }
+});
+
+// The classes are additive and the convergence lead is computed off what they actually returned, so both need a real
+// index to mean anything.
+test("against a real index: a named file and a quoted symbol are both resolved, and agreement leads the note", async () => {
+    const root = mkdtempSync(join(tmpdir(), "turn-context-"));
+    writeFileSync(
+        join(root, "auth.ts"),
+        `export const refreshSessionToken = (token: string): string => {\n    // rotate the credential before it expires\n    return token + "-rotated";\n};\n`,
+    );
+    writeFileSync(join(root, "paint.ts"), `export const paint = (): string => "blue";\n`);
+    const iq = createResidentEngine({ root });
+    const deps = { iq, logger: { warn: () => {}, debug: () => {} } as unknown as Pick<Logger, "warn" | "debug"> };
+    try {
+        await iq.warm();
+        // Both classes point at auth.ts, which is exactly the case the convergence lead exists for.
+        const both = await retrieveTurnContext(deps, "in auth.ts, why does `refreshSessionToken` return early?");
+        expect(both).toMatchObject({ strategies: ["paths", "literals"] });
+        const note = "note" in both ? both.note : "";
+        expect(note).toContain("iq outline auth.ts");
+        expect(note).toContain(`iq find "refreshSessionToken" --literal`);
+        expect(note).toContain("More than one of those landed on `auth.ts`");
+        // The fused query is not run once a path localized the turn: it is the expensive call and the file is known.
+        expect(note).not.toContain("read as a question");
+
+        // A file named with no quoted code is the path class alone.
+        const pathOnly = await retrieveTurnContext(deps, "what does paint.ts do?");
+        expect(pathOnly).toMatchObject({ strategies: ["paths"], paths: ["paint.ts"] });
     } finally {
         await iq.close();
     }
