@@ -144,6 +144,7 @@ test("implements every action the contract names", () => {
         "sync-resume",
         "sync-unpair",
         "sync-install",
+        "sync-clean",
         "dev-reload",
         "dev-rebuild",
         "dev-rebuild-log",

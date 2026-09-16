@@ -14,11 +14,14 @@ export interface DevicePortRow {
 }
 
 // One stuck path and what happened on each side; structural, like everything here. Either side absent
-// means the machine reported no change kind for it, not that it was untouched.
+// means the machine reported no change kind for it, not that it was untouched. `untracked` is not an edit
+// anybody made: it is build output under an ignore pattern, which is why `nature` can call a conflict
+// carrying it derived rather than disputed.
 export interface DeviceConflictRow {
     path: string;
-    local?: `created` | `modified` | `deleted` | undefined;
-    sandbox?: `created` | `modified` | `deleted` | undefined;
+    local?: `created` | `modified` | `deleted` | `untracked` | undefined;
+    sandbox?: `created` | `modified` | `deleted` | `untracked` | undefined;
+    nature?: `derived-leftover` | `both-edited` | undefined;
 }
 
 export interface DeviceFolderRow {
@@ -218,16 +221,20 @@ const CONFLICT_ROWS_MAX = 6;
 
 type ConflictChange = NonNullable<DeviceConflictRow[`local`]>;
 
+// `untracked` never reads as somebody's edit, which is what the old wording made of it: a reader told their own
+// `node_modules` was "created on this device" goes looking for a difference in content that does not exist.
 const ON_DEVICE: Record<ConflictChange, string> = {
     created: `created on this device`,
     modified: `changed on this device`,
     deleted: `deleted on this device`,
+    untracked: `build output left on this device`,
 };
 
 const IN_SANDBOX: Record<ConflictChange, string> = {
     created: `created in the sandbox`,
     modified: `changed in the sandbox`,
     deleted: `deleted in the sandbox`,
+    untracked: `build output left in the sandbox`,
 };
 
 export interface ConflictLine {
@@ -238,13 +245,19 @@ export interface ConflictLine {
 }
 
 export interface FolderConflicts {
-    /** What happened on each side, as far as the machine reported it; empty when it reported neither. */
+    /** The sentence over the list: what happened to those paths, and what ends it. */
     readonly lead: string;
     readonly rows: readonly ConflictLine[];
-    /** The sentence over the list: what happened to those files, and what ends it. */
-    readonly more: number;
     // How many conflicts these rows do NOT account for, counted against the machine's own total.
+    readonly more: number;
+    /** What happened on each side, as far as the machine reported it; empty when it reported neither. */
     readonly note?: string;
+    // How many of the reported paths are the device's own build output blocking a deletion. A button clears exactly
+    // these, so a reader is never offered one for a conflict it cannot settle.
+    readonly clearable: number;
+    // How many need a person, which is what the agent turn is for. Counted off the ROWS, so neither number ever claims
+    // anything about the conflicts the report had to leave out.
+    readonly disputed: number;
 }
 
 const conflictLine = (conflict: DeviceConflictRow): ConflictLine => ({
@@ -259,20 +272,54 @@ const conflictLine = (conflict: DeviceConflictRow): ConflictLine => ({
         .join(` · `),
 });
 
+// Whether this one is the device's own build output blocking a deletion, rather than two copies of something real.
+// Tested FOR the derived shape and never against the other, since an agent older than the classification reports no
+// nature at all and everything it sends must read as needing a person.
+const isDerived = (conflict: DeviceConflictRow): boolean =>
+    conflict.nature === `derived-leftover` && conflict.local === `untracked` && conflict.sandbox === `deleted`;
+
+// TWO UNLIKE THINGS WERE BEING SAID IN ONE SENTENCE, and the common one was being described as the rare one. "Both
+// ends changed it, make the copies match" is true of a genuine collision and false of the conflict this view actually
+// shows most: a directory the sandbox deleted that this device cannot follow, because build output nothing syncs is
+// still sitting in it. Nothing there disagrees, nothing is at stake, and telling somebody to reconcile two copies
+// sends them looking for a difference in content that does not exist.
+// Kept to two clauses on purpose: at the width this card is read on, the sentence it replaced ran to eight lines
+// before the first path, and half of those explained how the sync decides rather than what is stuck.
+const derivedLead = (count: number): string =>
+    `${count === 1 ? `One directory` : `${count} directories`} the sandbox deleted ${count === 1 ? `is` : `are`} still here, held open by ` +
+    `build output this device never syncs (node_modules, dist, a build cache). Nothing of yours is in ${count === 1 ? `it` : `them`}: ` +
+    `clearing it lets ${count === 1 ? `that deletion` : `those deletions`} land.`;
+
+const disputedLead = (count: number): string =>
+    `${count === 1 ? `One path changed` : `${count} paths changed`} both on this device and in the sandbox since they last agreed, so ` +
+    `neither copy was overwritten and ${count === 1 ? `it has` : `they have`} stopped syncing. Make the two copies match — same ` +
+    `contents, or gone on both sides — and syncing resumes on its own.`;
+
 export const folderConflicts = (folder: DeviceFolderRow | undefined): FolderConflicts | undefined => {
     const count = folder?.conflicts ?? 0;
     if (folder === undefined || count === 0) {
         return undefined;
     }
-    const rows = (folder.conflictedPaths ?? []).slice(0, CONFLICT_ROWS_MAX).map(conflictLine);
+    const listed = folder.conflictedPaths ?? [];
+    const rows = listed.slice(0, CONFLICT_ROWS_MAX).map(conflictLine);
+    const clearable = listed.filter(isDerived).length;
+    const disputed = listed.length - clearable;
+    // Counted off what the machine actually listed, so an unclassified report (an older agent, or paths the report had
+    // to drop) falls to the sentence that asks for a person rather than to the one offering a button.
+    const lead =
+        clearable === 0
+            ? disputedLead(count)
+            : disputed === 0
+              ? derivedLead(clearable)
+              : `${derivedLead(clearable)} The other ${disputed === 1 ? `one is a real disagreement` : `${disputed} are real disagreements`}: ` +
+                `both ends hold their own copy.`;
     return {
-        lead:
-            `${count === 1 ? `One path changed` : `${count} paths changed`} both on this device and in the sandbox since they last agreed, so ` +
-            `neither copy was overwritten and ${count === 1 ? `it has` : `they have`} stopped syncing. Make the two copies match — same ` +
-            `contents, or gone on both sides — and syncing resumes on its own.`,
+        lead,
         rows,
         more: count - rows.length,
         ...(rows.length === 0 ? { note: `This device's agent doesn't report which paths they are. Updating it lists them here.` } : {}),
+        clearable,
+        disputed,
     };
 };
 

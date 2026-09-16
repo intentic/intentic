@@ -1,3 +1,4 @@
+import { clearableOnDevice } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import {
     CONFLICT_PATHS_MAX,
@@ -92,7 +93,11 @@ describe("parseOrphanSyncNames", () => {
 // Protobuf JSON via Go's encoding/json: an absent field means absent, and which of `old`/`new` is present says
 // which way the change went.
 describe("conflictsFrom", () => {
-    const entry = { kind: 1 };
+    // The kind as Mutagen 0.18.1 actually prints it in `sync list --template {{json .}}`: the enum's NAME, not its
+    // number. Read off a live wedged session, which is also where the `untracked` cases below come from.
+    const entry = { kind: "file" };
+    const directory = { kind: "directory", contents: null };
+    const untracked = { kind: "untracked" };
 
     it("says nothing at all when Mutagen reported no conflicts", () => {
         expect(conflictsFrom({})).toBeUndefined();
@@ -119,8 +124,8 @@ describe("conflictsFrom", () => {
             ],
         });
         expect(read?.paths).toEqual([
-            { path: "notes.md", local: "modified", sandbox: "deleted" },
-            { path: "new.ts", local: "created", sandbox: "created" },
+            { path: "notes.md", local: "modified", sandbox: "deleted", nature: "both-edited" },
+            { path: "new.ts", local: "created", sandbox: "created", nature: "both-edited" },
         ]);
     });
 
@@ -135,17 +140,77 @@ describe("conflictsFrom", () => {
                 },
             ],
         });
-        expect(read?.paths).toEqual([{ path: "src", local: "modified", sandbox: "deleted" }]);
+        expect(read?.paths).toEqual([{ path: "src", local: "modified", sandbox: "deleted", nature: "both-edited" }]);
     });
 
     // An empty root is the synced folder itself, Mutagen's report for a root-level collision; dropping it would lose
     // the loudest conflict there is.
     it("keeps a root-level conflict, which has no path to name", () => {
-        expect(conflictsFrom({ conflicts: [{ root: "" }] })?.paths).toEqual([{ path: "" }]);
+        expect(conflictsFrom({ conflicts: [{ root: "" }] })?.paths).toEqual([{ path: "", nature: "both-edited" }]);
     });
 
     it("says nothing about a side whose change kind Mutagen did not report", () => {
-        expect(conflictsFrom({ conflicts: [{ root: "a.ts", alphaChanges: [{ path: "a.ts" }] }] })?.paths).toEqual([{ path: "a.ts" }]);
+        // A side Mutagen said nothing about falls to `both-edited`: nothing may be cleared on the strength of silence.
+        expect(conflictsFrom({ conflicts: [{ root: "a.ts", alphaChanges: [{ path: "a.ts" }] }] })?.paths).toEqual([
+            { path: "a.ts", nature: "both-edited" },
+        ]);
+    });
+
+    // THE CONFLICT THIS PRODUCT ACTUALLY PRODUCES, copied from a wedged session on a dogfooding machine: an agent
+    // moved six package directories in the sandbox, and each one stood because this device still had build output in
+    // it. Read as a creation, it says the user made a `node_modules` and must now reconcile two copies of it.
+    it("reads ignored content as build output left behind, not as something somebody created", () => {
+        const read = conflictsFrom({
+            conflicts: [
+                {
+                    root: "intentic/_extensions/acceptance",
+                    alphaChanges: [
+                        { path: "intentic/_extensions/acceptance/.cache", old: null, new: untracked },
+                        { path: "intentic/_extensions/acceptance/.turbo", old: null, new: untracked },
+                        { path: "intentic/_extensions/acceptance/node_modules", old: null, new: untracked },
+                    ],
+                    betaChanges: [{ path: "intentic/_extensions/acceptance", old: directory, new: null }],
+                },
+            ],
+        });
+        expect(read?.paths).toEqual([
+            { path: "intentic/_extensions/acceptance", local: "untracked", sandbox: "deleted", nature: "derived-leftover" },
+        ]);
+    });
+
+    // The asymmetry that keeps the heal safe: `untracked` licenses deleting a directory unasked, so one real file
+    // among the ignored ones must take the whole side out of that class.
+    it("refuses to call a side build output when one real file sits among it", () => {
+        const read = conflictsFrom({
+            conflicts: [
+                {
+                    root: "pkg",
+                    alphaChanges: [
+                        { path: "pkg/node_modules", old: null, new: untracked },
+                        { path: "pkg/notes.md", old: null, new: entry },
+                    ],
+                    betaChanges: [{ path: "pkg", old: directory, new: null }],
+                },
+            ],
+        });
+        expect(read?.paths).toEqual([{ path: "pkg", local: "created", sandbox: "deleted", nature: "both-edited" }]);
+    });
+
+    // The same standoff the other way round: the sandbox holds the residue, this device made the deletion. Named as
+    // derived so a reader is told what it is — but `clearableOnDevice` is what decides anything is removed, and this
+    // is not it.
+    it("classifies residue on the sandbox's side too, without making it this device's to clear", () => {
+        const read = conflictsFrom({
+            conflicts: [
+                {
+                    root: "pkg",
+                    alphaChanges: [{ path: "pkg", old: directory, new: null }],
+                    betaChanges: [{ path: "pkg/dist", old: null, new: untracked }],
+                },
+            ],
+        });
+        expect(read?.paths).toEqual([{ path: "pkg", local: "deleted", sandbox: "untracked", nature: "derived-leftover" }]);
+        expect(read?.paths.map((conflict) => clearableOnDevice(conflict))).toEqual([false]);
     });
 
     // Re-read every few seconds by every device card, so the path list is capped here too; the count never is.

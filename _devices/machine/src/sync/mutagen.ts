@@ -5,7 +5,7 @@ import { chmod, mkdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import type { DeviceConflict, DeviceConflictChange } from "@intentic/sandbox-contract";
+import type { DeviceConflict, DeviceConflictChange, DeviceConflictNature } from "@intentic/sandbox-contract";
 import {
     type CliLauncher,
     clearWindowsRunValue,
@@ -17,6 +17,7 @@ import {
 } from "@intentic/local-agent";
 import { binDir, mutagenDaemonLogPath, type Pairing } from "./config.js";
 import { runProcess } from "./exec.js";
+import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./residue.js";
 import { BACKUP_IGNORES, IGNORES, mutagenSshPath, sanitizeId, sshAlias, sshTransportAnswers } from "./ssh.js";
 
 // The pinned Mutagen version this agent downloads when the machine has no install of its own.
@@ -171,12 +172,22 @@ export const mutagenCreateArgs = (spec: SyncSessionSpec, paused: boolean): strin
 // What the drift check and report read off a live session. Protobuf JSON omits defaults, so absent here can mean
 // the zero value, not unknown; every field stays optional rather than defaulted.
 
+// Mutagen's kind for content it scanned and will never carry: everything under an ignore pattern. It is recorded at
+// all so that a directory deletion knows it would be destroying something unsynchronized — which is exactly why an
+// ignored `node_modules` stops the sandbox's `rm -rf` of its parent from ever reaching this device.
+const UNTRACKED = "untracked";
+
+// One side of a snapshot entry (entry.proto). Only `kind` is read, and only to tell ignored content from a real file.
+interface LiveEntry {
+    readonly kind?: string;
+}
+
 // One side's edit to a path (change.proto): `old`/`new` presence is the whole message, absent old means created,
-// absent new means deleted. Both stay `unknown`; only presence is read.
+// absent new means deleted.
 interface LiveChange {
     readonly path?: string;
-    readonly old?: unknown;
-    readonly new?: unknown;
+    readonly old?: LiveEntry | null;
+    readonly new?: LiveEntry | null;
 }
 
 // A conflicted path plus its colliding changes; `root` is the session-relative path from conflict.proto.
@@ -216,7 +227,8 @@ const readSessions = (mutagen: string, name: string): LiveSession[] => {
 export const CONFLICT_PATHS_MAX = 24;
 
 // Created, deleted, or modified, from which side of a change is present; neither present says nothing rather
-// than guessing.
+// than guessing. A creation whose content is ignored is reported as `untracked` instead, because nobody created it and
+// nothing is lost by removing it — the distinction the whole classification below rests on.
 const changeKind = (change: LiveChange | undefined): DeviceConflictChange | undefined => {
     if (change === undefined) {
         return undefined;
@@ -224,22 +236,65 @@ const changeKind = (change: LiveChange | undefined): DeviceConflictChange | unde
     const before = change.old !== undefined && change.old !== null;
     const after = change.new !== undefined && change.new !== null;
     if (!before) {
-        return after ? "created" : undefined;
+        return after ? (change.new?.kind === UNTRACKED ? "untracked" : "created") : undefined;
     }
     return after ? "modified" : "deleted";
 };
 
-// The change about the conflicted path if any; a directory-rooted conflict carries changes underneath it, so the
-// first one is the closest honest match.
-const sideChange = (changes: readonly LiveChange[] | undefined, root: string): LiveChange | undefined =>
-    changes?.find((change) => (change.path ?? "") === root) ?? changes?.[0];
+// What one side did, for the row. A conflict rooted at a directory carries its changes UNDERNEATH that root rather than
+// at it, so there is usually nothing to match and the side has to be summarised: unanimous kinds are that kind, and a
+// mixed side reports anything that is not `untracked`. The asymmetry is deliberate — `untracked` licenses deleting the
+// directory unasked, so it is claimed only when every change on that side is ignored content and never when one real
+// file sits among them.
+const sideKind = (changes: readonly LiveChange[] | undefined, root: string): DeviceConflictChange | undefined => {
+    const atRoot = changes?.find((change) => (change.path ?? "") === root);
+    if (atRoot !== undefined) {
+        return changeKind(atRoot);
+    }
+    const kinds = (changes ?? []).map(changeKind);
+    if (kinds.length === 0) {
+        return undefined;
+    }
+    return kinds.every((kind) => kind === kinds[0]) ? kinds[0] : (kinds.find((kind) => kind !== UNTRACKED) ?? kinds[0]);
+};
+
+// The one conflict shape that is not a disagreement: one side holds nothing but ignored content, the other deleted the
+// directory holding it. Everything else is two real copies and a person's call.
+const natureOf = (local: DeviceConflictChange | undefined, sandbox: DeviceConflictChange | undefined): DeviceConflictNature =>
+    (local === "untracked" && sandbox === "deleted") || (sandbox === "untracked" && local === "deleted") ? "derived-leftover" : "both-edited";
 
 const conflictedPath = (conflict: LiveConflict): DeviceConflict => {
     // An empty root is the synced folder itself; a change's path is the fallback when the conflict carried none.
-    const path = conflict.root ?? sideChange(conflict.alphaChanges, "")?.path ?? sideChange(conflict.betaChanges, "")?.path ?? "";
-    const local = changeKind(sideChange(conflict.alphaChanges, path));
-    const sandbox = changeKind(sideChange(conflict.betaChanges, path));
-    return { path, ...(local === undefined ? {} : { local }), ...(sandbox === undefined ? {} : { sandbox }) };
+    const path = conflict.root ?? conflict.alphaChanges?.[0]?.path ?? conflict.betaChanges?.[0]?.path ?? "";
+    const local = sideKind(conflict.alphaChanges, path);
+    const sandbox = sideKind(conflict.betaChanges, path);
+    return {
+        path,
+        ...(local === undefined ? {} : { local }),
+        ...(sandbox === undefined ? {} : { sandbox }),
+        nature: natureOf(local, sandbox),
+    };
+};
+
+// What the heal needs, in one `sync list`: every conflict the daemon reports, classified and UNCAPPED (the report caps
+// what it shows; a heal that saw only the first 24 would clear those, leave the session wedged on the rest, and say it
+// had succeeded), beside the ignore list the LIVE session carries. That list, not this build's IGNORES: Mutagen freezes
+// it at creation, so a session made by an older agent decides what "ignored" means by the rules it was born with.
+export interface SessionConflicts {
+    readonly ignores: readonly string[];
+    readonly conflicts: readonly DeviceConflict[];
+}
+
+export const readSessionConflicts = (mutagen: string, name: string): SessionConflicts | undefined => {
+    const session = readSessions(mutagen, name)[0];
+    return session === undefined ? undefined : { ignores: session.ignore.paths ?? [], conflicts: (session.conflicts ?? []).map(conflictedPath) };
+};
+
+// Asks for a cycle now rather than at the watcher's leisure. Always `--skip-wait`: this is called from the resident
+// loop, a full cycle over a large workspace outlives any tick, and Mutagen's own filesystem watch picks the change up
+// regardless — the flush only stops it waiting for a coalescing window it has no reason to keep.
+export const flushSession = async (mutagen: string, name: string): Promise<void> => {
+    await runProcess(mutagen, ["sync", "flush", "--skip-wait", name]);
 };
 
 export const conflictsFrom = (session: Pick<LiveSession, "conflicts" | "excludedConflicts">): { count: number; paths: DeviceConflict[] } | undefined => {
@@ -364,6 +419,50 @@ export const convergePlan = (sessions: readonly LiveSession[], spec: SyncSession
     return only !== undefined && sessionMatchesSpec(only, spec) ? "keep" : "replace";
 };
 
+// WHAT A REPLACEMENT COSTS, which is why one is never done blind. Mutagen's record of what the two ends last agreed on
+// lives inside the session; terminating it throws that away, and the replacement reconciles two trees with no history
+// between them. Every path that differs at that moment then reads as created on BOTH sides at once — the one shape
+// two-way-safe can never settle — so a session is replaced only from a settled state, and residue is swept first so it
+// is not propagated back to the sandbox as empty directories by a sync with nothing to compare against.
+const readyForReplacement = async (mutagen: string, spec: SyncSessionSpec, log: Log): Promise<boolean> => {
+    // The backup session is one-way from the sandbox and its root is the sandbox's own state dir: nothing of this
+    // device's making is in there to settle or to sweep, so it is replaced as it always was.
+    if (spec.mode !== "two-way-safe") {
+        return true;
+    }
+    await flushSession(mutagen, spec.name);
+    const held = readSessionConflicts(mutagen, spec.name);
+    const cleared =
+        held === undefined || held.conflicts.length === 0
+            ? { standing: 0 }
+            : await clearConflictResidue({ root: spec.localDir, conflicts: held.conflicts, ignores: held.ignores, log });
+    if (cleared.standing > 0) {
+        log(
+            `${spec.name}: ${cleared.standing} conflict(s) are still standing, so this session keeps the rules it was created with rather than being recreated on top of them — a fresh session has no record of what the two ends last agreed on, which would turn every one of those into a collision neither side can win. Settle them and this converges by itself.`,
+        );
+        return false;
+    }
+    // Residue nobody has flagged yet matters here for a reason of its own: with no history to compare against, a fresh
+    // session reads a directory this device holds and the sandbox does not as something to CREATE there, and pushes
+    // the husk back as an empty directory in /work.
+    await sweepDerivedResidue({
+        exec: { run: async (command, args) => await sshAnswer(command, args) },
+        root: spec.localDir,
+        alias: spec.alias,
+        remoteDir: spec.remoteDir,
+        ignores: spec.ignores,
+        log,
+    });
+    return true;
+};
+
+// stdout when the command SUCCEEDED, undefined when it did not — including an empty answer from a successful run,
+// which means "every path is still there" and must never be read as the failure that sweeps nothing.
+const sshAnswer = async (command: string, args: readonly string[]): Promise<string | undefined> => {
+    const result = await runProcess(command, args, { timeoutMs: SWEEP_TIMEOUT_MS });
+    return result.status === 0 ? result.stdout : undefined;
+};
+
 const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log): Promise<void> => {
     const sessions = readSessions(mutagen, spec.name);
     const plan = convergePlan(sessions, spec);
@@ -384,12 +483,44 @@ const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log)
             );
             return;
         }
+        if (!(await readyForReplacement(mutagen, spec, log))) {
+            return;
+        }
         log(
-            "the running sync session does not match this build's spec: recreating it so the current rules apply (no .git file-syncs; commits arrive via the git bridge instead).",
+            "the running sync session does not match this build's spec: recreating it so the current rules apply (no .git file-syncs; commits arrive via the git bridge instead). This starts the comparison from scratch, which is why it only happens from a settled state.",
         );
         spawnSync(mutagen, ["sync", "terminate", spec.name], { stdio: "ignore", windowsHide: true });
     }
     await runMutagenAsync(mutagen, mutagenCreateArgs(spec, live?.paused === true), log);
+};
+
+// One ssh round trip asking whether a handful of directories still exist; generous enough for a loaded laptop, bounded
+// so a hung transport cannot wedge the pass that was about to replace a session.
+const SWEEP_TIMEOUT_MS = 60_000;
+
+// THE HEAL: read this pairing's conflicts, clear the ones that are only this device's build output standing in the way
+// of a deletion, and ask for a cycle so the deletions it was blocking can land. Everything else is left exactly where it
+// is. `autoHealOff` is the owner's switch over the watcher doing this unprompted, not a fallback for uncertainty —
+// uncertainty is handled by refusing to remove, inside `clearConflictResidue`. `asked` is somebody pressing the button
+// or typing the command, which the switch does not govern: turning off a standing habit is not withholding consent for
+// the thing itself.
+export const healDerivedConflicts = async (mutagen: string, pairing: Pairing, log: Log, asked = false): Promise<ResidueOutcome> => {
+    const idle = { removed: [], standing: 0 } as const;
+    if (pairing.mode !== "sync" || pairing.localDir === undefined) {
+        return idle;
+    }
+    if (!asked && (pairing.autoHealOff === true || pairing.fileSyncAutoPaused === true)) {
+        return idle;
+    }
+    const held = readSessionConflicts(mutagen, sessionName(pairing.sandboxId));
+    if (held === undefined || held.conflicts.length === 0) {
+        return idle;
+    }
+    const outcome = await clearConflictResidue({ root: pairing.localDir, conflicts: held.conflicts, ignores: held.ignores, log });
+    if (outcome.removed.length > 0) {
+        await flushSession(mutagen, sessionName(pairing.sandboxId));
+    }
+    return outcome;
 };
 
 // Sweeps file-sync and forward sessions no pairing claims any more, so an unpaired sandbox stops being dialled

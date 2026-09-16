@@ -125,11 +125,19 @@ const fileSyncState = (pairing: DeviceReport["pairings"][number]): (string | und
 // uses ("here" is the machine you are typing on); an unknown side says nothing rather than guessing.
 const CONFLICT_LINES_MAX = 8;
 
-const HERE: Record<DeviceConflictChange, string> = { created: "created here", modified: "changed here", deleted: "deleted here" };
+// `untracked` is not somebody's edit and is never described as one: it is build output under an ignore pattern, sitting
+// where sync never looks, and the only reason the deletion on the other side cannot land.
+const HERE: Record<DeviceConflictChange, string> = {
+    created: "created here",
+    modified: "changed here",
+    deleted: "deleted here",
+    untracked: "build output left here",
+};
 const IN_SANDBOX: Record<DeviceConflictChange, string> = {
     created: "created in the sandbox",
     modified: "changed in the sandbox",
     deleted: "deleted in the sandbox",
+    untracked: "build output left in the sandbox",
 };
 
 const conflictLine = (conflict: DeviceConflict): string => {

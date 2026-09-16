@@ -1,12 +1,22 @@
-import type { DeviceConflict } from "@intentic/sandbox-contract";
+import { clearableOnDevice, type DeviceConflict } from "@intentic/sandbox-contract";
 import { composeAsk } from "@intentic/sandbox-contract/chores";
 
 // Builds the turn prompt for resolving a stuck file-sync conflict: per-file judgement a switch cannot make,
 // offered because an agent here can reach both ends (the sandbox's copy directly, the device's through its own
 // tools). Aimed at the owner's shared tree, not an isolated worktree.
+//
+// WHAT IT NO LONGER COVERS. The conflict this view shows most is not a disagreement at all: a directory the sandbox
+// deleted that the device cannot follow, because build output nothing syncs is still sitting in it. Those are cleared
+// by a button (`sync-clean`), by the machine's own agent unprompted, and are kept out of this prompt entirely — a turn
+// spent reading both copies of a `node_modules` is a turn spent proving that neither side wrote it.
 
 // Named for the two places rather than Mutagen's endpoints, since the agent is on neither of them.
-const CHANGE: Record<NonNullable<DeviceConflict[`local`]>, string> = { created: `created`, modified: `changed`, deleted: `deleted` };
+const CHANGE: Record<NonNullable<DeviceConflict[`local`]>, string> = {
+    created: `created`,
+    modified: `changed`,
+    deleted: `deleted`,
+    untracked: `left build output`,
+};
 
 const sides = (conflict: DeviceConflict, machine: string): string => {
     const said = [
@@ -53,9 +63,13 @@ export interface ConflictSubject {
 
 export const conflictAsk = ({ machine, hostId, localDir, conflicts, conflictedPaths }: ConflictSubject): ConflictAsk => {
     const folder = localDir ?? `the folder it syncs`;
-    const listed = conflictedPaths.map((conflict) => pathLine(conflict, machine));
-    // Stated rather than dropped: both the report and Mutagen cap what they carry.
-    const rest = conflicts - listed.length;
+    // The derived ones are somebody else's job — a button on this very card, and the machine's own agent — and naming
+    // them here would send a turn to read two copies of a build artefact.
+    const disputed = conflictedPaths.filter((conflict) => !clearableOnDevice(conflict));
+    const listed = disputed.map((conflict) => pathLine(conflict, machine));
+    // Stated rather than dropped: both the report and Mutagen cap what they carry. Counted against the paths the report
+    // actually carried, so the ones this prompt deliberately dropped are not also reported as missing from it.
+    const rest = conflicts - conflictedPaths.length;
     // An old agent reports the count with no paths, and its own `status` predates printing them too; Mutagen
     // itself is the source under both, reachable only by a turn running on that machine.
     const inventory =

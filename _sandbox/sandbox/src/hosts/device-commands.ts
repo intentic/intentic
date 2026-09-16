@@ -165,6 +165,14 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
         line: ({ sandboxId }) => forSandbox("intentic-machine sync resume", sandboxId),
         path: pairedFolder,
     },
+    // Removes ONLY what the session already ignores — build output sitting inside directories this sandbox deleted,
+    // which is what stops those deletions from ever reaching the device. Safe enough to be a button precisely because
+    // it can destroy nothing sync would have carried; a conflict with two real copies is left for `Fix with agent`.
+    "sync-clean": {
+        done: "Cleared the build output that was holding this sandbox's deletions back. Syncing resumes on its own within a few seconds.",
+        line: ({ sandboxId }) => forSandbox("intentic-machine sync clean", sandboxId),
+        path: pairedFolder,
+    },
     // Uninstall ends both sync sessions and self-revokes enrollment; the sandbox and local folder are untouched.
     "sync-unpair": {
         done: "That device has stopped syncing this sandbox. Its local folder is left exactly as it is.",

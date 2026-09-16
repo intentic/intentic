@@ -21,6 +21,7 @@ import {
     ensureMutagen,
     ensureSyncSession,
     forwardSessionName,
+    healDerivedConflicts,
     mutagenForwardArgs,
     ourForwardSessions,
     pauseUnreachableSync,
@@ -296,6 +297,11 @@ const guard = async (log: Log, what: string, step: () => void | Promise<void>): 
 // How often a failed file-sync setup retries; other pairings aren't rechecked every tick.
 const SESSION_RETRY_EVERY_TICKS = 60;
 
+// How often the heal reads a pairing's conflicts. Slower than POLL_MS because it costs a `mutagen sync list` per
+// pairing and nothing it fixes is urgent: the button on the Devices tab is what answers somebody who is watching, and
+// this is what stops them ever having to press it.
+const HEAL_EVERY_TICKS = 12;
+
 // The sync half of the resident loop: run by resident.ts, which owns the pidfile, signals and autostart. This
 // half must never process.exit() or touch autostart; it just returns when the last pairing is gone.
 // One rejected token is a blip; REVOKED_POLLS in a row means the enrollment is gone. Returns whether the pairing
@@ -358,6 +364,15 @@ const absorbPairingFailure = async (
         return { drop, paused: false };
     }
     return { drop: false, paused: await absorbUnreachablePoll(mutagen, pairing, tracking.unreachablePolls, log) };
+};
+
+// The heal as ONE STEP of a pass, cadence included: the loop below is a list of things done to a pairing, and how often
+// this one runs is this step's business rather than another branch in it.
+const healPairing = async (mutagen: string, pairing: Pairing, tick: number, log: Log): Promise<void> => {
+    if (tick % HEAL_EVERY_TICKS !== 0) {
+        return;
+    }
+    await guard(log, `${pairing.sandboxId}: clearing derived residue`, async () => void (await healDerivedConflicts(mutagen, pairing, log)));
 };
 
 export const runMirrorWatch = async (log: Log): Promise<void> => {
@@ -481,6 +496,10 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
             if (pairing.fileSyncAutoPaused === true || pausedThisPass) {
                 continue;
             }
+            // Before the bridge, and guarded like it: a conflict standing here blocks the very deletions the bridge's
+            // fast-forward has already recorded in the local index, so the two disagree until this clears.
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing at a time, like every other step in this pass
+            await healPairing(mutagen, pairing, tick, log);
             // The bridge gets its own catch: it rides ssh, while the ports read above rides https (which 502s through
             // Cloudflare often enough), so one must not cost the other a whole pass.
             try {

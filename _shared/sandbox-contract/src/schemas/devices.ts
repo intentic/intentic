@@ -120,12 +120,16 @@ export type DeviceAgentFlowInput = z.infer<typeof DeviceAgentFlowInputSchema>;
 // STRING to a tool every released agent already has, so a sandbox can drive a machine whose agent predates the feature.
 // `dev-rebuild-log` is the read side of `dev-rebuild`: the build is detached out there, so its log is the only place its
 // progress exists, and polling this is what turns a fired-and-forgotten command into something with a progress bar.
+// `sync-clean` removes the build output left in directories the sandbox has deleted, which is what stops those
+// deletions from ever landing. It deletes only content the session already ignores, so it is the one command here whose
+// worst outcome is a rebuild — which is why it is a button and not a turn.
 export const DeviceCommandSchema = z.enum([
     "mirror-off",
     "mirror-on",
     "sync-pause",
     "sync-resume",
     "sync-unpair",
+    "sync-clean",
     "dev-reload",
     "dev-rebuild",
     "dev-rebuild-log",
@@ -135,7 +139,7 @@ export type DeviceCommand = z.infer<typeof DeviceCommandSchema>;
 // The reversible sync switches: the subset a device's own row drives with a pair of buttons, as opposed to the two
 // commands a card elsewhere issues once. Its own type so those button tables stay total without carrying entries for
 // commands they can never send.
-export const DeviceSyncSwitchSchema = DeviceCommandSchema.exclude(["dev-reload", "dev-rebuild", "dev-rebuild-log", "sync-install"]);
+export const DeviceSyncSwitchSchema = DeviceCommandSchema.exclude(["dev-reload", "dev-rebuild", "dev-rebuild-log", "sync-install", "sync-clean"]);
 export type DeviceSyncSwitch = z.infer<typeof DeviceSyncSwitchSchema>;
 
 // WHERE A DETACHED REBUILD REPORTS ITSELF. `dev-rebuild` returns the moment the build is under way and nothing streams
@@ -229,10 +233,19 @@ export const DeviceCommandResultSchema = z.object({
 });
 export type DeviceCommandResult = z.infer<typeof DeviceCommandResultSchema>;
 
-// Mutagen's three change kinds, read per side of a conflict; a count alone named no file, cause or remedy. Absent means
-// Mutagen did not say, not that a side is untouched.
-export const DeviceConflictChangeSchema = z.enum(["created", "modified", "deleted"]);
+// What one side did to a conflicted path. The first three are Mutagen's own change kinds. `untracked` is its word for
+// content it SCANS but never carries — whatever sits under an ignore pattern, which for a workspace means build output
+// — and it is the whole difference between a conflict somebody must settle and one a device can clear by itself. Absent
+// means Mutagen did not say, not that a side is untouched.
+export const DeviceConflictChangeSchema = z.enum(["created", "modified", "deleted", "untracked"]);
 export type DeviceConflictChange = z.infer<typeof DeviceConflictChangeSchema>;
+
+// Which of two unlike things this conflict is. `both-edited` is the one the mode exists for: two real copies, one
+// choice, a person's. `derived-leftover` is not a disagreement at all — one side deleted a directory, the other still
+// holds build output inside it, and Mutagen will not delete a directory whose contents it never carried. Nothing at
+// stake, nobody's edit, and no judgement to make.
+export const DeviceConflictNatureSchema = z.enum(["derived-leftover", "both-edited"]);
+export type DeviceConflictNature = z.infer<typeof DeviceConflictNatureSchema>;
 
 export const DeviceConflictSchema = z.object({
     /** Relative to the synced folder (matches both `localDir` and /work); empty means the root itself. */
@@ -241,8 +254,17 @@ export const DeviceConflictSchema = z.object({
     local: DeviceConflictChangeSchema.optional(),
     /** And in the sandbox's /work (its beta). */
     sandbox: DeviceConflictChangeSchema.optional(),
+    // Absent from an agent older than the classification, which is why no reader may treat absence as `both-edited`:
+    // `clearableOnDevice` below tests for the derived shape rather than against the other one.
+    nature: DeviceConflictNatureSchema.optional(),
 });
 export type DeviceConflict = z.infer<typeof DeviceConflictSchema>;
+
+// Whether this one is the device's own to clear: build output on the device, inside a directory the sandbox deleted.
+// The rule lives here because two sides read it — the machine agent deciding what to remove, and the browser deciding
+// whether to offer a button instead of an agent — and they must never disagree about which conflicts need a person.
+export const clearableOnDevice = (conflict: DeviceConflict): boolean =>
+    conflict.nature === "derived-leftover" && conflict.local === "untracked" && conflict.sandbox === "deleted";
 
 // One paired sandbox as the local agent holds it; `localDir` is which folder on that device holds this sandbox's /work.
 export const DevicePairingSchema = z.object({
@@ -405,6 +427,7 @@ export const DeviceSchema = z.object({
 });
 export type Device = z.infer<typeof DeviceSchema>;
 export const DevicesListSchema = z.object({ devices: z.array(DeviceSchema) });
+export type DevicesList = z.infer<typeof DevicesListSchema>;
 
 // The physical computer a device is an environment of. Windows and every WSL distro on it are one machine with one
 // Docker engine, one screen and one set of disks, each environment holding its own agent and its own door.

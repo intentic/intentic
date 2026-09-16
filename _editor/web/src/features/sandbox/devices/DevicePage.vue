@@ -32,6 +32,7 @@ import {
     type DeviceRow,
     deviceState,
     deviceSwitches,
+    clearable,
     deviceTone,
     fixable,
     folderOwner,
@@ -410,7 +411,22 @@ const applyReshape = (ask: ResourcesAsk): void => ops.applyReshape(ask);
                         <div class="mt-1 flex flex-wrap items-center gap-2">
                             <!-- Which side of a many-sided machine holds the folder: the path alone says it, but not in words. -->
                             <span v-if="many && ownerOf(group)" class="text-2xs text-subtle">on {{ environmentTitle(ownerOf(group)!) }}</span>
-                            <!-- First, since a row with conflicts is open because of them; starts a turn rather than a command. -->
+                            <!-- Before the turn, because it is the cheaper of the two and usually the only one needed:
+                                 clearing build output that blocks a deletion needs no judgement, so it costs a command
+                                 rather than an agent. -->
+                            <Button
+                                v-if="ownerOf(group) && clearable(ownerOf(group)!.device, group)"
+                                size="small"
+                                severity="secondary"
+                                label="Clear build output"
+                                :loading="ops.syncRunning(ops.rowKey(group), `sync-clean`)"
+                                :disabled="ops.working.value"
+                                v-tooltip.top="`Delete the build output this device left in directories the sandbox deleted, so those deletions can land. It removes nothing that syncs, and a build puts it back.`"
+                                @click="void ops.runSync(ownerOf(group)!, ops.rowKey(group), group.sandboxId, `sync-clean`)"
+                            >
+                                <template #icon><Icon name="eraser" /></template>
+                            </Button>
+                            <!-- Only for conflicts with two real copies; starts a turn rather than a command. -->
                             <Button
                                 v-if="ownerOf(group) && fixable(ownerOf(group)!.device, group)"
                                 size="small"

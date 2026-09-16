@@ -9,13 +9,14 @@ import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core"
 import { resolveDaemonBase } from "../daemon-base.js";
 import { prepareSetup } from "../install.js";
 import { machineLauncher, readResidentPid, reconcileResidency, startResidentIfStopped } from "../resident.js";
-import { type Pairing, readState, removePairing, setMirrorOff, type SyncMode, type SyncState, upsertPairing } from "./config.js";
+import { type Pairing, readState, removePairing, setAutoHealOff, setMirrorOff, type SyncMode, type SyncState, upsertPairing } from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { retirePairingMirror, teardownAllForwards } from "./mirror.js";
 import {
     ensureMutagen,
     ensureSyncSession,
     existingSyncSessions,
+    healDerivedConflicts,
     registerMutagenAutostart,
     retireOrphanSessions,
     runMutagen,
@@ -404,6 +405,80 @@ const mirror = buildRouteMap({
     docs: { brief: "Turn this device's port mirroring off or on, for one paired sandbox or all of them" },
 });
 
+// CLEARING BUILD OUTPUT IS NOT RESOLVING A CONFLICT, and this command is careful to be only the first. When the sandbox
+// deletes a directory this device still has `node_modules` in, Mutagen holds the deletion rather than destroying
+// content it never carried — so the pairing stops converging over something nobody wrote and nothing needs. This
+// removes exactly that, per pairing, and leaves every conflict with two real copies standing for a person. It is what
+// the Devices tab's button runs, and what the watcher already does on its own unless `autoheal off` says not to.
+const clean = buildCommand<SandboxFlags>({
+    docs: { brief: "Clear build output this device left in directories the sandbox deleted, so those deletions can land" },
+    parameters: { flags: sandboxFlag },
+    async func(this: CommandContext, flags: SandboxFlags) {
+        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+        const syncing = selectPairings(await readState(), flags.sandbox).filter((pairing) => pairing.mode === "sync");
+        if (syncing.length === 0) {
+            out("no file-syncing sandbox is paired on this machine: there is no folder here to clear anything from.");
+            return;
+        }
+        const mutagen = await ensureMutagen();
+        let removed = 0;
+        let standing = 0;
+        for (const pairing of syncing) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing at a time, so a log line names one sandbox
+            const outcome = await healDerivedConflicts(mutagen, pairing, out, true);
+            removed += outcome.removed.length;
+            standing += outcome.standing;
+        }
+        out(
+            removed === 0
+                ? "Nothing to clear: no directory the sandbox deleted is being held open by build output on this device."
+                : `Cleared ${removed} director${removed === 1 ? "y" : "ies"}. The deletions they were holding back land within a few seconds.`,
+        );
+        if (standing > 0) {
+            // Said plainly rather than folded into the number above: these are the ones this command must not touch.
+            // Not called "real disagreements" — most are, but the count also holds anything that failed the check on
+            // disk, and overstating what it knows is how a reader learns to distrust the rest.
+            out(
+                `${standing} conflict(s) are still standing and are not this command's to settle: two copies somebody wrote is a choice only a person makes. \`intentic-machine status\` lists the paths.`,
+            );
+        }
+    },
+});
+
+// The switch over the clearing the watcher does by itself. Off is durable and per pairing, like mirroring's, because it
+// decides what this agent may delete on THIS device. Nothing about `clean` above is gated by it: asking for it once is
+// not the same as leaving it on.
+const autoHealSwitch = (brief: string, off: boolean) =>
+    buildCommand<SandboxFlags>({
+        docs: { brief },
+        parameters: { flags: sandboxFlag },
+        async func(this: CommandContext, flags: SandboxFlags) {
+            const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+            const selected = selectPairings(await readState(), flags.sandbox);
+            if (selected.length === 0) {
+                out("no sandboxes are paired on this machine: nothing to switch.");
+                return;
+            }
+            for (const pairing of selected) {
+                // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+                await setAutoHealOff(pairing.sandboxId, off);
+            }
+            out(
+                off
+                    ? `Clearing derived residue is OFF for: ${named(selected)}. A deletion the sandbox makes will now stop syncing whenever this device has build output inside it; \`intentic-machine sync clean\` clears one by hand.`
+                    : `Clearing derived residue is on for: ${named(selected)}.`,
+            );
+        },
+    });
+
+const autoheal = buildRouteMap({
+    routes: {
+        off: autoHealSwitch("Stop clearing build output that blocks the sandbox's deletions from landing here", true),
+        on: autoHealSwitch("Clear build output that blocks the sandbox's deletions from landing here", false),
+    },
+    docs: { brief: "Whether this device clears its own build output when it blocks a deletion, for one sandbox or all" },
+});
+
 // The sync half's teardown, callable from the top-level `uninstall` too. With a selector it unpairs ONE
 // sandbox and leaves every other pairing served; bare, it removes everything, self-revoking each dropped
 // enrollment so a machine walking away cleans up after itself.
@@ -471,4 +546,4 @@ const uninstall = buildCommand<SandboxFlags>({
     },
 });
 
-export const syncCommands = { setup, pause, resume, mirror, uninstall };
+export const syncCommands = { setup, pause, resume, mirror, clean, autoheal, uninstall };

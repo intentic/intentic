@@ -7,6 +7,7 @@ import {
     type BrowsersList,
     ChoreLedgerWriteSchema,
     type CiJobsResponse,
+    type DevicesList,
     type Info,
     type Persona,
     type Model,
@@ -26,6 +27,7 @@ import {
 import { KNOWLEDGE_BASE } from "../vendor/knowledge/wire-types";
 import { BROWSER_SESSIONS } from "./browser";
 import { automationApprovals, automationCatalog, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
+import { demoDevices } from "./fixture/devices";
 import { demoLoops } from "./fixture/loops";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
@@ -275,6 +277,9 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     ],
     // One still-driven browser session and one already closed, rendered as history, not a broken stream.
     [`GET`, `/system/browsers`, () => json({ sessions: BROWSER_SESSIONS(Date.now()) } satisfies BrowsersList)],
+    // The owner's own computers. Without this the Devices tab could only say it had nothing to show, so nothing
+    // under a paired folder — the sync switches, and the two answers to a conflict — was ever drawn.
+    [`GET`, `/system/devices`, () => json({ devices: demoDevices(Date.now()) } satisfies DevicesList)],
     [
         `DELETE`,
         `/system/browsers/{name}`,

@@ -119,7 +119,21 @@ const KIT_SANDBOXES: readonly DeviceSandboxRow[] = [
 // Third row: mirroring off, no ports — an empty list also means a quiet sandbox, not a fault.
 const KIT_PAIRINGS: readonly DeviceFolderRow[] = [
     { sandboxId: `work-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/work`, mutagenStatus: `watching`, backupStatus: `watching` },
-    { sandboxId: `lab-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/lab`, mutagenStatus: `halted-on-root-emptied`, conflicts: 2 },
+    // The conflict shape this product actually produces, and the one it produces most: an agent moved package
+    // directories in the sandbox, and each is held here by build output nothing syncs — beside one real disagreement,
+    // since a folder carrying both is what makes the two sentences have to coexist.
+    {
+        sandboxId: `lab-intentic-dev`,
+        mode: `sync`,
+        localDir: `/home/ada/intentic/lab`,
+        mutagenStatus: `halted-on-root-emptied`,
+        conflicts: 3,
+        conflictedPaths: [
+            { path: `packages/acceptance`, local: `untracked`, sandbox: `deleted`, nature: `derived-leftover` },
+            { path: `packages/deployments`, local: `untracked`, sandbox: `deleted`, nature: `derived-leftover` },
+            { path: `src/pricing/CheckoutPanel.tsx`, local: `modified`, sandbox: `modified`, nature: `both-edited` },
+        ],
+    },
     {
         sandboxId: `hold-intentic-dev`,
         mode: `sync`,

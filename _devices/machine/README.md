@@ -54,6 +54,17 @@ The **sync half** (`src/sync/`, the machine side of desktop sync):
   only way back from, so the button always names the pairing it ends. A machine whose pairings disagree (one
   mirroring, one not — which the per-pairing switches exist to allow) is drawn as such rather than collapsed to
   one position, and offered both directions.
+- **Clear its own build output when it blocks a deletion** ([src/sync/residue.ts](src/sync/residue.ts)). Two-way-safe
+  refuses to delete a directory holding content it never carried, so a `node_modules` this device built is enough to
+  stop a directory the sandbox deleted from ever going away here. Nothing in that standoff is a disagreement — no edit,
+  no second copy, nothing at stake — but it was reported as one ("created on this device"), and in a pnpm monorepo,
+  where every package carries three ignored directories, an agent moving six packages produced six of them at once.
+  The agent now reads Mutagen's own `untracked` kind, and where one side holds NOTHING but ignored content and the
+  other deleted the directory, it removes the residue here and lets the deletion land. It is bounded by the thing it
+  cannot get wrong: it removes only what the live session's own ignore list already excludes, re-read from disk rather
+  than trusted from the report, and a single file sync would have carried takes the whole directory out of the class.
+  `sync clean` does it on demand (the Devices tab's **Clear build output** button runs exactly that); `sync autoheal
+  off` stops the watcher doing it unprompted. A conflict with two real copies is untouched by all of it.
 - Register Mutagen's daemon for login autostart — on Windows through the launcher stub, because Mutagen's own
   registration flashes a console window at every boot.
 
@@ -138,7 +149,8 @@ said so in a log nobody had been pointed at.
 - [src/device/policy.ts](src/device/policy.ts) — what the sandbox is permitted to do here; the security surface.
 - [src/device/tools/sandboxes.ts](src/device/tools/sandboxes.ts) — the fleet: the `docker ps`/`inspect` readers, the docker verbs, and the `ic` flows (swap, reshape, remove, runners) with the pure argv builders beside them.
 - [src/sync/mirror.ts](src/sync/mirror.ts) — the sync tick: ports reconcile, git bridge, revocation handling.
-- [src/sync/mutagen.ts](src/sync/mutagen.ts) — driving the Mutagen binary, sessions and its daemon's autostart.
+- [src/sync/mutagen.ts](src/sync/mutagen.ts) — driving the Mutagen binary, sessions and its daemon's autostart, and classifying a conflict as build output or as two real copies.
+- [src/sync/residue.ts](src/sync/residue.ts) — what may be deleted here without asking, and the four separate refusals that keep it to exactly that.
 
 ## How it fits
 

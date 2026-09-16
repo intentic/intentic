@@ -37,6 +37,29 @@ describe(`conflictAsk`, () => {
         expect(conflictAsk(subject({ hostId: `ada-laptop` })).prompt).toContain(`+mcp__ada-laptop__`);
     });
 
+    // A turn sent to read both copies of a `node_modules` proves only that nobody wrote either. The button beside this
+    // one clears those, and the machine's own agent clears them unprompted, so they are kept out of the prompt.
+    it(`leaves out a directory stuck only on this device's build output`, () => {
+        const { prompt } = conflictAsk(
+            subject({
+                conflicts: 2,
+                conflictedPaths: [
+                    { path: `src/app.ts`, local: `modified`, sandbox: `modified`, nature: `both-edited` },
+                    { path: `intentic/_extensions/acceptance`, local: `untracked`, sandbox: `deleted`, nature: `derived-leftover` },
+                ],
+            }),
+        );
+        expect(prompt).toContain(`src/app.ts`);
+        expect(prompt).not.toContain(`intentic/_extensions/acceptance`);
+    });
+
+    // An agent older than the classification reports no nature at all, and everything it sends must still reach a
+    // person: absence of evidence is never read as "this one is only build output".
+    it(`keeps an unclassified conflict, since nothing may be dropped on the strength of silence`, () => {
+        const { prompt } = conflictAsk(subject({ conflicts: 1, conflictedPaths: [{ path: `src/app.ts`, local: `created`, sandbox: `created` }] }));
+        expect(prompt).toContain(`src/app.ts`);
+    });
+
     // The one thing that reads wrong from an isolated conversation: /work is its own worktree, not the shared tree
     // the device syncs with.
     it(`says which tree the sandbox's side actually is`, () => {

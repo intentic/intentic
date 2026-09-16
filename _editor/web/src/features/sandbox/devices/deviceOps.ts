@@ -34,7 +34,7 @@ const SEVERING = new Set<DeviceSandboxOp>([`stop`, `restart`, `update`, `rebuild
 // Everything this page can do to one machine's file sync: the switches over a pairing that exists, and the one that
 // starts one. Enrolling belongs with them rather than in the add-a-device dialog — a folder on a machine already
 // connected is a toggle on its row, not a one-liner to paste.
-type SyncCommand = DeviceSyncSwitch | "sync-install";
+type SyncCommand = DeviceSyncSwitch | "sync-install" | "sync-clean";
 
 // Pause/resume and mirror on/off are one button wearing two labels; the label flips on the next report, not
 // the click, so a spinner must answer to either direction.
@@ -56,6 +56,7 @@ const COMMAND_REFUSAL: Record<SyncCommand, string> = {
     "sync-resume": `That device didn't resume its file syncing.`,
     "sync-unpair": `That device didn't unpair this sandbox.`,
     "sync-install": `That device didn't start syncing this sandbox.`,
+    "sync-clean": `That device didn't clear the build output holding its deletions back.`,
 };
 
 const COMMAND_UNREACHED: Record<SyncCommand, string> = {
@@ -65,6 +66,7 @@ const COMMAND_UNREACHED: Record<SyncCommand, string> = {
     "sync-resume": `Couldn't reach that device to resume its file syncing.`,
     "sync-unpair": `Couldn't reach that device to unpair this sandbox.`,
     "sync-install": `Couldn't reach that device to start syncing this sandbox.`,
+    "sync-clean": `Couldn't reach that device to clear the build output holding its deletions back.`,
 };
 
 // Update and restart both stop the resident process carrying the request, so the page can't claim an
@@ -95,6 +97,7 @@ const SYNC_WORKING: Record<SyncCommand, string> = {
     "sync-resume": `Resuming file syncing`,
     "sync-unpair": `Unpairing this sandbox`,
     "sync-install": `Setting file syncing up`,
+    "sync-clean": `Clearing build output`,
 };
 
 const AGENT_WORKING: Record<DeviceAgentOp, string> = { upgrade: `Updating a device's agent`, restart: `Restarting a device's agent` };

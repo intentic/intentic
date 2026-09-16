@@ -13,6 +13,7 @@ import type { StatusVariant, TallyItem } from "@intentic/ui";
 import {
     type DeviceFolderRow,
     type DeviceSandboxGroup,
+    folderConflicts,
     groupNeedsAttention,
     groupSummary,
     isSameSandbox,
@@ -226,10 +227,18 @@ export const commandable = (device: Device, group: DeviceSandboxGroup): boolean 
 export const pausable = (device: Device, group: DeviceSandboxGroup): boolean =>
     commandable(device, group) && syncSessionLive(group.folder);
 
-// A conflict has no switch: choosing between two edited copies is judgement per file, so the control is a
-// turn an agent can run against both ends, not a one-click winner.
+// A conflict between two EDITED copies has no switch: choosing between them is judgement per file, so the
+// control is a turn an agent can run against both ends, not a one-click winner. Offered only where at least
+// one conflict is of that kind — a folder stuck entirely on its own build output needs no judgement and no
+// turn, and spending one on it taught readers that every conflict here costs an agent.
 export const fixable = (device: Device, group: DeviceSandboxGroup): boolean =>
-    commandable(device, group) && (group.folder?.conflicts ?? 0) > 0;
+    commandable(device, group) && (folderConflicts(group.folder)?.disputed ?? 0) > 0;
+
+// The other half: build output on this device standing in the way of deletions the sandbox already made.
+// Nothing to judge, so it is a button, and the machine's own agent is already clearing these unprompted —
+// this is for somebody who is watching and does not want to wait for the next pass.
+export const clearable = (device: Device, group: DeviceSandboxGroup): boolean =>
+    commandable(device, group) && (folderConflicts(group.folder)?.clearable ?? 0) > 0;
 
 const has = (needle: string, ...fields: (string | undefined)[]): boolean =>
     fields.some((field) => field !== undefined && field.toLowerCase().includes(needle));

@@ -57,7 +57,9 @@ export type SyncMode = "sync" | "mirror";
 // the key. syncToken is the enrollment-minted credential for GET /ports, the self-revoke on uninstall, and the
 // SSH transport itself; a pairing without one can do nothing but exist. mirroredPorts/skippedPorts are the last
 // reconcile's baseline and its negative. fileSyncAutoPaused marks a pause the watcher itself applied after an
-// hour unreachable, distinct from a person's `pause`, which the watcher never undoes.
+// hour unreachable, distinct from a person's `pause`, which the watcher never undoes. autoHealOff stops this agent
+// clearing the build output it left inside directories the sandbox deleted (residue.ts); it is off by default because
+// what that removes is content the session already ignores, which a build puts back.
 export interface Pairing {
     readonly sandboxUrl: string;
     readonly sandboxId: string;
@@ -68,6 +70,7 @@ export interface Pairing {
     readonly skippedPorts?: readonly SkippedPort[];
     readonly mirrorOff?: boolean | undefined;
     readonly fileSyncAutoPaused?: boolean | undefined;
+    readonly autoHealOff?: boolean | undefined;
 }
 
 // Every pairing this machine holds, a LIST: one machine legitimately runs a fleet of sandboxes. This file used
@@ -114,6 +117,13 @@ export const removePairing = async (sandboxId: string): Promise<void> =>
 export const setMirrorOff = async (sandboxId: string, off: boolean): Promise<void> =>
     await updateState((state) => ({
         pairings: state.pairings.map((held) => (held.sandboxId === sandboxId ? { ...held, mirrorOff: off ? true : undefined } : held)),
+    }));
+
+// Clearing derived residue, off. Local and durable for the same reason mirroring's switch is: it decides what this
+// agent may delete on THIS device, so it has to hold through a restart and while the sandbox is unreachable.
+export const setAutoHealOff = async (sandboxId: string, off: boolean): Promise<void> =>
+    await updateState((state) => ({
+        pairings: state.pairings.map((held) => (held.sandboxId === sandboxId ? { ...held, autoHealOff: off ? true : undefined } : held)),
     }));
 
 export const setFileSyncAutoPaused = async (sandboxId: string, paused: boolean): Promise<void> =>
