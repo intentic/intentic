@@ -41,7 +41,14 @@ const BLOCKS = {
     fenceHoldingNothing: "```json\n```",
     indentedCode: `    const x = 1;`,
     table: `| a | b |\n| - | - |\n| 1 | 2 |`,
+    tableAligned: `| a | b | c |\n| :-- | :-: | --: |\n| 1 | 2 | 3 |`,
+    tableWithEscapedPipe: `| a | b |\n| - | - |\n| x \\| y | z |`,
+    tableWithoutOuterPipes: `a | b\n- | -\n1 | 2`,
+    tableWithInlineMarkup: "| **a** | `b` |\n| - | - |\n| [x](y.md) | z |",
+    tableWithRaggedRow: `| a | b |\n| - | - |\n| 1 |`,
     rule: `---`,
+    ruleWithStars: `***`,
+    ruleWithSpaces: `- - -`,
     htmlBlock: `<details>\n<summary>More</summary>\n</details>`,
     trailingSpaces: `A hard break  \nand the next line.`,
     emptyish: ` `,
@@ -131,10 +138,54 @@ describe(`what it draws`, () => {
         expect(blockBody(element)).toBe(`    const x = 1;`);
     });
 
+    test(`a table is drawn as a table, its pipes markers like any other markup`, () => {
+        const source = "| Command | Does |\n| --- | --- |\n| `iq` | searches |";
+        const element = buildBlockElement(source);
+        expect(element.tagName).toBe(`TABLE`);
+        expect([...element.querySelectorAll(`th`)]).toHaveLength(2);
+        // Every pipe of the header row, and nothing else of it, is markup the CSS hides.
+        expect([...element.querySelectorAll(`tr:first-child .md-marker`)].map((node) => node.textContent)).toEqual([`|`, `|`, `|`]);
+        // The row under the header is markup end to end: at rest it IS the rule drawn under the header.
+        expect(element.querySelector(`.md-src-align`)?.textContent).toBe(`| --- | --- |`);
+        expect([...element.querySelectorAll(`tr:last-child td`)].map((cell) => cell.tagName)).toEqual([`TD`, `TD`]);
+        expect(blockBody(element)).toBe(source);
+    });
+
+    test(`the alignment row's colons become the columns' alignment, the attribute the rendered table uses`, () => {
+        const element = buildBlockElement(`| a | b | c |\n| :-- | :-: | --: |\n| 1 | 2 | 3 |`);
+        expect([...element.querySelectorAll(`th`)].map((cell) => cell.getAttribute(`align`))).toEqual([`left`, `center`, `right`]);
+        expect([...element.querySelectorAll(`td[align]`)].map((cell) => cell.getAttribute(`align`))).toEqual([`left`, `center`, `right`]);
+    });
+
+    test(`an escaped pipe is a character in a cell, not the boundary of one`, () => {
+        const source = `| a | b |\n| - | - |\n| x \\| y | z |`;
+        const element = buildBlockElement(source);
+        expect([...element.querySelectorAll(`tr:last-child td`)]).toHaveLength(2);
+        expect(blockBody(element)).toBe(source);
+    });
+
+    test(`a thematic break is the line it draws, holding the three characters that drew it`, () => {
+        const element = buildBlockElement(`---`);
+        expect(element.className).toBe(`md-src-rule`);
+        expect(element.querySelector(`.md-marker`)?.textContent).toBe(`---`);
+        expect(blockBody(element)).toBe(`---`);
+    });
+
+    test(`a row a browser has wrapped in a box of its own still counts as one line`, () => {
+        const source = `| a | b |\n| - | - |\n| 1 | 2 |`;
+        const element = buildBlockElement(source);
+        // What a browser can do to a table it is editing: the rows get a `tbody` they were not built with. Counting
+        // the block's children would then read the whole table as one line and write that back to the file.
+        const wrapper = document.createElement(`tbody`);
+        wrapper.append(...element.children);
+        element.appendChild(wrapper);
+        expect(blockBody(element)).toBe(source);
+    });
+
     test(`a construct it does not model is shown verbatim rather than wrongly`, () => {
-        const element = buildBlockElement(`| a | b |\n| - | - |`);
+        const element = buildBlockElement(`<details>\n<summary>More</summary>\n</details>`);
         expect(element.tagName).toBe(`PRE`);
-        expect(blockBody(element)).toBe(`| a | b |\n| - | - |`);
+        expect(blockBody(element)).toBe(`<details>\n<summary>More</summary>\n</details>`);
     });
 
     test(`no empty marker spans, which would be markup that is not in the file`, () => {

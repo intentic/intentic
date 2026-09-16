@@ -93,10 +93,12 @@ const dropEmptyMarkers = (root: HTMLElement): void => {
     }
 };
 
-// Inline content, straight from the source text: every character of `text` ends up in the element.
+// Inline content, straight from the source text: every character of `text` ends up in the element. Checked here
+// rather than left to the block's own invariant, so one cell the inline lexer does not round-trip costs that cell
+// its markup instead of costing the whole block its shape.
 const appendText = (parent: Node, text: string): void => {
     const tokens = lexInline(text);
-    if (tokens === undefined) {
+    if (tokens === undefined || tokens.map((token) => token.raw).join(``) !== text) {
         parent.appendChild(document.createTextNode(text));
         return;
     }
@@ -121,10 +123,26 @@ const sourceLines = (source: string): string[] => source.split(/(?<=\n)/u);
 // won't render, and `contenteditable` deletes what it can't render. `blockBody` restores them by joining rows with
 // newlines.
 const ROWS = `mdRows`;
+// Marks an element that stands for one source line. Marked rather than counted as a child, so a wrapper a browser
+// inserts of its own accord (a `tbody` inside a table) cannot silently rewrite the block's text.
+const ROW = `mdRow`;
+
+const rowElement = (tag: string, className?: string): HTMLElement => {
+    const element = document.createElement(tag);
+    element.dataset[ROW] = ``;
+    if (className !== undefined) {
+        element.className = className;
+    }
+    return element;
+};
+
+const rowsOf = (element: HTMLElement): Element[] | undefined => (ROWS in element.dataset ? [...element.querySelectorAll(`[data-md-row]`)] : undefined);
 
 /** The source of one block, read back from the element that draws it. */
-export const blockBody = (element: Element): string =>
-    ROWS in (element as HTMLElement).dataset ? [...element.children].map((row) => row.textContent ?? ``).join(`\n`) : (element.textContent ?? ``);
+export const blockBody = (element: Element): string => {
+    const rows = rowsOf(element as HTMLElement);
+    return rows === undefined ? (element.textContent ?? ``) : rows.map((line) => line.textContent ?? ``).join(`\n`);
+};
 
 /** One row of a line-prefixed block: its opening marker into the gutter, the rest of the line as text. */
 const appendPrefixedRow = (row: HTMLElement, body: string, pattern: RegExp): void => {
@@ -154,12 +172,15 @@ const linePrefixed = (source: string, tag: string, lineTag: string, pattern: Reg
         element.className = className;
     }
     for (const line of sourceLines(source)) {
-        const row = document.createElement(lineTag);
+        const row = rowElement(lineTag);
         element.appendChild(row);
         appendPrefixedRow(row, line.endsWith(`\n`) ? line.slice(0, -1) : line, pattern);
     }
     return element;
 };
+
+// Every line of a block, without the newline that ends it: that lives in the block's shape (see `blockBody`).
+const bodyLines = (source: string): string[] => sourceLines(source).map((line) => (line.endsWith(`\n`) ? line.slice(0, -1) : line));
 
 const headingElement = (source: string, depth: number): HTMLElement => {
     const element = document.createElement(`h${Math.min(6, Math.max(1, depth))}`);
@@ -202,11 +223,10 @@ const fenceOf = (line: string): { readonly marker: string; readonly rest: string
     return match?.[1] === undefined ? undefined : { marker: match[1], rest: match[2] ?? `` };
 };
 
-// One row of the fence itself, kept in the flow so the block is the same height whether the delimiters are
-// showing or not; the CSS reserves the line and hides only the text.
+// One row of the fence itself: markup, so it collapses to nothing while the block is at rest and takes its line
+// back the moment the caret is in the block.
 const fenceRow = (source: string): HTMLElement => {
-    const row = document.createElement(`div`);
-    row.className = `md-code-fence`;
+    const row = rowElement(`div`, `md-code-fence`);
     row.appendChild(span(source, MARKER));
     return row;
 };
@@ -226,8 +246,7 @@ const colouredLines = (body: readonly string[], info: string): Element[] | undef
 };
 
 const codeRow = (source: string, coloured: Element | undefined): HTMLElement => {
-    const row = document.createElement(`div`);
-    row.className = `md-code-line`;
+    const row = rowElement(`div`, `md-code-line`);
     row.append(...(coloured === undefined ? [document.createTextNode(source)] : coloured.childNodes));
     return row;
 };
@@ -248,7 +267,7 @@ interface FencedCode {
 }
 
 const fencedCode = (source: string): FencedCode | undefined => {
-    const lines = sourceLines(source).map((line) => (line.endsWith(`\n`) ? line.slice(0, -1) : line));
+    const lines = bodyLines(source);
     const first = lines[0] ?? ``;
     const open = fenceOf(first);
     if (open === undefined) {
@@ -290,21 +309,147 @@ const codeElement = (source: string): HTMLElement | undefined => {
     return element;
 };
 
-const buildProse = (token: MarkdownToken, source: string): HTMLElement | undefined => {
-    if (token.type === `heading`) {
-        return headingElement(source, (token as MarkdownToken & { depth?: number }).depth ?? 1);
-    }
-    if (token.type === `paragraph`) {
-        return paragraphElement(token, source);
-    }
-    if (token.type === `list`) {
-        return listElement(source, (token as MarkdownToken & { ordered?: boolean }).ordered === true);
-    }
-    if (token.type === `code`) {
-        return codeElement(source);
-    }
-    return token.type === `blockquote` ? quoteElement(source) : undefined;
+// A thematic break's three characters are markup, and what they draw is a line: the stylesheet draws it at rest
+// and stands it down for the source when the caret arrives, the way a task box does.
+const ruleElement = (source: string): HTMLElement => {
+    const element = document.createElement(`div`);
+    element.className = `md-src-rule`;
+    element.appendChild(span(source, MARKER));
+    return element;
 };
+
+// One table row split at its unescaped pipes: `lead` is the pipe that opens the cell, `trail` the one that closes
+// the row. `lead + text + trail` over the row's cells is the source line, character for character.
+interface TableCell {
+    lead: string;
+    text: string;
+    trail: string;
+}
+
+// A backslash escapes the character after it (`\|` is a pipe in a cell, not a cell boundary), so both are carried
+// across together.
+const splitOnPipes = (line: string): { pipe: string; text: string }[] => {
+    const parts: { pipe: string; text: string }[] = [];
+    let pipe = ``;
+    let text = ``;
+    for (let at = 0; at < line.length; at += 1) {
+        const char = line[at] ?? ``;
+        if (char === `\\`) {
+            text += char + (line[at + 1] ?? ``);
+            at += 1;
+            continue;
+        }
+        if (char !== `|`) {
+            text += char;
+            continue;
+        }
+        parts.push({ pipe, text });
+        pipe = char;
+        text = ``;
+    }
+    parts.push({ pipe, text });
+    return parts;
+};
+
+// The row's cells. A row written the usual way opens and closes with a pipe, so the blank runs outside those two
+// belong to the cells beside them rather than being cells of their own; a row written without them has neither.
+const tableCells = (line: string): TableCell[] => {
+    const cells: TableCell[] = splitOnPipes(line).map((part) => ({ lead: part.pipe, text: part.text, trail: `` }));
+    const opening = cells[0];
+    const first = cells[1];
+    if (opening !== undefined && first !== undefined && opening.text.trim() === ``) {
+        cells.shift();
+        first.lead = `${opening.text}${first.lead}`;
+    }
+    const closing = cells.at(-1);
+    const last = cells.at(-2);
+    if (closing !== undefined && last !== undefined && closing.text.trim() === ``) {
+        cells.pop();
+        last.trail = `${closing.lead}${closing.text}`;
+    }
+    return cells;
+};
+
+// The row under the header, which is what makes a table a table: dashes, and a colon for a column that reads
+// right or centred.
+const ALIGN_CELL = /^\s*:?-+:?\s*$/u;
+
+const isAlignRow = (line: string): boolean => {
+    const cells = tableCells(line);
+    return cells.length > 0 && cells.every((cell) => ALIGN_CELL.test(cell.text));
+};
+
+// Undefined for a plain run of dashes: the column then reads whichever way the stylesheet's default says, rather
+// than carrying an attribute the markdown never wrote.
+const alignOf = (cell: string): string | undefined => {
+    const spec = cell.trim();
+    const left = spec.startsWith(`:`);
+    const right = spec.endsWith(`:`);
+    if (left && right) {
+        return `center`;
+    }
+    return right ? `right` : left ? `left` : undefined;
+};
+
+const tableRow = (line: string, tag: string, aligns: readonly (string | undefined)[]): HTMLElement => {
+    const row = rowElement(`tr`);
+    tableCells(line).forEach((cell, index) => {
+        const element = document.createElement(tag);
+        const align = aligns[index];
+        if (align !== undefined) {
+            element.setAttribute(`align`, align);
+        }
+        element.appendChild(span(cell.lead, MARKER));
+        appendText(element, cell.text);
+        element.appendChild(span(cell.trail, MARKER));
+        row.appendChild(element);
+    });
+    return row;
+};
+
+// The alignment row is markup end to end, so every cell of it is one marker: at rest it draws as the rule under
+// the header, which is what it means.
+const alignRow = (line: string): HTMLElement => {
+    const row = rowElement(`tr`, `md-src-align`);
+    for (const cell of tableCells(line)) {
+        const element = document.createElement(`td`);
+        element.appendChild(span(`${cell.lead}${cell.text}${cell.trail}`, MARKER));
+        row.appendChild(element);
+    }
+    return row;
+};
+
+// A table drawn as a table, its pipes markers like any other markup. Built from the source lines rather than the
+// token's cells, which have already been trimmed and padded to a rectangle; undefined for anything without the
+// alignment row, which is then shown as its source.
+const tableElement = (source: string): HTMLElement | undefined => {
+    const lines = bodyLines(source);
+    const divider = lines[1];
+    if (divider === undefined || !isAlignRow(divider)) {
+        return undefined;
+    }
+    const aligns = tableCells(divider).map((cell) => alignOf(cell.text));
+    const element = document.createElement(`table`);
+    element.className = `md-src-table`;
+    element.dataset[ROWS] = ``;
+    lines.forEach((line, index) => {
+        element.appendChild(index === 1 ? alignRow(line) : tableRow(line, index === 0 ? `th` : `td`, aligns));
+    });
+    return element;
+};
+
+// Every block shape this surface draws as itself; anything absent is shown as its own source (`verbatimElement`).
+const BUILDERS: Record<string, (token: MarkdownToken, source: string) => HTMLElement | undefined> = {
+    heading: (token, source) => headingElement(source, (token as MarkdownToken & { depth?: number }).depth ?? 1),
+    paragraph: paragraphElement,
+    list: (token, source) => listElement(source, (token as MarkdownToken & { ordered?: boolean }).ordered === true),
+    blockquote: (_token, source) => quoteElement(source),
+    code: (_token, source) => codeElement(source),
+    table: (_token, source) => tableElement(source),
+    hr: (_token, source) => ruleElement(source),
+};
+
+const buildProse = (token: MarkdownToken, source: string): HTMLElement | undefined => BUILDERS[token.type]?.(token, source);
 
 /**
  * One block of markdown as an element whose `textContent` is that block's source. `source` excludes the blank
@@ -357,8 +502,6 @@ const textCaret = (root: Element, offset: number): { readonly node: Node; readon
     }
     return last === undefined ? { node: root, offset: 0 } : { node: last, offset: last.textContent?.length ?? 0 };
 };
-
-const rowsOf = (element: HTMLElement): Element[] | undefined => (ROWS in element.dataset ? [...element.children] : undefined);
 
 /** The offset into a block's source that a caret sits at, given the node/offset a selection reports. */
 export const offsetOfCaret = (element: HTMLElement, node: Node, offset: number): number => {
