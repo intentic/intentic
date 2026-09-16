@@ -30,7 +30,7 @@ import { trackPerf } from "../../../app/perf";
 import { sandboxError, sandboxRequestVia } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { invalidateAgentTranscript, olderTranscriptPage } from "../transcript/agentTranscript";
-import { AUTO_CONTINUE_PROGRESS_MS, AUTO_CONTINUE_TRIES, autoContinueDelay } from "../run/autoContinue";
+import { AUTO_CONTINUE_TRIES, autoContinueDelay } from "../run/autoContinue";
 import type { PickUp } from "../run/pickUp";
 import { clampEffort } from "../models/effortScale";
 import { rememberedAccountFor, selectedAccountId, setAccountUsage } from "../accounts/providerAccounts";
@@ -1057,8 +1057,6 @@ export class Conversation {
     // Settle it: drain the typewriter, drop streaming affordances, mirror the finished transcript, and let anything
     // queued behind the turn go.
     private endTurn(): void {
-        // Read before turnStartedAt clears: how long this turn ran tells the ladder whether it bought anything.
-        const ranForMs = this.turnStartedAt.value === undefined ? 0 : Date.now() - this.turnStartedAt.value;
         this.transcript.settle();
         this.inflight = null;
         this.streaming.value = false;
@@ -1070,7 +1068,7 @@ export class Conversation {
         this.noticeMidTurnSwitch();
         this.persist();
         this.dropStaleRemoteTranscript();
-        this.scheduleAutoContinue(ranForMs);
+        this.scheduleAutoContinue();
         void this.drainQueue();
     }
 
@@ -1084,16 +1082,16 @@ export class Conversation {
 
     // The standing press, scheduled at the end of every turn; does nothing unless auto-continue is armed, the turn
     // ended in a resumable shape, and nothing interrupted it.
-    private scheduleAutoContinue(ranForMs: number): void {
-        const pickUp = this.pickUp.value;
+    private scheduleAutoContinue(): void {
         if (!this.autoContinue.value || this.interrupted) {
             return;
         }
-        // A long turn normally proves the continuation helped, but not for a limit: retries can run minutes first.
-        if (ranForMs >= AUTO_CONTINUE_PROGRESS_MS && pickUp?.reason !== `limit`) {
-            this.autoContinueTries = 0;
-        }
+        const pickUp = this.pickUp.value;
+        // A turn that ends on its own is the only proof the run is getting anywhere, so it alone resets the ladder.
+        // Never how long a turn ran: a hang reads as progress by that measure, and a run that hangs then dies is
+        // exactly the one the ladder has to be able to stand down from.
         if (pickUp === undefined) {
+            this.autoContinueTries = 0;
             return;
         }
         // Something else is already bringing this turn back (the daemon's own breaker); the automation stands down.
@@ -1129,9 +1127,19 @@ export class Conversation {
             if (this.draft.value.trim() !== `` || this.attachments.value.length > 0 || this.queued.value.length > 0 || this.streaming.value) {
                 return;
             }
-            // The same press the button makes, so a held turn is re-run here too, not appended as another "Continue".
-            void this.continueTurn();
+            void this.autoContinueNow();
         }, wait);
+    }
+
+    // What the timer does, which is never what the button does: re-run the held turn, and nothing else. It types no
+    // message, since words nobody said belong in no transcript, so with nothing held it stands down and says why.
+    private async autoContinueNow(): Promise<void> {
+        if (await this.resumeHeldTurn()) {
+            return;
+        }
+        this.autoContinue.value = false;
+        this.transcript.notice(`Auto-continue stopped: this turn is no longer held, so there is nothing to send again. Press Continue to carry on.`);
+        this.persist();
     }
 
     // Canceling auto-continue leaves the ladder in its current state.

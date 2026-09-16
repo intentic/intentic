@@ -1742,20 +1742,47 @@ describe(`Conversation`, () => {
         try {
             const conversation = new Conversation(`c1`);
             conversation.setAutoContinue(true);
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete` }]));
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete`, held: { ran: true } }]));
             await conversation.send(`ship the parser`, settings);
 
             // Scheduled, not sent immediately: the wait gives a person a chance to intervene.
-            expect(conversation.pickUp.value).toEqual({ reason: `stopped` });
+            expect(conversation.pickUp.value).toEqual({ reason: `stopped`, held: { ran: true } });
             expect(conversation.autoContinueAt.value).toBeGreaterThan(Date.now());
             expect(turnBodies()).toHaveLength(1);
 
             sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
             await vi.advanceTimersByTimeAsync(6_000);
 
-            expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
+            // The held turn is re-run through the daemon; the transcript gains no word the user did not type.
+            expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/resume`)).toHaveLength(1);
+            expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`]);
+            expect(conversation.messages.value.map((message) => message.text)).not.toContain(CONTINUATIONS.plain);
             expect(conversation.autoContinueAt.value).toBeUndefined();
-            expect(conversation.pickUp.value).toBeUndefined();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // The automation only ever re-runs a turn the daemon still holds. With nothing held there is nothing mechanical
+    // left to do, and typing the word for the user is what this whole path exists to stop.
+    it(`stands itself down rather than typing a continuation, when nothing is held`, async () => {
+        vi.useFakeTimers();
+        try {
+            const conversation = new Conversation(`c1`);
+            conversation.setAutoContinue(true);
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete` }]));
+            await conversation.send(`ship the parser`, settings);
+            expect(conversation.pickUp.value).toEqual({ reason: `stopped` });
+
+            await vi.advanceTimersByTimeAsync(6_000);
+
+            expect(turnBodies()).toHaveLength(1);
+            expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
+            expect(conversation.autoContinue.value).toBe(false);
+            expect(conversation.messages.value.at(-1)).toMatchObject({
+                role: `notice`,
+                text: expect.stringContaining(`no longer held`),
+            });
         } finally {
             vi.useRealTimers();
         }
@@ -1766,7 +1793,7 @@ describe(`Conversation`, () => {
         vi.useFakeTimers();
         try {
             const conversation = new Conversation(`c1`);
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete` }]));
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete`, held: { ran: true } }]));
             await conversation.send(`ship the parser`, settings);
             expect(conversation.autoContinueAt.value).toBeUndefined();
 
@@ -1774,7 +1801,8 @@ describe(`Conversation`, () => {
             expect(conversation.autoContinueAt.value).toBeGreaterThan(Date.now());
             sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
             await vi.advanceTimersByTimeAsync(5_000);
-            expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
+            expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/resume`)).toHaveLength(1);
+            expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`]);
         } finally {
             vi.useRealTimers();
         }
@@ -1832,31 +1860,45 @@ describe(`Conversation`, () => {
         }
     });
 
-    // A turn that ran long enough to get somewhere resets the backoff ladder, rather than growing the wait
-    // indefinitely.
-    it(`resets the backoff after a turn that got somewhere`, async () => {
+    // Only a turn that ends on its own resets the ladder, never how long one ran: a run whose turns each hang for
+    // minutes and then die reads as all progress by duration, and never reaches the stand-down it exists for.
+    it(`climbs the ladder however long each dying turn takes, and resets only on a turn that ends`, async () => {
         vi.useFakeTimers();
         try {
             const conversation = new Conversation(`c1`);
             conversation.setAutoContinue(true);
-            const instant = sseResponse([{ kind: `error`, message: `agent did not complete` }]);
-            sandboxRequestMock.mockImplementation(instant);
+            const stops = sseResponse([{ kind: `error`, message: `agent did not complete`, held: { ran: true } }]);
+            // Burns a minute inside the request: the shape of a runtime that hangs, then dies.
+            const hangs: typeof stops = (path, init) => {
+                if (path === `/agent` || path === `/agent/resume`) {
+                    vi.setSystemTime(Date.now() + 60_000);
+                }
+                return stops(path, init);
+            };
+            sandboxRequestMock.mockImplementation(hangs);
             await conversation.send(`ship the parser`, settings);
             // Advances exactly the scheduled wait, so the next delay is read precisely rather than
             // delay-minus-overshoot.
+            expect(conversation.autoContinueAt.value! - Date.now()).toBe(5_000);
             await vi.advanceTimersByTimeAsync(5_000);
-            // The second stop is on the ladder's second rung, having bought nothing.
             expect(conversation.autoContinueAt.value! - Date.now()).toBe(15_000);
-
-            // Moves the clock inside the request to simulate a turn that worked a while before stopping, the one seam a
-            // canned stream has for duration.
-            sandboxRequestMock.mockImplementation((path, init) => {
-                if (path === `/agent`) {
-                    vi.setSystemTime(Date.now() + 60_000);
-                }
-                return instant(path, init);
-            });
             await vi.advanceTimersByTimeAsync(15_000);
+            expect(conversation.autoContinueAt.value! - Date.now()).toBe(45_000);
+
+            // The fourth stop spends the ladder, however long each of them took.
+            await vi.advanceTimersByTimeAsync(45_000);
+            expect(conversation.autoContinue.value).toBe(false);
+            expect(conversation.messages.value.at(-1)).toMatchObject({
+                role: `notice`,
+                text: expect.stringContaining(`Auto-continue stopped`),
+            });
+
+            // A turn that ends on its own puts the ladder back at its first rung.
+            conversation.setAutoContinue(true);
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `done` }, { kind: `done` }]));
+            await conversation.send(`and the rest`, settings);
+            sandboxRequestMock.mockImplementation(stops);
+            await conversation.send(`and again`, settings);
             expect(conversation.autoContinueAt.value! - Date.now()).toBe(5_000);
         } finally {
             vi.useRealTimers();
@@ -2214,7 +2256,10 @@ describe(`Conversation`, () => {
             conversation.setAutoContinue(true);
             const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
             sandboxRequestMock.mockImplementation(
-                sseResponse([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt }, { kind: `done` }]),
+                sseResponse([
+                    { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt, held: { ran: false } },
+                    { kind: `done` },
+                ]),
             );
             await conversation.send(`ship the parser`, settings);
 
@@ -2223,10 +2268,11 @@ describe(`Conversation`, () => {
             sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
             // A rung's worth of waiting buys nothing: the allowance is what the chat is waiting on.
             await vi.advanceTimersByTimeAsync(60_000);
-            expect(turnBodies()).toHaveLength(1);
+            expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/resume`)).toHaveLength(0);
 
             await vi.advanceTimersByTimeAsync(3_600_000);
-            expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
+            expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/resume`)).toHaveLength(1);
+            expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`]);
         } finally {
             vi.useRealTimers();
         }

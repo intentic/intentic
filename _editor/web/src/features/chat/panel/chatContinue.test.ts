@@ -206,8 +206,10 @@ it(`stands down the moment the user types something of their own`, async () => {
 });
 
 // When only Continue and Auto-continue exist, Auto-continue shows directly as a button, not behind the caret.
+// The automation only ever re-runs a held turn, so the offer rides a held stop; an unheld one gets the press alone.
 it(`offers to keep continuing by itself, and says so once it is on`, async () => {
     const conversation = stoppedChat();
+    conversation.pickUp.value = { reason: `stopped`, held: { ran: true } };
     await mountPanel();
 
     expect(button(`Auto-continue`)).toEqual(expect.any(Object));
@@ -224,6 +226,16 @@ it(`offers to keep continuing by itself, and says so once it is on`, async () =>
     await settle();
     expect(conversation.autoContinue.value).toBe(false);
     expect(composerText()).not.toContain(`Auto-continue is on`);
+});
+
+// Arming it over an ending the daemon is not holding promises a press the automation would stand straight back down
+// from, since it re-runs held turns and refuses to type a continuation for the user.
+it(`withholds the standing offer when there is no held turn to re-run`, async () => {
+    stoppedChat();
+    await mountPanel();
+
+    expect(continueButton()).toEqual(expect.any(Object));
+    expect(button(`Auto-continue`)).toBeUndefined();
 });
 
 it(`keeps the armed line up on a chat with nothing to continue`, async () => {

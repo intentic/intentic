@@ -62,13 +62,13 @@ import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } fro
 import {
     authResumable,
     clearPendingResume,
-    fireLimitResume,
-    type LimitFailure,
+    fireHeldResume,
+    type HeldTurn,
+    heldTurn,
     limitResumeArmed,
     outageResumeArmed,
-    pendingLimitFailure,
     recordAuthFailure,
-    recordLimitFailure,
+    recordHeldTurn,
     recordOutageFailure,
     startConversationTurn,
 } from "../run/turn/turn-resume.js";
@@ -700,9 +700,10 @@ const limitFrame = async (
     };
 };
 
-// The entry a spent allowance is holding for this conversation, if any; nothing for a turn with no conversation.
-const heldTurnOf = (conversationId: string | undefined): LimitFailure | undefined =>
-    conversationId === undefined ? undefined : pendingLimitFailure(conversationId);
+// The entry a spent allowance or a dead turn is holding for this conversation, if any; nothing for a turn with no
+// conversation.
+const heldTurnOf = (conversationId: string | undefined): HeldTurn | undefined =>
+    conversationId === undefined ? undefined : heldTurn(conversationId);
 
 // The frame's verdict on who brings the turn back: a booked move, the armed appointment, or an offer.
 const autoResumeOf = (moving: boolean, schedulable: boolean, armed: boolean): "scheduled" | "available" | undefined => {
@@ -729,7 +730,7 @@ const handoffNoteFor = async (
     services: Services,
     input: TurnInput,
     history: readonly unknown[],
-    held: LimitFailure | undefined,
+    held: HeldTurn | undefined,
 ): Promise<TurnNote | undefined> =>
     history.length === 0 || input.conversationId === undefined
         ? undefined
@@ -740,9 +741,17 @@ const handoffNoteFor = async (
               retiredSessionId: held?.sessionId ?? services.agents.entry(input.conversationId)?.sessionId,
           });
 
-// Records why a turn is held: a spent allowance holding it whole, or a carried session a sibling account refused
-// outright. The second case's remedy is a fresh session, recorded once and never twice.
-const recordSpentAllowance = (params: {
+// An uncoded death is a hung runtime or a crashed harness: nothing to repair first, so the turn is held whole and one
+// press sends it again. A coded failure names its own remedy, and re-firing it would only re-fail. False for a
+// `stopped` resume that never got the provider to answer: the runtime is down rather than flaky, and holding it again
+// would loop.
+const holdsAsStopped = (prompt: string, providerAnswered: boolean, failure: { readonly code: string | undefined } | undefined): boolean =>
+    failure !== undefined && failure.code === undefined && (providerAnswered || !prompt.startsWith(RESUME_NOTES.stopped));
+
+// Records why a turn is held, so a press re-runs it rather than appending a message after it: a spent allowance
+// holding it whole, a carried session a sibling account refused outright, or an uncoded death with nothing to repair.
+// Each case records once and never twice.
+const recordTurnHold = (params: {
     readonly input: TurnInput;
     readonly sessionId: string | undefined;
     readonly limitHit: boolean;
@@ -760,8 +769,9 @@ const recordSpentAllowance = (params: {
     }
     const turn = { ...input, conversationId: input.conversationId };
     if (params.limitHit) {
-        recordLimitFailure({
+        recordHeldTurn({
             input: turn,
+            reason: "limit",
             ...opt("sessionId", sessionId),
             ran: providerAnswered,
             // The instant the frame already published, carried so the pass can keep the appointment it names.
@@ -772,12 +782,25 @@ const recordSpentAllowance = (params: {
     }
     const carryRefused = !providerAnswered && failure !== undefined && failure.code === undefined && input.prompt.startsWith(RESUME_NOTES.carried);
     if (carryRefused && input.account !== undefined) {
-        recordLimitFailure({
+        recordHeldTurn({
             input: turn,
+            reason: "limit",
             ...opt("sessionId", sessionId),
             ran: true,
             carryRefused: true,
             move: { account: input.account, carry: false },
+            standing: params.standing,
+            ...opt("checklist", params.checklist),
+            ...opt("contextTokens", params.contextTokens),
+        });
+        return;
+    }
+    if (holdsAsStopped(input.prompt, providerAnswered, failure)) {
+        recordHeldTurn({
+            input: turn,
+            reason: "stopped",
+            ...opt("sessionId", sessionId),
+            ran: providerAnswered,
             standing: params.standing,
             ...opt("checklist", params.checklist),
             ...opt("contextTokens", params.contextTokens),
@@ -1329,6 +1352,12 @@ async function* runTurn(
                     });
                     continue;
                 }
+                // The same promise for an uncoded death the exit is about to hold: the window watching this turn die
+                // has to learn the press re-runs it, or it falls back to appending a message the user never typed.
+                if (input.conversationId !== undefined && holdsAsStopped(input.prompt, providerAnswered, failure)) {
+                    yield { ...event, held: { ran: providerAnswered, ...opt("contextTokens", context?.tokens) } };
+                    continue;
+                }
             }
             yield event;
         }
@@ -1355,7 +1384,7 @@ async function* runTurn(
             });
         }
         // Holds a spent-allowance turn whole so a press re-runs it, not a fresh message.
-        recordSpentAllowance({
+        recordTurnHold({
             input,
             sessionId,
             limitHit,
@@ -1487,10 +1516,11 @@ export const createAgentRoutes = (services: Services) => {
             }
             return { run: run.id };
         }),
-        // Re-runs a turn a spent allowance refused, with everything but who serves it, renamed by the press. NOT_FOUND
-        // when nothing is held; never CONFLICT, since a running turn already cleared the entry.
+        // Re-runs a turn a spent allowance refused or a dead runtime cut short, with everything but who serves it,
+        // renamed by the press. NOT_FOUND when nothing is held; never CONFLICT, since a running turn already cleared
+        // the entry.
         resume: i.resume.handler(async ({ input }) => {
-            const run = await fireLimitResume(services, streamAgent, input.conversationId, input.routing);
+            const run = await fireHeldResume(services, streamAgent, input.conversationId, input.routing);
             if (run === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no held turn to run again for that conversation" });
             }

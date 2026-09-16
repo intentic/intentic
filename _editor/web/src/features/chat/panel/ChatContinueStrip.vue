@@ -161,8 +161,9 @@ const useLimitReset = async (): Promise<void> => {
 
 // Standing version of the press, offered only while off (armed, the strip below carries the state and the way
 // out) and never while the daemon is already retrying. Lives in the menu since it's a preference outliving the
-// failure, not an answer about this turn.
-const offerAutoContinue = computed(() => !autoContinue.value && outage.value?.automatic === undefined);
+// failure, not an answer about this turn. Withheld with nothing held: the automation only ever re-runs a held
+// turn, so offering it over an ending it cannot act on promises a press it would stand straight back down from.
+const offerAutoContinue = computed(() => !autoContinue.value && outage.value?.automatic === undefined && pickUp.value?.held !== undefined);
 
 // Row vs. menu is a ranking: the row holds state, this ending's wait, and the press; everything else is a press
 // variant. Auto-continue rides inline only in the two-action case; the reset is never a variant, since it removes

@@ -286,7 +286,8 @@ test("the transcript reports a spent allowance as a held ending, so a window tha
 });
 
 // An uncoded error (crash, unresponsive agent, watchdog timeout) arms the continue press (turnFailures.ts, `code ===
-// undefined`); a named failure with a known repair stays silent instead.
+// undefined`); a named failure with a known repair stays silent instead. The hold rides with it, which is what makes
+// that press a re-run rather than the word "Continue" appended to the record.
 test("the transcript reports an uncoded error as stopped, so a window that never saw it can offer the press", async () => {
     const client = clientFor(
         createApp(
@@ -303,7 +304,8 @@ test("the transcript reports an uncoded error as stopped, so a window that never
     await runAgentTurn(client, { prompt: "rewrite the reconcile engine", conversationId: "conv-timeout" });
 
     const transcript = await client.agents.transcript({ id: "conv-timeout" });
-    expect(transcript.ending).toEqual({ reason: "stopped" });
+    // `ran` is false: this agent yielded no content before it died, so its session holds nothing worth resuming onto.
+    expect(transcript.ending).toEqual({ reason: "stopped", held: { ran: false } });
 });
 
 test("agents.search reads the daemon transcript for a provider with no SDK prompt store", async () => {

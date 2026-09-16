@@ -33,10 +33,10 @@ import { turnRunOf } from "./turn-runs.js";
 import {
     clearPendingResume,
     createTurnResumeScheduler,
-    fireLimitResume,
+    fireHeldResume,
     pendingOutageFailure,
     recordAuthFailure,
-    recordLimitFailure,
+    recordHeldTurn,
     recordOutageFailure,
     resumeInterruptedTurns,
     startConversationTurn,
@@ -1095,9 +1095,9 @@ const heldWake = (turns: AgentTurn[]): WakeFn =>
 test("a turn refused before it ran is sent again in full, and NOT onto the session it left behind", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-1", isolated: true }, sessionId: "s-void", ran: false });
+    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-1", isolated: true }, sessionId: "s-void", ran: false });
 
-    expect(await fireLimitResume(services, heldWake(turns), "lim-1")).toEqual(expect.any(Object));
+    expect(await fireHeldResume(services, heldWake(turns), "lim-1")).toEqual(expect.any(Object));
     await settle("lim-1");
 
     expect(turns).toHaveLength(1);
@@ -1115,9 +1115,9 @@ test("a turn refused before it ran is sent again in full, and NOT onto the sessi
 test("a limit reached mid-flight keeps the session holding its work, and says so", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-2", isolated: true }, sessionId: "s-real", ran: true });
+    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-2", isolated: true }, sessionId: "s-real", ran: true });
 
-    await fireLimitResume(services, heldWake(turns), "lim-2");
+    await fireHeldResume(services, heldWake(turns), "lim-2");
     await settle("lim-2");
 
     expect(turns[0]!.sessionId).toBe("s-real");
@@ -1130,13 +1130,14 @@ test("a limit reached mid-flight keeps the session holding its work, and says so
 test("a press on a switched account runs on it, and cannot take the old account's session with it", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordLimitFailure({
+    recordHeldTurn({
+        reason: "limit",
         input: { prompt: "ship the parser", conversationId: "lim-moved", isolated: true, account: "spent-one" },
         sessionId: "s-real",
         ran: true,
     });
 
-    await fireLimitResume(services, heldWake(turns), "lim-moved", { agent: "claude", harness: "native", account: "with-room" });
+    await fireHeldResume(services, heldWake(turns), "lim-moved", { agent: "claude", harness: "native", account: "with-room" });
     await settle("lim-moved");
 
     expect(turns[0]!.account).toBe("with-room");
@@ -1155,9 +1156,9 @@ test("a press on a switched account runs on it, and cannot take the old account'
 test("a press that names the routing the turn already had resumes its session", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-same", isolated: true }, sessionId: "s-real", ran: true });
+    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-same", isolated: true }, sessionId: "s-real", ran: true });
 
-    await fireLimitResume(services, heldWake(turns), "lim-same", { agent: "claude", harness: "native", model: "claude-sonnet-4-5" });
+    await fireHeldResume(services, heldWake(turns), "lim-same", { agent: "claude", harness: "native", model: "claude-sonnet-4-5" });
     await settle("lim-same");
 
     expect(turns[0]!.sessionId).toBe("s-real");
@@ -1171,13 +1172,14 @@ test("a press that names the routing the turn already had resumes its session", 
 test("a press on a switched account still says nothing ran, when nothing ran", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordLimitFailure({
+    recordHeldTurn({
+        reason: "limit",
         input: { prompt: "ship the parser", conversationId: "lim-door", isolated: true, account: "spent-one", model: "claude-opus-4-1" },
         sessionId: "s-void",
         ran: false,
     });
 
-    await fireLimitResume(services, heldWake(turns), "lim-door", { agent: "claude", harness: "native", account: "with-room" });
+    await fireHeldResume(services, heldWake(turns), "lim-door", { agent: "claude", harness: "native", account: "with-room" });
     await settle("lim-door");
 
     expect(turns[0]!.account).toBe("with-room");
@@ -1191,7 +1193,8 @@ test("a press on a switched account still says nothing ran, when nothing ran", a
 test("a press that names no routing runs the turn exactly as it was", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordLimitFailure({
+    recordHeldTurn({
+        reason: "limit",
         input: {
             prompt: "ship the parser",
             conversationId: "lim-bare",
@@ -1204,7 +1207,7 @@ test("a press that names no routing runs the turn exactly as it was", async () =
         ran: true,
     });
 
-    await fireLimitResume(services, heldWake(turns), "lim-bare");
+    await fireHeldResume(services, heldWake(turns), "lim-bare");
     await settle("lim-bare");
 
     expect(turns[0]).toMatchObject({ account: "spent-one", agent: "codex", harness: "claude-code", sessionId: "s-real" });
@@ -1216,13 +1219,13 @@ test("pressing again after a re-run was refused too states the note once, not on
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
     const wake = heldWake(turns);
-    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-3", isolated: true }, ran: false });
+    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-3", isolated: true }, ran: false });
 
-    await fireLimitResume(services, wake, "lim-3");
+    await fireHeldResume(services, wake, "lim-3");
     await settle("lim-3");
     // Re-held using the prompt the last fire built, simulating a second refusal.
-    recordLimitFailure({ input: { ...turns[0]!, conversationId: "lim-3" }, ran: false });
-    await fireLimitResume(services, wake, "lim-3");
+    recordHeldTurn({ reason: "limit", input: { ...turns[0]!, conversationId: "lim-3" }, ran: false });
+    await fireHeldResume(services, wake, "lim-3");
     await settle("lim-3");
 
     expect(turns).toHaveLength(2);
@@ -1236,13 +1239,13 @@ test("a turn that ran before it was refused stops claiming nothing had been done
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
     const wake = heldWake(turns);
-    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-4", isolated: true }, ran: false });
-    await fireLimitResume(services, wake, "lim-4");
+    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-4", isolated: true }, ran: false });
+    await fireHeldResume(services, wake, "lim-4");
     await settle("lim-4");
 
     // This retry got partway before failing again, crossing to the ran:true arm.
-    recordLimitFailure({ input: { ...turns[0]!, conversationId: "lim-4" }, sessionId: "s-partial", ran: true });
-    await fireLimitResume(services, wake, "lim-4");
+    recordHeldTurn({ reason: "limit", input: { ...turns[0]!, conversationId: "lim-4" }, sessionId: "s-partial", ran: true });
+    await fireHeldResume(services, wake, "lim-4");
     await settle("lim-4");
 
     // Keep resume notes idempotent so replacement reasons remain current.
@@ -1255,16 +1258,54 @@ test("a turn that ran before it was refused stops claiming nothing had been done
 
 test("nothing held answers with nothing, so the press falls back to saying carry on", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
-    expect(await fireLimitResume(services, heldWake([]), "lim-none")).toBeUndefined();
+    expect(await fireHeldResume(services, heldWake([]), "lim-none")).toBeUndefined();
+});
+
+test("a turn a dead runtime cut short is sent again on its own session, with no allowance in the note", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: AgentTurn[] = [];
+    recordHeldTurn({ reason: "stopped", input: { prompt: "ship the parser", conversationId: "stop-1", isolated: true }, sessionId: "s-real", ran: true });
+
+    await fireHeldResume(services, heldWake(turns), "stop-1");
+    await settle("stop-1");
+
+    expect(turns).toHaveLength(1);
+    expect(turns[0]!.sessionId).toBe("s-real");
+    expect(turns[0]!.prompt).toContain("ship the parser");
+    expect(turns[0]!.prompt).toMatch(/stopped before it finished/i);
+    expect(turns[0]!.prompt).toMatch(/continue from that point/i);
+    // The word itself is what this whole path exists to keep out of the record.
+    expect(turns[0]!.prompt).not.toMatch(/allowance/i);
+
+    clearPendingResume("stop-1");
+});
+
+test("a stopped turn whose provider never answered opens fresh, since its session holds nothing", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: AgentTurn[] = [];
+    recordHeldTurn({
+        reason: "stopped",
+        input: { prompt: "ship the parser", conversationId: "stop-2", isolated: true },
+        sessionId: "s-void",
+        ran: false,
+    });
+
+    await fireHeldResume(services, heldWake(turns), "stop-2");
+    await settle("stop-2");
+
+    expect(turns[0]!.sessionId).toBeUndefined();
+    expect(turns[0]!.prompt).toMatch(/stopped before it finished/i);
+
+    clearPendingResume("stop-2");
 });
 
 test("the next turn on the conversation supersedes the held one, whatever started it", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
-    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-5", isolated: true }, ran: false });
+    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-5", isolated: true }, ran: false });
     // Simulates the user typing instead of pressing: the pending hold must not survive their new message.
     clearPendingResume("lim-5");
 
-    expect(await fireLimitResume(services, heldWake([]), "lim-5")).toBeUndefined();
+    expect(await fireHeldResume(services, heldWake([]), "lim-5")).toBeUndefined();
 });
 
 // RECORDED is when the refusal happened; REOPENS is the window it named. Every test below pins some gate around that
@@ -1276,8 +1317,8 @@ test("an armed conversation sends the held turn again once the window reopens, a
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-1", true]]));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordLimitFailure(
-        { input: { prompt: "ship the parser", conversationId: "lim-auto-1", isolated: true }, ran: false, reopensAt: REOPENS },
+    recordHeldTurn(
+        { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-1", isolated: true }, ran: false, reopensAt: REOPENS },
         RECORDED,
     );
 
@@ -1298,8 +1339,8 @@ test("an armed conversation fires exactly once per hold", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-2", true]]));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordLimitFailure(
-        { input: { prompt: "ship the parser", conversationId: "lim-auto-2", isolated: true }, ran: false, reopensAt: REOPENS },
+    recordHeldTurn(
+        { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-2", isolated: true }, ran: false, reopensAt: REOPENS },
         RECORDED,
     );
 
@@ -1318,14 +1359,14 @@ test("an unarmed conversation is never fired for, however long the window has be
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordLimitFailure(
-        { input: { prompt: "ship the parser", conversationId: "lim-auto-3", isolated: true }, ran: false, reopensAt: REOPENS },
+    recordHeldTurn(
+        { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-3", isolated: true }, ran: false, reopensAt: REOPENS },
         RECORDED,
     );
 
     await scheduler.tick(REOPENS * 1000 + 24 * 60 * 60 * 1000);
     expect(turns).toHaveLength(0);
-    expect(await fireLimitResume(services, heldWake(turns), "lim-auto-3")).toEqual(expect.any(Object));
+    expect(await fireHeldResume(services, heldWake(turns), "lim-auto-3")).toEqual(expect.any(Object));
     await settle("lim-auto-3");
     clearPendingResume("lim-auto-3");
 });
@@ -1335,8 +1376,8 @@ test("the sandbox setting arms a conversation that has said nothing itself", asy
     const settings = await services.sandboxSettings.get();
     await services.sandboxSettings.set({ ...settings, resumeAfterLimit: true });
     const turns: AgentTurn[] = [];
-    recordLimitFailure(
-        { input: { prompt: "ship the parser", conversationId: "lim-auto-4", isolated: true }, ran: false, reopensAt: REOPENS },
+    recordHeldTurn(
+        { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-4", isolated: true }, ran: false, reopensAt: REOPENS },
         RECORDED,
     );
 
@@ -1351,7 +1392,7 @@ test("the sandbox setting arms a conversation that has said nothing itself", asy
 test("a limit that named no reset instant is never fired for, armed or not", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-5", true]]));
     const turns: AgentTurn[] = [];
-    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-auto-5", isolated: true }, ran: false }, RECORDED);
+    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-5", isolated: true }, ran: false }, RECORDED);
 
     await createTurnResumeScheduler(services, heldWake(turns)).tick(RECORDED + 24 * 60 * 60 * 1000);
     expect(turns).toHaveLength(0);
@@ -1364,8 +1405,8 @@ test("a reset instant that had already passed when the refusal happened is never
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-6", true]]));
     const turns: AgentTurn[] = [];
     const stale = Math.round((RECORDED - 60 * 60 * 1000) / 1000);
-    recordLimitFailure(
-        { input: { prompt: "ship the parser", conversationId: "lim-auto-6", isolated: true }, ran: false, reopensAt: stale },
+    recordHeldTurn(
+        { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-6", isolated: true }, ran: false, reopensAt: stale },
         RECORDED,
     );
 
@@ -1379,13 +1420,14 @@ test("a reset instant that had already passed when the refusal happened is never
 test("a press that carries keeps the session across the account change, and says so", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordLimitFailure({
+    recordHeldTurn({
+        reason: "limit",
         input: { prompt: "ship the parser", conversationId: "lim-carry", isolated: true, account: "spent-one" },
         sessionId: "s-real",
         ran: true,
     });
 
-    await fireLimitResume(services, heldWake(turns), "lim-carry", { agent: "claude", harness: "native", account: "with-room", carry: true });
+    await fireHeldResume(services, heldWake(turns), "lim-carry", { agent: "claude", harness: "native", account: "with-room", carry: true });
     await settle("lim-carry");
 
     expect(turns[0]!.account).toBe("with-room");
@@ -1402,8 +1444,9 @@ test("a carry the other account refused re-runs fresh on that account, once", as
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordLimitFailure(
+    recordHeldTurn(
         {
+            reason: "limit",
             input: { prompt: "ship the parser", conversationId: "lim-refused-carry", isolated: true, account: "with-room" },
             sessionId: "s-real",
             ran: true,
@@ -1431,8 +1474,9 @@ test("a booked move fires on the next pass, with the session the policy said to 
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordLimitFailure(
+    recordHeldTurn(
         {
+            reason: "limit",
             input: { prompt: "ship the parser", conversationId: "lim-move", isolated: true, account: "spent-one" },
             sessionId: "s-real",
             ran: true,
@@ -1461,7 +1505,7 @@ test("a held turn with no booked move and no arming stays held", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-unbooked", isolated: true }, ran: false, reopensAt: REOPENS }, RECORDED);
+    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-unbooked", isolated: true }, ran: false, reopensAt: REOPENS }, RECORDED);
 
     await scheduler.tick(RECORDED + 5_000);
     await scheduler.tick(REOPENS * 1000 + 1);

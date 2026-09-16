@@ -210,6 +210,63 @@ test("a spent allowance holds the turn, and agent.resume runs that same turn aga
     expect(attachedRows(frames).map(({ role, text }) => ({ role, text }))).toContainEqual({ role: "assistant", text: "on it" });
 });
 
+// An uncoded death is a hung runtime or a crashed harness: nothing to repair, so the turn is held whole and the press
+// is a re-run. Without the hold, the only way on is the word "Continue" typed into somebody's record.
+test("a runtime that dies with no code holds the turn too, and the press re-runs it with no word added", async () => {
+    const seen: { prompt: string; sessionId?: string }[] = [];
+    let die = true;
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent(request) {
+                    seen.push({ prompt: request.prompt, ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }) });
+                    yield { kind: "session", sessionId: "s-real" };
+                    yield { kind: "delta", text: "looking" };
+                    if (die) {
+                        yield { kind: "error", message: "Google turn timed out waiting for OpenCode." };
+                    } else {
+                        yield { kind: "delta", text: "on it" };
+                    }
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    const { facts: first } = await runAgentTurn(client, { prompt: "fix the pipeline", conversationId: "conv-stopped" });
+    // `ran` is true: the provider answered before it hung, so the session still holds the work.
+    expect(first).toContainEqual(expect.objectContaining({ kind: "error", held: expect.objectContaining({ ran: true }) }));
+
+    die = false;
+    await client.agent.resume({ conversationId: "conv-stopped" });
+    await collect(await client.agent.attach({ conversationId: "conv-stopped" }));
+
+    expect(seen).toHaveLength(2);
+    expect(seen[1]!.prompt).toContain("fix the pipeline");
+    expect(seen[1]!.prompt).toMatch(/stopped before it finished/i);
+    expect(seen[1]!.prompt).not.toMatch(/^Continue$/im);
+    // Onto the session that holds what the dead turn managed, rather than starting the work over.
+    expect(seen[1]!.sessionId).toBe("s-real");
+});
+
+test("a coded failure is not held, since pressing would only meet the same block again", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent() {
+                    yield { kind: "error", code: "context-window-too-small", message: "this model cannot hold the turn" };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    const { facts } = await runAgentTurn(client, { prompt: "fix the pipeline", conversationId: "conv-coded" });
+    expect(facts).toContainEqual(expect.objectContaining({ kind: "error", code: "context-window-too-small" }));
+    expect(facts.find((fact) => fact.kind === "error")).not.toHaveProperty("held");
+    expect(await errorCode(client.agent.resume({ conversationId: "conv-coded" }))).toBe("NOT_FOUND");
+});
+
 test("agent.resume answers NOT_FOUND when nothing is held for the conversation", async () => {
     const client = clientFor(
         createApp(

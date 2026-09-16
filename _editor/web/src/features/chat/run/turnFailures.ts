@@ -169,9 +169,10 @@ export class TurnFailures {
         }
         this.host.error.value = message;
         // Continue is offered only when the code is unknown: for the three named cases above, nothing here would fix
-        // the block and pressing it would just re-fail.
+        // the block and pressing it would just re-fail. `held` rides through, so the press re-runs the turn the daemon
+        // kept rather than appending a word after it.
         if (code === undefined) {
-            this.host.pickUp.value = { reason: `stopped` };
+            this.host.pickUp.value = { reason: `stopped`, ...(error.held === undefined ? {} : { held: error.held }) };
         }
     }
 

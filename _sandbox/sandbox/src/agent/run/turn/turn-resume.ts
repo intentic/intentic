@@ -50,7 +50,7 @@ const AUTH_GAVE_UP = "The Claude sign-in this turn ran on could not be renewed i
 export const clearPendingResume = (conversationId: string): void => {
     pendingAuth.delete(conversationId);
     pendingOutage.delete(conversationId);
-    pendingLimit.delete(conversationId);
+    pendingHeld.delete(conversationId);
 };
 
 export interface AuthFailure {
@@ -100,8 +100,10 @@ export const pendingOutageFailure = (conversationId: string): OutageFailure | un
 
 // A turn a spent allowance stranded, held for a press or, if resumeAfterLimit/moveAfterLimit is set, an automatic fire
 // at the reopen instant. No staleness sweep: a press is a deliberate pick-up regardless of how long it's been.
-export interface LimitFailure {
+export interface HeldTurn {
     readonly input: AgentTurn & { conversationId: string };
+    // What killed it: a spent allowance, or anything else that left nothing to repair (a hung runtime, a crash).
+    readonly reason: "limit" | "stopped";
     // The session the failed turn last reported; kept even when unused, so the fire can decide via `ran`.
     readonly sessionId?: string;
     // Epoch seconds the allowance reopens. Absent (Grok, Cursor publish none) means press-only, never guessed.
@@ -120,17 +122,17 @@ export interface LimitFailure {
     readonly carryRefused?: boolean | undefined;
 }
 
-// recordedAt and fired are the pass's bookkeeping, kept on the map entry rather than on LimitFailure itself.
-const pendingLimit = new Map<string, LimitFailure & { readonly recordedAt: number; readonly fired: boolean }>();
+// recordedAt and fired are the pass's bookkeeping, kept on the map entry rather than on HeldTurn itself.
+const pendingHeld = new Map<string, HeldTurn & { readonly recordedAt: number; readonly fired: boolean }>();
 
 // Recorded from the turn's exit, like its neighbours. Unconditional even for a turn that is itself a resume, since an
 // allowance refusing twice is ordinary, not hopeless, and regardless of posture, so arming afterwards still finds it.
-export const recordLimitFailure = (failure: LimitFailure, now: number = Date.now()): void => {
-    pendingLimit.set(failure.input.conversationId, { ...failure, recordedAt: now, fired: false });
+export const recordHeldTurn = (failure: HeldTurn, now: number = Date.now()): void => {
+    pendingHeld.set(failure.input.conversationId, { ...failure, recordedAt: now, fired: false });
 };
 
 /** Whether a press on this conversation has a held turn to re-run. */
-export const pendingLimitFailure = (conversationId: string): LimitFailure | undefined => pendingLimit.get(conversationId);
+export const heldTurn = (conversationId: string): HeldTurn | undefined => pendingHeld.get(conversationId);
 
 // The turn's own fields come from the held copy; routing (agent/harness/account/model) comes from the press when named.
 // Destructure-then-add so a press can unset a field instead of leaving the old value standing.
@@ -167,22 +169,28 @@ const movesAccount = (input: AgentTurn, routing: ResumeRouting | undefined): boo
 
 // Undefined when nothing is held or a turn already runs (a repeat press is free). Not consumed here: the started turn's
 // own clearPendingResume does that, and its exit re-arms it if refused again. `routing` overrides the held turn's own.
-export const fireLimitResume = async (
+export const fireHeldResume = async (
     services: Services,
     wake: WakeFn,
     conversationId: string,
     routing?: ResumeRouting,
 ): Promise<TurnRun | undefined> => {
-    const held = pendingLimit.get(conversationId);
+    const held = pendingHeld.get(conversationId);
     if (held === undefined) {
         return undefined;
     }
     const failure = { input: reroutedInput(held.input, routing), ...(held.sessionId !== undefined ? { sessionId: held.sessionId } : {}) };
     // restate applies on every arm: the note must describe this attempt's own starting point, not the last one's.
     if (held.ran && held.carryRefused !== true && !retiresSession(held.input, routing)) {
-        // Same session either way; the note says only whether the account changed, the one fact the model cannot see.
-        const note = movesAccount(held.input, routing) ? RESUME_NOTES.carried : RESUME_NOTES.limit;
+        // Same session either way; the note says only what the model cannot see: which wall it hit, and whether the
+        // account changed under it.
+        const note =
+            held.reason === "stopped" ? RESUME_NOTES.stopped : movesAccount(held.input, routing) ? RESUME_NOTES.carried : RESUME_NOTES.limit;
         return startConversationTurn(services, wake, resumedTurn(failure, note, { restate: true }));
+    }
+    // A stopped turn that never got the provider to answer has nothing to carry: it opens fresh and says so.
+    if (held.reason === "stopped") {
+        return startConversationTurn(services, wake, resumedTurn(failure, RESUME_NOTES.stopped, { fresh: true, restate: true }));
     }
     // Fresh otherwise: a turn that never ran has a session not worth reusing; one that did is moving without it.
     return startConversationTurn(
@@ -407,10 +415,10 @@ const fireBookedMove = async (
     services: Services,
     wake: WakeFn,
     input: AgentTurn & { conversationId: string },
-    move: NonNullable<LimitFailure["move"]>,
+    move: NonNullable<HeldTurn["move"]>,
 ): Promise<void> => {
     const routing: ResumeRouting = { agent: input.agent ?? "claude", harness: input.harness ?? "native", account: move.account, carry: move.carry };
-    if ((await fireLimitResume(services, wake, input.conversationId, routing)) !== undefined) {
+    if ((await fireHeldResume(services, wake, input.conversationId, routing)) !== undefined) {
         services.logger.info(
             { conversationId: input.conversationId, account: move.account, carry: move.carry },
             "usage-limit move fired: the owner's policy moved the held turn to another account",
@@ -422,13 +430,15 @@ const fireBookedMove = async (
 // infinite loop on a stale one). `fired` marks the one dispatch without deleting the entry, keeping a press idempotent
 // after.
 const runLimitPass = async (services: Services, wake: WakeFn, now: number): Promise<void> => {
-    const stranded = [...pendingLimit.values()];
+    // Every hold lives in one map; a stopped one names no instant and books no move, so it falls through both gates
+    // below and waits for a press.
+    const stranded = [...pendingHeld.values()];
     for (const held of stranded) {
         const conversationId = held.input.conversationId;
         // A booked move goes first, at once; `fired` is stamped before the start so it holds even if starting
         // conflicts.
         if (!held.fired && held.move !== undefined) {
-            pendingLimit.set(conversationId, { ...held, fired: true });
+            pendingHeld.set(conversationId, { ...held, fired: true });
             await fireBookedMove(services, wake, held.input, held.move);
             continue;
         }
@@ -440,8 +450,8 @@ const runLimitPass = async (services: Services, wake: WakeFn, now: number): Prom
             continue;
         }
         // Stamped before the fire, like the outage pass's dispatch count, so it holds even if the start conflicts.
-        pendingLimit.set(conversationId, { ...held, fired: true });
-        if ((await fireLimitResume(services, wake, conversationId)) !== undefined) {
+        pendingHeld.set(conversationId, { ...held, fired: true });
+        if ((await fireHeldResume(services, wake, conversationId)) !== undefined) {
             services.logger.info({ conversationId, reopensAt }, "usage-limit auto-resume fired: the allowance window reopened");
         }
     }

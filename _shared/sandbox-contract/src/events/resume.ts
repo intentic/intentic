@@ -10,6 +10,8 @@ export const RESUME_NOTES = {
     auth: `The Claude credential that interrupted this conversation has been renewed, and this turn resumed automatically. ${REPEATED}`,
     outage: `The model provider was briefly unavailable and interrupted this conversation; this turn resumed automatically. ${REPEATED}`,
     restart: `The sandbox restarted while this turn was running, which stopped it, and this turn resumed automatically once it came back. ${REPEATED}`,
+    // Anything that killed a turn with no remedy of its own: a runtime that hung, a harness that crashed.
+    stopped: `The previous attempt at this request stopped before it finished, and it has been sent again. ${REPEATED}`,
     // Three notes, one allowance failure: `limit` continues, `switched` opens fresh, `refused` says the opposite.
     limit: `The model provider's usage allowance ran out while this turn was running, which stopped it, and it has been sent again. ${REPEATED}`,
     switched:
@@ -44,6 +46,7 @@ const RESUME_DISCLOSURES: Record<ResumeReason, ResumeDisclosure> = {
     auth: { kind: "notice", text: "Claude sign-in renewed, this turn picked up where it left off." },
     outage: { kind: "notice", text: "The model provider came back, this turn picked up where it left off." },
     restart: { kind: "notice", text: "The sandbox came back, this turn picked up where it left off." },
+    stopped: { kind: "notice", text: "Sent again after the turn stopped short, picking up where it left off." },
     // None of these four auto-resumed, a person pressed Continue; `switched`/`carried` name the differing account.
     limit: { kind: "notice", text: "Sent again after the allowance ran out mid-turn, picking up where it left off." },
     switched: { kind: "notice", text: "Sent again on the switched account after the allowance ran out mid-turn, in a fresh session." },

@@ -5,13 +5,14 @@ import {
     type AgentHistoryCommit,
     type AgentRepoChanges,
     type AgentRepoHistory,
+    type AgentSummary,
     capabilitiesOf,
     type TurnEnding,
 } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/routes/agent.routes.js";
+import { type HeldTurn, heldTurn } from "../agent/run/turn/turn-resume.js";
 import { opt } from "../agent/run/opt.js";
-import { type LimitFailure, pendingLimitFailure } from "../agent/run/turn/turn-resume.js";
 import { cancelWatchersFor } from "../agent/verification/watchers.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import type { Services } from "../composition.js";
@@ -68,12 +69,33 @@ export const createAgentsRoutes = (services: Services) => {
     // Off the projected `get` status, never raw `entry.status`, which stays `interrupted` through a running turn. Adds
     // reasons stop/kill don't cover (a spent allowance, an outage); repair failures are excluded.
     // Whether the held turn ran, what each way of moving on costs, and where a policy is sending it.
-    const heldEnding = (held: LimitFailure): NonNullable<TurnEnding["held"]> => ({
+    const heldEnding = (held: HeldTurn): NonNullable<TurnEnding["held"]> => ({
         ran: held.ran,
         ...(held.contextTokens !== undefined ? { contextTokens: held.contextTokens } : {}),
         ...(held.handoffTokens !== undefined ? { handoffTokens: held.handoffTokens } : {}),
         ...(held.move !== undefined ? { moving: held.move.account } : {}),
     });
+    // The live hold, never a summary flag: a restart clears the hold, so only it backs a re-run rather than a message.
+    const heldOn = (id: string): Pick<TurnEnding, "held"> => {
+        const held = heldTurn(id);
+        return held === undefined ? {} : { held: heldEnding(held) };
+    };
+    const failureEnding = (id: string, summary: AgentSummary): TurnEnding | undefined => {
+        if (summary.failureCode === "rate_limit") {
+            return {
+                reason: "limit",
+                ...(summary.limitResetsAt !== undefined ? { resetsAt: summary.limitResetsAt } : {}),
+                ...heldOn(id),
+                ...(summary.limitScheduled === true ? { scheduled: true } : {}),
+            };
+        }
+        if (summary.failureCode === "provider-outage") {
+            return { reason: "outage" };
+        }
+        // A coded failure names something to repair first, so no offer beats a press that would only re-fail.
+        // Uncoded is stopped work: nothing to repair, so the press just carries on.
+        return summary.failureCode === undefined ? { reason: "stopped", ...heldOn(id) } : undefined;
+    };
     const endingOf = (id: string): TurnEnding | undefined => {
         const summary = services.agents.get(id);
         if (summary === undefined) {
@@ -83,24 +105,7 @@ export const createAgentsRoutes = (services: Services) => {
             return { reason: "stopped" };
         }
         // Reads the failure the card currently reports; a resumed, landed or overtaken turn has none (agents-registry).
-        if (summary.status !== "error") {
-            return undefined;
-        }
-        if (summary.failureCode === "rate_limit") {
-            // Live hold, not the summary's `limitHeld` flag: a restart clears it, so only it backs a re-run.
-            const held = pendingLimitFailure(id);
-            return {
-                reason: "limit",
-                ...(summary.limitResetsAt !== undefined ? { resetsAt: summary.limitResetsAt } : {}),
-                ...(held !== undefined ? { held: heldEnding(held) } : {}),
-                ...(summary.limitScheduled === true ? { scheduled: true } : {}),
-            };
-        }
-        if (summary.failureCode === "provider-outage") {
-            return { reason: "outage" };
-        }
-        // Uncoded error is stopped work: nothing to repair, so `{ reason: "stopped" }` offers to just carry on.
-        return summary.failureCode === undefined ? { reason: "stopped" } : undefined;
+        return summary.status === "error" ? failureEnding(id, summary) : undefined;
     };
     // The composition a manual land applies: the same pre-land rebase as auto-land, with `base` moved onto what each
     // repo now sits on. A git fault here lands on the old base instead of failing the land.
