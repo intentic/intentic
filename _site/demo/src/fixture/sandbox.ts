@@ -1,7 +1,7 @@
 import type { CapabilitySummary } from "@intentic/api-contract";
 import { builtinModules } from "@intentic/web/builtins";
 import type { Environment, EnvironmentContents, ExtensionSummary, PanelSummary, UsageRollupRow } from "@intentic/sandbox-contract";
-import { demoMode } from "../mode";
+import { enabledExtensions } from "../mode";
 import pins from "../../vendor/extensions.json";
 
 // acme-shop's workspace furniture: what it's made of, what it's wired to, the extensions supplying that wiring, and the
@@ -257,7 +257,7 @@ let extensions: ExtensionSummary[] | undefined;
 export const demoExtensions = (): ExtensionSummary[] =>
     (extensions ??= [...compiledExtensions(), ...vendoredExtensions(), ...CONNECTOR_EXTENSIONS].map((extension) =>
         // Mutates in place: `setExtensionEnabled` below writes `enabled` straight onto these objects.
-        Object.assign(extension, { enabled: demoMode.extensions?.includes(extension.id) ?? true }),
+        Object.assign(extension, { enabled: enabledExtensions()?.includes(extension.id) ?? true }),
     ));
 
 export const setExtensionEnabled = (id: string, enabled: boolean): void => {

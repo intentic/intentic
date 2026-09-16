@@ -71,6 +71,14 @@ interface Shot {
     stopAt?: number;
     /* Select the demo fixture density used for this shot. */
     mode?: "minimal" | "default" | "full";
+    /**
+     * Which extensions are switched on, overriding the density's own list.
+     *
+     * The rail carries one icon and one badge per enabled extension, so a mode picked for its ROSTER also decides how
+     * much chrome stands beside it. `[]` leaves only what the app cannot take away — sandbox, agents, workspace,
+     * preview, more, browsers, terminal, add, account — which is what a board shot should be a picture of.
+     */
+    extensions?: readonly string[];
     /** Overrides the shared desktop window, for a shot whose subject is not our app. */
     viewport?: { width: number; height: number };
     /** Overrides the device scale factor. Narrow sources need the extra rungs; wide ones already overshoot. */
@@ -115,7 +123,9 @@ const SHOTS: Shot[] = [
         waitFor: "text=ATTENTION",
         settleMs: 1200,
         clip: "area",
-        mode: "full",
+        // The curated fixture, like every other board shot. This one used the full roster — nine cards, every
+        // extension in the rail, seven badges — on the reasoning that a board about running many agents should show
+        // many. It reads as a backlog, not as capacity, and the lanes say what they are at one card each.
     },
     /* Showcase captures use whole 16:9 windows with settled curated conversations. */
     {
@@ -126,9 +136,10 @@ const SHOTS: Shot[] = [
         settleMs: 3200,
         viewport: SHOWCASE,
         dpr: SHOWCASE_DPR,
-        // The 16:9 frame is fixed, so an under-filled board cannot be trimmed back to its content — it is simply a
-        // screenshot that is half empty canvas. The full fixture is what fills a lane to the depth of the frame.
-        mode: "full",
+        // Stays on the curated fixture. The 16:9 frame is fixed, so this board cannot be trimmed back to its content
+        // and a good deal of it is canvas — but the full roster fills that space with nine cards, every extension's
+        // icon and seven badges, which is a picture of the worst day this product has rather than of working in it.
+        // The empty half is the calm; `fleet-board` is where the whole roster is the subject.
     },
     {
         /* Use the full fixture so this catalogue includes the connected capability tiles. */
@@ -174,8 +185,7 @@ const SHOTS: Shot[] = [
         clip: "area",
         viewport: HERO_WINDOW,
         fullHeight: true,
-        /* Same reason as stage-run: `fullHeight` keeps the window, so only the fixture can fill it. */
-        mode: "full",
+        /* Curated fixture, for stage-run's reason — and this is the first screen anyone sees of the product. */
     },
     /* Capture the hero review in the same window and crop as the hero board. */
     {
@@ -291,8 +301,7 @@ const SHOTS: Shot[] = [
         waitFor: "text=ATTENTION",
         settleMs: 1400,
         dpr: DENSE_DPR,
-        /* The phone frame is the whole viewport and cannot be trimmed, so the fixture has to reach the tab bar. */
-        mode: "full",
+        /* Curated fixture: a phone screen is the one place a full roster reads as a backlog rather than as capacity. */
     },
     /* Reopen the running fixture conversation so mobile chat shows its plan card. */
     {
@@ -750,6 +759,13 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
     /* Set fixture mode before app boot so every navigation keeps it. */
     if (shot.mode !== undefined) {
         await context.addInitScript((mode) => window.sessionStorage.setItem(`intentic.demo.mode`, mode), shot.mode);
+    }
+    // A bare rail unless the shot asks otherwise. `full` is only ever chosen because the extensions ARE the subject —
+    // the capability catalogue is built from them — so those keep the density's own list; everything else is a shot of
+    // some other surface, and the extension icons beside it are chrome the reader has to look past.
+    const pinned = shot.extensions ?? (shot.mode === "full" ? undefined : []);
+    if (pinned !== undefined) {
+        await context.addInitScript((ids) => window.sessionStorage.setItem(`intentic.demo.extensions`, JSON.stringify(ids)), pinned);
     }
     const page = await context.newPage();
     page.on("pageerror", (error) => console.warn(`  [pageerror ${shot.name}] ${error.message.split("\n")[0]}`));

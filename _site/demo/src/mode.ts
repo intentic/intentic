@@ -76,6 +76,24 @@ const resolve = (): DemoMode => {
 /** State this page load serves, resolved once before boot; every fixture reads it. */
 export const demoMode = resolve();
 
+// Which extensions start on, with one override the switcher never writes: the marketing shots harness pins it so a
+// board screenshot can carry this mode's agents AND an empty rail. The two are one knob otherwise — every enabled
+// extension adds an icon and a badge — and a shot of the fleet wants the roster without the chrome around it.
+const EXTENSIONS_KEY = `intentic.demo.extensions`;
+
+export const enabledExtensions = (): readonly string[] | undefined => {
+    const pinned = window.sessionStorage.getItem(EXTENSIONS_KEY);
+    if (pinned === null) {
+        return demoMode.extensions;
+    }
+    try {
+        const parsed: unknown = JSON.parse(pinned);
+        return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === `string`) : demoMode.extensions;
+    } catch {
+        return demoMode.extensions;
+    }
+};
+
 // Switching reloads: extensions activate once per app load, so a live rebroadcast would go half-stale. Lands on the
 // fleet board, since the current route might belong to an extension about to switch off.
 export const setDemoMode = (id: DemoModeId): void => {

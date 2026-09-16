@@ -75,7 +75,7 @@ export const productPages: ProductPage[] = [
         sub: "A chat window works for one agent. The board shows the status, changes and cost of every agent at once.",
         hero: {
             name: "fleet-board",
-            alt: "The intentic fleet board: an Attention lane with an agent asking a question and one blocked on a land conflict, an Active lane with three agents running, and a Finished lane where a completed agent offers Land now. Every card shows model, branch, tokens, cost and diff stats.",
+            alt: "The intentic fleet board: an Attention lane holding a visitor's question from the Front Desk and an agent asking one of its own, an Active lane with an agent adding Stripe checkout, and a Finished lane where a completed change offers Land now. Every card shows model, branch, cost and diff stats.",
             frame: "browser",
             label: "acme-shop · /agents",
         },
@@ -232,7 +232,7 @@ export const productPages: ProductPage[] = [
                 body: "An automatically started agent appears like any other, with its own card, diff and review.",
                 shot: {
                     name: "fleet-board",
-                    alt: "The intentic fleet board: an Attention lane with an agent asking a question and one blocked on a land conflict, an Active lane with three agents running, and a Finished lane where a completed agent offers Land now. Every card shows model, branch, tokens, cost and diff stats.",
+                    alt: "The intentic fleet board: an Attention lane holding a visitor's question from the Front Desk and an agent asking one of its own, an Active lane with an agent adding Stripe checkout, and a Finished lane where a completed change offers Land now. Every card shows model, branch, cost and diff stats.",
                     frame: "browser",
                     label: "acme-shop · /agents",
                 },
