@@ -5,6 +5,8 @@ import { ExitConfigSchema } from "./exit.js";
 import { entryId } from "./internal.js";
 import { ServiceKindSchema } from "./inventory.js";
 import { VpnConfigSchema } from "./vpn.js";
+// One-way: the browser extension bundles webext.js alone, so nothing there may reach back into this file.
+import { WebExtConfigSchema } from "./webext.js";
 // Everything a user adds is a capability with an idempotent apply plus a status check; the manifest is the source of
 // truth for what's active, and `mcp`-kind entries also feed the agent's MCP servers each turn.
 
@@ -194,28 +196,6 @@ export const HostScopesSchema = z.object({
 });
 export type HostScopes = z.infer<typeof HostScopesSchema>;
 export const HostConfigSchema = HostScopesSchema.extend({ platform: z.string().min(1) });
-// The user's own browser, reached through their installed extension; the sibling of `host`, not an arm of it, since
-// it's already signed in as the person, with their passkeys and SSO. Which sites the agent may touch lives in Chrome's
-// own host permissions, not here; every switch is enforced in the extension, never checked on this side.
-const webextScope = z.enum(["on", "off"]);
-export const WebExtScopesSchema = z.object({
-    // The floor of usefulness, defaults on; off, the connection is inert and the card says so.
-    read: webextScope.default("on"),
-    // On by default, unlike a device's `control`: driving the page is what this connector is for, not a last resort.
-    act: webextScope.default("on"),
-    // Off by default: the one read nothing here bounds, since it captures whatever pixels the window shows, not just
-    // granted frames.
-    screenshot: webextScope.default("off"),
-    // Off by default: the only switch here that copies a credential rather than borrowing the browser holding it.
-    cookies: webextScope.default("off"),
-    // "sensitive" (default) prompts only for a password, payment or delete action; "always" prompts every action,
-    // "never" trusts the owner to watch.
-    confirm: z.enum(["sensitive", "always", "never"]).default("sensitive"),
-});
-export type WebExtScopes = z.infer<typeof WebExtScopesSchema>;
-// An open slug (chrome, firefox), like a host's `platform`: a new browser family needs no daemon release.
-export const WebExtConfigSchema = WebExtScopesSchema.extend({ platform: z.string().min(1) });
-export type WebExtConfig = z.infer<typeof WebExtConfigSchema>;
 // An ACP agent served as a chat provider: the daemon spawns `command` as a long-lived JSON-RPC subprocess, and the
 // capability id becomes the provider id. `env` is a pasted KEY=VALUE block, the whole secret field; `loginCommand` runs
 // an interactive device-code login in a visible terminal.

@@ -4,9 +4,6 @@ import { z } from "zod";
 // can't itself be an oRPC call, so the machine's first frame is plain JSON; the daemon verifies it and only then
 // attaches the typed link. Anything before that link exists is this frame or a closed socket.
 
-// Shared with the daemon's peer bridge, which answers the handshake itself when the machine is asleep.
-export const MCP_PROTOCOL_VERSION = "2025-06-18";
-
 /* HOW OFTEN THIS DOOR PINGS A CONNECTED MACHINE, read by both sides of the socket. */
 export const HOST_HEARTBEAT_MS = 30_000;
 

@@ -1,5 +1,5 @@
 import { createBackoff } from "@intentic/base/async";
-import { WEBEXT_HEARTBEAT_MS, webextConnectUrl } from "@intentic/sandbox-contract";
+import { WEBEXT_HEARTBEAT_MS, webextConnectUrl } from "@intentic/sandbox-contract/webext";
 import { dialPeer, PEER_LINK_BACKOFF, peerLinkSilenceMs, type PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import { RPCHandler } from "@orpc/server/websocket";
 import { createWebExtRouter } from "./router.js";

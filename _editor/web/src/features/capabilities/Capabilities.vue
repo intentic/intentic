@@ -538,8 +538,8 @@ const browserGrants = (instance: CapabilitySummary): string => {
 const openBrowserConnect = (instance: CapabilitySummary): void => {
     const contribution = contributionFor(instance.kind, instance.config);
     browserConnectId.value = instance.id;
-    // Install link comes off the card that declared this browser family.
-    browserInstall.value = contribution?.kind === `webext` ? contribution.install : ``;
+    // Install link comes off the card that declared this browser family; empty while that family has no listing yet.
+    browserInstall.value = (contribution?.kind === `webext` ? contribution.install : undefined) ?? ``;
     browserPermissions.value = browserGrants(instance);
     browserConnectVisible.value = true;
 };

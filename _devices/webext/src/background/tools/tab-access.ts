@@ -1,4 +1,4 @@
-import type { WebExtGrant } from "@intentic/sandbox-contract";
+import type { WebExtGrant } from "@intentic/sandbox-contract/webext";
 import { decide, originPattern, RefusedError, sandboxOwnOrigin } from "../policy.js";
 import { store } from "../store.js";
 

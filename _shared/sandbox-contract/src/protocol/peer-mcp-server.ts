@@ -1,5 +1,12 @@
-import { z } from "zod";
-import { MCP_PROTOCOL_VERSION } from "./host-protocol.js";
+// Named imports rather than the `z` namespace: this module is bundled into the browser extension, where the
+// namespace keeps zod's 60 locales (~250 kB) that esbuild can otherwise drop. _devices/webext/scripts/size-budget.mjs holds the ceiling.
+import { prettifyError, toJSONSchema } from "zod";
+import type * as z from "zod";
+
+// The MCP version every peer announces, here rather than in host-protocol.ts because a browser extension bundles this
+// module and would otherwise carry the machine handshake's schemas to a store. Also read by the daemon's peer bridge,
+// which answers `initialize` itself while a peer is asleep.
+export const MCP_PROTOCOL_VERSION = "2025-06-18";
 
 // The MCP server a peer (device, browser) runs; the daemon forwards JSON-RPC verbatim, so the tool table here is the
 // whole surface. A failed tool returns isError, never a JSON-RPC error. Each tool's zod schema is both what tools/list
@@ -23,7 +30,7 @@ export const tool = <Schema extends z.ZodType, Ctx>(spec: {
     readonly input: Schema;
     readonly run: (args: z.output<Schema>, ctx: Ctx) => Promise<Record<string, unknown>>;
 }): McpTool<Ctx> => {
-    const { $schema: _dialect, ...inputSchema } = z.toJSONSchema(spec.input, { io: "input" });
+    const { $schema: _dialect, ...inputSchema } = toJSONSchema(spec.input, { io: "input" });
     return {
         name: spec.name,
         description: spec.description,
@@ -31,7 +38,7 @@ export const tool = <Schema extends z.ZodType, Ctx>(spec: {
         call: async (args, ctx) => {
             const parsed = spec.input.safeParse(args);
             // Readable enough for a model to fix its own call: which field, and what was expected.
-            return parsed.success ? await spec.run(parsed.data, ctx) : textResult(z.prettifyError(parsed.error), true);
+            return parsed.success ? await spec.run(parsed.data, ctx) : textResult(prettifyError(parsed.error), true);
         },
     };
 };

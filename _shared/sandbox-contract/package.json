@@ -183,6 +183,17 @@
                 "default": "./dist/text/transcript-fold.js"
             }
         },
+        "./webext": {
+            "types": "./dist/webext.d.ts",
+            "import": {
+                "@intentic/src": "./src/webext.ts",
+                "default": "./dist/webext.js"
+            },
+            "require": {
+                "@intentic/src": "./src/webext.ts",
+                "default": "./dist/webext.js"
+            }
+        },
         "./webext-links": {
             "types": "./dist/protocol/webext-links.d.ts",
             "import": {

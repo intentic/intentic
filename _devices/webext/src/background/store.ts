@@ -1,4 +1,4 @@
-import { type WebExtGrant, type WebExtScopes, WebExtScopesSchema } from "@intentic/sandbox-contract";
+import { type WebExtGrant, type WebExtScopes, WebExtScopesSchema } from "@intentic/sandbox-contract/webext";
 
 // Everything this extension remembers, in chrome.storage.local: the sandbox's url+token (the only secret), cached
 // scopes, per-site read/act modes, paused (must survive the worker's death), and the activity log. Not here:

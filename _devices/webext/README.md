@@ -81,10 +81,12 @@ answers.
   `@intentic/browser/page`, so an agent that learned `[e4] button "Send"` driving the sandbox's browser has
   nothing new to learn here. The DOM walk itself is this package's own, because it can be better: real DOM
   types, shadow roots pierced, password contents never read back.
-- **The background bundle is ~740 kB minified**, most of it the contract's schema surface reached through the
-  barrel import. The content script is 374 bytes, which is the number that mattered — it is injected into
-  every sandbox page — and it is why `@intentic/sandbox-contract/webext-links` exists. Trimming the background
-  the same way needs the webext schemas to get their own contract entry point.
+- **What this bundles is a store upload, and two import habits silently quadruple it.** Reaching the contract's
+  barrel (`@intentic/sandbox-contract`) instead of `/webext` re-adds ~440 kB of the daemon's unrelated wire
+  surface; a single `import { z } from "zod"` anywhere the background reaches re-adds ~330 kB, because the
+  namespace keeps all 60 of zod's locales where named imports (`import { object, string } from "zod"`) let
+  esbuild drop 59 of them. Both type-check and both pass the tests, so `scripts/size-budget.mjs` fails the
+  build instead: 169 kB background, 374-byte content script, 4.8 kB popup, each against a ceiling.
 
 - **The mark and the accent are the product's, not this package's.** The icons are rendered from the same
   `LOTUS` in `_site/site/src/components/ornaments.ts` that the favicon and the desktop app draw from — one
@@ -132,5 +134,6 @@ unset, which is the state until the listing has been created by hand once.
 - [src/popup/popup.ts](src/popup/popup.ts): the 340 pixels that make this installable, and the only place a permission is ever asked for.
 - [static/manifest.json](static/manifest.json): four permissions, one optional host pattern, one content script.
 - [scripts/pack.mjs](scripts/pack.mjs): dist/ as one zip, written by hand because the CI image has no `zip`.
+- [scripts/size-budget.mjs](scripts/size-budget.mjs): the ceilings, and the only thing that catches a bundle regression before the store does.
 - [scripts/render-icons.mjs](scripts/render-icons.mjs): the four PNGs, read out of the site's lotus rather than redrawn.
 - [scripts/render-store-assets.mjs](scripts/render-store-assets.mjs): the mandatory promotional tile, from that same lotus.

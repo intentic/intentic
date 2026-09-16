@@ -1,13 +1,53 @@
 import { createRequire } from "node:module";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { crc32, deflateSync } from "node:zlib";
+import { lotusPaths } from "../../../_site/site/scripts/lotus.mjs";
 
 /* The small Chrome Web Store promotional tile. */
+
+// The store refuses a promotional tile with an alpha channel, and resvg only emits RGBA — so the PNG is encoded here
+// from raw pixels with every fourth byte dropped, rather than rendered and then converted.
+const rgbPng = (pixels, width, height) => {
+    const stride = width * 3;
+    const raw = Buffer.alloc((stride + 1) * height);
+    for (let y = 0; y < height; y++) {
+        // Filter byte 0 (none) per scanline: the tile is flat colour, where filtering buys nothing.
+        raw[y * (stride + 1)] = 0;
+        for (let x = 0; x < width; x++) {
+            const from = (y * width + x) * 4;
+            const to = y * (stride + 1) + 1 + x * 3;
+            raw[to] = pixels[from];
+            raw[to + 1] = pixels[from + 1];
+            raw[to + 2] = pixels[from + 2];
+        }
+    }
+    const chunk = (type, body) => {
+        const head = Buffer.from(type, "ascii");
+        const out = Buffer.alloc(body.length + 12);
+        out.writeUInt32BE(body.length, 0);
+        head.copy(out, 4);
+        body.copy(out, 8);
+        out.writeUInt32BE(crc32(Buffer.concat([head, body])) >>> 0, body.length + 8);
+        return out;
+    };
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(width, 0);
+    ihdr.writeUInt32BE(height, 4);
+    ihdr[8] = 8;
+    // Colour type 2: truecolour, no alpha — the byte the store actually checks.
+    ihdr[9] = 2;
+    return Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        chunk("IHDR", ihdr),
+        chunk("IDAT", deflateSync(raw, { level: 9 })),
+        chunk("IEND", Buffer.alloc(0)),
+    ]);
+};
 
 const here = import.meta.dirname;
 const workspace = join(here, "..", "..", "..");
 const out = join(here, "..", "assets", "store");
-const ornaments = join(workspace, "_site/site/src/components/ornaments.ts");
 
 const require = createRequire(join(workspace, "package.json"));
 const fromStore = () => {
@@ -25,9 +65,10 @@ if (Resvg === undefined) {
     throw new Error("@resvg/resvg-js is not installed in this workspace; the committed store asset is unchanged.");
 }
 
-const kit = readFileSync(ornaments, "utf8");
-const lotus = /export const LOTUS = `([\s\S]*?)`;/u.exec(kit)?.[1];
-const paths = lotus?.match(/<path\b[^>]*\/>/gu) ?? [];
+// The whole flower, leaves included, unlike the icon ladders: at 440x280 there is room for it. Through the shared
+// helper rather than a second regex over ornaments.ts — the copy that used to live here is what went stale when the
+// mark was split into LOTUS_PETALS and its `<svg>` wrapper.
+const paths = lotusPaths();
 if (paths.length !== 7) {
     throw new Error(`expected the shared lotus to contain seven paths, found ${paths.length}`);
 }
@@ -71,7 +112,9 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="440" height="280" vi
   </g>
 </svg>`;
 
-const png = new Resvg(svg, { background: "rgba(0,0,0,0)" }).render().asPng();
+// Opaque background rather than transparent: with no alpha to carry it, an unpainted edge would encode as black.
+const rendered = new Resvg(svg, { background: "#15100b" }).render();
+const png = rgbPng(rendered.pixels, rendered.width, rendered.height);
 if (png.readUInt32BE(16) !== 440 || png.readUInt32BE(20) !== 280) {
     throw new Error("the promotional tile did not render at 440x280");
 }

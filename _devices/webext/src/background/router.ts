@@ -1,4 +1,4 @@
-import { webextContract } from "@intentic/sandbox-contract";
+import { webextContract } from "@intentic/sandbox-contract/webext";
 import { implement } from "@orpc/server";
 import { handleMcpMessage } from "./mcp.js";
 import { store } from "./store.js";

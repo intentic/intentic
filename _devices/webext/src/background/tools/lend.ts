@@ -1,4 +1,4 @@
-import { type WebExtCookie, webextLendUrl } from "@intentic/sandbox-contract";
+import { type WebExtCookie, webextLendUrl } from "@intentic/sandbox-contract/webext";
 import { askConfirm } from "../../page/driver.js";
 import { assertScope, RefusedError, siteOf } from "../policy.js";
 import { store } from "../store.js";

@@ -1,4 +1,4 @@
-import type { WebExtGrant, WebExtScopes } from "@intentic/sandbox-contract";
+import type { WebExtGrant, WebExtScopes } from "@intentic/sandbox-contract/webext";
 import type { ActivityEntry, PairedSandbox, PendingAccess } from "./store.js";
 
 // What the popup and service worker say to each other, typed on both sides since `chrome.runtime.sendMessage` is

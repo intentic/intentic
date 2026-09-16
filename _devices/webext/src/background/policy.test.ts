@@ -1,4 +1,4 @@
-import { WebExtScopesSchema } from "@intentic/sandbox-contract";
+import { WebExtScopesSchema } from "@intentic/sandbox-contract/webext";
 import { expect, test } from "vitest";
 import { decide, needsConfirm, originPattern, sandboxOwnOrigin, siteOf } from "./policy.js";
 

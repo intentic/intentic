@@ -11,7 +11,7 @@
             {
                 "id": "chrome",
                 "kind": "webext",
-                "install": "https://chromewebstore.google.com/detail/intentic",
+                "install": "https://chromewebstore.google.com/detail/ipdmljdopicihjdlgiiplaiolngbinma",
                 "catalog": {
                     "name": "Your Chrome",
                     "logo": "googlechrome",
@@ -33,7 +33,6 @@
             {
                 "id": "edge",
                 "kind": "webext",
-                "install": "https://microsoftedge.microsoft.com/addons/detail/intentic",
                 "catalog": {
                     "name": "Your Edge",
                     "icon": "globe",

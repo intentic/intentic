@@ -213,11 +213,12 @@ export const CapabilityContributionSchema = z
             skill: z.string().min(1).describe("Checkout-relative SKILL.md teaching the agent that machine's shell."),
         }),
         // A browser family the user connects their own copy of; `install` is a URL since each family has its own store
-        // or none at all.
+        // or none at all. Omitted until that family's listing exists: the connect dialog then shows no link, which is
+        // better than a store URL that quietly lands on the store's front page.
         z.object({
             ...contributionBase,
             kind: z.literal("webext"),
-            install: z.url().describe("Where this browser's extension is installed from: its store listing, or a page offering the build."),
+            install: z.url().optional().describe("Where this browser's extension is installed from: its store listing, or a page offering the build."),
             skill: z.string().min(1).describe("Checkout-relative SKILL.md teaching the agent to drive this browser."),
         }),
         // A preset over a core kind: no payload, just a name, a logo and a filled-in form.

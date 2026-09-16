@@ -13,15 +13,21 @@ export const EMBER = "#e07b27";
 // Box crops to the petals' actual extent, no padding: every unit of margin is a unit off the shape at 16px.
 export const PETALS_BOX = "7.2 2.6 17.6 20.2";
 
-// Extracts the lotus's paths from ornaments.ts and drops the two leaves, identified by their .42 opacity. Throws if
-// that stops matching, rather than silently drawing the wrong flower.
-export const petals = () => {
+// Every path in the mark, leaves included. Read from LOTUS_PETALS and not LOTUS, which is a one-line `<svg>` wrapper
+// interpolating it: matching that finds no paths at all.
+export const lotusPaths = () => {
     const kit = readFileSync(ORNAMENTS, "utf8");
-    const lotus = /export const LOTUS = `([\s\S]*?)`;/u.exec(kit)?.[1];
-    if (lotus === undefined) {
-        throw new Error(`No LOTUS export found in ${ORNAMENTS}: the mark moved, and every icon ladder has to follow it.`);
+    const petalSource = /export const LOTUS_PETALS = `([\s\S]*?)`;/u.exec(kit)?.[1];
+    if (petalSource === undefined) {
+        throw new Error(`No LOTUS_PETALS export found in ${ORNAMENTS}: the mark moved, and every icon ladder has to follow it.`);
     }
-    const all = lotus.match(/<path\b[^>]*\/>/gu) ?? [];
+    return petalSource.match(/<path\b[^>]*\/>/gu) ?? [];
+};
+
+// The five petals: the two leaves, identified by their .42 opacity, are dropped. Throws if that stops matching, rather
+// than silently drawing the wrong flower.
+export const petals = () => {
+    const all = lotusPaths();
     const kept = all.filter((path) => !path.includes('opacity=".42"'));
     if (kept.length !== all.length - 2) {
         throw new Error(`Expected two .42-opacity leaves in LOTUS, found ${all.length - kept.length}`);

@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import { parseWebextPairingCode } from "@intentic/sandbox-contract";
+import { parseWebextPairingCode } from "@intentic/sandbox-contract/webext";
 import { closeLink, ensureLink, linkState } from "./link.js";
 import type { PopupCommand, PopupState } from "./messages.js";
 import { store } from "./store.js";

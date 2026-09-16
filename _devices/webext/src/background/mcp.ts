@@ -1,6 +1,8 @@
 import { errorMessage } from "@intentic/base/errors";
 import { createMcpServer, type McpTool, textResult, tool } from "@intentic/sandbox-contract/peer-mcp-server";
-import { z } from "zod";
+// Named imports rather than the `z` namespace: the namespace keeps zod's 60 locales (~250 kB) in this store-shipped
+// bundle, which esbuild can otherwise drop. _devices/webext/scripts/size-budget.mjs holds the ceiling.
+import { array, boolean, enum as zEnum, number, object, string } from "zod";
 import { record } from "./audit.js";
 import { RefusedError } from "./policy.js";
 import { askAccess, describeAccess } from "./tools/access.js";
@@ -11,11 +13,11 @@ import { listTabs, selectTab } from "./tools/tabs.js";
 
 /* The peer MCP server dispatches the connected browser's tool surface. */
 
-const NO_ARGS = z.object({});
-const required = z.string().min(1);
+const NO_ARGS = object({});
+const required = string().min(1);
 // Which tab to work in. Absent = the one in front, which is what a person means by "the page". An id comes
 // from `tabs`, and naming one is how the agent works somewhere that is not in front.
-const tab = z.number().int().optional().describe("Which tab, from `tabs`. Omit for the tab in front.");
+const tab = number().int().optional().describe("Which tab, from `tabs`. Omit for the tab in front.");
 
 const TOOLS: readonly McpTool<undefined>[] = [
     tool({
@@ -29,16 +31,16 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "tabs",
         description:
             "Every tab open in this browser, with the one in front marked. Sites you have not been allowed on are listed without their address, which is the person's privacy rather than a fault. Pass `select` to bring a tab to the front.",
-        input: z.object({ select: z.number().int().optional().describe("A tab id to switch to. Omit to just list them.") }),
+        input: object({ select: number().int().optional().describe("A tab id to switch to. Omit to just list them.") }),
         run: async ({ select }) => textResult(select === undefined ? await listTabs() : await selectTab(select)),
     }),
     tool({
         name: "open",
         description:
             "Point a tab at a URL and answer with the page. Anyone may open a tab; READING what lands there needs the site to be allowed, and the answer says so plainly when it is not.",
-        input: z.object({
+        input: object({
             url: required.describe("The page to open. A bare host like example.com is fine."),
-            tab: z.enum(["current", "new"]).default("current").describe("Reuse the tab in front, or open a new one."),
+            tab: zEnum(["current", "new"]).default("current").describe("Reuse the tab in front, or open a new one."),
         }),
         run: async ({ url, tab: where }) => textResult(await openUrl(url, where)),
     }),
@@ -46,31 +48,31 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "snapshot",
         description:
             "What the page shows right now: every element you can click or type into, each with a reference like [e12]. Take one before acting. References die with the page — one from an older snapshot is refused rather than clicking whatever now sits in that slot.",
-        input: z.object({ tab }),
+        input: object({ tab }),
         run: async ({ tab: id }) => textResult(await snapshot(id)),
     }),
     tool({
         name: "read",
         description:
             "The page as readable text — what a person would get by selecting all of it. Use this to ANSWER questions about a page; use snapshot when you intend to act on it.",
-        input: z.object({ tab }),
+        input: object({ tab }),
         run: async ({ tab: id }) => textResult(await readable(id)),
     }),
     tool({
         name: "click",
         description:
             "Click an element by its [e…] reference. Answers with the page as it stands afterwards. On a page that deals in passwords, money or deletion, the person is asked in their own browser first.",
-        input: z.object({ ref: required, tab }),
+        input: object({ ref: required, tab }),
         run: async ({ ref, tab: id }) => textResult(await click(ref, id)),
     }),
     tool({
         name: "fill",
         description:
             "Type into a field by its [e…] reference: replaces what is there, and fires the events the page's own JavaScript listens for (setting a value without them is how a filled form submits empty). `submit` presses Enter afterwards, which is the half that gets confirmed.",
-        input: z.object({
+        input: object({
             ref: required,
-            text: z.string(),
-            submit: z.boolean().default(false).describe("Submit the form after typing. Default false."),
+            text: string(),
+            submit: boolean().default(false).describe("Submit the form after typing. Default false."),
             tab,
         }),
         run: async ({ ref, text, submit, tab: id }) => textResult(await fill(ref, text, submit, id)),
@@ -78,21 +80,21 @@ const TOOLS: readonly McpTool<undefined>[] = [
     tool({
         name: "select_option",
         description: "Choose in a dropdown by its [e…] reference. Values match either the option's value or the label you can see in the snapshot.",
-        input: z.object({ ref: required, values: z.array(required).min(1), tab }),
+        input: object({ ref: required, values: array(required).min(1), tab }),
         run: async ({ ref, values, tab: id }) => textResult(await selectOption(ref, values, id)),
     }),
     tool({
         name: "key",
         description: 'Press a key for the page as a whole: "Enter", "Escape", "PageDown". For typing into a field use fill.',
-        input: z.object({ key: required, tab }),
+        input: object({ key: required, tab }),
         run: async ({ key, tab: id }) => textResult(await pressKey(key, id)),
     }),
     tool({
         name: "scroll",
         description: "Scroll the page, when what you need has not been rendered into the snapshot yet. Counts as reading, not acting.",
-        input: z.object({
-            direction: z.enum(["up", "down", "left", "right"]).default("down"),
-            amount: z.number().int().min(1).max(10).default(1).describe("Roughly this many screens."),
+        input: object({
+            direction: zEnum(["up", "down", "left", "right"]).default("down"),
+            amount: number().int().min(1).max(10).default(1).describe("Roughly this many screens."),
             tab,
         }),
         run: async ({ direction, amount, tab: id }) => textResult(await scroll(direction, amount, id)),
@@ -101,17 +103,15 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "wait_for",
         description:
             "Wait for text to appear (or disappear) on the page, instead of guessing at a delay. This is what to use after a submit: wait for the thing you expect rather than snapshotting into a spinner.",
-        input: z
-            .object({
-                text: required.optional().describe("Wait until this appears."),
-                textGone: required.optional().describe("Wait until this disappears."),
-                seconds: z.number().int().min(1).max(60).default(15),
-                tab,
-            })
-            .refine((args) => args.text !== undefined || args.textGone !== undefined, {
-                error: `Say what to wait for: "text" for something to appear, "textGone" for something to disappear.`,
-                path: ["text"],
-            }),
+        input: object({
+            text: required.optional().describe("Wait until this appears."),
+            textGone: required.optional().describe("Wait until this disappears."),
+            seconds: number().int().min(1).max(60).default(15),
+            tab,
+        }).refine((args) => args.text !== undefined || args.textGone !== undefined, {
+            error: `Say what to wait for: "text" for something to appear, "textGone" for something to disappear.`,
+            path: ["text"],
+        }),
         run: async ({ text, textGone, seconds, tab: id }) =>
             textResult(await waitFor({ ...(text === undefined ? {} : { text }), ...(textGone === undefined ? {} : { textGone }), seconds }, id)),
     }),
@@ -129,7 +129,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "ask_access",
         description:
             "Ask the person to allow this browser's agent on a site. Their extension lights up with your reason; only they can grant it, because the browser refuses a permission that was not asked for by a person's own click. Call this and STOP — do not look for another way onto the site.",
-        input: z.object({
+        input: object({
             origin: required.describe(`The site, as a host or an origin: "github.com" or "https://github.com".`),
             reason: required.describe("Why you need it, in one plain sentence. They read this."),
         }),
@@ -139,7 +139,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "connect_site",
         description:
             "Hand THIS site's signed-in session to the sandbox's own browser, so work can carry on after this browser is closed. Needs the owner's click in their browser every time, and a switch on this card. You never see what moved. Say plainly what it means before offering it: the sandbox will be signed in as them, and some sites end a session that starts appearing from a second place.",
-        input: z.object({
+        input: object({
             account: required.describe("An existing connected-browser account in the sandbox, the one this session should land in."),
             tab,
         }),
@@ -149,7 +149,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "lend_site",
         description:
             "Borrow a sandbox account's sign-in for THIS site into this browser, so the owner can finish a step no remote browser can do: a passkey, a hardware security key, an SSO or a bank that checks the device. Needs the owner's click every time, and the same switch as connect_site. Reach for this when you are stuck on such a step, not as a shortcut — and tell them to hand the session back with connect_site when they are done, or the sandbox keeps the older one.",
-        input: z.object({
+        input: object({
             account: required.describe("The connected-browser account in the sandbox whose session should be borrowed."),
             tab,
         }),

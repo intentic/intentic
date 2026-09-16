@@ -1,6 +1,6 @@
 import { upgradeWebSocket } from "@hono/node-server";
 import { errorMessage } from "@intentic/base/errors";
-import { MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract";
+import { MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract/peer-mcp-server";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
 import type { Context, Hono } from "hono";

@@ -131,7 +131,7 @@ https://intentic.dev/docs/your-browser
 | --- | --- | --- |
 | Store icon | 128×128 PNG | `static/icons/icon-128.png` — the product's own lotus, rendered from the shared lotus in `_site/site/src/components/ornaments.ts` (`pnpm --filter @intentic/webext icons`) |
 | Screenshot 1 | 1280×800 | `assets/store/popup-1280x800.png` — the popup, paired, three sites allowed, one request waiting |
-| Screenshot 2 | 1280×800 | Optional but worth it: a real page mid-action with the banner up. Only a live session can produce that one |
+| Screenshot 2 | 1280×800 | `assets/store/banner-1280x800.png` — intentic.dev/pricing with the action banner up. The banner is `flashBanner` from `src/page/driver.ts` run in a real page, and the message is the exact string `click` announces, so it shows what a user sees; the click behind it was a navigation, not a paired agent. Retake it from a live session when there is one |
 | Small promo tile | 440×280 | **Required and ready:** `assets/store/promo-440x280.png`, regenerated with `pnpm --filter @intentic/webext store-assets` |
 
 The first screenshot is generated from this repository, so it can be retaken whenever the popup changes:

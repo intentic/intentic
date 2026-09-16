@@ -1,4 +1,4 @@
-import type { WebExtFacts } from "@intentic/sandbox-contract";
+import type { WebExtFacts } from "@intentic/sandbox-contract/webext";
 import { originPattern, RefusedError, siteOf } from "../policy.js";
 import { store } from "../store.js";
 import { currentGrants } from "./tab-access.js";

@@ -1,4 +1,4 @@
-import type { WebExtGrant, WebExtScopes } from "@intentic/sandbox-contract";
+import type { WebExtGrant, WebExtScopes } from "@intentic/sandbox-contract/webext";
 
 // The enforcement point: everything about what may happen in this browser is decided here. Three gates, only one
 // Keep refusal messages as values so callers can explain the required fix.

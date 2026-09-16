@@ -1,4 +1,4 @@
-import type { WebExtGrant } from "@intentic/sandbox-contract";
+import type { WebExtGrant } from "@intentic/sandbox-contract/webext";
 import type { PopupCommand, PopupState } from "../background/messages.js";
 
 // Answers three questions in order: is it connected, what can it touch, how to stop it. Every permission widening
