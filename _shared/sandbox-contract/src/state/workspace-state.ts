@@ -40,7 +40,7 @@ export interface WorkspaceStateFile extends StateFile {
 // `WorkspaceStateFile` so optional fields like `note`/`why` aren't lost.
 const STATE_FILES = [
     // Holds no credential: values are vaulted (capabilities-store.ts's withSecretVault) and read back rehydrated; the
-    // vaulted keys are the complement of what `echo` exposes (capabilities/secret-fields.ts). `carry` because
+    // vaulted keys are the complement of what `echo` exposes (capabilities/credentials/secret-fields.ts). `carry` because
     // composeEnvironment reads Dockerfile fragments from here; `versioned` because connecting a capability is a
     // consequential change worth reviewing.
     {

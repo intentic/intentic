@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
-import { storedKeys, storedValue, storeValue } from "../../../lib/browserStorage";
-import { activeSandboxId } from "../overview/activeSandbox";
+import { storedKeys, storedValue, storeValue } from "../../../../lib/browserStorage";
+import { activeSandboxId } from "../../overview/activeSandbox";
 import { loopbackPermission } from "./loopbackPermission";
 
 // Whether this browser may reach a sandbox on the user's own device, asked in the app's own words before

@@ -5,7 +5,7 @@
 // wherever floating.ts does, node tests included (where to DOWNLOAD the app is desktopDownloads.ts, which does not).
 
 // What the app tells the page about the webview (not about the app): whether this window skips the loopback gate
-// (loopbackPermission.ts). Optional since the SPA ships continuously and the app doesn't; undefined reads as "ask
+// (loopback/loopbackPermission.ts). Optional since the SPA ships continuously and the app doesn't; undefined reads as "ask
 // the browser", which is correct for an older window that still enforces the check.
 interface DesktopWebview {
     version: string;

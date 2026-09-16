@@ -76,7 +76,7 @@ import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./c
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
 import { type CapabilitiesStore, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "./capabilities/capabilities-store.js";
 import { contributionRegistry } from "./capabilities/contributions.js";
-import { fileSecretVault, type SecretVault } from "./capabilities/secret-vault.js";
+import { fileSecretVault, type SecretVault } from "./capabilities/credentials/secret-vault.js";
 import { type NamedSecret, secretRegistryOf } from "./secrets/secret-registry.js";
 import { fileSecretUses, type SecretUsesStore } from "./secrets/secret-uses.js";
 import { type CredentialGatesStore, fileCredentialGates } from "./secrets/credential-gates.js";

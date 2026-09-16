@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { type Capability, VAULTED } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { type CapabilitiesStore, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "./capabilities-store.js";
+import { type CapabilitiesStore, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "../capabilities-store.js";
 import { fileSecretVault, type SecretVault } from "./secret-vault.js";
 
 // Pins the split: the manifest on disk holds a connection's shape but never its credential, while every store reader

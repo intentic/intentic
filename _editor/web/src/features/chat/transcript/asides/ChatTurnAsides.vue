@@ -3,9 +3,9 @@ import { computed } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import ChatAsideLane from "./ChatAsideLane.vue";
 import type { ChatAsideMark } from "./chatAsides";
-import ChatToolRows from "../tools/ChatToolRows.vue";
-import { useToolCalls } from "../tools/useToolCalls";
-import { summarizeRun } from "../tools/toolRun";
+import ChatToolRows from "../../tools/ChatToolRows.vue";
+import { useToolCalls } from "../../tools/useToolCalls";
+import { summarizeRun } from "../../tools/toolRun";
 
 // What an assistant turn thought and did, on one lane: shared by the conversation (ChatMessageView) and a delegated
 // agent's record (Subagents.vue) so both read the same. Both marks belong to one row, which is why they are decided

@@ -71,6 +71,19 @@ const deviceStyle = computed(() =>
 const screenStyle = computed(() =>
     phone === undefined ? undefined : { width: `${phone.width}px`, height: `${phone.height}px`, borderRadius: `${phone.radius}px` },
 );
+
+// The drawn handset's own furniture, measured off the hardware: rail buttons, camera cutout, earpiece, home indicator.
+// These are the DEVICE's CSS pixels, riding `deviceStyle`'s scale, so they are styles rather than utilities — the app's
+// 4px spacing scale and its palette name nothing here, and rounding one to a step would draw a different phone.
+const RAIL_METAL = `#4c4c58`;
+const RAIL_LEFT = { left: `-2px`, width: `3px`, background: RAIL_METAL };
+const RAIL_RIGHT = { right: `-2px`, width: `3px`, background: RAIL_METAL };
+const ISLAND = { top: `11px`, height: `30px`, width: `112px` };
+const NOTCH = { height: `30px`, width: `160px` };
+const PUNCH = { top: `10px`, height: `11px`, width: `11px` };
+const HOME_INDICATOR = { bottom: `8px`, height: `5px` };
+const EARPIECE = { top: `26px`, height: `5px`, width: `46px` };
+const HOME_BUTTON = { bottom: `11px`, height: `34px`, width: `34px` };
 </script>
 
 <template>
@@ -88,10 +101,10 @@ const screenStyle = computed(() =>
             >
                 <template v-if="phone">
                     <!-- Side hardware, drawn just proud of the rail; percentages keep it in place at every model's height. -->
-                    <span class="absolute -left-[2px] top-[16%] h-[4%] w-[3px] rounded-l-sm bg-[#4c4c58]" aria-hidden="true"></span>
-                    <span class="absolute -left-[2px] top-[24%] h-[8%] w-[3px] rounded-l-sm bg-[#4c4c58]" aria-hidden="true"></span>
-                    <span class="absolute -left-[2px] top-[34%] h-[8%] w-[3px] rounded-l-sm bg-[#4c4c58]" aria-hidden="true"></span>
-                    <span class="absolute -right-[2px] top-[27%] h-[12%] w-[3px] rounded-r-sm bg-[#4c4c58]" aria-hidden="true"></span>
+                    <span class="absolute top-[16%] h-[4%] rounded-l-sm" :style="RAIL_LEFT" aria-hidden="true"></span>
+                    <span class="absolute top-[24%] h-[8%] rounded-l-sm" :style="RAIL_LEFT" aria-hidden="true"></span>
+                    <span class="absolute top-[34%] h-[8%] rounded-l-sm" :style="RAIL_LEFT" aria-hidden="true"></span>
+                    <span class="absolute top-[27%] h-[12%] rounded-r-sm" :style="RAIL_RIGHT" aria-hidden="true"></span>
                 </template>
 
                 <div :style="screenStyle" class="relative overflow-hidden bg-white" :class="phone ? `` : `h-full w-full`">
@@ -101,24 +114,28 @@ const screenStyle = computed(() =>
                         <!-- The camera, as the model wears it; drawn over the page because that is where the glass puts it. -->
                         <span
                             v-if="phone.cutout === `island`"
-                            class="pointer-events-none absolute left-1/2 top-[11px] h-[30px] w-[112px] -translate-x-1/2 rounded-full bg-black"
+                            class="pointer-events-none absolute left-1/2 -translate-x-1/2 rounded-full bg-black"
+                            :style="ISLAND"
                             aria-hidden="true"
                         ></span>
                         <span
                             v-else-if="phone.cutout === `notch`"
-                            class="pointer-events-none absolute left-1/2 top-0 h-[30px] w-[160px] -translate-x-1/2 rounded-b-2xl bg-black"
+                            class="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 rounded-b-2xl bg-black"
+                            :style="NOTCH"
                             aria-hidden="true"
                         ></span>
                         <span
                             v-else-if="phone.cutout === `punch`"
-                            class="pointer-events-none absolute left-1/2 top-[10px] size-[11px] -translate-x-1/2 rounded-full bg-black"
+                            class="pointer-events-none absolute left-1/2 -translate-x-1/2 rounded-full bg-black"
+                            :style="PUNCH"
                             aria-hidden="true"
                         ></span>
 
                         <!-- Difference blending is what makes one bar legible on a white page and on a black one, as the real indicator is. -->
                         <span
                             v-if="phone.cutout !== `none`"
-                            class="pointer-events-none absolute bottom-[8px] left-1/2 h-[5px] w-[34%] -translate-x-1/2 rounded-full bg-white/60 mix-blend-difference"
+                            class="pointer-events-none absolute left-1/2 w-[34%] -translate-x-1/2 rounded-full bg-white/60 mix-blend-difference"
+                            :style="HOME_INDICATOR"
                             aria-hidden="true"
                         ></span>
                     </template>
@@ -126,12 +143,10 @@ const screenStyle = computed(() =>
 
                 <!-- A home-button phone spends its forehead and chin on hardware, so the empty bezel would look like a bug. -->
                 <template v-if="phone?.cutout === `none`">
+                    <span class="pointer-events-none absolute left-1/2 -translate-x-1/2 rounded-full bg-black/70" :style="EARPIECE" aria-hidden="true"></span>
                     <span
-                        class="pointer-events-none absolute left-1/2 top-[26px] h-[5px] w-[46px] -translate-x-1/2 rounded-full bg-black/70"
-                        aria-hidden="true"
-                    ></span>
-                    <span
-                        class="pointer-events-none absolute bottom-[11px] left-1/2 size-[34px] -translate-x-1/2 rounded-full ring-1 ring-white/15"
+                        class="pointer-events-none absolute left-1/2 -translate-x-1/2 rounded-full ring-1 ring-white/15"
+                        :style="HOME_BUTTON"
                         aria-hidden="true"
                     ></span>
                 </template>

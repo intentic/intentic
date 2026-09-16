@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { SecretVault } from "../capabilities/secret-vault.js";
+import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
 import { statePath } from "../workspace/layout/state-paths.js";
 

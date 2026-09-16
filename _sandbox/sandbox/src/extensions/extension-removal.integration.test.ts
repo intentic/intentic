@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { expect, test } from "vitest";
 
@@ -12,6 +12,7 @@ import { fakeFiles } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryAutomationsStore, memoryCapabilitiesStore, memorySecretVault } from "../harness/route-stores.testing.js";
 import { removeWorkspacePath } from "../workspace/files/workspace-files.js";
+import { statePath } from "../workspace/layout/state-paths.js";
 import { workspacePaths } from "../workspace/workspace.js";
 
 // Removal, over the daemon's HTTP surface. The claims worth holding: the plan names the connections configured from
@@ -53,6 +54,8 @@ const MANIFEST = {
 // An automation must name what it spends; nothing here fires, so the cheapest valid pin will do.
 const MODELS = [{ provider: "claude" as const, model: "opus" }];
 
+const settingsFile = (root: string): string => statePath(root, ".intentic/config/extension-settings.json");
+
 // A workspace extension on disk plus the state an owner accumulates around one: a connection added from its card, its
 // own settings (one open, one vaulted), a switch entry, and an automation waking on its listener.
 const withExtension = async (cliConfig: Record<string, string> = { token: "sk-live" }) => {
@@ -61,13 +64,11 @@ const withExtension = async (cliConfig: Record<string, string> = { token: "sk-li
     await mkdir(join(dir, "skills"), { recursive: true });
     await writeFile(join(dir, "intentic-extension.json"), JSON.stringify(MANIFEST));
     await writeFile(join(dir, "skills", "acme.md"), "---\nname: acme\n---\nRun acme.\n");
-    await mkdir(join(workspace.root, ".intentic/config"), { recursive: true });
+    const settings = settingsFile(workspace.root);
+    await mkdir(dirname(settings), { recursive: true });
+    await writeFile(settings, JSON.stringify({ "acme.toolbox": { region: "eu" }, "other.pack": { keep: "me" } }));
     await writeFile(
-        join(workspace.root, ".intentic/config/extension-settings.json"),
-        JSON.stringify({ "acme.toolbox": { region: "eu" }, "other.pack": { keep: "me" } }),
-    );
-    await writeFile(
-        join(workspace.root, ".intentic/config/extension-enablement.json"),
+        statePath(workspace.root, ".intentic/config/extension-enablement.json"),
         JSON.stringify({ "acme.toolbox": true, "intentic.discord": false }),
     );
     const svc = services({
@@ -89,8 +90,7 @@ const withExtension = async (cliConfig: Record<string, string> = { token: "sk-li
     return { svc, workspace, client: clientFor(createApp(svc)) };
 };
 
-const settingsOn = async (root: string): Promise<Record<string, unknown>> =>
-    JSON.parse(await readFile(join(root, ".intentic/config/extension-settings.json"), "utf8"));
+const settingsOn = async (root: string): Promise<Record<string, unknown>> => JSON.parse(await readFile(settingsFile(root), "utf8"));
 
 test("the removal plan names the connections, credentials and stranded automations before anything happens", async () => {
     const { client } = await withExtension();

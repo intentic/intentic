@@ -15,9 +15,9 @@ import { reconcileListenerProcesses, startAutoStartProcesses } from "../extensio
 import { enabledExtensions } from "../extensions/installed-extensions.js";
 import { type CapabilityCtx, capabilityCtx } from "./capability.js";
 import { echoConfig, secretField } from "./summary.js";
-import { secretFieldsOf } from "./secret-fields.js";
+import { secretFieldsOf } from "./credentials/secret-fields.js";
 import { contributionFor, contributionRegistry } from "./contributions.js";
-import { totpCode } from "./totp.js";
+import { totpCode } from "./credentials/totp.js";
 import { browseMarketplace } from "./marketplace.js";
 import { readRemoteRefs, RemoteRefsError } from "./remote-refs.js";
 import { probeCapability } from "./probe.js";

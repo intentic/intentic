@@ -1,6 +1,6 @@
 import { oc } from "@orpc/contract";
 import { WorkspaceHealthQuerySchema, WorkspaceHealthSchema } from "../schemas/codebase-health.js";
-import { WorkspaceModulesSchema } from "../schemas/git.js";
+import { WorkspaceModulesSchema } from "../schemas/git/git.js";
 import { OkSchema } from "../schemas/shared.js";
 import {
     AddAppsSchema,

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { expect, test } from "vitest";
-import { fileSecretVault } from "../capabilities/secret-vault.js";
+import { fileSecretVault } from "../capabilities/credentials/secret-vault.js";
 import { resolveSecretReferences, secretReference, secretRegistryOf } from "./secret-registry.js";
 
 // Secrets live in three stores (capability vault, DevOps .env, deploy-generated values); pins that the registry unions

@@ -2,7 +2,7 @@
 
 Why the turn's thinking, the context the sandbox prepends to a prompt and an app-sent errand stand in the
 margin as a glyph and a count rather than as bars across the column, and what everything they open is drawn
-on. The subject is `_editor/web/src/features/chat/transcript/ChatAsideLane.vue`, its three callers, and the
+on. The subject is `_editor/web/src/features/chat/transcript/asides/ChatAsideLane.vue`, its three callers, and the
 `.chat-mark-*` and `.chat-inset` blocks in `_editor/web/src/features/chat/panel/chat.css`.
 
 ## 1. What was wrong

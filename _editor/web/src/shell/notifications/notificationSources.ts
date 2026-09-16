@@ -5,7 +5,7 @@ import UploadProgressBody from "../../features/workspace/files/upload/UploadProg
 import { useAppUpdate, type AppUpdate } from "../../app/appUpdate";
 import { hold, type NotificationTone } from "./notifications";
 import { sandboxRequiresGate } from "../../features/sandbox/overview/availability";
-import { useLocalShortcut } from "../../features/sandbox/devices/localShortcut";
+import { useLocalShortcut } from "../../features/sandbox/devices/loopback/localShortcut";
 import { useEndpoint } from "../../features/sandbox/secrets/useEndpoint";
 import { useSandbox } from "../../features/sandbox/client/useSandbox";
 import { useSandboxAvailability } from "../../features/sandbox/overview/useSandboxAvailability";

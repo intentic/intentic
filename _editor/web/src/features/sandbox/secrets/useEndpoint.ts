@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 import { couldBeOnThisMachine, type Endpoint, probeEndpoint, sandboxIdOf, selectEndpoint, settledEndpoint } from "./endpoint";
-import { shortcutAnswer, useLocalShortcut } from "../devices/localShortcut";
+import { shortcutAnswer, useLocalShortcut } from "../devices/loopback/localShortcut";
 import { setStreamCapacity, setStreamOverflow, setStreamScope, streamPermits } from "../client/streamBudget";
 import { useSandbox } from "../client/useSandbox";
 
@@ -102,7 +102,7 @@ const resolve = async (): Promise<void> => {
     if (!couldBeOnThisMachine(sandbox)) {
         return;
     }
-    // Returns without probing until loopback permission is allowed (localShortcut.ts, loopbackPermission.ts).
+    // Returns without probing until loopback permission is allowed (loopback/localShortcut.ts, loopback/loopbackPermission.ts).
     const answer = await shortcutAnswer(id);
     if (answer !== `allowed`) {
         if (answer === `unasked`) {

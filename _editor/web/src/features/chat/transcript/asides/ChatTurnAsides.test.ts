@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type App, createApp, h, nextTick } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
-import { useToolCalls } from "../tools/useToolCalls";
+import { useToolCalls } from "../../tools/useToolCalls";
 
 // Same runtime globals as ChatToolCard's suite (window.matchMedia, window.env), absent in jsdom.
 

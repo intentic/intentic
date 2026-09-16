@@ -6,7 +6,7 @@ import { contributionKey, contributionRegistry, type ResolvedContribution } from
 import { extensionDir, extensionsRoot } from "../capabilities/extension-dirs.js";
 import { previousDir } from "../capabilities/git-checkout.js";
 import { registry } from "../capabilities/registry.js";
-import { secretFieldsOf } from "../capabilities/secret-fields.js";
+import { secretFieldsOf } from "../capabilities/credentials/secret-fields.js";
 import type { Services } from "../composition.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { mintsEndpointProvider } from "../endpoints/local-model.js";

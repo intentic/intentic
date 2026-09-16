@@ -12,12 +12,13 @@
 #
 #   1. the bytes arrive with nobody pressing anything — the schedule fires, the manifest is fetched, the
 #      minisign signature is verified against the pubkey compiled into this build, the download is staged;
-#   2. the banner's button applies it — a page in the workspace webview navigating to `intentic://update`,
+#   2. the app OFFERS it to the page, which is the banner's only input and the one state the link is honoured in;
+#   3. the banner's button applies it — a page in the workspace webview navigating to `intentic://update`,
 #      which is the whole channel from the SPA into the app and the only direction that link is honoured from;
-#   3. the file the app runs from is now, byte for byte, the newer release;
-#   4. it starts again — an updater that swaps the bytes and cannot boot is strictly WORSE than one that never
+#   4. the file the app runs from is now, byte for byte, the newer release;
+#   5. it starts again — an updater that swaps the bytes and cannot boot is strictly WORSE than one that never
 #      ran, because the machine is left with no working app instead of an old one;
-#   5. and it now considers itself current, which is the only assertion that proves the app really MOVED
+#   6. and it now considers itself current, which is the only assertion that proves the app really MOVED
 #      rather than rewriting itself with something that merely differs.
 #
 # WHICH CALLER THIS EXERCISES, and which it does not. `install()` has two callers: this one, and the exit
@@ -38,7 +39,7 @@
 # The AppImage runs through the runtime's own self-extract (`APPIMAGE_EXTRACT_AND_RUN`), because a container
 # has no FUSE. The runtime still exports `APPIMAGE`, which is what the updater plugin reads to find the bundle
 # file — so the rewrite targets the .AppImage rather than the binary extracted out of it. If that ever stops
-# being true, assertion 3 is where it shows up.
+# being true, assertion 4 is where it shows up.
 set -euo pipefail
 
 DISPLAY_NUM=99
@@ -55,7 +56,7 @@ export WEBKIT_DISABLE_COMPOSITING_MODE=1
 export LIBGL_ALWAYS_SOFTWARE=1
 export APPIMAGE_EXTRACT_AND_RUN=1
 
-# Where the installed app lives for this run, and the file assertion 3 is about.
+# Where the installed app lives for this run, and the file assertion 4 is about.
 INSTALLED=/opt/Intentic.AppImage
 # The app's own staging directory, by the identifier in tauri.conf.json. Read rather than inferred from
 # behaviour, because it is what tells "it never downloaded" apart from "it downloaded and did not install" —
@@ -97,8 +98,9 @@ app_log() {
     echo "--- app output ---" >&2
     cat /tmp/intentic-app.log >&2 || true
 }
-# The stub server's access log, which is the only witness to what the PAGE did — every poll for `press` and the
-# status it got back. Read on the two failures that are otherwise indistinguishable from outside.
+# The stub server's access log, which is the only witness to what the PAGE did — the app's offer arriving
+# (`announced`), every poll for `press`, and the status each got back. Read on the failures that are otherwise
+# indistinguishable from outside.
 stub_log() {
     echo "--- what the workspace page asked the stub for ---" >&2
     tail -n 20 /tmp/stub.log >&2 || true
@@ -134,13 +136,32 @@ AFTER_EXPECTED="$(hash_of /artifacts/to.AppImage)"
 # Standing the hosted SPA up in here would test Vue; what needs testing is that a NAVIGATION from this window
 # is honoured while the same link from the OS handler is not. So the page waits for `press` to appear beside it
 # — same origin, so no CORS — and then navigates, which is the button reduced to its one effect.
+#
+# IT ALSO WAITS FOR THE APP TO SAY THERE IS SOMETHING TO TAKE, on the same two inputs the real banner reads
+# (web/src/app/environments/desktop.ts): the `update` field the init script carries for a page that loaded after the
+# download finished, and the `intentic-desktop-update` event for a page that was already up. Without that the button
+# presses itself in a state where there is nothing to press — see the assertion below for why that is not theoretical.
+# Reported to this container's own server, which is the only way anything out here can see into the webview.
 mkdir -p "$STUB"
 cat >"$STUB/index.html" <<'PAGE'
 <!doctype html><title>stub workspace</title><h1>stub</h1>
 <script>
+let announced = null;
+const announce = (version) => {
+    if (version && announced === null) {
+        announced = version;
+        fetch(`announced?version=${version}`, { cache: `no-store` }).catch(() => {});
+    }
+};
+announce(window.__INTENTIC_DESKTOP__ && window.__INTENTIC_DESKTOP__.update);
+window.addEventListener(`intentic-desktop-update`, (event) => announce(event.detail.version));
+
+// Polled unconditionally even while there is nothing to take, because these 404s are the only witness out here that
+// this script is still running: a page that never loaded and a page still waiting on the app must not look alike.
 (async function waitForPress() {
     try {
-        if ((await fetch(`press`, { cache: `no-store` })).ok) {
+        const pressed = (await fetch(`press`, { cache: `no-store` })).ok;
+        if (pressed && announced !== null) {
             location.href = `intentic://update`;
             return;
         }
@@ -181,7 +202,20 @@ if ! until_true 120 "the update downloaded on its own, and its signature verifie
     cat /tmp/releases.log >&2 || true
 fi
 
-# 2. the banner's button applies it
+# 2. the app offers it to the page
+#
+# AND THIS ORDER IS THE WHOLE POINT. The staged file appears when the write OPENS it, which is a
+# ~100 MB write before `Stage::Ready` is set and the page is told (update.rs `check_now`), so `staged_download` above
+# goes true inside that gap on a loaded runner. A press landing there reaches `act` in `Downloading` and is dropped by
+# its catch-all arm: no install, no restart, and — until the arm learned to say so — not one line in the app's log to
+# tell it from an app that ignored the link. Run 35072221066 is that race, green eight minutes either side of it.
+announced() { grep -q 'GET /announced' /tmp/stub.log; }
+until_true 60 "the app offered the update to the page" announced || {
+    app_log
+    stub_log
+}
+
+# 3. the banner's button applies it
 # Harmless to leave in place afterwards: a page that navigates here again meets an app that is already current,
 # and `intentic://update` does nothing in any state but `ready` (update.rs `act`).
 : >"$STUB/press"
@@ -195,7 +229,7 @@ fi
 took_press() { grep -q 'GET /press HTTP/1.1" 200' /tmp/stub.log; }
 until_true 60 "the workspace page took the press" took_press || stub_log
 
-# 3. the file it runs from IS the newer release
+# 4. the file it runs from IS the newer release
 if ! until_true 120 "the update installed over the running app" \
     bash -c "[ \"\$(sha256sum $INSTALLED | cut -d' ' -f1)\" = \"$AFTER_EXPECTED\" ]"; then
     AFTER="$(hash_of "$INSTALLED")"
@@ -208,15 +242,15 @@ if ! until_true 120 "the update installed over the running app" \
     stub_log
 fi
 
-# 4. and it still starts
+# 5. and it still starts
 # The half that makes an update worth having at all. A swap that boots into nothing trades a machine that was
 # merely out of date for one with no working app — the outcome `intentic-machine upgrade` rolls back for, and the
 # reason this is asserted rather than assumed. Installing relaunches the app itself (update.rs), so this waits
 # for the window to come back rather than starting anything.
 until_true 90 "the updated app is running" workspace_window || app_log
 
-# 5. Verify that the installed build is current.
-# The assertion that closes the loophole in 3: identical bytes would satisfy a hash check too. This one passes
+# 6. Verify that the installed build is current.
+# The assertion that closes the loophole in 4: identical bytes would satisfy a hash check too. This one passes
 # only if the running app's own version now outranks the manifest, so it declines the update it just took
 # instead of taking it again forever.
 rm -rf "${STAGING_DIR:?}"

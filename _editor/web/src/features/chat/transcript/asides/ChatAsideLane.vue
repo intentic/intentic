@@ -37,14 +37,8 @@ const said = computed(() => slots[`default`] !== undefined);
                     v-for="mark in marks"
                     :key="mark.key"
                     type="button"
-                    class="flex min-h-[calc(1lh+0.375rem)] shrink-0 items-center gap-1 rounded-full px-2.25 py-0.75 text-2xs tabular-nums ring-(length:--ring-hairline) transition-colors hover:bg-overlay hover:text-content hover:ring-line-strong"
-                    :class="
-                        mark.failed
-                            ? `text-danger ring-danger/40`
-                            : opened === mark.key
-                              ? `bg-overlay text-content ring-line-strong`
-                              : `bg-card text-muted ring-line`
-                    "
+                    class="ui-chip min-h-[calc(1lh+0.375rem)] shrink-0 tabular-nums"
+                    :class="mark.failed ? `border-danger/40 text-danger` : opened === mark.key && `ui-chip-on`"
                     :aria-expanded="opened === mark.key"
                     :aria-label="mark.label"
                     v-tooltip.left="mark.label"

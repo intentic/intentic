@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { jsonFile } from "../store/json-file.js";
+import { jsonFile } from "../../store/json-file.js";
 
 // Stores capability credential values under AGENT_AUTH_DIR (mode 0600), outside the file routes, tree walk and search
 // index the manifest is subject to, so reading or grepping the manifest never surfaces a credential. Not a barrier

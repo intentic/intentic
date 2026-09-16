@@ -1,6 +1,6 @@
 import type { Capability } from "@intentic/sandbox-contract";
-import type { ResolvedContribution } from "./contributions.js";
-import { registry } from "./registry.js";
+import type { ResolvedContribution } from "../contributions.js";
+import { registry } from "../registry.js";
 
 // Credential keys are the complement of a kind's `echo`, not a second declared list, so echo alone decides what gets
 // vaulted. Distinct from `handler.secret()` (the one rotatable key); also backs CapabilitySummary.secrets for the edit

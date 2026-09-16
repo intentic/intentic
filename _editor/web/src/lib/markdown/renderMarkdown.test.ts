@@ -3,6 +3,7 @@
 // than nothing. Only this file needs a document; the rest of the suite stays on node.
 import { beforeEach, describe, expect, it, test } from "vitest";
 import { watchEffect } from "vue";
+import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { copyCodeFromEvent, escapeHtml } from "@intentic/ui/markdown";
 import { createStreamingMarkdown, markdownParseCount, renderMarkdown, type RenderedMarkdown, settledEnd } from "./renderMarkdown";
 
@@ -444,7 +445,7 @@ describe(`tables`, () => {
     });
 
     it(`leaves the text itself untouched, so the cell copies out as it was written`, () => {
-        const path = `/work/.intentic/records/artifacts/image.png`;
+        const path = `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/image.png`;
         expect(table(`| Where |\n| --- |\n| ${path} |`).querySelector(`td`)!.textContent).toBe(path);
     });
 

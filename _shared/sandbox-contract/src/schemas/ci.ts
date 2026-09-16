@@ -158,7 +158,7 @@ export type CiFixResponse = z.infer<typeof CiFixResponseSchema>;
 // again.
 
 // One shape for any command the daemon runs on a click with a verdict and a quotable tail (the pre-push check, and the
-// push itself via PushRunSchema in schemas/git.ts), so the fields the browser reads (terminal, tail, kill vs timeout)
+// push itself via PushRunSchema in schemas/git/git.ts), so the fields the browser reads (terminal, tail, kill vs timeout)
 // can't drift between them.
 // idle: nothing has run yet, or the last run was cleared
 // running: live; its output is the terminal's, not this object's

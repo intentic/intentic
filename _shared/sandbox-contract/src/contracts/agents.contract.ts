@@ -22,7 +22,7 @@ import {
     LandResultSchema,
 } from "../schemas/agents.js";
 import { AgentsListSchema } from "../schemas/automations.js";
-import { AgentChangesSchema, AgentHistorySchema } from "../schemas/git.js";
+import { AgentChangesSchema, AgentHistorySchema } from "../schemas/git/git.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
 

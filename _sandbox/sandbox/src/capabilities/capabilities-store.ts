@@ -1,8 +1,8 @@
 import { type Capability, CapabilitySchema, VAULTED } from "@intentic/sandbox-contract";
 import { idListFile, type IdListStore } from "../store/id-list-file.js";
 import type { ResolvedContribution } from "./contributions.js";
-import { partitionSecretValues } from "./secret-fields.js";
-import type { SecretVault } from "./secret-vault.js";
+import { partitionSecretValues } from "./credentials/secret-fields.js";
+import type { SecretVault } from "./credentials/secret-vault.js";
 
 // Sandbox-owned manifest of active capabilities, readable/editable by the owner's shell (outside the file-route
 // denylist).

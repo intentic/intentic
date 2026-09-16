@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { AgentProviderSchema } from "./agent.js";
-import { LandConflictSchema, LandedMessageSchema } from "./agents.js";
-import { CommandRunSchema } from "./ci.js";
-import { RefNameSchema } from "./internal.js";
-import { RepoParamSchema } from "./shared.js";
+import { AgentProviderSchema } from "../agent.js";
+import { LandConflictSchema, LandedMessageSchema } from "../agents.js";
+import { CommandRunSchema } from "../ci.js";
+import { RefNameSchema } from "../internal.js";
+import { RepoParamSchema } from "../shared.js";
 
 // Which of the working tree's diffs a row is about; a path can be both staged and edited again, so a side is never
 // defaulted.

@@ -2,7 +2,7 @@ import { VAULTED } from "@intentic/sandbox-contract";
 import type { InvariantCheck } from "../invariants/invariants.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 import type { ResolvedContribution } from "./contributions.js";
-import { partitionSecretValues } from "./secret-fields.js";
+import { partitionSecretValues } from "./credentials/secret-fields.js";
 
 // No credential may sit in the manifest the agent can read; it can re-enter at any time (a pasted token, a restored
 // export, a hand edit), so this asks the sweep's own condition at boot without acting on it. Names the capability and

@@ -31,11 +31,11 @@ import ChatCommandBlock from "../tools/ChatCommandBlock.vue";
 import ChatDecisionButton from "./cards/ChatDecisionButton.vue";
 import ChatDocumentBody from "./cards/ChatDocumentBody.vue";
 import { capabilityStatus, credentialLane, helpStatus, offerStatus, permissionStatus, planStatus } from "./cards/cardStatus";
-import ChatAsideLane from "./ChatAsideLane.vue";
-import ChatNotes from "./ChatNotes.vue";
+import ChatAsideLane from "./asides/ChatAsideLane.vue";
+import ChatNotes from "./asides/ChatNotes.vue";
 import ChatQuestionCard from "./cards/ChatQuestionCard.vue";
 import ChatTodoList from "./ChatTodoList.vue";
-import ChatTurnAsides from "./ChatTurnAsides.vue";
+import ChatTurnAsides from "./asides/ChatTurnAsides.vue";
 import ChatTurnStatus from "./ChatTurnStatus.vue";
 import { present } from "../tools/toolPresentation";
 

@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { GitRunner } from "@intentic/scaffold";
 import { describe, expect, test } from "vitest";
 import { parseRemoteRefs, readRemoteRefs, RemoteRefsError } from "./remote-refs.js";
@@ -49,7 +50,7 @@ const refusing = (stderr: string): GitRunner => () => Promise.reject(Object.assi
 
 describe(`readRemoteRefs`, () => {
     test(`refuses a non-http remote rather than letting git stop on a host-key prompt`, async () => {
-        await expect(readRemoteRefs("/work", "git@github.com:owner/repo.git")).rejects.toThrow(RemoteRefsError);
+        await expect(readRemoteRefs(WORKSPACE_ROOT, "git@github.com:owner/repo.git")).rejects.toThrow(RemoteRefsError);
     });
 
     test(`asks for HEAD by name, since --heads would filter the symref line out`, async () => {
@@ -58,7 +59,7 @@ describe(`readRemoteRefs`, () => {
             asked = args;
             return Promise.resolve({ stdout: LS_REMOTE, stderr: "" });
         };
-        await readRemoteRefs("/work", "https://github.com/owner/repo.git", undefined, git);
+        await readRemoteRefs(WORKSPACE_ROOT, "https://github.com/owner/repo.git", undefined, git);
         expect(asked).toContain("HEAD");
         expect(asked).toContain("--symref");
         expect(asked).not.toContain("--heads");
@@ -72,7 +73,7 @@ describe(`readRemoteRefs`, () => {
             env = passed;
             return Promise.resolve({ stdout: LS_REMOTE, stderr: "" });
         };
-        await readRemoteRefs("/work", "https://github.com/owner/repo.git", "ghp_secret", git);
+        await readRemoteRefs(WORKSPACE_ROOT, "https://github.com/owner/repo.git", "ghp_secret", git);
         expect(asked.join(" ")).not.toContain("ghp_secret");
         expect(env?.["GIT_CONFIG_KEY_0"]).toBe("http.extraheader");
         expect(env?.["GIT_CONFIG_VALUE_0"]).toContain(Buffer.from("x-access-token:ghp_secret").toString("base64"));
@@ -84,32 +85,32 @@ describe(`readRemoteRefs`, () => {
             env = passed;
             return Promise.resolve({ stdout: LS_REMOTE, stderr: "" });
         };
-        await readRemoteRefs("/work", "https://github.com/owner/repo.git", undefined, git);
+        await readRemoteRefs(WORKSPACE_ROOT, "https://github.com/owner/repo.git", undefined, git);
         expect(env?.["GIT_TERMINAL_PROMPT"]).toBe("0");
     });
 
     test(`a private repo asked for without a token says to add one`, async () => {
         const stderr = "fatal: could not read Username for 'https://github.com': terminal prompts disabled";
-        await expect(readRemoteRefs("/work", "https://github.com/owner/repo.git", undefined, refusing(stderr))).rejects.toThrow(
+        await expect(readRemoteRefs(WORKSPACE_ROOT, "https://github.com/owner/repo.git", undefined, refusing(stderr))).rejects.toThrow(
             /private: add an access token/,
         );
     });
 
     test(`the same refusal with a token given blames the token instead`, async () => {
         const stderr = "fatal: Authentication failed for 'https://github.com/owner/repo.git/'";
-        await expect(readRemoteRefs("/work", "https://github.com/owner/repo.git", "ghp_x", refusing(stderr))).rejects.toThrow(/refused the access token/);
+        await expect(readRemoteRefs(WORKSPACE_ROOT, "https://github.com/owner/repo.git", "ghp_x", refusing(stderr))).rejects.toThrow(/refused the access token/);
     });
 
     test(`a missing repository is not reported as a credential problem`, async () => {
         const stderr = "remote: Repository not found.\nfatal: repository 'https://github.com/owner/nope.git/' not found";
-        await expect(readRemoteRefs("/work", "https://github.com/owner/nope.git", undefined, refusing(stderr))).rejects.toThrow(
+        await expect(readRemoteRefs(WORKSPACE_ROOT, "https://github.com/owner/nope.git", undefined, refusing(stderr))).rejects.toThrow(
             /no repository at that address/,
         );
     });
 
     test(`an unrecognised failure still reaches the reader as git's own last fatal line`, async () => {
         const stderr = "warning: something\nfatal: the remote end hung up unexpectedly";
-        await expect(readRemoteRefs("/work", "https://example.com/repo.git", undefined, refusing(stderr))).rejects.toThrow(
+        await expect(readRemoteRefs(WORKSPACE_ROOT, "https://example.com/repo.git", undefined, refusing(stderr))).rejects.toThrow(
             /the remote end hung up unexpectedly/,
         );
     });

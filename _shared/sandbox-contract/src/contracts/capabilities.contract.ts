@@ -14,7 +14,7 @@ import {
     CapabilityStatusSchema,
 } from "../schemas/capabilities.js";
 import { MarketplaceRequestSchema, MarketplaceSchema } from "../schemas/marketplace.js";
-import { RemoteRefsRequestSchema, RemoteRefsSchema } from "../schemas/remote-refs.js";
+import { RemoteRefsRequestSchema, RemoteRefsSchema } from "../schemas/git/remote-refs.js";
 import { OkSchema } from "../schemas/shared.js";
 
 // The sandbox's unified capability manifest, spanning `list`/`add`/`remove`/`status`/`marketplace`. A VAULTED marker

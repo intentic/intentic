@@ -18,7 +18,7 @@ import {
     GitStatusSchema,
     PushRunSchema,
     PushSchema,
-} from "../schemas/git.js";
+} from "../schemas/git/git.js";
 import {
     GitActionResultSchema,
     GitBranchCreateSchema,
@@ -44,7 +44,7 @@ import {
     StashListSchema,
     StashPushSchema,
     StashRefParamSchema,
-} from "../schemas/git-history.js";
+} from "../schemas/git/git-history.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema, RepoParamSchema } from "../schemas/shared.js";
 

@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
-import type { SecretVault } from "../capabilities/secret-vault.js";
+import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 
 // Every credential value under a stable name (a `{{secret:name}}` token): masking replaces a value with its reference,
 // resolution replaces it back only where it leaves. Unions three stores (env, deploy-generated, capability vault); env

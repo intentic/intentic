@@ -440,7 +440,10 @@ pub fn act(app: &AppHandle) {
             use tauri_plugin_opener::OpenerExt;
             let _ = app.opener().open_url(url, None::<&str>);
         }
-        _ => {}
+        // A press this state has nothing to answer with — a banner from a moment ago, a download still being written
+        // to disk. Said out loud rather than dropped: a link that does nothing and leaves no trace is indistinguishable
+        // from one the app never received, which is a whole class of bug reports nobody can act on.
+        other => eprintln!("intentic: nothing to install, the update is {other:?}"),
     }
 }
 

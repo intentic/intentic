@@ -31,7 +31,7 @@ const browserSays = (state: PermissionState | undefined): void => {
 // permission is asked once per document.
 const load = async () => {
     vi.resetModules();
-    const [shortcut, active] = await Promise.all([import(`./localShortcut`), import(`../overview/activeSandbox`)]);
+    const [shortcut, active] = await Promise.all([import(`./localShortcut`), import(`../../overview/activeSandbox`)]);
     return { ...shortcut.useLocalShortcut(), answerFor: shortcut.shortcutAnswer, activeSandboxId: active.activeSandboxId };
 };
 

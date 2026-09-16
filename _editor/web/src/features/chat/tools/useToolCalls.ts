@@ -3,7 +3,7 @@ import { definePreference } from "@intentic/ui/preference";
 
 const STORAGE_KEY = `ui-chat-show-tool-calls`;
 
-// Whether a transcript shows tool calls inline, or folds each turn's run behind one mark (see chat/ChatToolRun.vue). An
+// Whether a transcript shows tool calls inline, or folds each turn's run behind one mark (transcript/asides/ChatTurnAsides.vue). An
 // account-wide preference, like useFileNesting: it governs how every chat's transcript reads. Hidden by default;
 // turning it on only stops runs from folding, it doesn't change how a call renders.
 

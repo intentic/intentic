@@ -2,7 +2,7 @@ import type { IconName } from "@intentic/ui";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { present } from "./toolPresentation";
 
-// Summary of a turn's tool-call run for its collapsed mark (see ChatToolRun.vue): how many top-level calls it made (a
+// Summary of a turn's tool-call run for its collapsed mark (ChatTurnAsides.vue): how many top-level calls it made (a
 // sub-agent's own calls count as the one delegation that spawned them) and which was the most notable.
 
 export interface ToolRun {

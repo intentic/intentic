@@ -16,13 +16,13 @@ machinery is uniform:
   `/work/.intentic/config/capabilities.json` is the source of truth for what's active
   ([capabilities-store.ts](../../_sandbox/sandbox/src/capabilities/capabilities-store.ts)), but every secret FIELD is
   stored under the provider-credential root off `/work`
-  ([secret-vault.ts](../../_sandbox/sandbox/src/capabilities/secret-vault.ts)) and the manifest carries a marker in
+  ([secret-vault.ts](../../_sandbox/sandbox/src/capabilities/credentials/secret-vault.ts)) and the manifest carries a marker in
   its place. The manifest was denylisted from the daemon's file ROUTES, which was never a bound on the agent:
   it holds a shell and the file is deliberately readable and editable, so the credentials in it were one
   ordinary `Read` away from a model's context, the TOTP seed and the browser password included. Reads through
   the store rehydrate, so every consumer still receives a whole `Capability`; list responses echo secrets only
   as `hasToken`/`hasSecret` booleans, and which fields those are is derived from `echo` rather than declared
-  twice ([secret-fields.ts](../../_sandbox/sandbox/src/capabilities/secret-fields.ts)). This is exposure removed, not
+  twice ([secret-fields.ts](../../_sandbox/sandbox/src/capabilities/credentials/secret-fields.ts)). This is exposure removed, not
   a wall: daemon and agent are both root in one container, so the split closes the leak that does not require
   going looking, and the sandbox boundary remains the one that does. Deriving the credential keys as the
   COMPLEMENT of `echo` carries one obligation that is easy to miss and silent when missed: entries are validated

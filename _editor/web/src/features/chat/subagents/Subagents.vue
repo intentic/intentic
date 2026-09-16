@@ -14,7 +14,7 @@ import { SUBAGENT_TRANSCRIPT } from "../../../lib/queryKeys";
 import { subagentLive, useSubagentsQuery } from "./subagentsQuery";
 import { CHAT_SURFACE } from "../tools/chatToolSurface";
 import { workspaceSurface } from "../panel/workspaceSurface";
-import ChatTurnAsides from "../transcript/ChatTurnAsides.vue";
+import ChatTurnAsides from "../transcript/asides/ChatTurnAsides.vue";
 import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";
 import ActionLink from "../../../components/ActionLink.vue";
 import RailCard from "../../../components/RailCard.vue";

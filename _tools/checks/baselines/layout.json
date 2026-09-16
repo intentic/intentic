@@ -1,10 +1,10 @@
 {
     "fanOut": {
         "_editor/web/src/extension-host": 33,
-        "_sandbox/sandbox/src/capabilities": 39,
+        "_sandbox/sandbox/src/capabilities": 35,
         "_sandbox/sandbox/src/capabilities/handlers": 35,
         "_shared/sandbox-contract/src/contracts": 41,
-        "_shared/sandbox-contract/src/schemas": 43
+        "_shared/sandbox-contract/src/schemas": 41
     },
     "collisions": {
         "_deploy/cli": 2,

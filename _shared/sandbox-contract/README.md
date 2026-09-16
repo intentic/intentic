@@ -33,7 +33,7 @@ mismatch is a type error rather than a runtime surprise.
 
 - [src/contracts](src/contracts): one contract per area. Start with `agent.contract.ts` and `git.contract.ts`.
 - [src/schemas](src/schemas): the wire shapes, one module per subject area, named to match the contract that
-  spends them (`schemas/git.ts` under `contracts/git.contract.ts`). A contract imports the two or three modules
+  spends them (`schemas/git/git.ts` under `contracts/git.contract.ts`). A contract imports the two or three modules
   it actually needs, so what a subject area is built from is visible in its import block rather than implied by
   proximity in a shared file. `schemas/internal.ts` is the exception and is not re-exported from the index: it
   holds the id and ref primitives several modules are written in, which are vocabulary rather than shapes either
