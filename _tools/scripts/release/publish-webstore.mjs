@@ -125,14 +125,19 @@ const finishIfSettled = (status) => {
     return true;
 };
 
-// Guards a stale rerun: a duplicate-upload response is only recoverable when this release is the newest and no
-// different revision is already submitted, or an old tag could submit somebody else's draft.
+// Guards a stale rerun: only a NEWER revision may not be replaced, since an older one in review is a draft this
+// release supersedes (the hand-uploaded 0.0.0.1 seed sits in PENDING_REVIEW until Google gets to it).
 const assertReleaseCanProceed = (status) => {
     const submitted = revisionVersions(status.submittedItemRevisionStatus);
-    if (submitted.length > 0 && !submitted.includes(version)) {
+    const newerSubmitted = submitted.filter((candidate) => compareVersions(candidate, version) > 0);
+    if (newerSubmitted.length > 0) {
         throw new Error(
-            `the store already has ${submitted.join(", ")} submitted (${status.submittedItemRevisionStatus.state}); refusing to replace it with ${version}.`,
+            `the store already has newer version ${newerSubmitted.join(", ")} submitted (${status.submittedItemRevisionStatus.state}); refusing to replace it with ${version}.`,
         );
+    }
+    const supersededSubmitted = submitted.filter((candidate) => compareVersions(candidate, version) < 0);
+    if (supersededSubmitted.length > 0) {
+        console.log(`replacing the older submitted revision ${supersededSubmitted.join(", ")} (${status.submittedItemRevisionStatus.state}) with ${version}.`);
     }
     const newerPublished = revisionVersions(status.publishedItemRevisionStatus).filter((published) => compareVersions(published, version) > 0);
     if (newerPublished.length > 0) {

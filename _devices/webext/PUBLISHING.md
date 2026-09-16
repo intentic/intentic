@@ -113,7 +113,10 @@ but the account authorising the token must own the Chrome Web Store item.
 Actions ▸ **webstore publish** ▸ Run workflow, with the last release tag as the ref. It builds, packs and
 uploads; the log ends in `submitted <version>: PENDING_REVIEW`, `PUBLISHED_TO_TESTERS` or `PUBLISHED`. A version
 already submitted or live exits green. A version whose upload landed before a failed publish is submitted on
-the retry rather than mistaken for complete.
+the retry rather than mistaken for complete. A release does not wait for review: an older revision still sitting
+in `PENDING_REVIEW` — the hand-uploaded `0.0.0.1`, or the previous release — is replaced by the newer one, which
+is what the dashboard does too. Only a revision *newer* than the tag being published stops the run, because that
+is an old tag re-running.
 
 From then on, nothing: every release dispatches it.
 
