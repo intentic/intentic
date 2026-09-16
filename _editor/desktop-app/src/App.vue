@@ -46,6 +46,7 @@ import {
     onPendingSync,
     onRun,
     onUpdate,
+    openUrl,
     readMarker,
     parseCommandFailure,
     parseStep,
@@ -1090,7 +1091,7 @@ onUnmounted(() => {
 <!-- Covers installs a .deb/.rpm release has no artifact for, and copies whose signature check can no longer pass. -->
             <Notice v-else-if="update.kind === `manual`" tone="warning" class="items-center">
                 <span>{{ update.reason }}</span>
-                <a class="ml-2 text-link hover:underline" :href="update.url" target="_blank" rel="noreferrer">Get the latest version</a>
+                <button type="button" class="ml-2 cursor-pointer text-left text-link hover:underline" @click="openUrl(update.url)">Get the latest version</button>
             </Notice>
             <Notice v-if="updateError" tone="warning" class="items-center">{{ updateError }}</Notice>
 

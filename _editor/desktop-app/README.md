@@ -89,7 +89,11 @@ provider's token page, and exactly wrong here: the popped-out chat opened as a b
 `show_floating` with everything the workspace window has — no platform frame, the page's dark behind it, the
 browser arguments, the init script that makes the page draw its own bar — at the size and position the page
 put in the features (the frame it remembered for that panel); asking again while one is up raises it. Every
-other `window.open` still leaves for the browser. The call is denied either way, so the page sees `null`, as it
+other `window.open` still leaves for the browser — but only a `window.open` or a *named* target ever reaches
+that handler. WebView2 raises nothing at all for `target="_blank"`, so every link out of the app drawn that way
+(provider sign-ins, docs, an agent's markdown link) did nothing whatever inside the app until the page began
+re-issuing those presses as `window.open` (`_editor/web`, `environments/desktop.ts` `installDesktopLinks`). The
+call is denied either way, so the page sees `null`, as it
 would from a refused popup, and keeps drawing the panel until the new window announces itself over the same
 channel: both webviews share this app's one browser profile, so the heartbeat, the Web Lock and the chat
 projection cross between them exactly as between two tabs.

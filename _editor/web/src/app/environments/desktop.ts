@@ -112,6 +112,37 @@ export const workDesktopWindow = (verb: DesktopWindowVerb): void => {
     openDesktopLink(`intentic://window?do=${verb}`);
 };
 
+/* THE ONE LINK SHAPE THIS WEBVIEW DROPS ON THE FLOOR: `target="_blank"`. */
+
+// The app answers a link out of the page from the webview's new-window event (windows.rs `page_window`), and WebView2
+// raises that event for `window.open` and for a NAMED target but never for `_blank`: the click is swallowed inside the
+// webview, the app never hears the address, and nothing happens on screen. Re-issued here as the shape the app does
+// hear, which is what every `target="_blank"` in the app depends on — provider sign-ins, docs, an agent's markdown link.
+const followBlankLink = (event: MouseEvent): void => {
+    if (event.defaultPrevented || event.button !== 0) {
+        return;
+    }
+    const link = (event.target as HTMLElement | null)?.closest<HTMLAnchorElement>(`a[href]`);
+    // A download is the browser's to do in place, and `_blank` is the only target the webview cannot follow itself.
+    if (link === null || link === undefined || link.target !== `_blank` || link.hasAttribute(`download`)) {
+        return;
+    }
+    event.preventDefault();
+    window.open(link.href);
+};
+
+/**
+ * Makes `target="_blank"` work for the life of this window. Capture, because a surface whose own handler stops the
+ * press from bubbling would otherwise take the link down with it — which also means a `_blank` link is answered here
+ * before anything below the document sees the press. A no-op in a browser, where the target needs no help.
+ */
+export const installDesktopLinks = (): void => {
+    if (desktopVersion() === undefined) {
+        return;
+    }
+    document.addEventListener(`click`, followBlankLink, true);
+};
+
 /* WHAT A PAGE MAY DO TO ITS OWN WINDOW ONLY IF ITS SCRIPT OPENED IT: close it, raise it, resize it. A browser popup
    qualifies; a window of the app never does (windows.rs builds it), so there each is a link answered on that window. */
 

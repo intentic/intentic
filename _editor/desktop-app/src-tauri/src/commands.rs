@@ -207,6 +207,17 @@ pub fn reveal_log(app: AppHandle, path: String) -> CommandResult<()> {
         .map_err(|error| format!("could not open the log folder: {error}"))
 }
 
+/// Open an address in the machine's default browser. This face is a LOCAL page and gets no link handler of its
+/// own (windows.rs `launcher`), so a `target="_blank"` on it opens nothing at all: WebView2 drops that press
+/// without raising its new-window event, and the window that would have answered it is the workspace's.
+#[tauri::command]
+pub fn open_url(app: AppHandle, url: String) -> CommandResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|error| format!("could not open your browser: {error}"))
+}
+
 /// `install` is the user's answer to the requirements list — see [`SetupContext::consented`]. False on the
 /// first attempt of any setup, which is why a machine that needs changes reports them instead of making them.
 #[tauri::command]

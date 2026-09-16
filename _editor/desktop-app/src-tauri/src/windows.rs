@@ -342,7 +342,13 @@ fn stays_in_webview(url: &Url, app_origin: &Url) -> bool {
 }
 
 /// Open a link in the default browser, off the webview thread. The workspace webview has no IPC surface, so
-/// this is the only way out for external links the SPA renders with target="_blank".
+/// this is the only way out for a link that leaves the app.
+///
+/// What arrives here is a navigation or a `window.open`, NEVER a `target="_blank"` press: WebView2 raises its
+/// new-window event for `window.open` and for a named target, and for `_blank` raises nothing at all, so that
+/// press dies inside the webview. The page re-issues those as `window.open` before they are lost (`_editor/web`,
+/// `environments/desktop.ts` `installDesktopLinks`), which is why every `target="_blank"` in the app reaches
+/// this function at all.
 fn open_in_browser(app: &AppHandle, url: &str) {
     let app = app.clone();
     let url = url.to_string();

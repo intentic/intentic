@@ -8,6 +8,7 @@ import App from "./App.vue";
 import { initAnalytics } from "./app/analytics";
 import { dropOutdatedMirrors } from "./app/buildEpoch";
 import { describeError, installClientDiagnostics, reportClient } from "./app/clientDiagnostics";
+import { installDesktopLinks } from "./app/environments/desktop";
 import { installPerfConsole, installPerfReporter } from "./app/perf";
 import { queryClient } from "./lib/queryPersistence";
 import { installSelfHeal, purgeIfMarked, reportStartupError } from "./app/selfHeal";
@@ -30,6 +31,10 @@ dropOutdatedMirrors();
 
 // Runs in every window; must follow the purge, so a wipe here is never misread as a preference.
 installDocumentAppearance();
+
+// Runs in every window too, and does nothing outside the desktop app: there, `target="_blank"` reaches the app only
+// because of this.
+installDesktopLinks();
 
 initAnalytics();
 

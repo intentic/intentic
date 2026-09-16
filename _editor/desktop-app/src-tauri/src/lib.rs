@@ -59,6 +59,7 @@ pub fn run() {
             commands::setup_run,
             commands::run_stop,
             commands::reveal_log,
+            commands::open_url,
             commands::restart_for_setup,
             commands::sign_out_for_setup,
             commands::resumable_setup,

@@ -204,6 +204,8 @@ export const fitToContent = (height: number): Promise<void> => invoke(`fit_to_co
 export const runStop = (id: string): Promise<void> => invoke(`run_stop`, { id });
 /** Show a run's transcript in the machine's own file manager, selected. */
 export const revealLog = (path: string): Promise<void> => invoke(`reveal_log`, { path });
+/** The only way out of this face: a `target="_blank"` on a local page opens nothing (commands.rs `open_url`). */
+export const openUrl = (url: string): Promise<void> => invoke(`open_url`, { url });
 // `remember` makes this answer the × from now on and retires the dialog; otherwise it applies once.
 export const closeWorkspace = (action: CloseAction, remember: boolean): Promise<void> => invoke(`close_workspace`, { action, remember });
 
