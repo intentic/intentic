@@ -8,6 +8,7 @@ import { containerNotices } from "../overview/containerHealth";
 import { manageDeviceSandbox, useDevices, useHostRunning } from "./useDevices";
 import { useSandbox } from "../client/useSandbox";
 import { useRole } from "../secrets/useRole";
+import { useHubWork } from "../../../shell/hub/hubWork";
 
 const { active, daemonUrl } = useSandbox();
 const { isOwner } = useRole();
@@ -28,16 +29,20 @@ const host = computed<Device | undefined>(() =>
 // Owner-only: the platform rejects a non-owner's mint, so the button is hidden rather than left to fail.
 const canRepair = computed(() => isOwner.value && host.value !== undefined && ownSlug.value !== undefined);
 
+// The repair runs out on the machine and ends by replacing this container, so the row it was pressed on says so
+// for as long as it lasts.
+const hubWork = useHubWork();
+
 const busy = ref(false);
 const failure = ref<string | undefined>(undefined);
 const done = ref<string | undefined>(undefined);
 const lines = ref<string[]>([]);
 
 const repair = async (): Promise<void> => {
-    const device = host.value;
+    const deviceId = host.value?.hostId;
     const slug = ownSlug.value;
     const sandboxId = active.value?.id;
-    if (busy.value || device?.hostId === undefined || slug === undefined || sandboxId === undefined) {
+    if (busy.value || deviceId === undefined || slug === undefined || sandboxId === undefined) {
         return;
     }
     busy.value = true;
@@ -45,11 +50,13 @@ const repair = async (): Promise<void> => {
     done.value = undefined;
     lines.value = [];
     try {
-        // Minted fresh per call so the code is always current; never cached or reused.
-        const { code } = await apiClient.sandbox.setupCode({ sandboxId });
-        done.value = await manageDeviceSandbox(device.hostId, slug, `reconnect`, {
-            setupCode: code,
-            onLine: (line) => (lines.value = [...lines.value, line]),
+        done.value = await hubWork.track(`Reconnecting this sandbox`, async () => {
+            // Minted fresh per call so the code is always current; never cached or reused.
+            const { code } = await apiClient.sandbox.setupCode({ sandboxId });
+            return manageDeviceSandbox(deviceId, slug, `reconnect`, {
+                setupCode: code,
+                onLine: (line) => (lines.value = [...lines.value, line]),
+            });
         });
     } catch (error) {
         // The stream dying mid-flight is the success case: the daemon goes down with the container.

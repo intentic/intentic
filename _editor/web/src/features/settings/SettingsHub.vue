@@ -2,6 +2,7 @@
 import type { NavGroup } from "@intentic/ui";
 import HubLayout from "../../shell/hub/HubLayout.vue";
 import type { HubTab } from "../../shell/hub/hubNav";
+import { hubWorkKey, hubWorkRunning } from "../../shell/hub/hubWork";
 import { computed } from "vue";
 import { useHostedPlan } from "./hosted-plan/useHostedPlan";
 import SettingsAppearance from "./SettingsAppearance.vue";
@@ -18,17 +19,24 @@ import { SETTINGS_DEFAULT_SECTION, settingsSections } from "./settingsNav";
 
 const { offered: planOffered } = useHostedPlan();
 
-const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [{ key: `settings`, items: settingsSections(planOffered.value) }]);
+const HUB = `settings`;
 const DEFAULT = SETTINGS_DEFAULT_SECTION;
+
+// No counts here — nothing in this hub is an errand — so a row badges only while something it started is still
+// running (hubWork.ts).
+const GROUPS = computed<readonly NavGroup<HubTab>[]>(() => [
+    {
+        key: `settings`,
+        items: settingsSections(planOffered.value).map((section) => {
+            const running = hubWorkRunning(hubWorkKey(HUB, section.slug));
+            return running === undefined ? section : { ...section, badge: { running } };
+        }),
+    },
+]);
 </script>
 
 <template>
-    <HubLayout
-        title="Settings"
-        route-name="settings"
-        :default-slug="DEFAULT"
-        :groups="GROUPS"
-    >
+    <HubLayout title="Settings" :route-name="HUB" :default-slug="DEFAULT" :groups="GROUPS">
         <template #default="{ slug }">
             <SettingsProfile v-if="slug === `profile`" />
             <SettingsBilling v-else-if="slug === `billing`" />

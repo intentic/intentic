@@ -8,6 +8,7 @@ import ActionLink from "../../../components/ActionLink.vue";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { useExtensions } from "../../extensions/useExtensions";
+import { useHubWork } from "../../../shell/hub/hubWork";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
 import { router } from "../../../router";
 import { updateBrief } from "./extensionBrief";
@@ -19,6 +20,7 @@ import { updateBrief } from "./extensionBrief";
 const { extension } = defineProps<{ extension: ExtensionSummary }>();
 
 const { previewUpdate, applyUpdate, revertUpdate, setUpdatePolicy } = useExtensions();
+const hubWork = useHubWork();
 
 const update = computed(() => extension.update);
 const identity = computed(() => extensionIdOf(extension.manifest));
@@ -61,12 +63,15 @@ const stage = (): Promise<void> =>
 // pending image rebuild is reported, not implied away.
 const rebuildNote = ref(false);
 const apply = (): Promise<void> =>
-    act(async () => {
-        const applied = await applyUpdate(extension.id, preview.value?.ref);
-        rebuildNote.value = applied.rebuildNeeded === true;
-        preview.value = undefined;
-        await reloadExtensions();
-    });
+    act(() =>
+        // Fetching the new code and reconciling it takes longer than a click, so the Extensions row says so.
+        hubWork.track(`Updating ${extension.id}`, async () => {
+            const applied = await applyUpdate(extension.id, preview.value?.ref);
+            rebuildNote.value = applied.rebuildNeeded === true;
+            preview.value = undefined;
+            await reloadExtensions();
+        }),
+    );
 
 const revert = (): Promise<void> =>
     act(async () => {

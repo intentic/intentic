@@ -6,6 +6,7 @@ import { computed, type ComputedRef, type Ref, ref, watch } from "vue";
 import { type DeviceRow, isSelfMachine, type MachineRow, managerOf } from "./deviceRows";
 import { manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "./useDevices";
 import { useSandbox } from "../client/useSandbox";
+import { type HubWork, useHubWork } from "../../../shell/hub/hubWork";
 
 // Everything one device page does TO its machine: the container verbs, the two sync switches, the agent's
 // own two ops, and revoking the enrollment. One op at a time per machine, since a mirroring switch racing a
@@ -74,6 +75,36 @@ const AGENT_ASKED: Record<DeviceAgentOp, string> = {
     restart: `Restarting. This page catches up when its loop comes back.`,
 };
 
+// What the Devices row says while one of these is out on a machine, as a continuation of the section's own name.
+// `logs` is absent: reading a tail is not work being done to anything, and a row that marks it would be marking
+// almost every visit.
+const VERB_WORKING: Partial<Record<SandboxVerb, string>> = {
+    start: `Starting`,
+    stop: `Stopping`,
+    restart: `Restarting`,
+    update: `Updating`,
+    rollback: `Rolling back`,
+    resources: `Resizing`,
+    remove: `Removing`,
+};
+
+const SYNC_WORKING: Record<SyncCommand, string> = {
+    "mirror-off": `Turning port mirroring off`,
+    "mirror-on": `Turning port mirroring on`,
+    "sync-pause": `Pausing file syncing`,
+    "sync-resume": `Resuming file syncing`,
+    "sync-unpair": `Unpairing this sandbox`,
+    "sync-install": `Setting file syncing up`,
+};
+
+const AGENT_WORKING: Record<DeviceAgentOp, string> = { upgrade: `Updating a device's agent`, restart: `Restarting a device's agent` };
+
+/** The row's mark for a verb that does something, and an inert end for one that only reads. */
+const markVerb = (hubWork: HubWork, group: DeviceSandboxGroup, verb: SandboxVerb): (() => void) => {
+    const says = VERB_WORKING[verb];
+    return says === undefined ? (): void => {} : hubWork.begin(`${says} ${group.title}`);
+};
+
 export interface ActPrompt {
     readonly header: string;
     readonly body: string | undefined;
@@ -140,6 +171,10 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     // derivation the switcher and setup CLI use.
     const { daemonUrl } = useSandbox();
     const ownSlug = computed(() => (daemonUrl.value === undefined ? undefined : new URL(daemonUrl.value).hostname.split(`.`)[0]));
+
+    // Everything below runs on somebody else's machine and takes as long as it takes; the hub row keeps saying so
+    // after this page is gone, since a container update is exactly the moment to go and read something else.
+    const hubWork = useHubWork();
 
     const switchKey = (environment: DeviceRow): string => `${environment.device.key}:switches`;
     const agentKey = (environment: DeviceRow): string => `${environment.device.key}:agent`;
@@ -219,6 +254,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         runLines.value = { ...runLines.value, [key]: [] };
         // Opened before lines arrive, so an empty pane reads as "reading" rather than an ignored click.
         openLog.value = verb === `logs` ? key : undefined;
+        const endMark = markVerb(hubWork, group, verb);
         try {
             const message = await manageDeviceSandbox(hostId, slug, OP[verb], {
                 resources,
@@ -235,6 +271,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             }
         } finally {
             busy.value = undefined;
+            endMark();
             // Always, including after failure: a flow that stopped halfway still changed the machine, so the
             // row must reflect what's there now.
             if (verb !== `logs`) {
@@ -316,6 +353,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         syncBusy.value = { key, command };
         failure.value = undefined;
         outcome.value = undefined;
+        const endMark = hubWork.begin(`${SYNC_WORKING[command]} on ${environment.device.label}`);
         try {
             const result = await runDeviceCommand(hostId, command, { sandboxId, ...folder });
             // The machine's own sentence either way: a refusal names the switch to flip rather than throwing.
@@ -325,6 +363,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             failure.value = { key, notice: noticeFrom(error, COMMAND_UNREACHED[command]) };
         } finally {
             syncBusy.value = undefined;
+            endMark();
             // Blocks on a fresh read rather than serving the pre-click list, since the daemon dropped its
             // cached reading as the command ran.
             refetch();
@@ -360,6 +399,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         outcome.value = undefined;
         agentLog.value = { key, lines: [] };
         waiting.value = { key, text: AGENT_ASKED[op] };
+        const endMark = hubWork.begin(AGENT_WORKING[op]);
         try {
             const { message } = await runDeviceAgentFlow(hostId, op, {
                 onLine: (line) => (agentLog.value = { key, lines: [...(agentLog.value?.lines ?? []), line] }),
@@ -373,6 +413,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             waiting.value = undefined;
         } finally {
             agentOp.value = undefined;
+            endMark();
             // The version is the answer, so ask for it; the tab's own poll picks it up as the loop comes back.
             refetch();
         }

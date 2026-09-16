@@ -3,6 +3,7 @@ import { computed, type ComputedRef, onScopeDispose, reactive, ref } from "vue";
 import { runDeviceCommand } from "../devices/useDevices";
 import { SandboxHttpError } from "../client/sandboxClient";
 import { removeStoredValue, storedValue, storeValue } from "../../../lib/browserStorage";
+import { beginHubWork, hubWorkKey } from "../../../shell/hub/hubWork";
 
 // FOLLOWING A REBUILD THAT NOTHING ON THIS PAGE OWNS. `dev-rebuild` starts a detached build on the machine holding the
 // checkout and returns at once; the build then outlives the button, the card, the daemon and the container, because the
@@ -79,6 +80,23 @@ const runs = new Map<string, DevRebuildRun>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 const probedAt = new Map<string, number>();
 
+// The Environment row's mark, held for as long as this browser is following a build. It is kept here rather than by
+// the card for the same reason the run is: the reader leaves the section precisely because the build doesn't need
+// them, and the row is the only thing left saying it is still going.
+const ENVIRONMENT_ROW = hubWorkKey(`sandbox`, `environment`);
+const marks = new Map<string, () => void>();
+
+const mark = (slug: string): void => {
+    if (!marks.has(slug)) {
+        marks.set(slug, beginHubWork(ENVIRONMENT_ROW, `Rebuilding from your checkout`));
+    }
+};
+
+const unmark = (slug: string): void => {
+    marks.get(slug)?.();
+    marks.delete(slug);
+};
+
 const runFor = (slug: string): DevRebuildRun => {
     const existing = runs.get(slug);
     if (existing !== undefined) {
@@ -104,6 +122,7 @@ const settle = (run: DevRebuildRun, slug: string, phase: DevRebuildPhase, troubl
     run.trouble = trouble;
     removeStoredValue(markerKey(slug));
     stop(slug);
+    unmark(slug);
 };
 
 // What one read of the machine's log means for a run believed to be in flight. The exit mark is the only thing that
@@ -209,6 +228,7 @@ const probe = async (slug: string, hostId: string): Promise<void> => {
         // No `startedAt`: the log's age says when this build last printed, not when it began, and the card would rather
         // show no clock than one counting from the wrong moment.
         Object.assign(run, idle(), { phase: "building", lines: log.lines, quietFor: log.quietFor, heardAt: Date.now() });
+        mark(slug);
         follow(slug, hostId);
     } catch {
         // Nothing to report, and nobody asked.
@@ -243,6 +263,7 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
     const start = async (hostId: string): Promise<void> => {
         stop(slug);
         Object.assign(run, idle(), { phase: "starting", startedAt: Date.now(), heardAt: Date.now() });
+        mark(slug);
         storeValue(markerKey(slug), String(run.startedAt));
         now.value = Date.now();
         try {
@@ -267,6 +288,7 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
         const marker = Number(storedValue(markerKey(slug)) ?? Number.NaN);
         if (Number.isFinite(marker) && Date.now() - marker < MARKER_GOOD_FOR_MS) {
             Object.assign(run, idle(), { phase: "building", startedAt: marker, heardAt: Date.now() });
+            mark(slug);
             follow(slug, hostId);
             return;
         }

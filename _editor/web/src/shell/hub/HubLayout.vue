@@ -4,9 +4,10 @@ import { type IconName, type NavGroup, NavRail, Row, SegmentedControl, SplitView
 import { areaIcon } from "@intentic/ui/icons";
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { badgeChip } from "../../core-views/viewBadge";
+import { badgeSpeaks, RUNNING_MARK_CLASS } from "../../core-views/viewBadge";
 import ViewBadgeChip from "../../core-views/ViewBadgeChip.vue";
 import type { HubTab } from "./hubNav";
+import { hubWorkKey, provideHubSection } from "./hubWork";
 
 const {
     groups,
@@ -38,6 +39,10 @@ const activeSlug = computed<string>(() => {
 
 const linkTo = (slug: string) => ({ name: routeName, params: { tab: slug === defaultSlug ? undefined : slug } });
 
+// The address the section on screen reports its long-running work under, so no view has to be told which row it
+// lives on. The hub draws the mark; what it says comes back through this hub's own badges.
+provideHubSection(computed(() => hubWorkKey(routeName, activeSlug.value)));
+
 // The strip is a control, not a link, so the mobile branch still navigates by hand.
 const select = (slug: string): void => {
     void router.push(linkTo(slug));
@@ -45,13 +50,20 @@ const select = (slug: string): void => {
 
 // The strip flattens the groups away: it has no headings, which is the other half of why it is the mobile
 // answer only: the grouping this component exists to show is exactly what does not survive the trip.
+// A section's own mark keeps the chip; a run takes it only where there is none, turning, and says what it is in the
+// pill's title — the strip has no second corner to put it in.
 const options = computed(() =>
-    tabs.value.map((tab) => ({
-        label: tab.label,
-        value: tab.slug,
-        badge: tab.badge?.count,
-        mark: tab.badge?.mark as IconName | undefined,
-    })),
+    tabs.value.map((tab) => {
+        const running = tab.badge?.running;
+        return {
+            label: tab.label,
+            value: tab.slug,
+            badge: tab.badge?.count,
+            mark: (tab.badge?.mark ?? (running === undefined ? undefined : `spinner`)) as IconName | undefined,
+            markSpin: tab.badge?.mark === undefined && running !== undefined,
+            ...(running === undefined ? {} : { markTitle: running }),
+        };
+    }),
 );
 
 // An unknown slug (/sandbox/nonsense) resolves to the default: clean the URL back to the canonical one.
@@ -91,9 +103,20 @@ watch(
                             class="rounded-lg"
                         >
 <!-- A fact about the section, so it rides the row's #meta cluster. -->
-                            <!-- Chip only: a hub row is a section of one view, so it never speaks for a run in flight. -->
 <!-- The test stays out here, unlike the corner badges, because `#meta` is a slot Row only draws when it is filled. -->
-                            <template v-if="tab.badge !== undefined && badgeChip(tab.badge)" #meta>
+                            <template v-if="tab.badge !== undefined && badgeSpeaks(tab.badge)" #meta>
+<!-- Work in flight behind the section, in the rail tiles' own mark and ink: a hub mounts one section at a time,
+     so this is all that is left on screen of a run the reader walked away from. The sentence rides the tooltip
+     and the reader's screen reader — a 14rem row has no width to spend on it. -->
+                                <span
+                                    v-if="tab.badge.running !== undefined"
+                                    class="inline-flex items-center"
+                                    :class="RUNNING_MARK_CLASS"
+                                    v-tooltip.right="tab.badge.running"
+                                >
+                                    <Icon name="spinner" spin aria-hidden="true" />
+                                    <span class="sr-only">{{ tab.badge.running }}</span>
+                                </span>
                                 <ViewBadgeChip :badge="tab.badge" class="text-2xs" />
                             </template>
                         </Row>

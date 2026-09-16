@@ -6,6 +6,7 @@ import { useRouter } from "vue-router";
 import { apiClient } from "../../lib/useApi";
 import { useAuth } from "../auth/useAuth";
 import { useSandbox } from "../sandbox/client/useSandbox";
+import { useHubWork } from "../../shell/hub/hubWork";
 
 /* Data & privacy: GDPR self-service: export everything the platform stores about the account, or delete it. */
 
@@ -14,9 +15,12 @@ const { sandboxes } = useSandbox();
 const router = useRouter();
 
 // GDPR data export: download everything the platform stores about the account as JSON (me.export).
+const hubWork = useHubWork();
 const exporting = ref(false);
 const exportData = async (): Promise<void> => {
     exporting.value = true;
+    // The platform gathers every row it holds about the account before it answers, so the row says so meanwhile.
+    const endMark = hubWork.begin(`Gathering your data`);
     try {
         const data = await apiClient.me.export();
         const url = URL.createObjectURL(new Blob([JSON.stringify(data, undefined, 2)], { type: `application/json` }));
@@ -27,6 +31,7 @@ const exportData = async (): Promise<void> => {
         URL.revokeObjectURL(url);
     } finally {
         exporting.value = false;
+        endMark();
     }
 };
 

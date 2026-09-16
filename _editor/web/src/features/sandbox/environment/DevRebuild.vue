@@ -213,13 +213,9 @@ const hiccup = computed(() => (live.value ? run.trouble : undefined));
             </div>
 
             <!-- The log appears before its first line so running is distinct from no activity. -->
-            <DeviceRunLog
-                v-if="live || run.lines.length > 0"
-                :lines="run.lines"
-                :running="live"
-                empty="Waiting for the first line from that device…"
-                note="Running on that device: it keeps going even if you leave this page."
-            />
+            <!-- No note under the pane: the progress line above it is this run's one spinner, and that the build
+                 outlives this page is said by the hub's Environment row, where leaving it can be seen. -->
+            <DeviceRunLog v-if="live || run.lines.length > 0" :lines="run.lines" :running="live" empty="Waiting for the first line from that device…" />
 
             <p v-if="quiet" class="text-2xs text-subtle">{{ quiet }}</p>
             <p v-if="hiccup" class="text-2xs text-subtle">Can't read the log at the moment — the build itself is unaffected. {{ hiccup }}</p>

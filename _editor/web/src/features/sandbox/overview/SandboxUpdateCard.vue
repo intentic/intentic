@@ -9,6 +9,7 @@ import { useAgents } from "../../agents/fleet/useAgents";
 import { useSandbox } from "../client/useSandbox";
 import { useSandboxVersion } from "./useSandboxVersion";
 import { apiClient } from "../../../lib/useApi";
+import { useHubWork } from "../../../shell/hub/hubWork";
 
 // Update prompt on the sandbox hub. Updates run on the host, not the sandbox (no host Docker socket; see
 // HostRecreate); a server-managed sandbox updates on its next deploy instead. Also shown with no update when a
@@ -35,12 +36,19 @@ const { cmdOs } = useOsPreference();
 const { active } = useSandbox();
 const hosted = computed(() => (active.value?.hosted ? active.value.id : undefined));
 const { busy: restarting, notice: restartNotice, run: runRestart } = useAsyncAction();
+const hubWork = useHubWork();
 const restartHosted = (): Promise<void> =>
-    runRestart(async () => {
-        if (hosted.value !== undefined) {
-            await apiClient.sandbox.hostedRestart({ sandboxId: hosted.value });
-        }
-    }, `Could not restart the sandbox.`);
+    runRestart(
+        () =>
+            // The row keeps the mark through the half minute the sandbox is down, which is also the half minute
+            // this page spends reconnecting.
+            hubWork.track(`Restarting this sandbox`, async () => {
+                if (hosted.value !== undefined) {
+                    await apiClient.sandbox.hostedRestart({ sandboxId: hosted.value });
+                }
+            }),
+        `Could not restart the sandbox.`,
+    );
 
 // A breaking update gets a danger badge and hides the update command behind one explicit click; a routine update
 // keeps its one-step flow, and rollback is never gated. Acknowledgment isn't persisted, so a reload re-asks.

@@ -8,6 +8,7 @@ import PrimeVue from "primevue/config";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { forgetHubWork, hubWorkKey, hubWorkRunning } from "../../../shell/hub/hubWork";
 
 const hostId = ref<string | undefined>(`host-1`);
 // What the card asks the door rule about: its own checkout, since one PC answers for this container through several
@@ -84,6 +85,9 @@ beforeEach(() => {
 afterEach(() => {
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
+    // A run this test left in flight is module state like the run itself, and would be counted by the next test's
+    // row.
+    forgetHubWork();
     hostId.value = `host-1`;
     app?.unmount();
     app = undefined;
@@ -150,7 +154,10 @@ it(`shows the machine's own output, a running clock and what is happening to the
 
     expect(el.textContent).toContain(`Building the image from your checkout`);
     expect(el.textContent).toContain(`#12 [builder 4/9] RUN pnpm install`);
-    expect(el.textContent).toContain(`it keeps going even if you leave this page`);
+    // One spinner for one run: the line above the pane says a build is going, and the pane no longer repeats it
+    // underneath. That the build outlives this page is said by the hub row instead, where leaving can be seen.
+    expect(el.textContent).not.toContain(`it keeps going even if you leave this page`);
+    expect(hubWorkRunning(hubWorkKey(`sandbox`, `environment`))).toBe(`Rebuilding from your checkout`);
 
     await settleUi(POLL_MS * 16);
     expect(el.textContent).toMatch(/1m \d\ds/);
@@ -198,6 +205,8 @@ it(`reports a finished rebuild with how long it took`, async () => {
     expect(el.textContent).toMatch(/Rebuilt from your checkout in 2m \d\ds/);
     expect(el.textContent).toContain(`You're running the new image.`);
     expect(buttonSaying(`Rebuild from checkout`)).toBeInstanceOf(HTMLButtonElement);
+    // And the hub row stops turning with it: a mark left over a finished build is worse than none.
+    expect(hubWorkRunning(hubWorkKey(`sandbox`, `environment`))).toBeUndefined();
 });
 
 // A full rebuild on the machine this repo is developed on has taken two hours. A card that gave up at 45 minutes

@@ -4,6 +4,7 @@ import type { Device } from "@intentic/sandbox-contract";
 import { Button, ConfirmDialog, DeviceRunLog, Notice, type NoticeModel, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "./useRunners";
+import { useHubWork } from "../../../shell/hub/hubWork";
 
 // This sandbox's runners on one device: containers it keeps there to run agents (docs/remote-runners-plan.md),
 // separate from the sandbox list above (workspaces belonging to a person). Only runners this sandbox asked for
@@ -13,6 +14,11 @@ const { device } = defineProps<{ device: Device }>();
 
 const { runners, refetch } = useRunners();
 const mine = computed(() => runners.value.filter((runner) => runner.host !== undefined && runner.host === device.hostId));
+
+// Building or updating a container on somebody's laptop, so the Devices row carries it while the reader is
+// elsewhere in the hub.
+const hubWork = useHubWork();
+const WORKING: Record<"create" | "remove" | "update", string> = { create: `Adding runner`, remove: `Removing runner`, update: `Updating runner` };
 
 // One flow at a time on one machine, same rule the sandbox rows above follow.
 const busy = ref<string | undefined>();
@@ -92,6 +98,7 @@ const execute = async (op: "create" | "remove" | "update", name: string): Promis
     failure.value = undefined;
     done.value = undefined;
     lines.value = [];
+    const endMark = hubWork.begin(`${WORKING[op]} ${name}`);
     try {
         const onLine = (line: string): void => void (lines.value = [...lines.value, line]);
         const flow = { create: createRunner, remove: removeRunner, update: updateRunner }[op];
@@ -100,6 +107,7 @@ const execute = async (op: "create" | "remove" | "update", name: string): Promis
         failure.value = noticeFrom(error, `That didn't work on this device.`);
     } finally {
         busy.value = undefined;
+        endMark();
         refetch();
     }
 };

@@ -7,6 +7,7 @@ import { useCapabilities } from "../capabilities/connect/useCapabilities";
 import { useExtensions } from "../extensions/useExtensions";
 import { usePanels } from "../extensions/usePanels";
 import { useRegistry } from "../extensions/useRegistry";
+import { useHostedBuild } from "./secrets/useHostedBuild";
 import { useRole } from "./secrets/useRole";
 import { useSandbox } from "./client/useSandbox";
 import { useSyncHealth } from "./devices/useDevices";
@@ -14,6 +15,7 @@ import { type ActiveExtension, activationBadge, detectActivations } from "../../
 import ExtensionView from "../../core-views/ExtensionView.vue";
 import HubLayout from "../../shell/hub/HubLayout.vue";
 import type { HubTab } from "../../shell/hub/hubNav";
+import { hubWorkKey, hubWorkRunning } from "../../shell/hub/hubWork";
 import SandboxAccess from "./access/SandboxAccess.vue";
 import SandboxAgent from "./overview/SandboxAgent.vue";
 import SandboxDevices from "./devices/SandboxDevices.vue";
@@ -31,17 +33,18 @@ import SandboxUsage from "./usage/SandboxUsage.vue";
 // render a body through ExtensionView rather than their own Page.
 
 const DEFAULT = SANDBOX_DEFAULT_SECTION;
+// The route these sections live on, and half of the address their long-running work reports under.
+const HUB = `sandbox`;
 
-// The two counts the index carries. Extensions counts installed extensions with a newer registry commit; info, not
-// warning, since nothing here auto-updates.
-const sectionBadge = (slug: string, updates: number, contendedPorts: number): ViewBadge | undefined => {
-    if (slug === `extensions`) {
-        return updates > 0 ? { count: updates, tone: `info` } : undefined;
+// The two counts the index carries, and whatever is running behind the row. Extensions counts installed extensions
+// with a newer registry commit; info, not warning, since nothing here auto-updates. A run is not an errand, so it
+// adds no count of its own: it rides `running`, which the row draws as a turning mark.
+const sectionBadge = (slug: string, updates: number, contendedPorts: number, running: string | undefined): ViewBadge | undefined => {
+    const count = slug === `extensions` ? updates : slug === `devices` ? contendedPorts : 0;
+    if (count === 0 && running === undefined) {
+        return undefined;
     }
-    if (slug === `devices`) {
-        return contendedPorts > 0 ? { count: contendedPorts, tone: `info` } : undefined;
-    }
-    return undefined;
+    return { ...(count > 0 ? { count, tone: `info` as const } : {}), ...(running === undefined ? {} : { running }) };
 };
 
 const sandbox = useSandbox();
@@ -55,6 +58,14 @@ const { capabilities } = useCapabilities();
 const { entries: listedExtensions } = useRegistry({ read: false });
 const { extensions: installedExtensions } = useExtensions();
 const updatable = computed(() => updateCount(listedExtensions.value.map((entry) => toListing(entry, installedExtensions.value))));
+
+// The environment build the platform runs for a hosted sandbox: minutes long, server-side, and followed here rather
+// than by the section, since the row has to keep saying so while the section is closed. Everything else a section
+// starts reports itself through the ledger as it runs (hubWork.ts).
+const hosted = computed(() => (sandbox.active.value?.hosted ? sandbox.active.value.id : undefined));
+const { build: hostedBuild } = useHostedBuild(() => hosted.value);
+const runningIn = (slug: string): string | undefined =>
+    hubWorkRunning(hubWorkKey(HUB, slug)) ?? (slug === `environment` && hostedBuild.value?.state === `building` ? `Building your environment` : undefined);
 
 // A colliding activation key is dropped, not shadowed by the v-if chain; built-ins own their names.
 const contributed = computed<readonly ActiveExtension[]>(() =>
@@ -73,21 +84,25 @@ const contributedRow = (active: ActiveExtension): HubTab => ({
     badge: activationBadge(active),
 });
 
-// The table's own grouping, kept intact, with this reader's gating and the two live counts laid over it.
+// The table's own grouping, kept intact, with this reader's gating, the two live counts and whatever is running
+// laid over it.
 const groups = computed<readonly NavGroup<HubTab>[]>(() => [
     ...SANDBOX_SECTION_GROUPS.map((group) => ({
         key: group.key,
         label: group.label,
         items: group.items
             .filter((section) => canShip.value || section.maintainer !== true)
-            .map((section) => ({ ...section, badge: sectionBadge(section.slug, updatable.value, contendedPorts.value.length) })),
+            .map((section) => ({
+                ...section,
+                badge: sectionBadge(section.slug, updatable.value, contendedPorts.value.length, runningIn(section.slug)),
+            })),
     })).filter((group) => group.items.length > 0),
     ...(contributed.value.length === 0 ? [] : [{ key: `contributed`, label: `Added by extensions`, items: contributed.value.map(contributedRow) }]),
 ]);
 </script>
 
 <template>
-    <HubLayout :title="sandbox.active.value?.name ?? `Sandbox`" route-name="sandbox" :default-slug="DEFAULT" :groups="groups" :ready="!isLoading">
+    <HubLayout :title="sandbox.active.value?.name ?? `Sandbox`" :route-name="HUB" :default-slug="DEFAULT" :groups="groups" :ready="!isLoading">
         <template #default="{ slug }">
             <SandboxOverview v-if="slug === `overview`" />
             <SandboxUsage v-else-if="slug === `usage`" />

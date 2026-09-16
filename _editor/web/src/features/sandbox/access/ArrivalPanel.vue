@@ -15,6 +15,7 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../client/sandboxClient";
 import { useSandbox } from "../client/useSandbox";
+import { useHubWork } from "../../../shell/hub/hubWork";
 import { helpTopics, SOURCE_GUIDES } from "../overview/assistantGuide";
 
 // Body of <ImportCard>: one picker, one checklist, one report for all four arrival sources. The daemon detects
@@ -99,24 +100,32 @@ const readFile = (event: Event): Promise<void> =>
 
 const tickedCount = computed(() => Object.values(ticked.value).filter(Boolean).length);
 
+// Unpacking somebody's whole sandbox into this one runs for as long as the bundle is big, and the row it was
+// started from says so until it is done.
+const hubWork = useHubWork();
+
 const apply = (): Promise<void> =>
-    runApply(async () => {
-        const held = plan.value;
-        if (held === undefined) {
-            return;
-        }
-        const items = held.items.filter((item) => ticked.value[item.id] === true).map((item) => item.id);
-        report.value = ArrivalReportSchema.parse(
-            await sandboxJson(`/arrivals/apply`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify({ token: held.token, items, includeSecrets: withSecrets.value }),
+    runApply(
+        () =>
+            hubWork.track(`Bringing a sandbox in`, async () => {
+                const held = plan.value;
+                if (held === undefined) {
+                    return;
+                }
+                const items = held.items.filter((item) => ticked.value[item.id] === true).map((item) => item.id);
+                report.value = ArrivalReportSchema.parse(
+                    await sandboxJson(`/arrivals/apply`, {
+                        method: `POST`,
+                        headers: { "content-type": `application/json` },
+                        body: JSON.stringify({ token: held.token, items, includeSecrets: withSecrets.value }),
+                    }),
+                );
+                plan.value = undefined;
+                picked.value = undefined;
+                await adoptPresentation(report.value.presentation);
             }),
-        );
-        plan.value = undefined;
-        picked.value = undefined;
-        await adoptPresentation(report.value.presentation);
-    }, `Could not bring that in.`);
+        `Could not bring that in.`,
+    );
 
 // The one part of an arrival the daemon cannot finish. A sandbox's name and switcher logo are platform rows, so the
 // bundle carries them and this — the side holding the owner's session — writes them. Without it a migrated sandbox

@@ -4,6 +4,7 @@ import { BrandMark, Button, Notice, Picker, type PickerOption, Row, RowGroup, Sk
 import { useEngines } from "./useEngines";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useRole } from "../secrets/useRole";
+import { useHubWork } from "../../../shell/hub/hubWork";
 import { engineVisual } from "./engineVisual";
 
 // Agent engines this sandbox runs, and where each version comes from (the image bake vs. this machine's
@@ -30,6 +31,13 @@ const {
 } = useEngines();
 
 const outline = useSandboxOutline(isLoading);
+
+// A version swap is a download and an install, not a settings write, so it is reported to the row holding this card
+// and keeps its mark while the reader is off reading something else.
+const hubWork = useHubWork();
+const runUpdate = (engine: EngineRow): Promise<void> => hubWork.track(`Updating ${engine.label}`, () => update(engine));
+const runRevert = (engine: EngineRow): Promise<void> => hubWork.track(`Reverting ${engine.label}`, () => revert(engine));
+const runUpdateAll = (): Promise<void> => hubWork.track(`Updating agent engines`, () => updateAll());
 
 const CHANNELS: readonly PickerOption<`blessed` | `latest` | `pinned` | `image`>[] = [
     {
@@ -59,7 +67,7 @@ const CHANNELS: readonly PickerOption<`blessed` | `latest` | `pinned` | `image`>
                     :loading="updatingAll"
                     :disabled="isAnyBusy || !canOperate"
                     label="Update all"
-                    @click="updateAll"
+                    @click="runUpdateAll"
                 />
                 <StatusBadge
                     v-if="updatable.length"
@@ -117,7 +125,7 @@ const CHANNELS: readonly PickerOption<`blessed` | `latest` | `pinned` | `image`>
                         :loading="isEngineUpdating(engine)"
                         :disabled="isEngineBusy(engine) || !canOperate"
                         :label="`Update to ${engine.offered.version}`"
-                        @click="update(engine)"
+                        @click="runUpdate(engine)"
                     />
                     <Button
                         v-if="engine.previous || engine.running.source === `store`"
@@ -126,7 +134,7 @@ const CHANNELS: readonly PickerOption<`blessed` | `latest` | `pinned` | `image`>
                         :loading="isEngineReverting(engine)"
                         :disabled="isEngineBusy(engine) || !canOperate"
                         :label="engine.previous ? `Back to ${engine.previous}` : `Back to the image's copy`"
-                        @click="revert(engine)"
+                        @click="runRevert(engine)"
                     />
                 </template>
                 <template v-if="engine.quarantined.length > 0" #below>

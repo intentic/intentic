@@ -11,10 +11,20 @@ const {
 } = defineProps<{
     // - badge: chip with a count after the label; hidden at 0/undefined
     // - mark: an icon in that chip instead of a number, for a pending action not sized by count; wins over badge
+    // - markSpin: turns that icon, for a mark that stands for work happening right now rather than one waiting
     // - title/markTitle: hover label via v-tooltip, always on the pill, never the chip; markTitle wins with a mark
     // - icon: glyph before the label, for options with a glyph vocabulary defined elsewhere; never replaces it
     // - readonly: lets a shared preset (`as const`) spread straight into `options` without copying
-    options: readonly { label: string; value: T; icon?: IconName; title?: string; badge?: number; mark?: IconName; markTitle?: string }[];
+    options: readonly {
+        label: string;
+        value: T;
+        icon?: IconName;
+        title?: string;
+        badge?: number;
+        mark?: IconName;
+        markSpin?: boolean;
+        markTitle?: string;
+    }[];
     // sm: viewer toggles; xs: cramped rows (e.g. the workspace filter bar).
     size?: `sm` | `xs`;
     // Full-width, thumb-height track for a task step on a narrow screen; compact is a mouse control elsewhere.
@@ -78,7 +88,7 @@ const nameOf = (option: { label: string; title?: string; markTitle?: string; mar
             <Icon v-if="option.icon !== undefined" :name="option.icon" class="mr-1.5 text-sm" /><!--
             -->{{ option.label
             }}<span v-if="option.mark !== undefined" class="ml-1 rounded-full bg-primary-600/15 px-1 text-2xs text-link"
-                ><Icon :name="option.mark" /></span
+                ><Icon :name="option.mark" :spin="option.markSpin === true" /></span
             ><span v-else-if="option.badge !== undefined && option.badge > 0" class="ml-1 rounded-full bg-primary-600/15 px-1 text-2xs text-link">{{
                 option.badge > 99 ? `99+` : option.badge
             }}</span>

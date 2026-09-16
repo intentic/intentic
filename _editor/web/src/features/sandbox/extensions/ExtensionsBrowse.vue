@@ -11,6 +11,7 @@ import { useRegistry } from "../../extensions/useRegistry";
 import { useRole } from "../secrets/useRole";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useTerminalPanel } from "../../terminal/useTerminalPanel";
+import { useHubWork } from "../../../shell/hub/hubWork";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
 import { auditBrief, updateBrief } from "./extensionBrief";
 import DiscoverCard from "./DiscoverCard.vue";
@@ -43,6 +44,7 @@ const { entries, registryName, url, token, isOfficial, isLoading, error, refetch
 const outline = useSandboxOutline(isLoading);
 const { extensions } = useExtensions();
 const { add } = useCapabilities();
+const hubWork = useHubWork();
 
 const installing = ref<string | undefined>(undefined);
 const failure = ref<NoticeModel | undefined>(undefined);
@@ -109,6 +111,9 @@ const install = async (listing: DiscoverListing): Promise<void> => {
     }
     installing.value = listing.entry.name;
     failure.value = undefined;
+    // A clone and an install out in the sandbox: minutes on a big extension, and the terminal it streams to is
+    // somewhere else entirely, so the row it was started from carries it.
+    const endMark = hubWork.begin(`Installing ${listing.entry.name}`);
     try {
         await add(
             {
@@ -140,6 +145,7 @@ const install = async (listing: DiscoverListing): Promise<void> => {
         failure.value = noticeFrom(err, `Could not install ${listing.entry.name}.`);
     } finally {
         installing.value = undefined;
+        endMark();
     }
 };
 

@@ -15,6 +15,7 @@ import {
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { manageDeviceSandbox, useHostRunning } from "../../sandbox/devices/useDevices";
+import { useHubWork } from "../../../shell/hub/hubWork";
 import ConnectDeviceHint from "../../sandbox/devices/ConnectDeviceHint.vue";
 import { desktopRecreateLink, desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
 import { DESKTOP_DOWNLOADS } from "../../../app/environments/desktopDownloads";
@@ -57,6 +58,16 @@ const cost = computed(() => {
     }
     return `It downloads and builds first, which interrupts nothing, then restarts your sandbox for about half a minute. Your files (in /work) are kept.`;
 });
+
+// What the hub row this is rendered on says while the machine works: the same button sits on Environment and on
+// Overview's update card, and each reports where it was pressed.
+const WORKING: Record<Action, string> = {
+    Download: `Downloading the update`,
+    Update: `Updating this sandbox`,
+    Rebuild: `Rebuilding this sandbox`,
+    "Roll back": `Rolling this sandbox back`,
+};
+const hubWork = useHubWork();
 
 const running = ref(false);
 const lines = ref<string[]>([]);
@@ -103,10 +114,12 @@ const execute = async (): Promise<void> => {
     done.value = undefined;
     lines.value = [];
     try {
-        done.value = await manageDeviceSandbox(id, props.slug, OP[props.action], {
-            ...(props.hash === undefined ? {} : { hash: props.hash }),
-            onLine: (line) => lines.value.push(line),
-        });
+        done.value = await hubWork.track(WORKING[props.action], () =>
+            manageDeviceSandbox(id, props.slug, OP[props.action], {
+                ...(props.hash === undefined ? {} : { hash: props.hash }),
+                onLine: (line) => lines.value.push(line),
+            }),
+        );
     } catch (error) {
         failure.value = noticeFrom(error, `Couldn't rebuild this host.`);
     } finally {

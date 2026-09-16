@@ -5,6 +5,7 @@ import { computed, ref } from "vue";
 import { daemonBehind, daemonDrifted, driftedRoutes, missingRoutes } from "./useDaemonRoutes";
 import { useEnvironment } from "../environment/useEnvironment";
 import { runSeveringDeviceCommand, useDevices, useHostHolding } from "../devices/useDevices";
+import { useHubWork } from "../../../shell/hub/hubWork";
 import ConnectDeviceHint from "../devices/ConnectDeviceHint.vue";
 
 // Checks the daemon's route surface against this app's contract, not version strings (SandboxUpdateCard); catches
@@ -46,6 +47,7 @@ const unixDoors = computed(() => onlineDevices.value.filter((device) => device.p
 const hostId = computed(
     () => running.value ?? (machinesOf(onlineDevices.value).length === 1 ? (unixDoors.value[0] ?? onlineDevices.value[0])?.hostId : undefined),
 );
+const hubWork = useHubWork();
 const reloading = ref(false);
 const reloaded = ref(false);
 const failed = ref<string | undefined>(undefined);
@@ -61,6 +63,7 @@ const reloadOnDevice = async (): Promise<void> => {
     reloading.value = true;
     failed.value = undefined;
     reloaded.value = false;
+    const endMark = hubWork.begin(`Reloading the sandbox`);
     try {
         // Undefined is the expected ending: the container being restarted is the one answering this request.
         await runSeveringDeviceCommand(id, `dev-reload`);
@@ -69,6 +72,7 @@ const reloadOnDevice = async (): Promise<void> => {
         failed.value = error instanceof Error ? error.message : String(error);
     } finally {
         reloading.value = false;
+        endMark();
     }
 };
 

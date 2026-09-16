@@ -1,6 +1,6 @@
 <!-- A device's live output while it updates, verbatim and unsummarised, plus the tail once it's done. -->
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
+import { nextTick, onMounted, ref, watch } from "vue";
 
 const props = defineProps<{
     lines: readonly string[];
@@ -23,19 +23,26 @@ const onScroll = (): void => {
     }
 };
 
+const toTail = async (): Promise<void> => {
+    await nextTick();
+    const element = pane.value;
+    if (element !== undefined) {
+        element.scrollTop = element.scrollHeight;
+    }
+};
+
 watch(
     () => props.lines.length,
     async () => {
-        if (!following.value) {
-            return;
-        }
-        await nextTick();
-        const element = pane.value;
-        if (element !== undefined) {
-            element.scrollTop = element.scrollHeight;
+        if (following.value) {
+            await toTail();
         }
     },
 );
+
+// A run outlives the pane that draws it, so a revisit mounts on a log that is already long: it opens where the run
+// is, not where it started.
+onMounted(() => void toTail());
 </script>
 
 <template>
