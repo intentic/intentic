@@ -207,7 +207,7 @@ it(`says what a device is when it has no report to show`, () => {
         {
             key: `radarsu-rog`,
             label: `radarsu-rog`,
-                        hostId: `radarsu-rog`,
+            hostId: `radarsu-rog`,
             online: true,
             platform: `windows`,
             facts: {
@@ -234,7 +234,7 @@ it(`falls back to the platform, and ages a device that is not here`, () => {
         {
             key: `linux`,
             label: `linux`,
-                        hostId: `linux`,
+            hostId: `linux`,
             online: false,
             platform: `linux`,
             lastSeen: Date.now() - 3 * 60 * 60_000,
@@ -390,7 +390,14 @@ const shared = (): Device => {
     const row = managed(true);
     return {
         ...row,
-        facts: { os: `Ubuntu 24.04`, arch: `x64`, shell: `bash`, home: `/home/ada`, roots: [`/home/ada`], engine: { memoryBytes: 20 * GIB, cpus: 12 } },
+        facts: {
+            os: `Ubuntu 24.04`,
+            arch: `x64`,
+            shell: `bash`,
+            home: `/home/ada`,
+            roots: [`/home/ada`],
+            engine: { memoryBytes: 20 * GIB, cpus: 12 },
+        },
         sandboxes: [
             {
                 ...row.sandboxes![0]!,
@@ -1319,7 +1326,15 @@ const windowsSide = (): Device => ({
     hostId: `rog`,
     online: true,
     platform: `windows`,
-    facts: { os: `Microsoft Windows 11 Home`, arch: `x64`, shell: `PowerShell 7`, home: `C:\\Users\\radar`, roots: [], hostname: `rog`, wslDistros: [`Arch`, `Ubuntu`] },
+    facts: {
+        os: `Microsoft Windows 11 Home`,
+        arch: `x64`,
+        shell: `PowerShell 7`,
+        home: `C:\\Users\\radar`,
+        roots: [],
+        hostname: `rog`,
+        wslDistros: [`Arch`, `Ubuntu`],
+    },
     sandboxes: [CONTAINER],
     report: { hostname: `rog`, os: `win32`, pairings: [], ports: [], agent: { running: true, installed: `1.183.0` }, capturedAt: Date.now() },
 });
@@ -1357,7 +1372,7 @@ it(`draws a Windows PC and its distro as one card, with the container once and e
         key: `radarsu-omen`,
         label: `radarsu-omen`,
         platform: `windows`,
-        facts: { os: `Microsoft Windows 11 Pro`, shell: `PowerShell 7`, arch: `x64` },
+        facts: { os: `Microsoft Windows 11 Pro`, shell: `PowerShell 7`, arch: `x64`, home: `C:\\Users\\radar`, roots: [] },
         agentVersion: `1.279.0`,
         online: true,
     };

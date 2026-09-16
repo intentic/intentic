@@ -2,6 +2,7 @@
 <script setup lang="ts" generic="T extends string">
 import type { IconName } from "../../icons/iconSets.js";
 import { useDevice } from "../../composables/useDevice.js";
+import { countBadgePlate, countBadgeText } from "../feedback/countBadge.js";
 
 const {
     options,
@@ -44,6 +45,10 @@ const nameOf = (option: { label: string; title?: string; markTitle?: string; mar
     const hint = (option.mark === undefined ? option.title : (option.markTitle ?? option.title))?.trim();
     return hint === undefined || hint === `` ? undefined : `${option.label} · ${hint}`;
 };
+
+// Square-ish at one digit and a lozenge past that, like the rail's; `tabular-nums` so a ticking count doesn't
+// shuffle the pill's width under the pointer.
+const CHIP = `ml-1 inline-flex h-[1.5em] min-w-[1.5em] items-center justify-center rounded-full px-[0.35em] text-2xs font-semibold leading-none tabular-nums`;
 </script>
 
 <template>
@@ -86,11 +91,13 @@ const nameOf = (option: { label: string; title?: string; markTitle?: string; mar
             @click="model = option.value"
         >
             <Icon v-if="option.icon !== undefined" :name="option.icon" class="mr-1.5 text-sm" /><!--
-            -->{{ option.label
-            }}<span v-if="option.mark !== undefined" class="ml-1 rounded-full bg-primary-600/15 px-1 text-2xs text-link"
+            -->{{ option.label }}<!--
+            The same plate the rail and the phone tab bar draw a count on (countBadge.ts), minus their ring: those
+            overlap the glyph they badge and need separating from it, where this one sits beside a label.
+         --><span v-if="option.mark !== undefined" :class="[CHIP, countBadgePlate()]"
                 ><Icon :name="option.mark" :spin="option.markSpin === true" /></span
-            ><span v-else-if="option.badge !== undefined && option.badge > 0" class="ml-1 rounded-full bg-primary-600/15 px-1 text-2xs text-link">{{
-                option.badge > 99 ? `99+` : option.badge
+            ><span v-else-if="option.badge !== undefined && option.badge > 0" :class="[CHIP, countBadgePlate()]">{{
+                countBadgeText(option.badge)
             }}</span>
         </button>
     </div>

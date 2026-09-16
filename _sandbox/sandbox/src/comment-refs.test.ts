@@ -33,6 +33,9 @@ const NOT_OURS = new Set([
     "ErrorBoundary.tsx",
     "page.tsx",
     "client.mjs",
+    // Lives in intentic/extension-knowledge, and the vendored half of that engine under _site/demo/vendor names it to
+    // say why it is NOT here: it imports node:fs, so the sync leaves it upstream. Those files are generated.
+    "read-notes.ts",
 ]);
 
 // The only file allowed to quote dead names; its header is evidence, not a pointer.

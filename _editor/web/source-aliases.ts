@@ -66,6 +66,9 @@ export const sourceAliases = (): Record<string, string> => ({
     // Failure shape, severity order and duplicate-collapsing as plain data, used by non-rendering composables and
     // their tests; <Notice>/<NoticeStack> still come from the barrel.
     "@intentic/ui/notice": fromRoot("_editor/ui/src/components/feedback/notice.ts"),
+    // The count chip's tone plate and its 99+ cap, read by viewBadge.ts, which registry.test.ts imports in the node
+    // environment; through the barrel that would boot useTheme and touch `document` at import.
+    "@intentic/ui/count-badge": fromRoot("_editor/ui/src/components/feedback/countBadge.ts"),
     // The 1h/24h/7d/All window vocabulary, pure arithmetic over a timestamp used by feed projections and their unit
     // tests.
     "@intentic/ui/time": fromRoot("_editor/ui/src/lib/timeWindow.ts"),

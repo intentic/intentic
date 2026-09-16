@@ -36,6 +36,7 @@ export { default as Card } from "./components/layout/Card.vue";
 // drawn together.
 export { default as ChangeStatusMark } from "./components/feedback/ChangeStatusMark.vue";
 export { type ChangeStatus } from "./components/feedback/changeStatus.js";
+export { type CountBadgeTone, countBadgePlate, countBadgeText } from "./components/feedback/countBadge.js";
 export { default as DiffStat } from "./components/charts/DiffStat.vue";
 export { default as Code } from "./components/primitives/Code.vue";
 // Editable counterpart to <Code>: same styling, with a caret.

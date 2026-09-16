@@ -6,6 +6,7 @@
         // the live contract/UI code, so a change in _libs reflects here with no rebuild.
         "paths": {
             "@intentic/ui": ["../../_editor/ui/src/index.ts"],
+            "@intentic/ui/count-badge": ["../../_editor/ui/src/components/feedback/countBadge.ts"],
             "@intentic/ui/icon": ["../../_editor/ui/src/components/primitives/Icon.vue"],
             "@intentic/ui/markdown-view": ["../../_editor/ui/src/components/markdown/Markdown.vue"],
             "@intentic/ui/async": ["../../_editor/ui/src/lib/async.ts"],

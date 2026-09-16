@@ -239,7 +239,10 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
 
         <!-- The one press, above the list it covers. -->
         <div v-if="pending > 0" class="flex shrink-0 flex-col gap-1.5 p-2">
+            <!-- `small`, like the developer panel's Commit and this panel's own footer: the primary action earns the
+                 full width of a 270px column, not a taller weight than every other control on the screen. -->
             <Button
+                size="small"
                 class="w-full"
                 :disabled="!saveReady"
                 @click="doSave"

@@ -53,8 +53,10 @@ const declaringExtensions = (): { name: string; invalidates: string[]; keys: Set
         });
 
 test(`the scan finds extensions that declare file invalidations`, () => {
-    // Zero found means the guard broke (moved dir, bad manifest), not that there's nothing to check.
-    expect(declaringExtensions().length).toBeGreaterThan(3);
+    // Zero found means the guard broke (moved dir, bad manifest), not that there's nothing to check. The exact
+    // count, not a floor: approvals, automations and preview are the three left on the shelf that declare any, so a
+    // number that moves is either a new declaration to check or a scan that stopped seeing one.
+    expect(declaringExtensions().map((found) => found.name)).toEqual([`approvals`, `automations`, `preview`]);
 });
 
 test(`every name a first-party extension invalidates is one it registers a query under`, () => {

@@ -86,6 +86,10 @@
             "types": "./src/components/charts/seriesAccent.ts",
             "default": "./src/components/charts/seriesAccent.ts"
         },
+        "./count-badge": {
+            "types": "./src/components/feedback/countBadge.ts",
+            "default": "./src/components/feedback/countBadge.ts"
+        },
         "./preference": {
             "types": "./src/composables/preference.ts",
             "default": "./src/composables/preference.ts"
