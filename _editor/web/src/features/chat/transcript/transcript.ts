@@ -53,13 +53,20 @@ export interface ChecklistDelta {
     // Items carried whole, not as text: the label depends on whether the bubble is live, which only the view knows.
     readonly finished: readonly TodoItem[];
     readonly started: readonly TodoItem[];
+    // Tasks the baton moved on from without completing, which a finished/started pair alone reads as a completion.
+    readonly parked: readonly TodoItem[];
     readonly added: number;
     readonly dropped: number;
+    // Completed count BEFORE this snapshot: the row states an advance, so its figure can't be read as the list's state now.
+    readonly doneBefore: number;
     readonly done: number;
     readonly total: number;
 }
 
 const FULL: ChecklistView = { kind: `full` };
+
+// Shared by the deltas that park nothing, so the renderer gets the same array each rebuild, not a fresh equal one.
+const NOTHING_PARKED: readonly TodoItem[] = [];
 
 // A snapshot that moved nothing (a TaskList resync restating what is already drawn) has no line to draw at all.
 export const changedNothing = (view: ChecklistView): boolean =>
@@ -90,7 +97,18 @@ const deltaOf = (before: readonly TodoItem[], after: readonly TodoItem[]): Check
             started.push(item);
         }
     }
-    return { kind: `delta`, finished, started, added, dropped: was.size, done, total: after.length };
+    // Only where the baton moved: a task that stays active across a snapshot is not news, one left behind by a new
+    // start is — it is why the count can hold still while the active row moves on.
+    const now = new Map(after.map((item) => [item.content, item]));
+    const parked =
+        started.length === 0
+            ? NOTHING_PARKED
+            : before
+                  .filter((item) => item.status === `in_progress`)
+                  .map((item) => now.get(item.content))
+                  .filter((item): item is TodoItem => item !== undefined && item.status !== `completed`);
+    const doneBefore = before.filter((item) => item.status === `completed`).length;
+    return { kind: `delta`, finished, started, parked, added, dropped: was.size, doneBefore, done, total: after.length };
 };
 
 // Keyed by message id; a message absent from the map draws its list in full, so an unmapped snapshot degrades to the
@@ -100,13 +118,24 @@ export const checklistViewsOf = (turns: readonly ChatTurn[], repeated: ReadonlyS
     for (const turn of turns) {
         // Reset per turn, not per conversation: a new prompt re-states the whole list once to orient the reader.
         let previous: readonly TodoItem[] | undefined;
+        let latest: number | undefined;
         for (const message of turn.messages) {
             const items = message.role === `assistant` ? message.todos : undefined;
             if (items === undefined || items.length === 0 || repeated.has(message.id)) {
                 continue;
             }
-            views.set(message.id, previous === undefined ? FULL : deltaOf(previous, items));
+            const view = previous === undefined ? FULL : deltaOf(previous, items);
+            views.set(message.id, view);
             previous = items;
+            if (!changedNothing(view)) {
+                latest = message.id;
+            }
+        }
+        // Read top-down, the opening list is the most prominent thing in the turn and the least true by the end of it,
+        // with every move after it worth a line. So the turn ENDS on the list too: the last snapshot that moved
+        // anything draws in full, which is the one still standing when the reader gets there.
+        if (latest !== undefined) {
+            views.set(latest, FULL);
         }
     }
     return views;

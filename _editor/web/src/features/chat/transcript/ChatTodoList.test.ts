@@ -24,13 +24,29 @@ const mount = (todos: TodoItem[], live: boolean, view?: ChecklistView): HTMLElem
     return element;
 };
 
-// What the projection hands a snapshot that is not its turn's first: one task done, the next one picked up.
+// What the projection hands a snapshot in the middle of its turn: one task done, the next one picked up.
 const MOVED: ChecklistView = {
     kind: `delta`,
     finished: [LIST[2]!],
     started: [LIST[0]!],
+    parked: [],
     added: 0,
     dropped: 0,
+    doneBefore: 0,
+    done: 1,
+    total: 3,
+};
+
+// The move that reads as a completion and is not one: the active row changes while the task it leaves stays open.
+const HANDED_OVER: ChecklistView = {
+    kind: `delta`,
+    finished: [],
+    // Carried at the status the snapshot gave it, which is what the row draws its glyph from.
+    started: [{ ...LIST[1]!, status: `in_progress` }],
+    parked: [LIST[0]!],
+    added: 0,
+    dropped: 0,
+    doneBefore: 1,
     done: 1,
     total: 3,
 };
@@ -74,10 +90,10 @@ describe(`ChatTodoList`, () => {
         const element = mount(LIST, false, MOVED);
         const line = element.querySelector(`button`)!;
 
-        // The change itself: what finished, what it moved on to, and how far along the list now is.
+        // The change itself: what finished, what it moved on to, and the ground the list gained doing it.
         expect(line.textContent).toContain(`Add the per-repo lock`);
         expect(line.textContent).toContain(`Serialize git write routes`);
-        expect(line.textContent).toContain(`1/3`);
+        expect(line.textContent).toContain(`0→1 of 3`);
         // The row this snapshot did not touch is the one a reader has already read, so it is not redrawn.
         expect(element.textContent).not.toContain(`Typecheck, lint and test`);
 
@@ -86,10 +102,36 @@ describe(`ChatTodoList`, () => {
         expect(element.textContent).toContain(`Typecheck, lint and test`);
     });
 
+    // A bare "1/3" sits where a status bar puts what is true NOW, and these rows are stamps from earlier in the turn.
+    it(`states progress as the advance it made, never as a level a reader could take for the state now`, () => {
+        const line = mount(LIST, false, MOVED).querySelector(`button`)!;
+        expect(line.textContent).not.toMatch(/\b1\/3\b/u);
+    });
+
+    it(`prints no figure where the count held, so the same number can't appear on row after row`, () => {
+        const line = mount(LIST, false, HANDED_OVER).querySelector(`button`)!;
+        expect(line.textContent).not.toContain(`of 3`);
+        expect(line.textContent).toContain(`Typecheck, lint and test`);
+    });
+
+    // The one move the finished/started pair reads as a completion: the baton passes, nothing got done.
+    it(`names the task a snapshot moved on from without finishing`, () => {
+        const line = mount(LIST, false, HANDED_OVER).querySelector(`button`)!;
+        expect(line.textContent).toContain(`Serialize git write routes still open`);
+        expect(line.querySelector(`[data-icon="check-circle"]`)).toBeNull();
+    });
+
     it(`says in words what the icons and the arrow say by their arrangement`, () => {
         const element = mount(LIST, false, MOVED);
         expect(element.querySelector(`button`)?.getAttribute(`aria-label`)).toBe(
-            `Show the checklist · finished Add the per-repo lock, started Serialize git write routes · 1 of 3 done`,
+            `Show the checklist · finished Add the per-repo lock, started Serialize git write routes · 0 to 1 of 3 done at this point`,
+        );
+    });
+
+    it(`says "still" for a snapshot that moved no count, where the figure itself is absent`, () => {
+        const element = mount(LIST, false, HANDED_OVER);
+        expect(element.querySelector(`button`)?.getAttribute(`aria-label`)).toBe(
+            `Show the checklist · started Typecheck, lint and test, left Serialize git write routes open · still 1 of 3 done`,
         );
     });
 

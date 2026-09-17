@@ -98,11 +98,12 @@ const task = (content: string, status: TodoItem["status"], activeForm?: string):
 });
 
 // One turn's worth of what the daemon actually emits: the whole list again on every status flip, so three tasks cost
-// nine rows to say three things.
+// twelve rows to say four things.
 const SNAPSHOTS: TodoItem[][] = [
     [task(`Share the skin`, `in_progress`, `Sharing the skin`), task(`Give the typefaces`, `pending`), task(`Redesign the face`, `pending`)],
     [task(`Share the skin`, `completed`), task(`Give the typefaces`, `in_progress`, `Giving the typefaces`), task(`Redesign the face`, `pending`)],
     [task(`Share the skin`, `completed`), task(`Give the typefaces`, `completed`), task(`Redesign the face`, `in_progress`, `Redesigning the face`)],
+    [task(`Share the skin`, `completed`), task(`Give the typefaces`, `completed`), task(`Redesign the face`, `completed`)],
 ];
 
 const TURN: ChatMessage[] = [
@@ -110,13 +111,14 @@ const TURN: ChatMessage[] = [
     { id: 2, role: `assistant`, text: `Found it.`, todos: SNAPSHOTS[0] },
     { id: 3, role: `assistant`, text: `Now the scaffolding.`, todos: SNAPSHOTS[1] },
     { id: 4, role: `assistant`, text: `Now the stylesheet.`, todos: SNAPSHOTS[2] },
+    { id: 5, role: `assistant`, text: `That is the face.`, todos: SNAPSHOTS[3] },
 ];
 
 const viewsOf = (messages: readonly ChatMessage[], repeated: ReadonlySet<number> = new Set()): Map<number, ChecklistView> =>
     checklistViewsOf(turnsOf([...messages]), repeated);
 
 describe(`checklistViewsOf`, () => {
-    it(`draws the list once per turn and only what moved after that`, () => {
+    it(`draws the list at both ends of a turn and only what moved in between`, () => {
         const views = viewsOf(TURN);
         expect(views.get(2)).toEqual({ kind: `full` });
 
@@ -125,32 +127,59 @@ describe(`checklistViewsOf`, () => {
         const moved = second as ChecklistDelta;
         expect(moved.finished.map((item) => item.content)).toEqual([`Share the skin`]);
         expect(moved.started.map((item) => item.content)).toEqual([`Give the typefaces`]);
-        expect([moved.done, moved.total]).toEqual([1, 3]);
+        expect([moved.doneBefore, moved.done, moved.total]).toEqual([0, 1, 3]);
 
-        // The whole point, counted: nine rows for three facts becomes five lines.
+        // Read top-down, the opener is the turn's most prominent row and its least true by the end, with everything
+        // after it a one-liner. So the turn ends on the list as well: what is still standing, where the reader stops.
+        expect(views.get(5)).toEqual({ kind: `full` });
+
+        // Still the point, counted: twelve rows for four facts becomes eight lines.
         const lines = [...views.values()].reduce((total, view) => total + (view.kind === `full` ? SNAPSHOTS[0]!.length : 1), 0);
-        expect(lines).toBe(5);
+        expect(lines).toBe(8);
+    });
+
+    it(`ends a turn on the last snapshot that MOVED something, never on a resync that restated it`, () => {
+        const views = viewsOf([...TURN, { id: 6, role: `assistant`, text: `Checking.`, todos: [...SNAPSHOTS[3]!] }]);
+        expect(views.get(5)).toEqual({ kind: `full` });
+        expect(changedNothing(views.get(6)!)).toBe(true);
+    });
+
+    it(`names the task a snapshot moved on from without finishing, which a count alone reads as progress stalling`, () => {
+        const handover = [task(`Share the skin`, `completed`), task(`Give the typefaces`, `pending`), task(`Redesign the face`, `in_progress`)];
+        const views = viewsOf([
+            ...TURN.slice(0, 3),
+            { id: 4, role: `assistant`, text: `Parking that one.`, todos: handover },
+            { id: 5, role: `assistant`, text: `Done.`, todos: SNAPSHOTS[3] },
+        ]);
+        const moved = views.get(4) as ChecklistDelta;
+        expect(moved.parked.map((item) => item.content)).toEqual([`Give the typefaces`]);
+        expect(moved.finished).toEqual([]);
+        expect([moved.doneBefore, moved.done]).toEqual([1, 1]);
     });
 
     it(`restates the whole list when a new prompt starts a turn`, () => {
         const views = viewsOf([
             ...TURN,
-            { id: 5, role: `user`, text: `now the other states` },
-            { id: 6, role: `assistant`, text: `Looking.`, todos: SNAPSHOTS[2] },
+            { id: 6, role: `user`, text: `now the other states` },
+            { id: 7, role: `assistant`, text: `Looking.`, todos: SNAPSHOTS[2] },
         ]);
-        expect(views.get(6)).toEqual({ kind: `full` });
+        expect(views.get(7)).toEqual({ kind: `full` });
     });
 
     it(`counts a task that appears mid-turn, which no pair of moved rows can say`, () => {
-        const grown = [...SNAPSHOTS[2]!, task(`Calm the card`, `pending`)];
-        const views = viewsOf([...TURN, { id: 5, role: `assistant`, text: `One more.`, todos: grown }]);
-        const moved = views.get(5) as ChecklistDelta;
+        const grown = [...SNAPSHOTS[3]!, task(`Calm the card`, `pending`)];
+        const views = viewsOf([
+            ...TURN,
+            { id: 6, role: `assistant`, text: `One more.`, todos: grown },
+            { id: 7, role: `assistant`, text: `And that.`, todos: [...SNAPSHOTS[3]!, task(`Calm the card`, `completed`)] },
+        ]);
+        const moved = views.get(6) as ChecklistDelta;
         expect([moved.added, moved.dropped, moved.total]).toEqual([1, 0, 4]);
     });
 
     it(`has no line to draw for a resync that restates what is already on screen`, () => {
-        const views = viewsOf([...TURN, { id: 5, role: `assistant`, text: `Checking.`, todos: [...SNAPSHOTS[2]!] }]);
-        expect(changedNothing(views.get(5)!)).toBe(true);
+        const views = viewsOf([...TURN, { id: 6, role: `assistant`, text: `Checking.`, todos: [...SNAPSHOTS[3]!] }]);
+        expect(changedNothing(views.get(6)!)).toBe(true);
         expect(changedNothing(views.get(2)!)).toBe(false);
     });
 
@@ -165,16 +194,16 @@ describe(`checklistViewsOf`, () => {
 
 describe(`currentChecklist`, () => {
     it(`is the last snapshot of the turn in progress`, () => {
-        expect(currentChecklist(TURN)).toBe(SNAPSHOTS[2]);
+        expect(currentChecklist(TURN)).toBe(SNAPSHOTS[3]);
     });
 
     it(`clears once a later prompt has worked without one, rather than pinning a stale list`, () => {
-        const after: ChatMessage[] = [...TURN, { id: 5, role: `user`, text: `what is in this file?` }, { id: 6, role: `assistant`, text: `A stylesheet.` }];
+        const after: ChatMessage[] = [...TURN, { id: 6, role: `user`, text: `what is in this file?` }, { id: 7, role: `assistant`, text: `A stylesheet.` }];
         expect(currentChecklist(after)).toBeUndefined();
     });
 
     it(`survives a bare nudge, which folds into the turn rather than starting one`, () => {
-        const nudged: ChatMessage[] = [...TURN, { id: 5, role: `user`, text: `continue` }, { id: 6, role: `assistant`, text: `Carrying on.` }];
-        expect(currentChecklist(nudged)).toBe(SNAPSHOTS[2]);
+        const nudged: ChatMessage[] = [...TURN, { id: 6, role: `user`, text: `continue` }, { id: 7, role: `assistant`, text: `Carrying on.` }];
+        expect(currentChecklist(nudged)).toBe(SNAPSHOTS[3]);
     });
 });

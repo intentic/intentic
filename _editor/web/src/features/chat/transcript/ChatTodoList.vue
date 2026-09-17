@@ -5,10 +5,11 @@ import type { TodoItem } from "@intentic/sandbox-contract";
 import type { ChecklistView } from "./transcript";
 
 // A snapshot of the agent's task checklist (TaskCreate/TaskUpdate) at one point in the turn. The daemon rebuilds the
-// whole list on every status flip, so only a turn's first snapshot draws the list; the rest draw one line for what
-// moved and open to the same rows, as ChatToolRun opens to ChatToolRows. `live` marks the snapshot still being
-// written: only it may animate, so a scrolled-back settled snapshot reads as a static record instead of work still in
-// progress.
+// whole list on every status flip, so only a turn's first and last snapshots draw the list — the plan and where it
+// ended; the rest draw one line for what moved and open to the same rows, as ChatToolRun opens to ChatToolRows. Every
+// line one of them states is a MOVE, never a level: the reader gets the level from the list under it. `live` marks the
+// snapshot still being written: only it may animate, so a scrolled-back settled snapshot reads as a static record
+// instead of work still in progress.
 
 const props = defineProps<{
     todos: readonly TodoItem[];
@@ -46,6 +47,13 @@ const churn = computed(() => {
     return parts.length === 0 ? undefined : parts.join(` `);
 });
 
+// An ADVANCE, never a level: a bare "3/5" sits where a status bar puts what is true now, and every one of these rows
+// is a stamp from earlier in the turn. Absent where the count held, so the figure can only ever mean movement.
+const advance = computed(() => {
+    const moved = delta.value;
+    return moved === undefined || moved.done === moved.doneBefore ? undefined : `${moved.doneBefore}→${moved.done} of ${moved.total}`;
+});
+
 // The line as a sentence, for hover and screen readers: icons and an arrow say none of this out loud.
 const summary = computed(() => {
     const moved = delta.value;
@@ -55,10 +63,16 @@ const summary = computed(() => {
     const said = [
         ...moved.finished.map((item) => `finished ${item.content}`),
         ...moved.started.map((item) => `started ${item.content}`),
+        ...moved.parked.map((item) => `left ${item.content} open`),
         ...(moved.added > 0 ? [`${moved.added} added`] : []),
         ...(moved.dropped > 0 ? [`${moved.dropped} dropped`] : []),
     ].join(`, `);
-    return `${said}${said === `` ? `` : ` · `}${moved.done} of ${moved.total} done`;
+    // "still" and "at this point" are the words that stop a past snapshot reading as the checklist's state now.
+    const progress =
+        advance.value === undefined
+            ? `still ${moved.done} of ${moved.total} done`
+            : `${moved.doneBefore} to ${moved.done} of ${moved.total} done at this point`;
+    return `${said}${said === `` ? `` : ` · `}${progress}`;
 });
 
 const expanded = ref(false);
@@ -92,12 +106,18 @@ const hint = computed(() => `${expanded.value ? `Hide` : `Show`} the checklist �
                 <span class="min-w-0 truncate text-content">{{ todoText(delta.started[0]!) }}</span>
             </template>
 
+<!-- The move the finished/started pair cannot state, and the reason the figure beside it can hold still. Marked with a
+     glyph from outside the list's own three, since this is an annotation on the line and not a row of the checklist. -->
+            <template v-if="delta.parked.length > 0">
+                <Icon name="clock" class="shrink-0 text-2xs text-subtle" />
+                <span class="min-w-0 truncate text-subtle">{{ delta.parked[0]!.content }} still open</span>
+                <span v-if="delta.parked.length > 1" class="shrink-0 text-2xs text-subtle">+{{ delta.parked.length - 1 }}</span>
+            </template>
+
             <span v-if="churn" class="shrink-0 text-2xs tabular-nums text-subtle">{{ churn }}</span>
 
-<!-- Progress is the one number worth keeping when the line truncates, so it is pinned to the far edge. -->
-            <span class="ml-auto shrink-0 text-2xs tabular-nums text-subtle group-hover/todo:text-muted">
-                {{ delta.done }}/{{ delta.total }}
-            </span>
+<!-- The advance is the one number worth keeping when the line truncates, so it is pinned to the far edge. -->
+            <span v-if="advance" class="ml-auto shrink-0 text-2xs tabular-nums text-subtle group-hover/todo:text-muted">{{ advance }}</span>
         </button>
 
 <!-- Opened, the delta shows the same rows the full mode draws; there is no second rendering of a checklist. -->
