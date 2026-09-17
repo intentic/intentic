@@ -243,6 +243,16 @@ export const WorkspaceMoveSchema = z.object({
     from: z.string().min(1).describe("What to move or copy, as a workspace path."),
     to: z.string().min(1).describe("Where it should end up. Changing only the last part is how you rename something."),
 });
+// Unpacking an archive already in the workspace. Nothing is overwritten, so the answer is where it actually landed,
+// which is not always the name the caller would have guessed.
+export const WorkspaceExtractSchema = z.object({
+    path: z
+        .string()
+        .describe(
+            "Where the contents landed, as a workspace path: a new folder named after the archive, or the decompressed file itself when the archive held just one. Never an existing entry written over, so a name already taken lands beside it under a free one.",
+        ),
+});
+export type WorkspaceExtract = z.infer<typeof WorkspaceExtractSchema>;
 // Deterministic, no-LLM classification into coarse buckets, read-only, applied via /workspace/move. reason is the
 // winning signal: magic:<mime>, ext:<ext>, repository:<marker>, text-content, or unknown.
 export const WorkspaceBucketSchema = z.enum(["repositories", "documents", "media", "archives", "other"]);

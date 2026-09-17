@@ -20,6 +20,7 @@ import { missingCount } from "./layout/workspace-setup.js";
 import { syncWorkspaceRepos } from "./layout/sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./files/workspace-files-paths.js";
+import { UnknownArchiveError } from "./files/workspace-extract.js";
 import { containedIn, scopedTarget, workspaceRootFor } from "./layout/workspace-scope.js";
 
 // Row cap for one /workspace/search page, sized to the virtualized list's visible rows.
@@ -194,6 +195,21 @@ export const createWorkspaceRoutes = (services: Services) => {
             await services.files.copy(await contained(input.from), await contained(input.to));
             services.history.notifyUserWrite();
             return { ok: true } as const;
+        }),
+        // Unpacks beside the archive, into a name nothing holds yet; the tool it spawns is picked by suffix, so a
+        // format this sandbox has no tool for is a refusal rather than an empty folder.
+        extract: i.extract.handler(async ({ input }) => {
+            const archive = await contained(input.path);
+            try {
+                const landed = await services.files.extract(archive);
+                services.history.notifyUserWrite();
+                return { path: relative(services.workspace.root, landed) };
+            } catch (failure) {
+                if (failure instanceof UnknownArchiveError) {
+                    throw new ORPCError("BAD_REQUEST", { message: failure.message });
+                }
+                throw failure;
+            }
         }),
         // Dependency readiness per project; flattens the recipe and drops its `marker`. A stale project reports how
         // many names fail to resolve, not which, since that list is longest when least useful.

@@ -272,6 +272,13 @@ export function useWorkspaceTree() {
         }
         await settleEach(pairs, (pair) => [pair.to], (pair) => copyRaw(pair.from, pair.to));
     };
+    // Unpacks an archive beside itself and answers where it landed. No provisional row: only the daemon, which can see
+    // inside the archive and knows which names are free, can say what the new entry is called.
+    const extractEntry = async (path: string): Promise<string> => {
+        const landed = await sandboxJson<{ path: string }>(`/workspace/extract`, jsonBody(`POST`, { path }));
+        await invalidate();
+        return landed.path;
+    };
     // Moves each source into targetDir, skipping ones already there or that would nest a folder in itself.
     const moveIntoMany = async (sources: readonly string[], targetDir: string): Promise<void> => {
         const moves = sources
@@ -431,6 +438,7 @@ export function useWorkspaceTree() {
         removeEntries,
         copyEntries,
         moveIntoMany,
+        extractEntry,
         busy,
         actionError,
         run,

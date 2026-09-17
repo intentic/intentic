@@ -26,6 +26,7 @@ import {
     WorkspaceDerivedQuerySchema,
     WorkspaceDerivedSchema,
     WorkspaceDirSchema,
+    WorkspaceExtractSchema,
     WorkspaceFileQuerySchema,
     WorkspaceFileReadQuerySchema,
     WorkspaceFileSchema,
@@ -199,6 +200,16 @@ export const workspaceContract = {
         })
         .input(WorkspaceMoveSchema)
         .output(OkSchema),
+    extract: oc
+        .route({
+            method: "POST",
+            path: "/workspace/extract",
+            summary: "Unpack an archive",
+            description:
+                "Unpacks a zip or tar already in the workspace into a new folder beside it, named after the archive. An archive that is one folder of its own name lands as that folder rather than as it twice, and a .gz, .bz2, .xz or .zst holding a single file lands as that file. Nothing is ever written over: the answer says where it landed. Formats with no tool here, such as .7z and .rar, are refused.",
+        })
+        .input(WorkspaceFileQuerySchema)
+        .output(WorkspaceExtractSchema),
     // An imported project lacks node_modules/.venv; until this says ready, its type checks and tests can mislead.
     setup: oc
         .route({

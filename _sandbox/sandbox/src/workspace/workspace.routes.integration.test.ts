@@ -24,6 +24,7 @@ import { unstubbed } from "@intentic/testing";
 
 import { workspacePaths } from "./workspace.js";
 import { MAX_RAW_BYTES } from "./files/workspace-files-download.js";
+import { UnknownArchiveError } from "./files/workspace-extract.js";
 import { UploadTooLargeError } from "./files/workspace-files-upload.js";
 import { sha256Text, statWorkspaceFileSize } from "./files/workspace-files.js";
 
@@ -600,6 +601,37 @@ test("workspace.mkdir/delete/move/copy resolve within /work and reject escapes",
     expect(await errorCode(client.workspace.mkdir({ path: "../evil" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.workspace.move({ from: "app/a.ts", to: "../escape" }))).toBe("BAD_REQUEST");
     expect(calls).toHaveLength(5);
+});
+
+test("workspace.extract answers with the path it landed at, and refuses what nothing here unpacks", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                files: fakeFiles({
+                    // What the real one does: the archive minus its suffix, beside itself, as an absolute path.
+                    extract: async (archive) => archive.replace(/\.zip$/, ""),
+                }),
+            }),
+        ),
+    );
+
+    // Answered as a workspace path, not the absolute one the daemon works in.
+    expect(await client.workspace.extract({ path: "drops/site.zip" })).toEqual({ path: "drops/site" });
+    expect(await errorCode(client.workspace.extract({ path: "../evil.zip" }))).toBe("BAD_REQUEST");
+
+    const refusing = clientFor(
+        createApp(
+            services({
+                files: fakeFiles({
+                    extract: async () => {
+                        throw new UnknownArchiveError("bundle.7z");
+                    },
+                }),
+            }),
+        ),
+    );
+    // A format with no tool is the caller's mistake, not a broken daemon.
+    expect(await errorCode(refusing.workspace.extract({ path: "bundle.7z" }))).toBe("BAD_REQUEST");
 });
 
 test("workspace.addRepo clones a repo with a protected git dir, rejects reserved names + a bad body", async () => {

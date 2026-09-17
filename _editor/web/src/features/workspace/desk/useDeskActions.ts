@@ -57,6 +57,7 @@ export function useDeskActions(ctx: DeskActionsContext) {
         moveIntoMany,
         createFile,
         createDir,
+        extractEntry,
     } = useWorkspaceTree();
     const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
     const { say } = useNotifications();
@@ -259,6 +260,21 @@ export function useDeskActions(ctx: DeskActionsContext) {
         }, `Couldn't keep that folder.`);
     };
 
+    // Unpacks an archive into the open folder. Selected only once the daemon answers: what it landed as is its answer,
+    // and a name guessed here would mark the wrong tile whenever the archive turned out to hold its own folder.
+    const extract = async (path: string): Promise<void> => {
+        if (refuseWrite()) {
+            return;
+        }
+        await run(async () => {
+            const landed = await extractEntry(path);
+            if (parentDir(landed) === ctx.dir.value) {
+                select(landed);
+            }
+            say(`Extracted to ${basename(landed)}`);
+        }, `Couldn't extract that.`);
+    };
+
     // ---- cut, copy, paste: the clipboard is useWorkspaceTree's, shared with the tree ----
     // `async` also writes the paths as text to the OS clipboard, for the menu path, which has no clipboard event to
     // hook; routed via the desk element so a popped-out window targets its own clipboard.
@@ -438,6 +454,11 @@ export function useDeskActions(ctx: DeskActionsContext) {
         rename: () => {
             if (target !== undefined) {
                 beginRename(target.path);
+            }
+        },
+        extract: () => {
+            if (target !== undefined) {
+                void extract(target.path);
             }
         },
         keepFolder: () => {

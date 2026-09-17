@@ -1,4 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import { archiveFormat } from "@intentic/sandbox-contract";
 import type { MenuItem } from "primevue/menuitem";
 
 // The right-click menu both file surfaces (the tree, the desk) build: one list, so a verb never exists in one and not
@@ -9,6 +10,8 @@ export interface EntryVerbs {
     readonly newFile: () => void;
     readonly newFolder: () => void;
     readonly rename: () => void;
+    // Unpacks an archive into a new entry beside it; the daemon names it, having seen what is inside.
+    readonly extract: () => void;
     // Drops a placeholder into an empty folder chain so it stops counting as empty.
     readonly keepFolder: () => void;
     readonly remove: () => void;
@@ -49,25 +52,33 @@ const readOnlyMenu = ({ head = [], lead = [], tail = [] }: EntryMenuInput): Menu
     return [...readable, ...withSeparator([READ_ONLY_NOTE])];
 };
 
+// The rows that can only ever name one entry, which is why a bulk selection has none of them.
+const soleVerbs = (target: WorkspaceTreeEntry, barren: boolean, verbs: EntryVerbs): MenuItem[] => {
+    const items: MenuItem[] = [];
+    // Offered by the same rule the daemon unpacks by, so the row can't promise what it would then refuse.
+    if (target.type === `file` && archiveFormat(target.name) !== undefined) {
+        items.push({ label: `Extract`, icon: `box`, command: verbs.extract });
+    }
+    items.push({ label: `Rename`, icon: `pencil`, command: verbs.rename });
+    // Marks a barren folder intentional via a placeholder: durable, visible to git, not a private exclusion flag.
+    if (target.type === `dir` && barren) {
+        items.push({ label: `Keep folder`, icon: `check-circle`, command: verbs.keepFolder });
+    }
+    return items;
+};
+
 const entryVerbs = ({ target, multi, count, barren, verbs }: EntryMenuInput): MenuItem[] => {
     if (target === undefined) {
         return [];
     }
-    const items: MenuItem[] = [{ separator: true }];
-    if (!multi) {
-        items.push({ label: `Rename`, icon: `pencil`, command: verbs.rename });
-    }
-    // Marks a barren folder intentional via a placeholder: durable, visible to git, not a private exclusion flag.
-    if (!multi && target.type === `dir` && barren) {
-        items.push({ label: `Keep folder`, icon: `check-circle`, command: verbs.keepFolder });
-    }
-    items.push(
+    return [
+        { separator: true },
+        ...(multi ? [] : soleVerbs(target, barren, verbs)),
         { label: multi ? `Delete ${count} items` : `Delete`, icon: `trash`, command: verbs.remove },
         { separator: true },
         { label: multi ? `Cut ${count} items` : `Cut`, icon: `arrows-h`, command: verbs.cut },
         { label: multi ? `Copy ${count} items` : `Copy`, icon: `copy`, command: verbs.copy },
-    );
-    return items;
+    ];
 };
 
 export const entryMenuItems = (input: EntryMenuInput): MenuItem[] => {

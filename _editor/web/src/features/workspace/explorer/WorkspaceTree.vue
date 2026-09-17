@@ -100,6 +100,7 @@ const {
     removeEntries,
     copyEntries,
     moveIntoMany,
+    extractEntry,
     run,
     canEditFiles,
     refuseWrite,
@@ -718,6 +719,18 @@ const keepFolder = async (path: string): Promise<void> => {
 const cancelDelete = (): void => {
     confirmPaths.value = undefined;
 };
+// Unpacks an archive into the folder holding it. Selected only once the daemon answers: what it landed as is its
+// answer, and a name guessed here would mark the wrong row whenever the archive turned out to hold its own folder.
+const extract = async (path: string): Promise<void> => {
+    if (refuseWrite()) {
+        return;
+    }
+    await run(async () => {
+        const landed = await extractEntry(path);
+        revealPasted(parentDir(landed), [landed]);
+        say(`Extracted to ${basename(landed)}`);
+    }, `Couldn't extract that.`);
+};
 // Stages the selection; `async` also writes paths as text to the OS clipboard, since the menu path has no clipboard
 // event to hook. Routed via the tree element (clipboardOf) so a popped-out explorer targets the right window.
 const stage = (mode: "copy" | "cut", system: "async" | "event"): readonly string[] => {
@@ -1006,6 +1019,11 @@ const menuItems = computed<MenuItem[]>(() => {
             rename: () => {
                 if (target !== undefined) {
                     beginRename(target.path);
+                }
+            },
+            extract: () => {
+                if (target !== undefined) {
+                    void extract(target.path);
                 }
             },
             keepFolder: () => {

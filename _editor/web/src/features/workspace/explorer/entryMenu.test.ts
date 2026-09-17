@@ -10,6 +10,7 @@ const verbs = (): EntryVerbs => ({
     newFile: vi.fn(),
     newFolder: vi.fn(),
     rename: vi.fn(),
+    extract: vi.fn(),
     keepFolder: vi.fn(),
     remove: vi.fn(),
     cut: vi.fn(),
@@ -56,6 +57,15 @@ describe(`the entry menu`, () => {
         expect(labels(entryMenuItems(input({ target: dir, barren: true })))).toContain(`Keep folder`);
         expect(labels(entryMenuItems(input({ target: dir, barren: true, multi: true, count: 2 })))).not.toContain(`Keep folder`);
         expect(labels(entryMenuItems(input({ target: file, barren: true })))).not.toContain(`Keep folder`);
+    });
+
+    it(`offers Extract to one archive, and to nothing the sandbox can't unpack`, () => {
+        const zip: WorkspaceTreeEntry = { name: `site.zip`, path: `drops/site.zip`, type: `file` };
+        expect(labels(entryMenuItems(input({ target: zip })))).toEqual([`New File`, `New Folder`, `—`, `Extract`, `Rename`, `Delete`, `—`, `Cut`, `Copy`]);
+        expect(labels(entryMenuItems(input({ target: zip, multi: true, count: 2 })))).not.toContain(`Extract`);
+        expect(labels(entryMenuItems(input({ target: { ...zip, name: `site.7z`, path: `drops/site.7z` } })))).not.toContain(`Extract`);
+        // A folder can be named like an archive without being one.
+        expect(labels(entryMenuItems(input({ target: { ...dir, name: `site.zip`, path: `site.zip` } })))).not.toContain(`Extract`);
     });
 
     it(`seats each surface's own rows where it asked`, () => {

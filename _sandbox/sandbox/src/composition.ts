@@ -245,6 +245,7 @@ import { enabledExtensions, installedExtensions } from "./extensions/installed-e
 import { workspaceArrivedEmpty } from "./scaffold/starter-site.js";
 import { type WorkspacePaths, workspacePaths } from "./workspace/workspace.js";
 import { writeWorkspaceFileStream } from "./workspace/files/workspace-files-upload.js";
+import { extractArchive } from "./workspace/files/workspace-extract.js";
 import {
     copyWorkspacePath,
     makeWorkspaceDir,
@@ -593,6 +594,8 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         readonly remove: (absPath: string) => Promise<void>;
         readonly move: (fromAbs: string, toAbs: string) => Promise<void>;
         readonly copy: (fromAbs: string, toAbs: string) => Promise<void>;
+        // Unpacks an archive beside itself, answering with the absolute path of what landed.
+        readonly extract: (absArchive: string) => Promise<string>;
     };
     // A binary file's markdown shadow, read and derived on demand; wired here so no route reaches into fileq's own
     // subsystem, which reads workspace files itself.
@@ -1268,6 +1271,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             remove: removeWorkspacePath,
             move: moveWorkspacePath,
             copy: copyWorkspacePath,
+            extract: extractArchive,
         },
         derived: {
             read: readDerivedText,

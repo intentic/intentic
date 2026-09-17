@@ -103,6 +103,9 @@ const EXT_CATEGORY: Record<string, FileCategory> = {
     tar: "archive",
     rar: "archive",
     "7z": "archive",
+    bz2: "archive",
+    xz: "archive",
+    zst: "archive",
     // fonts / binaries
     woff: "binary",
     woff2: "binary",

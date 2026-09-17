@@ -10,7 +10,8 @@ const dir = (path: string, children?: readonly WorkspaceTreeEntry[]): WorkspaceT
     ...(children === undefined ? {} : { children }),
 });
 
-// web/ src/ App.tsx, checkout.ts ; docs/ (unwalked) ; README.md
+// The fixture tree, none of it real: a `web` repo whose `src` holds two files, a `docs` the walk left unopened, and a
+// readme beside them.
 const lazy = new Map<string, readonly WorkspaceTreeEntry[]>([[`web/docs`, [file(`web/docs/checkout.md`)]]]);
 const src = dir(`web/src`, [file(`web/src/App.tsx`), file(`web/src/checkout.ts`)]);
 const docs = dir(`web/docs`);

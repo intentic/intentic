@@ -130,6 +130,7 @@ export * from "./models/model-pins.js";
 export * from "./models/model-roles.js";
 export * from "./models/plan-pools.js";
 export * from "./text/path-refs.js";
+export * from "./text/archives.js";
 export * from "./models/prompt-complexity.js";
 export * from "./policy/output-fields.js";
 export * from "./policy/approvals-execution.js";
