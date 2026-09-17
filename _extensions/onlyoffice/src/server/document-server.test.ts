@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContainerSpec, ContainerState, DockerEngine } from "./docker.js";
-import { CONTAINER, DocumentServer, IMAGE, SETUP_DONE_MARKER } from "./document-server.js";
+import { CONTAINER, CONTAINER_LABELS, DocumentServer, IMAGE, RESTART_POLICY, SETUP_DONE_MARKER } from "./document-server.js";
 
 // The lifecycle against a scripted engine: what the owner's start does, what an open does after it, and what is
 // recreated rather than reused.
@@ -26,7 +26,7 @@ const scripted = (initial: Partial<Scripted[`state`]> = {}): Scripted => {
         inspect: async () => state.container,
         create: async (name, spec: ContainerSpec) => {
             calls.push(`create ${name} ${spec.hostPort} ${spec.env.join(` `)}`);
-            state.container = { running: false, hostPort: spec.hostPort, image: spec.image, env: [...spec.env], startedAt: 0 };
+            state.container = { running: false, hostPort: spec.hostPort, image: spec.image, env: [...spec.env], labels: spec.labels, restart: RESTART_POLICY, startedAt: 0 };
         },
         start: async (name) => {
             calls.push(`start ${name}`);
@@ -179,7 +179,7 @@ describe(`an open after that`, () => {
     it(`brings a stopped container back up without pulling`, async () => {
         const script = scripted({
             image: true,
-            container: { running: false, hostPort: 5000, image: IMAGE, env: [`JWT_SECRET=sec`], startedAt: 0 },
+            container: { running: false, hostPort: 5000, image: IMAGE, env: [`JWT_SECRET=sec`], labels: CONTAINER_LABELS, restart: RESTART_POLICY, startedAt: 0 },
         });
         const docs = server(script);
         expect(await docs.ensureRunning()).toEqual({ state: `starting` });
@@ -189,10 +189,10 @@ describe(`an open after that`, () => {
         expect(docs.running()).toEqual({ port: 5000 });
     });
 
-    it(`recreates a container built from another image or another secret`, async () => {
+    it(`recreates a container built from another image, another secret or without the restart policy`, async () => {
         const script = scripted({
             image: true,
-            container: { running: true, hostPort: 5000, image: `onlyoffice/documentserver:8.2.3`, env: [`JWT_SECRET=old`], startedAt: 0 },
+            container: { running: true, hostPort: 5000, image: `onlyoffice/documentserver:8.2.3`, env: [`JWT_SECRET=old`], labels: CONTAINER_LABELS, restart: RESTART_POLICY, startedAt: 0 },
         });
         const log: string[] = [];
         const docs = server(script, log);
@@ -202,10 +202,17 @@ describe(`an open after that`, () => {
         expect(script.calls[1]).toContain(`create ${CONTAINER} 4321`);
         expect(log.some((line) => line.includes(`recreating`))).toBe(true);
         expect(docs.running()).toEqual({ port: 4321 });
+        // The same image and secret, but created before the restart policy existed: recreated once to get it.
+        const older = scripted({ image: true, container: { running: true, hostPort: 5000, image: IMAGE, env: [`JWT_SECRET=sec`], labels: CONTAINER_LABELS, restart: `no`, startedAt: 0 } });
+        const upgraded = server(older);
+        await upgraded.ensureRunning();
+        await upgraded.settled();
+        expect(older.calls[0]).toBe(`remove ${CONTAINER}`);
+        expect(older.calls[1]).toContain(`create ${CONTAINER} 4321`);
     });
 
     it(`notices a server that stopped answering and starts it again`, async () => {
-        const script = scripted({ image: true, container: { running: true, hostPort: 5000, image: IMAGE, env: [`JWT_SECRET=sec`], startedAt: 0 } });
+        const script = scripted({ image: true, container: { running: true, hostPort: 5000, image: IMAGE, env: [`JWT_SECRET=sec`], labels: CONTAINER_LABELS, restart: RESTART_POLICY, startedAt: 0 } });
         const docs = server(script);
         await docs.ensureRunning();
         await docs.settled();

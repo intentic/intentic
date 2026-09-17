@@ -9,10 +9,14 @@ import type { ContainerState, DockerEngine } from "./docker.js";
 // Pinned: an upgrade is a deliberate change here, and a container built from another image is recreated to match.
 export const IMAGE = "onlyoffice/documentserver:9.4.0.1";
 export const CONTAINER = "intentic-onlyoffice";
+export const CONTAINER_LABELS: Readonly<Record<string, string>> = { "dev.intentic.extension": "intentic.onlyoffice" };
+// The engine brings the container back at every boot: a cold start is minutes of generation nobody should wait on. An
+// existing container without it is recreated once (or `docker update --restart unless-stopped` spares the restart).
+export const RESTART_POLICY = "unless-stopped";
 
-// Cold start of the document server (nginx, docservice, converter, postgres, rabbitmq) is tens of seconds; a pull
-// that just extracted 2 GB can be slower.
-const HEALTHY_WITHIN_MS = 5 * 60 * 1000;
+// A cold start of this image is about two minutes (fonts, presentation themes and gzip are generated on every start,
+// none of it baked), longer on a busy machine; a pull that just extracted 2 GB is slower still.
+const HEALTHY_WITHIN_MS = 8 * 60 * 1000;
 const HEALTH_POLL_MS = 2000;
 const HEALTH_TIMEOUT_MS = 3000;
 
@@ -213,7 +217,7 @@ export class DocumentServer {
         this.phase = { kind: "starting" };
         let port = found?.hostPort;
         if (found !== undefined && !this.matches(found)) {
-            this.deps.log(`recreating ${CONTAINER}: it was built from another image or secret`);
+            this.deps.log(`recreating ${CONTAINER}: it was built from another image or secret, or without the restart policy`);
             await this.deps.engine.remove(CONTAINER);
             port = undefined;
         }
@@ -223,7 +227,7 @@ export class DocumentServer {
                 image: this.deps.image,
                 env: this.env(),
                 hostPort: port,
-                labels: { "dev.intentic.extension": "intentic.onlyoffice" },
+                labels: CONTAINER_LABELS,
             });
         }
         // A container already running is adopted as of the run it is in; one started here is read from this moment.
@@ -235,7 +239,12 @@ export class DocumentServer {
     }
 
     private matches(found: ContainerState): boolean {
-        return found.image === this.deps.image && found.hostPort !== undefined && found.env.includes(`JWT_SECRET=${this.deps.secret}`);
+        return (
+            found.image === this.deps.image &&
+            found.hostPort !== undefined &&
+            found.env.includes(`JWT_SECRET=${this.deps.secret}`) &&
+            found.restart === RESTART_POLICY
+        );
     }
 
     // The container reaches the sandbox at a private address (host.docker.internal), which the server refuses unless
@@ -250,7 +259,10 @@ export class DocumentServer {
         const deadline = Date.now() + HEALTHY_WITHIN_MS;
         let setupDone = false;
         while (Date.now() < deadline) {
-            setupDone ||= (await this.deps.engine.logs(CONTAINER, sinceSeconds)).includes(SETUP_DONE_MARKER);
+            if (!setupDone && (await this.deps.engine.logs(CONTAINER, sinceSeconds)).includes(SETUP_DONE_MARKER)) {
+                setupDone = true;
+                this.deps.log(`document server finished its setup, waiting for its healthcheck`);
+            }
             if (setupDone && (await this.healthy(port))) {
                 return;
             }

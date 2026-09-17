@@ -81,12 +81,15 @@ export const activateServer = async (api: ExtensionServerApi, _context: Extensio
     // Where the browser reaches the listener: the daemon's forwarded-port hostname, asked for again on every open
     // since the forward table is in-memory and a busy sandbox can evict a slot.
     let listenerPort = 0;
+    // The last origin the daemon handed out; the listener names it to the document server on every proxied request.
+    let publicOrigin: string | undefined;
     const exposure = async (): Promise<string | undefined> => {
         const { previewUrl } = await api.daemon.json<{ previewUrl?: string }>("/ports/forward", {
             method: "POST",
             body: JSON.stringify({ port: listenerPort }),
         });
-        return previewUrl?.replace(/\/$/, "");
+        publicOrigin = previewUrl?.replace(/\/$/, "");
+        return publicOrigin;
     };
 
     const readDocument = async (document: Document): Promise<Readable | undefined> => {
@@ -142,7 +145,16 @@ export const activateServer = async (api: ExtensionServerApi, _context: Extensio
         return hostPage(config, basename(session.path), session.theme);
     };
 
-    const listener = createListener({ secret, sessions, documentServerPort: () => docs.running()?.port, pageFor, readDocument, saveDocument, log: api.log });
+    const listener = createListener({
+        secret,
+        sessions,
+        documentServerPort: () => docs.running()?.port,
+        publicOrigin: () => publicOrigin,
+        pageFor,
+        readDocument,
+        saveDocument,
+        log: api.log,
+    });
     listenerPort = await listener.listen();
     api.log(`listening on 0.0.0.0:${listenerPort}`);
 

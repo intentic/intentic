@@ -105,7 +105,7 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
         </template>
         <template v-else-if="status?.state === 'starting'">
             <Icon name="spinner" spin class="text-4xl text-subtle" />
-            <p class="max-w-sm text-sm text-muted">Starting the document server…</p>
+            <p class="max-w-sm text-sm text-muted">Starting the document server… A cold start takes about two minutes: it regenerates its fonts and themes every time. It stays up afterwards.</p>
         </template>
         <template v-else-if="status?.state === 'no-address'">
             <Icon name="exclamation-circle" class="text-4xl text-subtle" />

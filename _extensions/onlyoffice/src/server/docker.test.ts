@@ -39,7 +39,7 @@ describe(`container answers`, () => {
                 NetworkSettings: { Ports: { "80/tcp": [{ HostIp: `127.0.0.1`, HostPort: `41231` }], "443/tcp": null } },
             }),
         );
-        expect(state).toEqual({ running: true, hostPort: 41231, image: `onlyoffice/documentserver:9.4.0.1`, env: [`JWT_SECRET=abc`, `PATH=/usr/bin`], startedAt: 0 });
+        expect(state).toEqual({ running: true, hostPort: 41231, image: `onlyoffice/documentserver:9.4.0.1`, env: [`JWT_SECRET=abc`, `PATH=/usr/bin`], labels: {}, restart: `no`, startedAt: 0 });
     });
 
     it(`reads a stopped container's port from what it was created with, since its live bindings are empty`, () => {
@@ -48,10 +48,10 @@ describe(`container answers`, () => {
                 State: { Running: false, StartedAt: `2026-09-17T13:17:20.5Z` },
                 Config: { Image: `x` },
                 NetworkSettings: { Ports: {} },
-                HostConfig: { PortBindings: { "80/tcp": [{ HostIp: `127.0.0.1`, HostPort: `43657` }] } },
+                HostConfig: { PortBindings: { "80/tcp": [{ HostIp: `127.0.0.1`, HostPort: `43657` }] }, RestartPolicy: { Name: `unless-stopped` } },
             }),
         );
-        expect(state).toEqual({ running: false, hostPort: 43657, image: `x`, env: [], startedAt: Math.floor(Date.parse(`2026-09-17T13:17:20.5Z`) / 1000) });
+        expect(state).toEqual({ running: false, hostPort: 43657, image: `x`, env: [], labels: {}, restart: `unless-stopped`, startedAt: Math.floor(Date.parse(`2026-09-17T13:17:20.5Z`) / 1000) });
     });
 
     it(`reports no port for a container created without one, and the engine's zero time as never started`, () => {
@@ -60,6 +60,8 @@ describe(`container answers`, () => {
             hostPort: undefined,
             image: `x`,
             env: [],
+            labels: {},
+            restart: `no`,
             startedAt: 0,
         });
     });
@@ -74,6 +76,7 @@ describe(`container answers`, () => {
             HostConfig: {
                 PortBindings: { "80/tcp": [{ HostIp: `127.0.0.1`, HostPort: `5000` }] },
                 ExtraHosts: [`host.docker.internal:host-gateway`],
+                RestartPolicy: { Name: `unless-stopped` },
             },
         });
     });

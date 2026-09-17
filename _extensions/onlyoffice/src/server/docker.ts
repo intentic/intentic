@@ -16,6 +16,9 @@ export interface ContainerState {
     readonly hostPort: number | undefined;
     readonly image: string;
     readonly env: readonly string[];
+    readonly labels: Readonly<Record<string, string>>;
+    // The engine's restart policy name ("no", "unless-stopped", …); what brings the container back at boot.
+    readonly restart: string;
     // When the current run began, in unix seconds; 0 for a container never started.
     readonly startedAt: number;
 }
@@ -213,8 +216,9 @@ const pullImage = (socketPath: string, ref: string, onProgress: (percent: number
         req.end();
     });
 
-// The container spec the engine's create call takes: port 80 published on loopback only, and the sandbox reachable
-// from inside the container as host.docker.internal.
+// The container spec the engine's create call takes: port 80 published on loopback only, the sandbox reachable from
+// inside the container as host.docker.internal, and the engine bringing the container back whenever it starts (a
+// sandbox boot), since a cold start of this image is minutes of font, theme and gzip generation nobody should wait on.
 export const createBody = (spec: ContainerSpec): Record<string, unknown> => ({
     Image: spec.image,
     Env: spec.env,
@@ -223,6 +227,7 @@ export const createBody = (spec: ContainerSpec): Record<string, unknown> => ({
     HostConfig: {
         PortBindings: { "80/tcp": [{ HostIp: "127.0.0.1", HostPort: String(spec.hostPort) }] },
         ExtraHosts: ["host.docker.internal:host-gateway"],
+        RestartPolicy: { Name: "unless-stopped" },
     },
 });
 
@@ -230,10 +235,10 @@ type PortBindings = Record<string, { readonly HostPort?: string }[] | null>;
 
 interface InspectBody {
     readonly State?: { readonly Running?: boolean; readonly StartedAt?: string };
-    readonly Config?: { readonly Image?: string; readonly Env?: string[] };
+    readonly Config?: { readonly Image?: string; readonly Env?: string[]; readonly Labels?: Record<string, string> | null };
     // Live bindings, populated only while running; the created-with bindings live under HostConfig either way.
     readonly NetworkSettings?: { readonly Ports?: PortBindings };
-    readonly HostConfig?: { readonly PortBindings?: PortBindings };
+    readonly HostConfig?: { readonly PortBindings?: PortBindings; readonly RestartPolicy?: { readonly Name?: string } };
 }
 
 const portOf = (bindings: PortBindings | undefined): number | undefined => {
@@ -251,14 +256,19 @@ const secondsOf = (iso: string | undefined): number => {
     return Number.isNaN(millis) || millis <= 0 ? 0 : Math.floor(millis / 1000);
 };
 
+const restartPolicyOf = (parsed: InspectBody): string => parsed.HostConfig?.RestartPolicy?.Name ?? "no";
+
 // The state an inspect answer describes.
 export const parseInspect = (body: string): ContainerState => {
     const parsed = JSON.parse(body) as InspectBody;
+    const config = parsed.Config ?? {};
     return {
         running: parsed.State?.Running === true,
         hostPort: publishedPort(parsed),
-        image: parsed.Config?.Image ?? "",
-        env: parsed.Config?.Env ?? [],
+        image: config.Image ?? "",
+        env: config.Env ?? [],
+        labels: config.Labels ?? {},
+        restart: restartPolicyOf(parsed),
         startedAt: secondsOf(parsed.State?.StartedAt),
     };
 };

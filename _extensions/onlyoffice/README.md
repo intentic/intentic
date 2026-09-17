@@ -48,7 +48,12 @@ Two things in the platform decide this shape, and both were verified rather than
   the preview proxy frames for the editor and pipes WebSockets through; asked for again on every open, since the
   forward table is in-memory and a busy sandbox can evict a slot. The proxy's `frame-ancestors` names the editor
   origins AND `'self'`: the document frame `api.js` creates has this extension's own page as an ancestor, and without
-  `'self'` the browser refuses it (`panels/preview-proxy.ts`, and the nested-frame test beside it).
+  `'self'` the browser refuses it (`panels/preview-proxy.ts`, and the nested-frame test beside it). The same proxy
+  rewrites `Host` to `localhost:<port>` and forwards no `X-Forwarded-Host`, and the document server's nginx builds
+  `$the_host` from exactly those, so every absolute URL it hands the editor over the socket (the converted
+  `Editor.bin` to download, prints, images) would name the sandbox's localhost. The listener therefore sets
+  `X-Forwarded-Host`/`X-Forwarded-Proto` to the forwarded origin on every proxied request and upgrade
+  (`towardsDocumentServer` in `listener.ts`); "Download failed" in the editor is what the missing header looks like.
 
 The core learned two small things for this: a viewer can be fed the `path` alone (its backend reads the file), and
 a viewer can declare `edit`, which outranks a render-only viewer for the same extension whatever order the two
@@ -62,8 +67,11 @@ the session. `forcesave` is on, so Ctrl+S writes to the workspace at once; closi
 
 ## Conventions & gotchas
 
-- The first start is the owner's: opening a document shows a card, not a 2 GB pull. After that the container comes
-  back up on demand, and a container built from another image or another secret is recreated to match the pin.
+- The first start is the owner's: opening a document shows a card, not a 2 GB pull. After that the engine brings the
+  container back at every sandbox boot (`unless-stopped`), because a cold start of this image is about two minutes:
+  it regenerates its fonts, its presentation themes and its gzipped statics on every start, and none of that is
+  baked (a fresh container has no `AllFonts.js`), so it cannot be skipped. A container built from another image or
+  secret, or without the policy, is recreated to match.
 - Ready is not the healthcheck alone. The image's entrypoint keeps working after `/healthcheck` answers `true`
   (fonts, then a converter and docservice restart, then an nginx reload), and a document opened in that window
   fails to download. The backend waits for the banner the entrypoint's final `tail -f` prints

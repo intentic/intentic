@@ -12,6 +12,7 @@ const sessions = new Sessions();
 let listener: Listener;
 let port = 0;
 let documentServerPort: number | undefined;
+let publicOrigin: string | undefined = `https://port-abc-def.docs.example.test`;
 let fakeServer: http.Server;
 const saved: { key: string; path: string; url: string }[] = [];
 const logged: string[] = [];
@@ -30,7 +31,13 @@ beforeAll(async () => {
             res.end(`true`);
             return;
         }
-        res.writeHead(200, { "content-type": `text/plain`, "x-upstream-path": req.url ?? ``, connection: `close` });
+        res.writeHead(200, {
+            "content-type": `text/plain`,
+            "x-upstream-path": req.url ?? ``,
+            "x-upstream-forwarded-host": req.headers[`x-forwarded-host`] ?? `-`,
+            "x-upstream-forwarded-proto": req.headers[`x-forwarded-proto`] ?? `-`,
+            connection: `close`,
+        });
         res.end(`upstream says hi`);
     });
     documentServerPort = await listen(fakeServer);
@@ -38,6 +45,7 @@ beforeAll(async () => {
         secret,
         sessions,
         documentServerPort: () => documentServerPort,
+        publicOrigin: () => publicOrigin,
         pageFor: (session) => `<html>${session.path}:${session.mode}</html>`,
         readDocument: async (document) => (document.path === `gone.docx` ? undefined : Readable.from([Buffer.from(`bytes of ${document.path}`)])),
         saveDocument: async (key, document, url) => {
@@ -126,11 +134,25 @@ describe(`the save callback`, () => {
 });
 
 describe(`everything else`, () => {
-    it(`is the document server's, proxied on this origin`, async () => {
+    it(`is the document server's, proxied on this origin, and told the public origin it is reached at`, async () => {
         const response = await call(`/web-apps/apps/api/documents/api.js?x=1`);
         expect(response.status).toBe(200);
         expect(response.headers.get(`x-upstream-path`)).toBe(`/web-apps/apps/api/documents/api.js?x=1`);
+        // The server builds the download URLs it hands the editor from these; localhost here would be the sandbox's.
+        expect(response.headers.get(`x-upstream-forwarded-host`)).toBe(`port-abc-def.docs.example.test`);
+        expect(response.headers.get(`x-upstream-forwarded-proto`)).toBe(`https`);
         expect(await response.text()).toBe(`upstream says hi`);
+    });
+
+    it(`leaves the forwarded headers alone while no public origin is known`, async () => {
+        const was = publicOrigin;
+        publicOrigin = undefined;
+        try {
+            const response = await call(`/web-apps/x`);
+            expect(response.headers.get(`x-upstream-forwarded-host`)).toBe(`-`);
+        } finally {
+            publicOrigin = was;
+        }
     });
 
     it(`answers 503 while the document server is down, and keeps its own routes`, async () => {

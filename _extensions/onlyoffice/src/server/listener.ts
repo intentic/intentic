@@ -19,6 +19,10 @@ export interface ListenerDeps {
     readonly sessions: Sessions;
     // The document server's loopback port while it answers; undefined answers 503 to what would be proxied.
     readonly documentServerPort: () => number | undefined;
+    // Where the browser reaches this listener (the forwarded-port origin), once known. The daemon's preview proxy
+    // rewrites Host to localhost and forwards no X-Forwarded-Host, and the document server builds the URLs it hands
+    // the editor (the converted document to download) from exactly those, so it has to be told the public origin.
+    readonly publicOrigin: () => string | undefined;
     readonly pageFor: (session: Session) => string;
     // The document's bytes, or undefined when it is gone.
     readonly readDocument: (document: Document) => Promise<Readable | undefined>;
@@ -49,6 +53,16 @@ const withoutHopByHop = (headers: http.IncomingHttpHeaders): http.IncomingHttpHe
         delete kept[name];
     }
     return kept;
+};
+
+// The request as the document server should see it: X-Forwarded-Host/Proto naming the public origin, so every absolute
+// URL it generates points where the browser can reach. Left alone when the origin is not known (loopback use).
+export const towardsDocumentServer = (headers: http.IncomingHttpHeaders, publicOrigin: string | undefined): http.IncomingHttpHeaders => {
+    if (publicOrigin === undefined) {
+        return headers;
+    }
+    const origin = new URL(publicOrigin);
+    return { ...headers, "x-forwarded-host": origin.host, "x-forwarded-proto": origin.protocol.replace(/:$/, "") };
 };
 
 const readBody = (req: http.IncomingMessage, limit: number): Promise<string> =>
@@ -174,7 +188,8 @@ export const createListener = (deps: ListenerDeps): Listener => {
             json(res, 503, { error: "the document server is not running" });
             return;
         }
-        const upstream = http.request({ host: "127.0.0.1", port, method: req.method, path: req.url, headers: withoutHopByHop(req.headers) }, (answer) => {
+        const headers = towardsDocumentServer(withoutHopByHop(req.headers), deps.publicOrigin());
+        const upstream = http.request({ host: "127.0.0.1", port, method: req.method, path: req.url, headers }, (answer) => {
             res.writeHead(answer.statusCode ?? 502, withoutHopByHop(answer.headers));
             answer.pipe(res);
         });
@@ -222,7 +237,8 @@ export const createListener = (deps: ListenerDeps): Listener => {
             socket.end("HTTP/1.1 503 Service Unavailable\r\n\r\n");
             return;
         }
-        const upstream = http.request({ host: "127.0.0.1", port, method: req.method, path: req.url, headers: req.headers });
+        const headers = towardsDocumentServer(req.headers, deps.publicOrigin());
+        const upstream = http.request({ host: "127.0.0.1", port, method: req.method, path: req.url, headers });
         upstream.on("error", () => socket.destroy());
         upstream.on("response", (answer) => {
             socket.end(`HTTP/1.1 ${answer.statusCode ?? 502} ${answer.statusMessage ?? ""}\r\n\r\n`);
