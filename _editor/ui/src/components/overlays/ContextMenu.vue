@@ -25,8 +25,26 @@ const menu = ref<{ show: (event: Event) => void; hide: () => void } | undefined>
 // the union would indent every label past a space nothing can occupy.
 const hasGutter = computed(() => model.some((item) => item[`icon`] !== undefined || `checked` in item));
 
+/** px kept between the menu and the viewport edge. */
+const edgeGap = 8;
+
+// PrimeVue opens the menu at the pointer and only ever flips it whole, so a model longer than the screen (a fleet's
+// worth of conversations) is drawn straight past the bottom edge with no way to reach its last rows. Cap the list to
+// the roomier side of the click before it renders — PrimeVue measures after this style lands — and let it scroll.
+const maxHeight = ref<string>();
+const capToViewport = (event: Event): void => {
+    // Duck-typed, not `instanceof MouseEvent`: an extension's menu is opened by an event from its own iframe realm.
+    // A keyboard-opened menu reports no pointer, and 0 is where PrimeVue puts it anyway.
+    const y = (event as Partial<MouseEvent>).clientY ?? 0;
+    const below = window.innerHeight - y;
+    maxHeight.value = `${Math.max(below, y) - edgeGap}px`;
+};
+
 defineExpose({
-    show: (event: Event): void => menu.value?.show(event),
+    show: (event: Event): void => {
+        capToViewport(event);
+        menu.value?.show(event);
+    },
     hide: (): void => menu.value?.hide(),
 });
 
@@ -55,7 +73,7 @@ const onRowClick = (event: MouseEvent, item: MenuItem): void => {
         :append-to="appendTo"
         :pt="{
             root: { class: `!text-xs`, style: { minWidth: `${minWidth}rem` } },
-            rootList: `!p-1`,
+            rootList: { class: `!p-1 overflow-y-auto overscroll-contain`, style: { maxHeight } },
             itemLink: `!flex !items-center !gap-2 !rounded !px-2 !py-1 !text-xs`,
             separator: `!my-1`,
         }"
