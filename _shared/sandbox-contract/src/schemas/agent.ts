@@ -218,13 +218,13 @@ export const AgentTurnSchema = z
             .describe("Where this conversation was cut from, on its first turn only. Only the client knows this, so only the client can say it."),
         // The browser sends the chosen model per turn; the provider token is the sandbox's own stored credential.
         model: z.string().optional().describe("Which model to use. Leave it out for the provider's default."),
-        // True when a surface started the turn, not a person; the sandbox then fills the model from the owner's role
-        // list for unwatched work.
+        // Audience only, never model routing: `runRole` is what fills a model in. A run somebody pressed and is
+        // watching leaves this off, however little of it a person typed.
         unattended: z
             .boolean()
             .optional()
             .describe(
-                "Nobody chose a model for this turn because a screen started it rather than a person. The sandbox then fills in the model its owner picked for unwatched work.",
+                "Nobody is watching this turn: a schedule, a queue or another agent started it and no chat is open on it. A card that needs a person is refused rather than raised, plan mode and the terminal hand-off are withheld, and the sandbox's signed-in accounts stay out of it unless a persona carries them.",
             ),
         // Outside content caused this turn, naming the source; distinct from `unattended` (whether anyone is watching).
         outsideWake: z

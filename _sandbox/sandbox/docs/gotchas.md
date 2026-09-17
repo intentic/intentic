@@ -150,7 +150,7 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   reasoning-off turn came back reasoning, and a follow-up on a persona's turn came back as nobody, losing that
   card's toolbox and signed-in accounts in a turn whose entire job is to go and run something. One list, one
   place. There is no `watch-wake` or `verify-nudge` model role behind either any more: both could only ever
-  have bound for a turn that was unattended AND named no model AND no provider AND no role, which nothing here
+  have bound for a turn that named no model AND no provider AND no role AND no persona, which nothing here
   starts, so they were settings rows advertising exactly the model switch these two must never make.
 - **Claude Code turns are told about automatic Stop commands before they run**
   (`src/rules/turn-ending-note.ts`). The note lists enabled `turn.ending` command rules and tells the model not

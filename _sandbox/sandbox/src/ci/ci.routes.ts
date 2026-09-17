@@ -130,7 +130,7 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                 ...(failedJobs.length > 0 ? [`Failed jobs: ${failedJobs.join(", ")}.`] : []),
                 `The logs below are the evidence — read them first; they are usually enough to name the cause.`,
                 `REPRODUCE LOCALLY ONLY IF THIS SANDBOX CAN. \`pnpm verify:push --suite\` runs the checkout gates, typecheck, build and tests, which is what the preflight and verify-* jobs run, so those reproduce here exactly. Jobs that need Docker, a fresh CI image, a desktop runner, a GPU, Windows or Xcode DO NOT: this sandbox has none of them, and an hour spent standing one up is an hour that ends in a guess anyway.`,
-                `For a job you cannot run here: make the change from the logs, then verify it in the place the constraints exist by dispatching the workflow on your own branch (\`gh workflow run <workflow.yml> --ref <your branch>\`, then \`gh run watch\`). Say plainly in your summary if you could not verify it and what would.`,
+                `For a job you cannot run here: make the change from the logs, then verify it in the place the constraints exist by dispatching the workflow on your own branch and reading the run it starts. NO \`gh\` OR \`glab\` IS INSTALLED IN THIS SANDBOX — the ${project.account.provider} REST API is how you reach the run, and the \`${project.account.provider}\` skill carries the connected token and the curl form for it. The same API serves a failed job's full log, which is worth fetching when the tail below cuts off the cause. Say plainly in your summary if you could not verify it and what would.`,
                 `You are in an isolated worktree: commit your fix and it goes through review.`,
                 ...(logs !== "" ? [`--- failed job logs (tails) ---\n${logs}`] : []),
             ].join("\n\n");
@@ -167,8 +167,9 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                     title: `Fix CI: ${run?.title ?? input.repo}`.slice(0, TITLE_MAX),
                     turn: {
                         isolated: true,
-                        // True regardless of a caret pick: it names the turn's origin, not whether a model was chosen.
-                        unattended: true,
+                        // Never `unattended`: somebody pressed Fix and is watching the board it started from, so this
+                        // is an ordinary session with a prepared prompt — cards, plan mode, the terminal hand-off and
+                        // the signed-in accounts all reach it. `runRole` alone is what pins the model (turn-resume.ts).
                         runRole: `pipeline-fix`,
                         // Spread verbatim: AgentRunPick's fields ARE the turn's (agent, model, account, harness,
                         // effort, thinking, fast), so there is nothing to translate and nothing that can be forgotten.

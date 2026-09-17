@@ -39,7 +39,7 @@ const ASK = {
     prompt: "The CI pipeline failed. Investigate and fix it.",
     nudge: "Carry on from where you left off.",
     title: "Fix CI: build broke",
-    turn: { isolated: true as const, unattended: true as const, runRole: "pipeline-fix" as const },
+    turn: { isolated: true as const, runRole: "pipeline-fix" as const },
 };
 
 test("with nobody on the failure, the press opens attempt 1 with the opening prompt and its title", async () => {

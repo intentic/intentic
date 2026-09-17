@@ -262,10 +262,13 @@ const pinnedKnobs = (turn: AgentTurn, pin: ModelPin): Partial<AgentTurn> =>
         PIN_KNOBS.filter((knob) => turn[knob] === undefined && pin[knob] !== undefined && pin[knob] !== "").map((knob) => [knob, pin[knob]]),
     );
 
+// The pin answers for a turn nobody picked a model for, whoever is watching it: `runRole` and `actsAs` are the only
+// things that can answer, so an ordinary chat carrying neither is left alone by that alone. Whether anyone is watching
+// (`unattended`) is a separate question and not one this pin may read.
 const withRoleModel = async <T extends AgentTurn>(services: Services, turn: T): Promise<T> => {
     // Naming either model or agent already answers this: the pin carries a provider with its model, so filling over a
     // chosen agent would move it to a different provider (breaking an intentional cross-provider race).
-    if (turn.unattended !== true || turn.model !== undefined || turn.agent !== undefined) {
+    if (turn.model !== undefined || turn.agent !== undefined) {
         return turn;
     }
     const pinned = (await personaRunModel(services, turn.actsAs)) ?? (turn.runRole === undefined ? undefined : await runRoleModel(services, turn.runRole));

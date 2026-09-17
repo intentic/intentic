@@ -167,10 +167,10 @@ const ranWith = async (
     return seen[0]!;
 };
 
-test("an unattended turn takes the agent-run model, provider and effort", async () => {
+test("a turn carrying a run role takes that role's model, provider and effort", async () => {
     const ran = await ranWith(
         { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "high" }] } },
-        { prompt: "fix CI", conversationId: "ar-fill", unattended: true, runRole: ROLE },
+        { prompt: "fix CI", conversationId: "ar-fill", runRole: ROLE },
     );
     expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6", effort: "high" });
 });
@@ -178,7 +178,7 @@ test("an unattended turn takes the agent-run model, provider and effort", async 
 test("every knob the pin carries rides onto the turn, and the ones it doesn't stay absent", async () => {
     const ran = await ranWith(
         { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "xhigh", thinking: true, harness: "claude-code" }] } },
-        { prompt: "fix CI", conversationId: "ar-knobs", unattended: true, runRole: ROLE },
+        { prompt: "fix CI", conversationId: "ar-knobs", runRole: ROLE },
     );
     expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6", effort: "xhigh", thinking: true, harness: "claude-code" });
     expect(ran.fast).toBeUndefined();
@@ -187,7 +187,7 @@ test("every knob the pin carries rides onto the turn, and the ones it doesn't st
 test("a knob the turn already carries is not overwritten by the pin's", async () => {
     const ran = await ranWith(
         { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "low" }] } },
-        { prompt: "fix CI", conversationId: "ar-knob-kept", unattended: true, runRole: ROLE, effort: "max" },
+        { prompt: "fix CI", conversationId: "ar-knob-kept", runRole: ROLE, effort: "max" },
     );
     expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6", effort: "max" });
 });
@@ -202,7 +202,7 @@ test("the head of the list wins while its account is connected", async () => {
                 ],
             },
         },
-        { prompt: "fix CI", conversationId: "ar-head", unattended: true, runRole: ROLE },
+        { prompt: "fix CI", conversationId: "ar-head", runRole: ROLE },
     );
     expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6" });
 });
@@ -217,7 +217,7 @@ test("a disconnected head is stepped over, and the entry that answers brings its
                 ],
             },
         },
-        { prompt: "fix CI", conversationId: "ar-fallback", unattended: true, runRole: ROLE },
+        { prompt: "fix CI", conversationId: "ar-fallback", runRole: ROLE },
         ["claude"],
     );
     expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5", effort: "max" });
@@ -226,17 +226,17 @@ test("a disconnected head is stepped over, and the entry that answers brings its
 test("a list with nothing reachable left leaves the turn unset: it does not reach for a connected account", async () => {
     const ran = await ranWith(
         { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] } },
-        { prompt: "fix CI", conversationId: "ar-none", unattended: true, runRole: ROLE },
+        { prompt: "fix CI", conversationId: "ar-none", runRole: ROLE },
         ["claude", "gemini"],
     );
     expect(ran.model).toBeUndefined();
     expect(ran.agent).toBeUndefined();
 });
 
-test("an unattended turn that names its own model keeps it", async () => {
+test("a turn that names its own model keeps it", async () => {
     const ran = await ranWith(
         { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] } },
-        { prompt: "walk the story", conversationId: "ar-explicit", unattended: true, runRole: ROLE, agent: "claude", model: "claude-opus-4-5" },
+        { prompt: "walk the story", conversationId: "ar-explicit", runRole: ROLE, agent: "claude", model: "claude-opus-4-5" },
     );
     expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5" });
 });
@@ -267,26 +267,25 @@ test("the persona's own ladder outranks the role's list, and brings its knobs", 
     const ran = await ranAs(
         [{ id: "backend", capabilities: [], models: [{ provider: "claude", model: "claude-opus-4-5", effort: "max" }] }],
         { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "low" }] } },
-        { prompt: "fix CI", conversationId: "ar-persona", unattended: true, runRole: ROLE, actsAs: "backend" },
+        { prompt: "fix CI", conversationId: "ar-persona", runRole: ROLE, actsAs: "backend" },
     );
     expect(ran).toMatchObject({ agent: "claude", model: "claude-opus-4-5", effort: "max" });
 });
 
 test("a persona with no ladder, or none reachable, leaves the question to the role", async () => {
     const roles = { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] } };
-    const silent = await ranAs([{ id: "quiet", capabilities: [] }], roles, { prompt: "fix CI", conversationId: "ar-persona-silent", unattended: true, runRole: ROLE, actsAs: "quiet" });
+    const silent = await ranAs([{ id: "quiet", capabilities: [] }], roles, { prompt: "fix CI", conversationId: "ar-persona-silent", runRole: ROLE, actsAs: "quiet" });
     expect(silent).toMatchObject({ agent: "codex", model: "gpt-5.6" });
     // Kimi isn't connected in this fixture.
     const unreachable = await ranAs([{ id: "far", capabilities: [], models: [{ provider: "kimi", model: "k2" }] }], roles, {
         prompt: "fix CI",
         conversationId: "ar-persona-far",
-        unattended: true,
         runRole: ROLE,
         actsAs: "far",
     });
     expect(unreachable).toMatchObject({ agent: "codex", model: "gpt-5.6" });
     // A persona nobody has behaves like an empty ladder.
-    const missing = await ranAs([], roles, { prompt: "fix CI", conversationId: "ar-persona-missing", unattended: true, runRole: ROLE, actsAs: "gone" });
+    const missing = await ranAs([], roles, { prompt: "fix CI", conversationId: "ar-persona-missing", runRole: ROLE, actsAs: "gone" });
     expect(missing).toMatchObject({ agent: "codex", model: "gpt-5.6" });
 });
 
@@ -294,20 +293,31 @@ test("a turn that names its own model keeps it over the persona's ladder too", a
     const ran = await ranAs(
         [{ id: "backend", capabilities: [], models: [{ provider: "claude", model: "claude-opus-4-5" }] }],
         {},
-        { prompt: "fix CI", conversationId: "ar-persona-explicit", unattended: true, runRole: ROLE, actsAs: "backend", agent: "codex", model: "gpt-5.6" },
+        { prompt: "fix CI", conversationId: "ar-persona-explicit", runRole: ROLE, actsAs: "backend", agent: "codex", model: "gpt-5.6" },
     );
     expect(ran).toMatchObject({ agent: "codex", model: "gpt-5.6" });
 });
 
-test("a turn nobody flagged unattended is left alone", async () => {
-    // The flag, not a missing model, gates this: an unloaded chat catalog also sends no model.
+test("a chat naming neither role nor persona is left alone", async () => {
+    // Carrying no pin source is what gates this: a chat whose catalog hadn't loaded also sends no model, and no role
+    // list may answer for it.
     const ran = await ranWith({ modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] } }, { prompt: "hello", conversationId: "ar-chat" });
     expect(ran.model).toBeUndefined();
     expect(ran.agent).toBeUndefined();
 });
 
+// Audience and model routing are separate questions: a run somebody pressed and is watching still has nobody at a
+// caret, so the flag may not change which model answers for it.
+test("who is watching does not move the pin: the same role answers either way", async () => {
+    const roles = { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6", effort: "high" }] } };
+    const watched = await ranWith(roles, { prompt: "fix CI", conversationId: "ar-watched", runRole: ROLE });
+    const unwatched = await ranWith(roles, { prompt: "fix CI", conversationId: "ar-unwatched", runRole: ROLE, unattended: true });
+    expect(watched).toMatchObject({ agent: "codex", model: "gpt-5.6", effort: "high" });
+    expect([unwatched.agent, unwatched.model, unwatched.effort]).toEqual([watched.agent, watched.model, watched.effort]);
+});
+
 test("an empty agent-run list leaves the turn unset rather than inventing one", async () => {
-    const ran = await ranWith({ modelRoles: { [ROLE]: [] } }, { prompt: "fix CI", conversationId: "ar-unpinned", unattended: true, runRole: ROLE });
+    const ran = await ranWith({ modelRoles: { [ROLE]: [] } }, { prompt: "fix CI", conversationId: "ar-unpinned", runRole: ROLE });
     expect(ran.model).toBeUndefined();
 });
 

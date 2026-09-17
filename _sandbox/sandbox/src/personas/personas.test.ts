@@ -340,6 +340,9 @@ test("an unattended wake is told which accounts it lost, and that they are not b
     expect(note?.text).toContain("`reddit-work`");
     // The connector kept its tools, so naming it here would send the turn looking for a problem it doesn't have.
     expect(note?.text).not.toContain("github");
+    // And the note says so outright: a turn that reads only the loss concludes its whole environment was emptied, and
+    // stops reaching for credentials it still holds.
+    expect(note?.text).toContain("connector credential");
 });
 
 test("no note when nothing was withheld, and none for a turn wearing a card", () => {

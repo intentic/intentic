@@ -128,8 +128,10 @@ export const UNATTENDED_ACCOUNTS_TITLE = "This turn reaches no signed-in account
 // Absence teaches nothing here, and three silences compound: the skill files stay on disk still advertising the
 // account, `Skill(<id>)` refuses with the SDK's generic permission sentence, and `secrets gates` — the one diagnostic
 // this sandbox points at withheld credentials — knows only the owner-approval path and answers that nothing needs
-// approval. A CI-fix turn read that as a broken connection and spent an hour on a manual login for an account that was
-// connected the whole time. The fence is right; being silent about it is not.
+// approval. The fence is right; being silent about it is not.
+//
+// It names the boundary as well as the loss: this rule takes signed-in browsers only, so a turn reading it must not
+// conclude that the connector credentials still in its environment are gone too.
 //
 // Only for the unpinned case: a turn wearing a card is told what it is wearing by personaNote, which is the same
 // sentence from the other end.
@@ -140,12 +142,14 @@ export const unattendedAccountsNote = (persona: TurnPersona, withheld: readonly 
     return {
         title: UNATTENDED_ACCOUNTS_TITLE,
         text:
-            `Nobody started this turn — a schedule, an automation or a pipeline did — so it acts as no one, and the sandbox's ` +
-            `signed-in accounts are not loaded into it: ${withheld.map((capability) => `\`${capability.id}\``).join(", ")}.\n\n` +
+            `Nobody is watching this turn — a schedule, a queue or another agent started it — so it acts as no one, and the ` +
+            `sandbox's signed-in accounts are not loaded into it: ${withheld.map((capability) => `\`${capability.id}\``).join(", ")}.\n\n` +
             `They are connected and working. Their tools are absent and their skills refuse, and that is THIS RULE, not a broken ` +
             `login: do not reconnect them, do not sign in by hand, and do not reach for a token to work around them. A turn a ` +
             `person starts gets them, so if the work needs one, do everything else first and say plainly in your summary which ` +
-            `account it was waiting on.`,
+            `account it was waiting on.\n\n` +
+            `That list is the whole of what this rule takes, and it is signed-in browsers only. Every connector credential in ` +
+            `your environment and every skill built on one is untouched and yours to use.`,
     };
 };
 
