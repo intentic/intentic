@@ -21,6 +21,7 @@ const input = (over: Partial<EntryMenuInput> = {}): EntryMenuInput => ({
     target: file,
     locked: false,
     canEdit: true,
+    archived: false,
     multi: false,
     count: 1,
     barren: false,
@@ -93,6 +94,26 @@ describe(`the entry menu`, () => {
         const items = entryMenuItems(input({ canEdit: false, lead: [{ label: `Open management panel` }] }));
         expect(labels(items)).toEqual([`Open management panel`, `—`, `Read-only: changing files needs maintainer access`]);
         expect(items.at(-1)?.disabled).toBe(true);
+    });
+
+    it(`inside an archive keeps the read verbs and the one that gets something out`, () => {
+        const items = entryMenuItems(input({ archived: true, head: [{ label: `Open` }], tail: [{ label: `Collapse Folders` }] }));
+        expect(labels(items)).toEqual([`Open`, `—`, `Copy`, `—`, `Collapse Folders`, `—`, `Inside an archive: extract it to change anything`]);
+        expect(items.at(-1)?.disabled).toBe(true);
+    });
+
+    it(`counts a bulk copy out of an archive, and offers nothing on its background`, () => {
+        expect(labels(entryMenuItems(input({ archived: true, multi: true, count: 3 })))).toContain(`Copy 3 items`);
+        // Nothing lands in an archive, so its background has no create to offer.
+        expect(labels(entryMenuItems(input({ archived: true, target: undefined, clipboardFull: true })))).toEqual([
+            `Inside an archive: extract it to change anything`,
+        ]);
+    });
+
+    it(`drops a folder's own rows inside an archive: they are about the workspace, not a copy of one`, () => {
+        expect(labels(entryMenuItems(input({ archived: true, target: dir, lead: [{ label: `Open management panel` }] })))).not.toContain(
+            `Open management panel`,
+        );
     });
 
     it(`explains a locked entry and offers nothing else`, () => {

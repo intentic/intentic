@@ -12,6 +12,7 @@ import {
     explorerTreatment,
     iconForEntry,
 } from "@intentic/ui";
+import { noticeOf } from "@intentic/ui/async";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, type VNode, watch } from "vue";
 import { useLayout } from "../../../shell/window/useLayout";
@@ -19,6 +20,7 @@ import { viewersOfPath } from "../../../shell/presence/usePresence";
 import { noteUserCreatedDir, useEmptyDirs } from "./useEmptyDirs";
 import { useFileNesting } from "./useFileNesting";
 import { useUploadQueue } from "../files/upload/useUploadQueue";
+import { archiveAbove, isArchiveContent, opensAsFolder } from "../files/archiveEntries";
 import { isLeaving, type Provisional, provisionalAt, withProvisionalEntries } from "../files/provisionalEntries";
 import { isRecentlyChanged } from "../changes/live/useWorkspaceLive";
 import { lensPersonaId, reachOf } from "../directory-ui/personaReach";
@@ -102,6 +104,7 @@ const {
     moveIntoMany,
     extractEntry,
     run,
+    actionError,
     canEditFiles,
     refuseWrite,
     loadChildren,
@@ -175,10 +178,28 @@ const refused = (path: string): boolean => lensReach.value?.refuses(path) === tr
 // placeholder rows for files that aren't on disk under that name yet.
 const unlockedOnly = (paths: readonly string[]): string[] => paths.filter((path) => !locked(path) && !pending(path) && !isLeaving(path));
 
+// Inside an archive nothing can be written: what a row there names is a copy the daemon keeps out of sight, and
+// nothing repacks a zip. The archive FILE itself is ordinary workspace content.
+const archiveDir = (dir: string): boolean => archiveAbove(dir, (path) => byPath.value.get(path)) !== undefined;
+const archived = (path: string): boolean => isArchiveContent(path, (at) => byPath.value.get(at));
+// A folder that takes no drop: the sandbox keeps it private, or it is an archive's contents.
+const noDrops = (dir: string): boolean => locked(dir) || archiveDir(dir);
+// `refuseWrite` for the member tier, plus the archive rule, for a verb aimed at `dir`.
+const refuseIn = (dir: string): boolean => {
+    if (archiveDir(dir)) {
+        actionError.value = noticeOf(`An archive's contents are read-only. Extract it to change them.`);
+        return true;
+    }
+    return refuseWrite();
+};
+
 // Children come from the eager walk's inline `children`, else the lazily-fetched map keyed by path. No `children` means
 // never listed (ignored, or beyond budget) and fetches on expand; `children: []` is a genuinely empty dir.
-const isUnlisted = (entry: WorkspaceTreeEntry): boolean => entry.type === `dir` && entry.children === undefined;
+// An archive counts: it has no inline children either, and expanding one asks the daemon for what is inside it.
+const isUnlisted = (entry: WorkspaceTreeEntry): boolean => (entry.type === `dir` || opensAsFolder(entry)) && entry.children === undefined;
 const childrenOf = (entry: WorkspaceTreeEntry): readonly WorkspaceTreeEntry[] => entry.children ?? lazyChildren.value.get(entry.path) ?? [];
+// What draws rows under it: a directory, and an archive, which is a file the daemon lists as if it were one.
+const holdsRows = (entry: WorkspaceTreeEntry): boolean => entry.type === `dir` || opensAsFolder(entry);
 
 // Flattens the tree into a path→entry map, covering lazy subtrees too, so a lazy row is selectable like any other.
 const byPath = computed(() => {
@@ -248,7 +269,7 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
     const walk = (nodes: readonly WorkspaceTreeEntry[], depth: number, dir: string): (Row | MoreRow)[] => {
         const out: (Row | MoreRow)[] = [];
         for (const { entry, nested } of level(nodes, dir)) {
-            if (entry.type !== `dir`) {
+            if (!holdsRows(entry)) {
                 if (nested !== undefined) {
                     const isExpanded = open.has(entry.path);
                     out.push({ entry, depth, isExpanded, nest: true });
@@ -367,7 +388,7 @@ const deadLink = (entry: WorkspaceTreeEntry): boolean => entry.link?.state !== u
 // Whether a row has anything to expand into; a barren chain expands from its tail. No chevron when the tail has no
 // children, or the dir is locked, or the link is dead.
 const expandable = (row: Row): boolean =>
-    (row.entry.type === `dir` || row.nest === true) &&
+    (row.entry.type === `dir` || row.nest === true || opensAsFolder(row.entry)) &&
     !locked(row.entry.path) &&
     !deadLink(row.entry) &&
     (row.barren !== true || childrenOf(row.chainTail ?? row.entry).length > 0);
@@ -389,7 +410,8 @@ const activate = (entry: WorkspaceTreeEntry, revealManagedDir: boolean, mode: Op
         emit(`openFile`, entry.path, mode);
         return;
     }
-    if (entry.type === `dir`) {
+    // A zip or tar expands like the folder it holds, rather than opening as a file.
+    if (entry.type === `dir` || opensAsFolder(entry)) {
         toggleExpand(entry.path);
         // Keyboard activation (Enter) also reveals a managed dir's operator tab; a plain click just expands.
         if (revealManagedDir && manageableDirs.has(entry.path)) {
@@ -492,7 +514,7 @@ const onRowDblClick = (row: Row): void => {
     if (pending(row.entry.path)) {
         return;
     }
-    if (row.entry.type === `file` || locked(row.entry.path)) {
+    if ((row.entry.type === `file` && !opensAsFolder(row.entry)) || locked(row.entry.path)) {
         emit(`openFile`, row.entry.path, `keep`);
     }
 };
@@ -507,7 +529,7 @@ const onChevronClick = (event: MouseEvent, row: Row): void => {
 
 // ---- rename (inline) ----
 const beginRename = (path: string): void => {
-    if (locked(path) || pending(path) || refuseWrite()) {
+    if (locked(path) || pending(path) || refuseIn(targetDir(path))) {
         return;
     }
     renamingPath.value = path;
@@ -541,7 +563,7 @@ const focusRename = (vnode: VNode): void => {
 
 // ---- create (inline) / delete (confirm dialog) / cut·copy·paste (over the whole selection) ----
 const beginCreate = (dir: string, type: "file" | "dir"): void => {
-    if (refuseWrite()) {
+    if (refuseIn(dir)) {
         return;
     }
     renamingPath.value = undefined;
@@ -599,7 +621,7 @@ const cancelCreate = (): void => {
     creating.value = undefined;
 };
 const doDeleteSelection = (): void => {
-    if (refuseWrite()) {
+    if (refuseIn(targetDir(lead.value))) {
         return;
     }
     const paths = unlockedOnly([...selection.value]);
@@ -707,7 +729,7 @@ const confirmDelete = (): void => {
 };
 // Drops a placeholder into the chain's deepest folder, making it non-empty for git and off the barren list for good.
 const keepFolder = async (path: string): Promise<void> => {
-    if (refuseWrite()) {
+    if (refuseIn(path)) {
         return;
     }
     const tail = chainOf(path).tail;
@@ -722,7 +744,7 @@ const cancelDelete = (): void => {
 // Unpacks an archive into the folder holding it. Selected only once the daemon answers: what it landed as is its
 // answer, and a name guessed here would mark the wrong row whenever the archive turned out to hold its own folder.
 const extract = async (path: string): Promise<void> => {
-    if (refuseWrite()) {
+    if (refuseIn(targetDir(path))) {
         return;
     }
     await run(async () => {
@@ -770,7 +792,7 @@ const revealPasted = (dir: string, paths: readonly string[]): void => {
 // A copy never overwrites, landing under a free name ("<name> copy"); a cut moves and consumes the clipboard.
 const doPaste = async (dir: string): Promise<void> => {
     const clip = clipboard.value;
-    if (clip === undefined || refuseWrite()) {
+    if (clip === undefined || refuseIn(dir)) {
         return;
     }
     // Revealed before the write is awaited: the destination rows are already on screen, so selecting them after the
@@ -935,7 +957,7 @@ const onKeydown = (event: KeyboardEvent): void => {
 // A folder takes the drop itself; a file stands in for its parent, as with New File and paste.
 const dropDirOf = (row: Row): string => (row.entry.type === `dir` ? row.entry.path : parentDir(row.entry.path));
 // What a row offers a move: its folder, unless the sandbox keeps that folder private or the link leads nowhere.
-const dropTargetOf = (row: Row): string | undefined => (locked(dropDirOf(row)) || deadLink(row.entry) ? undefined : dropDirOf(row));
+const dropTargetOf = (row: Row): string | undefined => (noDrops(dropDirOf(row)) || deadLink(row.entry) ? undefined : dropDirOf(row));
 const { dragging: rowDragging, paths: dragPaths, over: dragOver, begin: beginEntryDrag, consumeSuppressedClick } = useEntryDrag();
 const onRowPointerDown = (event: PointerEvent, row: Row): void => {
     const path = row.entry.path;
@@ -948,7 +970,22 @@ const onRowPointerDown = (event: PointerEvent, row: Row): void => {
     if (paths.length === 0) {
         return;
     }
-    beginEntryDrag(event, { paths, onDrop: (dir) => void run(() => moveIntoMany(paths, dir), `Couldn't move those items.`) });
+    beginEntryDrag(event, { paths, onDrop: (dir) => void dragOnto(paths, dir) });
+};
+// Where a dragged row lands. Out of an archive it is a copy: the member stays in the archive, since nothing here
+// rewrites one, and a drag that silently deleted from a zip would be the wrong surprise either way.
+const dragOnto = async (paths: readonly string[], dir: string): Promise<void> => {
+    if (paths.some((path) => archived(path))) {
+        const pairs = pastePairs(paths, dir, await namesIn(dir));
+        const write = run(() => copyEntries(pairs), `Couldn't copy those items out.`);
+        revealPasted(
+            dir,
+            pairs.map((pair) => pair.to),
+        );
+        await write;
+        return;
+    }
+    await run(() => moveIntoMany(paths, dir), `Couldn't move those items.`);
 };
 const onRowDragOver = (event: DragEvent, row: Row): void => {
     // Not OS files: left alone so the browser declines it, as the background does.
@@ -979,7 +1016,7 @@ const onRowDrop = (event: DragEvent, row: Row): void => {
     const dir = dropDirOf(row);
     dragOverPath.value = undefined;
     // Swallowed here so a refused drop can't bubble to the root and land files unexpectedly.
-    if (locked(dir) || refuseWrite()) {
+    if (noDrops(dir) || refuseIn(dir)) {
         return;
     }
     // Opened before the files are read, so the placeholder rows appear inside the folder that took the drop rather than
@@ -1007,6 +1044,9 @@ const menuItems = computed<MenuItem[]>(() => {
         target,
         locked: target !== undefined && locked(target.path),
         canEdit: canEditFiles.value,
+        // The folder the verbs would act in decides it, so a right-click on the archive's own row keeps its verbs while
+        // a right-click on anything inside it does not.
+        archived: archiveDir(dir),
         multi,
         count: unlockedOnly([...selection.value]).length,
         barren: target?.type === `dir` && isBarren(target.path),

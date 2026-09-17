@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { sleep } from "@intentic/base/async";
+import { isBrowsableArchive } from "@intentic/sandbox-contract";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, markRaw, reactive, ref } from "vue";
 import { detectProjects, managerFromPackageJson, type ProjectSetup } from "@intentic/workspace-setup";
@@ -8,6 +9,7 @@ import { packTar } from "../../explorer/transfer/tarStream";
 import { sandboxJson, sandboxUpload } from "../../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../../sandbox/client/jsonBody";
 import { WORKSPACE_TREE } from "../../../../lib/queryKeys";
+import { scopeQuery } from "../../health/workspaceScope";
 import { chunkItems, dedupeByPath } from "./uploadChunking";
 import { clearUnsettledUploads, markFailed, markSettled, noteArriving } from "../provisionalEntries";
 
@@ -57,12 +59,23 @@ const skippedUnchanged = ref(0);
 
 const joinPath = (dir: string, rel: string): string => (dir === `` ? rel : `${dir}/${rel}`);
 
+// Unpacks a just-landed zip or tar ahead of the first click on it. The listing request IS the unpack, so this is the
+// same call the desk would make, made early and thrown away; a failure here costs nothing, since the desk's own call
+// will report it when someone actually opens the archive.
+const warmArchive = (path: string): void => {
+    if (!isBrowsableArchive(path.slice(path.lastIndexOf(`/`) + 1))) {
+        return;
+    }
+    void sandboxJson(`/workspace/children?${scopeQuery(new URLSearchParams({ path })).toString()}`).catch(() => undefined);
+};
+
 // The one place a file's status moves, so the explorer's placeholder row for it can't drift from the card's counts.
 // `queued` covers a retry resetting a file that a previous attempt already reported on.
 const setStatus = (item: QueueFile, status: FileStatus): void => {
     item.status = status;
     if (status === `done`) {
         markSettled(item.path);
+        warmArchive(item.path);
     } else if (status === `failed`) {
         markFailed(item.path);
     } else if (status === `queued`) {

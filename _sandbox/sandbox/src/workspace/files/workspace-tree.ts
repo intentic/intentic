@@ -8,7 +8,7 @@ import {
     type WorkspaceTree,
     type WorkspaceTreeEntry,
 } from "@intentic/sandbox-contract";
-import { createIgnoreScope, type IgnoreScope, toRelPath } from "@intentic/workspace-ignore";
+import { createIgnoreScope, type IgnoreScope, NO_IGNORES, toRelPath } from "@intentic/workspace-ignore";
 import { scanBarrenDirs } from "./empty-dirs.js";
 import { isUnder, realPathOf, realWithin, resolveWithin } from "./workspace-files-paths.js";
 
@@ -172,12 +172,19 @@ export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: n
     return { root: base, tree, hidden: rootHidden, barren: await barren };
 };
 
+// Where a listing's ignore state starts. ignoreRules:false admits everything, for a tree that is an archive's contents
+// rather than a project.
+const startingScope = (options: { ignoreRules?: boolean } | undefined): IgnoreScope =>
+    options?.ignoreRules === false ? NO_IGNORES : createIgnoreScope();
+
 // Lazily lists one directory's children (ignored, or past budget); depth 1 by default, as one flat list.
 // Ignore state is rebuilt from the root; relPath is checked lexically and on disk (realWithin catches a link escape).
+// ignoreRules:false lists everything: inside an unpacked archive a .gitignore is the archive's own content, and must
+// not hide its siblings from the person who opened it.
 export const listWorkspaceChildren = async (
     root: string,
     relPath: string,
-    options?: { maxEntries?: number; depth?: number },
+    options?: { maxEntries?: number; depth?: number; ignoreRules?: boolean },
 ): Promise<WorkspaceChildren> => {
     const base = resolve(root);
     const dir = resolveWithin(base, relPath);
@@ -193,7 +200,7 @@ export const listWorkspaceChildren = async (
         return { entries: [], hidden: 0 };
     }
     // Replays the ancestor chain: each descend() layers a .gitignore; an ignored ancestor ignores the whole branch.
-    let parentScope = createIgnoreScope();
+    let parentScope = startingScope(options);
     let branchIgnored = false;
     let walked = base;
     let rel = "";

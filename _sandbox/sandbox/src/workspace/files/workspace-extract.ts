@@ -35,10 +35,14 @@ const MAX_FREE_NAMES = 100;
 // unzip exits 1 for warnings it recovered from (a skipped unsafe path, a duplicate member): the extraction happened.
 const succeeded = (format: ArchiveFormat, code: number | null): boolean => code === 0 || (format === "zip" && code === 1);
 
-const unpack = (format: ArchiveFormat, archive: string, target: string, stdout: number | "ignore"): Promise<void> =>
+/**
+ * Spawns the tool for `format` over `archive`; `stdout` is the fd a single-file format decompresses into. Aborting
+ * `abort` kills the tool mid-write, which is how a caller watching the bytes land stops one that won't fit.
+ */
+export const unpack = (format: ArchiveFormat, archive: string, target: string, stdout: number | "ignore", abort?: AbortSignal): Promise<void> =>
     new Promise((resolve, reject) => {
         const [command, args] = TOOLS[format](archive, target);
-        const child = spawn(command, args, { stdio: ["ignore", stdout, "pipe"], timeout: EXTRACT_TIMEOUT_MS });
+        const child = spawn(command, args, { stdio: ["ignore", stdout, "pipe"], timeout: EXTRACT_TIMEOUT_MS, ...(abort === undefined ? {} : { signal: abort }) });
         let complaint = ``;
         child.stderr?.setEncoding(`utf8`);
         child.stderr?.on(`data`, (chunk: string) => {
@@ -78,6 +82,12 @@ const claim = async <T>(parent: string, base: string, create: (path: string) => 
 // Resource forks a Mac's zip carries beside the real tree. Junk everywhere else, and the usual reason an archive that
 // is one folder doesn't look like one.
 const MAC_JUNK = `__MACOSX`;
+
+/** Drops the junk and flattens the doubled folder, so an unpacked tree reads the way its archive was meant to. */
+export const tidyUnpacked = async (target: string, stem: string): Promise<void> => {
+    await rm(join(target, MAC_JUNK), { recursive: true, force: true });
+    await unwrapSoleRoot(target, stem);
+};
 
 // `site.zip` holding a single `site/` is the doubled folder every zip tool makes; its contents move up so the
 // extraction is one folder deep instead of two.
@@ -128,8 +138,7 @@ export const extractArchive = async (absArchive: string): Promise<string> => {
     const { path } = await claim(parent, stem, (candidate) => mkdir(candidate));
     try {
         await unpack(format, absArchive, path, `ignore`);
-        await rm(join(path, MAC_JUNK), { recursive: true, force: true });
-        await unwrapSoleRoot(path, stem);
+        await tidyUnpacked(path, stem);
     } catch (failure) {
         await rm(path, { recursive: true, force: true });
         throw failure;

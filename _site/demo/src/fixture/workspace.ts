@@ -408,7 +408,26 @@ const SOURCES: [string, string | number][] = [
     [`api/Dockerfile`, 640],
     [`api/package.json`, 690],
     [`api/pnpm-lock.yaml`, 96_200],
+
+    // A dropped archive: listed as the file it is, and entered like a folder (ARCHIVES below answers what is inside).
+    [`drop/brand-kit.zip`, 48_200],
 ];
+
+// What an archive holds, which the daemon answers by unpacking it out of sight. Keyed by the archive's own path and
+// separate from FILES on purpose: the tree must list `brand-kit.zip` as a FILE, and a member path under FILES would
+// make the walk build a folder of that name instead.
+const ARCHIVES = new Map<string, [string, string | number][]>([
+    [
+        `drop/brand-kit.zip`,
+        [
+            [`logo.svg`, 4_120],
+            [`README.md`, `# Brand kit\n\nLogos, the type scale, and the palette as tokens.\n`],
+            [`palette/tokens.json`, 1_860],
+            [`palette/swatches.png`, 21_400],
+            [`type/Inter-Regular.woff2`, 18_900],
+        ],
+    ],
+]);
 
 const FILES = new Map<string, string | number>([
     ...SOURCES,
@@ -474,8 +493,39 @@ export const workspaceTree = (): WorkspaceTree => {
     return { root: WORKSPACE_ROOT, hidden: 0, tree: ordered(roots), barren: [] };
 };
 
-/** One directory's immediate children: the lazy-load behind an ignored dir. */
+// One level of an archive's contents, under the archive's own path, the way the daemon answers for a zip or tar.
+// `at` is the archive; `inside` is where in it, "" for its top level.
+const archiveChildren = (at: string, inside: string, members: readonly [string, string | number][]): WorkspaceChildren => {
+    const prefix = inside === `` ? `` : `${inside}/`;
+    const entries = new Map<string, TreeNode>();
+    for (const [member, contents] of members) {
+        if (!member.startsWith(prefix)) {
+            continue;
+        }
+        const rest = member.slice(prefix.length);
+        const name = rest.includes(`/`) ? rest.slice(0, rest.indexOf(`/`)) : rest;
+        const child = `${at}/${prefix}${name}`;
+        entries.set(name, rest.includes(`/`) ? { name, path: child, type: `dir` } : { name, path: child, type: `file`, size: sizeOf(contents) });
+    }
+    return { entries: ordered([...entries.values()]), hidden: 0 };
+};
+
+// The archive a listing is of, and where inside it, when the path names one or sits under one.
+const archiveAt = (path: string): { at: string; inside: string; members: readonly [string, string | number][] } | undefined => {
+    for (const [at, members] of ARCHIVES) {
+        if (path === at || path.startsWith(`${at}/`)) {
+            return { at, inside: path === at ? `` : path.slice(at.length + 1), members };
+        }
+    }
+    return undefined;
+};
+
+/** One directory's immediate children: the lazy-load behind an ignored dir, or what an archive holds. */
 export const workspaceChildren = (path: string): WorkspaceChildren => {
+    const archive = archiveAt(path);
+    if (archive !== undefined) {
+        return archiveChildren(archive.at, archive.inside, archive.members);
+    }
     const prefix = `${path}/`;
     const entries = new Map<string, TreeNode>();
     const inIgnored = isIgnored(path);

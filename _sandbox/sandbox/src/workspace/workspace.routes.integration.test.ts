@@ -208,6 +208,56 @@ test("workspace.children forwards the bounded depth to the walker", async () => 
     expect(calls).toEqual([{ root: WORKSPACE_ROOT, path: "staged", depth: 5 }]);
 });
 
+test("an archive answers like the folder it holds, nothing writes into one, and copy gets a member out", async () => {
+    const workspace = tempWorkspace([]);
+    await mkdir(join(workspace.root, "drops"), { recursive: true });
+    await mkdir(join(workspace.root, ".staging", "site"), { recursive: true });
+    await writeFile(join(workspace.root, ".staging", "site", "index.html"), "<h1>hi</h1>");
+    await promisify(execFile)("tar", [
+        "-c",
+        "-z",
+        "-f",
+        join(workspace.root, "drops", "site.tar.gz"),
+        "-C",
+        join(workspace.root, ".staging"),
+        "site",
+    ]);
+    await rm(join(workspace.root, ".staging"), { recursive: true });
+
+    const calls: unknown[][] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                files: fakeFiles({ copy: async (from, to) => void calls.push(["copy", from, to]) }),
+            }),
+        ),
+    );
+
+    // The archive is a folder here: `site/` was its own name, so its contents sit one level in, as Extract lands them.
+    expect(await client.workspace.children({ path: "drops/site.tar.gz" })).toEqual({
+        entries: [{ name: "index.html", path: "drops/site.tar.gz/index.html", type: "file", size: 11 }],
+        hidden: 0,
+    });
+
+    // Nothing goes back into an archive, whichever write asks.
+    expect(await errorCode(client.workspace.mkdir({ path: "drops/site.tar.gz/new" }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.workspace.delete({ path: "drops/site.tar.gz/index.html" }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.workspace.move({ from: "drops/site.tar.gz/index.html", to: "index.html" }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.workspace.copy({ from: "index.html", to: "drops/site.tar.gz/index.html" }))).toBe("BAD_REQUEST");
+    expect(calls).toEqual([]);
+
+    // Copying OUT is the one write whose source may be an archive member: it reads from the unpacked copy.
+    expect(await client.workspace.copy({ from: "drops/site.tar.gz/index.html", to: "index.html" })).toEqual({ ok: true });
+    const [verb, from, to] = calls[0] ?? [];
+    expect(verb).toBe("copy");
+    expect(String(from)).toMatch(/intentic-archives\/[\da-f]{64}\/index\.html$/);
+    expect(to).toBe(join(workspace.root, "index.html"));
+
+    // The archive itself stays an ordinary file: it can be read, moved and deleted like any other.
+    expect(await client.workspace.delete({ path: "drops/site.tar.gz" })).toEqual({ ok: true });
+});
+
 test("workspace.file reads any contained file (former-secret paths included), answers absent, BAD_REQUESTs escape", async () => {
     const client = clientFor(
         createApp(

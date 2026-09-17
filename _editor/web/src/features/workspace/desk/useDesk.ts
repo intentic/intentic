@@ -35,7 +35,8 @@ const desk: Ref<boolean> = definePreference<boolean>({
     write: (value) => (value ? `1` : `0`),
 });
 
-// Root-relative; the scope root ("" for the whole tree) is the desk's own root.
+// Root-relative; the scope root ("" for the whole tree) is the desk's own root. An archive is a folder here: the desk
+// enters `drop/photos.zip` and the daemon serves its contents.
 const deskDir = ref<string>(workspaceDir.value);
 // The current entry: what the last click, in the tree or on the desk, landed on. Undefined after entering a folder.
 const selected = ref<string | undefined>(undefined);

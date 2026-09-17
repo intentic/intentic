@@ -8,7 +8,7 @@ import { sha256Text } from "./workspace-files.js";
 import { MAX_RAW_BYTES, contentTypeForPath, openWorkspaceFileRange, parseByteRange } from "./workspace-files-download.js";
 import { isControlPlanePath, resolveWithin } from "./workspace-files-paths.js";
 import { MAX_UPLOAD_BYTES, UploadTooLargeError } from "./workspace-files-upload.js";
-import { scopedTarget } from "../layout/workspace-scope.js";
+import { insideArchive, scopedTarget } from "../layout/workspace-scope.js";
 
 // Byte routes that stay off oRPC because their bodies are streamed: raw file read, ranged media read, and file/diff/tar
 // uploads. Registered before the oRPC catch-all, like /health.
@@ -35,6 +35,18 @@ const scopedFileTarget = async (
         }
         return { error: error.message, status: 404 };
     }
+};
+
+// Why an upload can't be written, or undefined when it can: the sandbox's own state is never writable through the
+// generic upload, and an archive is browsable rather than writable.
+const refusedUpload = (root: string, relPath: string | undefined, target: string): { error: string; status: 400 | 404 } | undefined => {
+    if (isControlPlanePath(root, target)) {
+        return { error: "not found", status: 404 };
+    }
+    if (insideArchive(root, relPath ?? "")) {
+        return { error: "an archive's contents are read-only; extract it to change them", status: 400 };
+    }
+    return undefined;
 };
 
 export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
@@ -124,9 +136,9 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
         if (target === undefined) {
             return c.json({ error: "invalid path" }, 400);
         }
-        // Sandbox's private state isn't writable through the generic upload.
-        if (isControlPlanePath(services.workspace.root, target)) {
-            return c.json({ error: "not found" }, 404);
+        const refused = refusedUpload(services.workspace.root, path, target);
+        if (refused !== undefined) {
+            return c.json({ error: refused.error }, refused.status);
         }
         // ?offset positions this part of a chunked upload; the write lands in place instead of truncating.
         const offset = Number(c.req.query("offset") ?? 0);

@@ -39,6 +39,7 @@ import type { SearchScope } from "../search/useWorkspaceSearch";
 import { MATCH_TOGGLES } from "../search/useSearchOptions";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
+import { opensAsFolder } from "../files/archiveEntries";
 import { DESK_DIR_ACTIONS, DESK_SEARCH, useDesk } from "../desk/useDesk";
 import { filesOffered, watchDragSource } from "../explorer/transfer/dragSource";
 import EntryDragGhost from "../explorer/transfer/EntryDragGhost.vue";
@@ -986,7 +987,7 @@ const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay
                         :row-actions="rowActions"
                         @open-file="openFile"
                         @open-directory="openDirectory"
-                        @pick="(entry) => pick(entry.path, entry.type)"
+                        @pick="(entry) => pick(entry.path, opensAsFolder(entry) ? `dir` : entry.type)"
                         @clear="selected = undefined"
                     />
                 </div>

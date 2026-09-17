@@ -7,6 +7,7 @@ import { computed, inject, onBeforeUnmount, ref, type VNode, watch } from "vue";
 import { useLayout } from "../../../shell/window/useLayout";
 import { type ExplorerFilters, explorerShows, technicalHidden } from "../explorer/explorerFilter";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
+import { opensAsFolder } from "../files/archiveEntries";
 import { withProvisionalEntries } from "../files/provisionalEntries";
 import { workspaceDir } from "../health/workspaceScope";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
@@ -168,6 +169,8 @@ const {
     openMenu,
     handleKey,
     locked,
+    noDrops,
+    archiveHere,
     pending,
 } = useDeskActions({
     dir: deskDir,
@@ -246,8 +249,8 @@ const dimmed = (entry: WorkspaceTreeEntry): boolean => entry.ignored === true ||
 const tabindexOf = (entry: WorkspaceTreeEntry): number => (selectedEntry.value === undefined ? (entry === order.value[0] ? 0 : -1) : selected.value === entry.path ? 0 : -1);
 // A folder takes a drop itself; a file stands in for the folder holding it, as with paste.
 const dropDirOf = (entry: WorkspaceTreeEntry): string => (entry.type === `dir` && entry.link?.state === undefined ? entry.path : deskDir.value);
-// What a tile offers a move: that folder, unless the sandbox keeps it private.
-const dropTargetOf = (entry: WorkspaceTreeEntry): string | undefined => (locked(dropDirOf(entry)) ? undefined : dropDirOf(entry));
+// What a tile offers a move: that folder, unless the sandbox keeps it private or it is an archive's contents.
+const dropTargetOf = (entry: WorkspaceTreeEntry): string | undefined => (noDrops(dropDirOf(entry)) ? undefined : dropDirOf(entry));
 // A tile lights as a target for a move (useEntryDrag) or for OS files (dropDir); a file tile never does, its folder is the desk.
 const targeted = (entry: WorkspaceTreeEntry): boolean => entry.type === `dir` && (dropDir.value === entry.path || over.value === entry.path);
 // The release that ended a drag lands as a click on the tile it started on; it was a drop, not a pick.
@@ -271,9 +274,15 @@ const open = (entry: WorkspaceTreeEntry): void => {
         return;
     }
     // A placeholder has no file behind it yet; opening one would read a path the daemon doesn't serve.
-    if (!pending(entry.path)) {
-        openFile(entry.path, `keep`);
+    if (pending(entry.path)) {
+        return;
     }
+    // A zip or tar is entered rather than opened: the daemon lists what is inside it as if it were this folder.
+    if (opensAsFolder(entry)) {
+        go(entry.path, `forward`);
+        return;
+    }
+    openFile(entry.path, `keep`);
 };
 
 // --- The quick look ------------------------------------------------------------------------------------------------
@@ -428,7 +437,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
         @copy="onCopyEvent($event, 'copy')"
         @cut="onCopyEvent($event, 'cut')"
         @paste="onPasteEvent"
-        :data-drop-dir="deskDir"
+        :data-drop-dir="noDrops(deskDir) ? undefined : deskDir"
         @dragenter.stop.prevent
         @dragover="onDragOver($event, deskDir)"
         @dragleave="onDragLeave($event, deskDir)"
@@ -445,7 +454,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     type="button"
                     class="-mx-1 rounded px-1 text-muted transition-colors hover:text-content"
                     :class="{ 'ui-row-select-drop': dropDir === crumb.path || over === crumb.path }"
-                    :data-drop-dir="crumb.path"
+                    :data-drop-dir="noDrops(crumb.path) ? undefined : crumb.path"
                     @click="go(crumb.path, 'back')"
                     @dragover="onDragOver($event, crumb.path)"
                     @dragleave="onDragLeave($event, crumb.path)"
@@ -454,6 +463,11 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     {{ crumb.label }}
                 </button>
             </template>
+            <!-- Says why there is no New File here and why a drop bounces; the menu's own note only shows on a right-click. -->
+            <span v-if="archiveHere" class="ui-chip ml-2 h-5 shrink-0 gap-1 px-1.5 text-2xs text-muted">
+                <Icon name="box" aria-hidden="true" />
+                Read-only
+            </span>
             <!-- The sidebar's query, here too; the placeholder names the scope the sidebar set, since it may be closed. -->
             <div v-if="search !== undefined" class="ml-auto flex items-center gap-2 pl-4">
                 <span v-if="querying && !searching" class="text-2xs tabular-nums text-subtle"

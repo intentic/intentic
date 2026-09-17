@@ -40,6 +40,7 @@ import { useAudience } from "../../../app/useAudience";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
+import { isArchiveContent, opensAsFolder } from "../files/archiveEntries";
 import { type Provisional, provisionalAt, withProvisionalEntries } from "../files/provisionalEntries";
 import { type ExplorerFilters, explorerShows, technicalHidden } from "../explorer/explorerFilter";
 import FileViewer from "../viewers/FileViewer.vue";
@@ -233,14 +234,23 @@ const deadLink = (node: WorkspaceTreeEntry): boolean => node.link?.state !== und
 // Only for a path the listing doesn't have: a folder an upload is landing in usually exists already.
 const pendingRow = (path: string): Provisional | undefined => (entriesByPath.value.has(path) ? undefined : provisionalAt(path));
 const pending = (path: string): boolean => pendingRow(path) !== undefined;
+// An archive's contents are read-only: what a row there names is a copy the daemon keeps out of sight, and nothing
+// repacks a zip. The archive FILE itself is ordinary workspace content.
+const archivedEntry = (node: WorkspaceTreeEntry): boolean => isArchiveContent(node.path, (path) => entriesByPath.value.get(path));
 const openEntry = (node: WorkspaceTreeEntry): void => {
     if (node.type === `dir` && !isLockedWorkspacePath(node.path) && !deadLink(node)) {
         openDir(node.path);
         return;
     }
-    if (!pending(node.path)) {
-        openFile(node.path);
+    if (pending(node.path)) {
+        return;
     }
+    // A zip or tar drills in like the folder it holds; the daemon lists its contents on demand.
+    if (opensAsFolder(node)) {
+        openDir(node.path);
+        return;
+    }
+    openFile(node.path);
 };
 
 // Long-press row actions (the ContextMenu equivalents). `rootEl` is where a clipboard write targets the
@@ -696,7 +706,7 @@ const onPick = (event: Event): void => {
                         <Icon name="download" class="text-base text-muted" /> Download
                     </button>
                     <!-- Rename and Delete stay gated; Download and Copy path remain available. -->
-                    <template v-if="canEditFiles">
+                    <template v-if="canEditFiles && !archivedEntry(sheetEntry)">
                         <button
                             type="button"
                             class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
@@ -712,6 +722,9 @@ const onPick = (event: Event): void => {
                             <Icon name="trash" class="text-base" /> Delete
                         </button>
                     </template>
+                    <p v-else-if="archivedEntry(sheetEntry)" class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
+                        <Icon name="box" class="text-base text-subtle" /> Inside an archive: extract it to change anything
+                    </p>
                     <p v-else class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
                         <Icon name="lock" class="text-base text-subtle" /> Read-only: changing files needs maintainer access
                     </p>

@@ -4,6 +4,7 @@ import { Button, CopyButton, ui, useDevice } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, shallowRef, watch, type Component } from "vue";
 import { sandboxBlob, SandboxHttpError } from "../../sandbox/client/sandboxClient";
+import { isArchiveContent } from "../files/archiveEntries";
 import { sha256Hex } from "../files/contentHash";
 import { readFileWindow } from "../files/fileWindow";
 import { mediaUrl } from "../files/mediaUrl";
@@ -283,7 +284,9 @@ const derivedDownloadable = computed(() => open.value.kind !== `code` && open.va
 // Inline editing (text only): direct editing in Monaco or Markdown, seeded from the live
 // buffer or disk text. Ctrl+S/Save persists via upload; the tree refetch then refreshes size and the read view.
 const { hideFileComments, toggleHideFileComments } = useLayout();
-const { saveText, run, canEditFiles } = useWorkspaceTree();
+const { saveText, run, canEditFiles, entry: entryAt } = useWorkspaceTree();
+// Inside an archive: what is open is a member of a copy the daemon keeps out of sight, and nothing repacks a zip.
+const inArchive = computed(() => isArchiveContent(path, entryAt));
 // Editable CodeView instance; toolbar Save calls its exposed save(), so toolbar and Ctrl+S share one path.
 const editorView = ref<InstanceType<typeof CodeView>>();
 // Markdown surface, same reason: its Save must fold the open paragraph back in first, so only it can do that.
@@ -296,16 +299,22 @@ const { mobile } = useDevice();
 const editableKind = computed(() => (open.value.kind === `code` || open.value.kind === `markdown`) && text.value !== null);
 // Off in a scope: the daemon can't write into a checkout at all, so a Save here would silently hit the shared
 // file of the same path, possibly racing the agent's own writes to it.
-const canEdit = computed(() => canEditFiles.value && workspaceAgent.value === undefined && editableKind.value);
+const canEdit = computed(() => canEditFiles.value && workspaceAgent.value === undefined && !inArchive.value && editableKind.value);
 // Reason lives here, where a reader would look for edit capability.
-// Two causes: tier (checked first, outranks scope) or scope, either can disable Edit.
-const scopedReadOnly = computed(() => !mobile.value && editableKind.value && (!canEditFiles.value || workspaceAgent.value !== undefined));
-const scopeTitle = useScopeTitle();
-const readOnlyReason = computed(() =>
-    canEditFiles.value
-        ? `Showing ${scopeTitle.value}'s copy of the workspace: its work hasn't landed yet, so these files can't be edited here.`
-        : `Your access to this sandbox is read-only: changing files needs maintainer access.`,
+// Three causes: tier (checked first, outranks the rest), scope, or an archive; any one disables Edit.
+const scopedReadOnly = computed(
+    () => !mobile.value && editableKind.value && (!canEditFiles.value || workspaceAgent.value !== undefined || inArchive.value),
 );
+const scopeTitle = useScopeTitle();
+const readOnlyReason = computed(() => {
+    if (!canEditFiles.value) {
+        return `Your access to this sandbox is read-only: changing files needs maintainer access.`;
+    }
+    if (inArchive.value) {
+        return `Inside an archive: extract it to get a copy you can change.`;
+    }
+    return `Showing ${scopeTitle.value}'s copy of the workspace: its work hasn't landed yet, so these files can't be edited here.`;
+});
 const markdownHere = computed(() => open.value.kind === `markdown`);
 // Text files are continuously editable on desktop whenever permissions allow.
 const editingThis = computed(() => !mobile.value && canEdit.value && !markdownHere.value);

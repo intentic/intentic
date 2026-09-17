@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 import { SandboxHttpError, sandboxBlob, sandboxJson } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
+import { opensAsFolder } from "../files/archiveEntries";
 import { readFileWindow } from "../files/fileWindow";
 import { resetEmptyDirsState } from "./useEmptyDirs";
 import { useSandbox } from "../../sandbox/client/useSandbox";
@@ -362,14 +363,14 @@ export function useWorkspaceTree() {
     };
 
     // Loads children for any expanded dir the walk left unlisted, whether opened by a click or restored from the
-    // snapshot. Runs immediately: the tree can already be cached on mount, so waiting for the next change would leave
-    // it empty.
+    // snapshot. An expanded ARCHIVE loads the same way: it is a file, and what is inside it only ever arrives lazily.
+    // Runs immediately: the tree can already be cached on mount, so waiting for the next change would leave it empty.
     watch(
         [expanded, entriesByPath],
         () => {
             for (const path of expanded.value) {
                 const node = entriesByPath.value.get(path);
-                if (node?.type === `dir` && node.children === undefined) {
+                if (node !== undefined && node.children === undefined && (node.type === `dir` || opensAsFolder(node))) {
                     void loadChildren(path);
                 }
             }

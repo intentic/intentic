@@ -27,6 +27,9 @@ export interface EntryMenuInput {
     readonly locked: boolean;
     // A read-only member: write verbs are dropped, not disabled, and the tier is named once at the bottom.
     readonly canEdit: boolean;
+    // The target is an archive's contents. Read verbs only: nothing here repacks a zip, and Extract is how you get
+    // something changeable.
+    readonly archived: boolean;
     // The target sits inside a larger selection, which the bulk verbs then act on.
     readonly multi: boolean;
     // How many entries the bulk verbs would touch.
@@ -44,6 +47,7 @@ export interface EntryMenuInput {
 
 const LOCKED_NOTE: MenuItem = { label: `Kept private by the sandbox`, icon: `lock`, disabled: true };
 const READ_ONLY_NOTE: MenuItem = { label: `Read-only: changing files needs maintainer access`, icon: `lock`, disabled: true };
+const ARCHIVE_NOTE: MenuItem = { label: `Inside an archive: extract it to change anything`, icon: `box`, disabled: true };
 
 const withSeparator = (items: readonly MenuItem[]): MenuItem[] => (items.length === 0 ? [] : [{ separator: true }, ...items]);
 
@@ -51,6 +55,20 @@ const readOnlyMenu = ({ head = [], lead = [], tail = [] }: EntryMenuInput): Menu
     const readable = [...head, ...lead, ...tail];
     return [...readable, ...withSeparator([READ_ONLY_NOTE])];
 };
+
+// Joins the groups that have rows, a rule between them, so a menu never opens or closes on a separator.
+const joinGroups = (...groups: readonly (readonly MenuItem[])[]): MenuItem[] =>
+    groups.filter((group) => group.length > 0).flatMap((group, index) => (index === 0 ? [...group] : [{ separator: true }, ...group]));
+
+// An archive's contents: what can be read, plus the one verb that gets something out of it. A folder's own rows
+// (`lead`) are dropped with the rest, since none of them mean anything about a copy the daemon keeps out of sight.
+const archiveMenu = ({ target, multi, count, head = [], tail = [], verbs }: EntryMenuInput): MenuItem[] =>
+    joinGroups(
+        head,
+        target === undefined ? [] : [{ label: multi ? `Copy ${count} items` : `Copy`, icon: `copy`, command: verbs.copy }],
+        tail,
+        [ARCHIVE_NOTE],
+    );
 
 // The rows that can only ever name one entry, which is why a bulk selection has none of them.
 const soleVerbs = (target: WorkspaceTreeEntry, barren: boolean, verbs: EntryVerbs): MenuItem[] => {
@@ -87,6 +105,9 @@ export const entryMenuItems = (input: EntryMenuInput): MenuItem[] => {
     }
     if (!input.canEdit) {
         return readOnlyMenu(input);
+    }
+    if (input.archived) {
+        return archiveMenu(input);
     }
     const { head = [], lead = [], tail = [], verbs, clipboardFull } = input;
     return [

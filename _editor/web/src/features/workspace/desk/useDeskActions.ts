@@ -1,6 +1,7 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { clipboardOf } from "@intentic/ui";
+import { noticeOf } from "@intentic/ui/async";
 import { basename, parentDir } from "@intentic/ui/path";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onScopeDispose, type Ref, ref, watch } from "vue";
@@ -15,6 +16,7 @@ import { movableInto, pastePairs } from "../explorer/transfer/explorerPaste";
 import { selectRange } from "../explorer/treeSelect";
 import { noteUserCreatedDir, useEmptyDirs } from "../explorer/useEmptyDirs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
+import { archiveAbove, isArchiveContent } from "../files/archiveEntries";
 import { isLeaving, provisionalAt } from "../files/provisionalEntries";
 import { useUploadQueue } from "../files/upload/useUploadQueue";
 
@@ -49,6 +51,7 @@ export function useDeskActions(ctx: DeskActionsContext) {
         barren,
         clipboard,
         run,
+        actionError,
         refuseWrite,
         canEditFiles,
         moveEntry,
@@ -67,6 +70,20 @@ export function useDeskActions(ctx: DeskActionsContext) {
     const entryAt = (path: string): WorkspaceTreeEntry | undefined =>
         entriesByPath.value.get(path) ?? lazyChildren.value.get(parentDir(path))?.find((entry) => entry.path === path);
     const locked = (path: string): boolean => isLockedWorkspacePath(path);
+    // Inside an archive nothing can be written: what the desk lists there is a copy the daemon keeps out of sight, and
+    // nothing repacks a zip. The archive FILE is ordinary workspace content; only what it holds is read-only.
+    const archived = (path: string): boolean => isArchiveContent(path, entryAt);
+    const archiveHere = computed(() => archiveAbove(ctx.dir.value, entryAt) !== undefined);
+    // A folder that takes no drop: the sandbox keeps it private, or it is an archive's contents.
+    const noDrops = (dir: string): boolean => locked(dir) || archiveAbove(dir, entryAt) !== undefined;
+    // `refuseWrite` for the member tier, plus the archive rule; says which it was, since neither is the other's fault.
+    const refuseHere = (): boolean => {
+        if (archiveHere.value) {
+            actionError.value = noticeOf(`An archive's contents are read-only. Extract it to change them.`);
+            return true;
+        }
+        return refuseWrite();
+    };
     // Still arriving: nothing at that path to act on yet.
     const pending = (path: string): boolean => !entriesByPath.value.has(path) && provisionalAt(path) !== undefined;
     // What the verbs may touch: not the sandbox's private paths, nor rows still on their way in or out.
@@ -146,7 +163,7 @@ export function useDeskActions(ctx: DeskActionsContext) {
     const editing = computed(() => renaming.value !== undefined || creating.value !== undefined);
 
     const beginRename = (path: string): void => {
-        if (locked(path) || pending(path) || refuseWrite()) {
+        if (locked(path) || pending(path) || refuseHere()) {
             return;
         }
         creating.value = undefined;
@@ -174,7 +191,7 @@ export function useDeskActions(ctx: DeskActionsContext) {
 
     // ---- create (a phantom tile in the open folder) ----
     const beginCreate = (type: "file" | "dir"): void => {
-        if (refuseWrite()) {
+        if (refuseHere()) {
             return;
         }
         renaming.value = undefined;
@@ -222,7 +239,7 @@ export function useDeskActions(ctx: DeskActionsContext) {
     // ---- delete (confirmed; there is no trash to restore from) ----
     const confirmPaths = ref<readonly string[] | undefined>(undefined);
     const requestDelete = (): void => {
-        if (refuseWrite()) {
+        if (refuseHere()) {
             return;
         }
         const targets = acting();
@@ -250,7 +267,7 @@ export function useDeskActions(ctx: DeskActionsContext) {
     };
     // Drops a placeholder into the chain's deepest folder, making it non-empty for git and off the barren list for good.
     const keepFolder = async (path: string): Promise<void> => {
-        if (refuseWrite()) {
+        if (refuseHere()) {
             return;
         }
         const tail = chainOf(path).tail;
@@ -263,7 +280,7 @@ export function useDeskActions(ctx: DeskActionsContext) {
     // Unpacks an archive into the open folder. Selected only once the daemon answers: what it landed as is its answer,
     // and a name guessed here would mark the wrong tile whenever the archive turned out to hold its own folder.
     const extract = async (path: string): Promise<void> => {
-        if (refuseWrite()) {
+        if (refuseHere()) {
             return;
         }
         await run(async () => {
@@ -300,24 +317,28 @@ export function useDeskActions(ctx: DeskActionsContext) {
         anchor.value = list.at(-1);
         ctx.lead.value = anchor.value;
     };
+    // Copies each source into `dir` without ever overwriting: a name already taken lands as "<name> copy".
+    const copyInto = async (sources: readonly string[], dir: string, whenRefused: string): Promise<void> => {
+        const taken = new Set((await listing(dir)).map((entry) => entry.name));
+        const pairs = pastePairs(sources, dir, taken);
+        if (pairs.length === 0) {
+            return;
+        }
+        const write = run(() => copyEntries(pairs), whenRefused);
+        landed(
+            dir,
+            pairs.map((pair) => pair.to),
+        );
+        await write;
+    };
     // A copy never overwrites, landing under a free name ("<name> copy"); a cut moves and consumes the clipboard.
     const paste = async (dir: string = ctx.dir.value): Promise<void> => {
         const clip = clipboard.value;
-        if (clip === undefined || refuseWrite()) {
+        if (clip === undefined || refuseHere()) {
             return;
         }
         if (clip.mode === `copy`) {
-            const taken = new Set((await listing(dir)).map((entry) => entry.name));
-            const pairs = pastePairs(clip.paths, dir, taken);
-            if (pairs.length === 0) {
-                return;
-            }
-            const write = run(() => copyEntries(pairs), `Couldn't paste those items.`);
-            landed(
-                dir,
-                pairs.map((pair) => pair.to),
-            );
-            await write;
+            await copyInto(clip.paths, dir, `Couldn't paste those items.`);
             return;
         }
         const sources = movableInto(clip.paths, dir);
@@ -352,7 +373,7 @@ export function useDeskActions(ctx: DeskActionsContext) {
         const files = event.clipboardData?.files;
         if (files !== undefined && files.length > 0) {
             event.preventDefault();
-            if (!refuseWrite()) {
+            if (!refuseHere()) {
                 void enqueue(ctx.dir.value, filesToEntries(files));
             }
             return;
@@ -377,7 +398,16 @@ export function useDeskActions(ctx: DeskActionsContext) {
         if (targets.length === 0) {
             return;
         }
-        beginEntryDrag(event, { paths: targets, onDrop: (dir) => void run(() => moveIntoMany(targets, dir), `Couldn't move those items.`) });
+        beginEntryDrag(event, { paths: targets, onDrop: (dir) => void dragOnto(targets, dir) });
+    };
+    // Where a dragged tile lands. Out of an archive it is a copy: the member stays in the archive, since nothing here
+    // rewrites one, and a drag that silently deleted from a zip would be the wrong surprise either way.
+    const dragOnto = async (targets: readonly string[], dir: string): Promise<void> => {
+        if (targets.some((path) => archived(path))) {
+            await copyInto(targets, dir, `Couldn't copy those items out.`);
+            return;
+        }
+        await run(() => moveIntoMany(targets, dir), `Couldn't move those items.`);
     };
 
     // The folder an OS file drag is over; undefined over nothing, or over a folder the sandbox keeps private.
@@ -390,7 +420,7 @@ export function useDeskActions(ctx: DeskActionsContext) {
         // Stopped here: the page's own drop zone sits behind the desk and must not also claim this drag.
         event.preventDefault();
         event.stopPropagation();
-        const invalid = locked(dir);
+        const invalid = noDrops(dir);
         if (event.dataTransfer !== null) {
             event.dataTransfer.dropEffect = invalid ? `none` : `copy`;
         }
@@ -413,7 +443,7 @@ export function useDeskActions(ctx: DeskActionsContext) {
         event.preventDefault();
         event.stopPropagation();
         dropDir.value = undefined;
-        if (locked(dir) || refuseWrite()) {
+        if (noDrops(dir) || refuseHere()) {
             return;
         }
         // Synchronous: webkitGetAsEntry must fire while the drag's items are still alive.
@@ -482,6 +512,9 @@ export function useDeskActions(ctx: DeskActionsContext) {
             target,
             locked: target !== undefined && locked(target.path),
             canEdit: canEditFiles.value,
+            // The background of an archive's listing is archive contents too, which is why the open folder decides it
+            // rather than the right-clicked tile.
+            archived: archiveHere.value,
             multi,
             count: acting().length,
             barren: target?.type === `dir` && isBarren(target.path),
@@ -565,6 +598,8 @@ export function useDeskActions(ctx: DeskActionsContext) {
         openMenu,
         handleKey,
         locked,
+        noDrops,
+        archiveHere,
         pending,
     };
 }

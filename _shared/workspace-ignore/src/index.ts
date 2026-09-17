@@ -69,5 +69,12 @@ const makeScope = (layers: readonly GitignoreLayer[]): IgnoreScope => ({
 // passed to isIgnored are root-relative.
 export const createIgnoreScope = (): IgnoreScope => makeScope([]);
 
+// A scope that ignores nothing, for a tree that is not a project: an unpacked archive's `.gitignore`, `node_modules`
+// and `.git` are its own contents, and hiding them would hide what the archive actually holds.
+export const NO_IGNORES: IgnoreScope = {
+    isIgnored: () => false,
+    descend: async () => NO_IGNORES,
+};
+
 // Root-relative, forward-slash path for `abs` under `base`, the path space the tree/search/file routes speak.
 export const toRelPath = (base: string, abs: string): string => relative(base, abs).split(sep).join("/");

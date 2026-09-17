@@ -21,7 +21,7 @@ import { syncWorkspaceRepos } from "./layout/sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./files/workspace-files-paths.js";
 import { UnknownArchiveError } from "./files/workspace-extract.js";
-import { containedIn, scopedTarget, workspaceRootFor } from "./layout/workspace-scope.js";
+import { childrenForRead, containedForRead, containedIn, insideArchive, scopedTarget, workspaceRootFor } from "./layout/workspace-scope.js";
 
 // Row cap for one /workspace/search page, sized to the virtualized list's visible rows.
 const GUI_SEARCH_HITS = 1_000;
@@ -33,11 +33,17 @@ const GUI_SEARCH_BUDGET = 2_000;
 // app.ts; a streamed body doesn't fit oRPC.
 export const createWorkspaceRoutes = (services: Services) => {
     const i = implement(workspaceContract).$context<OrpcContext>();
-    // Resolves a write target inside the shared tree; no write route can ever target a conversation's checkout.
-    const contained = async (relPath: string): Promise<string> => containedIn(services.workspace.root, relPath);
+    // Resolves a write target inside the shared tree; no write route can ever target a conversation's checkout, and an
+    // archive's contents are read-only: nothing here repacks a zip.
+    const contained = async (relPath: string): Promise<string> => {
+        if (insideArchive(services.workspace.root, relPath)) {
+            throw new ORPCError("BAD_REQUEST", { message: "an archive's contents are read-only; extract it to change them" });
+        }
+        return containedIn(services.workspace.root, relPath);
+    };
     // The same guard for a shadow's source, answering the canonical relative path a sidecar is filed under: `./a//b.pdf`
-    // and `a/b.pdf` name one file and must not name two shadows.
-    const derivedRel = async (relPath: string): Promise<string> => relative(services.workspace.root, await contained(relPath));
+    // and `a/b.pdf` name one file and must not name two shadows. No archive refusal: a member simply has no shadow.
+    const derivedRel = async (relPath: string): Promise<string> => relative(services.workspace.root, await containedIn(services.workspace.root, relPath));
     // Read scope shared with the byte routes in app.ts; two resolvers here would disagree on a file's contents.
     const scope = services.workspaceScope;
     // Zone and sandbox id used to build per-app preview URLs (preview-<panel>-<id>.<zone>).
@@ -58,14 +64,12 @@ export const createWorkspaceRoutes = (services: Services) => {
         // `file`.
         tree: i.tree.handler(async ({ input }) => services.workspaceTree(await workspaceRootFor(scope, input.agent))),
         // Lazy-loads children of a dir the tree skipped (node_modules, .git, ...), or a bounded subtree for a consumer
-        // avoiding per-directory requests.
-        children: i.children.handler(async ({ input }) =>
-            services.workspaceChildren(
-                await workspaceRootFor(scope, input.agent),
-                input.path,
-                input.depth === undefined ? undefined : { depth: input.depth },
-            ),
-        ),
+        // avoiding per-directory requests. A zip or tar lists like the folder it holds, unpacked on first ask.
+        children: i.children.handler(async ({ input }) => {
+            const root = await workspaceRootFor(scope, input.agent);
+            const options = input.depth === undefined ? undefined : { depth: input.depth };
+            return (await childrenForRead(root, input.path, options)) ?? services.workspaceChildren(root, input.path, options);
+        }),
         // Returns a window of the file with its total size, not the whole file. An absent file is a 200 with
         // present:false, not a 404; scopedTarget still throws on an escape or control-plane path.
         file: i.file.handler(async ({ input }) => {
@@ -191,8 +195,10 @@ export const createWorkspaceRoutes = (services: Services) => {
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),
+        // The one write whose source may sit inside an archive: copying out is how a member reaches the workspace
+        // without extracting the whole thing. The destination is a write target like any other.
         copy: i.copy.handler(async ({ input }) => {
-            await services.files.copy(await contained(input.from), await contained(input.to));
+            await services.files.copy(await containedForRead(services.workspace.root, input.from), await contained(input.to));
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),
