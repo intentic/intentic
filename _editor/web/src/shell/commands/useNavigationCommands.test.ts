@@ -5,11 +5,16 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import { registerView } from "../../core-views/registry";
 import { sandboxSections } from "../../features/sandbox/sandboxNav";
 import { settingsSections } from "../../features/settings/settingsNav";
+import { startAppI18n } from "../../app/i18n";
 import { commands } from "./useCommands";
 import { useNavigationCommands } from "./useNavigationCommands";
 
 // Pins the promise this composable exists for: everywhere the shell can take you is reachable by name, derived from
 // the same tables the rail and the hubs draw, and nothing is offered that the surface would bounce the reader off.
+
+// The section tables name themselves through `t`, so without the app's own catalog every title below is the raw key.
+// main.ts awaits this before mounting; so does this file, for the same reason.
+await startAppI18n();
 
 // Read inside the mock factories, so a test can set the grant and the plan before mounting.
 const state = vi.hoisted(() => ({ canShip: true, planOffered: true }));

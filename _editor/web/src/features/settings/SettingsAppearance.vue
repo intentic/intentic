@@ -20,7 +20,6 @@ import { type DiffOpen, useLayout } from "../../shell/window/useLayout";
 import { useChangeGrouping } from "../workspace/changes/useChangeGrouping";
 import { useChangeWeight } from "../workspace/changes/changeWeight";
 import { useFileNesting } from "../workspace/explorer/useFileNesting";
-import { useDesk } from "../workspace/desk/useDesk";
 import { useIconRailSize } from "../../shell/rail/useIconRailSize";
 import { useSkin } from "../../skins/useSkin";
 import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "./themeRow";
@@ -35,8 +34,6 @@ const { textSize, setTextSize } = useTextSize();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
 const { iconRailSize } = useIconRailSize();
 const { fileNesting } = useFileNesting();
-// The main pane's "nothing open" surface: the open folder as tiles, or the plain drop target.
-const { desk } = useDesk();
 // Review-list reading: groupByModule also has a toggle on the Changes panel; largestFirst is set only here.
 const { groupByModule } = useChangeGrouping();
 const { largestFirst } = useChangeWeight();
@@ -248,13 +245,6 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 <template #control>
                     <ToggleSwitch :model-value="hideTechnical" @update:model-value="toggleHideTechnical()" />
                 </template>
-            </Row>
-        </RowGroup>
-
-        <!-- What the main pane shows between files. -->
-        <RowGroup :label="t(`settings.appearance.desk.group`)">
-            <Row as="label" icon="th-large" :title="t(`settings.appearance.desk.title`)" :description="t(`settings.appearance.desk.hint`)">
-                <template #control><ToggleSwitch v-model="desk" /></template>
             </Row>
         </RowGroup>
 

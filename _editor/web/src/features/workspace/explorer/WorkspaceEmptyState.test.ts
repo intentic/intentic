@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 //
-// THE TWO SILENCES THIS PANE COVERS. An empty workspace is somebody who has just finished setup and has no code
-// in yet: for them this pane is the whole product, and every way in has to be on it. A workspace with code and
-// no file open is a reader between files, who needs the drop target and nothing else. Showing either screen in
-// the other's state is the failure worth a test: the newcomer offered only a file upload (what this replaced),
-// or a working developer greeted by a get-started pitch every time they close their last tab.
+// THE ONE SILENCE THIS PANE COVERS. An empty workspace is somebody who has just finished setup and has no code in
+// yet: for them this pane is the whole product, and every way in has to be on it. The other silence — a workspace
+// with code and no file open — is the desk's, and EditorPane picks between them on `empty`, so a working developer
+// closing their last tab never lands here. The failure worth a test is the newcomer offered only a file upload,
+// which is what this pane replaced.
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { expect, it } from "vitest";
 import { createApp, h, nextTick } from "vue";
@@ -12,10 +12,10 @@ import { queryClient } from "../../../lib/queryPersistence";
 import WorkspaceEmptyState from "./WorkspaceEmptyState.vue";
 import { IconStub } from "@intentic/ui/testing";
 
-const mount = (empty: boolean): HTMLElement => {
+const mount = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.appendChild(el);
-    const app = createApp({ render: () => h(WorkspaceEmptyState, { empty }) });
+    const app = createApp({ render: () => h(WorkspaceEmptyState) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(VueQueryPlugin, { queryClient });
@@ -26,18 +26,17 @@ const mount = (empty: boolean): HTMLElement => {
 const buttonSaying = (el: HTMLElement, text: string): HTMLButtonElement | undefined =>
     [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(text));
 
-it(`offers every way of getting code in while the workspace is empty`, () => {
-    const el = mount(true);
+it(`offers every way of getting code in`, () => {
+    const el = mount();
 
     expect(buttonSaying(el, `Clone`)).toEqual(expect.any(Object));
     expect(buttonSaying(el, `Upload`)).toEqual(expect.any(Object));
     expect(buttonSaying(el, `Ask`)).toEqual(expect.any(Object));
     expect(el.querySelectorAll(`button`).length).toBeGreaterThanOrEqual(3);
-    expect(mount(false).textContent).not.toBe(el.textContent);
 });
 
 it(`opens the clone field in place, and refuses to submit an empty address`, async () => {
-    const el = mount(true);
+    const el = mount();
 
     buttonSaying(el, `Clone a repository`)!.click();
     await nextTick();
@@ -48,20 +47,9 @@ it(`opens the clone field in place, and refuses to submit an empty address`, asy
     expect(buttonSaying(el, `Clone`)!.disabled).toBe(true);
 });
 
-it(`shows a workspace that HAS code only the drop target: this pane is not a tutorial for people mid-work`, () => {
-    const el = mount(false);
-
-    expect(el.textContent).not.toBe(mount(true).textContent);
-    expect(buttonSaying(el, `Clone`)).toBeUndefined();
-    expect(buttonSaying(el, `Ask`)).toBeUndefined();
-    expect(el.querySelector(`input`)).toBeNull();
-});
-
-// Last, since answering is remembered for the rest of this file's module: the card is the newcomer's one question,
-// and a reader between files (the non-empty pane) is never asked it here.
-it(`asks the newcomer how they work, once, and never the reader between files`, async () => {
-    expect(mount(false).textContent).not.toContain(`How will you work here?`);
-    const el = mount(true);
+// Last, since answering is remembered for the rest of this file's module: the card is the newcomer's one question.
+it(`asks the newcomer how they work, once`, async () => {
+    const el = mount();
     expect(el.textContent).toContain(`How will you work here?`);
 
     buttonSaying(el, `I write code`)!.click();
@@ -69,5 +57,5 @@ it(`asks the newcomer how they work, once, and never the reader between files`, 
 
     expect(el.textContent).not.toContain(`How will you work here?`);
     expect(localStorage.getItem(`ui-audience`)).toBe(`developer`);
-    expect(mount(true).textContent).not.toContain(`How will you work here?`);
+    expect(mount().textContent).not.toContain(`How will you work here?`);
 });

@@ -8,6 +8,7 @@ import type {
     ViewRegistration,
 } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-manifest";
+import { registerCatalog } from "@intentic/ui/i18n";
 import { isIconName } from "@intentic/ui/icons";
 import * as activity from "@intentic/ext-activity";
 import { describe, expect, it } from "vitest";
@@ -23,6 +24,16 @@ const { builtinModules } = await import("./builtins");
 // The core views register outside builtinModules but land in the same rail column, so the glyph check below has to see
 // both.
 const { coreViews } = await import("../core-views/coreViews");
+
+// The words, before any activate() below — the order loader.ts's runActivate keeps, and the reason a contribution's
+// title reads as a word here instead of the key it was translated from.
+await Promise.all(
+    [...builtinModules.values()].map((module) =>
+        module.messages === undefined
+            ? Promise.resolve()
+            : registerCatalog({ namespace: `ext.${extensionIdOf(module.manifest)}`, ...module.messages }),
+    ),
+);
 
 // A fake host that accepts every registration an extension can make. It must accept all of them, not just the one a
 // test reads: activate() runs top to bottom, so a registry the stub is missing throws halfway through and later

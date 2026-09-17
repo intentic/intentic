@@ -112,7 +112,9 @@ const activate = async (locale: Locale): Promise<void> => {
 };
 
 // Another window changing the language reaches this ref through BroadcastChannel; it has to load and swap here too.
-watch(preference, (locale) => void activate(locale));
+// Caught, unlike `setLocale`'s promise, because nobody is holding this one: a chunk that fails to arrive leaves the
+// reader in the language already on screen, which is the same outcome as one still in flight.
+watch(preference, (locale) => void activate(locale).catch(() => undefined));
 
 /**
  * Adds a package's messages to the tree. `en` is live the moment this returns; the promise resolves once the

@@ -1,17 +1,14 @@
 import type { WorkspaceSearchGroup } from "@intentic/api-contract";
-import { definePreference } from "@intentic/ui/preference";
 import { parentDir } from "@intentic/ui/path";
 import { type InjectionKey, type Ref, ref, watch } from "vue";
 import type { RowAction } from "../explorer/rowActions";
 import { workspaceDir } from "../health/workspaceScope";
 import type { SearchScope } from "../search/useWorkspaceSearch";
 
-// The desk: the main pane's "nothing open" surface drawn as large tiles of one folder. Opt-in, since it takes the
-// place of the drop target a reader between files gets today. Which folder, and which entry is current, are
-// module-level state shared with the explorer tree: a click in either view lands in the same two refs, so the other
-// view marks what this one picked, and closing the last tab brings back the folder the reader left, not the root.
-
-const STORAGE_KEY = `ui-workspace-desk`;
+// The desk: the main pane's "nothing open" surface drawn as large tiles of one folder. Which folder, and which entry
+// is current, are module-level state shared with the explorer tree: a click in either view lands in the same two refs,
+// so the other view marks what this one picked, and closing the last tab brings back the folder the reader left, not
+// the root.
 
 // A folder's own rows for the desk's menu (documents, personas, checks, management), composed by the workspace page,
 // which holds the openers; provided rather than passed, since the desk is mounted by the pane, not the page.
@@ -28,12 +25,6 @@ export interface DeskSearch {
     readonly clear: () => void;
 }
 export const DESK_SEARCH: InjectionKey<DeskSearch> = Symbol(`desk-search`);
-
-const desk: Ref<boolean> = definePreference<boolean>({
-    key: STORAGE_KEY,
-    read: (raw) => raw === `1`,
-    write: (value) => (value ? `1` : `0`),
-});
 
 // Root-relative; the scope root ("" for the whole tree) is the desk's own root. An archive is a folder here: the desk
 // enters `drop/photos.zip` and the daemon serves its contents.
@@ -74,5 +65,5 @@ const pick = (path: string, type: "file" | "dir"): void => {
 };
 
 export function useDesk() {
-    return { desk, deskDir, selected, openDir, pick };
+    return { deskDir, selected, openDir, pick };
 }

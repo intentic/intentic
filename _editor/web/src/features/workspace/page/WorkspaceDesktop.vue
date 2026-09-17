@@ -178,24 +178,11 @@ useWorkspaceRoute();
 
 // Nothing to draw: the pane shows every way to get code in, and the desk has no folder to show.
 const emptyWorkspace = computed(() => !isLoading.value && tree.value.length === 0);
-// The desk (features/workspace/desk): what is under the tabs while the preference is on. Showing it unsets the main
-// pane's active tab and closes nothing, so the strip is a click away from where it was.
-const { desk, selected, pick } = useDesk();
-const deskOffered = computed(() => desk.value && !emptyWorkspace.value);
-const deskCovered = computed(() => deskOffered.value && strip.value.main.active !== null);
+// The desk (features/workspace/desk): what is under the tabs. Showing it unsets the main pane's active tab and closes
+// nothing, so the strip is a click away from where it was.
+const { selected, pick } = useDesk();
+const deskCovered = computed(() => !emptyWorkspace.value && strip.value.main.active !== null);
 const showDesk = (): void => deselect(`main`);
-// Registered only while the desk is on: a palette row that shows a bare pane would be named for something it isn't.
-let deskCommand: Disposable | undefined;
-watch(
-    desk,
-    (on) => {
-        deskCommand?.dispose();
-        deskCommand = on
-            ? registerCommand({ owner: `builtin`, category: WORKSPACE, command: `workspace.showDesk`, title: `Show Desk`, icon: `th-large`, handler: showDesk })
-            : undefined;
-    },
-    { immediate: true },
-);
 
 // Below ~40rem the tree becomes a drawer over the viewer instead of a column. `drawerOpen` is separate from the
 // persisted `sidebarCollapsed`, so a chat-narrowed session can't leave the explorer hidden on a later wide one.
@@ -621,6 +608,7 @@ const WORKSPACE_COMMANDS: readonly Omit<CommandRegistration, `owner`>[] = [
     },
     // The root repo's health report: the palette route to what a nested repo opens from its own tree row.
     { command: `workspace.codebaseHealth`, title: `Show Codebase Health`, icon: `wave-pulse`, handler: () => openHealth(`root`) },
+    { command: `workspace.showDesk`, title: `Show Desk`, icon: `th-large`, handler: showDesk },
     { command: `workspace.toggleSidebar`, title: `Toggle Explorer`, icon: `bars`, keybinding: `Ctrl+Shift+B`, handler: () => toggleSidebar() },
     // One chord toggles both directions; Ctrl+Shift+\ avoids bare Ctrl+\, which is SIGQUIT in a focused terminal.
     {
@@ -751,8 +739,6 @@ onBeforeUnmount(() => {
         disposable.dispose();
     }
     workspaceCommandDisposables = [];
-    deskCommand?.dispose();
-    deskCommand = undefined;
 });
 const onPick = (event: Event): void => {
     const input = event.target as HTMLInputElement;

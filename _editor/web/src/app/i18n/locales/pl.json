@@ -20,11 +20,6 @@
                 "showToolCalls": "Show tool calls",
                 "showToolCallsHint": "Display individual tool calls in transcript."
             },
-            "desk": {
-                "group": "Desk",
-                "hint": "Folders and files as large tiles in the main area when nothing is open. Hover a tile to look inside it.",
-                "title": "Desk"
-            },
             "explorer": {
                 "colorful": "Colorful",
                 "fileNesting": "File nesting",
