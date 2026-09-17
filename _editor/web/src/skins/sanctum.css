@@ -177,14 +177,6 @@
             auto;
     }
 
-/* EVERY OTHER CARD-PAINTED SURFACE IN THE APP, and the one that matters most is the fleet board's: an agent card is `bg-card` + a border, not `.ui-card`. */
-    [data-skin="sanctum"] .bg-card {
-        background-image: var(--sanctum-tooth);
-        box-shadow:
-            inset 0 1px 0 rgba(240, 214, 168, 0.06),
-            0 1px 3px -1px rgba(0, 0, 0, 0.5);
-    }
-
 /* THE PINNED PROMPT BAND — the scroller has no fill of its own; it shows the panel's `bg-card` through it. */
     [data-skin="sanctum"] .chat-prompt-pinned {
         background-image: var(--sanctum-tooth);
