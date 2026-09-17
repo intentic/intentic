@@ -64,6 +64,11 @@ the session. `forcesave` is on, so Ctrl+S writes to the workspace at once; closi
 
 - The first start is the owner's: opening a document shows a card, not a 2 GB pull. After that the container comes
   back up on demand, and a container built from another image or another secret is recreated to match the pin.
+- Ready is not the healthcheck alone. The image's entrypoint keeps working after `/healthcheck` answers `true`
+  (fonts, then a converter and docservice restart, then an nginx reload), and a document opened in that window
+  fails to download. The backend waits for the banner the entrypoint's final `tail -f` prints
+  (`SETUP_DONE_MARKER` in `document-server.ts`, read from the container's log since this run began) and only then
+  for the healthcheck.
 - The JWT secret lives at `.intentic/local/onlyoffice/jwt-secret`: shared across turns, never tracked, kept by the
   volume across rebuilds. The container holds the same value in its environment; that is how a mismatch is noticed.
 - Last write wins. An agent that rewrites a file while it is open in the editor will have its change overwritten by

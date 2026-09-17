@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContainerSpec, ContainerState, DockerEngine } from "./docker.js";
-import { CONTAINER, DocumentServer, IMAGE } from "./document-server.js";
+import { CONTAINER, DocumentServer, IMAGE, SETUP_DONE_MARKER } from "./document-server.js";
 
 // The lifecycle against a scripted engine: what the owner's start does, what an open does after it, and what is
 // recreated rather than reused.
@@ -8,12 +8,12 @@ import { CONTAINER, DocumentServer, IMAGE } from "./document-server.js";
 interface Scripted {
     readonly engine: DockerEngine;
     readonly calls: string[];
-    state: { container: ContainerState | undefined; image: boolean; off: string | undefined; healthy: boolean };
+    state: { container: ContainerState | undefined; image: boolean; off: string | undefined; healthy: boolean; setupDone: boolean };
 }
 
 const scripted = (initial: Partial<Scripted[`state`]> = {}): Scripted => {
     const calls: string[] = [];
-    const state: Scripted[`state`] = { container: undefined, image: false, off: undefined, healthy: true, ...initial };
+    const state: Scripted[`state`] = { container: undefined, image: false, off: undefined, healthy: true, setupDone: true, ...initial };
     const engine: DockerEngine = {
         unreachable: async () => state.off,
         imagePresent: async () => state.image,
@@ -26,7 +26,7 @@ const scripted = (initial: Partial<Scripted[`state`]> = {}): Scripted => {
         inspect: async () => state.container,
         create: async (name, spec: ContainerSpec) => {
             calls.push(`create ${name} ${spec.hostPort} ${spec.env.join(` `)}`);
-            state.container = { running: false, hostPort: spec.hostPort, image: spec.image, env: [...spec.env] };
+            state.container = { running: false, hostPort: spec.hostPort, image: spec.image, env: [...spec.env], startedAt: 0 };
         },
         start: async (name) => {
             calls.push(`start ${name}`);
@@ -36,6 +36,7 @@ const scripted = (initial: Partial<Scripted[`state`]> = {}): Scripted => {
             calls.push(`remove ${name}`);
             state.container = undefined;
         },
+        logs: async () => (state.setupDone ? `...\n${SETUP_DONE_MARKER}\n` : `ds:converter: started\n`),
     };
     return { engine, calls, state };
 };
@@ -149,11 +150,36 @@ describe(`the owner's start`, () => {
     });
 });
 
+describe(`readiness`, () => {
+    it(`waits for the entrypoint's final banner even though the healthcheck already answers`, async () => {
+        const script = scripted({ image: true, setupDone: false });
+        let polls = 0;
+        const docs = new DocumentServer({
+            engine: script.engine,
+            image: IMAGE,
+            secret: `sec`,
+            log: () => undefined,
+            healthy: async () => true,
+            freePort: async () => 4321,
+            // The banner shows up on the third poll, as fonts finish and the services come back.
+            sleep: async () => {
+                polls += 1;
+                script.state.setupDone = polls >= 3;
+            },
+        });
+        await docs.start();
+        expect(await docs.status()).toEqual({ state: `starting` });
+        await docs.settled();
+        expect(polls).toBe(3);
+        expect(docs.running()).toEqual({ port: 4321 });
+    });
+});
+
 describe(`an open after that`, () => {
     it(`brings a stopped container back up without pulling`, async () => {
         const script = scripted({
             image: true,
-            container: { running: false, hostPort: 5000, image: IMAGE, env: [`JWT_SECRET=sec`] },
+            container: { running: false, hostPort: 5000, image: IMAGE, env: [`JWT_SECRET=sec`], startedAt: 0 },
         });
         const docs = server(script);
         expect(await docs.ensureRunning()).toEqual({ state: `starting` });
@@ -166,7 +192,7 @@ describe(`an open after that`, () => {
     it(`recreates a container built from another image or another secret`, async () => {
         const script = scripted({
             image: true,
-            container: { running: true, hostPort: 5000, image: `onlyoffice/documentserver:8.2.3`, env: [`JWT_SECRET=old`] },
+            container: { running: true, hostPort: 5000, image: `onlyoffice/documentserver:8.2.3`, env: [`JWT_SECRET=old`], startedAt: 0 },
         });
         const log: string[] = [];
         const docs = server(script, log);
@@ -179,7 +205,7 @@ describe(`an open after that`, () => {
     });
 
     it(`notices a server that stopped answering and starts it again`, async () => {
-        const script = scripted({ image: true, container: { running: true, hostPort: 5000, image: IMAGE, env: [`JWT_SECRET=sec`] } });
+        const script = scripted({ image: true, container: { running: true, hostPort: 5000, image: IMAGE, env: [`JWT_SECRET=sec`], startedAt: 0 } });
         const docs = server(script);
         await docs.ensureRunning();
         await docs.settled();

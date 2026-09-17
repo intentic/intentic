@@ -16,6 +16,8 @@ export interface ContainerState {
     readonly hostPort: number | undefined;
     readonly image: string;
     readonly env: readonly string[];
+    // When the current run began, in unix seconds; 0 for a container never started.
+    readonly startedAt: number;
 }
 
 export interface ContainerSpec {
@@ -36,6 +38,9 @@ export interface DockerEngine {
     readonly start: (name: string) => Promise<void>;
     // Stops and deletes; a container that is already gone is not an error.
     readonly remove: (name: string) => Promise<void>;
+    // The container's output since a unix time, as text. The engine's frame headers are left in between the lines,
+    // which a substring search does not mind.
+    readonly logs: (name: string, sinceSeconds: number) => Promise<string>;
 }
 
 const request = (socketPath: string, method: string, path: string, body?: unknown): Promise<EngineResponse> =>
@@ -221,17 +226,29 @@ export const createBody = (spec: ContainerSpec): Record<string, unknown> => ({
     },
 });
 
+type PortBindings = Record<string, { readonly HostPort?: string }[] | null>;
+
 interface InspectBody {
-    readonly State?: { readonly Running?: boolean };
+    readonly State?: { readonly Running?: boolean; readonly StartedAt?: string };
     readonly Config?: { readonly Image?: string; readonly Env?: string[] };
-    readonly NetworkSettings?: { readonly Ports?: Record<string, { readonly HostPort?: string }[] | null> };
+    // Live bindings, populated only while running; the created-with bindings live under HostConfig either way.
+    readonly NetworkSettings?: { readonly Ports?: PortBindings };
+    readonly HostConfig?: { readonly PortBindings?: PortBindings };
 }
 
-// The loopback port the container's port 80 is published on, if any.
-const publishedPort = (parsed: InspectBody): number | undefined => {
-    const binding = parsed.NetworkSettings?.Ports?.["80/tcp"]?.[0]?.HostPort;
+const portOf = (bindings: PortBindings | undefined): number | undefined => {
+    const binding = bindings?.["80/tcp"]?.[0]?.HostPort;
     const port = binding === undefined ? Number.NaN : Number.parseInt(binding, 10);
     return Number.isNaN(port) ? undefined : port;
+};
+
+// The loopback port the container's port 80 is published on, running or stopped.
+const publishedPort = (parsed: InspectBody): number | undefined => portOf(parsed.NetworkSettings?.Ports) ?? portOf(parsed.HostConfig?.PortBindings);
+
+// Unix seconds of an ISO time; 0 for the engine's zero time or nothing.
+const secondsOf = (iso: string | undefined): number => {
+    const millis = iso === undefined ? Number.NaN : Date.parse(iso);
+    return Number.isNaN(millis) || millis <= 0 ? 0 : Math.floor(millis / 1000);
 };
 
 // The state an inspect answer describes.
@@ -242,6 +259,7 @@ export const parseInspect = (body: string): ContainerState => {
         hostPort: publishedPort(parsed),
         image: parsed.Config?.Image ?? "",
         env: parsed.Config?.Env ?? [],
+        startedAt: secondsOf(parsed.State?.StartedAt),
     };
 };
 
@@ -283,6 +301,14 @@ const startContainer = async (socketPath: string, name: string): Promise<void> =
     }
 };
 
+const containerLogs = async (socketPath: string, name: string, sinceSeconds: number): Promise<string> => {
+    const response = await request(socketPath, "GET", `/containers/${encodeURIComponent(name)}/logs?stdout=1&stderr=1&since=${Math.max(0, Math.floor(sinceSeconds))}`);
+    if (response.status !== 200) {
+        throw failure(`reading ${name}'s log`, response);
+    }
+    return response.body;
+};
+
 const removeContainer = async (socketPath: string, name: string): Promise<void> => {
     const response = await request(socketPath, "DELETE", `/containers/${encodeURIComponent(name)}?force=true`);
     if (response.status !== 204 && response.status !== 404) {
@@ -298,4 +324,5 @@ export const createDockerEngine = (socketPath: string = DOCKER_SOCKET): DockerEn
     create: (name, spec) => createContainer(socketPath, name, spec),
     start: (name) => startContainer(socketPath, name),
     remove: (name) => removeContainer(socketPath, name),
+    logs: (name, sinceSeconds) => containerLogs(socketPath, name, sinceSeconds),
 });

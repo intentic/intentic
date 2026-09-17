@@ -16,6 +16,11 @@ const HEALTHY_WITHIN_MS = 5 * 60 * 1000;
 const HEALTH_POLL_MS = 2000;
 const HEALTH_TIMEOUT_MS = 3000;
 
+// The healthcheck answers true well before the image's entrypoint is done: it still generates fonts, restarts the
+// converter and the docservice and reloads nginx, and a document opened meanwhile fails to download. The entrypoint
+// ends by tailing the service logs, and this is the banner that tail prints once it gets there.
+export const SETUP_DONE_MARKER = "==> /var/log/onlyoffice/documentserver/docservice/out.log <==";
+
 type Phase =
     | { readonly kind: "idle" }
     | { readonly kind: "pulling"; readonly percent: number | undefined }
@@ -221,8 +226,10 @@ export class DocumentServer {
                 labels: { "dev.intentic.extension": "intentic.onlyoffice" },
             });
         }
+        // A container already running is adopted as of the run it is in; one started here is read from this moment.
+        const since = found?.running === true && found.hostPort === port ? found.startedAt : Math.floor(Date.now() / 1000) - 1;
         await this.deps.engine.start(CONTAINER);
-        await this.waitHealthy(port);
+        await this.waitReady(port, since);
         this.port = port;
         this.deps.log(`document server answering on 127.0.0.1:${port}`);
     }
@@ -237,10 +244,14 @@ export class DocumentServer {
         return ["JWT_ENABLED=true", `JWT_SECRET=${this.deps.secret}`, "JWT_HEADER=Authorization", "ALLOW_PRIVATE_IP_ADDRESS=true"];
     }
 
-    private async waitHealthy(port: number): Promise<void> {
+    // Ready means the entrypoint has finished its setup for this run AND the healthcheck answers, in that order: the
+    // healthcheck alone says yes in the middle of the setup's restarts.
+    private async waitReady(port: number, sinceSeconds: number): Promise<void> {
         const deadline = Date.now() + HEALTHY_WITHIN_MS;
+        let setupDone = false;
         while (Date.now() < deadline) {
-            if (await this.healthy(port)) {
+            setupDone ||= (await this.deps.engine.logs(CONTAINER, sinceSeconds)).includes(SETUP_DONE_MARKER);
+            if (setupDone && (await this.healthy(port))) {
                 return;
             }
             await this.sleep(HEALTH_POLL_MS);

@@ -125,12 +125,14 @@ export const createListener = (deps: ListenerDeps): Listener => {
     const document = async (req: http.IncomingMessage, res: http.ServerResponse, key: string): Promise<void> => {
         const token = bearerOf(req.headers.authorization);
         if (token === undefined || verifyJwt(token, deps.secret) === undefined) {
+            deps.log(`document fetch refused: ${token === undefined ? "no signature" : "signature does not match the secret"}`);
             json(res, 401, { error: "unauthorized" });
             return;
         }
         const found = deps.sessions.document(key);
         const stream = found === undefined ? undefined : await deps.readDocument(found);
         if (stream === undefined) {
+            deps.log(found === undefined ? `document fetch refused: no session holds key ${key}` : `document fetch refused: ${found.path} is not on disk`);
             json(res, 404, { error: "no such document" });
             return;
         }
@@ -142,11 +144,13 @@ export const createListener = (deps: ListenerDeps): Listener => {
     const callback = async (req: http.IncomingMessage, res: http.ServerResponse, key: string): Promise<void> => {
         const claims = callbackClaims(req, await readBody(req, MAX_CALLBACK_BYTES), deps.secret);
         if (claims === undefined) {
+            deps.log(`save callback refused: unsigned or missigned`);
             json(res, 401, { error: "unauthorized" });
             return;
         }
         const found = deps.sessions.document(key);
         if (found === undefined) {
+            deps.log(`save callback refused: no session holds key ${key}`);
             json(res, 404, { error: "no such document" });
             return;
         }
