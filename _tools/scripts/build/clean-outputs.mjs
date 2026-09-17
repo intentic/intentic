@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Clears a build output without giving its directory a new inode, the one way this repo may empty a `dist`,
-// `generated`, or `node_modules`. A mirrored directory (@intentic/constants/mirror-roots) is emptied in place since
-// agent worktrees overlay-mount it; anything else is removed outright. `--sweep <names...>` walks the repo instead of
-// taking explicit paths.
+// Clears a build output without giving its directory a new inode, the one way this repo may empty a `dist`, `.venv` or
+// `node_modules`. A mirrored directory (@intentic/constants/mirror-roots) is emptied in place since agent worktrees
+// overlay-mount it; anything else — a `.cache`, a `generated` — is removed outright. `--sweep <names...>` walks the
+// repo instead of taking explicit paths.
 import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { MIRRORED_DIRS } from "../../constants/src/mirror-roots.mjs";

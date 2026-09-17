@@ -547,6 +547,64 @@
                 }
             },
             {
+                "id": "posthog",
+                "kind": "cli",
+                "catalog": {
+                    "name": "PostHog",
+                    "logo": "posthog",
+                    "description": "Session replays, product events, errors and flags.",
+                    "category": "observability",
+                    "hint": "The agent drives PostHog's own agent-first CLI: who did what before a bug, the replay of that session, the exception behind it, HogQL over your events, and the flag that was on at the time. One key, one project: add the card again for a second project.",
+                    "guide": {
+                        "urlFromField": "host",
+                        "path": "/settings/user-api-keys",
+                        "linkLabel": "Create a personal API key",
+                        "scopes": "the `MCP Server` preset covers every tool; reading only needs `session_recording:read` `query:read` `person:read` `feature_flag:read` `error_tracking:read`",
+                        "steps": [
+                            "Set the `PostHog host` above first: US cloud, EU cloud, or your own install.",
+                            "Open `Settings` → `Personal API keys` → `Create personal API key`.",
+                            "Scope it to this one project, and pick the `MCP Server` preset unless you want reads only.",
+                            "Copy the key here: PostHog shows it once.",
+                            "`Project ID` is the number in the project URL, `12345` in `/project/12345`.",
+                            "The CLI lands on PATH at the next rebuild; until then the skill says how to run it without one."
+                        ]
+                    }
+                },
+                "fields": [
+                    {
+                        "key": "host",
+                        "label": "PostHog host",
+                        "default": "https://us.posthog.com",
+                        "hint": "`https://eu.posthog.com` for EU cloud, or your self-hosted URL. Not the ingestion host (`i.posthog.com`), which takes events and answers nothing."
+                    },
+                    {
+                        "key": "projectId",
+                        "label": "Project ID",
+                        "placeholder": "12345"
+                    },
+                    {
+                        "key": "apiKey",
+                        "label": "Personal API key",
+                        "secret": true,
+                        "placeholder": "phx_…"
+                    }
+                ],
+                "env": {
+                    "POSTHOG_HOST": "${host}",
+                    "POSTHOG_PROJECT_ID": "${projectId}",
+                    "POSTHOG_API_KEY": "${apiKey}"
+                },
+                "skill": "skills/posthog/SKILL.md",
+                "probe": {
+                    "url": "${host}/api/projects/${projectId}/",
+                    "headers": {
+                        "Authorization": "Bearer ${apiKey}"
+                    },
+                    "identity": "name"
+                },
+                "fragment": "env/posthog.Dockerfile"
+            },
+            {
                 "id": "komodo",
                 "kind": "cli",
                 "catalog": {

@@ -1,9 +1,14 @@
-// Directories an isolated turn's overlay mounts over (node_modules, .venv, dist, generated): emptying them is safe, but
+// Directories an isolated turn's overlay mounts over (node_modules, .venv, dist): emptying them is safe, but
 // replacing the directory (rm -rf then mkdir) orphans the mount at its old inode, and only umount/mount repairs it.
 // _tools/checks/mirror-roots.mjs refuses the replacing shape; clean-outputs.mjs does the emptying instead.
+// A name belongs here only while EVERYTHING that writes it empties rather than replaces it, ours and vendors' alike.
+// `generated` cannot: `prisma generate` replaces subdirectories of its output on every run, from inside a binary no
+// check over our own scripts can read, and a turn mounted over that lower root then sees a directory it can neither
+// remove (ENOENT) nor create (EEXIST). Per-worktree costs nothing — gitignored output the prepass regenerates before
+// anything reads it, while dependents import the compiled dist.
 
 // Overlaid directory names; `.cache` is deliberately excluded and `.venv` is python's node_modules.
-export const MIRRORED_DIRS = new Set(["node_modules", ".venv", "dist", "generated"]);
+export const MIRRORED_DIRS = new Set(["node_modules", ".venv", "dist"]);
 
 // Classify the last path segment after stripping quotes and slashes; directory contents are not matches.
 const lastSegment = (token) => {

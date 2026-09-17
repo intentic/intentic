@@ -8,7 +8,14 @@ import { MIRRORED_DIRS, replacedMirrorRoots } from "./mirror-roots.mjs";
 const PRISMA_BUILD = "rm -rf ./generated ./dist ./.cache && DATABASE_URL=postgresql://placeholder prisma generate --no-hints && tsgo";
 
 test("the mirror roots are the installed trees and the build outputs a checkout cannot carry", () => {
-    expect([...MIRRORED_DIRS].toSorted()).toEqual([".venv", "dist", "generated", "node_modules"]);
+    expect([...MIRRORED_DIRS].toSorted()).toEqual([".venv", "dist", "node_modules"]);
+});
+
+// `generated` was one until prisma's own generator was found replacing subdirectories of it: a lower root a turn can
+// neither remove nor recreate. Nothing in this repo's scripts says so, which is why the rule is pinned here.
+test("a directory a vendor generator replaces is not a mirror root, so removing one outright is nobody's problem", () => {
+    expect(MIRRORED_DIRS.has("generated")).toBe(false);
+    expect(replacedMirrorRoots("rm -rf ./generated")).toEqual([]);
 });
 
 test("a python environment is a mirror root, so removing one outright is reported like any other", () => {
@@ -18,8 +25,8 @@ test("a python environment is a mirror root, so removing one outright is reporte
     expect(replacedMirrorRoots("rm -rf venv env")).toEqual([]);
 });
 
-test("the removal that emptied every agent's prisma output is reported, and the cache beside it is not", () => {
-    expect(replacedMirrorRoots(PRISMA_BUILD)).toEqual(["./generated", "./dist"]);
+test("the removal that emptied every agent's prisma dist is reported, and neither its generated output nor the cache is", () => {
+    expect(replacedMirrorRoots(PRISMA_BUILD)).toEqual(["./dist"]);
 });
 
 test("removing the CONTENTS of a mirror root is the sanctioned operation and is not reported", () => {
@@ -36,7 +43,7 @@ test("a removal that cannot take a directory at all is not a replacement", () =>
     expect(replacedMirrorRoots("rm -r -f dist")).toEqual(["dist"]);
     expect(replacedMirrorRoots("rm --recursive --force dist")).toEqual(["dist"]);
     // rmdir and rimraf are always recursive; neither takes a flag to say so.
-    expect(replacedMirrorRoots("rmdir generated")).toEqual(["generated"]);
+    expect(replacedMirrorRoots("rmdir .venv")).toEqual([".venv"]);
     expect(replacedMirrorRoots("rimraf node_modules")).toEqual(["node_modules"]);
 });
 
