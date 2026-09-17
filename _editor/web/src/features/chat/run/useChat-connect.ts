@@ -227,7 +227,7 @@ const pollNativeOnce = async (target: AgentProvider, deadline: number): Promise<
         return;
     }
     try {
-        const connectedAccounts = await refreshAccounts(target, false);
+        const connectedAccounts = await refreshAccounts(target);
         // By handshake, not object identity: redeeming a grant re-stamps the same attempt, and a tick that read that
         // as a replacement would retire the very poll the credential has to land through.
         if (nativeConnectFlow.value?.handshake !== flow.handshake) {

@@ -81,7 +81,7 @@ export { shareContract } from "./contracts/share.contract.js";
 export { skillsContract } from "./contracts/skills.contract.js";
 export { systemContract } from "./contracts/system.contract.js";
 export { translatorContract } from "./contracts/translator.contract.js";
-export { usageContract } from "./contracts/usage.contract.js";
+export { type PlanLimitsHeld, type PlanLimitsRefreshed, PlanLimitsRefreshedSchema, usageContract } from "./contracts/usage.contract.js";
 export { vpnContract } from "./contracts/vpn.contract.js";
 export { workflowsContract } from "./contracts/workflows.contract.js";
 export { workspaceContract } from "./contracts/workspace.contract.js";

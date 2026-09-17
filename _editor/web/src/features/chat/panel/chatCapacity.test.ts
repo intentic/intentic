@@ -272,6 +272,36 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
     });
 });
 
+// The age the rail prints beside its refresh control is the oldest reading under it, which is what lets one account
+// pin it: a dead credential is named by what it is missing, never by a figure, so dating the drawn bars by ITS last
+// reading made a re-measure that worked look like a control that did nothing.
+describe(`how old the rail says its readings are`, () => {
+    it(`dates itself by the oldest reading it rests something on, not by a credential nothing can run on`, () => {
+        providerAccounts.value = {
+            claude: [
+                claude({ id: `a`, label: `live@example.com`, usage: { ...usage(40), measuredAt: NOW - 120_000 } }),
+                claude({ id: `b`, label: `expired@example.com`, needsReauth: true, usage: { ...usage(12), measuredAt: NOW - 10 * 3_600_000 } }),
+            ],
+        };
+
+        expect(chatCapacity(NOW).measuredAt).toBe(NOW - 120_000);
+        // And the expired sign-in is still accounted for, in the words of what it is missing.
+        expect(chatCapacity(NOW).blocked).toEqual([{ reason: `sign-in expired`, count: 1 }]);
+    });
+
+    it(`keeps the oldest reading of an account it is still drawing, however stale`, () => {
+        providerAccounts.value = {
+            claude: [
+                claude({ id: `a`, label: `fresh@example.com`, usage: { ...usage(40), measuredAt: NOW - 60_000 } }),
+                claude({ id: `b`, label: `stuck@example.com`, usage: { ...usage(74), measuredAt: NOW - 10 * 3_600_000 } }),
+            ],
+        };
+
+        // Both are drawn, so the age qualifies the older one: this is the reading a press could not move.
+        expect(chatCapacity(NOW).measuredAt).toBe(NOW - 10 * 3_600_000);
+    });
+});
+
 describe(`what the rail says about what it is not offering`, () => {
     // An absent provider could mean spent-until-later or never-connected; the footnote is what tells those apart.
     it(`names a spent provider and the instant it comes back`, () => {

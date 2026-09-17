@@ -1,7 +1,7 @@
 import { pino } from "pino";
 import { expect, test } from "vitest";
 import { type ClaudeStore, displayLabel, type StoredAccount } from "../runtimes/claude/claude-credentials.js";
-import { claudeHeadroomSource, claudeUsageWindows, readClaudeUsage } from "./claude-usage.js";
+import { claudeHeadroomSource, claudeUsageWindows, RATE_LIMIT_PARK_MS, readClaudeUsage } from "./claude-usage.js";
 
 // Anthropic OAuth usage payload, pinned (a private endpoint, not a published contract): defends the mapping from every
 // pool to its own named window, and that an unrecognised shape costs one window, not the read.
@@ -103,12 +103,16 @@ test("an unreadable payload is no reading at all", () => {
     expect(claudeUsageWindows({ limits: "soon" })).toEqual([]);
 });
 
-test("a 429 carries the endpoint's own stay-away; without a readable one it is a plain failure", async () => {
+test("a 429 always carries a stay-away: the endpoint's own, or the park when it names none", async () => {
     const limited = (async () => ({ ok: false, status: 429, headers: new Headers({ "retry-after": "30" }) })) as unknown as typeof fetch;
     expect(await readClaudeUsage("tok", limited)).toEqual({ windows: [], retryAfterMs: 30_000 });
 
-    const bare = (async () => ({ ok: false, status: 429, headers: new Headers() })) as unknown as typeof fetch;
-    expect(await readClaudeUsage("tok", bare)).toEqual({ windows: [] });
+    // This endpoint does send `retry-after: 0`, and reading that as "retry at once" is what kept its budget spent:
+    // every trigger asked again, so the account it was rate-limiting never got a reading back.
+    for (const headers of [new Headers(), new Headers({ "retry-after": "0" }), new Headers({ "retry-after": "soon" })]) {
+        const bare = (async () => ({ ok: false, status: 429, headers })) as unknown as typeof fetch;
+        expect(await readClaudeUsage("tok", bare)).toEqual({ windows: [], retryAfterMs: RATE_LIMIT_PARK_MS });
+    }
 });
 
 // Claude half of the headroom service: one target per connected account that can still read, on its own token. Pinned
@@ -143,6 +147,8 @@ test("publishes one target per account that can read, keyed by the account, and 
         ["claude", "b"],
     ]);
     expect((await targets[0]!.read()).windows.map((window) => window.kind)).toEqual(["five_hour", "seven_day", "model:Fable"]);
+    // Every target carries this endpoint's read budget, so a background trigger cannot ask per turn or per screen.
+    expect(targets.map((target) => target.minAgeMs)).toEqual([300_000, 300_000]);
 });
 
 test("a refused read answers no windows, never an empty measurement", async () => {

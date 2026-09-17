@@ -2,10 +2,10 @@
 import { ui } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import { SPENT_UTILIZATION } from "@intentic/sandbox-contract";
-import { type CapacityLane, type CapacityProvider, type CapacityRow, chatCapacity } from "./chatCapacity";
+import { type CapacityLane, type CapacityProvider, type CapacityRow, chatCapacity, heldReadings } from "./chatCapacity";
 import { accountsLoaded } from "../accounts/providerAccounts";
 import { formatAge, formatReset, formatUtilization, usageTone } from "../session/usageStatus";
-import { refreshConnections } from "../accounts/useChat-accounts";
+import { heldAccounts, refreshConnections } from "../accounts/useChat-accounts";
 import ProviderLogo from "../accounts/ProviderLogo.vue";
 
 // Headroom rail in chat pop-out: displays runnable provider capacity without full Usage tab reconciliation.
@@ -88,8 +88,22 @@ const remeasure = async (): Promise<void> => {
     }
 };
 const remeasureLabel = computed(() =>
-    capacity.value.measuredAt === undefined ? `Measure plan limits` : `Re-measure plan limits, measured ${formatAge(capacity.value.measuredAt)}`,
+    capacity.value.measuredAt === undefined
+        ? `Measure plan limits`
+        : `Re-measure plan limits, oldest reading ${formatAge(capacity.value.measuredAt)}`,
 );
+
+// What the last press could not read: while the provider holds a read off, the oldest age below cannot move however
+// often the button is pressed. Says re-read, never "rate-limited", which on a panel of plan limits would read as the
+// allowance itself being spent.
+const heldNote = computed((): { readonly subject: string; readonly retry: string } | undefined => {
+    const entry = heldReadings(heldAccounts.value);
+    if (entry === undefined) {
+        return undefined;
+    }
+    const names = entry.labels.length === entry.count ? entry.labels.join(`, `) : `${entry.count} ${entry.count === 1 ? `account` : `accounts`}`;
+    return { subject: `Can't re-read ${names} yet`, retry: `retry ${formatReset(entry.resumesAt)}` };
+});
 </script>
 
 <template>
@@ -109,6 +123,12 @@ const remeasureLabel = computed(() =>
                 <span v-if="capacity.measuredAt !== undefined">{{ formatAge(capacity.measuredAt) }}</span>
             </button>
         </div>
+
+<!-- Sits with the control it explains: the age above is the oldest reading here, so one account held off pins it. -->
+        <p v-if="heldNote !== undefined" class="shrink-0 px-3 pb-2 text-2xs">
+            <span class="text-warning">{{ heldNote.subject }}</span>
+            <span class="text-subtle"> · {{ heldNote.retry }}</span>
+        </p>
 
 <!-- Unread isn't empty: until accounts load, this must not claim the fleet has nothing — drawn as the shape that's coming, not stated in words. -->
         <div v-if="!accountsLoaded" class="flex min-h-0 flex-1 flex-col gap-4 px-3 py-1" role="status" aria-busy="true">

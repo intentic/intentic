@@ -10,6 +10,10 @@ export type UsageRoutesDeps = Pick<Services, "headroom" | "usage" | "claudeStore
 // timeouts.
 const FORCED_WAIT_MS = 9_000;
 
+// The store keys a routed account by `${provider}:${file}` and a native one by its id; over the wire an account is
+// always named the way its provider's list names it, since that is what a caller has in hand to match against.
+const listedAccount = (provider: string, key: string): string => (key.startsWith(`${provider}:`) ? key.slice(provider.length + 1) : key);
+
 // The spend ledger's read side; rows are appended daemon-side at turn end, so this stays read-only.
 export const createUsageRoutes = (services: UsageRoutesDeps) => {
     const i = implement(usageContract).$context<OrpcContext>();
@@ -17,7 +21,15 @@ export const createUsageRoutes = (services: UsageRoutesDeps) => {
         rollup: i.rollup.handler(async ({ input }) => ({ rows: await services.usage.rollup(input) })),
         refreshPlanLimits: i.refreshPlanLimits.handler(async ({ input }) => {
             await services.headroom.refresh({ ...(input.force ? { maxAgeMs: 0 } : {}), withinMs: FORCED_WAIT_MS });
-            return { ok: true } as const;
+            // Reported in seconds like every other instant on the wire, so a caller can say when the number can move.
+            return {
+                ok: true as const,
+                held: services.headroom.held().map((entry) => ({
+                    provider: entry.provider,
+                    account: listedAccount(entry.provider, entry.account),
+                    resumesAt: Math.ceil(entry.until / 1000),
+                })),
+            };
         }),
 /* A spent session window can continue through the Claude reset mechanism. */
         limitReset: i.limitReset.handler(async ({ input }) => {

@@ -28,7 +28,9 @@ const memoryStore = (stored: Record<string, AccountUsage> = {}): { store: Accoun
 const WINDOWS: HeadroomReading = { windows: [{ kind: "seven_day", utilization: 40, gates: "all" }] };
 
 // A source whose every target counts its reads and answers what it is told to.
-const source = (targets: readonly { key: string; provider: HeadroomTarget["provider"]; answer?: () => Promise<HeadroomReading> }[]) => {
+const source = (
+    targets: readonly { key: string; provider: HeadroomTarget["provider"]; minAgeMs?: number; answer?: () => Promise<HeadroomReading> }[],
+) => {
     const reads: Record<string, number> = {};
     return {
         reads,
@@ -37,6 +39,7 @@ const source = (targets: readonly { key: string; provider: HeadroomTarget["provi
                 targets.map((target) => ({
                     key: target.key,
                     provider: target.provider,
+                    ...(target.minAgeMs === undefined ? {} : { minAgeMs: target.minAgeMs }),
                     read: async () => {
                         reads[target.key] = (reads[target.key] ?? 0) + 1;
                         return target.answer === undefined ? WINDOWS : target.answer();
@@ -112,6 +115,29 @@ test("two triggers landing together cost one read, and a failed read leaves the 
     expect(recorded["a"]).toBe(known);
 });
 
+test("a target's own read budget outranks a background trigger's freshness, but never a watched re-measure", async () => {
+    vi.useFakeTimers({ now: NOW });
+    try {
+        const budget = FRESH_MS * 5;
+        const { store } = memoryStore({ budgeted: { windows: [...WINDOWS.windows], measuredAt: NOW - FRESH_MS * 2 } });
+        const { source: mixed, reads } = source([
+            { key: "budgeted", provider: "claude", minAgeMs: budget },
+            { key: "gemini:g.json", provider: "gemini" },
+        ]);
+        const service = createHeadroomService({ store, sources: [mixed], logger: silent });
+
+        // Both are past the service's own bound; only the one with no budget of its own is read.
+        await service.refresh();
+        expect(reads).toEqual({ "gemini:g.json": 1 });
+
+        // Someone is watching this one, so it is taken now rather than at the endpoint's convenience.
+        await service.refresh({ maxAgeMs: 0 });
+        expect(reads).toEqual({ budgeted: 1, "gemini:g.json": 2 });
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
 test("honours the endpoint's own stay-away, even for a caller that says something happened", async () => {
     vi.useFakeTimers({ now: NOW });
     try {
@@ -132,7 +158,10 @@ test("honours the endpoint's own stay-away, even for a caller that says somethin
         await service.refresh({ maxAgeMs: 0 });
         await service.refresh({ maxAgeMs: 0 });
         expect(calls).toBe(1);
+        // Reported for as long as it holds, so a screen can say why a re-measure moved nothing.
+        expect(service.held()).toEqual([{ provider: "claude", account: "a", until: NOW + 600_000 }]);
         vi.setSystemTime(NOW + 600_001);
+        expect(service.held()).toEqual([]);
         await service.refresh({ maxAgeMs: 0 });
         expect(calls).toBe(2);
     } finally {

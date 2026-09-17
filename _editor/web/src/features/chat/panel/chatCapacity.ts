@@ -1,4 +1,4 @@
-import { type AgentProvider, SPENT_UTILIZATION } from "@intentic/sandbox-contract";
+import { type AgentProvider, type PlanLimitsHeld, SPENT_UTILIZATION } from "@intentic/sandbox-contract";
 import { providerAccounts, providerRefusals, translatorAccounts } from "../accounts/providerAccounts";
 import { providerDisplayLabel } from "../accounts/providerCatalog";
 import {
@@ -259,7 +259,9 @@ export const chatCapacity = (now: number = Date.now()): ChatCapacity => {
         const refused = refusedAccounts(group);
         return { group, refused, ready: group.rows.filter((row) => canServe(row, refused)).toSorted(byRoom) };
     });
-    const measured = rows.flatMap((row) => (row.measuredAt === undefined ? [] : [row.measuredAt]));
+    // Held to the rows whose reading this rail rests something on: a credential no turn can run on is named by what it
+    // is missing, never by a figure, so its last reading — of any age — must not date the ones that are drawn.
+    const measured = rows.flatMap((row) => (row.measuredAt === undefined || blockedReason(row) !== undefined ? [] : [row.measuredAt]));
     return {
         providers: judged
             .flatMap((entry) => (entry.ready.length === 0 ? [] : [capacityProvider(entry.group, entry.ready)]))
@@ -279,6 +281,34 @@ export const chatCapacity = (now: number = Date.now()): ChatCapacity => {
         ),
         blocked: attentionGroups(rows).map((entry) => ({ reason: entry.reason, count: entry.rows.length })),
         measuredAt: measured.length === 0 ? undefined : Math.min(...measured),
+    };
+};
+
+/** What a re-measure could not read: the accounts a provider is rate-limiting, named as this column names them. */
+export interface CapacityHeld {
+    readonly count: number;
+    // Soonest instant any of them may be read again, epoch seconds, on the same clock as a pool's reset.
+    readonly resumesAt: number;
+    // Account labels, for the sentence the column is too narrow to print; empty when none of them is drawn here.
+    readonly labels: readonly string[];
+}
+
+// The daemon's answer to a press, as the rail states it. An account it cannot name (a connection this window hasn't
+// read yet) still counts: the count is what says a number could not move, and the label only says which. A park whose
+// instant has passed is dropped rather than restated: the next trigger reads that account, so the claim is over.
+export const heldReadings = (held: readonly PlanLimitsHeld[], now: number = Date.now()): CapacityHeld | undefined => {
+    const standing = held.filter((entry) => entry.resumesAt * 1000 > now);
+    if (standing.length === 0) {
+        return undefined;
+    }
+    const rows = planLimitRows(providerAccounts.value, translatorAccounts.value);
+    return {
+        count: standing.length,
+        resumesAt: Math.min(...standing.map((entry) => entry.resumesAt)),
+        labels: standing.flatMap((entry) => {
+            const row = rows.find((candidate) => candidate.provider === entry.provider && candidate.account === entry.account);
+            return row === undefined ? [] : [row.label];
+        }),
     };
 };
 

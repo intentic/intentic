@@ -113,8 +113,12 @@ export interface ClaudeUsageReading {
     readonly retryAfterMs?: number;
 }
 
-// Best-effort: every failure reads as "no reading" (caller keeps the last one), except a 429, which carries the
-// endpoint's own retry-after and is passed through for the sweep to honour.
+// Stay-away for a 429 whose retry-after says nothing usable (absent, malformed, or `0`, which this endpoint does send).
+// Without it a rate-limited account is retried by every trigger, which is what keeps the endpoint's budget spent.
+export const RATE_LIMIT_PARK_MS = 10 * 60_000;
+
+// Best-effort: every failure reads as "no reading" (caller keeps the last one), except a 429, which always carries a
+// stay-away for the sweep to honour.
 export const readClaudeUsage = async (oauthToken: string, fetchFn: typeof fetch, timeoutMs = 10_000): Promise<ClaudeUsageReading> => {
     try {
         const response = await fetchFn(USAGE_ENDPOINT, {
@@ -122,9 +126,9 @@ export const readClaudeUsage = async (oauthToken: string, fetchFn: typeof fetch,
             signal: AbortSignal.timeout(timeoutMs),
         });
         if (response.status === 429) {
-            // retry-after is whole seconds; a malformed or absent header reads as a plain failure.
+            // retry-after is whole seconds; anything else falls back to the park rather than to an immediate retry.
             const seconds = Number(response.headers.get("retry-after"));
-            return { windows: [], ...(Number.isFinite(seconds) && seconds > 0 ? { retryAfterMs: seconds * 1000 } : {}) };
+            return { windows: [], retryAfterMs: Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : RATE_LIMIT_PARK_MS };
         }
         if (!response.ok) {
             return { windows: [] };
@@ -141,6 +145,10 @@ export const readClaudeUsage = async (oauthToken: string, fetchFn: typeof fetch,
 // Shorter than a turn's read: a page may be waiting, so a slow endpoint costs freshness, not the answer.
 const READ_TIMEOUT_MS = 8_000;
 
+// This endpoint budgets reads per account, and every turn start and account list asks for one: at the service's own
+// 60-second freshness that is a read a minute per account, which earns the 429 that freezes the number it asked for.
+const BACKGROUND_FLOOR_MS = 5 * 60_000;
+
 export const claudeHeadroomSource = (store: ClaudeStore, fetchFn: typeof fetch = fetch): HeadroomSource => ({
     targets: async () =>
         (await store.list())
@@ -149,6 +157,7 @@ export const claudeHeadroomSource = (store: ClaudeStore, fetchFn: typeof fetch =
             .map((account) => ({
                 key: account.id,
                 provider: "claude",
+                minAgeMs: BACKGROUND_FLOOR_MS,
                 read: async () => {
                     const token = await ensureFreshToken(store, account.id);
                     return token === undefined ? { windows: [] } : readClaudeUsage(token, fetchFn, READ_TIMEOUT_MS);

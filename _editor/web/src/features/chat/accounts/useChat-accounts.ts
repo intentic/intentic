@@ -3,6 +3,8 @@ import {
     type KeyedProvider,
     NATIVE_PROVIDERS,
     type OauthAccount,
+    type PlanLimitsHeld,
+    type PlanLimitsRefreshed,
     type ProviderRefusals,
     providerSpec,
     TRIAL_PROVIDER,
@@ -145,11 +147,10 @@ const repointStranded = (target: AgentProvider, live: readonly OauthAccount[]): 
 
 // Pulls a provider's account list and keeps the selection valid; the single reader of the `/accounts`
 // routes. Throws on failure, since a daemon that didn't answer is not the same as an empty account list.
-export const refreshAccounts = async (target: AgentProvider, force: boolean): Promise<OauthAccount[]> => {
-    // `force` re-measures before answering, Claude only; routed rings come from a non-blocking background
-    // sweep.
-    const forced = force && target === `claude` ? `?force=1` : ``;
-    const list = (await sandboxJson<{ accounts?: OauthAccount[] }>(`${providerBase(target)}${forced}`)).accounts ?? [];
+// Never asks the daemon to re-measure: a forced read is one sweep across every provider (readConnections), not
+// one per list.
+export const refreshAccounts = async (target: AgentProvider): Promise<OauthAccount[]> => {
+    const list = (await sandboxJson<{ accounts?: OauthAccount[] }>(providerBase(target))).accounts ?? [];
     // Seeds the shared usage map as this list lands, so headroom shows immediately, not after the next turn.
     providerAccounts.value = { ...providerAccounts.value, [target]: list };
     // The remembered pick is never rewritten from a list; every reader resolves it against the live list already.
@@ -157,17 +158,25 @@ export const refreshAccounts = async (target: AgentProvider, force: boolean): Pr
     return list;
 };
 
+// Accounts a provider is rate-limiting, from the last forced re-measure: which readings could not move, and when
+// they can. Empty after a press that read everything, so a surface can state either outcome.
+export const heldAccounts = ref<readonly PlanLimitsHeld[]>([]);
+
 // Reads every connection (accounts and translator subscriptions) as one call, since to a user they're
 // one question. `accountsLoaded` flips only once a real read lands; the translator read is excluded
 // since it swallows its own failure.
 const readConnections = async (force: boolean): Promise<void> => {
-    // Forced: one route re-measures every connection first, bypassing the daemon's usual minute-long cache.
+    // Forced: one route re-measures every connection first, past the freshness bound a background sweep is held to.
     if (force) {
-        await sandboxJson(`/usage/plan-limits/refresh`, jsonBody(`POST`, { force: true })).catch(() => undefined);
+        // A press that lands on a rate-limited account changes no number, so what it could not read is kept and said.
+        const refreshed = await sandboxJson<PlanLimitsRefreshed>(`/usage/plan-limits/refresh`, jsonBody(`POST`, { force: true })).catch(
+            () => undefined,
+        );
+        heldAccounts.value = refreshed?.held ?? [];
     }
     const natives = NATIVE_PROVIDERS.filter((target) => !subscriptionOnly(target));
     const [reads] = await Promise.all([
-        Promise.allSettled(natives.map((target) => refreshAccounts(target, false))),
+        Promise.allSettled(natives.map((target) => refreshAccounts(target))),
         refreshTranslatorAccounts(),
         refreshProviderRefusals(),
     ]);
@@ -237,7 +246,7 @@ export const renameAccount = async (id: string, label: string): Promise<void> =>
     if (!response.ok) {
         // A 404 means the row is gone elsewhere; re-read rather than restore a name onto a dead account.
         if (response.status === 404) {
-            await refreshAccounts(target, false).catch(() => replaceAccount(target, current));
+            await refreshAccounts(target).catch(() => replaceAccount(target, current));
             throw new Error(`That account is no longer connected.`);
         }
         replaceAccount(target, current);

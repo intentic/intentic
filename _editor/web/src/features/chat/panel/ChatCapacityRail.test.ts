@@ -14,11 +14,14 @@ import { IconStub } from "@intentic/ui/testing";
 // Import chain pulls in app-wide singletons reading browser globals at import time (matchMedia, window.env).
 const { default: ChatCapacityRail } = await import("./ChatCapacityRail.vue");
 const { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } = await import("../accounts/providerAccounts");
+const { heldAccounts } = await import("../accounts/useChat-accounts");
 // The app's own reset formatter, not a copy: assertions check it carries the reset, not a fixed timezone string.
 const { formatReset } = await import("../session/usageStatus");
 
 const NO_ROUTED: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };
 const MEASURED_AT = Date.now() - 60_000;
+// A park still standing: one that has passed is no longer a reason for anything, so the rail drops it.
+const HELD_UNTIL = Math.floor(Date.now() / 1000) + 1_800;
 
 const claude = (over: Partial<OauthAccount>): OauthAccount => ({ id: `acc`, label: `first@example.com`, connectedAt: 0, ...over });
 
@@ -45,6 +48,7 @@ afterEach(() => {
     providerAccounts.value = {};
     translatorAccounts.value = NO_ROUTED;
     providerRefusals.value = {};
+    heldAccounts.value = [];
 });
 
 // The bars, by the width each was given, the one part of this column drawn rather than written.
@@ -246,3 +250,63 @@ it(`does not render 'most room' row for pooled providers`, () => {
     expect(barWidths(el)).toEqual([`40%`]);
 });
 
+
+// The age beside the refresh control is the OLDEST reading on the rail, so one account the provider will not re-read
+// pins it however often the button is pressed: the press worked, every other account moved, and the one number a
+// reader was watching did not. Silence there is what made the control read as broken.
+it(`says which reading the last press could not take, and when it can`, () => {
+    heldAccounts.value = [{ provider: `claude`, account: `a`, resumesAt: HELD_UNTIL }];
+    const el = mount([
+        {
+            id: `a`,
+            label: `first@example.com`,
+            usage: { measuredAt: Date.now() - 10 * 3_600_000, windows: [{ kind: `seven_day`, utilization: 60, gates: `all` }] },
+        },
+    ]);
+
+    // Named, in the words of what was refused: a re-read, never the plan limit this whole column is about.
+    expect(el.textContent).toContain(`Can't re-read first@example.com yet`);
+    expect(el.textContent).toContain(`retry ${formatReset(HELD_UNTIL)}`);
+});
+
+// A held account this window has no row for (a provider it hasn't listed) still explains a number that didn't move,
+// so it is counted rather than dropped for want of a name.
+it(`counts a held reading it cannot name`, () => {
+    heldAccounts.value = [
+        { provider: `claude`, account: `a`, resumesAt: HELD_UNTIL },
+        { provider: `claude`, account: `gone`, resumesAt: HELD_UNTIL + 300 },
+    ];
+    const el = mount([{ id: `a`, label: `first@example.com`, usage: { measuredAt: MEASURED_AT, windows: [] } }]);
+
+    expect(el.textContent).toContain(`Can't re-read 2 accounts yet`);
+    // The soonest of them, since that is when any of this can change.
+    expect(el.textContent).toContain(`retry ${formatReset(HELD_UNTIL)}`);
+});
+
+// Nothing held means nothing said: a press that read everything leaves the rail as it was.
+it(`says nothing about held readings when the press read everything`, () => {
+    const el = mount([
+        {
+            id: `a`,
+            label: `first@example.com`,
+            usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 60, gates: `all` }] },
+        },
+    ]);
+
+    expect(el.textContent).not.toContain(`Can't re-read`);
+});
+
+// A park the clock has passed says nothing about now: the next trigger reads that account, so restating it would
+// leave a sentence on the rail that outlives the thing it describes.
+it(`drops a held reading once its retry instant has passed`, () => {
+    heldAccounts.value = [{ provider: `claude`, account: `a`, resumesAt: Math.floor(Date.now() / 1000) - 60 }];
+    const el = mount([
+        {
+            id: `a`,
+            label: `first@example.com`,
+            usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 60, gates: `all` }] },
+        },
+    ]);
+
+    expect(el.textContent).not.toContain(`Can't re-read`);
+});

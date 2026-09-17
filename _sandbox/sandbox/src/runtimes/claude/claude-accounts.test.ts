@@ -33,6 +33,7 @@ const door = (
                 refresh: async (options) => {
                     sweeps.push({ withinMs: options?.withinMs, maxAgeMs: options?.maxAgeMs });
                 },
+                held: () => [],
                 record: async () => {},
                 clear: async () => {},
                 read: async () => ({}),

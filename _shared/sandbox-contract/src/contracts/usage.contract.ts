@@ -8,6 +8,23 @@ export const RefreshPlanLimitsSchema = z.object({
     force: z.boolean().default(false).describe("Measure again even if a reading was taken a moment ago."),
 });
 
+// What a re-measure could not read. A provider rate-limits these reads per account, and while it is holding one off
+// the number on screen cannot move: without this the caller can only report a press that changed nothing.
+export const PlanLimitsRefreshedSchema = z.object({
+    ok: z.literal(true),
+    held: z
+        .array(
+            z.object({
+                provider: z.string().describe("Which provider is holding the read off."),
+                account: z.string().describe("The account as its provider's list names it: an account id, or a routed auth file's name."),
+                resumesAt: z.number().describe("Unix seconds: when this account may be read again, the provider's own retry-after."),
+            }),
+        )
+        .describe("Accounts whose plan limits could not be read now because the provider is rate-limiting them."),
+});
+export type PlanLimitsRefreshed = z.infer<typeof PlanLimitsRefreshedSchema>;
+export type PlanLimitsHeld = PlanLimitsRefreshed["held"][number];
+
 // Durable spend ledger, read-only over the wire; rows are appended daemon-side at turn end.
 // `rollup` groups by day, provider, account and model, so every cost panel re-projects from this one answer.
 export const usageContract = {
@@ -28,10 +45,10 @@ export const usageContract = {
             path: "/usage/plan-limits/refresh",
             summary: "Measure every account's plan limits again",
             description:
-                "Reads how full each connected account's plan limits are, for every provider, and records it. Forced, it measures even accounts read a moment ago, which is the right thing when a plan was just changed and the question is whether the number on screen is still true.",
+                "Reads how full each connected account's plan limits are, for every provider, and records it. Forced, it measures even accounts read a moment ago, which is the right thing when a plan was just changed and the question is whether the number on screen is still true. Answers with the accounts it could not read because the provider is rate-limiting them, and when each may be asked again: those keep the reading they already had, so a number that does not move is explained rather than silent.",
         })
         .input(RefreshPlanLimitsSchema)
-        .output(z.object({ ok: z.literal(true) })),
+        .output(PlanLimitsRefreshedSchema),
     // Asked, not polled: the provider only evaluates this when told the account is at the wall, and the answer isn't
     // cached.
     // Answers `available: false` rather than failing when the account has no such mechanism.

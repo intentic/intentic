@@ -18,6 +18,9 @@ export interface HeadroomTarget {
     readonly provider: AgentProvider;
     // Never throws for an ordinary failure; an empty window list means "could not read", keeps the last snapshot.
     readonly read: () => Promise<HeadroomReading>;
+    // This endpoint's own read budget: the shortest interval a background trigger may re-read it at, whatever
+    // freshness that trigger asked for. A re-measure someone is watching (`maxAgeMs: 0`) is not held to it.
+    readonly minAgeMs?: number;
 }
 
 export interface HeadroomSource {
@@ -39,8 +42,18 @@ export interface RefreshOptions {
     readonly withinMs?: number;
 }
 
+/** An account whose provider is holding reads off, and the instant it may be asked again. */
+export interface HeldTarget {
+    readonly provider: AgentProvider;
+    readonly account: string;
+    // Epoch ms; the endpoint's own retry-after, so a screen can say when the number can move.
+    readonly until: number;
+}
+
 export interface HeadroomService {
     readonly refresh: (options?: RefreshOptions) => Promise<void>;
+    // Targets a provider is currently rate-limiting; what a re-measure could not read, and why nothing moved.
+    readonly held: () => readonly HeldTarget[];
     // Records a reading obtained elsewhere (a turn's stream, a provider's push) exactly as a swept one; provider rides
     // along since the store key alone doesn't say whose row it is.
     readonly record: (provider: AgentProvider, account: string, usage: AccountUsage) => Promise<void>;
@@ -73,7 +86,7 @@ export const createHeadroomService = (deps: {
     // When each target was last asked, not answered; bounds retries of a failing read the store can't cache.
     const attemptedAt = new Map<string, number>();
     // Endpoint's stay-away per target, honoured even by a forced trigger.
-    const blockedUntil = new Map<string, number>();
+    const blockedUntil = new Map<string, { readonly provider: AgentProvider; readonly until: number }>();
     // Read in flight per target, so concurrent triggers share one round-trip.
     const inFlight = new Map<string, Promise<void>>();
     const listeners = new Set<(provider: AgentProvider, account: string, usage: AccountUsage | undefined) => void>();
@@ -102,7 +115,13 @@ export const createHeadroomService = (deps: {
             attemptedAt.set(target.key, Date.now());
             const reading = await target.read();
             if (reading.retryAfterMs !== undefined) {
-                blockedUntil.set(target.key, Date.now() + reading.retryAfterMs);
+                const until = Date.now() + reading.retryAfterMs;
+                blockedUntil.set(target.key, { provider: target.provider, until });
+                // Said out loud: a reading that silently stops moving is the one failure nobody can see from a screen.
+                deps.logger.warn(
+                    { account: target.key, provider: target.provider, until: new Date(until).toISOString() },
+                    "headroom: the provider is rate-limiting this account, holding reads off until then",
+                );
                 return;
             }
             // A failed or poolless read leaves the last snapshot standing; an empty list would misread as "no limits".
@@ -126,12 +145,15 @@ export const createHeadroomService = (deps: {
             deps.store.read(),
         ]);
         const now = Date.now();
+        // A watched re-measure asks for zero and gets it; every other trigger is held to the endpoint's own budget,
+        // since a background sweep that outruns it spends the account's allowance to read the same number.
+        const bound = (target: HeadroomTarget): number => (maxAgeMs === 0 ? 0 : Math.max(maxAgeMs, target.minAgeMs ?? 0));
         const due = targets.filter(
             (target) =>
                 inScope(target, options.scope) &&
-                (blockedUntil.get(target.key) ?? 0) <= now &&
+                (blockedUntil.get(target.key)?.until ?? 0) <= now &&
                 // `>=`, so a bound of zero reads it regardless of the clock, as the caller meant.
-                now - Math.max(stored[target.key]?.measuredAt ?? 0, attemptedAt.get(target.key) ?? 0) >= maxAgeMs,
+                now - Math.max(stored[target.key]?.measuredAt ?? 0, attemptedAt.get(target.key) ?? 0) >= bound(target),
         );
         const pending = [...due];
         const worker = async (): Promise<void> => {
@@ -150,6 +172,12 @@ export const createHeadroomService = (deps: {
 
     return {
         refresh,
+        held: () => {
+            const now = Date.now();
+            return [...blockedUntil]
+                .flatMap(([account, parked]) => (parked.until > now ? [{ provider: parked.provider, account, until: parked.until }] : []))
+                .toSorted((left, right) => left.until - right.until);
+        },
         record,
         clear: async (provider, account) => {
             attemptedAt.delete(account);

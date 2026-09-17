@@ -40,6 +40,7 @@ import {
     claudeConnected,
     disconnect,
     error,
+    heldAccounts,
     loadUsage,
     managedAccounts,
     managedProvider,
@@ -147,6 +148,8 @@ export const resetChat = (): void => {
     // Outgoing sandbox's totals aren't an answer for the incoming one, so these wait again too.
     accountUsage.value = {};
     usageLoaded.value = false;
+    // Names the outgoing daemon's accounts, and what its provider was holding off says nothing about this one's.
+    heldAccounts.value = [];
     providerRefusals.value = {};
     error.value = null;
 };

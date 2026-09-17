@@ -282,6 +282,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // Nothing to sweep: reading one needs a live OAuth endpoint; writes are swallowed like the store's.
         headroom: {
             refresh: async () => {},
+            held: () => [],
             record: async () => {},
             clear: async () => {},
             read: async () => ({}),
