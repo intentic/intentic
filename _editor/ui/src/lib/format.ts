@@ -1,3 +1,5 @@
+import { ref } from "vue";
+
 // Human-readable byte size for the breadcrumb / file-info chips. Empty string when the size is unknown.
 export const formatBytes = (bytes: number | undefined): string => {
     if (bytes === undefined) {
@@ -26,9 +28,7 @@ export const formatDuration = (seconds: number): string => {
     const whole = Math.floor(seconds);
     const pad = (value: number): string => String(value).padStart(2, `0`);
     const hours = Math.floor(whole / 3600);
-    return hours > 0
-        ? `${hours}:${pad(Math.floor((whole % 3600) / 60))}:${pad(whole % 60)}`
-        : `${Math.floor(whole / 60)}:${pad(whole % 60)}`;
+    return hours > 0 ? `${hours}:${pad(Math.floor((whole % 3600) / 60))}:${pad(whole % 60)}` : `${Math.floor(whole / 60)}:${pad(whole % 60)}`;
 };
 
 // Token counts at chip width: "1.4M" past a million, "142k" past a thousand, exact below that. Used everywhere
@@ -63,7 +63,12 @@ const DATE_STYLES = {
 
 type DateStyle = keyof typeof DATE_STYLES;
 
-let formatLocale = `en`;
+// A REF, NOT A PLAIN VARIABLE, and that is the whole reason a language change reaches the dates already on screen.
+// Every formatter below reads it on every call, so a render that formats a date takes a dependency on the language
+// and re-runs when it moves. As a plain variable this changed what the NEXT call returned and told Vue nothing: the
+// words swapped (vue-i18n's `t` reads a ref of its own) while every date, clock and byte count beside them stayed in
+// the language before, until something unrelated happened to re-render it.
+const formatLocale = ref(`en`);
 
 // Built on first use and kept, since constructing an Intl formatter is expensive and these run per row; cleared
 // wholesale when the language changes, which happens at most once per reader per session.
@@ -73,26 +78,31 @@ const numberFormats = new Map<number, Intl.NumberFormat>();
 
 // Half of Europe writes "1,4 MB". A decimal point is a language's answer, not a constant, so every number this
 // module prints with a fraction goes through here.
+// EVERY ONE OF THESE READS `.value` BEFORE THE CACHE, never only on a miss: the read is what the calling render
+// subscribes to, and a cache hit that skipped it would leave that render tracking nothing.
 const formatFixed = (value: number, digits: number): string => {
+    const locale = formatLocale.value;
     let format = numberFormats.get(digits);
     if (format === undefined) {
-        format = new Intl.NumberFormat(formatLocale, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+        format = new Intl.NumberFormat(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits });
         numberFormats.set(digits, format);
     }
     return format.format(value);
 };
 
 const dateFormat = (style: DateStyle): Intl.DateTimeFormat => {
+    const locale = formatLocale.value;
     const had = dateFormats.get(style);
     if (had !== undefined) {
         return had;
     }
-    const built = new Intl.DateTimeFormat(formatLocale, DATE_STYLES[style]);
+    const built = new Intl.DateTimeFormat(locale, DATE_STYLES[style]);
     dateFormats.set(style, built);
     return built;
 };
 
 const relativeFormat = (numeric: Intl.RelativeTimeFormatNumeric): Intl.RelativeTimeFormat => {
+    const locale = formatLocale.value;
     const had = relativeFormats.get(numeric);
     if (had !== undefined) {
         return had;
@@ -100,7 +110,7 @@ const relativeFormat = (numeric: Intl.RelativeTimeFormatNumeric): Intl.RelativeT
     // `narrow` is what keeps these chip-width ("5m ago", "vor 3 Std.", "2 dni temu") rather than sentence-width;
     // French is the one language whose narrow form CLDR spells as a signed number ("-5 min"), which reads fine in
     // a timestamp column and is not worth a per-language exception to avoid.
-    const built = new Intl.RelativeTimeFormat(formatLocale, { style: `narrow`, numeric });
+    const built = new Intl.RelativeTimeFormat(locale, { style: `narrow`, numeric });
     relativeFormats.set(numeric, built);
     return built;
 };
@@ -108,15 +118,18 @@ const relativeFormat = (numeric: Intl.RelativeTimeFormatNumeric): Intl.RelativeT
 /**
  * Points every formatter in this module at a language. Called only by the i18n layer — app code changes the
  * language through `setLocale`, which drives this so dates and text can never be in two different languages.
+ *
+ * Caches are dropped BEFORE the ref moves: the assignment is what wakes every render that formats something, and
+ * a render woken while the old formatters were still cached would redraw the new language's date in the old one.
  */
 export const setFormatLocale = (tag: string): void => {
-    if (tag === formatLocale) {
+    if (tag === formatLocale.value) {
         return;
     }
-    formatLocale = tag;
     dateFormats.clear();
     relativeFormats.clear();
     numberFormats.clear();
+    formatLocale.value = tag;
 };
 
 /** A calendar day on its own: "Jul 28, 2026". */

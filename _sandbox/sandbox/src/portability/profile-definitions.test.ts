@@ -18,7 +18,8 @@ const files = readdirSync(PROFILES_DIR).filter((name) => name.endsWith(`.sandbox
 // switch the reader would look at stands off. Read as source because a daemon package cannot import the app's screens.
 const appRules = readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/features/sandbox/environment/rules.ts`), `utf8`);
 // The NAME each row is called by is not a literal beside its id: rules.ts labels through `t()`, so the words a profile
-// writes into a TOML are the app's English catalogue's, and `sandbox.rules` holds exactly what the toggles label.
+// writes into a TOML are the app's English catalogue's — matching them against the source read above could only ever
+// fail — and `sandbox.rules` holds exactly what the toggles label.
 const appRuleLabels: readonly string[] = Object.values(
     (
         JSON.parse(readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/app/i18n/locales/en.json`), `utf8`)) as {

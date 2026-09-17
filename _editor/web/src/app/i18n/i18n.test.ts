@@ -141,4 +141,51 @@ describe(`the language layer`, () => {
         expect(t(`probe.title`)).toBe(`Namespaced`);
         expect(t(`title`)).toBe(`Root`);
     });
+
+    // THE ONE THAT SHIPPED BROKEN. Every assertion above reads `t` after the switch and passed while the app on
+    // screen did not change: the words were right the next time anything asked for them, and nothing asked. What a
+    // render actually needs is a DEPENDENCY, so these drive the two halves through `watchEffect` — the same thing a
+    // component's render is — and count the runs rather than reading the value back.
+    //
+    // `formatDate` was the half that had none: `setFormatLocale` wrote a plain module variable, so the dates beside
+    // freshly-translated words stayed in the language before until something unrelated re-rendered them.
+    describe(`a language change reaches what is already drawn`, () => {
+        const catalog = (): Catalog => ({
+            namespace: `probe`,
+            base: { greeting: `Hello` },
+            load: () => Promise.resolve({ default: { greeting: `Cześć` } }),
+        });
+
+        it(`re-runs a render that translates`, async () => {
+            const { registerCatalog, setLocale, useT } = await freshI18n();
+            const { watchEffect, nextTick } = await import(`vue`);
+            await registerCatalog(catalog());
+            const t = useT(`probe`);
+
+            const seen: string[] = [];
+            const stop = watchEffect(() => seen.push(t(`greeting`)));
+            await setLocale(`pl`);
+            await nextTick();
+            stop();
+
+            expect(seen).toEqual([`Hello`, `Cześć`]);
+        });
+
+        it(`re-runs a render that formats a date`, async () => {
+            const { registerCatalog, setLocale } = await freshI18n();
+            const { watchEffect, nextTick } = await import(`vue`);
+            const { formatDate } = await import(`@intentic/ui/format`);
+            await registerCatalog(catalog());
+
+            const seen: string[] = [];
+            const stop = watchEffect(() => seen.push(formatDate(Date.UTC(2026, 8, 17))));
+            await setLocale(`pl`);
+            await nextTick();
+            stop();
+
+            // The words are CLDR's; what this pins is that there are TWO readings and they differ.
+            expect(seen).toHaveLength(2);
+            expect(seen[1]).not.toBe(seen[0]);
+        });
+    });
 });
