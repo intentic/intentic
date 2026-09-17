@@ -36,6 +36,20 @@ describe(`the boot frame`, () => {
         expect(inline).toContain(`.boot-mark`);
     });
 
+    // The bug this is for: body's `bg-canvas` is a class in the bundle, so until the bundle lands the document
+    // wears the browser's white — a flash of daylight at every refresh for the reader who picked the dark.
+    it(`paints a canvas of its own for each look, since the stylesheet naming them has not arrived`, () => {
+        const inline = [...page.querySelectorAll(`head style`)].map((style) => style.textContent ?? ``).join(``);
+        const painted = (selector: string): string[] => {
+            const block = new RegExp(`:where\\(${selector}\\)\\s*\\{([^}]*)\\}`, `u`).exec(inline)?.[1] ?? ``;
+            return [...block.matchAll(/([\w-]+):\s*([^;]+);/gu)].map(([, property, value]) => `${property}: ${value?.trim() ?? ``}`);
+        };
+
+        expect(painted(`html`)).toEqual([`background-color: #f4f1ec`, `color-scheme: light`]);
+        expect(painted(`html\\[data-mode="dark"\\]`)).toEqual([`background-color: #141210`, `color-scheme: dark`]);
+        expect(painted(`html\\[data-skin="sanctum"\\]`)).toEqual([`background-color: #0d0c0a`, `color-scheme: dark`]);
+    });
+
     // A start that is merely slow must never be called broken, so the second line ships hidden and arrives late; a
     // start that is stuck leaves the reader something to press. `isConnected` is the mount's cancellation: by the
     // time the timer runs, a successful boot has already detached the element it asks about.

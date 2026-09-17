@@ -103,6 +103,22 @@
         <link rel="preload" as="font" type="font/woff2" href="/fonts/public-sans-100-900-latin.woff2" crossorigin />
 <!-- The boot frame's own styles, here rather than in the bundle, because the bundle is what it stands in for. -->
         <style>
+/* THE CANVAS BEFORE THE BUNDLE. `body class="bg-canvas"` is a class in the stylesheet this frame stands in for,
+               so without these three lines the first paint is the browser's white — under a reader whose whole point is
+               that they chose the dark. Same values as the theme-color above, sanctum a shade under the plain dark;
+               `:where` keeps them at specificity 0 so styles.css's `html` rule replaces them the moment it lands. */
+            :where(html) {
+                background-color: #f4f1ec;
+                color-scheme: light;
+            }
+            :where(html[data-mode="dark"]) {
+                background-color: #141210;
+                color-scheme: dark;
+            }
+            :where(html[data-skin="sanctum"]) {
+                background-color: #0d0c0a;
+                color-scheme: dark;
+            }
             .boot {
                 position: fixed;
                 inset: 0;
@@ -119,7 +135,8 @@
                 font-size: 0.875rem;
                 text-align: center;
             }
-            [data-mode="dark"] .boot {
+            [data-mode="dark"] .boot,
+            [data-skin="sanctum"] .boot {
                 color: #9c8b73;
             }
             .boot-mark {

@@ -44,6 +44,11 @@
     body {
         overscroll-behavior: none;
     }
+/* The canvas is on the root element too, not only on body's `bg-canvas`: it replaces the approximate hex
+       index.html paints before this file exists, and it is what shows anywhere body does not reach. */
+    html {
+        background-color: var(--role-canvas);
+    }
 }
 
 /* Tighten the page gutter on phones — the desktop `--ui-page-padding` (up to 2rem/side) eats a third of a 375px screen. */
