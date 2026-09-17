@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { explorerColorClass, type IconName, iconForEntry } from "@intentic/ui";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
 import { thumbnailKind, thumbnailUrl } from "./thumbnails";
 
 const {
@@ -12,6 +12,10 @@ const {
     pending = false,
     dimmed = false,
     tabindex = -1,
+    renaming = false,
+    dropTarget = false,
+    dragging = false,
+    draggable = false,
 } = defineProps<{
     entry: WorkspaceTreeEntry;
     selected?: boolean;
@@ -23,14 +27,44 @@ const {
     dimmed?: boolean;
     // Roving: the selected tile (or the first) is the one the Tab key reaches.
     tabindex?: number;
+    // The name is a field being typed into; `draft` is its text.
+    renaming?: boolean;
+    // A folder about to take a drop.
+    dropTarget?: boolean;
+    // Being dragged: drawn faint where it still stands.
+    dragging?: boolean;
+    draggable?: boolean;
 }>();
 
-const emit = defineEmits<{ select: []; open: []; enter: [el: HTMLElement]; leave: [] }>();
+// The rename field's text; the owner reads it back on commit.
+const draft = defineModel<string>(`draft`, { default: `` });
+
+const emit = defineEmits<{
+    select: [event: MouseEvent];
+    open: [];
+    enter: [el: HTMLElement];
+    leave: [];
+    contextmenu: [event: MouseEvent];
+    commit: [];
+    cancel: [];
+    dragstart: [event: DragEvent];
+    dragend: [];
+    dragover: [event: DragEvent];
+    dragleave: [event: DragEvent];
+    drop: [event: DragEvent];
+}>();
 
 const icon = computed<IconName>(() => (locked ? `lock` : iconForEntry(entry.name, entry.type)));
 // Always the colourful hue, whatever the tree's own setup: a 2rem glyph in the minimal setup's grey reads as disabled.
 const color = computed(() => (locked ? `text-subtle` : explorerColorClass(`colorful`, entry.name, entry.type, dimmed)));
 const quiet = computed(() => dimmed || locked || pending);
+
+// Focus and select the name the moment the field mounts; only one is ever rendered at a time.
+const focusField = (vnode: VNode): void => {
+    const el = vnode.el as HTMLInputElement;
+    el.focus();
+    el.select();
+};
 
 // --- The thumbnail: fetched once the tile is near the viewport, never for a folder of four hundred off-screen shots. ---
 const kind = computed(() => (locked || pending ? undefined : thumbnailKind(entry)));
@@ -107,18 +141,25 @@ const seekFrame = (event: Event): void => {
 </script>
 
 <template>
-    <button
-        type="button"
+    <!-- A div, not a button: the rename field lives inside it, and a field inside a button takes no keystrokes in Firefox. -->
+    <div
         role="option"
         :aria-selected="selected"
         :data-desk-tile="entry.path"
         :tabindex="tabindex"
+        :draggable="draggable"
         class="ui-row-select flex w-full flex-col items-center gap-1.5 rounded-lg px-2 pt-3 pb-2 text-center select-none"
-        :class="{ 'ui-row-select-on': selected, 'opacity-60': pending }"
-        @click="emit('select')"
+        :class="{ 'ui-row-select-on': selected, 'ui-row-select-drop': dropTarget, 'opacity-60': pending, 'opacity-40': dragging }"
+        @click="emit('select', $event)"
         @dblclick="emit('open')"
+        @contextmenu="emit('contextmenu', $event)"
         @pointerenter="emit('enter', $event.currentTarget as HTMLElement)"
         @pointerleave="emit('leave')"
+        @dragstart="emit('dragstart', $event)"
+        @dragend="emit('dragend')"
+        @dragover="emit('dragover', $event)"
+        @dragleave="emit('dragleave', $event)"
+        @drop="emit('drop', $event)"
     >
         <!-- One height for every tile, glyph or thumbnail, so names sit on one line across a row. -->
         <span ref="art" class="relative flex h-14 w-full items-center justify-center">
@@ -126,6 +167,7 @@ const seekFrame = (event: Event): void => {
                 v-if="kind === 'picture' && src !== undefined && !failed"
                 :src="src"
                 alt=""
+                draggable="false"
                 class="ui-desk-move max-h-14 max-w-[6.5rem] rounded-sm object-contain ring-1 ring-line/60"
                 :class="shown ? 'opacity-100' : 'opacity-0'"
                 @load="shown = true"
@@ -148,8 +190,23 @@ const seekFrame = (event: Event): void => {
             <!-- A link wears its target's glyph; the small mark says it is one. -->
             <Icon v-if="entry.link !== undefined" name="link" class="absolute right-2 bottom-0 text-[0.65rem] text-subtle" aria-label="Link" />
         </span>
-        <span class="line-clamp-2 w-full text-xs leading-snug [overflow-wrap:anywhere]" :class="quiet ? 'text-subtle' : 'text-content/90'">{{
+        <!-- The field owns its keys (arrows move the caret, Enter commits, Escape cancels); none reach the desk. -->
+        <input
+            v-if="renaming"
+            v-model="draft"
+            type="text"
+            aria-label="New name"
+            class="ui-field-box ui-field-inline w-full min-w-0 px-1 text-center text-xs"
+            @click.stop
+            @dblclick.stop
+            @keydown.stop
+            @keydown.enter.prevent="emit('commit')"
+            @keydown.esc.prevent="emit('cancel')"
+            @blur="emit('commit')"
+            @vue:mounted="focusField"
+        />
+        <span v-else class="line-clamp-2 w-full text-xs leading-snug [overflow-wrap:anywhere]" :class="quiet ? 'text-subtle' : 'text-content/90'">{{
             entry.name
         }}</span>
-    </button>
+    </div>
 </template>

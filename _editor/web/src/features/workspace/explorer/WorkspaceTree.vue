@@ -34,6 +34,8 @@ import { type ExplorerFilters, explorerShows, technicalHidden } from "./explorer
 import { movableInto, pastePairs } from "./transfer/explorerPaste";
 import { nestSiblings, type NestedEntry } from "./fileNesting";
 import { ancestorDirs, revealTargets } from "./revealPath";
+import { entryMenuItems } from "./entryMenu";
+import { deletedReceipt, deleteHeader as deleteHeaderFor, joinPath, newNameError } from "./entryNames";
 import type { RowAction } from "./rowActions";
 import { selectRange, stepLead } from "./treeSelect";
 import type { OpenMode } from "../tabs/workspaceTabs";
@@ -155,7 +157,6 @@ watch(
     },
 );
 
-const joinPath = (dir: string, name: string): string => (dir === `` ? name : `${dir}/${name}`);
 const canMoveInto = (source: string, dir: string): boolean => !(dir === source || dir === parentDir(source) || dir.startsWith(`${source}/`));
 
 // Sandbox-private paths (isLockedWorkspacePath): no rename, delete, cut, copy, drag, or drop-into; a click opens an
@@ -539,23 +540,10 @@ const beginCreate = (dir: string, type: "file" | "dir"): void => {
     creating.value = { dir, type };
     createDraft.value = ``;
 };
-// Live validation while typing; empty stays error-free (an empty commit is a silent cancel, like rename).
-const createError = computed<string | undefined>(() => {
-    if (creating.value === undefined) {
-        return undefined;
-    }
-    const name = createDraft.value.trim();
-    if (name === ``) {
-        return undefined;
-    }
-    if (name === `.` || name === `..` || /[/\\]/.test(name)) {
-        return `Invalid name.`;
-    }
-    if (byPath.value.has(joinPath(creating.value.dir, name))) {
-        return `"${name}" already exists.`;
-    }
-    return undefined;
-});
+// Live validation while typing (entryNames.ts); empty stays error-free, since an empty commit is a silent cancel.
+const createError = computed<string | undefined>(() =>
+    creating.value === undefined ? undefined : newNameError(createDraft.value, creating.value.dir, (path) => byPath.value.has(path)),
+);
 const commitCreate = async (): Promise<void> => {
     const spec = creating.value;
     if (spec === undefined) {
@@ -686,17 +674,9 @@ const sweepBarren = (roots: readonly string[]): void => {
     selection.value = new Set();
     anchor.value = null;
 };
-const deleteHeader = computed<string>(() => {
-    const paths = confirmPaths.value;
-    if (paths === undefined) {
-        return ``;
-    }
-    const only = paths.length === 1 ? paths[0] : undefined;
-    if (only === undefined) {
-        return `Delete ${paths.length} items?`;
-    }
-    return byPath.value.get(only)?.type === `dir` ? `Delete folder?` : `Delete file?`;
-});
+const deleteHeader = computed<string>(() =>
+    confirmPaths.value === undefined ? `` : deleteHeaderFor(confirmPaths.value, (path) => byPath.value.get(path)?.type),
+);
 const confirmDelete = (): void => {
     const paths = confirmPaths.value;
     confirmPaths.value = undefined;
@@ -706,8 +686,7 @@ const confirmDelete = (): void => {
     // Named while the tree still knows what they were, said only after the delete lands: a receipt for a failed delete
     // would misreport what can't be undone. No Undo on this one, unlike the sweep's — there is no trash to restore
     // from, and a button that only sometimes brings a file back is worse than none.
-    const only = paths.length === 1 ? paths[0] : undefined;
-    const named = only === undefined ? `${paths.length} items deleted` : `${basename(only)} deleted`;
+    const named = deletedReceipt(paths);
     void run(async () => {
         await removeEntries(paths);
         say(named);
@@ -1016,73 +995,44 @@ const dirActionItems = (target: WorkspaceTreeEntry | undefined, multi: boolean):
         ? actionsFor(target.path).map((action) => ({ label: action.tooltip, icon: action.icon, command: () => runAction(target, action) }))
         : [];
 
-// A read-only member's menu: write items are dropped, not disabled, since greyed-out verbs just invite frustration. The
-// tier is named once at the bottom; the daemon would refuse each dropped item anyway (auth/role-floor.ts).
-const readOnlyMenu = (target: WorkspaceTreeEntry | undefined, multi: boolean): MenuItem[] => {
-    const readable = [
-        ...dirActionItems(target, multi),
-        ...(expanded.value.size > 0 ? [{ label: `Collapse Folders`, icon: `collapse-all`, command: collapseAll }] : []),
-    ];
-    return [
-        ...readable,
-        ...(readable.length > 0 ? [{ separator: true }] : []),
-        { label: `Read-only: changing files needs maintainer access`, icon: `lock`, disabled: true },
-    ];
-};
-
-// ---- context menu (acts on the whole selection when the right-clicked row is part of it) ----
+// ---- context menu (entryMenu.ts; acts on the whole selection when the right-clicked row is part of it) ----
 const menuItems = computed<MenuItem[]>(() => {
     const target = menuEntry.value;
-    // A locked row's menu is just the padlock explanation, since every item would be refused anyway.
-    if (target !== undefined && locked(target.path)) {
-        return [{ label: `Kept private by the sandbox`, icon: `lock`, disabled: true }];
-    }
     const multi = target !== undefined && selection.value.size > 1 && selection.value.has(target.path);
-    const count = unlockedOnly([...selection.value]).length;
     const dir = target === undefined ? `` : target.type === `dir` ? target.path : parentDir(target.path);
-    if (!canEditFiles.value) {
-        return readOnlyMenu(target, multi);
-    }
-    const items: MenuItem[] = [
-        { label: `New File`, icon: `file`, command: () => beginCreate(dir, `file`) },
-        { label: `New Folder`, icon: `folder`, command: () => beginCreate(dir, `dir`) },
-        ...dirActionItems(target, multi),
-    ];
-    if (target !== undefined) {
-        items.push({ separator: true });
-        if (!multi) {
-            items.push({ label: `Rename`, icon: `pencil`, command: () => beginRename(target.path) });
-        }
-        // Marks a barren folder intentional via a placeholder: durable, visible to git, not a private exclusion flag.
-        if (!multi && target.type === `dir` && isBarren(target.path)) {
-            items.push({ label: `Keep folder`, icon: `check-circle`, command: () => keepFolder(target.path) });
-        }
-        items.push(
-            { label: multi ? `Delete ${count} items` : `Delete`, icon: `trash`, command: () => doDeleteSelection() },
-            { separator: true },
-            {
-                label: multi ? `Cut ${count} items` : `Cut`,
-                icon: `arrows-h`,
-                command: () => {
-                    stage(`cut`, `async`);
-                },
+    return entryMenuItems({
+        target,
+        locked: target !== undefined && locked(target.path),
+        canEdit: canEditFiles.value,
+        multi,
+        count: unlockedOnly([...selection.value]).length,
+        barren: target?.type === `dir` && isBarren(target.path),
+        clipboardFull: clipboard.value !== undefined,
+        lead: dirActionItems(target, multi),
+        tail: expanded.value.size > 0 ? [{ label: `Collapse Folders`, icon: `collapse-all`, command: collapseAll }] : [],
+        verbs: {
+            newFile: () => beginCreate(dir, `file`),
+            newFolder: () => beginCreate(dir, `dir`),
+            rename: () => {
+                if (target !== undefined) {
+                    beginRename(target.path);
+                }
             },
-            {
-                label: multi ? `Copy ${count} items` : `Copy`,
-                icon: `copy`,
-                command: () => {
-                    stage(`copy`, `async`);
-                },
+            keepFolder: () => {
+                if (target !== undefined) {
+                    void keepFolder(target.path);
+                }
             },
-        );
-    }
-    if (clipboard.value !== undefined) {
-        items.push({ label: `Paste`, icon: `clone`, command: () => void doPaste(dir) });
-    }
-    if (expanded.value.size > 0) {
-        items.push({ separator: true }, { label: `Collapse Folders`, icon: `collapse-all`, command: collapseAll });
-    }
-    return items;
+            remove: () => doDeleteSelection(),
+            cut: () => {
+                stage(`cut`, `async`);
+            },
+            copy: () => {
+                stage(`copy`, `async`);
+            },
+            paste: () => void doPaste(dir),
+        },
+    });
 });
 const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): void => {
     menuEntry.value = entry;
@@ -1411,15 +1361,12 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
 </template>
 
 <style scoped>
-/* States `.ui-row-select` doesn't cover: a drop target, a changed-on-disk row, and one the sweep line points at. */
+/* States `.ui-row-select` doesn't cover: a changed-on-disk row, and one the sweep line points at. The drop tint sits in
+   utilities.css beside `.ui-row-select-on`, since the desk's tiles and crumbs wear it too. */
 
 /* Pointed at from the sweep line, not hovered; an outline, not a fill, keeps it distinct from hover and selection. */
 .ui-row-select-pointed {
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary-500) 55%, transparent);
-}
-.ui-row-select-drop {
-    background: color-mix(in srgb, var(--color-primary-500) 28%, transparent);
-    box-shadow: inset 0 0 0 1px var(--color-primary-500);
 }
 /* Flags a row changed on disk for ~2s; static, not animated, since DevTools rebuilds under a live CSS animation. */
 .ui-row-select-changed {

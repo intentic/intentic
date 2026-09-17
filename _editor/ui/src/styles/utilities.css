@@ -100,6 +100,12 @@
         background: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
     }
 
+/* A folder about to take a drop (a tree row, a desk tile, a breadcrumb): fuller than the selected tint, with a rule. */
+    .ui-row-select-drop {
+        background: color-mix(in srgb, var(--color-primary-500) 28%, transparent);
+        box-shadow: inset 0 0 0 1px var(--color-primary-500);
+    }
+
 /* A compact HORIZONTAL strip keeps selection to its tint and icon colour. */
     .ui-row-select-horizontal.ui-row-select-on,
     .ui-row-select-horizontal.ui-row-select-on:hover:not(:disabled) {

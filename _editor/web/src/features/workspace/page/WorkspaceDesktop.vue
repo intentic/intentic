@@ -39,7 +39,7 @@ import type { SearchScope } from "../search/useWorkspaceSearch";
 import { MATCH_TOGGLES } from "../search/useSearchOptions";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
-import { useDesk } from "../desk/useDesk";
+import { DESK_DIR_ACTIONS, useDesk } from "../desk/useDesk";
 import { dragOffer, watchDragSource } from "../explorer/transfer/dragSource";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
 import DirectoryChecks from "../directory-ui/DirectoryChecks.vue";
@@ -317,6 +317,9 @@ const rowActions = (dir: string): readonly RowAction[] =>
         },
         openDocument,
     });
+
+// The desk's menu offers a folder the same rows; it is mounted by the pane, so they travel by injection.
+provide(DESK_DIR_ACTIONS, rowActions);
 
 // The file the reader is in; with two panes, the focused one's. Feeds presence and, through `pick`, the current entry.
 const openPath = computed(() => (activeTab.value?.kind === `file` ? activeTab.value.path : undefined));

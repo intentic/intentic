@@ -1,6 +1,7 @@
 import { definePreference } from "@intentic/ui/preference";
 import { parentDir } from "@intentic/ui/path";
-import { type Ref, ref, watch } from "vue";
+import { type InjectionKey, type Ref, ref, watch } from "vue";
+import type { RowAction } from "../explorer/rowActions";
 import { workspaceDir } from "../health/workspaceScope";
 
 // The desk: the main pane's "nothing open" surface drawn as large tiles of one folder. Opt-in, since it takes the
@@ -9,6 +10,10 @@ import { workspaceDir } from "../health/workspaceScope";
 // view marks what this one picked, and closing the last tab brings back the folder the reader left, not the root.
 
 const STORAGE_KEY = `ui-workspace-desk`;
+
+// A folder's own rows for the desk's menu (documents, personas, checks, management), composed by the workspace page,
+// which holds the openers; provided rather than passed, since the desk is mounted by the pane, not the page.
+export const DESK_DIR_ACTIONS: InjectionKey<(dir: string) => readonly RowAction[]> = Symbol(`desk-dir-actions`);
 
 const desk: Ref<boolean> = definePreference<boolean>({
     key: STORAGE_KEY,
