@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { COMMAND_RULE_CATALOG, type CommandLocus, type CommandRuleTier } from "@intentic/sandbox-contract";
-import { Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
+import { Row, RowGroup } from "@intentic/ui";
 import RuleCommand from "./RuleCommand.vue";
 
 // Read-only table of COMMAND_RULE_CATALOG (safety-policy.ts): one row per command class, one column per machine
@@ -12,12 +12,12 @@ const MACHINES = [
     { locus: `device`, label: `My devices`, track: `bg-content/[0.045]` },
 ] as const satisfies readonly { locus: CommandLocus; label: string; track: string }[];
 
-// ONE RECORD PER TIER, three views of it: the word, the pill it wears in a machine's column, and the tone it takes in
-// the narrow line, so a tier cannot end up spelled two ways. "Judged" and "Always asks" name the consequence, not the
-// mechanism; context already says what judging means, and amber is the half a reader cannot waive.
-const TIERS: Readonly<Record<CommandRuleTier, { label: string; badge: StatusVariant; tone: string }>> = {
-    hard: { label: `Always asks`, badge: `warning`, tone: `font-medium text-warning` },
-    judged: { label: `Judged`, badge: `neutral`, tone: `text-subtle` },
+// ONE RECORD PER TIER, two views of it: the word and the tone it takes wherever it's shown, so a tier cannot end up
+// spelled two ways. "Judged" and "Always asks" name the consequence, not the mechanism; context already says what
+// judging means, and amber is the half a reader cannot waive.
+const TIERS: Readonly<Record<CommandRuleTier, { label: string; tone: string }>> = {
+    hard: { label: `Always asks`, tone: `font-medium text-warning` },
+    judged: { label: `Judged`, tone: `text-subtle` },
 };
 
 // ONE MACHINE'S COLUMN, WRITTEN ONCE. Its head, its track, every verdict in it and the empty spacer that holds the
@@ -101,11 +101,9 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
                                 class="flex h-full items-center justify-center"
                                 :class="[COLUMN, COLUMN_PAD]"
                             >
-                                <StatusBadge
-                                    size="xs"
-                                    :variant="TIERS[rule.tiers[machine.locus]].badge"
-                                    :label="TIERS[rule.tiers[machine.locus]].label"
-                                />
+                                <span class="text-2xs" :class="TIERS[rule.tiers[machine.locus]].tone">
+                                    {{ TIERS[rule.tiers[machine.locus]].label }}
+                                </span>
                             </span>
                         </div>
                     </template>
