@@ -50,6 +50,10 @@
             "types": "./src/icons/iconSets.ts",
             "default": "./src/icons/iconSets.ts"
         },
+        "./file-icon": {
+            "types": "./src/icons/fileIcon.ts",
+            "default": "./src/icons/fileIcon.ts"
+        },
         "./glyph": {
             "types": "./src/icons/glyph.ts",
             "default": "./src/icons/glyph.ts"

@@ -9,6 +9,8 @@ import ExtensionDocument from "../../../core-views/ExtensionDocument.vue";
 import CodebaseHealth from "../health/CodebaseHealth.vue";
 import DirectoryOperator from "../directory-ui/DirectoryOperator.vue";
 import DirectoryUiHost from "../directory-ui/DirectoryUiHost.vue";
+import DeskView from "../desk/DeskView.vue";
+import { useDesk } from "../desk/useDesk";
 import FileBreadcrumb from "../explorer/FileBreadcrumb.vue";
 import FileTabs from "../tabs/FileTabs.vue";
 import DiffSkeleton from "../viewers/DiffSkeleton.vue";
@@ -36,6 +38,8 @@ const emit = defineEmits<{
 
 const { strip, focusedPane, openLine, focusPane, collapseSplit } = useWorkspaceTabs();
 const { entry } = useWorkspaceTree();
+// What is under the tabs: the open folder as tiles, or the plain drop target.
+const { desk } = useDesk();
 
 // Teleport seats are named after this pane, so the companion's breadcrumb can't land in the wrong one.
 provide(CHROME_SCOPE, pane);
@@ -157,6 +161,8 @@ const diffOutline = useLoadingReveal(
         <div v-else-if="activeTab?.kind === 'document'" class="min-h-0 flex-1">
             <ExtensionDocument :extension="activeTab.extension" :provider="activeTab.provider" :path="activeTab.path" :title="activeTab.title" />
         </div>
+        <!-- The desk, while it is on and there are files to draw; an empty workspace still gets every way to get code in. -->
+        <DeskView v-else-if="desk && !empty" />
         <!-- `empty` picks the silence: nothing in the workspace gets every way in, between files gets just the drop target. -->
         <WorkspaceEmptyState v-else :empty="empty" @pick="emit('pick')" />
     </section>

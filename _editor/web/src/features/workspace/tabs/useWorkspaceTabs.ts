@@ -269,6 +269,16 @@ const openDocument = (extension: string, provider: string, path: string, title: 
     place(paneOf(strip.value, id) ?? focused.value, { kind: `document`, id, extension, provider, path, title, icon }, `keep`);
 };
 
+// Shows what is under the tabs (the desk) without closing any: the pane's active tab is unset, and the next click on a
+// tab brings it back. Main in practice: a side pane exists only while it holds tabs, and one of them is always active.
+const deselect = (which: EditorPane = `main`): void => {
+    if (pane(which).active === null) {
+        return;
+    }
+    setPane(which, { ...pane(which), active: null });
+    openLine.value = undefined;
+};
+
 // Selecting a tab focuses its pane: the strip clicked is the strip the keyboard acts on next.
 const selectTab = (id: string): void => {
     const which = paneOf(strip.value, id);
@@ -392,6 +402,7 @@ export function useWorkspaceTabs() {
         openHealth,
         openDocument,
         selectTab,
+        deselect,
         keepTab,
         closedTabs,
         closeTabIds,

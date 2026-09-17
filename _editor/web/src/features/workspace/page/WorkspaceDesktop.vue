@@ -39,6 +39,7 @@ import type { SearchScope } from "../search/useWorkspaceSearch";
 import { MATCH_TOGGLES } from "../search/useSearchOptions";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
+import { useDesk } from "../desk/useDesk";
 import { dragOffer, watchDragSource } from "../explorer/transfer/dragSource";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
 import DirectoryChecks from "../directory-ui/DirectoryChecks.vue";
@@ -161,6 +162,7 @@ const {
     openHealth,
     openDocument,
     selectTab,
+    deselect,
     keepTab,
     closedTabs,
     closeTabIds,
@@ -173,6 +175,27 @@ const {
 } = useWorkspaceTabs();
 // Mirrors the active file into the URL so a reload or shared link reopens it.
 useWorkspaceRoute();
+
+// Nothing to draw: the pane shows every way to get code in, and the desk has no folder to show.
+const emptyWorkspace = computed(() => !isLoading.value && tree.value.length === 0);
+// The desk (features/workspace/desk): what is under the tabs while the preference is on. Showing it unsets the main
+// pane's active tab and closes nothing, so the strip is a click away from where it was.
+const { desk } = useDesk();
+const deskOffered = computed(() => desk.value && !emptyWorkspace.value);
+const deskCovered = computed(() => deskOffered.value && strip.value.main.active !== null);
+const showDesk = (): void => deselect(`main`);
+// Registered only while the desk is on: a palette row that shows a bare pane would be named for something it isn't.
+let deskCommand: Disposable | undefined;
+watch(
+    desk,
+    (on) => {
+        deskCommand?.dispose();
+        deskCommand = on
+            ? registerCommand({ owner: `builtin`, category: WORKSPACE, command: `workspace.showDesk`, title: `Show Desk`, icon: `th-large`, handler: showDesk })
+            : undefined;
+    },
+    { immediate: true },
+);
 
 // Below ~40rem the tree becomes a drawer over the viewer instead of a column. `drawerOpen` is separate from the
 // persisted `sidebarCollapsed`, so a chat-narrowed session can't leave the explorer hidden on a later wide one.
@@ -728,6 +751,8 @@ onBeforeUnmount(() => {
         disposable.dispose();
     }
     workspaceCommandDisposables = [];
+    deskCommand?.dispose();
+    deskCommand = undefined;
 });
 const onPick = (event: Event): void => {
     const input = event.target as HTMLInputElement;
@@ -750,6 +775,7 @@ const explorerTooltip = computed(() =>
     ),
 );
 const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of the workspace root`, `workspace.codebaseHealth`));
+const deskTooltip = computed(() => tooltipWithChord(`Show desk · your tabs stay open`, `workspace.showDesk`));
 </script>
 
 <template>
@@ -988,7 +1014,7 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                 <EditorPane
                     pane="main"
                     :broken="scopeBroken"
-                    :empty="!isLoading && tree.length === 0"
+                    :empty="emptyWorkspace"
                     @select="selectTab"
                     @keep="keepTab"
                     @close="closeTab"
@@ -1011,6 +1037,17 @@ const rootHealthTooltip = computed(() => tooltipWithChord(`Codebase health of th
                                 :class="{ 'ws-stashed-new': justHidden }"
                                 aria-hidden="true"
                             ></span>
+                        </button>
+                        <!-- What is under the tabs, without closing any; only while a tab covers the desk. -->
+                        <button
+                            v-if="deskCovered"
+                            type="button"
+                            :class="ui.iconButton(`mr-1 h-7 w-7 self-center`)"
+                            @click="showDesk"
+                            v-tooltip.bottom="deskTooltip"
+                            aria-label="Show desk"
+                        >
+                            <Icon name="th-large" class="text-sm" />
                         </button>
                     </template>
                     <template #status>

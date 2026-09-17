@@ -318,3 +318,21 @@
         }
     }
 }
+
+/* THE DESK'S TWO MOVES: a folder change slides the tiles a step in the direction travelled, and the quick-look card
+   glides to the tile under the pointer. One property list, so the reduced-motion answer beside it stills both. */
+@layer components {
+    .ui-desk-move {
+        transition:
+            opacity 0.15s ease-out,
+            translate 0.15s ease-out,
+            left 0.15s ease-out,
+            top 0.15s ease-out;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .ui-desk-move {
+            transition: none;
+        }
+    }
+}
