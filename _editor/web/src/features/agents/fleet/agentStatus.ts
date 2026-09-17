@@ -464,6 +464,41 @@ export const originMeta = (origin: AgentOrigin): { icon: IconName; label: string
 export const unreadBadge = (agent: { unread: boolean; seenAt?: number }): { label: "New" | "Updated"; seenAt?: number } | undefined =>
     !agent.unread ? undefined : agent.seenAt === undefined ? { label: `New` } : { label: `Updated`, seenAt: agent.seenAt };
 
+// The unread chip's hover, one sentence wherever that chip is drawn; takes the formatted instant, since this module
+// owns no clock (see `unreadBadge`).
+export const unreadHint = (when: string): string => `Worked since you last opened it, ${when}`;
+
+// A CARD'S CORNER IS A WORD, NOT A GLYPH, AND THE SAME WORD EVERYWHERE. "Usage limit" and "Stopped" are what the
+// reader needs; a triangle in the corner names neither, and the rail and the board each used to decide the word, the
+// tint and the seat for themselves. This decides all three once: what it says, how it is tinted, and (by returning
+// nothing) when the resting status glyph may have the corner back.
+export interface StandingChip {
+    readonly label: string;
+    // Tailwind fill + ink for `ui-status-pill`. An ink tint, not a surface token: a surface token collides with the
+    // selected card's lifted fill and, in the light scheme, with the card fill itself.
+    readonly tone: string;
+    // When the reader last opened it, raw, for a host with a clock to phrase (`unreadHint`); absent on every reason chip.
+    readonly seenAt?: number;
+}
+
+// Muted for a spent allowance: it needs a person, but nothing is wrong and nothing is lost.
+const LIMIT_TONE = `bg-content/10 text-muted`;
+const REASON_TONE = `bg-warning/15 text-warning`;
+const UNREAD_TONE = `bg-primary-600/15 text-link`;
+
+export const standingChip = (agent: AgentStanding & { readonly unread: boolean; readonly seenAt?: number }): StandingChip | undefined => {
+    const reason = attentionReason(agent);
+    if (reason !== undefined) {
+        return { label: reason, tone: limited(agent) ? LIMIT_TONE : REASON_TONE };
+    }
+    // Never both at once: "needs you" outranks "there is news".
+    const badge = unreadBadge(agent);
+    if (badge === undefined) {
+        return undefined;
+    }
+    return { label: badge.label, tone: UNREAD_TONE, ...(badge.seenAt === undefined ? {} : { seenAt: badge.seenAt }) };
+};
+
 /* A working child's activity takes precedence over its parent's idle tool. */
 export const activityLine = (agent: Pick<AgentSummary, "activity" | "subagents">): string | undefined => {
     const activity = agent.activity;

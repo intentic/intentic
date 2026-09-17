@@ -11,12 +11,12 @@ import {
     activityIcon,
     activityLine,
     agentStatusMeta,
-    attentionReason,
     type FleetLane,
+    type StandingChip,
+    standingChip,
     type TileRim,
     tileRim,
     turnInFlight,
-    unreadBadge,
 } from "../../agents/fleet/agentStatus";
 import { sessionCategory } from "../../../app/sessionCategory";
 import { useAgentFilter } from "../../agents/board/useAgentFilter";
@@ -246,6 +246,10 @@ const statusOf = (entry: OpenChat): { name: IconName; spin?: boolean; class: str
     return { name: icon.name, spin: icon.spin, class: `text-xs ${icon.class}`, "aria-label": statusLabel(status) };
 };
 
+// The corner's word, from the board's own projection: why this chat needs you, else that it worked since you last
+// looked. A conversation the roster hasn't filed has no standing to report, so its corner keeps the status glyph.
+const chipOf = (entry: OpenChat): StandingChip | undefined => (entry.agent === undefined ? undefined : standingChip(entry.agent));
+
 // What the mark's rim draws: the chat's own checklist, or how much of the context window it has spent. Only the fleet
 // agent knows either, so a conversation this window holds but the roster has not filed wears the empty rim rather than
 // a guess. Not `quiet`: every row here is an open session, not a destination.
@@ -288,10 +292,9 @@ const liveOf = (entry: OpenChat): { icon: IconName; text: string; since: number 
 };
 
 // Whether the second line has anything to show; a fresh draft has no numbers, marks or model, so it's asked per
-// card rather than assumed.
+// card rather than assumed. The standing is not counted here: it wears the card's corner, not this line.
 const hasMeta = (entry: OpenChat): boolean =>
-    (entry.agent !== undefined &&
-        (attentionReason(entry.agent) !== undefined || unreadBadge(entry.agent) !== undefined || entry.agent.updatedAt > 0)) ||
+    (entry.agent !== undefined && entry.agent.updatedAt > 0) ||
     entry.conversation.unsent.value ||
     originOf(entry.conversation) !== undefined ||
     isArchived(entry.conversation) ||
@@ -651,6 +654,7 @@ const keepTab = (event: Event, id: string): void => {
                             :match-case="matchCase"
                             :provider="agent?.provider ?? c.provider.value"
                             :status="statusOf({ conversation: c, agent })"
+                            :chip="chipOf({ conversation: c, agent })"
                             :rim="rimOf({ conversation: c, agent })"
                             :live="liveOf({ conversation: c, agent })"
                             :now="now"
@@ -693,25 +697,8 @@ const keepTab = (event: Event, id: string): void => {
                                     <Icon name="times" class="text-2xs" />
                                 </span>
                             </template>
-<!-- One line: why it needs attention or is unread, where it came from, the model, and (settled only) its age, right-aligned. -->
+<!-- One line: where it came from, the model, and (settled only) its age, right-aligned. Why it needs you is the card's corner (see `chipOf`), where the board puts it too. -->
                             <template v-if="hasMeta({ conversation: c, agent })" #meta>
-                                <span
-                                    v-if="agent !== undefined && attentionReason(agent) !== undefined"
-                                    class="ui-status-pill shrink-0 bg-warning/15 font-semibold text-warning"
-                                    >{{ attentionReason(agent) }}</span
-                                >
-                                <!-- Same slot as the attention chip: never both at once, "needs you" outranks "unread". -->
-                                <span
-                                    v-else-if="agent !== undefined && unreadBadge(agent) !== undefined"
-                                    v-tooltip.top="
-                                        unreadBadge(agent)!.seenAt === undefined
-                                            ? undefined
-                                            : `Worked since you last opened it, ${relativeTime(unreadBadge(agent)!.seenAt!)}`
-                                    "
-                                    class="ui-status-pill shrink-0 bg-primary-600/15 font-semibold text-link"
-                                    >{{ unreadBadge(agent)!.label }}</span
-                                >
-                                <!-- Attention and unread chips share the trailing metadata group. -->
                                 <UnsentMark v-if="c.unsent.value" :preview="draftPreview(c.draft.value)" :at="c.draftAt.value" :now="now" />
 <!-- One glyph, no countdown: the rail says which chat is about to stop being cheap to answer, the board says for how long. -->
                                 <Icon

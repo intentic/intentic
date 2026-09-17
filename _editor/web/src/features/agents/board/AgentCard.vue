@@ -18,7 +18,6 @@ import {
     activityIcon,
     activityLine,
     agentStatusMeta,
-    attentionReason,
     conflictIsYours,
     formatCost,
     formatElapsed,
@@ -29,10 +28,11 @@ import {
     limited,
     loopMeta,
     reviewAction,
+    standingChip,
     tileRim,
     turnInFlight,
     turnWorking,
-    unreadBadge,
+    unreadHint,
     unregistered,
     watching,
     watchLine,
@@ -110,11 +110,9 @@ const box = computed(() =>
         ? undefined
         : { name: boxNameOf.value.get(props.agent.sandboxId) ?? `Another sandbox`, image: boxImageOf.value.get(props.agent.sandboxId) },
 );
-const reason = computed(() => attentionReason(props.agent));
-// Muted only for a spent allowance (needs a person, but nothing is wrong); amber for every other attention reason.
-// An ink tint, not a surface token: a surface token collides with the selected card's lifted fill and, in the light
-// scheme, with the card fill itself.
-const reasonTone = computed(() => (limited(props.agent) ? `bg-content/10 text-muted` : `bg-warning/15 text-warning`));
+// The corner's word and tint, from the projection the rails read too (agentStatus.standingChip): why it needs you,
+// else that it worked since you last looked, else nothing and the resting glyph keeps the corner.
+const chip = computed(() => standingChip(props.agent));
 // Shared with agentStatus.activityLine so the rail and board never narrate the same turn differently.
 const activityText = computed(() => activityLine(props.agent));
 // Archive appears wherever it means something (not just the Finished lane, see canArchive), including in Attention,
@@ -337,15 +335,9 @@ const displayTitle = computed(() => {
 // Term is case-folded to match the filter's own rule, unless `Aa` (matchCase) is on.
 const needle = computed(() => (props.matchCase === true ? (props.query ?? ``) : (props.query?.toLowerCase() ?? ``)));
 const titleRuns = computed(() => markSegments(displayTitle.value, needle.value, props.matchCase === true));
-// Shared with the rail's cards (agentStatus.unreadBadge).
-// "New" already says unopened; "Updated" hides when you last looked, so only that one earns a hover hint.
-const unread = computed(() => {
-    const badge = unreadBadge(props.agent);
-    if (badge === undefined) {
-        return undefined;
-    }
-    return { label: badge.label, hint: badge.seenAt === undefined ? undefined : `Worked since you last opened it, ${relativeTime(badge.seenAt)}` };
-});
+// "New" already says unopened; "Updated" hides when you last looked, so only that one earns a hover hint. The
+// sentence is the rails' own (agentStatus.unreadHint); only the clock is this card's.
+const chipHint = computed(() => (chip.value?.seenAt === undefined ? undefined : unreadHint(relativeTime(chip.value.seenAt))));
 
 const edit = createInlineRename(
     () => props.agent.title,
@@ -541,15 +533,10 @@ const grab = (event: PointerEvent): void => {
                 </button>
             </template>
             <Icon v-if="pending !== undefined" name="spinner" spin class="shrink-0 text-sm text-link" />
-            <span v-else-if="reason !== undefined" class="ui-status-pill shrink-0 text-2xs font-semibold" :class="reasonTone">{{
-                reason
+<!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
+            <span v-else-if="chip !== undefined" v-tooltip.top="chipHint" class="ui-status-pill shrink-0 text-2xs font-semibold" :class="chip.tone">{{
+                chip.label
             }}</span>
-            <span
-                v-else-if="unread !== undefined"
-                v-tooltip.top="unread.hint"
-                class="ui-status-pill shrink-0 bg-primary-600/15 text-2xs font-semibold text-link"
-                >{{ unread.label }}</span
-            >
 <!-- The resting standing for a card with no reason or unread mark; carries meta.label as a word in its hover, not just a glyph. -->
 <!-- What the last turn left open is the tile rim's to say (tileRim): the checklist it drew here twice was one fact with two marks. -->
             <Icon

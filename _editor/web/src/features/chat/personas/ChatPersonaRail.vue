@@ -6,7 +6,16 @@ import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { startAgent } from "../../agents/fleet/agentActions";
-import { activityIcon, activityLine, agentStatusMeta, blocked, type FleetLane, turnInFlight } from "../../agents/fleet/agentStatus";
+import {
+    activityIcon,
+    activityLine,
+    agentStatusMeta,
+    blocked,
+    type FleetLane,
+    type StandingChip,
+    standingChip,
+    turnInFlight,
+} from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
 import { relativeTime, statusIcon, statusLabel } from "../models/catalog";
@@ -54,6 +63,10 @@ const statusOf = (entry: PersonaChat): { name: IconName; spin?: boolean; class: 
     const icon = statusIcon(status);
     return { name: icon.name, spin: icon.spin, class: `text-xs ${icon.class}`, "aria-label": statusLabel(status) };
 };
+
+// The same corner word the lanes list and the board draw (agentStatus.standingChip): a chat of this persona's parked
+// on a question says so here too, rather than leaving the reader a glyph to interpret.
+const chipOf = (entry: PersonaChat): StandingChip | undefined => (entry.agent === undefined ? undefined : standingChip(entry.agent));
 
 // Which of a persona's chats the card speaks for: a turn in flight first, else the most recent, else none — undefined
 // is a distinct state, not a gap, for a persona with no chats here yet.
@@ -247,6 +260,7 @@ const sessionsOf = (row: PersonaRow) =>
                         :title-action="entry.agent?.titleAction"
                         :provider="entry.agent?.provider ?? entry.conversation.provider.value"
                         :status="statusOf(entry)"
+                        :chip="chipOf(entry)"
                         :live="liveOf(entry)"
                         :now="now"
                         tight

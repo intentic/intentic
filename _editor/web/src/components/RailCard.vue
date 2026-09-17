@@ -4,8 +4,9 @@ import type { AgentProvider, MatchSnippet } from "@intentic/sandbox-contract";
 import { type IconName, ProgressRing, SegmentRing } from "@intentic/ui";
 import { computed } from "vue";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
-import { formatElapsed, type TileRim } from "../features/agents/fleet/agentStatus";
+import { formatElapsed, type StandingChip, type TileRim, unreadHint } from "../features/agents/fleet/agentStatus";
 import { markSegments } from "../features/agents/review/markSegments";
+import { relativeTime } from "../features/chat/models/catalog";
 import IdentityTile from "../features/capabilities/connect/IdentityTile.vue";
 import MatchLine from "./MatchLine.vue";
 
@@ -22,6 +23,9 @@ const props = defineProps<{
     icon?: IconName;
     // Spread onto the Icon via v-bind; the host derives it once (agentStatusMeta) rather than field by field.
     status?: { name: IconName; spin?: boolean; class: string; "aria-label"?: string };
+    // Why this row needs the reader, or that it has news: the corner's word, decided by agentStatus.standingChip so a
+    // rail row and its board card say and tint the same thing. Takes the seat `status` would otherwise hold.
+    chip?: StandingChip;
     // What the identity mark's rim draws: checklist ticks or a context arc, decided once by agentStatus.tileRim so
     // this card and the board's cannot disagree. Undefined for a row with nothing measured (and for every row that
     // isn't a session), which wears the empty rim instead.
@@ -47,6 +51,8 @@ const props = defineProps<{
 }>();
 
 const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, props.matchCase === true));
+// Only the "Updated" chip earns a hover: "New" already says unopened, while this hides when you last looked.
+const chipHint = computed(() => (props.chip?.seenAt === undefined ? undefined : unreadHint(relativeTime(props.chip.seenAt))));
 </script>
 
 <template>
@@ -105,8 +111,18 @@ const titleRuns = computed(() => markSegments(props.title, props.needle ?? ``, p
                     <span v-if="peek" class="sr-only">, temporary</span>
                 </span>
                 <slot name="trailing" />
+<!-- THE CORNER SAYS IT IN WORDS WHEN THERE ARE WORDS, exactly as the board's card does: a glyph in this seat can say
+     "something ended" but never "Usage limit", and the two surfaces drawing the same standing differently was the
+     whole complaint. The resting glyph gets the seat back the moment there is nothing to say. -->
+                <span
+                    v-if="chip !== undefined"
+                    v-tooltip.top="chipHint"
+                    class="ui-status-pill shrink-0 text-2xs font-semibold"
+                    :class="chip.tone"
+                    >{{ chip.label }}</span
+                >
 <!-- Fixed-height box so a row's title never shifts between a spinning glyph and a resting one. -->
-                <span v-if="status !== undefined" class="flex h-4 shrink-0 items-center">
+                <span v-else-if="status !== undefined" class="flex h-4 shrink-0 items-center">
                     <Icon v-bind="status" />
                 </span>
             </span>
