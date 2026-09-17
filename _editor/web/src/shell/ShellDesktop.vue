@@ -687,8 +687,8 @@ useKeybindings();
             </SandboxGate>
         </main>
 
-        <!-- The parked chat's composer, under the area rather than over it, so growing it shortens the page instead of
-             covering it. Outside the gate, like the chat column: a stalled sandbox is one of the things to ask about. -->
+        <!-- The parked chat's composer, floating in the area's own cell: growing it must not reflow the page the reader
+             opened it to talk about. Outside the gate, like the chat column: a stalled sandbox is a thing to ask about. -->
         <ChatQuickBar />
 
         <!-- Portals to body, so it overlays the whole shell regardless of where it sits in the grid. -->
@@ -703,12 +703,9 @@ useKeybindings();
 .shell {
     /* Floor is 0, not the stored width, which was clamped at drag time and could push past a shrunk window. */
     grid-template-columns: var(--icon-rail-width) minmax(0, 1fr) minmax(0, var(--chat-width, 22rem));
-    /* Two explicit rows, so a stray element landing in an implicit row can't starve 1fr to zero height. The second is
-       the parked chat's strip, `auto` so it measures zero on every surface that doesn't draw one. */
-    grid-template-rows: minmax(0, 1fr) auto;
-    grid-template-areas:
-        "rail workspace chat"
-        "rail composer chat";
+    /* One explicit row, so a stray element landing in an implicit row can't starve 1fr to zero height. */
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "rail workspace chat";
 }
 
 .icon-rail {
