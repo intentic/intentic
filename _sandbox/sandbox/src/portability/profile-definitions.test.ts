@@ -25,6 +25,17 @@ const appRuleLabels: readonly string[] = Object.values(
     }).sandbox.rules,
 );
 
+// A LABEL IS NO LONGER IN THAT FILE. The app names its rules through `t(...)`, so the words a profile writes into a
+// TOML are the app's English catalogue's, and matching them against the screen's source can only ever fail. These are
+// the same two rows either way: `sandbox.rules` holds exactly what the toggles label, in the language the seeds speak.
+const appRuleLabels: readonly string[] = Object.values(
+    (
+        JSON.parse(readFileSync(join(repoRoot(import.meta.url), `_editor/web/src/app/i18n/locales/en.json`), `utf8`)) as {
+            sandbox?: { rules?: Record<string, string> };
+        }
+    ).sandbox?.rules ?? {},
+);
+
 describe(`the profile definitions the platform seeds`, () => {
     it(`ships at least one, or the seed path is dead code`, () => {
         expect(files.length).toBeGreaterThan(0);
